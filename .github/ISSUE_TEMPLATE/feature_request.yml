@@ -1,0 +1,51 @@
+name: Feature Request
+description: Suggest a new feature for Houndarr
+title: "feat: "
+labels: ["type: feature"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## Scope Check
+
+        Houndarr is a **single-purpose tool** that searches for missing and cutoff-unmet
+        media in Sonarr and Radarr, in controlled batches.
+
+        Before submitting, please confirm your feature is within scope.
+
+  - type: checkboxes
+    id: scope-check
+    attributes:
+      label: Scope Check
+      description: "This is required. Features outside scope will be closed."
+      options:
+        - label: "This feature directly helps search for missing or cutoff-unmet media in a more controlled, polite, or effective way."
+          required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Feature Description
+      description: A clear and concise description of the feature you'd like.
+    validations:
+      required: true
+
+  - type: textarea
+    id: use-case
+    attributes:
+      label: Use Case
+      description: Why do you need this feature? What problem does it solve?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposed-solution
+    attributes:
+      label: Proposed Solution
+      description: How would you implement this? (optional but helpful)
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives Considered
+      description: Have you considered any alternative approaches?

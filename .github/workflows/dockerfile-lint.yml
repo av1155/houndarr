@@ -1,0 +1,33 @@
+name: Dockerfile Lint
+
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - "Dockerfile"
+      - ".github/workflows/dockerfile-lint.yml"
+  pull_request:
+    paths:
+      - "Dockerfile"
+      - ".github/workflows/dockerfile-lint.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  hadolint:
+    name: Lint Dockerfile (hadolint)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Lint Dockerfile
+        uses: hadolint/hadolint-action@v3.3.0
+        with:
+          dockerfile: Dockerfile
+          ignore: DL3008,DL3013

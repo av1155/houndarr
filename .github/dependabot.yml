@@ -1,0 +1,36 @@
+version: 2
+updates:
+  # Python dependencies
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    groups:
+      production-deps:
+        patterns:
+          - "fastapi"
+          - "uvicorn"
+          - "jinja2"
+          - "aiosqlite"
+          - "httpx"
+          - "bcrypt"
+          - "cryptography"
+          - "itsdangerous"
+          - "python-multipart"
+          - "click"
+      dev-deps:
+        patterns:
+          - "ruff"
+          - "mypy"
+          - "pytest*"
+          - "anyio"
+
+  # GitHub Actions
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5

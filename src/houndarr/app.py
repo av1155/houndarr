@@ -13,6 +13,7 @@ from fastapi.staticfiles import StaticFiles
 from houndarr import __version__
 from houndarr.auth import AuthMiddleware
 from houndarr.config import get_settings
+from houndarr.crypto import ensure_master_key
 from houndarr.database import init_db, set_db_path
 
 logger = logging.getLogger(__name__)
@@ -25,6 +26,10 @@ async def _lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     # Ensure data directory exists
     Path(settings.data_dir).mkdir(parents=True, exist_ok=True)
+
+    # Load (or generate) the master encryption key and store on app state
+    app.state.master_key = ensure_master_key(settings.data_dir)
+    logger.info("Master key loaded from %s", settings.master_key_path)
 
     # Configure and initialize the database
     set_db_path(str(settings.db_path))

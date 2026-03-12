@@ -1,0 +1,50 @@
+# Version control
+.git/
+.gitignore
+
+# Python artifacts
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+.eggs/
+dist/
+build/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Development tools
+.ruff_cache/
+.mypy_cache/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Tests (not needed in production image)
+tests/
+
+# Documentation
+docs/
+*.md
+
+# Dev compose and data
+docker-compose.dev.yml
+data/
+data-dev/
+*.db
+*.masterkey
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# Research artifacts
+.opencode/
+
+# CI/CD
+.github/

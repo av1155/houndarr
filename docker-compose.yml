@@ -1,0 +1,13 @@
+services:
+  houndarr:
+    image: ghcr.io/av1155/houndarr:latest
+    container_name: houndarr
+    restart: unless-stopped
+    ports:
+      - "8877:8877"
+    volumes:
+      - ./data:/data
+    environment:
+      - TZ=America/New_York
+      - PUID=1000
+      - PGID=1000

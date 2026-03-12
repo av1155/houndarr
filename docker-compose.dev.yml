@@ -1,0 +1,19 @@
+services:
+  houndarr:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: houndarr-dev
+    restart: "no"
+    ports:
+      - "8877:8877"
+    volumes:
+      # Mount source for hot-reload
+      - ./src:/app/src:ro
+      - ./data-dev:/data
+    environment:
+      - TZ=America/New_York
+      - PUID=1000
+      - PGID=1000
+      - HOUNDARR_LOG_LEVEL=debug
+    command: ["python", "-m", "houndarr", "--data-dir", "/data", "--dev"]

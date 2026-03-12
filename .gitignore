@@ -82,3 +82,6 @@ node_modules/
 
 # Research artifacts
 .opencode/
+
+# Claude session brief (local only — never commit)
+CLAUDE.md

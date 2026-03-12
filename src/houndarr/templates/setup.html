@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% set show_nav = false %}
+
+{% block title %}Setup — Houndarr{% endblock %}
+
+{% block content %}
+<div class="flex items-center justify-center min-h-[calc(100vh-8rem)]">
+  <div class="w-full max-w-md">
+    <!-- Logo / Header -->
+    <div class="text-center mb-8">
+      <div class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-brand-900/50 border border-brand-700 mb-4">
+        <svg class="w-8 h-8 text-brand-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+            d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+        </svg>
+      </div>
+      <h1 class="text-2xl font-bold text-white">Welcome to Houndarr</h1>
+      <p class="mt-2 text-slate-400 text-sm">Create a password to secure your instance.</p>
+    </div>
+
+    <!-- Setup form -->
+    <div class="bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-xl">
+      {% if error %}
+      <div class="mb-4 bg-red-900/50 border border-red-700 text-red-200 rounded-lg px-4 py-3 text-sm" role="alert">
+        {{ error }}
+      </div>
+      {% endif %}
+
+      <form action="/setup" method="post" class="space-y-5">
+        <div>
+          <label for="password" class="block text-sm font-medium text-slate-300 mb-1.5">
+            Password
+          </label>
+          <input
+            id="password"
+            name="password"
+            type="password"
+            autocomplete="new-password"
+            required
+            minlength="8"
+            class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2.5 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition-colors"
+            placeholder="Minimum 8 characters"
+            autofocus
+          />
+        </div>
+
+        <div>
+          <label for="password_confirm" class="block text-sm font-medium text-slate-300 mb-1.5">
+            Confirm Password
+          </label>
+          <input
+            id="password_confirm"
+            name="password_confirm"
+            type="password"
+            autocomplete="new-password"
+            required
+            minlength="8"
+            class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2.5 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition-colors"
+            placeholder="Repeat your password"
+          />
+        </div>
+
+        <button
+          type="submit"
+          class="w-full bg-brand-600 hover:bg-brand-500 text-white font-semibold py-2.5 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2 focus:ring-offset-slate-900">
+          Set Password &amp; Get Started
+        </button>
+      </form>
+    </div>
+
+    <p class="mt-6 text-center text-xs text-slate-600">
+      This password protects your Houndarr instance. Keep it safe.
+    </p>
+  </div>
+</div>
+{% endblock %}

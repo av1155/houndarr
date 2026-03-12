@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard — Houndarr{% endblock %}
+
+{% block content %}
+<div class="flex items-center justify-between mb-6">
+  <h1 class="text-2xl font-bold text-white">Dashboard</h1>
+  <a href="/settings"
+     class="text-sm text-brand-400 hover:text-brand-300 transition-colors">
+    + Add Instance
+  </a>
+</div>
+
+<!-- Instance cards will be loaded here in Issue #12 -->
+<div id="instance-grid">
+  <div class="text-center py-20 text-slate-500">
+    <svg class="w-16 h-16 mx-auto mb-4 opacity-30" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+        d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+    </svg>
+    <p class="text-lg font-medium text-slate-400">No instances configured yet</p>
+    <p class="mt-2 text-sm">
+      <a href="/settings" class="text-brand-400 hover:text-brand-300">Add a Sonarr or Radarr instance</a>
+      to get started.
+    </p>
+  </div>
+</div>
+{% endblock %}

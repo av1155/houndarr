@@ -71,7 +71,6 @@ select = [
     "C4",  # flake8-comprehensions
     "UP",  # pyupgrade
     "SIM", # flake8-simplify
-    "TCH", # flake8-type-checking
     "ANN", # flake8-annotations (selected rules only)
     "S",   # bandit security
     "N",   # pep8-naming
@@ -81,6 +80,7 @@ ignore = [
     "S101",   # use of assert (needed in tests)
     "S104",   # binding to all interfaces is intentional for a server application
     "B008",   # do not perform function calls in default arguments (FastAPI Depends pattern)
+    "SIM117", # nested with — aiosqlite async context managers cannot be combined
 ]
 
 [tool.ruff.lint.per-file-ignores]

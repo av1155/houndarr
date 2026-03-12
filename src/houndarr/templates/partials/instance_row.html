@@ -1,0 +1,48 @@
+{# Single instance row — used by both initial render and HTMX swap after update. #}
+<tr id="instance-row-{{ instance.id }}"
+    class="border-b border-slate-800 hover:bg-slate-800/40 transition-colors">
+  <td class="px-4 py-3 font-medium text-white">{{ instance.name }}</td>
+  <td class="px-4 py-3">
+    {% if instance.type.value == 'sonarr' %}
+      <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-sky-900/60 text-sky-300 border border-sky-700">
+        Sonarr
+      </span>
+    {% else %}
+      <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-900/60 text-amber-300 border border-amber-700">
+        Radarr
+      </span>
+    {% endif %}
+  </td>
+  <td class="px-4 py-3 text-slate-400 text-sm truncate max-w-xs">{{ instance.url }}</td>
+  <td class="px-4 py-3 text-center">
+    {% if instance.enabled %}
+      <span class="inline-block w-2 h-2 rounded-full bg-green-500" title="Enabled"></span>
+    {% else %}
+      <span class="inline-block w-2 h-2 rounded-full bg-slate-600" title="Disabled"></span>
+    {% endif %}
+  </td>
+  <td class="px-4 py-3 text-sm text-slate-400">
+    {{ instance.batch_size }} / {{ instance.sleep_interval_mins }}m
+  </td>
+  <td class="px-4 py-3 text-right">
+    <div class="flex items-center justify-end gap-2">
+      {# Edit — swaps this row with the edit form partial #}
+      <button
+        hx-get="/settings/instances/{{ instance.id }}/edit"
+        hx-target="#instance-row-{{ instance.id }}"
+        hx-swap="outerHTML"
+        class="px-3 py-1 text-xs rounded bg-slate-700 hover:bg-slate-600 text-slate-200 transition-colors">
+        Edit
+      </button>
+      {# Delete — removes this row on success #}
+      <button
+        hx-delete="/settings/instances/{{ instance.id }}"
+        hx-target="#instance-row-{{ instance.id }}"
+        hx-swap="outerHTML"
+        hx-confirm="Delete '{{ instance.name }}'? This cannot be undone."
+        class="px-3 py-1 text-xs rounded bg-red-900/60 hover:bg-red-800 text-red-300 transition-colors">
+        Delete
+      </button>
+    </div>
+  </td>
+</tr>

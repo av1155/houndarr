@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+
+{% block title %}Settings — Houndarr{% endblock %}
+
+{% block content %}
+<div class="flex items-center justify-between mb-6">
+  <h1 class="text-2xl font-bold text-white">Settings</h1>
+</div>
+
+{% if error is defined and error %}
+<div class="mb-4 text-sm text-red-400 bg-red-900/30 border border-red-700 rounded px-4 py-3">
+  {{ error }}
+</div>
+{% endif %}
+
+<!-- Instance table -->
+<section class="mb-10">
+  <div class="flex items-center justify-between mb-3">
+    <h2 class="text-lg font-semibold text-slate-200">Instances</h2>
+    <button
+      hx-get="/settings/instances/add-form"
+      hx-target="#add-instance-slot"
+      hx-swap="innerHTML"
+      id="add-instance-btn"
+      class="px-3 py-1.5 rounded bg-brand-600 hover:bg-brand-500 text-white text-sm font-medium transition-colors">
+      + Add Instance
+    </button>
+  </div>
+
+  <div class="rounded-lg border border-slate-800 overflow-hidden">
+    <table class="w-full text-sm">
+      <thead class="bg-slate-800/80 text-xs text-slate-400 uppercase tracking-wider">
+        <tr>
+          <th class="px-4 py-3 text-left">Name</th>
+          <th class="px-4 py-3 text-left">Type</th>
+          <th class="px-4 py-3 text-left">URL</th>
+          <th class="px-4 py-3 text-center">Status</th>
+          <th class="px-4 py-3 text-left">Batch / Interval</th>
+          <th class="px-4 py-3 text-right">Actions</th>
+        </tr>
+      </thead>
+      <tbody id="instance-tbody" class="divide-y divide-slate-800">
+        {% for instance in instances %}
+          {% include "partials/instance_row.html" %}
+        {% else %}
+        <tr id="no-instances-row">
+          <td colspan="6" class="px-4 py-10 text-center text-slate-500 text-sm">
+            No instances configured yet. Click <strong class="text-slate-400">+ Add Instance</strong> to get started.
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {# Slot where the add-form row is injected by HTMX #}
+  <div id="add-instance-slot"></div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  // After a successful create, clear the add-form slot
+  document.body.addEventListener('htmx:afterSwap', function(evt) {
+    if (evt.detail.target.id === 'instance-tbody') {
+      document.getElementById('add-instance-slot').innerHTML = '';
+    }
+  });
+</script>
+{% endblock %}

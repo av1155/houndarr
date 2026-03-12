@@ -1,0 +1,170 @@
+{#
+  Add / Edit instance form.
+  When editing=True the form POSTs to /settings/instances/{id} and the row is
+  swapped back after a successful save.  When adding (editing=False / unset)
+  the form POSTs to /settings/instances and the table body is refreshed.
+#}
+{% set is_edit = editing is defined and editing %}
+{% set form_id = "edit-form-" ~ instance.id if is_edit else "add-instance-form" %}
+{% set post_url = "/settings/instances/" ~ instance.id if is_edit else "/settings/instances" %}
+{% set target  = "#instance-row-" ~ instance.id if is_edit else "#instance-tbody" %}
+{% set swap    = "outerHTML" if is_edit else "innerHTML" %}
+
+<tr id="{{ 'instance-row-' ~ instance.id if is_edit else 'add-instance-row' }}"
+    class="border-b border-slate-700 bg-slate-800/60">
+  <td colspan="6" class="px-4 py-4">
+    {% if error is defined and error %}
+    <div class="mb-3 text-sm text-red-400 bg-red-900/30 border border-red-700 rounded px-3 py-2">
+      {{ error }}
+    </div>
+    {% endif %}
+
+    <form id="{{ form_id }}"
+          hx-post="{{ post_url }}"
+          hx-target="{{ target }}"
+          hx-swap="{{ swap }}"
+          class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+
+      {# Name #}
+      <div>
+        <label class="block text-xs text-slate-400 mb-1" for="{{ form_id }}-name">Name</label>
+        <input id="{{ form_id }}-name" name="name" type="text" required
+               value="{{ instance.name if is_edit else '' }}"
+               placeholder="My Sonarr"
+               class="w-full bg-slate-900 border border-slate-700 rounded px-3 py-1.5 text-sm text-white
+                      focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500" />
+      </div>
+
+      {# Type #}
+      <div>
+        <label class="block text-xs text-slate-400 mb-1" for="{{ form_id }}-type">Type</label>
+        <select id="{{ form_id }}-type" name="type" required
+                class="w-full bg-slate-900 border border-slate-700 rounded px-3 py-1.5 text-sm text-white
+                       focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500">
+          <option value="sonarr" {% if is_edit and instance.type.value == 'sonarr' %}selected{% endif %}>Sonarr</option>
+          <option value="radarr" {% if is_edit and instance.type.value == 'radarr' %}selected{% endif %}>Radarr</option>
+        </select>
+      </div>
+
+      {# URL #}
+      <div>
+        <label class="block text-xs text-slate-400 mb-1" for="{{ form_id }}-url">URL</label>
+        <input id="{{ form_id }}-url" name="url" type="url" required
+               value="{{ instance.url if is_edit else '' }}"
+               placeholder="http://sonarr:8989"
+               class="w-full bg-slate-900 border border-slate-700 rounded px-3 py-1.5 text-sm text-white
+                      focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500" />
+      </div>
+
+      {# API Key #}
+      <div>
+        <label class="block text-xs text-slate-400 mb-1" for="{{ form_id }}-api-key">API Key</label>
+        <input id="{{ form_id }}-api-key" name="api_key" type="password" required
+               value="{{ instance.api_key if is_edit else '' }}"
+               placeholder="••••••••••••••••"
+               class="w-full bg-slate-900 border border-slate-700 rounded px-3 py-1.5 text-sm text-white
+                      focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500" />
+      </div>
+
+      {# Batch size #}
+      <div>
+        <label class="block text-xs text-slate-400 mb-1" for="{{ form_id }}-batch">Batch Size</label>
+        <input id="{{ form_id }}-batch" name="batch_size" type="number" min="1" max="250"
+               value="{{ instance.batch_size if is_edit else 10 }}"
+               class="w-full bg-slate-900 border border-slate-700 rounded px-3 py-1.5 text-sm text-white
+                      focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500" />
+      </div>
+
+      {# Sleep interval #}
+      <div>
+        <label class="block text-xs text-slate-400 mb-1" for="{{ form_id }}-sleep">Sleep (minutes)</label>
+        <input id="{{ form_id }}-sleep" name="sleep_interval_mins" type="number" min="1"
+               value="{{ instance.sleep_interval_mins if is_edit else 15 }}"
+               class="w-full bg-slate-900 border border-slate-700 rounded px-3 py-1.5 text-sm text-white
+                      focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500" />
+      </div>
+
+      {# Hourly cap #}
+      <div>
+        <label class="block text-xs text-slate-400 mb-1" for="{{ form_id }}-hcap">Hourly Cap</label>
+        <input id="{{ form_id }}-hcap" name="hourly_cap" type="number" min="1"
+               value="{{ instance.hourly_cap if is_edit else 20 }}"
+               class="w-full bg-slate-900 border border-slate-700 rounded px-3 py-1.5 text-sm text-white
+                      focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500" />
+      </div>
+
+      {# Cooldown days #}
+      <div>
+        <label class="block text-xs text-slate-400 mb-1" for="{{ form_id }}-cool">Cooldown (days)</label>
+        <input id="{{ form_id }}-cool" name="cooldown_days" type="number" min="0"
+               value="{{ instance.cooldown_days if is_edit else 7 }}"
+               class="w-full bg-slate-900 border border-slate-700 rounded px-3 py-1.5 text-sm text-white
+                      focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500" />
+      </div>
+
+      {# Unreleased delay #}
+      <div>
+        <label class="block text-xs text-slate-400 mb-1" for="{{ form_id }}-delay">Unreleased Delay (hrs)</label>
+        <input id="{{ form_id }}-delay" name="unreleased_delay_hrs" type="number" min="0"
+               value="{{ instance.unreleased_delay_hrs if is_edit else 24 }}"
+               class="w-full bg-slate-900 border border-slate-700 rounded px-3 py-1.5 text-sm text-white
+                      focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500" />
+      </div>
+
+      {# Cutoff enabled + batch size — span full width on small screens #}
+      <div class="flex items-center gap-6 sm:col-span-2 lg:col-span-1">
+        <label class="flex items-center gap-2 cursor-pointer select-none">
+          <input type="checkbox" name="cutoff_enabled" value="on"
+                 {% if is_edit and instance.cutoff_enabled %}checked{% endif %}
+                 class="rounded border-slate-600 bg-slate-900 text-brand-500
+                        focus:ring-brand-500 focus:ring-offset-slate-950" />
+          <span class="text-xs text-slate-300">Cutoff search</span>
+        </label>
+        <div>
+          <label class="block text-xs text-slate-400 mb-1" for="{{ form_id }}-cbatch">Cutoff Batch</label>
+          <input id="{{ form_id }}-cbatch" name="cutoff_batch_size" type="number" min="1" max="250"
+                 value="{{ instance.cutoff_batch_size if is_edit else 5 }}"
+                 class="w-24 bg-slate-900 border border-slate-700 rounded px-3 py-1.5 text-sm text-white
+                        focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500" />
+        </div>
+      </div>
+
+      {# Enabled toggle #}
+      <div class="flex items-center">
+        <label class="flex items-center gap-2 cursor-pointer select-none">
+          <input type="checkbox" name="enabled" value="on"
+                 {% if not is_edit or instance.enabled %}checked{% endif %}
+                 class="rounded border-slate-600 bg-slate-900 text-brand-500
+                        focus:ring-brand-500 focus:ring-offset-slate-950" />
+          <span class="text-xs text-slate-300">Enabled</span>
+        </label>
+      </div>
+
+      {# Buttons — span full width #}
+      <div class="sm:col-span-2 lg:col-span-3 flex items-center gap-3 pt-1">
+        <button type="submit"
+                class="px-4 py-1.5 rounded bg-brand-600 hover:bg-brand-500 text-white text-sm font-medium transition-colors">
+          {{ 'Save Changes' if is_edit else 'Add Instance' }}
+        </button>
+        {% if is_edit %}
+        {# Cancel edit — swap the form back to the read-only row #}
+        <button type="button"
+                hx-get="/settings"
+                hx-target="#instance-row-{{ instance.id }}"
+                hx-swap="outerHTML"
+                hx-select="#instance-row-{{ instance.id }}"
+                class="px-4 py-1.5 rounded bg-slate-700 hover:bg-slate-600 text-slate-200 text-sm transition-colors">
+          Cancel
+        </button>
+        {% else %}
+        <button type="button"
+                onclick="this.closest('tr').remove()"
+                class="px-4 py-1.5 rounded bg-slate-700 hover:bg-slate-600 text-slate-200 text-sm transition-colors">
+          Cancel
+        </button>
+        {% endif %}
+      </div>
+
+    </form>
+  </td>
+</tr>

@@ -36,12 +36,7 @@
 
   <style>
     body {
-      animation: page-fade-in 110ms ease-out;
-      transition: opacity 90ms ease-in;
-    }
-
-    body.is-leaving {
-      opacity: 0;
+      animation: page-fade-in 90ms ease-out;
     }
 
     @keyframes page-fade-in {
@@ -151,65 +146,5 @@
   </footer>
 
   {% block scripts %}{% endblock %}
-
-  <script>
-    (function() {
-      const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-      if (prefersReducedMotion) {
-        return;
-      }
-
-      const leaveDurationMs = 90;
-      let isNavigating = false;
-
-      document.addEventListener('click', function(event) {
-        if (event.defaultPrevented || isNavigating) {
-          return;
-        }
-
-        if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
-          return;
-        }
-
-        const anchor = event.target.closest('a[href]');
-        if (!anchor) {
-          return;
-        }
-
-        if ((anchor.target && anchor.target !== '_self') || anchor.hasAttribute('download')) {
-          return;
-        }
-
-        const rawHref = anchor.getAttribute('href');
-        if (!rawHref || rawHref.startsWith('#') || rawHref.startsWith('mailto:') || rawHref.startsWith('tel:')) {
-          return;
-        }
-
-        const nextUrl = new URL(anchor.href, window.location.href);
-        const currentUrl = new URL(window.location.href);
-
-        if (nextUrl.origin !== currentUrl.origin) {
-          return;
-        }
-
-        if (nextUrl.pathname === currentUrl.pathname && nextUrl.search === currentUrl.search) {
-          return;
-        }
-
-        event.preventDefault();
-        isNavigating = true;
-        document.body.classList.add('is-leaving');
-
-        window.setTimeout(function() {
-          window.location.href = nextUrl.href;
-        }, leaveDurationMs);
-      });
-
-      window.addEventListener('pageshow', function() {
-        document.body.classList.remove('is-leaving');
-        isNavigating = false;
-      });
-    })();
-  </script>
 </body>
 </html>

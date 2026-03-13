@@ -1,5 +1,7 @@
 """Houndarr — focused, self-hosted companion for Sonarr and Radarr."""
 
+from __future__ import annotations
+
 from pathlib import Path
 
 # Read version from the canonical VERSION file at repo root

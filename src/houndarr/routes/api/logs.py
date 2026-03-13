@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 _LOG_LIMIT_DEFAULT = 50
-_LOG_LIMIT_MAX = 200
+_LOG_LIMIT_MAX = 500
 
 
 def _parse_instance_id(raw: str | None) -> int | None:
@@ -153,7 +153,7 @@ async def get_logs(
         instance_id: Filter to a specific instance ID.
         action: Filter by action (``searched``, ``skipped``, ``error``, ``info``).
         before: Timestamp cursor — only return rows older than this ISO-8601 value.
-        limit: Max rows (1–200, default 50).
+        limit: Max rows (1–500, default 50).
 
     Returns:
         JSON array of log-row objects.

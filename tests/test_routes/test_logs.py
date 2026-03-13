@@ -362,6 +362,9 @@ def test_logs_page_renders(app: TestClient) -> None:
     assert b"log-filter-form" in resp.content
     assert b"log-tbody" in resp.content
     assert b"Media" in resp.content
+    assert b"Timestamp (Local)" in resp.content
+    assert b"Copy visible rows" in resp.content
+    assert b'<option value="500">500</option>' in resp.content
 
 
 # ---------------------------------------------------------------------------

@@ -112,6 +112,9 @@ def test_settings_page_renders(app: TestClient) -> None:
     assert b"Account" in resp.content
     assert b"Update Password" in resp.content
     assert b"Signed in as" in resp.content
+    assert b'id="account-settings"' in resp.content
+    assert b'id="account-settings" open' not in resp.content
+    assert b"What do these settings mean?" in resp.content
 
 
 def test_settings_page_shows_no_instances_message(app: TestClient) -> None:
@@ -338,7 +341,7 @@ def test_add_form_partial_renders(app: TestClient) -> None:
     assert b'value="14"' in resp.content
     assert b'name="unreleased_delay_hrs" type="number" min="0"' in resp.content
     assert b'value="36"' in resp.content
-    assert b'href="/settings/help"' in resp.content
+    assert b'href="/settings/help"' not in resp.content
     assert b'target="_blank"' not in resp.content
 
 
@@ -382,6 +385,7 @@ def test_password_change_success(app: TestClient) -> None:
     )
     assert resp.status_code == 200
     assert b"Password updated successfully" in resp.content
+    assert b'id="account-settings" open' in resp.content
 
     app.post("/logout")
     login_resp = app.post(
@@ -404,6 +408,7 @@ def test_password_change_requires_correct_current_password(app: TestClient) -> N
     )
     assert resp.status_code == 422
     assert b"Current password is incorrect" in resp.content
+    assert b'id="account-settings" open' in resp.content
 
 
 def test_password_change_requires_matching_confirmation(app: TestClient) -> None:
@@ -418,3 +423,4 @@ def test_password_change_requires_matching_confirmation(app: TestClient) -> None
     )
     assert resp.status_code == 422
     assert b"New passwords do not match" in resp.content
+    assert b'id="account-settings" open' in resp.content

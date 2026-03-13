@@ -189,7 +189,7 @@
         : `<span class="text-xs font-mono bg-red-900/50 text-red-300 px-2 py-0.5 rounded">Radarr</span>`;
 
       const lastSearch = inst.last_search_at
-        ? new Date(inst.last_search_at).toLocaleString()
+        ? formatLocalTimestamp(inst.last_search_at)
         : "Never";
 
       return `
@@ -253,6 +253,24 @@
       .replace(/</g, "&lt;")
       .replace(/>/g, "&gt;")
       .replace(/"/g, "&quot;");
+  }
+
+  function formatLocalTimestamp(isoTimestamp) {
+    const parsed = new Date(isoTimestamp);
+    if (Number.isNaN(parsed.getTime())) {
+      return isoTimestamp;
+    }
+
+    return new Intl.DateTimeFormat(undefined, {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false,
+      timeZoneName: 'short',
+    }).format(parsed);
   }
 
   document.body.addEventListener('htmx:beforeRequest', function(evt) {

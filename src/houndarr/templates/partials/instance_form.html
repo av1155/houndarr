@@ -141,17 +141,6 @@
         </div>
       </div>
 
-      {# Enabled toggle #}
-      <div class="flex items-center">
-        <label class="flex items-center gap-2 cursor-pointer select-none">
-          <input type="checkbox" name="enabled" value="on"
-                 {% if not is_edit or instance.enabled %}checked{% endif %}
-                 class="rounded border-slate-600 bg-slate-900 text-brand-500
-                        focus:ring-brand-500 focus:ring-offset-slate-950" />
-          <span class="text-xs text-slate-300">Enabled</span>
-        </label>
-      </div>
-
       {# Buttons — span full width #}
       <div class="sm:col-span-2 flex items-center gap-3 pt-2">
         <button type="button"

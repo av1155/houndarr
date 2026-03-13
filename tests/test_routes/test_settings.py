@@ -136,6 +136,13 @@ def test_create_instance_radarr(app: TestClient) -> None:
     assert b"Radarr" in resp.content
 
 
+def test_create_instance_defaults_to_enabled(app: TestClient) -> None:
+    _login(app)
+    resp = app.post("/settings/instances", data=_VALID_FORM)
+    assert resp.status_code == 200
+    assert b"Search enabled" in resp.content
+
+
 def test_create_instance_invalid_type_returns_422(app: TestClient) -> None:
     _login(app)
     form = {**_VALID_FORM, "type": "plex"}
@@ -179,6 +186,7 @@ def test_edit_form_returns_partial(app: TestClient) -> None:
     assert b"Save Changes" in resp.content
     assert b"<tr" not in resp.content
     assert b'data-form-mode="edit"' in resp.content
+    assert b'name="enabled"' not in resp.content
 
 
 def test_edit_form_not_found(app: TestClient) -> None:
@@ -199,6 +207,20 @@ def test_update_instance(app: TestClient) -> None:
     resp = app.post("/settings/instances/1", data=updated_form)
     assert resp.status_code == 200
     assert b"Renamed Sonarr" in resp.content
+
+
+def test_update_instance_preserves_enabled_state(app: TestClient) -> None:
+    _login(app)
+    app.post("/settings/instances", data=_VALID_FORM)
+    app.post("/settings/instances/1/toggle-enabled")
+
+    updated_form = {**_VALID_FORM, "name": "Still Disabled"}
+    resp = app.post("/settings/instances/1", data=updated_form)
+
+    assert resp.status_code == 200
+    assert b"Still Disabled" in resp.content
+    assert b"Search disabled" in resp.content
+    assert b"Enable" in resp.content
 
 
 def test_update_instance_requires_successful_test(app: TestClient) -> None:
@@ -275,6 +297,7 @@ def test_add_form_partial_renders(app: TestClient) -> None:
     resp = app.get("/settings/instances/add-form")
     assert resp.status_code == 200
     assert b"Add Instance" in resp.content
+    assert b'name="enabled"' not in resp.content
 
 
 def test_connection_check_endpoint_success(app: TestClient) -> None:

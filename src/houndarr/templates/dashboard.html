@@ -124,6 +124,11 @@
   const RUN_NOW_ERROR_HOLD_MS = 1100;
   const previousMetrics = new Map();
 
+  function toNumber(value) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+
   function setRunNowButtonState(button, state) {
     const label = button.querySelector('[data-run-now-label]');
     const icon = button.querySelector('[data-run-now-icon]');
@@ -225,11 +230,56 @@
 
     const isInitialHydration = evt.detail.target.dataset.hydrated !== 'true';
 
+    const fleetSummary = data.reduce(function(acc, inst) {
+      const enabled = Boolean(inst.enabled);
+      acc.totalInstances += 1;
+      if (enabled) {
+        acc.enabledInstances += 1;
+      }
+      acc.searched24h += toNumber(inst.searched_24h);
+      acc.skipped24h += toNumber(inst.skipped_24h);
+      acc.errors24h += toNumber(inst.errors_24h);
+      return acc;
+    }, {
+      totalInstances: 0,
+      enabledInstances: 0,
+      searched24h: 0,
+      skipped24h: 0,
+      errors24h: 0,
+    });
+
+    const fleetSummaryMarkup = `
+      <section class="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-5" aria-label="Fleet summary">
+        <div class="rounded-xl border border-slate-800 bg-slate-900/70 px-4 py-3">
+          <p class="text-[11px] uppercase tracking-wide text-slate-500">Fleet summary</p>
+          <p class="mt-1 text-sm font-semibold text-white">${fleetSummary.enabledInstances}/${fleetSummary.totalInstances} enabled</p>
+        </div>
+        <div class="rounded-xl border border-slate-800 bg-slate-900/70 px-4 py-3">
+          <p class="text-[11px] uppercase tracking-wide text-slate-500">24h searched</p>
+          <p class="mt-1 text-sm font-semibold text-emerald-300">${fleetSummary.searched24h}</p>
+        </div>
+        <div class="rounded-xl border border-slate-800 bg-slate-900/70 px-4 py-3">
+          <p class="text-[11px] uppercase tracking-wide text-slate-500">24h skipped</p>
+          <p class="mt-1 text-sm font-semibold text-amber-300">${fleetSummary.skipped24h}</p>
+        </div>
+        <div class="rounded-xl border border-slate-800 bg-slate-900/70 px-4 py-3">
+          <p class="text-[11px] uppercase tracking-wide text-slate-500">24h errors</p>
+          <p class="mt-1 text-sm font-semibold text-rose-300">${fleetSummary.errors24h}</p>
+        </div>
+        <div class="rounded-xl border border-slate-800 bg-slate-900/70 px-4 py-3">
+          <p class="text-[11px] uppercase tracking-wide text-slate-500">Auto-refresh</p>
+          <p class="mt-1 text-sm font-semibold text-slate-200">Every 15s</p>
+        </div>
+      </section>`;
+
     const cards = data.map((inst, index) => {
       const previous = previousMetrics.get(inst.id);
       const lastHourChanged = previous && previous.searches_last_hour !== inst.searches_last_hour;
       const todayChanged = previous && previous.searches_today !== inst.searches_today;
       const totalChanged = previous && previous.items_found_total !== inst.items_found_total;
+      const searched24hChanged = previous && previous.searched_24h !== toNumber(inst.searched_24h);
+      const skipped24hChanged = previous && previous.skipped_24h !== toNumber(inst.skipped_24h);
+      const errors24hChanged = previous && previous.errors_24h !== toNumber(inst.errors_24h);
 
       const badge = inst.enabled
         ? `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-green-900/60 text-green-300">
@@ -247,12 +297,37 @@
         ? formatLocalTimestamp(inst.last_search_at)
         : "Never";
 
+      const activityLabelMap = {
+        searched: 'Searched',
+        skipped: 'Skipped',
+        error: 'Error',
+      };
+      const lastActivity = inst.last_activity_at
+        ? `${activityLabelMap[inst.last_activity_action] || 'Activity'} at ${formatLocalTimestamp(inst.last_activity_at)}`
+        : 'No activity in recent history';
+
+      const policyChips = [
+        `Every ${toNumber(inst.sleep_interval_mins)}m`,
+        `Batch ${toNumber(inst.batch_size)}`,
+        `Cap/h ${toNumber(inst.hourly_cap)}`,
+        `Cooldown ${toNumber(inst.cooldown_days)}d`,
+        `Delay ${toNumber(inst.unreleased_delay_hrs)}h`,
+        inst.cutoff_enabled
+          ? `Cutoff on (${toNumber(inst.cutoff_batch_size)})`
+          : 'Cutoff off',
+      ].map(function(label) {
+        return `<span class="rounded-md border border-slate-700 bg-slate-800/60 px-2 py-1 text-[11px] text-slate-300">${label}</span>`;
+      }).join('');
+
       const animationDelay = Math.min(index * 40, 220);
 
       previousMetrics.set(inst.id, {
         searches_last_hour: inst.searches_last_hour,
         searches_today: inst.searches_today,
         items_found_total: inst.items_found_total,
+        searched_24h: toNumber(inst.searched_24h),
+        skipped_24h: toNumber(inst.skipped_24h),
+        errors_24h: toNumber(inst.errors_24h),
       });
 
       const entryClass = isInitialHydration ? ' is-entering' : '';
@@ -302,14 +377,33 @@
             </div>
           </dl>
 
-          <!-- Last search -->
-          <p class="text-xs text-slate-500">
-            Last search: <span class="text-slate-400">${lastSearch}</span>
-          </p>
+          <dl class="grid grid-cols-1 sm:grid-cols-3 gap-3 text-center">
+            <div class="bg-emerald-950/35 rounded-lg px-3 py-2 border border-emerald-900/40 ${searched24hChanged ? 'metric-changed' : ''}">
+              <dt class="text-[11px] text-emerald-300/80 uppercase tracking-wide">24h searched</dt>
+              <dd class="text-lg font-bold text-emerald-200 mt-0.5">${toNumber(inst.searched_24h)}</dd>
+            </div>
+            <div class="bg-amber-950/30 rounded-lg px-3 py-2 border border-amber-900/40 ${skipped24hChanged ? 'metric-changed' : ''}">
+              <dt class="text-[11px] text-amber-300/80 uppercase tracking-wide">24h skipped</dt>
+              <dd class="text-lg font-bold text-amber-200 mt-0.5">${toNumber(inst.skipped_24h)}</dd>
+            </div>
+            <div class="bg-rose-950/30 rounded-lg px-3 py-2 border border-rose-900/40 ${errors24hChanged ? 'metric-changed' : ''}">
+              <dt class="text-[11px] text-rose-300/80 uppercase tracking-wide">24h errors</dt>
+              <dd class="text-lg font-bold text-rose-200 mt-0.5">${toNumber(inst.errors_24h)}</dd>
+            </div>
+          </dl>
+
+          <div class="space-y-1.5 text-xs text-slate-400">
+            <p>Last activity: <span class="text-slate-300">${lastActivity}</span></p>
+            <p>Last searched: <span class="text-slate-300">${lastSearch}</span></p>
+          </div>
+
+          <div class="flex flex-wrap gap-1.5">
+            ${policyChips}
+          </div>
         </div>`;
     }).join("");
 
-    evt.detail.serverResponse = `<div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">${cards}</div>`;
+    evt.detail.serverResponse = `${fleetSummaryMarkup}<div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">${cards}</div>`;
     evt.detail.target.dataset.hydrated = 'true';
   });
 

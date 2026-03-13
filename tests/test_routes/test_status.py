@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+import asyncio
+from datetime import UTC, datetime, timedelta
+
 import httpx
 import pytest
 import respx
 from fastapi.testclient import TestClient
 
 from houndarr.clients.base import ArrClient
+from houndarr.database import get_db
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -38,6 +42,56 @@ def _login(client: TestClient) -> None:
         data={"username": "admin", "password": "ValidPass1!", "password_confirm": "ValidPass1!"},
     )
     client.post("/login", data={"username": "admin", "password": "ValidPass1!"})
+
+
+async def _seed_status_activity_logs(instance_id: int) -> None:
+    """Seed mixed recent/old log actions for status aggregate assertions."""
+    now = datetime.now(UTC)
+    rows = [
+        (
+            instance_id,
+            101,
+            "episode",
+            "missing",
+            "searched",
+            (now - timedelta(hours=2)).strftime("%Y-%m-%dT%H:%M:%S.000Z"),
+        ),
+        (
+            instance_id,
+            102,
+            "episode",
+            "missing",
+            "skipped",
+            (now - timedelta(minutes=30)).strftime("%Y-%m-%dT%H:%M:%S.000Z"),
+        ),
+        (
+            instance_id,
+            103,
+            "episode",
+            "missing",
+            "error",
+            (now - timedelta(minutes=10)).strftime("%Y-%m-%dT%H:%M:%S.000Z"),
+        ),
+        (
+            instance_id,
+            104,
+            "episode",
+            "missing",
+            "searched",
+            (now - timedelta(hours=30)).strftime("%Y-%m-%dT%H:%M:%S.000Z"),
+        ),
+    ]
+
+    async with get_db() as conn:
+        await conn.execute("DELETE FROM search_log WHERE instance_id = ?", (instance_id,))
+        await conn.executemany(
+            """
+            INSERT INTO search_log (instance_id, item_id, item_type, search_kind, action, timestamp)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            rows,
+        )
+        await conn.commit()
 
 
 # ---------------------------------------------------------------------------
@@ -92,6 +146,18 @@ def test_status_returns_correct_shape(app: TestClient) -> None:
     assert item["searches_last_hour"] == 0
     assert item["searches_today"] == 0
     assert item["items_found_total"] == 0
+    assert item["searched_24h"] == 0
+    assert item["skipped_24h"] == 0
+    assert item["errors_24h"] == 0
+    assert item["last_activity_action"] is None
+    assert item["last_activity_at"] is None
+    assert item["batch_size"] == 2
+    assert item["sleep_interval_mins"] == 30
+    assert item["hourly_cap"] == 4
+    assert item["cooldown_days"] == 14
+    assert item["cutoff_enabled"] is False
+    assert item["cutoff_batch_size"] == 1
+    assert item["unreleased_delay_hrs"] == 36
 
 
 def test_status_returns_multiple_instances(app: TestClient) -> None:
@@ -108,6 +174,29 @@ def test_status_returns_multiple_instances(app: TestClient) -> None:
     assert len(data) == 2
     names = {d["name"] for d in data}
     assert names == {"My Sonarr", "My Radarr"}
+
+
+def test_status_includes_24h_outcomes_and_last_activity(app: TestClient) -> None:
+    _login(app)
+    app.post("/settings/instances", data={**_VALID_FORM, "name": "Seeded Sonarr"})
+    created = app.get("/api/status").json()
+    inst_id = int(created[0]["id"])
+    app.post(f"/settings/instances/{inst_id}/toggle-enabled")
+    asyncio.run(_seed_status_activity_logs(inst_id))
+
+    resp = app.get("/api/status")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data) == 1
+
+    item = data[0]
+    assert item["name"] == "Seeded Sonarr"
+    assert item["searched_24h"] == 1
+    assert item["skipped_24h"] == 1
+    assert item["errors_24h"] == 1
+    assert item["last_activity_action"] == "error"
+    assert isinstance(item["last_activity_at"], str)
+    assert item["last_search_at"] is not None
 
 
 # ---------------------------------------------------------------------------

@@ -88,11 +88,15 @@
     transition: background-color 180ms ease, color 180ms ease, box-shadow 180ms ease, transform 180ms ease;
   }
 
+  #instance-test-connection-btn .instance-test-content {
+    position: relative;
+  }
+
   #instance-test-connection-btn .instance-test-spinner {
+    position: absolute;
+    left: -1.1rem;
     opacity: 0;
-    width: 0;
-    margin-right: 0;
-    transition: opacity 120ms ease, width 120ms ease, margin-right 120ms ease;
+    transition: opacity 120ms ease;
   }
 
   #instance-test-connection-btn .instance-test-label {
@@ -107,8 +111,6 @@
 
   #instance-test-connection-btn.is-testing .instance-test-spinner {
     opacity: 1;
-    width: 0.875rem;
-    margin-right: 0.35rem;
     animation: instance-test-spin 700ms linear infinite;
   }
 

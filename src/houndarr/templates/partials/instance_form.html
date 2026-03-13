@@ -30,6 +30,15 @@
              name="connection_verified"
              value="false" />
 
+      <div class="sm:col-span-2 flex items-center justify-end">
+        <a href="/settings/help"
+           target="_blank"
+           rel="noopener noreferrer"
+           class="text-xs text-brand-400 hover:text-brand-300 underline underline-offset-2">
+          What do these settings mean?
+        </a>
+      </div>
+
       {# Name #}
       <div>
         <label class="block text-xs text-slate-400 mb-1" for="{{ form_id }}-name">Name</label>
@@ -82,7 +91,7 @@
       <div>
         <label class="block text-xs text-slate-400 mb-1" for="{{ form_id }}-batch">Batch Size</label>
         <input id="{{ form_id }}-batch" name="batch_size" type="number" min="1" max="250"
-               value="{{ instance.batch_size if is_edit else 10 }}"
+               value="{{ instance.batch_size }}"
                class="w-full bg-slate-900 border border-slate-700 rounded px-3 py-1.5 text-sm text-white
                       focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500" />
       </div>
@@ -91,7 +100,7 @@
       <div>
         <label class="block text-xs text-slate-400 mb-1" for="{{ form_id }}-sleep">Sleep (minutes)</label>
         <input id="{{ form_id }}-sleep" name="sleep_interval_mins" type="number" min="1"
-               value="{{ instance.sleep_interval_mins if is_edit else 15 }}"
+               value="{{ instance.sleep_interval_mins }}"
                class="w-full bg-slate-900 border border-slate-700 rounded px-3 py-1.5 text-sm text-white
                       focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500" />
       </div>
@@ -99,8 +108,8 @@
       {# Hourly cap #}
       <div>
         <label class="block text-xs text-slate-400 mb-1" for="{{ form_id }}-hcap">Hourly Cap</label>
-        <input id="{{ form_id }}-hcap" name="hourly_cap" type="number" min="1"
-               value="{{ instance.hourly_cap if is_edit else 20 }}"
+        <input id="{{ form_id }}-hcap" name="hourly_cap" type="number" min="0"
+               value="{{ instance.hourly_cap }}"
                class="w-full bg-slate-900 border border-slate-700 rounded px-3 py-1.5 text-sm text-white
                       focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500" />
       </div>
@@ -109,7 +118,7 @@
       <div>
         <label class="block text-xs text-slate-400 mb-1" for="{{ form_id }}-cool">Cooldown (days)</label>
         <input id="{{ form_id }}-cool" name="cooldown_days" type="number" min="0"
-               value="{{ instance.cooldown_days if is_edit else 7 }}"
+               value="{{ instance.cooldown_days }}"
                class="w-full bg-slate-900 border border-slate-700 rounded px-3 py-1.5 text-sm text-white
                       focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500" />
       </div>
@@ -118,7 +127,7 @@
       <div>
         <label class="block text-xs text-slate-400 mb-1" for="{{ form_id }}-delay">Unreleased Delay (hrs)</label>
         <input id="{{ form_id }}-delay" name="unreleased_delay_hrs" type="number" min="0"
-               value="{{ instance.unreleased_delay_hrs if is_edit else 24 }}"
+               value="{{ instance.unreleased_delay_hrs }}"
                class="w-full bg-slate-900 border border-slate-700 rounded px-3 py-1.5 text-sm text-white
                       focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500" />
       </div>
@@ -135,7 +144,21 @@
         <div>
           <label class="block text-xs text-slate-400 mb-1" for="{{ form_id }}-cbatch">Cutoff Batch</label>
           <input id="{{ form_id }}-cbatch" name="cutoff_batch_size" type="number" min="1" max="250"
-                 value="{{ instance.cutoff_batch_size if is_edit else 5 }}"
+                 value="{{ instance.cutoff_batch_size }}"
+                 class="w-24 bg-slate-900 border border-slate-700 rounded px-3 py-1.5 text-sm text-white
+                        focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500" />
+        </div>
+        <div>
+          <label class="block text-xs text-slate-400 mb-1" for="{{ form_id }}-ccool">Cutoff Cooldown</label>
+          <input id="{{ form_id }}-ccool" name="cutoff_cooldown_days" type="number" min="0"
+                 value="{{ instance.cutoff_cooldown_days }}"
+                 class="w-24 bg-slate-900 border border-slate-700 rounded px-3 py-1.5 text-sm text-white
+                        focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500" />
+        </div>
+        <div>
+          <label class="block text-xs text-slate-400 mb-1" for="{{ form_id }}-chcap">Cutoff Cap</label>
+          <input id="{{ form_id }}-chcap" name="cutoff_hourly_cap" type="number" min="0"
+                 value="{{ instance.cutoff_hourly_cap }}"
                  class="w-24 bg-slate-900 border border-slate-700 rounded px-3 py-1.5 text-sm text-white
                         focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500" />
         </div>

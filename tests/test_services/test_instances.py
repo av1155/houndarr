@@ -68,13 +68,15 @@ async def test_create_decrypts_api_key(db: None, master_key: bytes) -> None:
 async def test_create_applies_defaults(db: None, master_key: bytes) -> None:
     inst = await _make(master_key)
     assert inst.enabled is True
-    assert inst.batch_size == 10
-    assert inst.sleep_interval_mins == 15
-    assert inst.hourly_cap == 20
-    assert inst.cooldown_days == 7
-    assert inst.unreleased_delay_hrs == 24
+    assert inst.batch_size == 2
+    assert inst.sleep_interval_mins == 30
+    assert inst.hourly_cap == 4
+    assert inst.cooldown_days == 14
+    assert inst.unreleased_delay_hrs == 36
     assert inst.cutoff_enabled is False
-    assert inst.cutoff_batch_size == 5
+    assert inst.cutoff_batch_size == 1
+    assert inst.cutoff_cooldown_days == 21
+    assert inst.cutoff_hourly_cap == 1
 
 
 @pytest.mark.asyncio()

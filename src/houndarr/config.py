@@ -50,10 +50,12 @@ class AppSettings:
 # Per-instance defaults (used when creating new instances via the UI)
 # ---------------------------------------------------------------------------
 
-DEFAULT_BATCH_SIZE: int = 10
-DEFAULT_SLEEP_INTERVAL_MINUTES: int = 15
-DEFAULT_HOURLY_CAP: int = 20
-DEFAULT_COOLDOWN_DAYS: int = 7
-DEFAULT_UNRELEASED_DELAY_HOURS: int = 24
-DEFAULT_CUTOFF_BATCH_SIZE: int = 5
+DEFAULT_BATCH_SIZE: int = 2
+DEFAULT_SLEEP_INTERVAL_MINUTES: int = 30
+DEFAULT_HOURLY_CAP: int = 4
+DEFAULT_COOLDOWN_DAYS: int = 14
+DEFAULT_UNRELEASED_DELAY_HOURS: int = 36
+DEFAULT_CUTOFF_BATCH_SIZE: int = 1
+DEFAULT_CUTOFF_COOLDOWN_DAYS: int = 21
+DEFAULT_CUTOFF_HOURLY_CAP: int = 1
 DEFAULT_LOG_RETENTION_DAYS: int = 30

@@ -17,6 +17,8 @@ from houndarr.config import (
     DEFAULT_BATCH_SIZE,
     DEFAULT_COOLDOWN_DAYS,
     DEFAULT_CUTOFF_BATCH_SIZE,
+    DEFAULT_CUTOFF_COOLDOWN_DAYS,
+    DEFAULT_CUTOFF_HOURLY_CAP,
     DEFAULT_HOURLY_CAP,
     DEFAULT_SLEEP_INTERVAL_MINUTES,
     DEFAULT_UNRELEASED_DELAY_HOURS,
@@ -77,6 +79,8 @@ def _blank_instance() -> Instance:
         unreleased_delay_hrs=DEFAULT_UNRELEASED_DELAY_HOURS,
         cutoff_enabled=False,
         cutoff_batch_size=DEFAULT_CUTOFF_BATCH_SIZE,
+        cutoff_cooldown_days=DEFAULT_CUTOFF_COOLDOWN_DAYS,
+        cutoff_hourly_cap=DEFAULT_CUTOFF_HOURLY_CAP,
         created_at="",
         updated_at="",
     )
@@ -114,6 +118,21 @@ def _connection_guard_response(message: str) -> HTMLResponse:
             "HX-Trigger": "houndarr-connection-test-failure",
         },
     )
+
+
+def _validate_cutoff_controls(
+    cutoff_batch_size: int,
+    cutoff_cooldown_days: int,
+    cutoff_hourly_cap: int,
+) -> str | None:
+    """Validate cutoff-specific numeric controls from form submissions."""
+    if cutoff_batch_size < 1:
+        return "Cutoff batch size must be at least 1."
+    if cutoff_cooldown_days < 0:
+        return "Cutoff cooldown days must be 0 or greater."
+    if cutoff_hourly_cap < 0:
+        return "Cutoff hourly cap must be 0 or greater."
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -191,6 +210,8 @@ async def instance_create(
     unreleased_delay_hrs: Annotated[int, Form()] = DEFAULT_UNRELEASED_DELAY_HOURS,
     cutoff_enabled: Annotated[str, Form()] = "",
     cutoff_batch_size: Annotated[int, Form()] = DEFAULT_CUTOFF_BATCH_SIZE,
+    cutoff_cooldown_days: Annotated[int, Form()] = DEFAULT_CUTOFF_COOLDOWN_DAYS,
+    cutoff_hourly_cap: Annotated[int, Form()] = DEFAULT_CUTOFF_HOURLY_CAP,
     connection_verified: Annotated[str, Form()] = "false",
 ) -> HTMLResponse:
     """Create a new instance and return the updated instance table body."""
@@ -198,6 +219,14 @@ async def instance_create(
         instance_type = InstanceType(type)
     except ValueError:
         return _connection_guard_response("Invalid instance type.")
+
+    validation_error = _validate_cutoff_controls(
+        cutoff_batch_size,
+        cutoff_cooldown_days,
+        cutoff_hourly_cap,
+    )
+    if validation_error is not None:
+        return _connection_guard_response(validation_error)
 
     if connection_verified != "true":
         return _connection_guard_response("Test connection successfully before adding.")
@@ -219,6 +248,8 @@ async def instance_create(
         unreleased_delay_hrs=unreleased_delay_hrs,
         cutoff_enabled=cutoff_enabled == "on",
         cutoff_batch_size=cutoff_batch_size,
+        cutoff_cooldown_days=cutoff_cooldown_days,
+        cutoff_hourly_cap=cutoff_hourly_cap,
     )
     instances = await list_instances(master_key=_master_key(request))
     # HTMX: return just the refreshed table body partial
@@ -259,6 +290,8 @@ async def instance_update(
     unreleased_delay_hrs: Annotated[int, Form()] = DEFAULT_UNRELEASED_DELAY_HOURS,
     cutoff_enabled: Annotated[str, Form()] = "",
     cutoff_batch_size: Annotated[int, Form()] = DEFAULT_CUTOFF_BATCH_SIZE,
+    cutoff_cooldown_days: Annotated[int, Form()] = DEFAULT_CUTOFF_COOLDOWN_DAYS,
+    cutoff_hourly_cap: Annotated[int, Form()] = DEFAULT_CUTOFF_HOURLY_CAP,
     connection_verified: Annotated[str, Form()] = "false",
 ) -> HTMLResponse:
     """Update an existing instance and return the refreshed row partial."""
@@ -266,6 +299,14 @@ async def instance_update(
         instance_type = InstanceType(type)
     except ValueError:
         return _connection_guard_response("Invalid instance type.")
+
+    validation_error = _validate_cutoff_controls(
+        cutoff_batch_size,
+        cutoff_cooldown_days,
+        cutoff_hourly_cap,
+    )
+    if validation_error is not None:
+        return _connection_guard_response(validation_error)
 
     if connection_verified != "true":
         return _connection_guard_response("Test connection successfully before saving changes.")
@@ -292,6 +333,8 @@ async def instance_update(
         unreleased_delay_hrs=unreleased_delay_hrs,
         cutoff_enabled=cutoff_enabled == "on",
         cutoff_batch_size=cutoff_batch_size,
+        cutoff_cooldown_days=cutoff_cooldown_days,
+        cutoff_hourly_cap=cutoff_hourly_cap,
     )
     if updated is None:
         return HTMLResponse(content="Not found", status_code=404)
@@ -336,6 +379,8 @@ async def instance_toggle_enabled(request: Request, instance_id: int) -> HTMLRes
         unreleased_delay_hrs=instance.unreleased_delay_hrs,
         cutoff_enabled=instance.cutoff_enabled,
         cutoff_batch_size=instance.cutoff_batch_size,
+        cutoff_cooldown_days=instance.cutoff_cooldown_days,
+        cutoff_hourly_cap=instance.cutoff_hourly_cap,
     )
     if updated is None:
         return HTMLResponse(content="Not found", status_code=404)

@@ -109,6 +109,13 @@ def test_settings_page_includes_add_instance_modal(app: TestClient) -> None:
     assert b"add-instance-modal-content" in resp.content
 
 
+def test_settings_help_page_renders(app: TestClient) -> None:
+    _login(app)
+    resp = app.get("/settings/help")
+    assert resp.status_code == 200
+    assert b"Instance Settings Help" in resp.content
+
+
 # ---------------------------------------------------------------------------
 # POST /settings/instances (create)
 # ---------------------------------------------------------------------------
@@ -298,6 +305,19 @@ def test_add_form_partial_renders(app: TestClient) -> None:
     assert resp.status_code == 200
     assert b"Add Instance" in resp.content
     assert b'name="enabled"' not in resp.content
+    assert b'name="cutoff_cooldown_days"' in resp.content
+    assert b'name="cutoff_hourly_cap"' in resp.content
+    assert b'name="batch_size" type="number" min="1" max="250"' in resp.content
+    assert b'value="2"' in resp.content
+    assert b'name="sleep_interval_mins" type="number" min="1"' in resp.content
+    assert b'value="30"' in resp.content
+    assert b'name="hourly_cap" type="number" min="0"' in resp.content
+    assert b'value="4"' in resp.content
+    assert b'name="cooldown_days" type="number" min="0"' in resp.content
+    assert b'value="14"' in resp.content
+    assert b'name="unreleased_delay_hrs" type="number" min="0"' in resp.content
+    assert b'value="36"' in resp.content
+    assert b'href="/settings/help"' in resp.content
 
 
 def test_connection_check_endpoint_success(app: TestClient) -> None:
@@ -318,3 +338,11 @@ def test_connection_check_endpoint_invalid_type(app: TestClient) -> None:
     )
     assert resp.status_code == 422
     assert b"Invalid type" in resp.content
+
+
+def test_create_instance_rejects_invalid_cutoff_controls(app: TestClient) -> None:
+    _login(app)
+    form = {**_VALID_FORM, "cutoff_batch_size": "0", "cutoff_cooldown_days": "-1"}
+    resp = app.post("/settings/instances", data=form)
+    assert resp.status_code == 422
+    assert b"Cutoff batch size" in resp.content

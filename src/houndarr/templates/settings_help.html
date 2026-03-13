@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+
+{% block title %}Settings Help — Houndarr{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto space-y-6">
+  <div class="flex items-start justify-between gap-4">
+    <div>
+      <h1 class="text-2xl font-bold text-white">Instance Settings Help</h1>
+      <p class="mt-1 text-sm text-slate-400">
+        Quick reference for each Add/Edit Instance control.
+      </p>
+    </div>
+    <a href="/settings"
+       class="px-3 py-1.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 text-sm border border-slate-700 transition-colors">
+      Back to Settings
+    </a>
+  </div>
+
+  <section class="rounded-xl border border-slate-800 bg-slate-900 p-5">
+    <h2 class="text-base font-semibold text-slate-200 mb-3">Missing Search Controls</h2>
+    <ul class="space-y-2 text-sm text-slate-300">
+      <li><strong>Batch Size</strong>: max missing items considered per cycle (default: <code>2</code>).</li>
+      <li><strong>Sleep (minutes)</strong>: wait between cycles (default: <code>30</code>).</li>
+      <li><strong>Hourly Cap</strong>: max successful missing searches/hour (default: <code>4</code>, <code>0</code> = unlimited).</li>
+      <li><strong>Cooldown (days)</strong>: retry wait per item (default: <code>14</code>).</li>
+      <li><strong>Unreleased Delay (hrs)</strong>: wait after release date before searching (default: <code>36</code>).</li>
+    </ul>
+  </section>
+
+  <section class="rounded-xl border border-slate-800 bg-slate-900 p-5">
+    <h2 class="text-base font-semibold text-slate-200 mb-3">Cutoff Upgrade Controls</h2>
+    <ul class="space-y-2 text-sm text-slate-300">
+      <li><strong>Cutoff search</strong>: enables cutoff-upgrade pass (default: off).</li>
+      <li><strong>Cutoff Batch</strong>: max cutoff items/cycle (default: <code>1</code>).</li>
+      <li><strong>Cutoff Cooldown</strong>: retry wait for cutoff items (default: <code>21</code> days).</li>
+      <li><strong>Cutoff Cap</strong>: max successful cutoff searches/hour (default: <code>1</code>, <code>0</code> = unlimited).</li>
+    </ul>
+    <p class="mt-3 text-xs text-slate-400">Cutoff has its own budget and cooldown so it does not compete with missing searches.</p>
+  </section>
+
+  <section class="rounded-xl border border-slate-800 bg-slate-900 p-5">
+    <h2 class="text-base font-semibold text-slate-200 mb-3">Safe Starting Preset</h2>
+    <p class="text-sm text-slate-300">
+      Start conservative: Batch <code>2</code>, Sleep <code>30</code>, Hourly Cap <code>4</code>, Cooldown <code>14</code>,
+      Unreleased Delay <code>36</code>, Cutoff Off, Cutoff Batch <code>1</code>, Cutoff Cooldown <code>21</code>, Cutoff Cap <code>1</code>.
+    </p>
+  </section>
+
+  <p class="text-xs text-slate-500">
+    Source doc in repo: <code>docs/settings.md</code>
+  </p>
+</div>
+{% endblock %}

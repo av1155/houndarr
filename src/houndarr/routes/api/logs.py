@@ -83,7 +83,7 @@ async def _query_logs(
 
     Returns:
         List of dicts with keys: id, instance_id, instance_name, item_id,
-        item_type, action, reason, message, timestamp.
+        item_type, item_label, action, reason, message, timestamp.
     """
     limit = min(max(1, limit), _LOG_LIMIT_MAX)
 
@@ -115,6 +115,7 @@ async def _query_logs(
             END AS instance_name,
             sl.item_id,
             sl.item_type,
+            sl.item_label,
             sl.action,
             sl.reason,
             sl.message,

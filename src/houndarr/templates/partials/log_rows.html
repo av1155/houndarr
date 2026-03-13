@@ -30,9 +30,19 @@
       {{ row.item_type or "—" }}
     </td>
 
-    {# Item ID #}
-    <td class="px-3 py-2.5 text-xs text-slate-400 font-mono">
-      {{ row.item_id if row.item_id is not none else "—" }}
+    {# Media label + ID fallback #}
+    <td class="px-3 py-2.5 text-xs text-slate-300 max-w-[320px] truncate"
+        title="{{ row.item_label or '' }}">
+      {% if row.item_label %}
+        <div class="truncate">{{ row.item_label }}</div>
+      {% elif row.item_type and row.item_id is not none %}
+        <div class="truncate text-slate-400">{{ row.item_type|capitalize }} {{ row.item_id }}</div>
+      {% else %}
+        <div class="truncate text-slate-500">—</div>
+      {% endif %}
+      {% if row.item_id is not none %}
+        <div class="text-[11px] text-slate-500 font-mono">id: {{ row.item_id }}</div>
+      {% endif %}
     </td>
 
     {# Reason / Message #}

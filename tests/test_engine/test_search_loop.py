@@ -59,6 +59,7 @@ def _make_instance(
     batch_size: int = 10,
     hourly_cap: int = 20,
     cooldown_days: int = 7,
+    unreleased_delay_hrs: int = 24,
     enabled: bool = True,
 ) -> Instance:
     return Instance(
@@ -72,9 +73,11 @@ def _make_instance(
         sleep_interval_mins=15,
         hourly_cap=hourly_cap,
         cooldown_days=cooldown_days,
-        unreleased_delay_hrs=24,
+        unreleased_delay_hrs=unreleased_delay_hrs,
         cutoff_enabled=False,
         cutoff_batch_size=5,
+        cutoff_cooldown_days=21,
+        cutoff_hourly_cap=1,
         created_at="2024-01-01T00:00:00Z",
         updated_at="2024-01-01T00:00:00Z",
     )
@@ -139,6 +142,8 @@ async def test_item_is_searched_when_not_on_cooldown(seeded_instances: None) -> 
     assert rows[0]["action"] == "searched"
     assert rows[0]["item_id"] == 101
     assert rows[0]["item_type"] == "episode"
+    assert rows[0]["item_label"] == "My Show - S01E01 - Pilot"
+    assert rows[0]["search_kind"] == "missing"
 
 
 @pytest.mark.asyncio()
@@ -160,6 +165,8 @@ async def test_radarr_item_is_searched(seeded_instances: None) -> None:
     assert rows[0]["action"] == "searched"
     assert rows[0]["item_id"] == 201
     assert rows[0]["item_type"] == "movie"
+    assert rows[0]["item_label"] == "My Movie (2023)"
+    assert rows[0]["search_kind"] == "missing"
 
 
 # ---------------------------------------------------------------------------
@@ -206,11 +213,16 @@ async def test_item_skipped_when_on_cooldown(seeded_instances: None) -> None:
 @respx.mock
 async def test_hourly_cap_stops_searches(seeded_instances: None) -> None:
     """When the hourly cap is already reached, items should be skipped."""
-    # Fill up the hourly cap by recording searches for other items
-    from houndarr.services.cooldown import record_search
-
-    for i in range(5):
-        await record_search(1, 900 + i, "episode")
+    # Fill up the hourly cap by inserting recent successful missing-pass logs.
+    async with get_db() as conn:
+        await conn.executemany(
+            """
+            INSERT INTO search_log (instance_id, item_id, item_type, search_kind, action, timestamp)
+            VALUES (?, ?, 'episode', 'missing', 'searched', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+            """,
+            [(1, 900 + i) for i in range(5)],
+        )
+        await conn.commit()
 
     respx.get(f"{SONARR_URL}/api/v3/wanted/missing").mock(
         return_value=httpx.Response(200, json=_MISSING_SONARR)
@@ -227,9 +239,8 @@ async def test_hourly_cap_stops_searches(seeded_instances: None) -> None:
     assert not search_route.called
 
     rows = await _get_log_rows()
-    assert len(rows) == 1
-    assert rows[0]["action"] == "skipped"
-    assert "hourly cap" in (rows[0]["reason"] or "")
+    assert rows[-1]["action"] == "skipped"
+    assert "hourly cap" in (rows[-1]["reason"] or "")
 
 
 @pytest.mark.asyncio()
@@ -274,9 +285,39 @@ async def test_search_log_row_written_on_success(seeded_instances: None) -> None
     assert row["instance_id"] == 1
     assert row["item_id"] == 101
     assert row["item_type"] == "episode"
+    assert row["item_label"] == "My Show - S01E01 - Pilot"
+    assert row["search_kind"] == "missing"
     assert row["action"] == "searched"
     assert row["reason"] is None
     assert row["timestamp"] is not None
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_unreleased_delay_skips_item_until_delay_elapses(seeded_instances: None) -> None:
+    """Items inside unreleased delay are skipped with an explicit reason."""
+    future_episode = {
+        **_EPISODE_RECORD,
+        "id": 303,
+        "airDateUtc": "2999-01-01T00:00:00Z",
+    }
+    respx.get(f"{SONARR_URL}/api/v3/wanted/missing").mock(
+        return_value=httpx.Response(200, json={"records": [future_episode]})
+    )
+    search_route = respx.post(f"{SONARR_URL}/api/v3/command").mock(
+        return_value=httpx.Response(201, json=_COMMAND_RESP)
+    )
+
+    instance = _make_instance(unreleased_delay_hrs=36)
+    count = await run_instance_search(instance, MASTER_KEY)
+
+    assert count == 0
+    assert not search_route.called
+    rows = await _get_log_rows()
+    assert len(rows) == 1
+    assert rows[0]["action"] == "skipped"
+    assert rows[0]["reason"] == "unreleased delay (36h)"
+    assert rows[0]["item_id"] == 303
 
 
 @pytest.mark.asyncio()
@@ -403,6 +444,11 @@ def _make_cutoff_instance(
     url: str = SONARR_URL,
     cutoff_enabled: bool = True,
     cutoff_batch_size: int = 5,
+    hourly_cap: int = 20,
+    cutoff_hourly_cap: int = 1,
+    cooldown_days: int = 7,
+    cutoff_cooldown_days: int = 21,
+    unreleased_delay_hrs: int = 24,
 ) -> Instance:
     return Instance(
         id=instance_id,
@@ -413,11 +459,13 @@ def _make_cutoff_instance(
         enabled=True,
         batch_size=10,
         sleep_interval_mins=15,
-        hourly_cap=20,
-        cooldown_days=7,
-        unreleased_delay_hrs=24,
+        hourly_cap=hourly_cap,
+        cooldown_days=cooldown_days,
+        unreleased_delay_hrs=unreleased_delay_hrs,
         cutoff_enabled=cutoff_enabled,
         cutoff_batch_size=cutoff_batch_size,
+        cutoff_cooldown_days=cutoff_cooldown_days,
+        cutoff_hourly_cap=cutoff_hourly_cap,
         created_at="2024-01-01T00:00:00Z",
         updated_at="2024-01-01T00:00:00Z",
     )
@@ -446,6 +494,46 @@ async def test_cutoff_pass_runs_when_enabled(seeded_instances: None) -> None:
     assert len(rows) == 1
     assert rows[0]["action"] == "searched"
     assert rows[0]["item_id"] == 101
+    assert rows[0]["search_kind"] == "cutoff"
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_cutoff_hourly_cap_is_separate_from_missing_hourly_cap(
+    seeded_instances: None,
+) -> None:
+    """Cutoff and missing passes should not share hourly cap budget."""
+    missing_one = {"records": [{**_EPISODE_RECORD, "id": 401}]}
+    cutoff_one = {"records": [{**_EPISODE_RECORD, "id": 402}]}
+
+    respx.get(f"{SONARR_URL}/api/v3/wanted/missing").mock(
+        return_value=httpx.Response(200, json=missing_one)
+    )
+    respx.get(f"{SONARR_URL}/api/v3/wanted/cutoff").mock(
+        return_value=httpx.Response(200, json=cutoff_one)
+    )
+    search_route = respx.post(f"{SONARR_URL}/api/v3/command").mock(
+        return_value=httpx.Response(201, json=_COMMAND_RESP)
+    )
+
+    instance = _make_cutoff_instance(
+        cutoff_enabled=True,
+        hourly_cap=1,
+        cutoff_hourly_cap=1,
+        cooldown_days=0,
+        cutoff_cooldown_days=0,
+    )
+    count = await run_instance_search(instance, MASTER_KEY)
+
+    assert count == 2
+    assert search_route.called
+    assert len(search_route.calls) == 2
+
+    rows = await _get_log_rows()
+    searched_rows = [row for row in rows if row["action"] == "searched"]
+    assert len(searched_rows) == 2
+    assert searched_rows[0]["search_kind"] == "missing"
+    assert searched_rows[1]["search_kind"] == "cutoff"
 
 
 @pytest.mark.asyncio()
@@ -478,6 +566,39 @@ async def test_cutoff_pass_respects_cooldown_from_missing_pass(seeded_instances:
     assert rows[0]["action"] == "searched"
     assert rows[1]["action"] == "skipped"
     assert "cooldown" in (rows[1]["reason"] or "")
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_cutoff_pass_uses_cutoff_cooldown_setting(seeded_instances: None) -> None:
+    """Cutoff pass should honor cutoff_cooldown_days instead of missing cooldown_days."""
+    from houndarr.services.cooldown import record_search
+
+    await record_search(1, 101, "episode")
+
+    respx.get(f"{SONARR_URL}/api/v3/wanted/missing").mock(
+        return_value=httpx.Response(200, json={"records": []})
+    )
+    respx.get(f"{SONARR_URL}/api/v3/wanted/cutoff").mock(
+        return_value=httpx.Response(200, json={"records": [_EPISODE_RECORD]})
+    )
+    search_route = respx.post(f"{SONARR_URL}/api/v3/command").mock(
+        return_value=httpx.Response(201, json=_COMMAND_RESP)
+    )
+
+    instance = _make_cutoff_instance(
+        cutoff_enabled=True,
+        cooldown_days=0,
+        cutoff_cooldown_days=21,
+    )
+    count = await run_instance_search(instance, MASTER_KEY)
+
+    assert count == 0
+    assert not search_route.called
+    rows = await _get_log_rows()
+    assert len(rows) == 1
+    assert rows[0]["action"] == "skipped"
+    assert rows[0]["reason"] == "on cutoff cooldown (21d)"
 
 
 @pytest.mark.asyncio()

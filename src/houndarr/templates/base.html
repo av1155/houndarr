@@ -35,20 +35,6 @@
   <script src="https://unpkg.com/htmx.org@2.0.4/dist/htmx.min.js" defer></script>
 
   <style>
-    body {
-      animation: page-fade-in 70ms ease-out;
-      transition: opacity 70ms ease-in;
-    }
-
-    body.is-leaving {
-      opacity: 0;
-    }
-
-    @keyframes page-fade-in {
-      from { opacity: 0; }
-      to { opacity: 1; }
-    }
-
     html {
       scrollbar-gutter: stable both-edges;
     }
@@ -59,12 +45,6 @@
     ::-webkit-scrollbar-thumb { background: #475569; border-radius: 3px; }
     ::-webkit-scrollbar-thumb:hover { background: #64748b; }
 
-    @media (prefers-reduced-motion: reduce) {
-      body {
-        animation: none;
-        transition: none;
-      }
-    }
   </style>
 
   {% block head %}{% endblock %}
@@ -152,64 +132,5 @@
 
   {% block scripts %}{% endblock %}
 
-  <script>
-    (function() {
-      const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-      if (prefersReducedMotion) {
-        return;
-      }
-
-      const leaveDurationMs = 65;
-      let isNavigating = false;
-
-      document.addEventListener('click', function(event) {
-        if (event.defaultPrevented || isNavigating) {
-          return;
-        }
-
-        if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
-          return;
-        }
-
-        const anchor = event.target.closest('a[href]');
-        if (!anchor) {
-          return;
-        }
-
-        if ((anchor.target && anchor.target !== '_self') || anchor.hasAttribute('download')) {
-          return;
-        }
-
-        const rawHref = anchor.getAttribute('href');
-        if (!rawHref || rawHref.startsWith('#') || rawHref.startsWith('mailto:') || rawHref.startsWith('tel:')) {
-          return;
-        }
-
-        const nextUrl = new URL(anchor.href, window.location.href);
-        const currentUrl = new URL(window.location.href);
-
-        if (nextUrl.origin !== currentUrl.origin) {
-          return;
-        }
-
-        if (nextUrl.pathname === currentUrl.pathname && nextUrl.search === currentUrl.search) {
-          return;
-        }
-
-        event.preventDefault();
-        isNavigating = true;
-        document.body.classList.add('is-leaving');
-
-        window.setTimeout(function() {
-          window.location.href = nextUrl.href;
-        }, leaveDurationMs);
-      });
-
-      window.addEventListener('pageshow', function() {
-        document.body.classList.remove('is-leaving');
-        isNavigating = false;
-      });
-    })();
-  </script>
 </body>
 </html>

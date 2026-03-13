@@ -5,12 +5,10 @@ on:
     branches: ["main"]
     tags: ["v*"]
     paths-ignore:
-      - ".github/**"
       - "docs/**"
       - "*.md"
   pull_request:
     paths-ignore:
-      - ".github/**"
       - "docs/**"
       - "*.md"
 

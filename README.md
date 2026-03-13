@@ -1,5 +1,7 @@
 # Houndarr
 
+![Houndarr logo](src/houndarr/static/img/houndarr-logo.png)
+
 > A focused, self-hosted companion for Sonarr and Radarr that automatically searches for missing media in polite, controlled batches.
 
 **Status:** Under active development — not yet production-ready.
@@ -31,6 +33,14 @@ services:
 ```
 
 Full documentation coming in v1.0.0.
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development workflow and quality gates.
+
+## Security
+
+See [SECURITY.md](SECURITY.md) to report vulnerabilities responsibly.
 
 ## License
 

@@ -16,6 +16,7 @@ from houndarr.config import get_settings
 from houndarr.crypto import ensure_master_key
 from houndarr.database import init_db, set_db_path
 from houndarr.engine.supervisor import Supervisor
+from houndarr.services.instances import list_instances
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +37,13 @@ async def _lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     set_db_path(str(settings.db_path))
     await init_db()
     logger.info("Database ready at %s", settings.db_path)
+
+    # Warn if no instances are configured yet
+    instances = await list_instances(master_key=app.state.master_key)
+    if not instances:
+        logger.warning(
+            "No instances configured — visit the Settings page to add a Sonarr or Radarr instance"
+        )
 
     # Start the background search supervisor
     supervisor = Supervisor(master_key=app.state.master_key)

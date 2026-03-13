@@ -74,10 +74,20 @@ class Supervisor:
         for task in self._tasks.values():
             task.cancel()
 
-        results = await asyncio.gather(*self._tasks.values(), return_exceptions=True)
-        for result in results:
-            if isinstance(result, Exception) and not isinstance(result, asyncio.CancelledError):
-                logger.error("Supervisor: task raised unexpected exception: %s", result)
+        done, pending = await asyncio.wait(
+            list(self._tasks.values()),
+            timeout=_SHUTDOWN_TIMEOUT,
+        )
+
+        # Force-cancel anything that outlived the timeout
+        for task in pending:
+            task.cancel()
+            logger.warning("Supervisor: task did not finish within timeout — force cancelled")
+
+        for task in done:
+            exc = task.exception() if not task.cancelled() else None
+            if exc is not None:
+                logger.error("Supervisor: task raised unexpected exception: %s", exc)
 
         self._tasks.clear()
         logger.info("Supervisor: all tasks stopped")

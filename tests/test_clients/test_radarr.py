@@ -150,6 +150,59 @@ async def test_search_non_2xx_raises(client: RadarrClient) -> None:
 
 
 # ---------------------------------------------------------------------------
+# get_cutoff_unmet
+# ---------------------------------------------------------------------------
+
+_CUTOFF_RESPONSE = {
+    "page": 1,
+    "pageSize": 10,
+    "totalRecords": 1,
+    "records": [
+        {
+            "id": 201,
+            "title": "My Movie",
+            "year": 2023,
+            "digitalRelease": None,
+        }
+    ],
+}
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_get_cutoff_unmet_returns_movies(client: RadarrClient) -> None:
+    respx.get(f"{BASE}/api/v3/wanted/cutoff").mock(
+        return_value=httpx.Response(200, json=_CUTOFF_RESPONSE)
+    )
+    results = await client.get_cutoff_unmet(page=1, page_size=10)
+    assert len(results) == 1
+    movie = results[0]
+    assert isinstance(movie, MissingMovie)
+    assert movie.movie_id == 201
+    assert movie.title == "My Movie"
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_get_cutoff_unmet_empty(client: RadarrClient) -> None:
+    respx.get(f"{BASE}/api/v3/wanted/cutoff").mock(
+        return_value=httpx.Response(
+            200, json={"page": 1, "pageSize": 10, "totalRecords": 0, "records": []}
+        )
+    )
+    results = await client.get_cutoff_unmet()
+    assert results == []
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_get_cutoff_unmet_non_2xx_raises(client: RadarrClient) -> None:
+    respx.get(f"{BASE}/api/v3/wanted/cutoff").mock(return_value=httpx.Response(403))
+    with pytest.raises(httpx.HTTPStatusError):
+        await client.get_cutoff_unmet()
+
+
+# ---------------------------------------------------------------------------
 # Timeout propagation
 # ---------------------------------------------------------------------------
 

@@ -136,25 +136,19 @@
   }
 
   .account-details-content {
-    display: grid;
-    grid-template-rows: 0fr;
-    transition: grid-template-rows 180ms ease, opacity 180ms ease;
+    overflow: hidden;
+    height: 0;
     opacity: 0;
   }
 
   #account-settings[open] .account-details-content {
-    grid-template-rows: 1fr;
+    height: auto;
     opacity: 1;
-  }
-
-  .account-details-inner {
-    overflow: hidden;
   }
 
   @media (prefers-reduced-motion: reduce) {
     #account-settings > summary,
-    .account-details-chevron,
-    .account-details-content {
+    .account-details-chevron {
       transition: none;
     }
   }
@@ -339,9 +333,88 @@
   const addInstanceModalContent = document.getElementById('add-instance-modal-content');
   const addInstanceModalTitle = document.getElementById('add-instance-modal-title');
   const addInstanceModalSubtitle = document.getElementById('add-instance-modal-subtitle');
+  const accountSettings = document.getElementById('account-settings');
+  const accountSummary = accountSettings ? accountSettings.querySelector('summary') : null;
+  const accountContent = accountSettings ? accountSettings.querySelector('.account-details-content') : null;
   const closeAnimationMs = 160;
+  const accountAnimationMs = 180;
   const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   let isClosingAddInstanceModal = false;
+  let isAccountAnimating = false;
+
+  function initializeAccountContent() {
+    if (!accountSettings || !accountContent) {
+      return;
+    }
+
+    accountContent.style.transition = '';
+    accountContent.style.height = accountSettings.open ? 'auto' : '0px';
+    accountContent.style.opacity = accountSettings.open ? '1' : '0';
+  }
+
+  function toggleAccountDetails(shouldOpen) {
+    if (!accountSettings || !accountContent || isAccountAnimating) {
+      return;
+    }
+
+    if (prefersReducedMotion) {
+      accountSettings.open = shouldOpen;
+      initializeAccountContent();
+      return;
+    }
+
+    const startHeight = accountContent.getBoundingClientRect().height;
+    isAccountAnimating = true;
+
+    if (shouldOpen) {
+      accountSettings.open = true;
+      const endHeight = accountContent.scrollHeight;
+
+      accountContent.style.height = `${startHeight}px`;
+      accountContent.style.opacity = '0';
+
+      requestAnimationFrame(() => {
+        accountContent.style.transition = `height ${accountAnimationMs}ms ease, opacity ${accountAnimationMs}ms ease`;
+        accountContent.style.height = `${endHeight}px`;
+        accountContent.style.opacity = '1';
+      });
+
+      window.setTimeout(() => {
+        accountContent.style.transition = '';
+        accountContent.style.height = 'auto';
+        isAccountAnimating = false;
+      }, accountAnimationMs);
+      return;
+    }
+
+    accountContent.style.height = `${startHeight}px`;
+    accountContent.style.opacity = '1';
+
+    requestAnimationFrame(() => {
+      accountContent.style.transition = `height ${accountAnimationMs}ms ease, opacity ${accountAnimationMs}ms ease`;
+      accountContent.style.height = '0px';
+      accountContent.style.opacity = '0';
+    });
+
+    window.setTimeout(() => {
+      accountSettings.open = false;
+      accountContent.style.transition = '';
+      accountContent.style.height = '0px';
+      isAccountAnimating = false;
+    }, accountAnimationMs);
+  }
+
+  initializeAccountContent();
+
+  if (accountSummary) {
+    accountSummary.addEventListener('click', function(event) {
+      event.preventDefault();
+      if (!accountSettings) {
+        return;
+      }
+      toggleAccountDetails(!accountSettings.open);
+    });
+  }
 
   function setAddInstanceModalChrome(mode, instanceName) {
     if (mode === 'edit') {

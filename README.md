@@ -1,6 +1,8 @@
 # Houndarr
 
-![Houndarr logo](src/houndarr/static/img/houndarr-logo.png)
+<p align="center">
+  <img src="src/houndarr/static/img/houndarr-logo-dark.png" alt="Houndarr logo" width="220" />
+</p>
 
 > A focused, self-hosted companion for Sonarr and Radarr that automatically searches for missing media in polite, controlled batches.
 

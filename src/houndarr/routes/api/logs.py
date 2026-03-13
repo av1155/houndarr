@@ -22,6 +22,8 @@ router = APIRouter()
 
 _LOG_LIMIT_DEFAULT = 50
 _LOG_LIMIT_MAX = 500
+_SEARCH_KINDS = {"missing", "cutoff"}
+_CYCLE_TRIGGERS = {"scheduled", "run_now", "system"}
 
 
 def _parse_instance_id(raw: str | None) -> int | None:
@@ -44,6 +46,39 @@ def _parse_instance_id(raw: str | None) -> int | None:
         return int(raw)
     except ValueError as exc:  # pragma: no cover - defensive path
         raise HTTPException(status_code=422, detail="instance_id must be an integer") from exc
+
+
+def _parse_search_kind(raw: str | None) -> str | None:
+    """Parse optional search_kind query param."""
+    if raw is None or raw == "":
+        return None
+    if raw not in _SEARCH_KINDS:
+        raise HTTPException(status_code=422, detail="search_kind must be 'missing' or 'cutoff'")
+    return raw
+
+
+def _parse_cycle_trigger(raw: str | None) -> str | None:
+    """Parse optional cycle_trigger query param."""
+    if raw is None or raw == "":
+        return None
+    if raw not in _CYCLE_TRIGGERS:
+        raise HTTPException(
+            status_code=422,
+            detail="cycle_trigger must be 'scheduled', 'run_now', or 'system'",
+        )
+    return raw
+
+
+def _parse_hide_system(raw: str | None) -> bool:
+    """Parse hide_system checkbox/select values from query params."""
+    if raw is None or raw == "":
+        return False
+    normalized = raw.strip().lower()
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "off"}:
+        return False
+    raise HTTPException(status_code=422, detail="hide_system must be a boolean")
 
 
 # ---------------------------------------------------------------------------
@@ -70,6 +105,9 @@ def _get_templates() -> Jinja2Templates:
 async def _query_logs(
     instance_id: int | None,
     action: str | None,
+    search_kind: str | None,
+    cycle_trigger: str | None,
+    hide_system: bool,
     before: str | None,
     limit: int,
 ) -> list[dict[str, Any]]:
@@ -78,6 +116,9 @@ async def _query_logs(
     Args:
         instance_id: Restrict to a specific instance (None = all).
         action: One of ``searched``, ``skipped``, ``error``, ``info`` (None = all).
+        search_kind: ``missing`` or ``cutoff`` (None = all).
+        cycle_trigger: ``scheduled``, ``run_now``, or ``system`` (None = all).
+        hide_system: When True, hide system lifecycle rows from results.
         before: ISO-8601 timestamp cursor — return rows older than this value.
         limit: Maximum number of rows to return.
 
@@ -98,6 +139,20 @@ async def _query_logs(
     if action is not None:
         conditions.append("sl.action = ?")
         params.append(action)
+
+    if search_kind is not None:
+        conditions.append("sl.search_kind = ?")
+        params.append(search_kind)
+
+    if cycle_trigger is not None:
+        conditions.append("sl.cycle_trigger = ?")
+        params.append(cycle_trigger)
+
+    if hide_system:
+        conditions.append(
+            "NOT (COALESCE(sl.cycle_trigger, '') = 'system' "
+            "OR (sl.instance_id IS NULL AND sl.action = 'info'))"
+        )
 
     if before is not None:
         conditions.append("sl.timestamp < ?")
@@ -123,6 +178,16 @@ async def _query_logs(
             sl.action,
             sl.reason,
             sl.message,
+            CASE
+                WHEN sl.cycle_id IS NULL THEN NULL
+                WHEN EXISTS (
+                    SELECT 1
+                    FROM search_log sl2
+                    WHERE sl2.cycle_id = sl.cycle_id
+                      AND sl2.action = 'searched'
+                ) THEN 'progress'
+                ELSE 'no_progress'
+            END AS cycle_progress,
             sl.timestamp
         FROM search_log sl
         LEFT JOIN instances i ON i.id = sl.instance_id
@@ -148,6 +213,9 @@ async def _query_logs(
 async def get_logs(
     instance_id: str | None = Query(default=None),
     action: str | None = Query(default=None),
+    search_kind: str | None = Query(default=None),
+    cycle_trigger: str | None = Query(default=None),
+    hide_system: str | None = Query(default=None),
     before: str | None = Query(default=None),
     limit: int = Query(default=_LOG_LIMIT_DEFAULT, ge=1, le=_LOG_LIMIT_MAX),
 ) -> JSONResponse:
@@ -156,6 +224,9 @@ async def get_logs(
     Args:
         instance_id: Filter to a specific instance ID.
         action: Filter by action (``searched``, ``skipped``, ``error``, ``info``).
+        search_kind: Filter by search pass kind (``missing`` or ``cutoff``).
+        cycle_trigger: Filter by cycle trigger (``scheduled``, ``run_now``, ``system``).
+        hide_system: When true, hide system lifecycle rows.
         before: Timestamp cursor — only return rows older than this ISO-8601 value.
         limit: Max rows (1–500, default 50).
 
@@ -164,7 +235,18 @@ async def get_logs(
     """
     parsed_instance_id = _parse_instance_id(instance_id)
     parsed_action = action or None
-    rows = await _query_logs(parsed_instance_id, parsed_action, before, limit)
+    parsed_search_kind = _parse_search_kind(search_kind)
+    parsed_cycle_trigger = _parse_cycle_trigger(cycle_trigger)
+    parsed_hide_system = _parse_hide_system(hide_system)
+    rows = await _query_logs(
+        parsed_instance_id,
+        parsed_action,
+        parsed_search_kind,
+        parsed_cycle_trigger,
+        parsed_hide_system,
+        before,
+        limit,
+    )
     return JSONResponse(rows)
 
 
@@ -173,6 +255,9 @@ async def get_logs_partial(
     request: Request,
     instance_id: str | None = Query(default=None),
     action: str | None = Query(default=None),
+    search_kind: str | None = Query(default=None),
+    cycle_trigger: str | None = Query(default=None),
+    hide_system: str | None = Query(default=None),
     before: str | None = Query(default=None),
     limit: int = Query(default=_LOG_LIMIT_DEFAULT, ge=1, le=_LOG_LIMIT_MAX),
 ) -> HTMLResponse:
@@ -182,6 +267,9 @@ async def get_logs_partial(
         request: FastAPI request (required for template rendering).
         instance_id: Filter to a specific instance ID.
         action: Filter by action.
+        search_kind: Filter by search pass kind.
+        cycle_trigger: Filter by trigger type.
+        hide_system: Whether to hide system lifecycle rows.
         before: Timestamp cursor.
         limit: Max rows.
 
@@ -190,7 +278,18 @@ async def get_logs_partial(
     """
     parsed_instance_id = _parse_instance_id(instance_id)
     parsed_action = action or None
-    rows = await _query_logs(parsed_instance_id, parsed_action, before, limit)
+    parsed_search_kind = _parse_search_kind(search_kind)
+    parsed_cycle_trigger = _parse_cycle_trigger(cycle_trigger)
+    parsed_hide_system = _parse_hide_system(hide_system)
+    rows = await _query_logs(
+        parsed_instance_id,
+        parsed_action,
+        parsed_search_kind,
+        parsed_cycle_trigger,
+        parsed_hide_system,
+        before,
+        limit,
+    )
 
     return _get_templates().TemplateResponse(
         request=request,
@@ -200,6 +299,9 @@ async def get_logs_partial(
             # Pass back current filter values so the partial can render pagination
             "instance_id": parsed_instance_id,
             "action": parsed_action,
+            "search_kind": parsed_search_kind,
+            "cycle_trigger": parsed_cycle_trigger,
+            "hide_system": parsed_hide_system,
             "before": before,
             "limit": limit,
         },

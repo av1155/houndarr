@@ -192,6 +192,9 @@ async def logs_page(request: Request) -> HTMLResponse:
     rows = await _query_logs(
         instance_id=None,
         action=None,
+        search_kind=None,
+        cycle_trigger=None,
+        hide_system=True,
         before=None,
         limit=50,
     )
@@ -203,6 +206,14 @@ async def logs_page(request: Request) -> HTMLResponse:
         limit=50,
         selected_instance_id=None,
         selected_action=None,
+        selected_search_kind=None,
+        selected_cycle_trigger=None,
+        selected_hide_system=True,
+        instance_id=None,
+        action=None,
+        search_kind=None,
+        cycle_trigger=None,
+        hide_system=True,
         before=None,
     )
 

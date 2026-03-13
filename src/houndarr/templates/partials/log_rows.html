@@ -30,6 +30,50 @@
       {{ row.item_type or "—" }}
     </td>
 
+    {# Search kind #}
+    <td class="px-3 py-2.5" data-col="kind">
+      {% if row.search_kind == "missing" %}
+        <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-sky-900/50 text-sky-300">missing</span>
+      {% elif row.search_kind == "cutoff" %}
+        <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-amber-900/50 text-amber-300">cutoff</span>
+      {% else %}
+        <span class="text-slate-500">—</span>
+      {% endif %}
+    </td>
+
+    {# Cycle trigger #}
+    <td class="px-3 py-2.5" data-col="trigger">
+      {% if row.cycle_trigger == "scheduled" %}
+        <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-blue-900/50 text-blue-300">scheduled</span>
+      {% elif row.cycle_trigger == "run_now" %}
+        <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-emerald-900/50 text-emerald-300">run_now</span>
+      {% elif row.cycle_trigger == "system" %}
+        <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-slate-700 text-slate-300">system</span>
+      {% else %}
+        <span class="text-slate-500">—</span>
+      {% endif %}
+    </td>
+
+    {# Cycle id #}
+    <td class="px-3 py-2.5 text-xs text-slate-300 font-mono" data-col="cycle" title="{{ row.cycle_id or '' }}">
+      {% if row.cycle_id %}
+        {{ row.cycle_id[:8] }}
+      {% else %}
+        <span class="text-slate-500">—</span>
+      {% endif %}
+    </td>
+
+    {# Cycle progress #}
+    <td class="px-3 py-2.5" data-col="progress">
+      {% if row.cycle_progress == "progress" %}
+        <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-green-900/50 text-green-300">progress</span>
+      {% elif row.cycle_progress == "no_progress" %}
+        <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-zinc-700 text-zinc-300">no progress</span>
+      {% else %}
+        <span class="text-slate-500">—</span>
+      {% endif %}
+    </td>
+
     {# Media label + ID fallback #}
     <td class="px-3 py-2.5 text-xs text-slate-300 max-w-[320px] truncate"
         data-col="media"
@@ -58,9 +102,9 @@
   {# Pagination: "Load older" link — only show if we got a full page #}
   {% if rows | length >= limit %}
   <tr id="pagination-row">
-    <td colspan="6" class="px-3 py-3 text-center">
+    <td colspan="10" class="px-3 py-3 text-center">
       <button
-        hx-get="/api/logs/partial?limit={{ limit }}{% if instance_id %}&instance_id={{ instance_id }}{% endif %}{% if action %}&action={{ action }}{% endif %}&before={{ rows[-1].timestamp }}"
+        hx-get="/api/logs/partial?limit={{ limit }}{% if instance_id %}&instance_id={{ instance_id }}{% endif %}{% if action %}&action={{ action }}{% endif %}{% if search_kind %}&search_kind={{ search_kind }}{% endif %}{% if cycle_trigger %}&cycle_trigger={{ cycle_trigger }}{% endif %}&hide_system={{ 'true' if hide_system else 'false' }}&before={{ rows[-1].timestamp }}"
         hx-target="#pagination-row"
         hx-swap="outerHTML"
         class="text-xs text-brand-400 hover:text-brand-300 transition-colors underline-offset-2 hover:underline">
@@ -72,7 +116,7 @@
 
 {% else %}
   <tr id="log-empty-row">
-    <td colspan="6" class="px-3 py-12 text-center text-slate-500 text-sm">
+    <td colspan="10" class="px-3 py-12 text-center text-slate-500 text-sm">
       No log entries found.
     </td>
   </tr>

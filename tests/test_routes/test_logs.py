@@ -91,7 +91,7 @@ async def seeded_log(db: None) -> AsyncGenerator[None, None]:  # type: ignore[mi
                     1,
                     102,
                     "episode",
-                    "missing",
+                    "cutoff",
                     "cycle-a",
                     "scheduled",
                     "My Show - S01E02 - Next",
@@ -216,6 +216,7 @@ async def test_logs_returns_all_rows(seeded_log: None, async_client: object) -> 
     assert data[0]["search_kind"] == "missing"
     assert data[0]["cycle_id"] == "cycle-b"
     assert data[0]["cycle_trigger"] == "run_now"
+    assert data[0]["cycle_progress"] == "progress"
 
 
 @pytest.mark.asyncio()
@@ -279,6 +280,94 @@ async def test_logs_filter_by_action(seeded_log: None, async_client: object) -> 
     assert len(data) == 2
     for row in data:
         assert row["action"] == "searched"
+
+
+@pytest.mark.asyncio()
+async def test_logs_filter_by_search_kind(seeded_log: None, async_client: object) -> None:
+    """Filtering by search_kind returns only rows with that kind."""
+    from httpx import AsyncClient
+
+    assert isinstance(async_client, AsyncClient)
+
+    await async_client.post(
+        "/setup",
+        data={"username": "admin", "password": "ValidPass1!", "password_confirm": "ValidPass1!"},
+    )
+    await async_client.post("/login", data={"username": "admin", "password": "ValidPass1!"})
+
+    resp = await async_client.get("/api/logs?search_kind=cutoff&limit=200")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data) == 1
+    assert data[0]["search_kind"] == "cutoff"
+
+
+@pytest.mark.asyncio()
+async def test_logs_filter_by_cycle_trigger(seeded_log: None, async_client: object) -> None:
+    """Filtering by cycle_trigger returns only rows with that trigger."""
+    from httpx import AsyncClient
+
+    assert isinstance(async_client, AsyncClient)
+
+    await async_client.post(
+        "/setup",
+        data={"username": "admin", "password": "ValidPass1!", "password_confirm": "ValidPass1!"},
+    )
+    await async_client.post("/login", data={"username": "admin", "password": "ValidPass1!"})
+
+    resp = await async_client.get("/api/logs?cycle_trigger=run_now&limit=200")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data) == 2
+    assert all(row["cycle_trigger"] == "run_now" for row in data)
+
+
+@pytest.mark.asyncio()
+async def test_logs_hide_system_rows_filter(seeded_log: None, async_client: object) -> None:
+    """hide_system=true should remove system lifecycle rows from results."""
+    from httpx import AsyncClient
+
+    assert isinstance(async_client, AsyncClient)
+
+    await async_client.post(
+        "/setup",
+        data={"username": "admin", "password": "ValidPass1!", "password_confirm": "ValidPass1!"},
+    )
+    await async_client.post("/login", data={"username": "admin", "password": "ValidPass1!"})
+
+    resp = await async_client.get("/api/logs?hide_system=true&limit=200")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data) == 4
+    assert all(row["cycle_trigger"] != "system" for row in data)
+
+
+@pytest.mark.asyncio()
+async def test_logs_filters_compose_with_existing_filters(
+    seeded_log: None, async_client: object
+) -> None:
+    """Existing and new filters should compose deterministically."""
+    from httpx import AsyncClient
+
+    assert isinstance(async_client, AsyncClient)
+
+    await async_client.post(
+        "/setup",
+        data={"username": "admin", "password": "ValidPass1!", "password_confirm": "ValidPass1!"},
+    )
+    await async_client.post("/login", data={"username": "admin", "password": "ValidPass1!"})
+
+    resp = await async_client.get(
+        "/api/logs?instance_id=1&action=skipped&search_kind=cutoff&cycle_trigger=scheduled&hide_system=true&limit=200"
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data) == 1
+    row = data[0]
+    assert row["instance_id"] == 1
+    assert row["action"] == "skipped"
+    assert row["search_kind"] == "cutoff"
+    assert row["cycle_trigger"] == "scheduled"
 
 
 @pytest.mark.asyncio()
@@ -380,6 +469,13 @@ def test_logs_page_renders(app: TestClient) -> None:
     assert b"log-tbody" in resp.content
     assert b"Media" in resp.content
     assert b"Timestamp (Local)" in resp.content
+    assert b"Kind" in resp.content
+    assert b"Trigger" in resp.content
+    assert b"Cycle" in resp.content
+    assert b"Progress" in resp.content
+    assert b"Hide system rows" in resp.content
+    assert b'id="filter-hide-system"' in resp.content
+    assert b"checked" in resp.content
     assert b"Copy visible rows" in resp.content
     assert b'<option value="500">500</option>' in resp.content
 
@@ -417,6 +513,8 @@ async def test_logs_partial_returns_rows(seeded_log: None, async_client: object)
     # Should contain action badges
     assert "searched" in content or "skipped" in content
     assert "My Show - S01E01 - Pilot" in content
+    assert "run_now" in content
+    assert "progress" in content
 
 
 @pytest.mark.asyncio()
@@ -437,6 +535,26 @@ async def test_logs_partial_empty_instance_id_treated_as_all(
     resp = await async_client.get("/api/logs/partial?instance_id=&limit=200")
     assert resp.status_code == 200
     assert "<tr" in resp.text
+
+
+@pytest.mark.asyncio()
+async def test_logs_partial_hide_system_rows_excludes_system_entries(
+    seeded_log: None, async_client: object
+) -> None:
+    """Partial endpoint should hide system rows when hide_system=true."""
+    from httpx import AsyncClient
+
+    assert isinstance(async_client, AsyncClient)
+
+    await async_client.post(
+        "/setup",
+        data={"username": "admin", "password": "ValidPass1!", "password_confirm": "ValidPass1!"},
+    )
+    await async_client.post("/login", data={"username": "admin", "password": "ValidPass1!"})
+
+    resp = await async_client.get("/api/logs/partial?hide_system=true&limit=200")
+    assert resp.status_code == 200
+    assert "Supervisor started" not in resp.text
 
 
 @pytest.mark.asyncio()

@@ -66,7 +66,7 @@
     <button id="copy-visible-logs-btn"
             type="button"
             class="inline-flex items-center justify-center w-[9.5rem] px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-sm font-medium transition-colors duration-300 ease-out">
-      Copy visible rows
+      <span id="copy-visible-logs-label" class="transition-opacity duration-200 ease-out">Copy visible rows</span>
     </button>
   </div>
 
@@ -175,7 +175,31 @@
   formatVisibleLogTimestamps();
 
   const copyBtn = document.getElementById('copy-visible-logs-btn');
+  const copyBtnLabel = document.getElementById('copy-visible-logs-label');
   let copyButtonTimer = null;
+  let copyLabelSwapTimer = null;
+
+  function setCopyButtonLabel(nextLabel) {
+    if (!copyBtnLabel) {
+      return;
+    }
+
+    if (copyBtnLabel.textContent === nextLabel) {
+      return;
+    }
+
+    if (copyLabelSwapTimer) {
+      window.clearTimeout(copyLabelSwapTimer);
+      copyLabelSwapTimer = null;
+    }
+
+    copyBtnLabel.classList.add('opacity-0');
+    copyLabelSwapTimer = window.setTimeout(() => {
+      copyBtnLabel.textContent = nextLabel;
+      copyBtnLabel.classList.remove('opacity-0');
+      copyLabelSwapTimer = null;
+    }, 120);
+  }
 
   function flashCopyButtonState(state) {
     if (!copyBtn) {
@@ -191,13 +215,13 @@
     copyBtn.classList.remove('bg-red-800', 'hover:bg-red-700', 'border-red-600/60');
 
     if (state === 'success') {
-      copyBtn.textContent = 'Copied';
+      setCopyButtonLabel('Copied');
       copyBtn.classList.add('bg-emerald-700', 'hover:bg-emerald-600', 'border-emerald-500/60');
     } else if (state === 'error') {
-      copyBtn.textContent = 'Copy failed';
+      setCopyButtonLabel('Copy failed');
       copyBtn.classList.add('bg-red-800', 'hover:bg-red-700', 'border-red-600/60');
     } else {
-      copyBtn.textContent = 'Copy visible rows';
+      setCopyButtonLabel('Copy visible rows');
       return;
     }
 

@@ -2,34 +2,6 @@
 
 {% block title %}Settings Help — Houndarr{% endblock %}
 
-{% block head %}
-<style>
-  .help-reveal {
-    opacity: 1;
-    transform: none;
-  }
-
-  .help-motion-ready .help-reveal {
-    opacity: 0;
-    transform: translateY(10px);
-    transition: opacity 240ms ease-out, transform 240ms ease-out;
-  }
-
-  .help-motion-ready .help-reveal.is-visible {
-    opacity: 1;
-    transform: translateY(0);
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    .help-motion-ready .help-reveal {
-      opacity: 1;
-      transform: none;
-      transition: none;
-    }
-  }
-</style>
-{% endblock %}
-
 {% block content %}
 <div class="max-w-5xl mx-auto space-y-6">
   <div class="help-reveal flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
@@ -164,38 +136,4 @@
     </a>
   </p>
 </div>
-{% endblock %}
-
-{% block scripts %}
-<script>
-  (function () {
-    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    if (reduceMotion || !('IntersectionObserver' in window)) {
-      return;
-    }
-
-    document.documentElement.classList.add('help-motion-ready');
-
-    const revealItems = Array.from(document.querySelectorAll('.help-reveal'));
-    if (revealItems.length === 0) {
-      return;
-    }
-
-    const observer = new IntersectionObserver((entries) => {
-      entries.forEach((entry) => {
-        if (!entry.isIntersecting) {
-          return;
-        }
-
-        entry.target.classList.add('is-visible');
-        observer.unobserve(entry.target);
-      });
-    }, { threshold: 0.15, rootMargin: '0px 0px -40px 0px' });
-
-    revealItems.forEach((item, index) => {
-      item.style.transitionDelay = `${Math.min(index * 40, 220)}ms`;
-      observer.observe(item);
-    });
-  })();
-</script>
 {% endblock %}

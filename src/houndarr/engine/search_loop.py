@@ -11,6 +11,7 @@ from __future__ import annotations
 import logging
 from datetime import UTC, datetime, timedelta
 from typing import Literal
+from uuid import uuid4
 
 from houndarr.clients.radarr import MissingMovie, RadarrClient
 from houndarr.clients.sonarr import MissingEpisode, SonarrClient
@@ -24,6 +25,7 @@ from houndarr.services.instances import Instance, InstanceType
 logger = logging.getLogger(__name__)
 
 SearchKind = Literal["missing", "cutoff"]
+CycleTrigger = Literal["scheduled", "run_now", "system"]
 ItemType = Literal["episode", "movie"]
 
 _MAX_LIST_PAGES_PER_PASS = 3
@@ -48,6 +50,8 @@ async def _write_log(
     item_type: str | None,
     action: str,
     search_kind: SearchKind | None = None,
+    cycle_id: str | None = None,
+    cycle_trigger: CycleTrigger | None = None,
     item_label: str | None = None,
     reason: str | None = None,
     message: str | None = None,
@@ -57,10 +61,32 @@ async def _write_log(
         await db.execute(
             """
             INSERT INTO search_log
-                (instance_id, item_id, item_type, search_kind, item_label, action, reason, message)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                (
+                    instance_id,
+                    item_id,
+                    item_type,
+                    search_kind,
+                    cycle_id,
+                    cycle_trigger,
+                    item_label,
+                    action,
+                    reason,
+                    message
+                )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            (instance_id, item_id, item_type, search_kind, item_label, action, reason, message),
+            (
+                instance_id,
+                item_id,
+                item_type,
+                search_kind,
+                cycle_id,
+                cycle_trigger,
+                item_label,
+                action,
+                reason,
+                message,
+            ),
         )
         await db.commit()
 
@@ -165,7 +191,13 @@ async def _count_searches_last_hour(instance_id: int, search_kind: SearchKind) -
 # ---------------------------------------------------------------------------
 
 
-async def run_instance_search(instance: Instance, master_key: bytes) -> int:
+async def run_instance_search(
+    instance: Instance,
+    master_key: bytes,
+    *,
+    cycle_id: str | None = None,
+    cycle_trigger: CycleTrigger = "scheduled",
+) -> int:
     """Execute one search cycle for *instance*.
 
     Steps:
@@ -192,6 +224,7 @@ async def run_instance_search(instance: Instance, master_key: bytes) -> int:
     )
 
     searched = 0
+    cycle_id_value = cycle_id or str(uuid4())
     missing_target = max(0, instance.batch_size)
     missing_page_size = _missing_page_size(missing_target)
     missing_scan_budget = _missing_scan_budget(missing_target)
@@ -254,6 +287,8 @@ async def run_instance_search(instance: Instance, master_key: bytes) -> int:
                             item_type,
                             "skipped",
                             search_kind="missing",
+                            cycle_id=cycle_id_value,
+                            cycle_trigger=cycle_trigger,
                             item_label=item_label,
                             reason=reason,
                         )
@@ -268,6 +303,8 @@ async def run_instance_search(instance: Instance, master_key: bytes) -> int:
                             item_type,
                             "skipped",
                             search_kind="missing",
+                            cycle_id=cycle_id_value,
+                            cycle_trigger=cycle_trigger,
                             item_label=item_label,
                             reason=reason,
                         )
@@ -285,6 +322,8 @@ async def run_instance_search(instance: Instance, master_key: bytes) -> int:
                             item_type,
                             "skipped",
                             search_kind="missing",
+                            cycle_id=cycle_id_value,
+                            cycle_trigger=cycle_trigger,
                             item_label=item_label,
                             reason=reason,
                         )
@@ -304,6 +343,8 @@ async def run_instance_search(instance: Instance, master_key: bytes) -> int:
                             item_type,
                             "error",
                             search_kind="missing",
+                            cycle_id=cycle_id_value,
+                            cycle_trigger=cycle_trigger,
                             item_label=item_label,
                             message=msg,
                         )
@@ -316,6 +357,8 @@ async def run_instance_search(instance: Instance, master_key: bytes) -> int:
                         item_type,
                         "searched",
                         search_kind="missing",
+                        cycle_id=cycle_id_value,
+                        cycle_trigger=cycle_trigger,
                         item_label=item_label,
                     )
                     searched += 1
@@ -333,12 +376,21 @@ async def run_instance_search(instance: Instance, master_key: bytes) -> int:
     # Cutoff-unmet pass (only when enabled)
     # -----------------------------------------------------------------------
     if instance.cutoff_enabled:
-        searched += await _run_cutoff_pass(instance)
+        searched += await _run_cutoff_pass(
+            instance,
+            cycle_id=cycle_id_value,
+            cycle_trigger=cycle_trigger,
+        )
 
     return searched
 
 
-async def _run_cutoff_pass(instance: Instance) -> int:
+async def _run_cutoff_pass(
+    instance: Instance,
+    *,
+    cycle_id: str,
+    cycle_trigger: CycleTrigger,
+) -> int:
     """Execute the cutoff-unmet search pass for *instance*.
 
     Fetches one page of cutoff-unmet items and searches each eligible one,
@@ -411,6 +463,8 @@ async def _run_cutoff_pass(instance: Instance) -> int:
                             item_type,
                             "skipped",
                             search_kind="cutoff",
+                            cycle_id=cycle_id,
+                            cycle_trigger=cycle_trigger,
                             item_label=item_label,
                             reason=reason,
                         )
@@ -428,6 +482,8 @@ async def _run_cutoff_pass(instance: Instance) -> int:
                             item_type,
                             "skipped",
                             search_kind="cutoff",
+                            cycle_id=cycle_id,
+                            cycle_trigger=cycle_trigger,
                             item_label=item_label,
                             reason=reason,
                         )
@@ -448,6 +504,8 @@ async def _run_cutoff_pass(instance: Instance) -> int:
                             item_type,
                             "skipped",
                             search_kind="cutoff",
+                            cycle_id=cycle_id,
+                            cycle_trigger=cycle_trigger,
                             item_label=item_label,
                             reason=reason,
                         )
@@ -470,6 +528,8 @@ async def _run_cutoff_pass(instance: Instance) -> int:
                             item_type,
                             "error",
                             search_kind="cutoff",
+                            cycle_id=cycle_id,
+                            cycle_trigger=cycle_trigger,
                             item_label=item_label,
                             message=msg,
                         )
@@ -482,6 +542,8 @@ async def _run_cutoff_pass(instance: Instance) -> int:
                         item_type,
                         "searched",
                         search_kind="cutoff",
+                        cycle_id=cycle_id,
+                        cycle_trigger=cycle_trigger,
                         item_label=item_label,
                     )
                     searched += 1
@@ -532,6 +594,8 @@ async def _run_cutoff_pass(instance: Instance) -> int:
                             item_type,
                             "skipped",
                             search_kind="cutoff",
+                            cycle_id=cycle_id,
+                            cycle_trigger=cycle_trigger,
                             item_label=item_label,
                             reason=reason,
                         )
@@ -549,6 +613,8 @@ async def _run_cutoff_pass(instance: Instance) -> int:
                             item_type,
                             "skipped",
                             search_kind="cutoff",
+                            cycle_id=cycle_id,
+                            cycle_trigger=cycle_trigger,
                             item_label=item_label,
                             reason=reason,
                         )
@@ -569,6 +635,8 @@ async def _run_cutoff_pass(instance: Instance) -> int:
                             item_type,
                             "skipped",
                             search_kind="cutoff",
+                            cycle_id=cycle_id,
+                            cycle_trigger=cycle_trigger,
                             item_label=item_label,
                             reason=reason,
                         )
@@ -591,6 +659,8 @@ async def _run_cutoff_pass(instance: Instance) -> int:
                             item_type,
                             "error",
                             search_kind="cutoff",
+                            cycle_id=cycle_id,
+                            cycle_trigger=cycle_trigger,
                             item_label=item_label,
                             message=msg,
                         )
@@ -603,6 +673,8 @@ async def _run_cutoff_pass(instance: Instance) -> int:
                         item_type,
                         "searched",
                         search_kind="cutoff",
+                        cycle_id=cycle_id,
+                        cycle_trigger=cycle_trigger,
                         item_label=item_label,
                     )
                     searched += 1

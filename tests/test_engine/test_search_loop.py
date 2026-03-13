@@ -145,6 +145,8 @@ async def test_item_is_searched_when_not_on_cooldown(seeded_instances: None) -> 
     assert rows[0]["item_type"] == "episode"
     assert rows[0]["item_label"] == "My Show - S01E01 - Pilot"
     assert rows[0]["search_kind"] == "missing"
+    assert rows[0]["cycle_id"]
+    assert rows[0]["cycle_trigger"] == "scheduled"
 
 
 @pytest.mark.asyncio()
@@ -168,6 +170,8 @@ async def test_radarr_item_is_searched(seeded_instances: None) -> None:
     assert rows[0]["item_type"] == "movie"
     assert rows[0]["item_label"] == "My Movie (2023)"
     assert rows[0]["search_kind"] == "missing"
+    assert rows[0]["cycle_id"]
+    assert rows[0]["cycle_trigger"] == "scheduled"
 
 
 # ---------------------------------------------------------------------------
@@ -456,6 +460,8 @@ async def test_search_log_row_written_on_success(seeded_instances: None) -> None
     assert row["item_type"] == "episode"
     assert row["item_label"] == "My Show - S01E01 - Pilot"
     assert row["search_kind"] == "missing"
+    assert row["cycle_id"]
+    assert row["cycle_trigger"] == "scheduled"
     assert row["action"] == "searched"
     assert row["reason"] is None
     assert row["timestamp"] is not None
@@ -506,6 +512,91 @@ async def test_search_log_row_written_on_error(seeded_instances: None) -> None:
     assert len(rows) == 1
     assert rows[0]["action"] == "error"
     assert rows[0]["item_id"] == 101
+    assert rows[0]["cycle_id"]
+    assert rows[0]["cycle_trigger"] == "scheduled"
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_cycle_id_is_shared_between_missing_and_cutoff_passes(seeded_instances: None) -> None:
+    """One run_instance_search invocation should reuse cycle_id across both passes."""
+    respx.get(f"{SONARR_URL}/api/v3/wanted/missing").mock(
+        return_value=httpx.Response(200, json={"records": [{**_EPISODE_RECORD, "id": 501}]})
+    )
+    respx.get(f"{SONARR_URL}/api/v3/wanted/cutoff").mock(
+        return_value=httpx.Response(200, json={"records": [{**_EPISODE_RECORD, "id": 502}]})
+    )
+    respx.post(f"{SONARR_URL}/api/v3/command").mock(
+        return_value=httpx.Response(201, json=_COMMAND_RESP)
+    )
+
+    instance = _make_cutoff_instance(
+        cutoff_enabled=True,
+        cutoff_batch_size=1,
+        cooldown_days=0,
+        cutoff_cooldown_days=0,
+        unreleased_delay_hrs=0,
+    )
+    count = await run_instance_search(instance, MASTER_KEY)
+
+    assert count == 2
+    rows = await _get_log_rows()
+    searched_rows = [row for row in rows if row["action"] == "searched"]
+    assert len(searched_rows) == 2
+    assert searched_rows[0]["search_kind"] == "missing"
+    assert searched_rows[1]["search_kind"] == "cutoff"
+    assert searched_rows[0]["cycle_id"] == searched_rows[1]["cycle_id"]
+    assert searched_rows[0]["cycle_trigger"] == "scheduled"
+    assert searched_rows[1]["cycle_trigger"] == "scheduled"
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_cycle_id_changes_across_distinct_invocations(seeded_instances: None) -> None:
+    """Separate run_instance_search invocations should use different cycle IDs."""
+    missing_route = respx.get(f"{SONARR_URL}/api/v3/wanted/missing").mock(
+        side_effect=[
+            httpx.Response(200, json={"records": [{**_EPISODE_RECORD, "id": 701}]}),
+            httpx.Response(200, json={"records": [{**_EPISODE_RECORD, "id": 702}]}),
+        ]
+    )
+    respx.post(f"{SONARR_URL}/api/v3/command").mock(
+        return_value=httpx.Response(201, json=_COMMAND_RESP)
+    )
+
+    instance = _make_instance(cooldown_days=0, unreleased_delay_hrs=0, batch_size=1)
+    first_count = await run_instance_search(instance, MASTER_KEY)
+    second_count = await run_instance_search(instance, MASTER_KEY)
+
+    assert first_count == 1
+    assert second_count == 1
+    assert missing_route.call_count == 2
+
+    rows = await _get_log_rows()
+    searched_rows = [row for row in rows if row["action"] == "searched"]
+    assert len(searched_rows) == 2
+    assert searched_rows[0]["cycle_id"] != searched_rows[1]["cycle_id"]
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_run_now_trigger_is_persisted_in_log_rows(seeded_instances: None) -> None:
+    """Manual trigger context should persist as cycle_trigger='run_now'."""
+    respx.get(f"{SONARR_URL}/api/v3/wanted/missing").mock(
+        return_value=httpx.Response(200, json={"records": [{**_EPISODE_RECORD, "id": 801}]})
+    )
+    respx.post(f"{SONARR_URL}/api/v3/command").mock(
+        return_value=httpx.Response(201, json=_COMMAND_RESP)
+    )
+
+    instance = _make_instance(cooldown_days=0, unreleased_delay_hrs=0, batch_size=1)
+    count = await run_instance_search(instance, MASTER_KEY, cycle_trigger="run_now")
+
+    assert count == 1
+    rows = await _get_log_rows()
+    assert len(rows) == 1
+    assert rows[0]["cycle_id"]
+    assert rows[0]["cycle_trigger"] == "run_now"
 
 
 @pytest.mark.asyncio()
@@ -540,6 +631,26 @@ async def test_supervisor_starts_and_stops_cleanly(db: None) -> None:
     await sup.start()
     await sup.stop()
     assert sup._tasks == {}  # noqa: SLF001
+
+
+@pytest.mark.asyncio()
+async def test_supervisor_start_logs_system_row_with_null_cycle_id(seeded_instances: None) -> None:
+    """Supervisor lifecycle rows are classified as system and keep cycle_id NULL."""
+    from houndarr.engine.supervisor import Supervisor
+
+    with patch(
+        "houndarr.engine.supervisor.run_instance_search",
+        new=AsyncMock(return_value=0),
+    ):
+        sup = Supervisor(master_key=MASTER_KEY)
+        await sup.start()
+        await sup.stop()
+
+    rows = await _get_log_rows()
+    info_rows = [row for row in rows if row["action"] == "info"]
+    assert info_rows
+    assert info_rows[0]["cycle_trigger"] == "system"
+    assert info_rows[0]["cycle_id"] is None
 
 
 @pytest.mark.asyncio()
@@ -688,6 +799,61 @@ async def test_trigger_run_now_deduplicates_pending_manual_runs(
         assert status_1 == "accepted"
         assert status_2 == "accepted"
         assert len(sup._manual_runs) == 1  # noqa: SLF001
+
+        gate.set()
+        await asyncio.sleep(0)
+        await sup.stop()
+
+
+@pytest.mark.asyncio()
+async def test_supervisor_scheduled_cycles_pass_scheduled_trigger(seeded_instances: None) -> None:
+    """Scheduled supervisor loop should call engine with cycle_trigger='scheduled'."""
+    import asyncio
+
+    from houndarr.engine.supervisor import Supervisor
+
+    with patch(
+        "houndarr.engine.supervisor.run_instance_search",
+        new=AsyncMock(return_value=0),
+    ) as run_mock:
+        sup = Supervisor(master_key=MASTER_KEY)
+        await sup.start()
+        await asyncio.sleep(0.05)
+        await sup.stop()
+
+    assert run_mock.call_count >= 1
+    trigger_values = [call.kwargs.get("cycle_trigger") for call in run_mock.call_args_list]
+    assert "scheduled" in trigger_values
+    assert all(call.kwargs.get("cycle_id") for call in run_mock.call_args_list)
+
+
+@pytest.mark.asyncio()
+async def test_supervisor_run_now_passes_run_now_trigger(seeded_instances: None) -> None:
+    """Run-now should call engine with cycle_trigger='run_now'."""
+    import asyncio
+
+    from houndarr.engine.supervisor import Supervisor
+
+    gate = asyncio.Event()
+
+    async def _block(*_: object, **__: object) -> int:
+        await gate.wait()
+        return 0
+
+    with patch(
+        "houndarr.engine.supervisor.run_instance_search",
+        new=AsyncMock(side_effect=_block),
+    ) as run_mock:
+        sup = Supervisor(master_key=MASTER_KEY)
+        status = await sup.trigger_run_now(1)
+        assert status == "accepted"
+        await asyncio.sleep(0.05)
+
+        called_with_run_now = any(
+            call.kwargs.get("cycle_trigger") == "run_now" for call in run_mock.call_args_list
+        )
+        assert called_with_run_now
+        assert all(call.kwargs.get("cycle_id") for call in run_mock.call_args_list)
 
         gate.set()
         await asyncio.sleep(0)

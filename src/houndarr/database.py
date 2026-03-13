@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Schema version — bump when adding new migrations
 # ---------------------------------------------------------------------------
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 # ---------------------------------------------------------------------------
 # DDL
@@ -62,6 +62,8 @@ CREATE TABLE IF NOT EXISTS search_log (
     item_id     INTEGER,
     item_type   TEXT    CHECK(item_type IN ('episode', 'movie')),
     search_kind TEXT,
+    cycle_id    TEXT,
+    cycle_trigger TEXT CHECK(cycle_trigger IN ('scheduled', 'run_now', 'system')),
     item_label  TEXT,
     action      TEXT    NOT NULL CHECK(action IN ('searched', 'skipped', 'error', 'info')),
     reason      TEXT,
@@ -123,18 +125,23 @@ async def init_db() -> None:
                 "INSERT INTO settings (key, value) VALUES ('schema_version', ?)",
                 (str(SCHEMA_VERSION),),
             )
+            await _ensure_v3_indexes(db)
             await db.commit()
             logger.info("Database initialized at schema version %d", SCHEMA_VERSION)
         else:
             current = int(row["value"])
             if current < SCHEMA_VERSION:
                 await _run_migrations(db, current)
+            await _ensure_v3_indexes(db)
+            await db.commit()
 
 
 async def _run_migrations(db: aiosqlite.Connection, from_version: int) -> None:
     """Apply incremental migrations from from_version to SCHEMA_VERSION."""
     if from_version < 2:
         await _migrate_to_v2(db)
+    if from_version < 3:
+        await _migrate_to_v3(db)
 
     logger.info("Migrated database from schema version %d to %d", from_version, SCHEMA_VERSION)
     await db.execute(
@@ -161,6 +168,22 @@ async def _migrate_to_v2(db: aiosqlite.Connection) -> None:
         await db.execute(
             "ALTER TABLE instances ADD COLUMN cutoff_hourly_cap INTEGER NOT NULL DEFAULT 1"
         )
+
+
+async def _migrate_to_v3(db: aiosqlite.Connection) -> None:
+    """Add v3 columns for cycle and trigger log context."""
+    if not await _column_exists(db, "search_log", "cycle_id"):
+        await db.execute("ALTER TABLE search_log ADD COLUMN cycle_id TEXT")
+
+    if not await _column_exists(db, "search_log", "cycle_trigger"):
+        await db.execute("ALTER TABLE search_log ADD COLUMN cycle_trigger TEXT")
+
+
+async def _ensure_v3_indexes(db: aiosqlite.Connection) -> None:
+    """Create v3 indexes that depend on post-v2 columns."""
+    await db.execute(
+        "CREATE INDEX IF NOT EXISTS idx_search_log_cycle ON search_log(cycle_id, timestamp DESC)"
+    )
 
 
 async def _column_exists(db: aiosqlite.Connection, table_name: str, column_name: str) -> bool:

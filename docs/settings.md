@@ -69,6 +69,19 @@ top candidates are repeatedly ineligible (cooldown, unreleased delay, or caps), 
 
 This improves backlog rotation while preserving polite API behavior.
 
+## Log Context Fields
+
+Search log rows now include cycle context so operators can distinguish why a row
+exists and which rows belong to the same run:
+
+- `cycle_id`: one ID per `run_instance_search(...)` invocation for one instance;
+  shared by both missing and cutoff passes in that invocation.
+- `cycle_trigger`: one of `scheduled`, `run_now`, or `system`.
+- `search_kind`: `missing` or `cutoff` for item rows; `NULL` for system rows.
+
+System lifecycle rows (for example, supervisor startup messages) are tagged
+`cycle_trigger=system` and keep `cycle_id` empty.
+
 ## Status Control
 
 - **Enabled/Disabled**: controlled from the row toggle in Settings.

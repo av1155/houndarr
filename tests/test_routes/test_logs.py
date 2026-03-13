@@ -63,13 +63,15 @@ async def seeded_log(db: None) -> AsyncGenerator[None, None]:  # type: ignore[mi
                     item_id,
                     item_type,
                     search_kind,
+                    cycle_id,
+                    cycle_trigger,
                     item_label,
                     action,
                     reason,
                     message,
                     timestamp
                 )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             [
                 (
@@ -77,6 +79,8 @@ async def seeded_log(db: None) -> AsyncGenerator[None, None]:  # type: ignore[mi
                     101,
                     "episode",
                     "missing",
+                    "cycle-a",
+                    "scheduled",
                     "My Show - S01E01 - Pilot",
                     "searched",
                     None,
@@ -88,6 +92,8 @@ async def seeded_log(db: None) -> AsyncGenerator[None, None]:  # type: ignore[mi
                     102,
                     "episode",
                     "missing",
+                    "cycle-a",
+                    "scheduled",
                     "My Show - S01E02 - Next",
                     "skipped",
                     "on cooldown (7d)",
@@ -99,6 +105,8 @@ async def seeded_log(db: None) -> AsyncGenerator[None, None]:  # type: ignore[mi
                     201,
                     "movie",
                     "missing",
+                    "cycle-b",
+                    "run_now",
                     "My Movie (2023)",
                     "searched",
                     None,
@@ -110,6 +118,8 @@ async def seeded_log(db: None) -> AsyncGenerator[None, None]:  # type: ignore[mi
                     202,
                     "movie",
                     "missing",
+                    "cycle-b",
+                    "run_now",
                     "Another Movie (2024)",
                     "error",
                     None,
@@ -121,6 +131,8 @@ async def seeded_log(db: None) -> AsyncGenerator[None, None]:  # type: ignore[mi
                     None,
                     None,
                     None,
+                    None,
+                    "system",
                     None,
                     "info",
                     None,
@@ -201,6 +213,9 @@ async def test_logs_returns_all_rows(seeded_log: None, async_client: object) -> 
     assert actions[0] == "error"  # 12:03
     assert actions[-1] == "info"  # 11:59
     assert data[0]["item_label"] == "Another Movie (2024)"
+    assert data[0]["search_kind"] == "missing"
+    assert data[0]["cycle_id"] == "cycle-b"
+    assert data[0]["cycle_trigger"] == "run_now"
 
 
 @pytest.mark.asyncio()
@@ -305,6 +320,8 @@ async def test_logs_system_rows_render_as_system_label(
     assert len(data) == 1
     assert data[0]["instance_id"] is None
     assert data[0]["instance_name"] == "System"
+    assert data[0]["cycle_id"] is None
+    assert data[0]["cycle_trigger"] == "system"
 
 
 @pytest.mark.asyncio()

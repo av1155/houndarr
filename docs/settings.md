@@ -86,6 +86,11 @@ In the Logs page, you can now filter by `search_kind` and `cycle_trigger`. The
 UI defaults to hiding system rows (`hide_system=true`) to keep operator-facing
 views focused on search activity.
 
+The Logs view also surfaces cycle context directly: rows are grouped by cycle
+when metadata exists, and `Cycle outcome` indicates whether a cycle searched at
+least one item (`searched`), produced only skips (`skips only`), or has no
+metadata (`unknown`).
+
 ## Status Control
 
 - **Enabled/Disabled**: controlled from the row toggle in Settings.

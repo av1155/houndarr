@@ -127,6 +127,19 @@ async def seeded_log(db: None) -> AsyncGenerator[None, None]:  # type: ignore[mi
                     "2024-01-01T12:03:00.000Z",
                 ),
                 (
+                    1,
+                    103,
+                    "episode",
+                    "missing",
+                    "cycle-c",
+                    "scheduled",
+                    "My Show - S01E03 - Fill",
+                    "skipped",
+                    "already queued",
+                    None,
+                    "2024-01-01T12:00:30.000Z",
+                ),
+                (
                     None,
                     None,
                     None,
@@ -206,7 +219,7 @@ async def test_logs_returns_all_rows(seeded_log: None, async_client: object) -> 
     resp = await async_client.get("/api/logs?limit=200")
     assert resp.status_code == 200
     data = resp.json()
-    assert len(data) == 5
+    assert len(data) == 6
 
     # Newest first (by timestamp DESC)
     actions = [r["action"] for r in data]
@@ -235,8 +248,7 @@ async def test_logs_filter_by_instance_id(seeded_log: None, async_client: object
     resp = await async_client.get("/api/logs?instance_id=1&limit=200")
     assert resp.status_code == 200
     data = resp.json()
-    # instance 1 has 2 rows (101 searched, 102 skipped)
-    assert len(data) == 2
+    assert len(data) == 3
     for row in data:
         assert row["instance_id"] == 1
 
@@ -258,7 +270,7 @@ async def test_logs_empty_instance_id_treated_as_all(
 
     resp = await async_client.get("/api/logs?instance_id=&limit=200")
     assert resp.status_code == 200
-    assert len(resp.json()) == 5
+    assert len(resp.json()) == 6
 
 
 @pytest.mark.asyncio()
@@ -338,7 +350,7 @@ async def test_logs_hide_system_rows_filter(seeded_log: None, async_client: obje
     resp = await async_client.get("/api/logs?hide_system=true&limit=200")
     assert resp.status_code == 200
     data = resp.json()
-    assert len(data) == 4
+    assert len(data) == 5
     assert all(row["cycle_trigger"] != "system" for row in data)
 
 
@@ -385,7 +397,7 @@ async def test_logs_empty_action_treated_as_all(seeded_log: None, async_client: 
 
     resp = await async_client.get("/api/logs?action=&limit=200")
     assert resp.status_code == 200
-    assert len(resp.json()) == 5
+    assert len(resp.json()) == 6
 
 
 @pytest.mark.asyncio()
@@ -445,11 +457,11 @@ async def test_logs_before_cursor_paginates(seeded_log: None, async_client: obje
     )
     await async_client.post("/login", data={"username": "admin", "password": "ValidPass1!"})
 
-    # All rows older than 12:02 → should be 12:01, 12:00, 11:59 (3 rows)
+    # All rows older than 12:02 -> should be 12:01, 12:00:30, 12:00, 11:59.
     resp = await async_client.get("/api/logs?before=2024-01-01T12:02:00.000Z&limit=200")
     assert resp.status_code == 200
     data = resp.json()
-    assert len(data) == 3
+    assert len(data) == 4
     for row in data:
         assert row["timestamp"] < "2024-01-01T12:02:00.000Z"
 
@@ -472,8 +484,9 @@ def test_logs_page_renders(app: TestClient) -> None:
     assert b"Kind" in resp.content
     assert b"Trigger" in resp.content
     assert b"Cycle" in resp.content
-    assert b"Progress" in resp.content
+    assert b"Cycle outcome" in resp.content
     assert b"Hide system rows" in resp.content
+    assert b"Visible rows" in resp.content
     assert b'id="filter-hide-system"' in resp.content
     assert b"checked" in resp.content
     assert b"Copy visible rows" in resp.content
@@ -510,11 +523,14 @@ async def test_logs_partial_returns_rows(seeded_log: None, async_client: object)
     assert resp.status_code == 200
     content = resp.text
     assert "<tr" in content
+    assert 'data-cycle-group="cycle-b"' in content
     # Should contain action badges
     assert "searched" in content or "skipped" in content
     assert "My Show - S01E01 - Pilot" in content
     assert "run_now" in content
-    assert "progress" in content
+    assert "skips only" in content
+    assert "unknown" in content
+    assert 'hx-swap-oob="outerHTML"' in content
 
 
 @pytest.mark.asyncio()
@@ -555,6 +571,7 @@ async def test_logs_partial_hide_system_rows_excludes_system_entries(
     resp = await async_client.get("/api/logs/partial?hide_system=true&limit=200")
     assert resp.status_code == 200
     assert "Supervisor started" not in resp.text
+    assert "Visible rows 5" in resp.text
 
 
 @pytest.mark.asyncio()
@@ -600,3 +617,26 @@ async def test_logs_partial_fallback_media_when_item_label_missing(
     resp = await async_client.get("/api/logs/partial?limit=200")
     assert resp.status_code == 200
     assert "Episode 102" in resp.text
+
+
+@pytest.mark.asyncio()
+async def test_logs_partial_cycle_group_headers_include_cycle_context(
+    seeded_log: None, async_client: object
+) -> None:
+    """Cycle group rows should include trigger and per-cycle action totals."""
+    from httpx import AsyncClient
+
+    assert isinstance(async_client, AsyncClient)
+
+    await async_client.post(
+        "/setup",
+        data={"username": "admin", "password": "ValidPass1!", "password_confirm": "ValidPass1!"},
+    )
+    await async_client.post("/login", data={"username": "admin", "password": "ValidPass1!"})
+
+    resp = await async_client.get("/api/logs/partial?limit=200")
+    assert resp.status_code == 200
+    assert "Cycle cycle-b" in resp.text
+    assert "trigger run_now" in resp.text
+    assert "searched 1" in resp.text
+    assert "skipped 1" in resp.text

@@ -153,6 +153,10 @@
   </div>
 </form>
 
+<div id="logs-summary" class="mb-4">
+  {% include "partials/log_summary.html" %}
+</div>
+
 {# ------------------------------------------------------------------ #}
 {# Log table                                                           #}
 {# ------------------------------------------------------------------ #}
@@ -167,7 +171,7 @@
         <th class="px-3 py-2.5 font-medium">Kind</th>
         <th class="px-3 py-2.5 font-medium">Trigger</th>
         <th class="px-3 py-2.5 font-medium">Cycle</th>
-        <th class="px-3 py-2.5 font-medium">Progress</th>
+        <th class="px-3 py-2.5 font-medium">Cycle outcome</th>
         <th class="px-3 py-2.5 font-medium">Media</th>
         <th class="px-3 py-2.5 font-medium">Reason / Message</th>
       </tr>
@@ -220,7 +224,7 @@
       return;
     }
 
-    const header = ['Timestamp (Local)', 'Instance', 'Action', 'Type', 'Kind', 'Trigger', 'Cycle', 'Progress', 'Media', 'Reason / Message'];
+    const header = ['Timestamp (Local)', 'Instance', 'Action', 'Type', 'Kind', 'Trigger', 'Cycle', 'Cycle outcome', 'Media', 'Reason / Message'];
     const divider = ['---', '---', '---', '---', '---', '---', '---', '---', '---', '---'];
     const lines = [
       `| ${header.join(' | ')} |`,
@@ -236,7 +240,7 @@
         row.querySelector('[data-col="kind"]')?.textContent?.trim() || '—',
         row.querySelector('[data-col="trigger"]')?.textContent?.trim() || '—',
         row.querySelector('[data-col="cycle"]')?.textContent?.trim() || '—',
-        row.querySelector('[data-col="progress"]')?.textContent?.trim() || '—',
+        row.querySelector('[data-col="outcome"]')?.textContent?.trim() || '—',
         row.querySelector('[data-col="media"]')?.textContent?.replace(/\s+/g, ' ').trim() || '—',
         row.querySelector('[data-col="reason"]')?.textContent?.trim() || '—',
       ].map(escapePipes);

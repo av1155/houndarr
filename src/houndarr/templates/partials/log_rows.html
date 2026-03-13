@@ -1,6 +1,29 @@
 {# Log table rows partial — rendered by GET /api/logs/partial and swapped into #log-tbody #}
 {% if rows %}
+  {% set ns = namespace(previous_cycle_id='') %}
   {% for row in rows %}
+  {% if row.cycle_id and row.cycle_id != ns.previous_cycle_id %}
+  <tr class="border-b border-slate-800 bg-slate-950/70" data-cycle-group="{{ row.cycle_id }}">
+    <td colspan="10" class="px-3 py-2">
+      <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-slate-400">
+        <span class="font-mono text-slate-300" title="{{ row.cycle_id }}">Cycle {{ row.cycle_id[:8] }}</span>
+        <span>instance {{ row.instance_name }}</span>
+        <span>trigger {{ row.cycle_trigger or 'unknown' }}</span>
+        {% if row.cycle_progress == "progress" %}
+        <span class="text-green-300">outcome searched</span>
+        {% elif row.cycle_progress == "no_progress" %}
+        <span class="text-zinc-300">outcome skips only</span>
+        {% else %}
+        <span class="text-slate-500">outcome unknown</span>
+        {% endif %}
+        <span class="text-slate-500">
+          searched {{ row.cycle_searched_count or 0 }} · skipped {{ row.cycle_skipped_count or 0 }} · error {{ row.cycle_error_count or 0 }}
+        </span>
+      </div>
+    </td>
+  </tr>
+  {% endif %}
+
   <tr class="border-b border-slate-800 hover:bg-slate-800/40 transition-colors" data-log-row="true">
     {# Timestamp #}
     <td class="px-3 py-2.5 text-xs text-slate-400 whitespace-nowrap font-mono" data-log-ts="{{ row.timestamp or '' }}" data-col="timestamp">
@@ -63,14 +86,14 @@
       {% endif %}
     </td>
 
-    {# Cycle progress #}
-    <td class="px-3 py-2.5" data-col="progress">
+    {# Cycle outcome #}
+    <td class="px-3 py-2.5" data-col="outcome">
       {% if row.cycle_progress == "progress" %}
-        <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-green-900/50 text-green-300">progress</span>
+        <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-green-900/50 text-green-300">searched</span>
       {% elif row.cycle_progress == "no_progress" %}
-        <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-zinc-700 text-zinc-300">no progress</span>
+        <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-zinc-700 text-zinc-300">skips only</span>
       {% else %}
-        <span class="text-slate-500">—</span>
+        <span class="text-[11px] text-slate-500">unknown</span>
       {% endif %}
     </td>
 
@@ -97,6 +120,11 @@
       {{ row.reason or row.message or "—" }}
     </td>
   </tr>
+  {% if row.cycle_id %}
+    {% set ns.previous_cycle_id = row.cycle_id %}
+  {% else %}
+    {% set ns.previous_cycle_id = '' %}
+  {% endif %}
   {% endfor %}
 
   {# Pagination: "Load older" link — only show if we got a full page #}

@@ -26,6 +26,59 @@ _SEARCH_KINDS = {"missing", "cutoff"}
 _CYCLE_TRIGGERS = {"scheduled", "run_now", "system"}
 
 
+def _summarize_rows(rows: list[dict[str, Any]]) -> dict[str, int]:
+    """Build compact summary counts for currently visible log rows."""
+    searched_rows = 0
+    skipped_rows = 0
+    error_rows = 0
+    info_rows = 0
+    legacy_rows = 0
+
+    cycle_outcomes: dict[str, str] = {}
+    for row in rows:
+        action = str(row.get("action") or "")
+        if action == "searched":
+            searched_rows += 1
+        elif action == "skipped":
+            skipped_rows += 1
+        elif action == "error":
+            error_rows += 1
+        elif action == "info":
+            info_rows += 1
+
+        cycle_id = row.get("cycle_id")
+        if cycle_id is None:
+            legacy_rows += 1
+            continue
+
+        cycle_id_str = str(cycle_id)
+        cycle_progress = str(row.get("cycle_progress") or "")
+        existing = cycle_outcomes.get(cycle_id_str)
+        if existing == "progress" or cycle_progress == "progress":
+            cycle_outcomes[cycle_id_str] = "progress"
+        elif existing is None:
+            cycle_outcomes[cycle_id_str] = cycle_progress or "unknown"
+
+    searched_cycles = sum(1 for value in cycle_outcomes.values() if value == "progress")
+    skip_only_cycles = sum(1 for value in cycle_outcomes.values() if value == "no_progress")
+    unknown_cycles = sum(
+        1 for value in cycle_outcomes.values() if value not in {"progress", "no_progress"}
+    )
+
+    return {
+        "total_rows": len(rows),
+        "searched_rows": searched_rows,
+        "skipped_rows": skipped_rows,
+        "error_rows": error_rows,
+        "info_rows": info_rows,
+        "legacy_rows": legacy_rows,
+        "total_cycles": len(cycle_outcomes),
+        "searched_cycles": searched_cycles,
+        "skip_only_cycles": skip_only_cycles,
+        "unknown_cycles": unknown_cycles,
+    }
+
+
 def _parse_instance_id(raw: str | None) -> int | None:
     """Parse optional instance_id query param from HTMX form values.
 
@@ -188,6 +241,33 @@ async def _query_logs(
                 ) THEN 'progress'
                 ELSE 'no_progress'
             END AS cycle_progress,
+            CASE
+                WHEN sl.cycle_id IS NULL THEN NULL
+                ELSE (
+                    SELECT COUNT(*)
+                    FROM search_log sl2
+                    WHERE sl2.cycle_id = sl.cycle_id
+                      AND sl2.action = 'searched'
+                )
+            END AS cycle_searched_count,
+            CASE
+                WHEN sl.cycle_id IS NULL THEN NULL
+                ELSE (
+                    SELECT COUNT(*)
+                    FROM search_log sl3
+                    WHERE sl3.cycle_id = sl.cycle_id
+                      AND sl3.action = 'skipped'
+                )
+            END AS cycle_skipped_count,
+            CASE
+                WHEN sl.cycle_id IS NULL THEN NULL
+                ELSE (
+                    SELECT COUNT(*)
+                    FROM search_log sl4
+                    WHERE sl4.cycle_id = sl.cycle_id
+                      AND sl4.action = 'error'
+                )
+            END AS cycle_error_count,
             sl.timestamp
         FROM search_log sl
         LEFT JOIN instances i ON i.id = sl.instance_id
@@ -290,12 +370,14 @@ async def get_logs_partial(
         before,
         limit,
     )
+    summary = _summarize_rows(rows)
 
     return _get_templates().TemplateResponse(
         request=request,
-        name="partials/log_rows.html",
+        name="partials/log_rows_partial.html",
         context={
             "rows": rows,
+            "summary": summary,
             # Pass back current filter values so the partial can render pagination
             "instance_id": parsed_instance_id,
             "action": parsed_action,

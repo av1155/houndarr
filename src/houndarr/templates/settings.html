@@ -136,16 +136,22 @@
 <section class="mb-10">
   <div class="flex items-center justify-between mb-3">
     <h2 class="text-lg font-semibold text-slate-200">Instances</h2>
-    <button
-      type="button"
-      onclick="window.houndarrOpenAddInstanceModal()"
-      hx-get="/settings/instances/add-form"
-      hx-target="#add-instance-modal-content"
-      hx-swap="innerHTML"
-      id="add-instance-btn"
-      class="px-3 py-1.5 rounded bg-brand-600 hover:bg-brand-500 text-white text-sm font-medium transition-colors">
-      + Add Instance
-    </button>
+    <div class="flex items-center gap-2">
+      <a href="/settings/help"
+         class="px-3 py-1.5 rounded border border-slate-700 bg-slate-800 hover:bg-slate-700 text-slate-200 text-sm font-medium transition-colors">
+        Settings Guide
+      </a>
+      <button
+        type="button"
+        onclick="window.houndarrOpenAddInstanceModal()"
+        hx-get="/settings/instances/add-form"
+        hx-target="#add-instance-modal-content"
+        hx-swap="innerHTML"
+        id="add-instance-btn"
+        class="px-3 py-1.5 rounded bg-brand-600 hover:bg-brand-500 text-white text-sm font-medium transition-colors">
+        + Add Instance
+      </button>
+    </div>
   </div>
 
   <div class="rounded-lg border border-slate-800 overflow-hidden">

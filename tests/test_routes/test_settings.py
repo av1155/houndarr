@@ -93,6 +93,8 @@ def test_settings_page_renders(app: TestClient) -> None:
     assert b"Settings" in resp.content
     assert b"Instances" in resp.content
     assert b"https://github.com/av1155/houndarr" in resp.content
+    assert b"Settings Guide" in resp.content
+    assert b'href="/settings/help"' in resp.content
 
 
 def test_settings_page_shows_no_instances_message(app: TestClient) -> None:

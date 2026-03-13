@@ -450,6 +450,38 @@ async def test_cutoff_pass_runs_when_enabled(seeded_instances: None) -> None:
 
 @pytest.mark.asyncio()
 @respx.mock
+async def test_cutoff_pass_respects_cooldown_from_missing_pass(seeded_instances: None) -> None:
+    """An item searched in missing pass should be skipped in cutoff pass."""
+    missing_with_one = {"records": [_EPISODE_RECORD]}
+    cutoff_with_same = {"records": [_EPISODE_RECORD]}
+
+    respx.get(f"{SONARR_URL}/api/v3/wanted/missing").mock(
+        return_value=httpx.Response(200, json=missing_with_one)
+    )
+    respx.get(f"{SONARR_URL}/api/v3/wanted/cutoff").mock(
+        return_value=httpx.Response(200, json=cutoff_with_same)
+    )
+    search_route = respx.post(f"{SONARR_URL}/api/v3/command").mock(
+        return_value=httpx.Response(201, json=_COMMAND_RESP)
+    )
+
+    instance = _make_cutoff_instance(cutoff_enabled=True)
+    count = await run_instance_search(instance, MASTER_KEY)
+
+    # Missing pass searches once; cutoff pass sees cooldown and skips duplicate.
+    assert count == 1
+    assert search_route.called
+    assert len(search_route.calls) == 1
+
+    rows = await _get_log_rows()
+    assert len(rows) == 2
+    assert rows[0]["action"] == "searched"
+    assert rows[1]["action"] == "skipped"
+    assert "cooldown" in (rows[1]["reason"] or "")
+
+
+@pytest.mark.asyncio()
+@respx.mock
 async def test_cutoff_pass_skipped_when_disabled(seeded_instances: None) -> None:
     """When cutoff_enabled=False the cutoff endpoint must never be called."""
     respx.get(f"{SONARR_URL}/api/v3/wanted/missing").mock(

@@ -49,8 +49,8 @@
     <td colspan="6" class="px-3 py-3 text-center">
       <button
         hx-get="/api/logs/partial?limit={{ limit }}{% if instance_id %}&instance_id={{ instance_id }}{% endif %}{% if action %}&action={{ action }}{% endif %}&before={{ rows[-1].timestamp }}"
-        hx-target="#log-tbody"
-        hx-swap="innerHTML"
+        hx-target="#pagination-row"
+        hx-swap="outerHTML"
         class="text-xs text-brand-400 hover:text-brand-300 transition-colors underline-offset-2 hover:underline">
         Load older entries &darr;
       </button>

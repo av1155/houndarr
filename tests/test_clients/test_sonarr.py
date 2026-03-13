@@ -154,6 +154,52 @@ async def test_search_non_2xx_raises(client: SonarrClient) -> None:
 
 
 # ---------------------------------------------------------------------------
+# get_cutoff_unmet
+# ---------------------------------------------------------------------------
+
+_CUTOFF_RESPONSE = {
+    "page": 1,
+    "pageSize": 10,
+    "totalRecords": 1,
+    "records": [_EPISODE_RECORD],
+}
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_get_cutoff_unmet_returns_episodes(client: SonarrClient) -> None:
+    respx.get(f"{BASE}/api/v3/wanted/cutoff").mock(
+        return_value=httpx.Response(200, json=_CUTOFF_RESPONSE)
+    )
+    results = await client.get_cutoff_unmet(page=1, page_size=10)
+    assert len(results) == 1
+    ep = results[0]
+    assert isinstance(ep, MissingEpisode)
+    assert ep.episode_id == 101
+    assert ep.series_title == "My Show"
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_get_cutoff_unmet_empty(client: SonarrClient) -> None:
+    respx.get(f"{BASE}/api/v3/wanted/cutoff").mock(
+        return_value=httpx.Response(
+            200, json={"page": 1, "pageSize": 10, "totalRecords": 0, "records": []}
+        )
+    )
+    results = await client.get_cutoff_unmet()
+    assert results == []
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_get_cutoff_unmet_non_2xx_raises(client: SonarrClient) -> None:
+    respx.get(f"{BASE}/api/v3/wanted/cutoff").mock(return_value=httpx.Response(403))
+    with pytest.raises(httpx.HTTPStatusError):
+        await client.get_cutoff_unmet()
+
+
+# ---------------------------------------------------------------------------
 # Timeout propagation
 # ---------------------------------------------------------------------------
 

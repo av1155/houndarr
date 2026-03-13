@@ -10,7 +10,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, Query, Request
+from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 
@@ -22,6 +22,29 @@ router = APIRouter()
 
 _LOG_LIMIT_DEFAULT = 50
 _LOG_LIMIT_MAX = 200
+
+
+def _parse_instance_id(raw: str | None) -> int | None:
+    """Parse optional instance_id query param from HTMX form values.
+
+    Empty-string values are treated as no filter.
+
+    Args:
+        raw: Query param value from request.
+
+    Returns:
+        Parsed integer instance ID, or ``None``.
+
+    Raises:
+        HTTPException: If a non-empty value is not an integer.
+    """
+    if raw is None or raw == "":
+        return None
+    try:
+        return int(raw)
+    except ValueError as exc:  # pragma: no cover - defensive path
+        raise HTTPException(status_code=422, detail="instance_id must be an integer") from exc
+
 
 # ---------------------------------------------------------------------------
 # Template loader (shared lazy singleton)
@@ -85,7 +108,11 @@ async def _query_logs(
         SELECT
             sl.id,
             sl.instance_id,
-            COALESCE(i.name, 'Deleted') AS instance_name,
+            CASE
+                WHEN sl.instance_id IS NULL THEN 'System'
+                WHEN i.name IS NULL THEN 'Deleted'
+                ELSE i.name
+            END AS instance_name,
             sl.item_id,
             sl.item_type,
             sl.action,
@@ -114,7 +141,7 @@ async def _query_logs(
 
 @router.get("/api/logs")
 async def get_logs(
-    instance_id: int | None = Query(default=None),
+    instance_id: str | None = Query(default=None),
     action: str | None = Query(default=None),
     before: str | None = Query(default=None),
     limit: int = Query(default=_LOG_LIMIT_DEFAULT, ge=1, le=_LOG_LIMIT_MAX),
@@ -130,14 +157,16 @@ async def get_logs(
     Returns:
         JSON array of log-row objects.
     """
-    rows = await _query_logs(instance_id, action, before, limit)
+    parsed_instance_id = _parse_instance_id(instance_id)
+    parsed_action = action or None
+    rows = await _query_logs(parsed_instance_id, parsed_action, before, limit)
     return JSONResponse(rows)
 
 
 @router.get("/api/logs/partial", response_class=HTMLResponse)
 async def get_logs_partial(
     request: Request,
-    instance_id: int | None = Query(default=None),
+    instance_id: str | None = Query(default=None),
     action: str | None = Query(default=None),
     before: str | None = Query(default=None),
     limit: int = Query(default=_LOG_LIMIT_DEFAULT, ge=1, le=_LOG_LIMIT_MAX),
@@ -154,7 +183,9 @@ async def get_logs_partial(
     Returns:
         HTML fragment containing ``<tbody>`` rows.
     """
-    rows = await _query_logs(instance_id, action, before, limit)
+    parsed_instance_id = _parse_instance_id(instance_id)
+    parsed_action = action or None
+    rows = await _query_logs(parsed_instance_id, parsed_action, before, limit)
 
     return _get_templates().TemplateResponse(
         request=request,
@@ -162,8 +193,8 @@ async def get_logs_partial(
         context={
             "rows": rows,
             # Pass back current filter values so the partial can render pagination
-            "instance_id": instance_id,
-            "action": action,
+            "instance_id": parsed_instance_id,
+            "action": parsed_action,
             "before": before,
             "limit": limit,
         },

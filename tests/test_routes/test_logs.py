@@ -181,6 +181,26 @@ async def test_logs_filter_by_instance_id(seeded_log: None, async_client: object
 
 
 @pytest.mark.asyncio()
+async def test_logs_empty_instance_id_treated_as_all(
+    seeded_log: None, async_client: object
+) -> None:
+    """HTMX-style empty instance_id should mean no filter, not a 422."""
+    from httpx import AsyncClient
+
+    assert isinstance(async_client, AsyncClient)
+
+    await async_client.post(
+        "/setup",
+        data={"username": "admin", "password": "ValidPass1!", "password_confirm": "ValidPass1!"},
+    )
+    await async_client.post("/login", data={"username": "admin", "password": "ValidPass1!"})
+
+    resp = await async_client.get("/api/logs?instance_id=&limit=200")
+    assert resp.status_code == 200
+    assert len(resp.json()) == 5
+
+
+@pytest.mark.asyncio()
 async def test_logs_filter_by_action(seeded_log: None, async_client: object) -> None:
     """Filtering by action returns only rows with that action."""
     from httpx import AsyncClient
@@ -199,6 +219,47 @@ async def test_logs_filter_by_action(seeded_log: None, async_client: object) -> 
     assert len(data) == 2
     for row in data:
         assert row["action"] == "searched"
+
+
+@pytest.mark.asyncio()
+async def test_logs_empty_action_treated_as_all(seeded_log: None, async_client: object) -> None:
+    """HTMX-style empty action should mean no filter, not action='' filter."""
+    from httpx import AsyncClient
+
+    assert isinstance(async_client, AsyncClient)
+
+    await async_client.post(
+        "/setup",
+        data={"username": "admin", "password": "ValidPass1!", "password_confirm": "ValidPass1!"},
+    )
+    await async_client.post("/login", data={"username": "admin", "password": "ValidPass1!"})
+
+    resp = await async_client.get("/api/logs?action=&limit=200")
+    assert resp.status_code == 200
+    assert len(resp.json()) == 5
+
+
+@pytest.mark.asyncio()
+async def test_logs_system_rows_render_as_system_label(
+    seeded_log: None, async_client: object
+) -> None:
+    """Rows with NULL instance_id should be labeled 'System', not 'Deleted'."""
+    from httpx import AsyncClient
+
+    assert isinstance(async_client, AsyncClient)
+
+    await async_client.post(
+        "/setup",
+        data={"username": "admin", "password": "ValidPass1!", "password_confirm": "ValidPass1!"},
+    )
+    await async_client.post("/login", data={"username": "admin", "password": "ValidPass1!"})
+
+    resp = await async_client.get("/api/logs?action=info&limit=200")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data) == 1
+    assert data[0]["instance_id"] is None
+    assert data[0]["instance_name"] == "System"
 
 
 @pytest.mark.asyncio()
@@ -289,3 +350,44 @@ async def test_logs_partial_returns_rows(seeded_log: None, async_client: object)
     assert "<tr" in content
     # Should contain action badges
     assert "searched" in content or "skipped" in content
+
+
+@pytest.mark.asyncio()
+async def test_logs_partial_empty_instance_id_treated_as_all(
+    seeded_log: None, async_client: object
+) -> None:
+    """Partial endpoint should accept empty instance_id from the filter form."""
+    from httpx import AsyncClient
+
+    assert isinstance(async_client, AsyncClient)
+
+    await async_client.post(
+        "/setup",
+        data={"username": "admin", "password": "ValidPass1!", "password_confirm": "ValidPass1!"},
+    )
+    await async_client.post("/login", data={"username": "admin", "password": "ValidPass1!"})
+
+    resp = await async_client.get("/api/logs/partial?instance_id=&limit=200")
+    assert resp.status_code == 200
+    assert "<tr" in resp.text
+
+
+@pytest.mark.asyncio()
+async def test_logs_partial_pagination_uses_append_swap(
+    seeded_log: None, async_client: object
+) -> None:
+    """Load-older control should append older rows instead of replacing current rows."""
+    from httpx import AsyncClient
+
+    assert isinstance(async_client, AsyncClient)
+
+    await async_client.post(
+        "/setup",
+        data={"username": "admin", "password": "ValidPass1!", "password_confirm": "ValidPass1!"},
+    )
+    await async_client.post("/login", data={"username": "admin", "password": "ValidPass1!"})
+
+    resp = await async_client.get("/api/logs/partial?limit=2")
+    assert resp.status_code == 200
+    assert 'hx-target="#pagination-row"' in resp.text
+    assert 'hx-swap="outerHTML"' in resp.text

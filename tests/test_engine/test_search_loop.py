@@ -357,3 +357,168 @@ async def test_supervisor_stop_cancels_tasks(seeded_instances: None) -> None:
         await sup.stop()
 
     assert sup._tasks == {}  # noqa: SLF001
+
+
+@pytest.mark.asyncio()
+async def test_supervisor_stop_completes_within_timeout(seeded_instances: None) -> None:
+    """stop() must complete well within the 10-second shutdown timeout."""
+    import asyncio
+    import time
+
+    from houndarr.engine.supervisor import Supervisor
+
+    async def _block(*_: object, **__: object) -> int:
+        await asyncio.sleep(9999)
+        return 0
+
+    with patch(
+        "houndarr.engine.supervisor.run_instance_search",
+        new=AsyncMock(side_effect=_block),
+    ):
+        sup = Supervisor(master_key=MASTER_KEY)
+        await sup.start()
+        await asyncio.sleep(0.05)
+
+        t0 = time.monotonic()
+        await sup.stop()
+        elapsed = time.monotonic() - t0
+
+    # Should complete far below the 10s timeout (tasks cancel immediately)
+    assert elapsed < 5.0
+    assert sup._tasks == {}  # noqa: SLF001
+
+
+# ---------------------------------------------------------------------------
+# Tests — cutoff-unmet pass
+# ---------------------------------------------------------------------------
+
+_CUTOFF_SONARR = {"page": 1, "pageSize": 5, "totalRecords": 1, "records": [_EPISODE_RECORD]}
+_CUTOFF_RADARR = {"page": 1, "pageSize": 5, "totalRecords": 1, "records": [_MOVIE_RECORD]}
+
+
+def _make_cutoff_instance(
+    *,
+    instance_id: int = 1,
+    itype: InstanceType = InstanceType.sonarr,
+    url: str = SONARR_URL,
+    cutoff_enabled: bool = True,
+    cutoff_batch_size: int = 5,
+) -> Instance:
+    return Instance(
+        id=instance_id,
+        name="Cutoff Test",
+        type=itype,
+        url=url,
+        api_key="test-api-key",
+        enabled=True,
+        batch_size=10,
+        sleep_interval_mins=15,
+        hourly_cap=20,
+        cooldown_days=7,
+        unreleased_delay_hrs=24,
+        cutoff_enabled=cutoff_enabled,
+        cutoff_batch_size=cutoff_batch_size,
+        created_at="2024-01-01T00:00:00Z",
+        updated_at="2024-01-01T00:00:00Z",
+    )
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_cutoff_pass_runs_when_enabled(seeded_instances: None) -> None:
+    """When cutoff_enabled=True the cutoff-unmet endpoint is called and items are searched."""
+    # Missing pass returns nothing; cutoff pass has one item
+    respx.get(f"{SONARR_URL}/api/v3/wanted/missing").mock(
+        return_value=httpx.Response(200, json={"records": []})
+    )
+    respx.get(f"{SONARR_URL}/api/v3/wanted/cutoff").mock(
+        return_value=httpx.Response(200, json=_CUTOFF_SONARR)
+    )
+    respx.post(f"{SONARR_URL}/api/v3/command").mock(
+        return_value=httpx.Response(201, json=_COMMAND_RESP)
+    )
+
+    instance = _make_cutoff_instance(cutoff_enabled=True)
+    count = await run_instance_search(instance, MASTER_KEY)
+
+    assert count == 1
+    rows = await _get_log_rows()
+    assert len(rows) == 1
+    assert rows[0]["action"] == "searched"
+    assert rows[0]["item_id"] == 101
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_cutoff_pass_respects_cooldown_from_missing_pass(seeded_instances: None) -> None:
+    """An item searched in missing pass should be skipped in cutoff pass."""
+    missing_with_one = {"records": [_EPISODE_RECORD]}
+    cutoff_with_same = {"records": [_EPISODE_RECORD]}
+
+    respx.get(f"{SONARR_URL}/api/v3/wanted/missing").mock(
+        return_value=httpx.Response(200, json=missing_with_one)
+    )
+    respx.get(f"{SONARR_URL}/api/v3/wanted/cutoff").mock(
+        return_value=httpx.Response(200, json=cutoff_with_same)
+    )
+    search_route = respx.post(f"{SONARR_URL}/api/v3/command").mock(
+        return_value=httpx.Response(201, json=_COMMAND_RESP)
+    )
+
+    instance = _make_cutoff_instance(cutoff_enabled=True)
+    count = await run_instance_search(instance, MASTER_KEY)
+
+    # Missing pass searches once; cutoff pass sees cooldown and skips duplicate.
+    assert count == 1
+    assert search_route.called
+    assert len(search_route.calls) == 1
+
+    rows = await _get_log_rows()
+    assert len(rows) == 2
+    assert rows[0]["action"] == "searched"
+    assert rows[1]["action"] == "skipped"
+    assert "cooldown" in (rows[1]["reason"] or "")
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_cutoff_pass_skipped_when_disabled(seeded_instances: None) -> None:
+    """When cutoff_enabled=False the cutoff endpoint must never be called."""
+    respx.get(f"{SONARR_URL}/api/v3/wanted/missing").mock(
+        return_value=httpx.Response(200, json={"records": []})
+    )
+    cutoff_route = respx.get(f"{SONARR_URL}/api/v3/wanted/cutoff").mock(
+        return_value=httpx.Response(200, json=_CUTOFF_SONARR)
+    )
+
+    instance = _make_cutoff_instance(cutoff_enabled=False)
+    count = await run_instance_search(instance, MASTER_KEY)
+
+    assert count == 0
+    assert not cutoff_route.called
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_cutoff_pass_radarr(seeded_instances: None) -> None:
+    """Radarr cutoff-unmet items are searched with movie item_type."""
+    respx.get(f"{RADARR_URL}/api/v3/wanted/missing").mock(
+        return_value=httpx.Response(200, json={"records": []})
+    )
+    respx.get(f"{RADARR_URL}/api/v3/wanted/cutoff").mock(
+        return_value=httpx.Response(200, json=_CUTOFF_RADARR)
+    )
+    respx.post(f"{RADARR_URL}/api/v3/command").mock(
+        return_value=httpx.Response(201, json={"id": 2})
+    )
+
+    instance = _make_cutoff_instance(
+        instance_id=2, itype=InstanceType.radarr, url=RADARR_URL, cutoff_enabled=True
+    )
+    count = await run_instance_search(instance, MASTER_KEY)
+
+    assert count == 1
+    rows = await _get_log_rows()
+    assert rows[0]["action"] == "searched"
+    assert rows[0]["item_id"] == 201
+    assert rows[0]["item_type"] == "movie"

@@ -66,6 +66,33 @@ class RadarrClient(ArrClient):
             json={"name": "MoviesSearch", "movieIds": [item_id]},
         )
 
+    async def get_cutoff_unmet(
+        self,
+        *,
+        page: int = 1,
+        page_size: int = 10,
+    ) -> list[MissingMovie]:
+        """Return a page of monitored movies that have not met their quality cutoff.
+
+        Calls ``GET /api/v3/wanted/cutoff`` sorted by in-cinema date.
+
+        Args:
+            page: 1-based page number.
+            page_size: Number of records per page.
+
+        Returns:
+            List of :class:`MissingMovie` dataclasses for cutoff-unmet movies.
+        """
+        data: dict[str, Any] = await self._get(
+            "/api/v3/wanted/cutoff",
+            page=page,
+            pageSize=page_size,
+            sortKey="inCinemas",
+            sortDirection="ascending",
+        )
+        records: list[dict[str, Any]] = data.get("records", [])
+        return [_parse_movie(r) for r in records]
+
     async def search_movie(self, movie_id: int) -> None:
         """Alias for :meth:`search` with a more descriptive name."""
         await self.search(movie_id)

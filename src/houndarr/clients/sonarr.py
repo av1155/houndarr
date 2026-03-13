@@ -69,6 +69,33 @@ class SonarrClient(ArrClient):
             json={"name": "EpisodeSearch", "episodeIds": [item_id]},
         )
 
+    async def get_cutoff_unmet(
+        self,
+        *,
+        page: int = 1,
+        page_size: int = 10,
+    ) -> list[MissingEpisode]:
+        """Return a page of monitored episodes that have not met their quality cutoff.
+
+        Calls ``GET /api/v3/wanted/cutoff`` with ``includeSeries=true`` so that
+        series metadata is embedded in each record.
+
+        Args:
+            page: 1-based page number.
+            page_size: Number of records per page.
+
+        Returns:
+            List of :class:`MissingEpisode` dataclasses for cutoff-unmet episodes.
+        """
+        data: dict[str, Any] = await self._get(
+            "/api/v3/wanted/cutoff",
+            page=page,
+            pageSize=page_size,
+            includeSeries="true",
+        )
+        records: list[dict[str, Any]] = data.get("records", [])
+        return [_parse_episode(r) for r in records]
+
     async def search_episode(self, episode_id: int) -> None:
         """Alias for :meth:`search` with a more descriptive name."""
         await self.search(episode_id)

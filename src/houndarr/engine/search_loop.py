@@ -10,8 +10,8 @@ from __future__ import annotations
 
 import logging
 
-from houndarr.clients.radarr import RadarrClient
-from houndarr.clients.sonarr import SonarrClient
+from houndarr.clients.radarr import MissingMovie, RadarrClient
+from houndarr.clients.sonarr import MissingEpisode, SonarrClient
 from houndarr.database import get_db
 from houndarr.services.cooldown import (
     count_searches_last_hour,
@@ -130,4 +130,89 @@ async def run_instance_search(instance: Instance, master_key: bytes) -> int:
         logger.info("[%s] searched %s %s", instance.name, item_type, item_id)
 
     logger.info("[%s] cycle complete — %d searched", instance.name, searched)
+
+    # -----------------------------------------------------------------------
+    # Cutoff-unmet pass (only when enabled)
+    # -----------------------------------------------------------------------
+    if instance.cutoff_enabled:
+        searched += await _run_cutoff_pass(instance)
+
+    return searched
+
+
+async def _run_cutoff_pass(instance: Instance) -> int:
+    """Execute the cutoff-unmet search pass for *instance*.
+
+    Fetches one page of cutoff-unmet items and searches each eligible one,
+    applying the same hourly-cap and cooldown logic used for missing items.
+
+    Args:
+        instance: Fully-populated (decrypted) instance.
+
+    Returns:
+        Count of items searched in this pass.
+    """
+    item_type = "episode" if instance.type == InstanceType.sonarr else "movie"
+    logger.info(
+        "[%s] starting cutoff-unmet pass (cutoff_batch_size=%d)",
+        instance.name,
+        instance.cutoff_batch_size,
+    )
+
+    searched = 0
+    cutoff_items: list[MissingEpisode] | list[MissingMovie]
+
+    if instance.type == InstanceType.sonarr:
+        sonarr = SonarrClient(url=instance.url, api_key=instance.api_key)
+        async with sonarr:
+            cutoff_items = await sonarr.get_cutoff_unmet(
+                page=1, page_size=instance.cutoff_batch_size
+            )
+    else:
+        radarr = RadarrClient(url=instance.url, api_key=instance.api_key)
+        async with radarr:
+            cutoff_items = await radarr.get_cutoff_unmet(
+                page=1, page_size=instance.cutoff_batch_size
+            )
+
+    logger.debug("[%s] fetched %d cutoff-unmet %s(s)", instance.name, len(cutoff_items), item_type)
+
+    for item in cutoff_items:
+        item_id: int = item.episode_id if isinstance(item, MissingEpisode) else item.movie_id
+
+        # --- hourly cap check ---
+        searches_this_hour = await count_searches_last_hour(instance.id)
+        if instance.hourly_cap > 0 and searches_this_hour >= instance.hourly_cap:
+            reason = f"hourly cap reached ({instance.hourly_cap})"
+            logger.info("[%s] cutoff %s — %s", instance.name, item_id, reason)
+            await _write_log(instance.id, item_id, item_type, "skipped", reason=reason)
+            break
+
+        # --- cooldown check ---
+        if await is_on_cooldown(instance.id, item_id, item_type, instance.cooldown_days):  # type: ignore[arg-type]
+            reason = f"on cooldown ({instance.cooldown_days}d)"
+            logger.debug("[%s] cutoff %s — %s", instance.name, item_id, reason)
+            await _write_log(instance.id, item_id, item_type, "skipped", reason=reason)
+            continue
+
+        # --- search ---
+        try:
+            if instance.type == InstanceType.sonarr:
+                async with SonarrClient(url=instance.url, api_key=instance.api_key) as c:
+                    await c.search(item_id)
+            else:
+                async with RadarrClient(url=instance.url, api_key=instance.api_key) as c:
+                    await c.search(item_id)
+        except Exception as exc:  # noqa: BLE001
+            msg = str(exc)
+            logger.warning("[%s] cutoff search failed for %s: %s", instance.name, item_id, msg)
+            await _write_log(instance.id, item_id, item_type, "error", message=msg)
+            continue
+
+        await record_search(instance.id, item_id, item_type)  # type: ignore[arg-type]
+        await _write_log(instance.id, item_id, item_type, "searched")
+        searched += 1
+        logger.info("[%s] cutoff searched %s %s", instance.name, item_type, item_id)
+
+    logger.info("[%s] cutoff pass complete — %d searched", instance.name, searched)
     return searched

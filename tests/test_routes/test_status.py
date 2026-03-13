@@ -21,8 +21,11 @@ _VALID_FORM = {
 
 
 def _login(client: TestClient) -> None:
-    client.post("/setup", data={"password": "ValidPass1!", "password_confirm": "ValidPass1!"})
-    client.post("/login", data={"password": "ValidPass1!"})
+    client.post(
+        "/setup",
+        data={"username": "admin", "password": "ValidPass1!", "password_confirm": "ValidPass1!"},
+    )
+    client.post("/login", data={"username": "admin", "password": "ValidPass1!"})
 
 
 # ---------------------------------------------------------------------------

@@ -8,14 +8,17 @@ from fastapi.templating import Jinja2Templates
 
 from houndarr import __version__
 from houndarr.auth import (
+    check_credentials,
     check_login_rate_limit,
-    check_password,
     clear_login_attempts,
     clear_session,
     create_session,
     is_setup_complete,
+    normalize_username,
     record_failed_login,
     set_password,
+    set_username,
+    validate_username,
 )
 
 router = APIRouter()
@@ -65,12 +68,23 @@ async def setup_get(request: Request) -> HTMLResponse:
 @router.post("/setup", response_class=HTMLResponse)
 async def setup_post(
     request: Request,
+    username: str = Form(...),
     password: str = Form(...),
     password_confirm: str = Form(...),
 ) -> HTMLResponse:
     """Process the first-run password setup form."""
     if await is_setup_complete():
         return RedirectResponse(url="/login", status_code=302)  # type: ignore[return-value]
+
+    username_error = validate_username(username)
+    if username_error is not None:
+        return _render(
+            request,
+            "setup.html",
+            status_code=422,
+            show_nav=False,
+            error=username_error,
+        )
 
     if len(password) < 8:
         return _render(
@@ -90,6 +104,7 @@ async def setup_post(
             error="Passwords do not match.",
         )
 
+    await set_username(normalize_username(username))
     await set_password(password)
     return RedirectResponse(url="/login", status_code=303)  # type: ignore[return-value]
 
@@ -110,6 +125,7 @@ async def login_get(request: Request) -> HTMLResponse:
 @router.post("/login", response_class=HTMLResponse)
 async def login_post(
     request: Request,
+    username: str = Form(...),
     password: str = Form(...),
 ) -> HTMLResponse:
     """Process login form."""
@@ -125,14 +141,14 @@ async def login_post(
             error="Too many attempts. Please wait a moment.",
         )
 
-    if not await check_password(password):
+    if not await check_credentials(username, password):
         record_failed_login(request)
         return _render(
             request,
             "login.html",
             status_code=401,
             show_nav=False,
-            error="Incorrect password.",
+            error="Invalid credentials.",
         )
 
     clear_login_attempts(request)

@@ -10,6 +10,7 @@ from fastapi.responses import HTMLResponse, Response
 from fastapi.templating import Jinja2Templates
 
 from houndarr import __version__
+from houndarr.auth import check_password, get_username, set_password
 from houndarr.clients.base import ArrClient
 from houndarr.clients.radarr import RadarrClient
 from houndarr.clients.sonarr import SonarrClient
@@ -143,8 +144,71 @@ def _validate_cutoff_controls(
 @router.get("/settings", response_class=HTMLResponse)
 async def settings_get(request: Request) -> HTMLResponse:
     """Render the settings page with the current list of instances."""
+    return await _render_settings_page(request)
+
+
+async def _render_settings_page(
+    request: Request,
+    *,
+    status_code: int = 200,
+    account_error: str | None = None,
+    account_success: str | None = None,
+) -> HTMLResponse:
+    """Render settings page with common account and instance context."""
     instances = await list_instances(master_key=_master_key(request))
-    return _render(request, "settings.html", instances=instances)
+    username = await get_username()
+    return _render(
+        request,
+        "settings.html",
+        status_code=status_code,
+        instances=instances,
+        username=username,
+        account_error=account_error,
+        account_success=account_success,
+    )
+
+
+@router.post("/settings/account/password", response_class=HTMLResponse)
+async def account_password_update(
+    request: Request,
+    current_password: Annotated[str, Form()],
+    new_password: Annotated[str, Form()],
+    new_password_confirm: Annotated[str, Form()],
+) -> HTMLResponse:
+    """Update admin password from the settings page."""
+    if not await check_password(current_password):
+        return await _render_settings_page(
+            request,
+            status_code=422,
+            account_error="Current password is incorrect.",
+        )
+
+    if len(new_password) < 8:
+        return await _render_settings_page(
+            request,
+            status_code=422,
+            account_error="New password must be at least 8 characters.",
+        )
+
+    if new_password != new_password_confirm:
+        return await _render_settings_page(
+            request,
+            status_code=422,
+            account_error="New passwords do not match.",
+        )
+
+    if new_password == current_password:
+        return await _render_settings_page(
+            request,
+            status_code=422,
+            account_error="New password must be different from current password.",
+        )
+
+    await set_password(new_password)
+    return await _render_settings_page(
+        request,
+        account_success="Password updated successfully.",
+    )
 
 
 # ---------------------------------------------------------------------------

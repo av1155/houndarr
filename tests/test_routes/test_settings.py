@@ -81,6 +81,20 @@ def test_settings_toggle_redirects_unauthenticated(app: TestClient) -> None:
     assert resp.headers["location"] in _AUTH_LOCATIONS
 
 
+def test_password_change_redirects_unauthenticated(app: TestClient) -> None:
+    resp = app.post(
+        "/settings/account/password",
+        data={
+            "current_password": "ValidPass1!",
+            "new_password": "NewValidPass2!",
+            "new_password_confirm": "NewValidPass2!",
+        },
+        follow_redirects=False,
+    )
+    assert resp.status_code == 302
+    assert resp.headers["location"] in _AUTH_LOCATIONS
+
+
 # ---------------------------------------------------------------------------
 # GET /settings
 # ---------------------------------------------------------------------------
@@ -95,6 +109,9 @@ def test_settings_page_renders(app: TestClient) -> None:
     assert b"https://github.com/av1155/houndarr" in resp.content
     assert b"Settings Guide" in resp.content
     assert b'href="/settings/help"' in resp.content
+    assert b"Account" in resp.content
+    assert b"Update Password" in resp.content
+    assert b"Signed in as" in resp.content
 
 
 def test_settings_page_shows_no_instances_message(app: TestClient) -> None:
@@ -351,3 +368,53 @@ def test_create_instance_rejects_invalid_cutoff_controls(app: TestClient) -> Non
     resp = app.post("/settings/instances", data=form)
     assert resp.status_code == 422
     assert b"Cutoff batch size" in resp.content
+
+
+def test_password_change_success(app: TestClient) -> None:
+    _login(app)
+    resp = app.post(
+        "/settings/account/password",
+        data={
+            "current_password": "ValidPass1!",
+            "new_password": "BetterPass2!",
+            "new_password_confirm": "BetterPass2!",
+        },
+    )
+    assert resp.status_code == 200
+    assert b"Password updated successfully" in resp.content
+
+    app.post("/logout")
+    login_resp = app.post(
+        "/login",
+        data={"username": "admin", "password": "BetterPass2!"},
+        follow_redirects=False,
+    )
+    assert login_resp.status_code == 303
+
+
+def test_password_change_requires_correct_current_password(app: TestClient) -> None:
+    _login(app)
+    resp = app.post(
+        "/settings/account/password",
+        data={
+            "current_password": "WrongPass1!",
+            "new_password": "AnotherGoodPass2!",
+            "new_password_confirm": "AnotherGoodPass2!",
+        },
+    )
+    assert resp.status_code == 422
+    assert b"Current password is incorrect" in resp.content
+
+
+def test_password_change_requires_matching_confirmation(app: TestClient) -> None:
+    _login(app)
+    resp = app.post(
+        "/settings/account/password",
+        data={
+            "current_password": "ValidPass1!",
+            "new_password": "AnotherGoodPass2!",
+            "new_password_confirm": "MismatchPass2!",
+        },
+    )
+    assert resp.status_code == 422
+    assert b"New passwords do not match" in resp.content

@@ -92,6 +92,7 @@ def test_settings_page_renders(app: TestClient) -> None:
     assert resp.status_code == 200
     assert b"Settings" in resp.content
     assert b"Instances" in resp.content
+    assert b"https://github.com/av1155/houndarr" in resp.content
 
 
 def test_settings_page_shows_no_instances_message(app: TestClient) -> None:
@@ -114,6 +115,7 @@ def test_settings_help_page_renders(app: TestClient) -> None:
     resp = app.get("/settings/help")
     assert resp.status_code == 200
     assert b"Instance Settings Help" in resp.content
+    assert b"https://github.com/av1155/houndarr/blob/main/docs/settings.md" in resp.content
 
 
 # ---------------------------------------------------------------------------
@@ -318,6 +320,7 @@ def test_add_form_partial_renders(app: TestClient) -> None:
     assert b'name="unreleased_delay_hrs" type="number" min="0"' in resp.content
     assert b'value="36"' in resp.content
     assert b'href="/settings/help"' in resp.content
+    assert b'target="_blank"' not in resp.content
 
 
 def test_connection_check_endpoint_success(app: TestClient) -> None:

@@ -118,6 +118,46 @@
       animation: none;
     }
   }
+
+  #account-settings > summary::-webkit-details-marker {
+    display: none;
+  }
+
+  #account-settings > summary {
+    transition: background-color 180ms ease, color 180ms ease;
+  }
+
+  .account-details-chevron {
+    transition: transform 180ms ease, color 180ms ease;
+  }
+
+  #account-settings[open] .account-details-chevron {
+    transform: rotate(180deg);
+  }
+
+  .account-details-content {
+    display: grid;
+    grid-template-rows: 0fr;
+    transition: grid-template-rows 180ms ease, opacity 180ms ease;
+    opacity: 0;
+  }
+
+  #account-settings[open] .account-details-content {
+    grid-template-rows: 1fr;
+    opacity: 1;
+  }
+
+  .account-details-inner {
+    overflow: hidden;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    #account-settings > summary,
+    .account-details-chevron,
+    .account-details-content {
+      transition: none;
+    }
+  }
 </style>
 {% endblock %}
 
@@ -180,72 +220,85 @@
     </table>
   </div>
 
-  <section class="mt-8 rounded-xl border border-slate-800 bg-slate-900/60 p-5 sm:p-6">
-    <div class="mb-4">
-      <h3 class="text-base font-semibold text-slate-200">Account</h3>
-      <p class="text-sm text-slate-400 mt-1">Manage admin credentials for this Houndarr instance.</p>
-    </div>
+  <section class="mt-8 rounded-xl border border-slate-800 bg-slate-900/60 p-4 sm:p-5">
+    <details id="account-settings" {% if account_error or account_success %}open{% endif %}>
+      <summary class="cursor-pointer list-none flex items-center justify-between rounded-lg px-2 py-2 text-slate-200 hover:bg-slate-800/50 focus:outline-none focus:ring-2 focus:ring-brand-500/30">
+        <span>
+          <span class="block text-base font-semibold">Account</span>
+          <span class="block text-sm text-slate-400 mt-0.5">Manage admin credentials for this Houndarr instance.</span>
+        </span>
+        <span class="account-details-chevron text-slate-400" aria-hidden="true">
+          <svg class="w-4 h-4" viewBox="0 0 20 20" fill="currentColor">
+            <path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 0 1 1.06.02L10 11.118l3.71-3.89a.75.75 0 1 1 1.08 1.04l-4.25 4.46a.75.75 0 0 1-1.08 0l-4.25-4.46a.75.75 0 0 1 .02-1.06Z" clip-rule="evenodd"/>
+          </svg>
+        </span>
+      </summary>
 
-    <div class="mb-4 inline-flex items-center gap-2 rounded-md border border-slate-800 bg-slate-950/60 px-3 py-1.5 text-xs text-slate-400">
-      <span class="text-slate-500">Signed in as</span>
-      <span class="font-medium text-slate-200">{{ username or "admin" }}</span>
-    </div>
+      <div class="account-details-content">
+      <div class="account-details-inner pt-4 space-y-4">
+        <div class="inline-flex items-center gap-2 rounded-md border border-slate-800 bg-slate-950/60 px-3 py-1.5 text-xs text-slate-400">
+          <span class="text-slate-500">Signed in as</span>
+          <span class="font-medium text-slate-200">{{ username or "admin" }}</span>
+        </div>
 
-    <form action="/settings/account/password" method="post" class="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
-      <div>
-        <label class="block text-xs font-medium text-slate-400 mb-1.5" for="current-password">Current Password</label>
-        <input id="current-password"
-               name="current_password"
-               type="password"
-               required
-               autocomplete="current-password"
-               class="w-full h-11 rounded-lg border border-slate-700 bg-slate-950/70 px-3 text-sm text-white placeholder:text-slate-500
-                      focus:outline-none focus:border-brand-400/80 focus:ring-2 focus:ring-brand-500/25" />
-      </div>
-      <div>
-        <label class="block text-xs font-medium text-slate-400 mb-1.5" for="new-password">New Password</label>
-        <input id="new-password"
-               name="new_password"
-               type="password"
-               required
-               minlength="8"
-               autocomplete="new-password"
-               class="w-full h-11 rounded-lg border border-slate-700 bg-slate-950/70 px-3 text-sm text-white placeholder:text-slate-500
-                      focus:outline-none focus:border-brand-400/80 focus:ring-2 focus:ring-brand-500/25" />
-      </div>
-      <div>
-        <label class="block text-xs font-medium text-slate-400 mb-1.5" for="confirm-password">Confirm Password</label>
-        <input id="confirm-password"
-               name="new_password_confirm"
-               type="password"
-               required
-               minlength="8"
-               autocomplete="new-password"
-               class="w-full h-11 rounded-lg border border-slate-700 bg-slate-950/70 px-3 text-sm text-white placeholder:text-slate-500
-                      focus:outline-none focus:border-brand-400/80 focus:ring-2 focus:ring-brand-500/25" />
-      </div>
+        <form action="/settings/account/password" method="post" class="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+          <div>
+            <label class="block text-xs font-medium text-slate-400 mb-1.5" for="current-password">Current Password</label>
+            <input id="current-password"
+                   name="current_password"
+                   type="password"
+                   required
+                   autocomplete="current-password"
+                   class="w-full h-11 rounded-lg border border-slate-700 bg-slate-950/70 px-3 text-sm text-white placeholder:text-slate-500
+                          focus:outline-none focus:border-brand-400/80 focus:ring-2 focus:ring-brand-500/25" />
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-slate-400 mb-1.5" for="new-password">New Password</label>
+            <input id="new-password"
+                   name="new_password"
+                   type="password"
+                   required
+                   minlength="8"
+                   autocomplete="new-password"
+                   class="w-full h-11 rounded-lg border border-slate-700 bg-slate-950/70 px-3 text-sm text-white placeholder:text-slate-500
+                          focus:outline-none focus:border-brand-400/80 focus:ring-2 focus:ring-brand-500/25" />
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-slate-400 mb-1.5" for="confirm-password">Confirm Password</label>
+            <input id="confirm-password"
+                   name="new_password_confirm"
+                   type="password"
+                   required
+                   minlength="8"
+                   autocomplete="new-password"
+                   class="w-full h-11 rounded-lg border border-slate-700 bg-slate-950/70 px-3 text-sm text-white placeholder:text-slate-500
+                          focus:outline-none focus:border-brand-400/80 focus:ring-2 focus:ring-brand-500/25" />
+          </div>
 
-      <div class="sm:col-span-3 flex flex-wrap items-center gap-3 pt-1">
-        <button type="submit"
-                class="px-4 py-2.5 rounded-lg bg-brand-500 hover:bg-brand-400 text-white text-sm font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-brand-500/35">
-          Update Password
-        </button>
-        <p class="text-xs text-slate-500">Current password is required for security.</p>
-      </div>
+          <div class="sm:col-span-3 flex flex-wrap items-center gap-3 pt-1">
+            <button type="submit"
+                    class="px-4 py-2.5 rounded-lg bg-brand-500 hover:bg-brand-400 text-white text-sm font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-brand-500/35">
+              Update Password
+            </button>
+            <p class="text-xs text-slate-500">Current password is required for security.</p>
+          </div>
 
-      {% if account_error is defined and account_error %}
-      <div class="sm:col-span-3 rounded-md border border-red-800/60 bg-red-950/40 px-3 py-2 text-sm text-red-300">
-        {{ account_error }}
-      </div>
-      {% endif %}
+          {% if account_error is defined and account_error %}
+          <div class="sm:col-span-3 rounded-md border border-red-800/60 bg-red-950/40 px-3 py-2 text-sm text-red-300">
+            {{ account_error }}
+          </div>
+          {% endif %}
 
-      {% if account_success is defined and account_success %}
-      <div class="sm:col-span-3 rounded-md border border-green-800/60 bg-green-950/30 px-3 py-2 text-sm text-green-300">
-        {{ account_success }}
+          {% if account_success is defined and account_success %}
+          <div class="sm:col-span-3 rounded-md border border-green-800/60 bg-green-950/30 px-3 py-2 text-sm text-green-300">
+            {{ account_success }}
+          </div>
+          {% endif %}
+        </form>
       </div>
-      {% endif %}
-    </form>
+      </div>
+    </details>
   </section>
 
   <dialog id="add-instance-modal"
@@ -255,12 +308,18 @@
         <h3 id="add-instance-modal-title" class="text-xl font-semibold tracking-tight text-white">Add Instance</h3>
         <p id="add-instance-modal-subtitle" class="text-sm text-slate-400">Configure a Sonarr or Radarr instance.</p>
       </div>
-      <button type="button"
-              aria-label="Close add instance dialog"
-              onclick="window.houndarrCloseAddInstanceModal()"
-              class="rounded-lg border border-slate-700 bg-slate-900/90 p-2 text-slate-400 hover:bg-slate-800 hover:text-slate-200 transition-colors focus:outline-none focus:ring-2 focus:ring-brand-500/30">
-        <span aria-hidden="true" class="text-xl leading-none">&times;</span>
-      </button>
+      <div class="flex items-center gap-3">
+        <a href="/settings/help"
+           class="text-xs font-medium text-brand-300 hover:text-brand-200 underline underline-offset-4 transition-colors">
+          What do these settings mean?
+        </a>
+        <button type="button"
+                aria-label="Close add instance dialog"
+                onclick="window.houndarrCloseAddInstanceModal()"
+                class="rounded-lg border border-slate-700 bg-slate-900/90 p-2 text-slate-400 hover:bg-slate-800 hover:text-slate-200 transition-colors focus:outline-none focus:ring-2 focus:ring-brand-500/30">
+          <span aria-hidden="true" class="text-xl leading-none">&times;</span>
+        </button>
+      </div>
     </div>
 
     <div id="add-instance-modal-content"

@@ -13,8 +13,9 @@ import logging
 from contextlib import suppress
 from functools import partial
 from typing import Literal
+from uuid import uuid4
 
-from houndarr.engine.search_loop import _write_log, run_instance_search
+from houndarr.engine.search_loop import CycleTrigger, _write_log, run_instance_search
 from houndarr.services.instances import Instance, get_instance, list_instances
 
 logger = logging.getLogger(__name__)
@@ -62,6 +63,7 @@ class Supervisor:
             item_id=None,
             item_type=None,
             action="info",
+            cycle_trigger="system",
             message=f"Supervisor started {len(self._tasks)} task(s)",
         )
 
@@ -202,7 +204,7 @@ class Supervisor:
                     )
                     return
 
-                await self._run_search_cycle(instance)
+                await self._run_search_cycle(instance, cycle_trigger="scheduled")
 
                 await asyncio.sleep(instance.sleep_interval_mins * 60)
 
@@ -216,14 +218,20 @@ class Supervisor:
         if instance is None or not instance.enabled:
             return
 
-        await self._run_search_cycle(instance)
+        await self._run_search_cycle(instance, cycle_trigger="run_now")
 
-    async def _run_search_cycle(self, instance: Instance) -> None:
+    async def _run_search_cycle(self, instance: Instance, *, cycle_trigger: CycleTrigger) -> None:
         """Run exactly one cycle for *instance* under the per-instance lock."""
         lock = self._run_locks.setdefault(instance.id, asyncio.Lock())
         async with lock:
+            cycle_id = str(uuid4())
             try:
-                await run_instance_search(instance, self._master_key)
+                await run_instance_search(
+                    instance,
+                    self._master_key,
+                    cycle_id=cycle_id,
+                    cycle_trigger=cycle_trigger,
+                )
             except Exception as exc:  # noqa: BLE001
                 logger.error(
                     "Supervisor: unhandled error in search loop for %r: %s",
@@ -235,6 +243,8 @@ class Supervisor:
                     item_id=None,
                     item_type=None,
                     action="error",
+                    cycle_id=cycle_id,
+                    cycle_trigger=cycle_trigger,
                     message=str(exc),
                 )
 

@@ -44,6 +44,7 @@ _MOVIE_RECORD: dict[str, Any] = {
 _MISSING_SONARR = {"page": 1, "pageSize": 10, "totalRecords": 1, "records": [_EPISODE_RECORD]}
 _MISSING_RADARR = {"page": 1, "pageSize": 10, "totalRecords": 1, "records": [_MOVIE_RECORD]}
 _COMMAND_RESP = {"id": 1, "name": "EpisodeSearch"}
+_FUTURE_AIR_DATE = "2999-01-01T00:00:00Z"
 
 
 # ---------------------------------------------------------------------------
@@ -258,6 +259,174 @@ async def test_hourly_cap_zero_means_unlimited(seeded_instances: None) -> None:
     count = await run_instance_search(instance, MASTER_KEY)
 
     assert count == 1
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_missing_scans_next_pages_when_first_page_items_ineligible(
+    seeded_instances: None,
+) -> None:
+    """Missing pass should continue to later pages when page 1 items are ineligible."""
+    from houndarr.services.cooldown import record_search
+
+    await record_search(1, 1002, "episode")
+
+    page_1 = {
+        "records": [
+            {**_EPISODE_RECORD, "id": 1001, "airDateUtc": _FUTURE_AIR_DATE},
+            {**_EPISODE_RECORD, "id": 1002, "airDateUtc": "2023-09-01T00:00:00Z"},
+        ]
+    }
+    page_2 = {"records": [{**_EPISODE_RECORD, "id": 1003, "title": "Eligible"}]}
+
+    missing_route = respx.get(f"{SONARR_URL}/api/v3/wanted/missing").mock(
+        side_effect=[
+            httpx.Response(200, json=page_1),
+            httpx.Response(200, json=page_2),
+        ]
+    )
+    search_route = respx.post(f"{SONARR_URL}/api/v3/command").mock(
+        return_value=httpx.Response(201, json=_COMMAND_RESP)
+    )
+
+    instance = _make_instance(batch_size=1, cooldown_days=7, unreleased_delay_hrs=36)
+    count = await run_instance_search(instance, MASTER_KEY)
+
+    assert count == 1
+    assert missing_route.call_count == 2
+    assert search_route.call_count == 1
+
+    rows = await _get_log_rows()
+    assert any(r["item_id"] == 1001 and r["action"] == "skipped" for r in rows)
+    assert any(r["item_id"] == 1002 and r["action"] == "skipped" for r in rows)
+    assert any(r["item_id"] == 1003 and r["action"] == "searched" for r in rows)
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_missing_list_page_calls_are_hard_bounded(seeded_instances: None) -> None:
+    """Missing pass should not fetch more than three list pages per cycle."""
+    page_payloads = [
+        {
+            "records": [
+                {
+                    **_EPISODE_RECORD,
+                    "id": i,
+                    "airDateUtc": _FUTURE_AIR_DATE,
+                }
+                for i in range(start, start + 10)
+            ]
+        }
+        for start in (1000, 2000, 3000, 4000)
+    ]
+
+    missing_route = respx.get(f"{SONARR_URL}/api/v3/wanted/missing").mock(
+        side_effect=[httpx.Response(200, json=p) for p in page_payloads]
+    )
+    search_route = respx.post(f"{SONARR_URL}/api/v3/command").mock(
+        return_value=httpx.Response(201, json=_COMMAND_RESP)
+    )
+
+    instance = _make_instance(batch_size=2, unreleased_delay_hrs=36)
+    count = await run_instance_search(instance, MASTER_KEY)
+
+    assert count == 0
+    assert missing_route.call_count == 3
+    assert not search_route.called
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_missing_stops_fetching_pages_when_target_is_reached(seeded_instances: None) -> None:
+    """Once missing batch target is reached, no additional pages should be fetched."""
+    page_1 = {"records": [{**_EPISODE_RECORD, "id": 1101, "title": "First"}]}
+    page_2 = {"records": [{**_EPISODE_RECORD, "id": 1102, "title": "Second"}]}
+
+    missing_route = respx.get(f"{SONARR_URL}/api/v3/wanted/missing").mock(
+        side_effect=[
+            httpx.Response(200, json=page_1),
+            httpx.Response(200, json=page_2),
+        ]
+    )
+    search_route = respx.post(f"{SONARR_URL}/api/v3/command").mock(
+        return_value=httpx.Response(201, json=_COMMAND_RESP)
+    )
+
+    instance = _make_instance(batch_size=1, cooldown_days=0, unreleased_delay_hrs=0)
+    count = await run_instance_search(instance, MASTER_KEY)
+
+    assert count == 1
+    assert missing_route.call_count == 1
+    assert search_route.call_count == 1
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_missing_deduplicates_items_across_pages(seeded_instances: None) -> None:
+    """Duplicate item IDs returned on later pages should be ignored within one pass."""
+    page_1 = {"records": [{**_EPISODE_RECORD, "id": 1201, "title": "One"}]}
+    page_2 = {
+        "records": [
+            {**_EPISODE_RECORD, "id": 1201, "title": "One duplicate"},
+            {**_EPISODE_RECORD, "id": 1202, "title": "Two"},
+        ]
+    }
+
+    missing_route = respx.get(f"{SONARR_URL}/api/v3/wanted/missing").mock(
+        side_effect=[
+            httpx.Response(200, json=page_1),
+            httpx.Response(200, json=page_2),
+        ]
+    )
+    search_route = respx.post(f"{SONARR_URL}/api/v3/command").mock(
+        return_value=httpx.Response(201, json=_COMMAND_RESP)
+    )
+
+    instance = _make_instance(batch_size=2, cooldown_days=0, unreleased_delay_hrs=0)
+    count = await run_instance_search(instance, MASTER_KEY)
+
+    assert count == 2
+    assert missing_route.call_count == 2
+    assert search_route.call_count == 2
+
+    rows = await _get_log_rows()
+    assert [row["item_id"] for row in rows if row["action"] == "searched"] == [1201, 1202]
+    assert not any(row["item_id"] == 1201 and row["action"] == "skipped" for row in rows)
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_missing_hourly_cap_stops_additional_page_fetches(seeded_instances: None) -> None:
+    """When missing hourly cap is reached, the pass should stop without extra page fetches."""
+    async with get_db() as conn:
+        await conn.execute(
+            """
+            INSERT INTO search_log (instance_id, item_id, item_type, search_kind, action, timestamp)
+            VALUES (?, ?, 'episode', 'missing', 'searched', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+            """,
+            (1, 9999),
+        )
+        await conn.commit()
+
+    page_1 = {"records": [{**_EPISODE_RECORD, "id": 1301}]}
+    page_2 = {"records": [{**_EPISODE_RECORD, "id": 1302}]}
+
+    missing_route = respx.get(f"{SONARR_URL}/api/v3/wanted/missing").mock(
+        side_effect=[
+            httpx.Response(200, json=page_1),
+            httpx.Response(200, json=page_2),
+        ]
+    )
+    search_route = respx.post(f"{SONARR_URL}/api/v3/command").mock(
+        return_value=httpx.Response(201, json=_COMMAND_RESP)
+    )
+
+    instance = _make_instance(hourly_cap=1, cooldown_days=0, unreleased_delay_hrs=0)
+    count = await run_instance_search(instance, MASTER_KEY)
+
+    assert count == 0
+    assert missing_route.call_count == 1
+    assert not search_route.called
 
 
 # ---------------------------------------------------------------------------
@@ -739,3 +908,117 @@ async def test_cutoff_pass_radarr(seeded_instances: None) -> None:
     assert rows[0]["action"] == "searched"
     assert rows[0]["item_id"] == 201
     assert rows[0]["item_type"] == "movie"
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_cutoff_scans_next_pages_when_first_page_items_ineligible(
+    seeded_instances: None,
+) -> None:
+    """Cutoff pass should continue to later pages when page 1 items are ineligible."""
+    from houndarr.services.cooldown import record_search
+
+    await record_search(1, 2202, "episode")
+
+    page_1 = {
+        "records": [
+            {**_EPISODE_RECORD, "id": 2201, "airDateUtc": _FUTURE_AIR_DATE},
+            {**_EPISODE_RECORD, "id": 2202, "airDateUtc": "2023-09-01T00:00:00Z"},
+        ]
+    }
+    page_2 = {"records": [{**_EPISODE_RECORD, "id": 2203, "title": "Eligible cutoff"}]}
+
+    respx.get(f"{SONARR_URL}/api/v3/wanted/missing").mock(
+        return_value=httpx.Response(200, json={"records": []})
+    )
+    cutoff_route = respx.get(f"{SONARR_URL}/api/v3/wanted/cutoff").mock(
+        side_effect=[
+            httpx.Response(200, json=page_1),
+            httpx.Response(200, json=page_2),
+        ]
+    )
+    search_route = respx.post(f"{SONARR_URL}/api/v3/command").mock(
+        return_value=httpx.Response(201, json=_COMMAND_RESP)
+    )
+
+    instance = _make_cutoff_instance(cutoff_enabled=True, cutoff_batch_size=1)
+    count = await run_instance_search(instance, MASTER_KEY)
+
+    assert count == 1
+    assert cutoff_route.call_count == 2
+    assert search_route.call_count == 1
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_cutoff_list_page_calls_are_hard_bounded(seeded_instances: None) -> None:
+    """Cutoff pass should not fetch more than three list pages per cycle."""
+    respx.get(f"{SONARR_URL}/api/v3/wanted/missing").mock(
+        return_value=httpx.Response(200, json={"records": []})
+    )
+
+    page_payloads = [
+        {
+            "records": [
+                {
+                    **_EPISODE_RECORD,
+                    "id": i,
+                    "airDateUtc": _FUTURE_AIR_DATE,
+                }
+                for i in range(start, start + 10)
+            ]
+        }
+        for start in (5000, 6000, 7000, 8000)
+    ]
+
+    cutoff_route = respx.get(f"{SONARR_URL}/api/v3/wanted/cutoff").mock(
+        side_effect=[httpx.Response(200, json=p) for p in page_payloads]
+    )
+    search_route = respx.post(f"{SONARR_URL}/api/v3/command").mock(
+        return_value=httpx.Response(201, json=_COMMAND_RESP)
+    )
+
+    instance = _make_cutoff_instance(cutoff_enabled=True, cutoff_batch_size=1)
+    count = await run_instance_search(instance, MASTER_KEY)
+
+    assert count == 0
+    assert cutoff_route.call_count <= 3
+    assert not search_route.called
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_cutoff_hourly_cap_stops_additional_page_fetches(seeded_instances: None) -> None:
+    """When cutoff hourly cap is reached, the pass should stop without extra page fetches."""
+    async with get_db() as conn:
+        await conn.execute(
+            """
+            INSERT INTO search_log (instance_id, item_id, item_type, search_kind, action, timestamp)
+            VALUES (?, ?, 'episode', 'cutoff', 'searched', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+            """,
+            (1, 9100),
+        )
+        await conn.commit()
+
+    respx.get(f"{SONARR_URL}/api/v3/wanted/missing").mock(
+        return_value=httpx.Response(200, json={"records": []})
+    )
+    page_1 = {"records": [{**_EPISODE_RECORD, "id": 2301}]}
+    page_2 = {"records": [{**_EPISODE_RECORD, "id": 2302}]}
+
+    cutoff_route = respx.get(f"{SONARR_URL}/api/v3/wanted/cutoff").mock(
+        side_effect=[
+            httpx.Response(200, json=page_1),
+            httpx.Response(200, json=page_2),
+        ]
+    )
+    search_route = respx.post(f"{SONARR_URL}/api/v3/command").mock(
+        return_value=httpx.Response(201, json=_COMMAND_RESP)
+    )
+
+    instance = _make_cutoff_instance(cutoff_enabled=True, cutoff_batch_size=1, cutoff_hourly_cap=1)
+    count = await run_instance_search(instance, MASTER_KEY)
+
+    assert count == 0
+    assert cutoff_route.call_count == 1
+    assert not search_route.called

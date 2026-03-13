@@ -58,6 +58,17 @@ Why this shape:
 
 Cutoff searches use separate cap/cooldown settings from missing searches so they do not consume the same budget.
 
+## Fair Backlog Scanning
+
+Houndarr does not stop at the first wanted page anymore. During each cycle, it can scan deeper pages when
+top candidates are repeatedly ineligible (cooldown, unreleased delay, or caps), but it stays bounded:
+
+- per-pass list paging has a hard cap (no unbounded page walks)
+- per-pass candidate evaluation has a hard scan budget
+- missing remains primary; cutoff remains separate and conservative
+
+This improves backlog rotation while preserving polite API behavior.
+
 ## Status Control
 
 - **Enabled/Disabled**: controlled from the row toggle in Settings.

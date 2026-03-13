@@ -20,6 +20,7 @@ from cryptography.fernet import Fernet
 from houndarr.database import get_db
 from houndarr.engine.search_loop import run_instance_search
 from houndarr.engine.supervisor import Supervisor
+from houndarr.services.cooldown import record_search
 from houndarr.services.instances import Instance, InstanceType, create_instance
 
 # ---------------------------------------------------------------------------
@@ -47,6 +48,7 @@ _MOVIE: dict[str, Any] = {
 _MISSING_SONARR_1 = {"records": [_EPISODE]}
 _MISSING_RADARR_1 = {"records": [_MOVIE]}
 _MISSING_EMPTY = {"records": []}
+_FUTURE_AIR_DATE = "2999-01-01T00:00:00Z"
 
 _CMD_OK = {"id": 1, "name": "EpisodeSearch"}
 
@@ -347,3 +349,72 @@ async def test_supervisor_runs_both_instances(
     instance_ids = {r["instance_id"] for r in searched}
     assert sonarr_instance.id in instance_ids
     assert radarr_instance.id in instance_ids
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_missing_pass_reaches_deeper_page_when_top_items_are_ineligible(
+    sonarr_instance: Instance, master_key: bytes
+) -> None:
+    """Fair scanning should reach page 2 when page 1 candidates are blocked."""
+    await record_search(sonarr_instance.id, 601, "episode")
+
+    page_1 = {
+        "records": [
+            {**_EPISODE, "id": 600, "airDateUtc": _FUTURE_AIR_DATE},
+            {**_EPISODE, "id": 601, "airDateUtc": "2023-09-01T00:00:00Z"},
+        ]
+    }
+    page_2 = {"records": [{**_EPISODE, "id": 602, "title": "Deeper candidate"}]}
+
+    missing_route = respx.get(f"{SONARR_URL}/api/v3/wanted/missing").mock(
+        side_effect=[
+            httpx.Response(200, json=page_1),
+            httpx.Response(200, json=page_2),
+        ]
+    )
+    search_route = respx.post(f"{SONARR_URL}/api/v3/command").mock(
+        return_value=httpx.Response(201, json=_CMD_OK)
+    )
+
+    # Use a small target to ensure we stop once we find one eligible candidate.
+    sonarr_instance.batch_size = 1
+    count = await run_instance_search(sonarr_instance, master_key)
+
+    assert count == 1
+    assert missing_route.call_count == 2
+    assert search_route.call_count == 1
+
+    logs = await _log_rows()
+    assert any(row["item_id"] == 602 and row["action"] == "searched" for row in logs)
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_missing_list_calls_are_bounded_per_cycle(
+    sonarr_instance: Instance, master_key: bytes
+) -> None:
+    """Fair scanning keeps missing list-page fetches under a hard cap."""
+    payloads = [
+        {
+            "records": [
+                {**_EPISODE, "id": i, "airDateUtc": _FUTURE_AIR_DATE}
+                for i in range(start, start + 10)
+            ]
+        }
+        for start in (900, 1000, 1100, 1200)
+    ]
+
+    missing_route = respx.get(f"{SONARR_URL}/api/v3/wanted/missing").mock(
+        side_effect=[httpx.Response(200, json=payload) for payload in payloads]
+    )
+    search_route = respx.post(f"{SONARR_URL}/api/v3/command").mock(
+        return_value=httpx.Response(201, json=_CMD_OK)
+    )
+
+    sonarr_instance.batch_size = 2
+    count = await run_instance_search(sonarr_instance, master_key)
+
+    assert count == 0
+    assert missing_route.call_count == 3
+    assert not search_route.called

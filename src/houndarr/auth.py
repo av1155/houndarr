@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import time
 from collections.abc import Callable
+from hmac import compare_digest
 from typing import Any
 
 import bcrypt
@@ -25,6 +27,9 @@ logger = logging.getLogger(__name__)
 SESSION_COOKIE_NAME = "houndarr_session"
 SESSION_MAX_AGE_SECONDS = 86400  # 24 hours
 BCRYPT_COST = 12
+USERNAME_MIN_LENGTH = 3
+USERNAME_MAX_LENGTH = 32
+_USERNAME_PATTERN = re.compile(r"^[a-z0-9_.-]+$")
 
 # Routes that don't require authentication
 _PUBLIC_PATHS = frozenset(
@@ -127,12 +132,61 @@ async def set_password(password: str) -> None:
     await set_setting("password_hash", hash_password(password))
 
 
+def normalize_username(username: str) -> str:
+    """Return a normalized username for storage and comparison."""
+    return username.strip().lower()
+
+
+def validate_username(username: str) -> str | None:
+    """Return an error message if username is invalid, else None."""
+    normalized = normalize_username(username)
+    if not normalized:
+        return "Username is required."
+    if len(normalized) < USERNAME_MIN_LENGTH or len(normalized) > USERNAME_MAX_LENGTH:
+        return "Username must be 3-32 characters."
+    if _USERNAME_PATTERN.fullmatch(normalized) is None:
+        return "Username may only contain lowercase letters, numbers, dots, dashes, or underscores."
+    return None
+
+
+async def set_username(username: str) -> None:
+    """Persist the normalized single-admin username."""
+    await set_setting("username", normalize_username(username))
+
+
+async def get_username() -> str | None:
+    """Return the configured single-admin username."""
+    return await get_setting("username")
+
+
 async def check_password(password: str) -> bool:
     """Return True if password matches the stored hash."""
     stored = await get_setting("password_hash")
     if not stored:
         return False
     return verify_password(password, stored)
+
+
+async def check_credentials(username: str, password: str) -> bool:
+    """Return True if the provided username and password are valid.
+
+    If a legacy install has a password hash but no username yet, the first
+    successful password login claims the submitted username.
+    """
+    normalized_username = normalize_username(username)
+    username_error = validate_username(normalized_username)
+    if username_error is not None:
+        return False
+
+    if not await check_password(password):
+        return False
+
+    stored_username = await get_username()
+    if stored_username is None:
+        await set_username(normalized_username)
+        return True
+
+    return compare_digest(normalized_username, normalize_username(stored_username))
 
 
 # ---------------------------------------------------------------------------

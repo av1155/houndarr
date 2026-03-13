@@ -15,7 +15,7 @@
         </svg>
       </div>
       <h1 class="text-2xl font-bold text-white">Welcome to Houndarr</h1>
-      <p class="mt-2 text-slate-400 text-sm">Create a password to secure your instance.</p>
+      <p class="mt-2 text-slate-400 text-sm">Create your admin username and password.</p>
     </div>
 
     <!-- Setup form -->
@@ -27,6 +27,25 @@
       {% endif %}
 
       <form action="/setup" method="post" class="space-y-5">
+        <div>
+          <label for="username" class="block text-sm font-medium text-slate-300 mb-1.5">
+            Username
+          </label>
+          <input
+            id="username"
+            name="username"
+            type="text"
+            autocomplete="username"
+            required
+            minlength="3"
+            maxlength="32"
+            pattern="[A-Za-z0-9_.-]+"
+            class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2.5 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition-colors"
+            placeholder="admin"
+            autofocus
+          />
+        </div>
+
         <div>
           <label for="password" class="block text-sm font-medium text-slate-300 mb-1.5">
             Password
@@ -40,7 +59,6 @@
             minlength="8"
             class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2.5 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition-colors"
             placeholder="Minimum 8 characters"
-            autofocus
           />
         </div>
 
@@ -63,13 +81,13 @@
         <button
           type="submit"
           class="w-full bg-brand-600 hover:bg-brand-500 text-white font-semibold py-2.5 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2 focus:ring-offset-slate-900">
-          Set Password &amp; Get Started
+          Create Account &amp; Get Started
         </button>
       </form>
     </div>
 
     <p class="mt-6 text-center text-xs text-slate-600">
-      This password protects your Houndarr instance. Keep it safe.
+      Keep your username and password secure.
     </p>
   </div>
 </div>

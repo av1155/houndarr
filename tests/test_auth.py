@@ -5,7 +5,8 @@ from __future__ import annotations
 import pytest
 from fastapi.testclient import TestClient
 
-from houndarr.auth import hash_password, is_setup_complete, verify_password
+from houndarr.auth import check_credentials, hash_password, is_setup_complete, verify_password
+from houndarr.database import get_setting
 
 # ---------------------------------------------------------------------------
 # Unit tests — password hashing
@@ -66,6 +67,33 @@ async def test_check_password_incorrect(db: None) -> None:
     assert await check_password("wrong_password") is False
 
 
+@pytest.mark.asyncio()
+async def test_check_credentials_correct(db: None) -> None:
+    from houndarr.auth import set_password, set_username
+
+    await set_username("admin")
+    await set_password("correct_password")
+    assert await check_credentials("admin", "correct_password") is True
+
+
+@pytest.mark.asyncio()
+async def test_check_credentials_wrong_username(db: None) -> None:
+    from houndarr.auth import set_password, set_username
+
+    await set_username("admin")
+    await set_password("correct_password")
+    assert await check_credentials("operator", "correct_password") is False
+
+
+@pytest.mark.asyncio()
+async def test_check_credentials_claims_username_for_legacy_install(db: None) -> None:
+    from houndarr.auth import set_password
+
+    await set_password("correct_password")
+    assert await check_credentials("admin", "correct_password") is True
+    assert await get_setting("username") == "admin"
+
+
 # ---------------------------------------------------------------------------
 # Integration tests — HTTP routes
 # ---------------------------------------------------------------------------
@@ -94,16 +122,33 @@ def test_setup_page_renders(app: TestClient) -> None:
 
 def test_setup_post_short_password(app: TestClient) -> None:
     """Password shorter than 8 chars should fail validation."""
-    response = app.post("/setup", data={"password": "short", "password_confirm": "short"})
+    response = app.post(
+        "/setup",
+        data={"username": "admin", "password": "short", "password_confirm": "short"},
+    )
     assert response.status_code == 422
     assert b"at least 8 characters" in response.content
+
+
+def test_setup_post_invalid_username(app: TestClient) -> None:
+    """Invalid username should fail validation."""
+    response = app.post(
+        "/setup",
+        data={
+            "username": "bad username",
+            "password": "ValidPass1!",
+            "password_confirm": "ValidPass1!",
+        },
+    )
+    assert response.status_code == 422
+    assert b"Username may only contain" in response.content
 
 
 def test_setup_post_mismatched_passwords(app: TestClient) -> None:
     """Mismatched confirmation should return error."""
     response = app.post(
         "/setup",
-        data={"password": "password123", "password_confirm": "password456"},
+        data={"username": "admin", "password": "password123", "password_confirm": "password456"},
     )
     assert response.status_code == 422
     assert b"do not match" in response.content
@@ -113,7 +158,7 @@ def test_setup_post_success(app: TestClient) -> None:
     """Valid setup should redirect to login."""
     response = app.post(
         "/setup",
-        data={"password": "ValidPass1!", "password_confirm": "ValidPass1!"},
+        data={"username": "admin", "password": "ValidPass1!", "password_confirm": "ValidPass1!"},
         follow_redirects=False,
     )
     assert response.status_code == 303
@@ -125,7 +170,7 @@ def test_login_page_renders_after_setup(app: TestClient) -> None:
     # Complete setup first
     app.post(
         "/setup",
-        data={"password": "ValidPass1!", "password_confirm": "ValidPass1!"},
+        data={"username": "admin", "password": "ValidPass1!", "password_confirm": "ValidPass1!"},
     )
     response = app.get("/login")
     assert response.status_code == 200
@@ -134,18 +179,35 @@ def test_login_page_renders_after_setup(app: TestClient) -> None:
 
 def test_login_wrong_password(app: TestClient) -> None:
     """Wrong password should return 401."""
-    app.post("/setup", data={"password": "ValidPass1!", "password_confirm": "ValidPass1!"})
-    response = app.post("/login", data={"password": "WrongPass!"})
+    app.post(
+        "/setup",
+        data={"username": "admin", "password": "ValidPass1!", "password_confirm": "ValidPass1!"},
+    )
+    response = app.post("/login", data={"username": "admin", "password": "WrongPass!"})
     assert response.status_code == 401
-    assert b"Incorrect password" in response.content
+    assert b"Invalid credentials" in response.content
+
+
+def test_login_wrong_username(app: TestClient) -> None:
+    """Wrong username should return 401 with generic error."""
+    app.post(
+        "/setup",
+        data={"username": "admin", "password": "ValidPass1!", "password_confirm": "ValidPass1!"},
+    )
+    response = app.post("/login", data={"username": "other", "password": "ValidPass1!"})
+    assert response.status_code == 401
+    assert b"Invalid credentials" in response.content
 
 
 def test_login_correct_password(app: TestClient) -> None:
     """Correct password should create session and redirect to dashboard."""
-    app.post("/setup", data={"password": "ValidPass1!", "password_confirm": "ValidPass1!"})
+    app.post(
+        "/setup",
+        data={"username": "admin", "password": "ValidPass1!", "password_confirm": "ValidPass1!"},
+    )
     response = app.post(
         "/login",
-        data={"password": "ValidPass1!"},
+        data={"username": "admin", "password": "ValidPass1!"},
         follow_redirects=False,
     )
     assert response.status_code == 303
@@ -156,8 +218,11 @@ def test_login_correct_password(app: TestClient) -> None:
 
 def test_dashboard_accessible_after_login(app: TestClient) -> None:
     """Dashboard should be accessible after logging in."""
-    app.post("/setup", data={"password": "ValidPass1!", "password_confirm": "ValidPass1!"})
-    app.post("/login", data={"password": "ValidPass1!"})
+    app.post(
+        "/setup",
+        data={"username": "admin", "password": "ValidPass1!", "password_confirm": "ValidPass1!"},
+    )
+    app.post("/login", data={"username": "admin", "password": "ValidPass1!"})
     response = app.get("/")
     assert response.status_code == 200
     assert b"Dashboard" in response.content
@@ -165,8 +230,11 @@ def test_dashboard_accessible_after_login(app: TestClient) -> None:
 
 def test_logout_clears_session(app: TestClient) -> None:
     """Logout should clear the session and redirect to login."""
-    app.post("/setup", data={"password": "ValidPass1!", "password_confirm": "ValidPass1!"})
-    app.post("/login", data={"password": "ValidPass1!"})
+    app.post(
+        "/setup",
+        data={"username": "admin", "password": "ValidPass1!", "password_confirm": "ValidPass1!"},
+    )
+    app.post("/login", data={"username": "admin", "password": "ValidPass1!"})
     response = app.post("/logout", follow_redirects=False)
     assert response.status_code == 303
     assert "/login" in response.headers["location"]

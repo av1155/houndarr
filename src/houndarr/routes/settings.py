@@ -10,6 +10,7 @@ from fastapi.responses import HTMLResponse, Response
 from fastapi.templating import Jinja2Templates
 
 from houndarr import __version__
+from houndarr.auth import check_password, get_username, set_password
 from houndarr.clients.base import ArrClient
 from houndarr.clients.radarr import RadarrClient
 from houndarr.clients.sonarr import SonarrClient
@@ -17,6 +18,8 @@ from houndarr.config import (
     DEFAULT_BATCH_SIZE,
     DEFAULT_COOLDOWN_DAYS,
     DEFAULT_CUTOFF_BATCH_SIZE,
+    DEFAULT_CUTOFF_COOLDOWN_DAYS,
+    DEFAULT_CUTOFF_HOURLY_CAP,
     DEFAULT_HOURLY_CAP,
     DEFAULT_SLEEP_INTERVAL_MINUTES,
     DEFAULT_UNRELEASED_DELAY_HOURS,
@@ -77,6 +80,8 @@ def _blank_instance() -> Instance:
         unreleased_delay_hrs=DEFAULT_UNRELEASED_DELAY_HOURS,
         cutoff_enabled=False,
         cutoff_batch_size=DEFAULT_CUTOFF_BATCH_SIZE,
+        cutoff_cooldown_days=DEFAULT_CUTOFF_COOLDOWN_DAYS,
+        cutoff_hourly_cap=DEFAULT_CUTOFF_HOURLY_CAP,
         created_at="",
         updated_at="",
     )
@@ -116,6 +121,21 @@ def _connection_guard_response(message: str) -> HTMLResponse:
     )
 
 
+def _validate_cutoff_controls(
+    cutoff_batch_size: int,
+    cutoff_cooldown_days: int,
+    cutoff_hourly_cap: int,
+) -> str | None:
+    """Validate cutoff-specific numeric controls from form submissions."""
+    if cutoff_batch_size < 1:
+        return "Cutoff batch size must be at least 1."
+    if cutoff_cooldown_days < 0:
+        return "Cutoff cooldown days must be 0 or greater."
+    if cutoff_hourly_cap < 0:
+        return "Cutoff hourly cap must be 0 or greater."
+    return None
+
+
 # ---------------------------------------------------------------------------
 # Settings index
 # ---------------------------------------------------------------------------
@@ -124,8 +144,71 @@ def _connection_guard_response(message: str) -> HTMLResponse:
 @router.get("/settings", response_class=HTMLResponse)
 async def settings_get(request: Request) -> HTMLResponse:
     """Render the settings page with the current list of instances."""
+    return await _render_settings_page(request)
+
+
+async def _render_settings_page(
+    request: Request,
+    *,
+    status_code: int = 200,
+    account_error: str | None = None,
+    account_success: str | None = None,
+) -> HTMLResponse:
+    """Render settings page with common account and instance context."""
     instances = await list_instances(master_key=_master_key(request))
-    return _render(request, "settings.html", instances=instances)
+    username = await get_username()
+    return _render(
+        request,
+        "settings.html",
+        status_code=status_code,
+        instances=instances,
+        username=username,
+        account_error=account_error,
+        account_success=account_success,
+    )
+
+
+@router.post("/settings/account/password", response_class=HTMLResponse)
+async def account_password_update(
+    request: Request,
+    current_password: Annotated[str, Form()],
+    new_password: Annotated[str, Form()],
+    new_password_confirm: Annotated[str, Form()],
+) -> HTMLResponse:
+    """Update admin password from the settings page."""
+    if not await check_password(current_password):
+        return await _render_settings_page(
+            request,
+            status_code=422,
+            account_error="Current password is incorrect.",
+        )
+
+    if len(new_password) < 8:
+        return await _render_settings_page(
+            request,
+            status_code=422,
+            account_error="New password must be at least 8 characters.",
+        )
+
+    if new_password != new_password_confirm:
+        return await _render_settings_page(
+            request,
+            status_code=422,
+            account_error="New passwords do not match.",
+        )
+
+    if new_password == current_password:
+        return await _render_settings_page(
+            request,
+            status_code=422,
+            account_error="New password must be different from current password.",
+        )
+
+    await set_password(new_password)
+    return await _render_settings_page(
+        request,
+        account_success="Password updated successfully.",
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -191,6 +274,8 @@ async def instance_create(
     unreleased_delay_hrs: Annotated[int, Form()] = DEFAULT_UNRELEASED_DELAY_HOURS,
     cutoff_enabled: Annotated[str, Form()] = "",
     cutoff_batch_size: Annotated[int, Form()] = DEFAULT_CUTOFF_BATCH_SIZE,
+    cutoff_cooldown_days: Annotated[int, Form()] = DEFAULT_CUTOFF_COOLDOWN_DAYS,
+    cutoff_hourly_cap: Annotated[int, Form()] = DEFAULT_CUTOFF_HOURLY_CAP,
     connection_verified: Annotated[str, Form()] = "false",
 ) -> HTMLResponse:
     """Create a new instance and return the updated instance table body."""
@@ -198,6 +283,14 @@ async def instance_create(
         instance_type = InstanceType(type)
     except ValueError:
         return _connection_guard_response("Invalid instance type.")
+
+    validation_error = _validate_cutoff_controls(
+        cutoff_batch_size,
+        cutoff_cooldown_days,
+        cutoff_hourly_cap,
+    )
+    if validation_error is not None:
+        return _connection_guard_response(validation_error)
 
     if connection_verified != "true":
         return _connection_guard_response("Test connection successfully before adding.")
@@ -219,6 +312,8 @@ async def instance_create(
         unreleased_delay_hrs=unreleased_delay_hrs,
         cutoff_enabled=cutoff_enabled == "on",
         cutoff_batch_size=cutoff_batch_size,
+        cutoff_cooldown_days=cutoff_cooldown_days,
+        cutoff_hourly_cap=cutoff_hourly_cap,
     )
     instances = await list_instances(master_key=_master_key(request))
     # HTMX: return just the refreshed table body partial
@@ -259,6 +354,8 @@ async def instance_update(
     unreleased_delay_hrs: Annotated[int, Form()] = DEFAULT_UNRELEASED_DELAY_HOURS,
     cutoff_enabled: Annotated[str, Form()] = "",
     cutoff_batch_size: Annotated[int, Form()] = DEFAULT_CUTOFF_BATCH_SIZE,
+    cutoff_cooldown_days: Annotated[int, Form()] = DEFAULT_CUTOFF_COOLDOWN_DAYS,
+    cutoff_hourly_cap: Annotated[int, Form()] = DEFAULT_CUTOFF_HOURLY_CAP,
     connection_verified: Annotated[str, Form()] = "false",
 ) -> HTMLResponse:
     """Update an existing instance and return the refreshed row partial."""
@@ -266,6 +363,14 @@ async def instance_update(
         instance_type = InstanceType(type)
     except ValueError:
         return _connection_guard_response("Invalid instance type.")
+
+    validation_error = _validate_cutoff_controls(
+        cutoff_batch_size,
+        cutoff_cooldown_days,
+        cutoff_hourly_cap,
+    )
+    if validation_error is not None:
+        return _connection_guard_response(validation_error)
 
     if connection_verified != "true":
         return _connection_guard_response("Test connection successfully before saving changes.")
@@ -292,6 +397,8 @@ async def instance_update(
         unreleased_delay_hrs=unreleased_delay_hrs,
         cutoff_enabled=cutoff_enabled == "on",
         cutoff_batch_size=cutoff_batch_size,
+        cutoff_cooldown_days=cutoff_cooldown_days,
+        cutoff_hourly_cap=cutoff_hourly_cap,
     )
     if updated is None:
         return HTMLResponse(content="Not found", status_code=404)
@@ -336,6 +443,8 @@ async def instance_toggle_enabled(request: Request, instance_id: int) -> HTMLRes
         unreleased_delay_hrs=instance.unreleased_delay_hrs,
         cutoff_enabled=instance.cutoff_enabled,
         cutoff_batch_size=instance.cutoff_batch_size,
+        cutoff_cooldown_days=instance.cutoff_cooldown_days,
+        cutoff_hourly_cap=instance.cutoff_hourly_cap,
     )
     if updated is None:
         return HTMLResponse(content="Not found", status_code=404)

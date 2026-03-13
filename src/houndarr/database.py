@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Schema version — bump when adding new migrations
 # ---------------------------------------------------------------------------
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 # ---------------------------------------------------------------------------
 # DDL
@@ -30,13 +30,15 @@ CREATE TABLE IF NOT EXISTS instances (
     type                 TEXT    NOT NULL CHECK(type IN ('sonarr', 'radarr')),
     url                  TEXT    NOT NULL,
     encrypted_api_key    TEXT    NOT NULL DEFAULT '',
-    batch_size           INTEGER NOT NULL DEFAULT 10,
-    sleep_interval_mins  INTEGER NOT NULL DEFAULT 15,
-    hourly_cap           INTEGER NOT NULL DEFAULT 20,
-    cooldown_days        INTEGER NOT NULL DEFAULT 7,
-    unreleased_delay_hrs INTEGER NOT NULL DEFAULT 24,
+    batch_size           INTEGER NOT NULL DEFAULT 2,
+    sleep_interval_mins  INTEGER NOT NULL DEFAULT 30,
+    hourly_cap           INTEGER NOT NULL DEFAULT 4,
+    cooldown_days        INTEGER NOT NULL DEFAULT 14,
+    unreleased_delay_hrs INTEGER NOT NULL DEFAULT 36,
     cutoff_enabled       INTEGER NOT NULL DEFAULT 0,
-    cutoff_batch_size    INTEGER NOT NULL DEFAULT 5,
+    cutoff_batch_size    INTEGER NOT NULL DEFAULT 1,
+    cutoff_cooldown_days INTEGER NOT NULL DEFAULT 21,
+    cutoff_hourly_cap    INTEGER NOT NULL DEFAULT 1,
     enabled              INTEGER NOT NULL DEFAULT 1,
     created_at           TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     updated_at           TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
@@ -59,6 +61,8 @@ CREATE TABLE IF NOT EXISTS search_log (
     instance_id INTEGER REFERENCES instances(id) ON DELETE SET NULL,
     item_id     INTEGER,
     item_type   TEXT    CHECK(item_type IN ('episode', 'movie')),
+    search_kind TEXT,
+    item_label  TEXT,
     action      TEXT    NOT NULL CHECK(action IN ('searched', 'skipped', 'error', 'info')),
     reason      TEXT,
     message     TEXT,
@@ -129,13 +133,41 @@ async def init_db() -> None:
 
 async def _run_migrations(db: aiosqlite.Connection, from_version: int) -> None:
     """Apply incremental migrations from from_version to SCHEMA_VERSION."""
-    # Future migrations go here as elif from_version == N blocks
+    if from_version < 2:
+        await _migrate_to_v2(db)
+
     logger.info("Migrated database from schema version %d to %d", from_version, SCHEMA_VERSION)
     await db.execute(
         "UPDATE settings SET value = ? WHERE key = 'schema_version'",
         (str(SCHEMA_VERSION),),
     )
     await db.commit()
+
+
+async def _migrate_to_v2(db: aiosqlite.Connection) -> None:
+    """Add v2 columns for richer logs and cutoff-specific throttling."""
+    if not await _column_exists(db, "search_log", "search_kind"):
+        await db.execute("ALTER TABLE search_log ADD COLUMN search_kind TEXT")
+
+    if not await _column_exists(db, "search_log", "item_label"):
+        await db.execute("ALTER TABLE search_log ADD COLUMN item_label TEXT")
+
+    if not await _column_exists(db, "instances", "cutoff_cooldown_days"):
+        await db.execute(
+            "ALTER TABLE instances ADD COLUMN cutoff_cooldown_days INTEGER NOT NULL DEFAULT 21"
+        )
+
+    if not await _column_exists(db, "instances", "cutoff_hourly_cap"):
+        await db.execute(
+            "ALTER TABLE instances ADD COLUMN cutoff_hourly_cap INTEGER NOT NULL DEFAULT 1"
+        )
+
+
+async def _column_exists(db: aiosqlite.Connection, table_name: str, column_name: str) -> bool:
+    """Return whether *column_name* exists on *table_name*."""
+    async with db.execute(f"PRAGMA table_info({table_name})") as cur:  # noqa: S608  # nosec B608
+        rows = await cur.fetchall()
+    return any(row[1] == column_name for row in rows)
 
 
 # ---------------------------------------------------------------------------

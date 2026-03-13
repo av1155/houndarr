@@ -1,19 +1,19 @@
 {# Log table rows partial — rendered by GET /api/logs/partial and swapped into #log-tbody #}
 {% if rows %}
   {% for row in rows %}
-  <tr class="border-b border-slate-800 hover:bg-slate-800/40 transition-colors">
+  <tr class="border-b border-slate-800 hover:bg-slate-800/40 transition-colors" data-log-row="true">
     {# Timestamp #}
-    <td class="px-3 py-2.5 text-xs text-slate-400 whitespace-nowrap font-mono">
+    <td class="px-3 py-2.5 text-xs text-slate-400 whitespace-nowrap font-mono" data-log-ts="{{ row.timestamp or '' }}" data-col="timestamp">
       {{ row.timestamp[:19].replace("T", " ") if row.timestamp else "—" }}
     </td>
 
     {# Instance #}
-    <td class="px-3 py-2.5 text-xs text-slate-300 max-w-[140px] truncate" title="{{ row.instance_name }}">
+    <td class="px-3 py-2.5 text-xs text-slate-300 max-w-[140px] truncate" title="{{ row.instance_name }}" data-col="instance">
       {{ row.instance_name }}
     </td>
 
     {# Action badge #}
-    <td class="px-3 py-2.5">
+    <td class="px-3 py-2.5" data-col="action">
       {% if row.action == "searched" %}
         <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-green-900/60 text-green-300">searched</span>
       {% elif row.action == "skipped" %}
@@ -26,17 +26,29 @@
     </td>
 
     {# Type #}
-    <td class="px-3 py-2.5 text-xs text-slate-400 capitalize">
+    <td class="px-3 py-2.5 text-xs text-slate-400 capitalize" data-col="type">
       {{ row.item_type or "—" }}
     </td>
 
-    {# Item ID #}
-    <td class="px-3 py-2.5 text-xs text-slate-400 font-mono">
-      {{ row.item_id if row.item_id is not none else "—" }}
+    {# Media label + ID fallback #}
+    <td class="px-3 py-2.5 text-xs text-slate-300 max-w-[320px] truncate"
+        data-col="media"
+        title="{{ row.item_label or '' }}">
+      {% if row.item_label %}
+        <div class="truncate">{{ row.item_label }}</div>
+      {% elif row.item_type and row.item_id is not none %}
+        <div class="truncate text-slate-400">{{ row.item_type|capitalize }} {{ row.item_id }}</div>
+      {% else %}
+        <div class="truncate text-slate-500">—</div>
+      {% endif %}
+      {% if row.item_id is not none %}
+        <div class="text-[11px] text-slate-500 font-mono">id: {{ row.item_id }}</div>
+      {% endif %}
     </td>
 
     {# Reason / Message #}
     <td class="px-3 py-2.5 text-xs text-slate-400 max-w-[260px] truncate"
+        data-col="reason"
         title="{{ (row.reason or row.message or '') }}">
       {{ row.reason or row.message or "—" }}
     </td>

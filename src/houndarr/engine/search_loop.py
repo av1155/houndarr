@@ -9,18 +9,22 @@ triggers the *arr search command for each eligible item, and writes a row to
 from __future__ import annotations
 
 import logging
+from datetime import UTC, datetime, timedelta
+from typing import Literal
 
 from houndarr.clients.radarr import MissingMovie, RadarrClient
 from houndarr.clients.sonarr import MissingEpisode, SonarrClient
 from houndarr.database import get_db
 from houndarr.services.cooldown import (
-    count_searches_last_hour,
     is_on_cooldown,
     record_search,
 )
 from houndarr.services.instances import Instance, InstanceType
 
 logger = logging.getLogger(__name__)
+
+SearchKind = Literal["missing", "cutoff"]
+ItemType = Literal["episode", "movie"]
 
 
 # ---------------------------------------------------------------------------
@@ -33,6 +37,8 @@ async def _write_log(
     item_id: int | None,
     item_type: str | None,
     action: str,
+    search_kind: SearchKind | None = None,
+    item_label: str | None = None,
     reason: str | None = None,
     message: str | None = None,
 ) -> None:
@@ -41,12 +47,82 @@ async def _write_log(
         await db.execute(
             """
             INSERT INTO search_log
-                (instance_id, item_id, item_type, action, reason, message)
-            VALUES (?, ?, ?, ?, ?, ?)
+                (instance_id, item_id, item_type, search_kind, item_label, action, reason, message)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            (instance_id, item_id, item_type, action, reason, message),
+            (instance_id, item_id, item_type, search_kind, item_label, action, reason, message),
         )
         await db.commit()
+
+
+def _parse_iso_utc(value: str | None) -> datetime | None:
+    """Parse an ISO-8601 value into a timezone-aware UTC datetime."""
+    if not value:
+        return None
+
+    normalized = value.strip()
+    if normalized.endswith("Z"):
+        normalized = normalized[:-1] + "+00:00"
+
+    try:
+        parsed = datetime.fromisoformat(normalized)
+    except ValueError:
+        return None
+
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=UTC)
+    return parsed.astimezone(UTC)
+
+
+def _is_within_unreleased_delay(release_at: str | None, unreleased_delay_hrs: int) -> bool:
+    """Return True when an item is still inside the configured unreleased delay."""
+    if unreleased_delay_hrs <= 0:
+        return False
+
+    release_dt = _parse_iso_utc(release_at)
+    if release_dt is None:
+        return False
+
+    return datetime.now(UTC) < (release_dt + timedelta(hours=unreleased_delay_hrs))
+
+
+def _episode_label(item: MissingEpisode) -> str:
+    """Build a human-readable log label for Sonarr episodes."""
+    code = f"S{item.season:02d}E{item.episode:02d}"
+    series = item.series_title or "Unknown Series"
+    if item.episode_title:
+        return f"{series} - {code} - {item.episode_title}"
+    return f"{series} - {code}"
+
+
+def _movie_label(item: MissingMovie) -> str:
+    """Build a human-readable log label for Radarr movies."""
+    title = item.title or "Unknown Movie"
+    if item.year > 0:
+        return f"{title} ({item.year})"
+    return title
+
+
+async def _count_searches_last_hour(instance_id: int, search_kind: SearchKind) -> int:
+    """Count successful searches in the last hour for one pass kind."""
+    cutoff = datetime.now(UTC) - timedelta(hours=1)
+    cutoff_iso = cutoff.strftime("%Y-%m-%dT%H:%M:%S.%f") + "Z"
+
+    async with get_db() as db:
+        async with db.execute(
+            """
+            SELECT COUNT(*)
+            FROM search_log
+            WHERE instance_id = ?
+              AND action = 'searched'
+              AND search_kind = ?
+              AND timestamp > ?
+            """,
+            (instance_id, search_kind, cutoff_iso),
+        ) as cur:
+            row = await cur.fetchone()
+
+    return int(row[0]) if row else 0
 
 
 # ---------------------------------------------------------------------------
@@ -86,7 +162,7 @@ async def run_instance_search(instance: Instance, master_key: bytes) -> int:
         client: SonarrClient | RadarrClient = SonarrClient(
             url=instance.url, api_key=instance.api_key
         )
-        item_type = "episode"
+        item_type: ItemType = "episode"
     else:
         client = RadarrClient(url=instance.url, api_key=instance.api_key)
         item_type = "movie"
@@ -97,21 +173,57 @@ async def run_instance_search(instance: Instance, master_key: bytes) -> int:
     logger.debug("[%s] fetched %d missing %s(s)", instance.name, len(items), item_type)
 
     for item in items:
-        item_id: int = item.episode_id if item_type == "episode" else item.movie_id  # type: ignore[union-attr]
+        if isinstance(item, MissingEpisode):
+            item_id = item.episode_id
+            item_label = _episode_label(item)
+            release_at = item.air_date_utc
+        else:
+            item_id = item.movie_id
+            item_label = _movie_label(item)
+            release_at = item.digital_release
+
+        if _is_within_unreleased_delay(release_at, instance.unreleased_delay_hrs):
+            reason = f"unreleased delay ({instance.unreleased_delay_hrs}h)"
+            await _write_log(
+                instance.id,
+                item_id,
+                item_type,
+                "skipped",
+                search_kind="missing",
+                item_label=item_label,
+                reason=reason,
+            )
+            continue
 
         # --- hourly cap check ---
-        searches_this_hour = await count_searches_last_hour(instance.id)
+        searches_this_hour = await _count_searches_last_hour(instance.id, "missing")
         if instance.hourly_cap > 0 and searches_this_hour >= instance.hourly_cap:
             reason = f"hourly cap reached ({instance.hourly_cap})"
             logger.info("[%s] %s — %s", instance.name, item_id, reason)
-            await _write_log(instance.id, item_id, item_type, "skipped", reason=reason)
+            await _write_log(
+                instance.id,
+                item_id,
+                item_type,
+                "skipped",
+                search_kind="missing",
+                item_label=item_label,
+                reason=reason,
+            )
             break
 
         # --- cooldown check ---
-        if await is_on_cooldown(instance.id, item_id, item_type, instance.cooldown_days):  # type: ignore[arg-type]
+        if await is_on_cooldown(instance.id, item_id, item_type, instance.cooldown_days):
             reason = f"on cooldown ({instance.cooldown_days}d)"
             logger.debug("[%s] %s — %s", instance.name, item_id, reason)
-            await _write_log(instance.id, item_id, item_type, "skipped", reason=reason)
+            await _write_log(
+                instance.id,
+                item_id,
+                item_type,
+                "skipped",
+                search_kind="missing",
+                item_label=item_label,
+                reason=reason,
+            )
             continue
 
         # --- search ---
@@ -121,11 +233,26 @@ async def run_instance_search(instance: Instance, master_key: bytes) -> int:
         except Exception as exc:  # noqa: BLE001
             msg = str(exc)
             logger.warning("[%s] search failed for %s: %s", instance.name, item_id, msg)
-            await _write_log(instance.id, item_id, item_type, "error", message=msg)
+            await _write_log(
+                instance.id,
+                item_id,
+                item_type,
+                "error",
+                search_kind="missing",
+                item_label=item_label,
+                message=msg,
+            )
             continue
 
-        await record_search(instance.id, item_id, item_type)  # type: ignore[arg-type]
-        await _write_log(instance.id, item_id, item_type, "searched")
+        await record_search(instance.id, item_id, item_type)
+        await _write_log(
+            instance.id,
+            item_id,
+            item_type,
+            "searched",
+            search_kind="missing",
+            item_label=item_label,
+        )
         searched += 1
         logger.info("[%s] searched %s %s", instance.name, item_type, item_id)
 
@@ -152,7 +279,7 @@ async def _run_cutoff_pass(instance: Instance) -> int:
     Returns:
         Count of items searched in this pass.
     """
-    item_type = "episode" if instance.type == InstanceType.sonarr else "movie"
+    item_type: ItemType = "episode" if instance.type == InstanceType.sonarr else "movie"
     logger.info(
         "[%s] starting cutoff-unmet pass (cutoff_batch_size=%d)",
         instance.name,
@@ -179,20 +306,59 @@ async def _run_cutoff_pass(instance: Instance) -> int:
 
     for item in cutoff_items:
         item_id: int = item.episode_id if isinstance(item, MissingEpisode) else item.movie_id
+        item_label = (
+            _episode_label(item) if isinstance(item, MissingEpisode) else _movie_label(item)
+        )
+
+        release_at = item.air_date_utc if isinstance(item, MissingEpisode) else item.digital_release
+
+        if _is_within_unreleased_delay(release_at, instance.unreleased_delay_hrs):
+            reason = f"unreleased delay ({instance.unreleased_delay_hrs}h)"
+            await _write_log(
+                instance.id,
+                item_id,
+                item_type,
+                "skipped",
+                search_kind="cutoff",
+                item_label=item_label,
+                reason=reason,
+            )
+            continue
 
         # --- hourly cap check ---
-        searches_this_hour = await count_searches_last_hour(instance.id)
-        if instance.hourly_cap > 0 and searches_this_hour >= instance.hourly_cap:
-            reason = f"hourly cap reached ({instance.hourly_cap})"
+        searches_this_hour = await _count_searches_last_hour(instance.id, "cutoff")
+        if instance.cutoff_hourly_cap > 0 and searches_this_hour >= instance.cutoff_hourly_cap:
+            reason = f"cutoff hourly cap reached ({instance.cutoff_hourly_cap})"
             logger.info("[%s] cutoff %s — %s", instance.name, item_id, reason)
-            await _write_log(instance.id, item_id, item_type, "skipped", reason=reason)
+            await _write_log(
+                instance.id,
+                item_id,
+                item_type,
+                "skipped",
+                search_kind="cutoff",
+                item_label=item_label,
+                reason=reason,
+            )
             break
 
         # --- cooldown check ---
-        if await is_on_cooldown(instance.id, item_id, item_type, instance.cooldown_days):  # type: ignore[arg-type]
-            reason = f"on cooldown ({instance.cooldown_days}d)"
+        if await is_on_cooldown(
+            instance.id,
+            item_id,
+            item_type,
+            instance.cutoff_cooldown_days,
+        ):
+            reason = f"on cutoff cooldown ({instance.cutoff_cooldown_days}d)"
             logger.debug("[%s] cutoff %s — %s", instance.name, item_id, reason)
-            await _write_log(instance.id, item_id, item_type, "skipped", reason=reason)
+            await _write_log(
+                instance.id,
+                item_id,
+                item_type,
+                "skipped",
+                search_kind="cutoff",
+                item_label=item_label,
+                reason=reason,
+            )
             continue
 
         # --- search ---
@@ -206,11 +372,26 @@ async def _run_cutoff_pass(instance: Instance) -> int:
         except Exception as exc:  # noqa: BLE001
             msg = str(exc)
             logger.warning("[%s] cutoff search failed for %s: %s", instance.name, item_id, msg)
-            await _write_log(instance.id, item_id, item_type, "error", message=msg)
+            await _write_log(
+                instance.id,
+                item_id,
+                item_type,
+                "error",
+                search_kind="cutoff",
+                item_label=item_label,
+                message=msg,
+            )
             continue
 
-        await record_search(instance.id, item_id, item_type)  # type: ignore[arg-type]
-        await _write_log(instance.id, item_id, item_type, "searched")
+        await record_search(instance.id, item_id, item_type)
+        await _write_log(
+            instance.id,
+            item_id,
+            item_type,
+            "searched",
+            search_kind="cutoff",
+            item_label=item_label,
+        )
         searched += 1
         logger.info("[%s] cutoff searched %s %s", instance.name, item_type, item_id)
 

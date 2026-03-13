@@ -58,23 +58,67 @@ async def seeded_log(db: None) -> AsyncGenerator[None, None]:  # type: ignore[mi
         await conn.executemany(
             """
             INSERT INTO search_log
-                (instance_id, item_id, item_type, action, reason, message, timestamp)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+                (
+                    instance_id,
+                    item_id,
+                    item_type,
+                    search_kind,
+                    item_label,
+                    action,
+                    reason,
+                    message,
+                    timestamp
+                )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             [
-                (1, 101, "episode", "searched", None, None, "2024-01-01T12:00:00.000Z"),
+                (
+                    1,
+                    101,
+                    "episode",
+                    "missing",
+                    "My Show - S01E01 - Pilot",
+                    "searched",
+                    None,
+                    None,
+                    "2024-01-01T12:00:00.000Z",
+                ),
                 (
                     1,
                     102,
                     "episode",
+                    "missing",
+                    "My Show - S01E02 - Next",
                     "skipped",
                     "on cooldown (7d)",
                     None,
                     "2024-01-01T12:01:00.000Z",
                 ),
-                (2, 201, "movie", "searched", None, None, "2024-01-01T12:02:00.000Z"),
-                (2, 202, "movie", "error", None, "connection refused", "2024-01-01T12:03:00.000Z"),
                 (
+                    2,
+                    201,
+                    "movie",
+                    "missing",
+                    "My Movie (2023)",
+                    "searched",
+                    None,
+                    None,
+                    "2024-01-01T12:02:00.000Z",
+                ),
+                (
+                    2,
+                    202,
+                    "movie",
+                    "missing",
+                    "Another Movie (2024)",
+                    "error",
+                    None,
+                    "connection refused",
+                    "2024-01-01T12:03:00.000Z",
+                ),
+                (
+                    None,
+                    None,
                     None,
                     None,
                     None,
@@ -156,6 +200,7 @@ async def test_logs_returns_all_rows(seeded_log: None, async_client: object) -> 
     actions = [r["action"] for r in data]
     assert actions[0] == "error"  # 12:03
     assert actions[-1] == "info"  # 11:59
+    assert data[0]["item_label"] == "Another Movie (2024)"
 
 
 @pytest.mark.asyncio()
@@ -316,6 +361,10 @@ def test_logs_page_renders(app: TestClient) -> None:
     assert b"Search Logs" in resp.content
     assert b"log-filter-form" in resp.content
     assert b"log-tbody" in resp.content
+    assert b"Media" in resp.content
+    assert b"Timestamp (Local)" in resp.content
+    assert b"Copy visible rows" in resp.content
+    assert b'<option value="500">500</option>' in resp.content
 
 
 # ---------------------------------------------------------------------------
@@ -350,6 +399,7 @@ async def test_logs_partial_returns_rows(seeded_log: None, async_client: object)
     assert "<tr" in content
     # Should contain action badges
     assert "searched" in content or "skipped" in content
+    assert "My Show - S01E01 - Pilot" in content
 
 
 @pytest.mark.asyncio()
@@ -391,3 +441,27 @@ async def test_logs_partial_pagination_uses_append_swap(
     assert resp.status_code == 200
     assert 'hx-target="#pagination-row"' in resp.text
     assert 'hx-swap="outerHTML"' in resp.text
+
+
+@pytest.mark.asyncio()
+async def test_logs_partial_fallback_media_when_item_label_missing(
+    seeded_log: None, async_client: object
+) -> None:
+    """Rows without item_label should fall back to item type + ID in Media column."""
+    from httpx import AsyncClient
+
+    assert isinstance(async_client, AsyncClient)
+
+    async with get_db() as conn:
+        await conn.execute("UPDATE search_log SET item_label = NULL WHERE item_id = 102")
+        await conn.commit()
+
+    await async_client.post(
+        "/setup",
+        data={"username": "admin", "password": "ValidPass1!", "password_confirm": "ValidPass1!"},
+    )
+    await async_client.post("/login", data={"username": "admin", "password": "ValidPass1!"})
+
+    resp = await async_client.get("/api/logs/partial?limit=200")
+    assert resp.status_code == 200
+    assert "Episode 102" in resp.text

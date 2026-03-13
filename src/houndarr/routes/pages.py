@@ -205,3 +205,9 @@ async def logs_page(request: Request) -> HTMLResponse:
         selected_action=None,
         before=None,
     )
+
+
+@router.get("/settings/help", response_class=HTMLResponse)
+async def settings_help_page(request: Request) -> HTMLResponse:
+    """Settings help page with guidance for instance controls."""
+    return _render(request, "settings_help.html")

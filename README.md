@@ -36,6 +36,10 @@ services:
 
 Full documentation coming in v1.0.0.
 
+## Configuration docs
+
+- [Instance Settings Guide](docs/settings.md)
+
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for development workflow and quality gates.

@@ -6,7 +6,6 @@ POST /api/instances/{id}/run-now → trigger an immediate search cycle (202)
 
 from __future__ import annotations
 
-import asyncio
 import logging
 from typing import Any
 
@@ -14,6 +13,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
 
 from houndarr.database import get_db
+from houndarr.engine.supervisor import Supervisor
 from houndarr.services.instances import list_instances
 
 logger = logging.getLogger(__name__)
@@ -116,22 +116,16 @@ async def get_status(request: Request) -> JSONResponse:
 
 @router.post("/api/instances/{instance_id}/run-now", status_code=202)
 async def run_now(instance_id: int, request: Request) -> JSONResponse:
-    """Trigger an immediate search cycle for the given instance (non-blocking).
+    """Trigger an immediate search cycle for the given enabled instance."""
+    supervisor = getattr(request.app.state, "supervisor", None)
+    if not isinstance(supervisor, Supervisor):
+        raise HTTPException(status_code=503, detail="Supervisor unavailable")
 
-    Schedules ``run_instance_search`` as a background asyncio task so the
-    HTTP response returns immediately (202 Accepted).
-    """
-    from houndarr.engine.search_loop import run_instance_search
-    from houndarr.services.instances import get_instance
-
-    master_key: bytes = request.app.state.master_key
-    instance = await get_instance(instance_id, master_key=master_key)
-    if instance is None:
+    status = await supervisor.trigger_run_now(instance_id)
+    if status == "not_found":
         raise HTTPException(status_code=404, detail="Instance not found")
+    if status == "disabled":
+        raise HTTPException(status_code=409, detail="Instance is disabled")
 
-    asyncio.create_task(
-        run_instance_search(instance, master_key),
-        name=f"run-now-{instance_id}",
-    )
-    logger.info("run-now triggered for instance %r (id=%d)", instance.name, instance_id)
+    logger.info("run-now accepted for instance id=%d", instance_id)
     return JSONResponse({"status": "accepted", "instance_id": instance_id}, status_code=202)

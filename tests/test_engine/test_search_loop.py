@@ -429,6 +429,102 @@ async def test_supervisor_stop_completes_within_timeout(seeded_instances: None) 
     assert sup._tasks == {}  # noqa: SLF001
 
 
+@pytest.mark.asyncio()
+async def test_supervisor_reconcile_starts_task_for_enabled_instance(db: None) -> None:
+    """reconcile_instance() should start a task when an enabled instance is added."""
+    from houndarr.crypto import encrypt
+    from houndarr.engine.supervisor import Supervisor
+
+    with patch(
+        "houndarr.engine.supervisor.run_instance_search",
+        new=AsyncMock(return_value=0),
+    ):
+        sup = Supervisor(master_key=MASTER_KEY)
+        await sup.start()
+        assert sup._tasks == {}  # noqa: SLF001
+
+        encrypted = encrypt("test-api-key", MASTER_KEY)
+        async with get_db() as conn:
+            await conn.execute(
+                """
+                INSERT INTO instances (id, name, type, url, encrypted_api_key, enabled)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (1, "Sonarr Test", "sonarr", SONARR_URL, encrypted, 1),
+            )
+            await conn.commit()
+
+        await sup.reconcile_instance(1)
+        assert 1 in sup._tasks  # noqa: SLF001
+
+        await sup.stop()
+
+
+@pytest.mark.asyncio()
+async def test_supervisor_reconcile_stops_task_when_instance_disabled(
+    seeded_instances: None,
+) -> None:
+    """reconcile_instance() should cancel an existing task after disable."""
+    import asyncio
+
+    from houndarr.engine.supervisor import Supervisor
+
+    async def _block(*_: object, **__: object) -> int:
+        await asyncio.sleep(9999)
+        return 0
+
+    with patch(
+        "houndarr.engine.supervisor.run_instance_search",
+        new=AsyncMock(side_effect=_block),
+    ):
+        sup = Supervisor(master_key=MASTER_KEY)
+        await sup.start()
+        assert 1 in sup._tasks  # noqa: SLF001
+
+        async with get_db() as conn:
+            await conn.execute("UPDATE instances SET enabled = 0 WHERE id = ?", (1,))
+            await conn.commit()
+
+        await sup.reconcile_instance(1)
+        assert 1 not in sup._tasks  # noqa: SLF001
+
+        await sup.stop()
+
+
+@pytest.mark.asyncio()
+async def test_trigger_run_now_deduplicates_pending_manual_runs(
+    seeded_instances: None,
+) -> None:
+    """trigger_run_now() should keep at most one pending manual run per instance."""
+    import asyncio
+
+    from houndarr.engine.supervisor import Supervisor
+
+    gate = asyncio.Event()
+
+    async def _block(*_: object, **__: object) -> int:
+        await gate.wait()
+        return 0
+
+    with patch(
+        "houndarr.engine.supervisor.run_instance_search",
+        new=AsyncMock(side_effect=_block),
+    ):
+        sup = Supervisor(master_key=MASTER_KEY)
+        await sup.start()
+
+        status_1 = await sup.trigger_run_now(1)
+        status_2 = await sup.trigger_run_now(1)
+
+        assert status_1 == "accepted"
+        assert status_2 == "accepted"
+        assert len(sup._manual_runs) == 1  # noqa: SLF001
+
+        gate.set()
+        await asyncio.sleep(0)
+        await sup.stop()
+
+
 # ---------------------------------------------------------------------------
 # Tests — cutoff-unmet pass
 # ---------------------------------------------------------------------------

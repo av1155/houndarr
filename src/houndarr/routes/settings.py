@@ -24,6 +24,7 @@ from houndarr.config import (
     DEFAULT_SLEEP_INTERVAL_MINUTES,
     DEFAULT_UNRELEASED_DELAY_HOURS,
 )
+from houndarr.engine.supervisor import Supervisor
 from houndarr.services.instances import (
     Instance,
     InstanceType,
@@ -298,7 +299,7 @@ async def instance_create(
     if not await _connection_ok(instance_type, url.rstrip("/"), api_key):
         return _connection_guard_response("Connection test failed. Re-test before adding.")
 
-    await create_instance(
+    instance = await create_instance(
         master_key=_master_key(request),
         name=name,
         type=instance_type,
@@ -315,6 +316,11 @@ async def instance_create(
         cutoff_cooldown_days=cutoff_cooldown_days,
         cutoff_hourly_cap=cutoff_hourly_cap,
     )
+
+    supervisor = getattr(request.app.state, "supervisor", None)
+    if isinstance(supervisor, Supervisor):
+        await supervisor.reconcile_instance(instance.id)
+
     instances = await list_instances(master_key=_master_key(request))
     # HTMX: return just the refreshed table body partial
     return _render(request, "partials/instance_table_body.html", instances=instances)
@@ -415,6 +421,10 @@ async def instance_update(
 @router.delete("/settings/instances/{instance_id}")
 async def instance_delete(request: Request, instance_id: int) -> Response:
     """Delete an instance; returns empty 200 so HTMX removes the row."""
+    supervisor = getattr(request.app.state, "supervisor", None)
+    if isinstance(supervisor, Supervisor):
+        await supervisor.stop_instance_task(instance_id)
+
     await delete_instance(instance_id)
     # Return an empty 200 — HTMX hx-swap="outerHTML" with empty content
     # removes the row from the DOM.
@@ -448,5 +458,9 @@ async def instance_toggle_enabled(request: Request, instance_id: int) -> HTMLRes
     )
     if updated is None:
         return HTMLResponse(content="Not found", status_code=404)
+
+    supervisor = getattr(request.app.state, "supervisor", None)
+    if isinstance(supervisor, Supervisor):
+        await supervisor.reconcile_instance(updated.id)
 
     return _render(request, "partials/instance_row.html", instance=updated)

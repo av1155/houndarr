@@ -140,3 +140,16 @@ def test_run_now_404_for_unknown_instance(app: TestClient) -> None:
     _login(app)
     resp = app.post("/api/instances/9999/run-now")
     assert resp.status_code == 404
+
+
+def test_run_now_409_for_disabled_instance(app: TestClient) -> None:
+    _login(app)
+    app.post("/settings/instances", data=_VALID_FORM)
+
+    status = app.get("/api/status").json()
+    inst_id = status[0]["id"]
+
+    app.post(f"/settings/instances/{inst_id}/toggle-enabled")
+
+    resp = app.post(f"/api/instances/{inst_id}/run-now")
+    assert resp.status_code == 409

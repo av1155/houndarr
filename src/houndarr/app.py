@@ -15,6 +15,7 @@ from houndarr.auth import AuthMiddleware
 from houndarr.config import get_settings
 from houndarr.crypto import ensure_master_key
 from houndarr.database import init_db, set_db_path
+from houndarr.engine.supervisor import Supervisor
 
 logger = logging.getLogger(__name__)
 
@@ -36,9 +37,15 @@ async def _lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     await init_db()
     logger.info("Database ready at %s", settings.db_path)
 
+    # Start the background search supervisor
+    supervisor = Supervisor(master_key=app.state.master_key)
+    await supervisor.start()
+    app.state.supervisor = supervisor
+
     yield  # Application runs here
 
     logger.info("Houndarr shutting down")
+    await supervisor.stop()
 
 
 def create_app() -> FastAPI:

@@ -1,0 +1,67 @@
+{# Log table rows partial — rendered by GET /api/logs/partial and swapped into #log-tbody #}
+{% if rows %}
+  {% for row in rows %}
+  <tr class="border-b border-slate-800 hover:bg-slate-800/40 transition-colors">
+    {# Timestamp #}
+    <td class="px-3 py-2.5 text-xs text-slate-400 whitespace-nowrap font-mono">
+      {{ row.timestamp[:19].replace("T", " ") if row.timestamp else "—" }}
+    </td>
+
+    {# Instance #}
+    <td class="px-3 py-2.5 text-xs text-slate-300 max-w-[140px] truncate" title="{{ row.instance_name }}">
+      {{ row.instance_name }}
+    </td>
+
+    {# Action badge #}
+    <td class="px-3 py-2.5">
+      {% if row.action == "searched" %}
+        <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-green-900/60 text-green-300">searched</span>
+      {% elif row.action == "skipped" %}
+        <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-yellow-900/50 text-yellow-300">skipped</span>
+      {% elif row.action == "error" %}
+        <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-red-900/60 text-red-300">error</span>
+      {% else %}
+        <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-slate-700 text-slate-400">info</span>
+      {% endif %}
+    </td>
+
+    {# Type #}
+    <td class="px-3 py-2.5 text-xs text-slate-400 capitalize">
+      {{ row.item_type or "—" }}
+    </td>
+
+    {# Item ID #}
+    <td class="px-3 py-2.5 text-xs text-slate-400 font-mono">
+      {{ row.item_id if row.item_id is not none else "—" }}
+    </td>
+
+    {# Reason / Message #}
+    <td class="px-3 py-2.5 text-xs text-slate-400 max-w-[260px] truncate"
+        title="{{ (row.reason or row.message or '') }}">
+      {{ row.reason or row.message or "—" }}
+    </td>
+  </tr>
+  {% endfor %}
+
+  {# Pagination: "Load older" link — only show if we got a full page #}
+  {% if rows | length >= limit %}
+  <tr id="pagination-row">
+    <td colspan="6" class="px-3 py-3 text-center">
+      <button
+        hx-get="/api/logs/partial?limit={{ limit }}{% if instance_id %}&instance_id={{ instance_id }}{% endif %}{% if action %}&action={{ action }}{% endif %}&before={{ rows[-1].timestamp }}"
+        hx-target="#log-tbody"
+        hx-swap="innerHTML"
+        class="text-xs text-brand-400 hover:text-brand-300 transition-colors underline-offset-2 hover:underline">
+        Load older entries &darr;
+      </button>
+    </td>
+  </tr>
+  {% endif %}
+
+{% else %}
+  <tr id="log-empty-row">
+    <td colspan="6" class="px-3 py-12 text-center text-slate-500 text-sm">
+      No log entries found.
+    </td>
+  </tr>
+{% endif %}

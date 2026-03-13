@@ -20,6 +20,7 @@ from houndarr.auth import (
     set_username,
     validate_username,
 )
+from houndarr.services.instances import list_instances
 
 router = APIRouter()
 
@@ -174,3 +175,33 @@ async def logout(request: Request) -> RedirectResponse:
 async def dashboard(request: Request) -> HTMLResponse:
     """Main dashboard page."""
     return _render(request, "dashboard.html")
+
+
+# ---------------------------------------------------------------------------
+# Logs
+# ---------------------------------------------------------------------------
+
+
+@router.get("/logs", response_class=HTMLResponse)
+async def logs_page(request: Request) -> HTMLResponse:
+    """Search log viewer page — initial render with no filters applied."""
+    from houndarr.routes.api.logs import _query_logs
+
+    master_key: bytes = request.app.state.master_key
+    instances = await list_instances(master_key=master_key)
+    rows = await _query_logs(
+        instance_id=None,
+        action=None,
+        before=None,
+        limit=50,
+    )
+    return _render(
+        request,
+        "logs.html",
+        instances=instances,
+        rows=rows,
+        limit=50,
+        selected_instance_id=None,
+        selected_action=None,
+        before=None,
+    )

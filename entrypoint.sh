@@ -15,7 +15,7 @@ if [ "$(id -u)" = "0" ]; then
 
     # Update user if needed
     CURRENT_UID=$(id -u appuser 2>/dev/null || echo "")
-    if [ "$CURRENT_UID" != "$PGID" ]; then
+    if [ "$CURRENT_UID" != "$PUID" ]; then
         usermod -u "$PUID" -g "$PGID" appuser 2>/dev/null || true
     fi
 

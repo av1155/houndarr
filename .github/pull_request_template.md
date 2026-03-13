@@ -1,10 +1,10 @@
+## Linked Issue (required)
+
+Closes #<!-- ISSUE NUMBER — every PR must link a pre-existing issue -->
+
 ## Summary
 
 <!-- What does this PR do? Be concise. -->
-
-## Related Issue
-
-<!-- Fixes #XX or Refs #XX -->
 
 ## Type of Change
 
@@ -17,6 +17,8 @@
 
 ## Checklist
 
+- [ ] **Issue exists** and is linked above with `Closes #N`
+- [ ] Branch name matches issue scope (`feat/<slug>`, `fix/<slug>`, etc.)
 - [ ] Tests added/updated for all changes
 - [ ] Type check passes (`mypy src/`)
 - [ ] Lint passes (`ruff check .`)

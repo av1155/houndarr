@@ -66,8 +66,19 @@
           Houndarr
         </a>
 
+        <button id="mobile-nav-toggle"
+                type="button"
+                aria-label="Toggle navigation menu"
+                aria-controls="mobile-nav-menu"
+                aria-expanded="false"
+                class="sm:hidden inline-flex items-center justify-center rounded-md border border-slate-700 bg-slate-800 px-2.5 py-1.5 text-slate-300 hover:text-white hover:bg-slate-700 transition-colors">
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+          </svg>
+        </button>
+
         <!-- Nav links -->
-        <div class="flex items-center gap-1">
+        <div class="hidden sm:flex items-center gap-1">
           <a href="/"
              class="px-3 py-2 rounded-md text-sm font-medium {% if request.url.path == '/' %}bg-slate-800 text-white{% else %}text-slate-400 hover:text-white hover:bg-slate-800{% endif %} transition-colors">
             Dashboard
@@ -84,6 +95,30 @@
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
             <button type="submit"
                     class="px-3 py-2 rounded-md text-sm font-medium text-slate-400 hover:text-white hover:bg-slate-800 transition-colors">
+              Logout
+            </button>
+          </form>
+        </div>
+      </div>
+
+      <div id="mobile-nav-menu" class="sm:hidden hidden border-t border-slate-800 py-2">
+        <div class="flex flex-col gap-1">
+          <a href="/"
+             class="px-3 py-2 rounded-md text-sm font-medium {% if request.url.path == '/' %}bg-slate-800 text-white{% else %}text-slate-400 hover:text-white hover:bg-slate-800{% endif %} transition-colors">
+            Dashboard
+          </a>
+          <a href="/logs"
+             class="px-3 py-2 rounded-md text-sm font-medium {% if request.url.path == '/logs' %}bg-slate-800 text-white{% else %}text-slate-400 hover:text-white hover:bg-slate-800{% endif %} transition-colors">
+            Logs
+          </a>
+          <a href="/settings"
+             class="px-3 py-2 rounded-md text-sm font-medium {% if request.url.path == '/settings' %}bg-slate-800 text-white{% else %}text-slate-400 hover:text-white hover:bg-slate-800{% endif %} transition-colors">
+            Settings
+          </a>
+          <form action="/logout" method="post">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+            <button type="submit"
+                    class="w-full text-left px-3 py-2 rounded-md text-sm font-medium text-slate-400 hover:text-white hover:bg-slate-800 transition-colors">
               Logout
             </button>
           </form>
@@ -110,7 +145,7 @@
   {% endif %}
 
   <!-- Main content -->
-  <main class="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-8">
+  <main class="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
     {% block content %}{% endblock %}
   </main>
 
@@ -131,6 +166,33 @@
   </footer>
 
   {% block scripts %}{% endblock %}
+
+  <script>
+    (function () {
+      const toggle = document.getElementById('mobile-nav-toggle');
+      const menu = document.getElementById('mobile-nav-menu');
+
+      if (!toggle || !menu) {
+        return;
+      }
+
+      const setExpanded = (expanded) => {
+        toggle.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+        menu.classList.toggle('hidden', !expanded);
+      };
+
+      toggle.addEventListener('click', function () {
+        const isOpen = toggle.getAttribute('aria-expanded') === 'true';
+        setExpanded(!isOpen);
+      });
+
+      window.addEventListener('resize', function () {
+        if (window.innerWidth >= 640) {
+          setExpanded(false);
+        }
+      });
+    })();
+  </script>
 
 </body>
 </html>

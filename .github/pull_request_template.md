@@ -18,6 +18,8 @@ Closes #<!-- ISSUE NUMBER — every PR must link a pre-existing issue -->
 ## Checklist
 
 - [ ] **Issue exists** and is linked above with `Closes #N`
+- [ ] Linked issue has exactly one `type:*` and one `priority:*` label
+- [ ] Linked issue has at most one `phase:*` label (or none when not roadmap work)
 - [ ] Branch name matches issue scope (`feat/<slug>`, `fix/<slug>`, etc.)
 - [ ] Tests added/updated for all changes
 - [ ] Type check passes (`mypy src/`)

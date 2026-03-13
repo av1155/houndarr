@@ -1,7 +1,7 @@
 name: Bug Report
 description: Report a bug in Houndarr
 title: "fix: "
-labels: ["type: bug"]
+labels: ["type: bug", "priority: medium"]
 body:
   - type: markdown
     attributes:

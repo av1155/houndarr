@@ -1,7 +1,7 @@
 name: Feature Request
 description: Suggest a new feature for Houndarr
 title: "feat: "
-labels: ["type: feature"]
+labels: ["type: feature", "priority: medium"]
 body:
   - type: markdown
     attributes:

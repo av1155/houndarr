@@ -193,3 +193,50 @@ def _login(client: TestClient) -> None:
 - Commits: Conventional Commits (`feat:`, `fix:`, `ci:`, `chore:`, etc.)
 - PRs: squash-merge only; all required CI checks green before merge
 - If mypy CI fails with "merge ref not found": push empty commit to retrigger
+
+### Staged execution discipline (required)
+
+1. Investigate and define a tight scope before editing code.
+2. Create a GitHub issue first with clear acceptance criteria.
+3. Apply mandatory labels on the issue before implementation starts.
+4. Create a scoped branch (`type/short-slug`) for that issue only.
+5. Implement only issue-scoped changes; avoid mixed concerns.
+6. Run all local quality gates before committing.
+7. Open a scoped PR with native linking (`Closes #N`).
+8. Merge only after all required checks are green.
+9. Housekeeping after merge: sync `main`, delete branch, prune refs.
+
+### Issue label policy (required)
+
+Every issue must have:
+- Exactly one `type:*` label
+- Exactly one `priority:*` label
+- At most one `phase:*` label (required for roadmap/product delivery work)
+
+#### Type labels
+
+- `type: bug` — incorrect behavior, regressions, broken UX
+- `type: feature` — user-facing capability additions
+- `type: docs` — documentation-only work
+- `type: chore` — maintenance, refactors, tooling, process
+- `type: test` — test-only additions/changes
+- `type: ci` — workflow/pipeline automation changes
+- `type: security` — vulnerability or security hardening work
+
+#### Priority labels
+
+- `priority: high` — release-blocking, data-risk, security, or urgent breakage
+- `priority: medium` — default for normal planned work
+- `priority: low` — optional improvements and non-urgent polish
+
+#### Phase labels
+
+- `phase: 0-workflow` — process, templates, policy, governance
+- `phase: 1-foundation` to `phase: 6-release` — roadmap execution phases
+
+#### Deprecated generic labels
+
+Use namespaced `type:*` labels only. Legacy generic labels are deprecated:
+- `bug`
+- `enhancement`
+- `documentation`

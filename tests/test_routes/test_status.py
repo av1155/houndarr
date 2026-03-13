@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import httpx
+import pytest
 import respx
 from fastapi.testclient import TestClient
+
+from houndarr.clients.base import ArrClient
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -17,7 +20,16 @@ _VALID_FORM = {
     "type": "sonarr",
     "url": "http://sonarr:8989",
     "api_key": "test-api-key",
+    "connection_verified": "true",
 }
+
+
+@pytest.fixture(autouse=True)
+def _mock_connection_ping(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def _always_true(self: ArrClient) -> bool:
+        return True
+
+    monkeypatch.setattr(ArrClient, "ping", _always_true)
 
 
 def _login(client: TestClient) -> None:

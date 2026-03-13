@@ -2,6 +2,47 @@
 
 {% block title %}Dashboard — Houndarr{% endblock %}
 
+{% block head %}
+<style>
+  [data-run-now-btn="true"] {
+    transition: background-color 180ms ease, color 180ms ease, box-shadow 180ms ease, transform 180ms ease;
+  }
+
+  [data-run-now-btn="true"].is-running {
+    background-color: rgb(14 116 144);
+    color: rgb(224 242 254);
+    box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.38) inset;
+  }
+
+  [data-run-now-btn="true"].is-success {
+    background-color: rgb(22 101 52);
+    color: rgb(220 252 231);
+    box-shadow: 0 0 0 1px rgba(74, 222, 128, 0.4) inset;
+  }
+
+  [data-run-now-btn="true"].is-error {
+    background-color: rgb(153 27 27);
+    color: rgb(254 226 226);
+    box-shadow: 0 0 0 1px rgba(248, 113, 113, 0.45) inset;
+    animation: run-now-shake 320ms ease;
+  }
+
+  @keyframes run-now-shake {
+    0%, 100% { transform: translateX(0); }
+    20% { transform: translateX(-3px); }
+    40% { transform: translateX(3px); }
+    60% { transform: translateX(-2px); }
+    80% { transform: translateX(2px); }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    [data-run-now-btn="true"].is-error {
+      animation: none;
+    }
+  }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="flex items-center justify-between mb-6">
   <h1 class="text-2xl font-bold text-white">Dashboard</h1>
@@ -31,6 +72,79 @@
 
 {% block scripts %}
 <script>
+  const RUN_NOW_MIN_RUNNING_MS = 700;
+  const RUN_NOW_SUCCESS_HOLD_MS = 900;
+  const RUN_NOW_ERROR_HOLD_MS = 1100;
+
+  function setRunNowButtonState(button, state) {
+    const label = button.querySelector('[data-run-now-label]');
+    const icon = button.querySelector('[data-run-now-icon]');
+
+    button.classList.remove('is-running', 'is-success', 'is-error');
+    if (icon) {
+      icon.classList.remove('animate-spin');
+    }
+
+    if (state === 'running') {
+      button.classList.add('is-running');
+      button.disabled = true;
+      button.setAttribute('aria-busy', 'true');
+      if (label) {
+        label.textContent = 'Running...';
+      }
+      if (icon) {
+        icon.classList.add('animate-spin');
+      }
+      return;
+    }
+
+    button.disabled = false;
+    button.setAttribute('aria-busy', 'false');
+
+    if (state === 'success') {
+      button.classList.add('is-success');
+      if (label) {
+        label.textContent = 'Queued';
+      }
+      return;
+    }
+
+    if (state === 'error') {
+      button.classList.add('is-error');
+      if (label) {
+        label.textContent = 'Failed';
+      }
+      return;
+    }
+
+    if (label) {
+      label.textContent = 'Run now';
+    }
+  }
+
+  function completeRunNowRequest(button, statusCode) {
+    const startedAt = Number(button.dataset.runNowStartedAt || 0);
+    const elapsed = Math.max(0, Date.now() - startedAt);
+    const waitForMin = Math.max(0, RUN_NOW_MIN_RUNNING_MS - elapsed);
+    const outcome = statusCode >= 200 && statusCode < 300 ? 'success' : 'error';
+    const holdMs = outcome === 'success' ? RUN_NOW_SUCCESS_HOLD_MS : RUN_NOW_ERROR_HOLD_MS;
+
+    window.setTimeout(function() {
+      if (!document.body.contains(button)) {
+        return;
+      }
+
+      setRunNowButtonState(button, outcome);
+
+      window.setTimeout(function() {
+        if (!document.body.contains(button)) {
+          return;
+        }
+        setRunNowButtonState(button, 'idle');
+      }, holdMs);
+    }, waitForMin);
+  }
+
   // HTMX renders JSON from /api/status into the grid — we use a response
   // handler to convert the JSON array into cards.
   document.body.addEventListener("htmx:beforeSwap", function (evt) {
@@ -72,7 +186,7 @@
 
       const typeBadge = inst.type === "sonarr"
         ? `<span class="text-xs font-mono bg-sky-900/50 text-sky-300 px-2 py-0.5 rounded">Sonarr</span>`
-        : `<span class="text-xs font-mono bg-violet-900/50 text-violet-300 px-2 py-0.5 rounded">Radarr</span>`;
+        : `<span class="text-xs font-mono bg-red-900/50 text-red-300 px-2 py-0.5 rounded">Radarr</span>`;
 
       const lastSearch = inst.last_search_at
         ? new Date(inst.last_search_at).toLocaleString()
@@ -92,16 +206,18 @@
             <button
               hx-post="/api/instances/${inst.id}/run-now"
               hx-swap="none"
+              data-run-now-btn="true"
+              data-instance-id="${inst.id}"
               title="Run search now"
               class="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium
                      bg-brand-600 hover:bg-brand-500 text-white transition-colors disabled:opacity-50">
-              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg data-run-now-icon class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                   d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/>
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                   d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
               </svg>
-              Run now
+              <span data-run-now-label>Run now</span>
             </button>
           </div>
 
@@ -138,5 +254,25 @@
       .replace(/>/g, "&gt;")
       .replace(/"/g, "&quot;");
   }
+
+  document.body.addEventListener('htmx:beforeRequest', function(evt) {
+    const triggerEl = evt.detail.elt;
+    if (!triggerEl || !triggerEl.matches('[data-run-now-btn="true"]')) {
+      return;
+    }
+
+    triggerEl.dataset.runNowStartedAt = String(Date.now());
+    setRunNowButtonState(triggerEl, 'running');
+  });
+
+  document.body.addEventListener('htmx:afterRequest', function(evt) {
+    const triggerEl = evt.detail.elt;
+    if (!triggerEl || !triggerEl.matches('[data-run-now-btn="true"]')) {
+      return;
+    }
+
+    const statusCode = evt.detail.xhr ? evt.detail.xhr.status : 0;
+    completeRunNowRequest(triggerEl, statusCode);
+  });
 </script>
 {% endblock %}

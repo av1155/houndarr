@@ -2,6 +2,125 @@
 
 {% block title %}Settings — Houndarr{% endblock %}
 
+{% block head %}
+<style>
+  #add-instance-modal {
+    opacity: 0;
+    transform: translateY(12px) scale(0.98);
+  }
+
+  #add-instance-modal[open] {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    animation: add-instance-modal-in 180ms ease-out;
+  }
+
+  #add-instance-modal[open].is-closing {
+    animation: add-instance-modal-out 160ms ease-in forwards;
+  }
+
+  #add-instance-modal::backdrop {
+    background: rgba(2, 6, 23, 0);
+  }
+
+  #add-instance-modal[open]::backdrop {
+    animation: add-instance-backdrop-in 180ms ease-out forwards;
+    backdrop-filter: blur(2px);
+  }
+
+  #add-instance-modal[open].is-closing::backdrop {
+    animation: add-instance-backdrop-out 160ms ease-in forwards;
+  }
+
+  @keyframes add-instance-modal-in {
+    from {
+      opacity: 0;
+      transform: translateY(12px) scale(0.98);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+
+  @keyframes add-instance-backdrop-in {
+    from {
+      background: rgba(2, 6, 23, 0);
+    }
+    to {
+      background: rgba(2, 6, 23, 0.8);
+    }
+  }
+
+  @keyframes add-instance-modal-out {
+    from {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+    to {
+      opacity: 0;
+      transform: translateY(8px) scale(0.985);
+    }
+  }
+
+  @keyframes add-instance-backdrop-out {
+    from {
+      background: rgba(2, 6, 23, 0.8);
+    }
+    to {
+      background: rgba(2, 6, 23, 0);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    #add-instance-modal,
+    #add-instance-modal[open],
+    #add-instance-modal::backdrop,
+    #add-instance-modal[open]::backdrop {
+      animation: none;
+      transition: none;
+      transform: none;
+      opacity: 1;
+    }
+  }
+
+  #instance-test-connection-btn {
+    transition: background-color 180ms ease, color 180ms ease, box-shadow 180ms ease, transform 180ms ease;
+  }
+
+  #instance-test-connection-btn.is-testing {
+    box-shadow: 0 0 0 1px rgba(148, 163, 184, 0.55) inset;
+  }
+
+  #instance-test-connection-btn.is-success {
+    background-color: rgb(22 101 52);
+    color: rgb(220 252 231);
+    box-shadow: 0 0 0 1px rgba(74, 222, 128, 0.4) inset;
+  }
+
+  #instance-test-connection-btn.is-error {
+    background-color: rgb(153 27 27);
+    color: rgb(254 226 226);
+    box-shadow: 0 0 0 1px rgba(248, 113, 113, 0.45) inset;
+    animation: test-connection-shake 320ms ease;
+  }
+
+  @keyframes test-connection-shake {
+    0%, 100% { transform: translateX(0); }
+    20% { transform: translateX(-3px); }
+    40% { transform: translateX(3px); }
+    60% { transform: translateX(-2px); }
+    80% { transform: translateX(2px); }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    #instance-test-connection-btn.is-error {
+      animation: none;
+    }
+  }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="flex items-center justify-between mb-6">
   <h1 class="text-2xl font-bold text-white">Settings</h1>
@@ -18,8 +137,10 @@
   <div class="flex items-center justify-between mb-3">
     <h2 class="text-lg font-semibold text-slate-200">Instances</h2>
     <button
+      type="button"
+      onclick="window.houndarrOpenAddInstanceModal()"
       hx-get="/settings/instances/add-form"
-      hx-target="#add-instance-slot"
+      hx-target="#add-instance-modal-content"
       hx-swap="innerHTML"
       id="add-instance-btn"
       class="px-3 py-1.5 rounded bg-brand-600 hover:bg-brand-500 text-white text-sm font-medium transition-colors">
@@ -53,17 +174,291 @@
     </table>
   </div>
 
-  {# Slot where the add-form row is injected by HTMX #}
-  <div id="add-instance-slot"></div>
+  <dialog id="add-instance-modal"
+          class="m-auto p-0 w-[min(92vw,48rem)] rounded-2xl border border-slate-700 bg-slate-900 text-slate-100 shadow-2xl">
+    <div class="flex items-center justify-between border-b border-slate-800 px-5 py-4">
+      <div>
+        <h3 id="add-instance-modal-title" class="text-lg font-semibold text-white">Add Instance</h3>
+        <p id="add-instance-modal-subtitle" class="text-sm text-slate-400">Configure a Sonarr or Radarr instance.</p>
+      </div>
+      <button type="button"
+              aria-label="Close add instance dialog"
+              onclick="window.houndarrCloseAddInstanceModal()"
+              class="rounded-md p-1.5 text-slate-400 hover:bg-slate-800 hover:text-slate-200 transition-colors">
+        <span aria-hidden="true" class="text-xl leading-none">&times;</span>
+      </button>
+    </div>
+
+    <div id="add-instance-modal-content"
+         role="dialog"
+         aria-modal="true"
+         aria-labelledby="add-instance-modal-title"
+         class="max-h-[min(80vh,44rem)] overflow-y-auto px-5 py-5">
+    </div>
+  </dialog>
 </section>
 {% endblock %}
 
 {% block scripts %}
 <script>
-  // After a successful create, clear the add-form slot
+  const addInstanceBtn = document.getElementById('add-instance-btn');
+  const addInstanceModal = document.getElementById('add-instance-modal');
+  const addInstanceModalContent = document.getElementById('add-instance-modal-content');
+  const addInstanceModalTitle = document.getElementById('add-instance-modal-title');
+  const addInstanceModalSubtitle = document.getElementById('add-instance-modal-subtitle');
+  const closeAnimationMs = 160;
+  const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let isClosingAddInstanceModal = false;
+
+  function setAddInstanceModalChrome(mode, instanceName) {
+    if (mode === 'edit') {
+      addInstanceModalTitle.textContent = 'Edit Instance';
+      addInstanceModalSubtitle.textContent = instanceName
+        ? `Update settings for ${instanceName}.`
+        : 'Update instance settings.';
+      return;
+    }
+
+    addInstanceModalTitle.textContent = 'Add Instance';
+    addInstanceModalSubtitle.textContent = 'Configure a Sonarr or Radarr instance.';
+  }
+
+  function getModalForm() {
+    return addInstanceModalContent.querySelector('form[data-form-mode]');
+  }
+
+  function getModalFormMode() {
+    const modalForm = getModalForm();
+    return modalForm ? modalForm.dataset.formMode : null;
+  }
+
+  function getConnectionTestButton() {
+    return addInstanceModalContent.querySelector('#instance-test-connection-btn');
+  }
+
+  function isConnectionGuardedFormLoaded() {
+    return Boolean(addInstanceModalContent.querySelector('#instance-connection-verified'));
+  }
+
+  function syncAddInstancePlaceholders() {
+    const typeSelect = addInstanceModalContent.querySelector('[data-instance-field="type"]');
+    const nameInput = addInstanceModalContent.querySelector('[data-instance-field="name"]');
+    const urlInput = addInstanceModalContent.querySelector('[data-instance-field="url"]');
+
+    if (!typeSelect || !nameInput || !urlInput) {
+      return;
+    }
+
+    const isRadarr = typeSelect.value === 'radarr';
+    nameInput.placeholder = isRadarr ? nameInput.dataset.radarrPlaceholder : nameInput.dataset.sonarrPlaceholder;
+    urlInput.placeholder = isRadarr ? urlInput.dataset.radarrPlaceholder : urlInput.dataset.sonarrPlaceholder;
+  }
+
+  function addConnectionStatusClass(statusTone) {
+    if (statusTone === 'success') {
+      return 'text-xs text-green-400';
+    }
+    if (statusTone === 'error') {
+      return 'text-xs text-red-400';
+    }
+    return 'text-xs text-slate-400';
+  }
+
+  function isConnectionVerified() {
+    const verifiedInput = addInstanceModalContent.querySelector('#instance-connection-verified');
+    return verifiedInput && verifiedInput.value === 'true';
+  }
+
+  function setConnectionState(isVerified, statusText, statusTone) {
+    const verifiedInput = addInstanceModalContent.querySelector('#instance-connection-verified');
+    const submitBtn = addInstanceModalContent.querySelector('#instance-submit-btn');
+    const statusEl = addInstanceModalContent.querySelector('#instance-connection-status');
+
+    if (verifiedInput) {
+      verifiedInput.value = isVerified ? 'true' : 'false';
+    }
+    if (submitBtn) {
+      submitBtn.disabled = !isVerified;
+    }
+    if (statusEl && statusText) {
+      statusEl.textContent = statusText;
+      statusEl.className = addConnectionStatusClass(statusTone);
+    }
+  }
+
+  function setConnectionTestButtonState(state) {
+    const testBtn = getConnectionTestButton();
+    if (!testBtn) {
+      return;
+    }
+
+    testBtn.classList.remove('is-testing', 'is-success', 'is-error');
+
+    if (state === 'testing') {
+      testBtn.classList.add('is-testing');
+    }
+    if (state === 'success') {
+      testBtn.classList.add('is-success');
+    }
+    if (state === 'error') {
+      // Force restart of shake animation on repeated failures.
+      void testBtn.offsetWidth;
+      testBtn.classList.add('is-error');
+    }
+  }
+
+  function neutralConnectionPromptForMode(mode) {
+    if (mode === 'edit') {
+      return 'Test connection before saving changes.';
+    }
+    return 'Test connection before adding this instance.';
+  }
+
+  function resetConnectionStateOnFieldChange(target) {
+    const mode = getModalFormMode();
+    if (!isConnectionGuardedFormLoaded() || mode === null) {
+      return;
+    }
+
+    if (!target.matches('[data-instance-field="type"], [data-instance-field="url"], form[data-form-mode] [name="api_key"]')) {
+      return;
+    }
+
+    const actionLabel = mode === 'edit' ? 'Save Changes' : 'Add Instance';
+    if (isConnectionVerified()) {
+      setConnectionState(false, `Connection details changed. Test again to enable ${actionLabel}.`, 'error');
+      setConnectionTestButtonState('neutral');
+      return;
+    }
+
+    setConnectionState(false, neutralConnectionPromptForMode(mode), 'neutral');
+    setConnectionTestButtonState('neutral');
+  }
+
+  window.houndarrOpenAddInstanceModal = function() {
+    addInstanceModal.classList.remove('is-closing');
+    isClosingAddInstanceModal = false;
+    setAddInstanceModalChrome('add');
+    if (!addInstanceModal.open) {
+      addInstanceModal.showModal();
+    }
+  };
+
+  window.houndarrCloseAddInstanceModal = function() {
+    if (!addInstanceModal.open || isClosingAddInstanceModal) {
+      return;
+    }
+
+    const finalizeClose = function() {
+      addInstanceModal.classList.remove('is-closing');
+      if (addInstanceModal.open) {
+        addInstanceModal.close();
+      }
+      addInstanceModalContent.innerHTML = '';
+      isClosingAddInstanceModal = false;
+      setAddInstanceModalChrome('add');
+      addInstanceBtn.focus();
+    };
+
+    if (prefersReducedMotion) {
+      finalizeClose();
+      return;
+    }
+
+    isClosingAddInstanceModal = true;
+    addInstanceModal.classList.add('is-closing');
+    window.setTimeout(finalizeClose, closeAnimationMs);
+  };
+
+  addInstanceModal.addEventListener('cancel', function(event) {
+    event.preventDefault();
+    window.houndarrCloseAddInstanceModal();
+  });
+
+  addInstanceModal.addEventListener('click', function(event) {
+    if (event.target === addInstanceModal) {
+      window.houndarrCloseAddInstanceModal();
+    }
+  });
+
+  addInstanceModalContent.addEventListener('change', function(event) {
+    if (event.target.matches('[data-instance-field="type"]')) {
+      syncAddInstancePlaceholders();
+    }
+    resetConnectionStateOnFieldChange(event.target);
+  });
+
+  addInstanceModalContent.addEventListener('input', function(event) {
+    resetConnectionStateOnFieldChange(event.target);
+  });
+
+  document.body.addEventListener('htmx:beforeRequest', function(evt) {
+    const triggerEl = evt.detail.elt;
+    if (!triggerEl || !triggerEl.matches('[data-test-connection-btn="true"]')) {
+      return;
+    }
+    setConnectionTestButtonState('testing');
+  });
+
+  document.body.addEventListener('houndarr-connection-test-success', function() {
+    const mode = getModalFormMode();
+    if (!isConnectionGuardedFormLoaded() || mode === null) {
+      return;
+    }
+
+    const actionLabel = mode === 'edit' ? 'save changes' : 'add this instance';
+    setConnectionState(true, `Connection successful. You can now ${actionLabel}.`, 'success');
+    setConnectionTestButtonState('success');
+  });
+
+  document.body.addEventListener('houndarr-connection-test-failure', function() {
+    if (!isConnectionGuardedFormLoaded()) {
+      return;
+    }
+    setConnectionState(false, 'Connection failed. Fix details and test again.', 'error');
+    setConnectionTestButtonState('error');
+  });
+
+  document.body.addEventListener('htmx:afterRequest', function(evt) {
+    const triggerEl = evt.detail.elt;
+    if (!triggerEl || !triggerEl.matches('[data-test-connection-btn="true"]')) {
+      return;
+    }
+
+    // Keep success/error styling if one was applied via HX-Trigger.
+    const testBtn = getConnectionTestButton();
+    if (!testBtn) {
+      return;
+    }
+    testBtn.classList.remove('is-testing');
+  });
+
+  // Close modal after successful create and focus first field when form loads.
   document.body.addEventListener('htmx:afterSwap', function(evt) {
     if (evt.detail.target.id === 'instance-tbody') {
-      document.getElementById('add-instance-slot').innerHTML = '';
+      window.houndarrCloseAddInstanceModal();
+    }
+
+    if (evt.detail.target.id.startsWith('instance-row-')) {
+      window.houndarrCloseAddInstanceModal();
+    }
+
+    if (evt.detail.target.id === 'add-instance-modal-content') {
+      const modalForm = addInstanceModalContent.querySelector('form[data-form-mode]');
+      if (modalForm) {
+        setAddInstanceModalChrome(modalForm.dataset.formMode, modalForm.dataset.instanceName);
+      }
+
+      const firstInput = addInstanceModalContent.querySelector('input, select, textarea, button');
+      if (firstInput) {
+        firstInput.focus();
+      }
+      syncAddInstancePlaceholders();
+
+      if (isConnectionGuardedFormLoaded()) {
+        setConnectionState(false, neutralConnectionPromptForMode(getModalFormMode()), 'neutral');
+        setConnectionTestButtonState('neutral');
+      }
     }
   });
 </script>

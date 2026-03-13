@@ -9,36 +9,45 @@
 {% set post_url = "/settings/instances/" ~ instance.id if is_edit else "/settings/instances" %}
 {% set target  = "#instance-row-" ~ instance.id if is_edit else "#instance-tbody" %}
 {% set swap    = "outerHTML" if is_edit else "innerHTML" %}
+{% set form_grid = "grid grid-cols-1 sm:grid-cols-2 gap-4" %}
 
-<tr id="{{ 'instance-row-' ~ instance.id if is_edit else 'add-instance-row' }}"
-    class="border-b border-slate-700 bg-slate-800/60">
-  <td colspan="6" class="px-4 py-4">
-    {% if error is defined and error %}
-    <div class="mb-3 text-sm text-red-400 bg-red-900/30 border border-red-700 rounded px-3 py-2">
-      {{ error }}
-    </div>
-    {% endif %}
+<div id="{{ 'edit-instance-form-shell-' ~ instance.id if is_edit else 'add-instance-form-shell' }}">
+  {% if error is defined and error %}
+  <div class="mb-3 text-sm text-red-400 bg-red-900/30 border border-red-700 rounded px-3 py-2">
+    {{ error }}
+  </div>
+  {% endif %}
 
-    <form id="{{ form_id }}"
-          hx-post="{{ post_url }}"
-          hx-target="{{ target }}"
-          hx-swap="{{ swap }}"
-          class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+  <form id="{{ form_id }}"
+        data-form-mode="{{ 'edit' if is_edit else 'add' }}"
+        data-instance-name="{{ instance.name if is_edit else '' }}"
+        hx-post="{{ post_url }}"
+        hx-target="{{ target }}"
+        hx-swap="{{ swap }}"
+        class="{{ form_grid }}">
+      <input type="hidden"
+             id="instance-connection-verified"
+             name="connection_verified"
+             value="false" />
 
       {# Name #}
       <div>
         <label class="block text-xs text-slate-400 mb-1" for="{{ form_id }}-name">Name</label>
         <input id="{{ form_id }}-name" name="name" type="text" required
+               data-instance-field="name"
+               data-sonarr-placeholder="My Sonarr"
+               data-radarr-placeholder="My Radarr"
                value="{{ instance.name if is_edit else '' }}"
                placeholder="My Sonarr"
                class="w-full bg-slate-900 border border-slate-700 rounded px-3 py-1.5 text-sm text-white
-                      focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500" />
+                       focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500" />
       </div>
 
       {# Type #}
       <div>
         <label class="block text-xs text-slate-400 mb-1" for="{{ form_id }}-type">Type</label>
         <select id="{{ form_id }}-type" name="type" required
+                data-instance-field="type"
                 class="w-full bg-slate-900 border border-slate-700 rounded px-3 py-1.5 text-sm text-white
                        focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500">
           <option value="sonarr" {% if is_edit and instance.type.value == 'sonarr' %}selected{% endif %}>Sonarr</option>
@@ -50,6 +59,9 @@
       <div>
         <label class="block text-xs text-slate-400 mb-1" for="{{ form_id }}-url">URL</label>
         <input id="{{ form_id }}-url" name="url" type="url" required
+               data-instance-field="url"
+               data-sonarr-placeholder="http://sonarr:8989"
+               data-radarr-placeholder="http://radarr:7878"
                value="{{ instance.url if is_edit else '' }}"
                placeholder="http://sonarr:8989"
                class="w-full bg-slate-900 border border-slate-700 rounded px-3 py-1.5 text-sm text-white
@@ -112,7 +124,7 @@
       </div>
 
       {# Cutoff enabled + batch size — span full width on small screens #}
-      <div class="flex items-center gap-6 sm:col-span-2 lg:col-span-1">
+      <div class="flex items-center gap-6 sm:col-span-2">
         <label class="flex items-center gap-2 cursor-pointer select-none">
           <input type="checkbox" name="cutoff_enabled" value="on"
                  {% if is_edit and instance.cutoff_enabled %}checked{% endif %}
@@ -141,30 +153,37 @@
       </div>
 
       {# Buttons — span full width #}
-      <div class="sm:col-span-2 lg:col-span-3 flex items-center gap-3 pt-1">
-        <button type="submit"
-                class="px-4 py-1.5 rounded bg-brand-600 hover:bg-brand-500 text-white text-sm font-medium transition-colors">
+      <div class="sm:col-span-2 flex items-center gap-3 pt-2">
+        <button type="button"
+                id="instance-test-connection-btn"
+                data-test-connection-btn="true"
+                hx-post="/settings/instances/test-connection"
+                hx-include="#{{ form_id }} [name='type'],#{{ form_id }} [name='url'],#{{ form_id }} [name='api_key']"
+                hx-target="#instance-connection-status"
+                hx-swap="innerHTML"
+                class="px-4 py-2 rounded bg-slate-700 hover:bg-slate-600 text-slate-200 text-sm font-medium transition-colors">
+          Test Connection
+        </button>
+        <button id="instance-submit-btn"
+                type="submit"
+                disabled
+                class="px-4 py-2 rounded bg-brand-600 text-white text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40 hover:enabled:bg-brand-500">
           {{ 'Save Changes' if is_edit else 'Add Instance' }}
         </button>
-        {% if is_edit %}
-        {# Cancel edit — swap the form back to the read-only row #}
         <button type="button"
-                hx-get="/settings"
-                hx-target="#instance-row-{{ instance.id }}"
-                hx-swap="outerHTML"
-                hx-select="#instance-row-{{ instance.id }}"
-                class="px-4 py-1.5 rounded bg-slate-700 hover:bg-slate-600 text-slate-200 text-sm transition-colors">
+                onclick="window.houndarrCloseAddInstanceModal()"
+                class="px-4 py-2 rounded bg-slate-700 hover:bg-slate-600 text-slate-200 text-sm transition-colors">
           Cancel
         </button>
-        {% else %}
-        <button type="button"
-                onclick="this.closest('tr').remove()"
-                class="px-4 py-1.5 rounded bg-slate-700 hover:bg-slate-600 text-slate-200 text-sm transition-colors">
-          Cancel
-        </button>
-        {% endif %}
       </div>
 
-    </form>
-  </td>
-</tr>
+      <div class="sm:col-span-2">
+        <div id="instance-connection-status"
+             class="text-xs text-slate-400"
+             aria-live="polite">
+          {{ 'Test connection before saving changes.' if is_edit else 'Test connection before adding this instance.' }}
+        </div>
+      </div>
+
+  </form>
+</div>

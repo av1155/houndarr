@@ -8,7 +8,7 @@
         Sonarr
       </span>
     {% else %}
-      <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-900/60 text-amber-300 border border-amber-700">
+      <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-900/60 text-red-300 border border-red-700">
         Radarr
       </span>
     {% endif %}
@@ -16,9 +16,9 @@
   <td class="px-4 py-3 text-slate-400 text-sm truncate max-w-xs">{{ instance.url }}</td>
   <td class="px-4 py-3 text-center">
     {% if instance.enabled %}
-      <span class="inline-block w-2 h-2 rounded-full bg-green-500" title="Enabled"></span>
+      <span class="inline-block w-2 h-2 rounded-full bg-green-500" title="Search enabled" aria-label="Search enabled"></span>
     {% else %}
-      <span class="inline-block w-2 h-2 rounded-full bg-slate-600" title="Disabled"></span>
+      <span class="inline-block w-2 h-2 rounded-full bg-slate-600" title="Search disabled" aria-label="Search disabled"></span>
     {% endif %}
   </td>
   <td class="px-4 py-3 text-sm text-slate-400">
@@ -26,11 +26,20 @@
   </td>
   <td class="px-4 py-3 text-right">
     <div class="flex items-center justify-end gap-2">
-      {# Edit — swaps this row with the edit form partial #}
       <button
-        hx-get="/settings/instances/{{ instance.id }}/edit"
+        hx-post="/settings/instances/{{ instance.id }}/toggle-enabled"
         hx-target="#instance-row-{{ instance.id }}"
         hx-swap="outerHTML"
+        class="px-3 py-1 text-xs rounded transition-colors {% if instance.enabled %}bg-amber-900/60 hover:bg-amber-800 text-amber-300{% else %}bg-emerald-900/60 hover:bg-emerald-800 text-emerald-300{% endif %}">
+        {{ 'Disable' if instance.enabled else 'Enable' }}
+      </button>
+      {# Edit — swaps this row with the edit form partial #}
+      <button
+        type="button"
+        onclick="window.houndarrOpenAddInstanceModal()"
+        hx-get="/settings/instances/{{ instance.id }}/edit"
+        hx-target="#add-instance-modal-content"
+        hx-swap="innerHTML"
         class="px-3 py-1 text-xs rounded bg-slate-700 hover:bg-slate-600 text-slate-200 transition-colors">
         Edit
       </button>

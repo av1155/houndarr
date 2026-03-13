@@ -39,11 +39,44 @@
       scrollbar-gutter: stable both-edges;
     }
 
+    .mobile-nav-menu {
+      overflow: hidden;
+      max-height: 0;
+      opacity: 0;
+      transform: translateY(-4px);
+      pointer-events: none;
+      border-top-color: transparent;
+      transition: max-height 200ms ease, opacity 160ms ease, transform 200ms ease;
+    }
+
+    .mobile-nav-menu.is-open {
+      max-height: 16rem;
+      opacity: 1;
+      transform: translateY(0);
+      pointer-events: auto;
+      border-top-color: rgb(30 41 59);
+    }
+
+    .mobile-nav-icon {
+      transition: transform 180ms ease;
+    }
+
+    #mobile-nav-toggle[aria-expanded="true"] .mobile-nav-icon {
+      transform: rotate(90deg);
+    }
+
     /* Subtle scrollbar styling for dark theme */
     ::-webkit-scrollbar { width: 6px; height: 6px; }
     ::-webkit-scrollbar-track { background: #1e293b; }
     ::-webkit-scrollbar-thumb { background: #475569; border-radius: 3px; }
     ::-webkit-scrollbar-thumb:hover { background: #64748b; }
+
+    @media (prefers-reduced-motion: reduce) {
+      .mobile-nav-menu,
+      .mobile-nav-icon {
+        transition: none;
+      }
+    }
 
   </style>
 
@@ -72,7 +105,7 @@
                 aria-controls="mobile-nav-menu"
                 aria-expanded="false"
                 class="sm:hidden inline-flex items-center justify-center rounded-md border border-slate-700 bg-slate-800 px-2.5 py-1.5 text-slate-300 hover:text-white hover:bg-slate-700 transition-colors">
-          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
+          <svg class="w-4 h-4 mobile-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
           </svg>
         </button>
@@ -101,7 +134,7 @@
         </div>
       </div>
 
-      <div id="mobile-nav-menu" class="sm:hidden hidden border-t border-slate-800 py-2">
+      <div id="mobile-nav-menu" class="sm:hidden mobile-nav-menu border-t border-slate-800 py-2">
         <div class="flex flex-col gap-1">
           <a href="/"
              class="px-3 py-2 rounded-md text-sm font-medium {% if request.url.path == '/' %}bg-slate-800 text-white{% else %}text-slate-400 hover:text-white hover:bg-slate-800{% endif %} transition-colors">
@@ -178,7 +211,7 @@
 
       const setExpanded = (expanded) => {
         toggle.setAttribute('aria-expanded', expanded ? 'true' : 'false');
-        menu.classList.toggle('hidden', !expanded);
+        menu.classList.toggle('is-open', expanded);
       };
 
       toggle.addEventListener('click', function () {

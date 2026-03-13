@@ -2,9 +2,37 @@
 
 {% block title %}Settings Help — Houndarr{% endblock %}
 
+{% block head %}
+<style>
+  .help-reveal {
+    opacity: 1;
+    transform: none;
+  }
+
+  .help-motion-ready .help-reveal {
+    opacity: 0;
+    transform: translateY(10px);
+    transition: opacity 240ms ease-out, transform 240ms ease-out;
+  }
+
+  .help-motion-ready .help-reveal.is-visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .help-motion-ready .help-reveal {
+      opacity: 1;
+      transform: none;
+      transition: none;
+    }
+  }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="max-w-5xl mx-auto space-y-6">
-  <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+  <div class="help-reveal flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
     <div>
       <h1 class="text-2xl font-bold text-white">Instance Settings Help</h1>
       <p class="mt-2 text-sm text-slate-400 max-w-2xl leading-relaxed">
@@ -17,14 +45,14 @@
     </a>
   </div>
 
-  <section class="rounded-xl border border-brand-900/40 bg-gradient-to-br from-slate-900 to-slate-900/70 p-4 sm:p-5">
+  <section class="help-reveal rounded-xl border border-brand-900/40 bg-gradient-to-br from-slate-900 to-slate-900/70 p-4 sm:p-5">
     <p class="text-xs font-medium tracking-wide uppercase text-brand-300">Recommended mindset</p>
     <p class="mt-2 text-sm text-slate-300 leading-relaxed">
       Start conservative first. Increase one control at a time and watch logs for a full day before increasing again.
     </p>
   </section>
 
-  <section class="rounded-xl border border-slate-800 bg-slate-900 p-5">
+  <section class="help-reveal rounded-xl border border-slate-800 bg-slate-900 p-5">
     <h2 class="text-lg font-semibold text-slate-100 mb-1">Missing Search Controls</h2>
     <p class="text-xs text-slate-400 mb-4">Primary workload. Increase slowly only if indexers remain healthy.</p>
     <div class="space-y-3">
@@ -66,7 +94,7 @@
     </div>
   </section>
 
-  <section class="rounded-xl border border-slate-800 bg-slate-900 p-5">
+  <section class="help-reveal rounded-xl border border-slate-800 bg-slate-900 p-5">
     <h2 class="text-lg font-semibold text-slate-100 mb-1">Cutoff Upgrade Controls</h2>
     <p class="text-xs text-slate-400 mb-4">Lower priority than missing. Keep conservative unless backlog is stable.</p>
     <div class="space-y-3">
@@ -102,7 +130,7 @@
     <p class="mt-4 text-xs text-slate-400">Cutoff has its own budget and cooldown so it does not compete with missing searches.</p>
   </section>
 
-  <section class="rounded-xl border border-slate-800 bg-slate-900 p-5">
+  <section class="help-reveal rounded-xl border border-slate-800 bg-slate-900 p-5">
     <h2 class="text-lg font-semibold text-slate-100 mb-3">Safe Starting Preset</h2>
     <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
       <div class="rounded border border-slate-800 bg-slate-950/40 px-3 py-2 text-slate-300">Batch Size: <strong class="text-slate-100">2</strong></div>
@@ -117,7 +145,7 @@
     </div>
   </section>
 
-  <section class="rounded-xl border border-slate-800 bg-slate-900 p-5">
+  <section class="help-reveal rounded-xl border border-slate-800 bg-slate-900 p-5">
     <h2 class="text-lg font-semibold text-slate-100 mb-3">Need More Throughput?</h2>
     <ol class="list-decimal list-inside space-y-1.5 text-sm text-slate-300">
       <li>Increase Batch Size slightly.</li>
@@ -128,7 +156,7 @@
     <p class="mt-3 text-xs text-slate-400">Change one control at a time and observe logs for at least 24 hours.</p>
   </section>
 
-  <p class="text-xs text-slate-500 pt-1">
+  <p class="help-reveal text-xs text-slate-500 pt-1">
     Source doc in repo:
     <a href="https://github.com/av1155/houndarr/blob/main/docs/settings.md"
        class="text-brand-400 hover:text-brand-300 underline underline-offset-2">
@@ -136,4 +164,38 @@
     </a>
   </p>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  (function () {
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (reduceMotion || !('IntersectionObserver' in window)) {
+      return;
+    }
+
+    document.documentElement.classList.add('help-motion-ready');
+
+    const revealItems = Array.from(document.querySelectorAll('.help-reveal'));
+    if (revealItems.length === 0) {
+      return;
+    }
+
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (!entry.isIntersecting) {
+          return;
+        }
+
+        entry.target.classList.add('is-visible');
+        observer.unobserve(entry.target);
+      });
+    }, { threshold: 0.15, rootMargin: '0px 0px -40px 0px' });
+
+    revealItems.forEach((item, index) => {
+      item.style.transitionDelay = `${Math.min(index * 40, 220)}ms`;
+      observer.observe(item);
+    });
+  })();
+</script>
 {% endblock %}

@@ -4,6 +4,43 @@
 
 {% block head %}
 <style>
+  #instance-grid.is-refreshing {
+    opacity: 0.75;
+    transition: opacity 140ms ease;
+  }
+
+  .instance-card {
+    opacity: 0;
+    transform: translateY(8px);
+    animation: instance-card-in 220ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  }
+
+  @keyframes instance-card-in {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .metric-changed {
+    animation: metric-pulse 360ms ease-out;
+  }
+
+  @keyframes metric-pulse {
+    0% {
+      background-color: rgba(14, 165, 233, 0.24);
+      box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.32) inset;
+    }
+    100% {
+      background-color: rgba(30, 41, 59, 0.6);
+      box-shadow: 0 0 0 0 rgba(56, 189, 248, 0);
+    }
+  }
+
   [data-run-now-btn="true"] {
     transition: background-color 180ms ease, color 180ms ease, box-shadow 180ms ease, transform 180ms ease;
   }
@@ -36,6 +73,15 @@
   }
 
   @media (prefers-reduced-motion: reduce) {
+    #instance-grid.is-refreshing,
+    .instance-card,
+    .metric-changed {
+      transition: none;
+      animation: none;
+      opacity: 1;
+      transform: none;
+    }
+
     [data-run-now-btn="true"].is-error {
       animation: none;
     }
@@ -75,6 +121,7 @@
   const RUN_NOW_MIN_RUNNING_MS = 700;
   const RUN_NOW_SUCCESS_HOLD_MS = 900;
   const RUN_NOW_ERROR_HOLD_MS = 1100;
+  const previousMetrics = new Map();
 
   function setRunNowButtonState(button, state) {
     const label = button.querySelector('[data-run-now-label]');
@@ -175,7 +222,12 @@
       return;
     }
 
-    const cards = data.map(inst => {
+    const cards = data.map((inst, index) => {
+      const previous = previousMetrics.get(inst.id);
+      const lastHourChanged = previous && previous.searches_last_hour !== inst.searches_last_hour;
+      const todayChanged = previous && previous.searches_today !== inst.searches_today;
+      const totalChanged = previous && previous.items_found_total !== inst.items_found_total;
+
       const badge = inst.enabled
         ? `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-green-900/60 text-green-300">
              <span class="w-1.5 h-1.5 rounded-full bg-green-400 inline-block"></span> Active
@@ -192,8 +244,16 @@
         ? formatLocalTimestamp(inst.last_search_at)
         : "Never";
 
+      const animationDelay = Math.min(index * 40, 220);
+
+      previousMetrics.set(inst.id, {
+        searches_last_hour: inst.searches_last_hour,
+        searches_today: inst.searches_today,
+        items_found_total: inst.items_found_total,
+      });
+
       return `
-        <div class="bg-slate-900 border border-slate-800 rounded-xl p-5 flex flex-col gap-4">
+        <div class="instance-card bg-slate-900 border border-slate-800 rounded-xl p-5 flex flex-col gap-4" style="animation-delay: ${animationDelay}ms;">
           <!-- Header -->
           <div class="flex items-start justify-between gap-3">
             <div>
@@ -223,15 +283,15 @@
 
           <!-- Stats grid -->
           <dl class="grid grid-cols-1 sm:grid-cols-3 gap-3 text-center">
-            <div class="bg-slate-800/60 rounded-lg px-3 py-2">
+            <div class="bg-slate-800/60 rounded-lg px-3 py-2 ${lastHourChanged ? 'metric-changed' : ''}">
               <dt class="text-[11px] text-slate-500 uppercase tracking-wide">Last hour</dt>
               <dd class="text-lg font-bold text-white mt-0.5">${inst.searches_last_hour}</dd>
             </div>
-            <div class="bg-slate-800/60 rounded-lg px-3 py-2">
+            <div class="bg-slate-800/60 rounded-lg px-3 py-2 ${todayChanged ? 'metric-changed' : ''}">
               <dt class="text-[11px] text-slate-500 uppercase tracking-wide">Today</dt>
               <dd class="text-lg font-bold text-white mt-0.5">${inst.searches_today}</dd>
             </div>
-            <div class="bg-slate-800/60 rounded-lg px-3 py-2">
+            <div class="bg-slate-800/60 rounded-lg px-3 py-2 ${totalChanged ? 'metric-changed' : ''}">
               <dt class="text-[11px] text-slate-500 uppercase tracking-wide">Total</dt>
               <dd class="text-lg font-bold text-white mt-0.5">${inst.items_found_total}</dd>
             </div>
@@ -274,6 +334,10 @@
   }
 
   document.body.addEventListener('htmx:beforeRequest', function(evt) {
+    if (evt.detail.target && evt.detail.target.id === 'instance-grid') {
+      evt.detail.target.classList.add('is-refreshing');
+    }
+
     const triggerEl = evt.detail.elt;
     if (!triggerEl || !triggerEl.matches('[data-run-now-btn="true"]')) {
       return;
@@ -284,6 +348,10 @@
   });
 
   document.body.addEventListener('htmx:afterRequest', function(evt) {
+    if (evt.detail.target && evt.detail.target.id === 'instance-grid') {
+      evt.detail.target.classList.remove('is-refreshing');
+    }
+
     const triggerEl = evt.detail.elt;
     if (!triggerEl || !triggerEl.matches('[data-run-now-btn="true"]')) {
       return;

@@ -52,6 +52,7 @@ class SonarrClient(ArrClient):
             sortKey="airDateUtc",
             sortDirection="ascending",
             includeSeries="true",
+            monitored="true",
         )
         records: list[dict[str, Any]] = data.get("records", [])
         return [_parse_episode(r) for r in records]
@@ -92,6 +93,7 @@ class SonarrClient(ArrClient):
             page=page,
             pageSize=page_size,
             includeSeries="true",
+            monitored="true",
         )
         records: list[dict[str, Any]] = data.get("records", [])
         return [_parse_episode(r) for r in records]

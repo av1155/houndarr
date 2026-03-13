@@ -66,7 +66,7 @@ _MISSING_RESPONSE = {"page": 1, "pageSize": 10, "totalRecords": 1, "records": [_
 @pytest.mark.asyncio()
 @respx.mock
 async def test_get_missing_returns_movies(client: RadarrClient) -> None:
-    respx.get(f"{BASE}/api/v3/wanted/missing").mock(
+    route = respx.get(f"{BASE}/api/v3/wanted/missing").mock(
         return_value=httpx.Response(200, json=_MISSING_RESPONSE)
     )
     results = await client.get_missing(page=1, page_size=10)
@@ -77,6 +77,8 @@ async def test_get_missing_returns_movies(client: RadarrClient) -> None:
     assert movie.title == "Great Film"
     assert movie.year == 2022
     assert movie.digital_release == "2022-12-01"
+    request = route.calls[0].request
+    assert request.url.params["monitored"] == "true"
 
 
 @pytest.mark.asyncio()
@@ -171,7 +173,7 @@ _CUTOFF_RESPONSE = {
 @pytest.mark.asyncio()
 @respx.mock
 async def test_get_cutoff_unmet_returns_movies(client: RadarrClient) -> None:
-    respx.get(f"{BASE}/api/v3/wanted/cutoff").mock(
+    route = respx.get(f"{BASE}/api/v3/wanted/cutoff").mock(
         return_value=httpx.Response(200, json=_CUTOFF_RESPONSE)
     )
     results = await client.get_cutoff_unmet(page=1, page_size=10)
@@ -180,6 +182,8 @@ async def test_get_cutoff_unmet_returns_movies(client: RadarrClient) -> None:
     assert isinstance(movie, MissingMovie)
     assert movie.movie_id == 201
     assert movie.title == "My Movie"
+    request = route.calls[0].request
+    assert request.url.params["monitored"] == "true"
 
 
 @pytest.mark.asyncio()

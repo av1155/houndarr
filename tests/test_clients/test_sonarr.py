@@ -68,7 +68,7 @@ _MISSING_RESPONSE = {"page": 1, "pageSize": 10, "totalRecords": 1, "records": [_
 @pytest.mark.asyncio()
 @respx.mock
 async def test_get_missing_returns_episodes(client: SonarrClient) -> None:
-    respx.get(f"{BASE}/api/v3/wanted/missing").mock(
+    route = respx.get(f"{BASE}/api/v3/wanted/missing").mock(
         return_value=httpx.Response(200, json=_MISSING_RESPONSE)
     )
     results = await client.get_missing(page=1, page_size=10)
@@ -81,6 +81,8 @@ async def test_get_missing_returns_episodes(client: SonarrClient) -> None:
     assert ep.season == 1
     assert ep.episode == 1
     assert ep.air_date_utc == "2023-09-01T00:00:00Z"
+    request = route.calls[0].request
+    assert request.url.params["monitored"] == "true"
 
 
 @pytest.mark.asyncio()
@@ -168,7 +170,7 @@ _CUTOFF_RESPONSE = {
 @pytest.mark.asyncio()
 @respx.mock
 async def test_get_cutoff_unmet_returns_episodes(client: SonarrClient) -> None:
-    respx.get(f"{BASE}/api/v3/wanted/cutoff").mock(
+    route = respx.get(f"{BASE}/api/v3/wanted/cutoff").mock(
         return_value=httpx.Response(200, json=_CUTOFF_RESPONSE)
     )
     results = await client.get_cutoff_unmet(page=1, page_size=10)
@@ -177,6 +179,8 @@ async def test_get_cutoff_unmet_returns_episodes(client: SonarrClient) -> None:
     assert isinstance(ep, MissingEpisode)
     assert ep.episode_id == 101
     assert ep.series_title == "My Show"
+    request = route.calls[0].request
+    assert request.url.params["monitored"] == "true"
 
 
 @pytest.mark.asyncio()

@@ -4,6 +4,20 @@ This guide explains each Add/Edit Instance setting in Houndarr, with safe defaul
 
 Houndarr is a polite backlog orchestrator. Keep settings conservative to reduce indexer/API pressure and avoid bans.
 
+## Search Command Contract (v0.1)
+
+- **Sonarr:** Houndarr sends episode-level commands (`EpisodeSearch` with `episodeIds`).
+- **Radarr:** Houndarr sends movie-level commands (`MoviesSearch` with `movieIds`).
+- Wanted-list reads are explicitly restricted to monitored items (`monitored=true`) for both
+  missing and cutoff passes.
+
+Why this shape:
+
+- Episode/movie-level commands map cleanly to Houndarr's cooldown, cap, and batch controls.
+- It keeps retries predictable and avoids broad one-shot bursts that can over-pressure indexers.
+- Season-level Sonarr search is intentionally out of scope for v0.1 to keep behavior simple,
+  controlled, and observable.
+
 ## Missing Search Controls
 
 - **Batch Size**: maximum number of missing items considered per cycle.

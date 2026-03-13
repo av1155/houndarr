@@ -49,6 +49,7 @@ class RadarrClient(ArrClient):
             pageSize=page_size,
             sortKey="inCinemas",
             sortDirection="ascending",
+            monitored="true",
         )
         records: list[dict[str, Any]] = data.get("records", [])
         return [_parse_movie(r) for r in records]
@@ -89,6 +90,7 @@ class RadarrClient(ArrClient):
             pageSize=page_size,
             sortKey="inCinemas",
             sortDirection="ascending",
+            monitored="true",
         )
         records: list[dict[str, Any]] = data.get("records", [])
         return [_parse_movie(r) for r in records]

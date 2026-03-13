@@ -119,6 +119,27 @@
     }
   }
 
+  [id^="instance-row-"].just-updated {
+    animation: instance-row-flash 420ms ease-out;
+  }
+
+  @keyframes instance-row-flash {
+    0% {
+      background-color: rgba(14, 165, 233, 0.22);
+      box-shadow: inset 0 0 0 1px rgba(56, 189, 248, 0.35);
+    }
+    100% {
+      background-color: transparent;
+      box-shadow: inset 0 0 0 0 rgba(56, 189, 248, 0);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    [id^="instance-row-"].just-updated {
+      animation: none;
+    }
+  }
+
   #account-settings > summary::-webkit-details-marker {
     display: none;
   }
@@ -341,6 +362,18 @@
   const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   let isClosingAddInstanceModal = false;
   let isAccountAnimating = false;
+
+  function flashUpdatedInstanceRow(row) {
+    if (!row) {
+      return;
+    }
+    row.classList.remove('just-updated');
+    void row.offsetWidth;
+    row.classList.add('just-updated');
+    window.setTimeout(() => {
+      row.classList.remove('just-updated');
+    }, 450);
+  }
 
   function initializeAccountContent() {
     if (!accountSettings || !accountContent) {
@@ -646,6 +679,8 @@
     }
 
     if (evt.detail.target.id.startsWith('instance-row-')) {
+      const row = document.getElementById(evt.detail.target.id);
+      flashUpdatedInstanceRow(row);
       window.houndarrCloseAddInstanceModal();
     }
 

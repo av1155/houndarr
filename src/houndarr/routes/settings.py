@@ -184,7 +184,6 @@ async def instance_create(
     type: Annotated[str, Form()],  # noqa: A002
     url: Annotated[str, Form()],
     api_key: Annotated[str, Form()],
-    enabled: Annotated[str, Form()] = "on",
     batch_size: Annotated[int, Form()] = DEFAULT_BATCH_SIZE,
     sleep_interval_mins: Annotated[int, Form()] = DEFAULT_SLEEP_INTERVAL_MINUTES,
     hourly_cap: Annotated[int, Form()] = DEFAULT_HOURLY_CAP,
@@ -212,7 +211,7 @@ async def instance_create(
         type=instance_type,
         url=url.rstrip("/"),
         api_key=api_key,
-        enabled=enabled == "on",
+        enabled=True,
         batch_size=batch_size,
         sleep_interval_mins=sleep_interval_mins,
         hourly_cap=hourly_cap,
@@ -253,7 +252,6 @@ async def instance_update(
     type: Annotated[str, Form()],  # noqa: A002
     url: Annotated[str, Form()],
     api_key: Annotated[str, Form()],
-    enabled: Annotated[str, Form()] = "on",
     batch_size: Annotated[int, Form()] = DEFAULT_BATCH_SIZE,
     sleep_interval_mins: Annotated[int, Form()] = DEFAULT_SLEEP_INTERVAL_MINUTES,
     hourly_cap: Annotated[int, Form()] = DEFAULT_HOURLY_CAP,
@@ -275,6 +273,10 @@ async def instance_update(
     if not await _connection_ok(instance_type, url.rstrip("/"), api_key):
         return _connection_guard_response("Connection test failed. Re-test before saving changes.")
 
+    current = await get_instance(instance_id, master_key=_master_key(request))
+    if current is None:
+        return HTMLResponse(content="Not found", status_code=404)
+
     updated = await update_instance(
         instance_id,
         master_key=_master_key(request),
@@ -282,7 +284,7 @@ async def instance_update(
         type=instance_type,
         url=url.rstrip("/"),
         api_key=api_key,
-        enabled=enabled == "on",
+        enabled=current.enabled,
         batch_size=batch_size,
         sleep_interval_mins=sleep_interval_mins,
         hourly_cap=hourly_cap,

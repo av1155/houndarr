@@ -85,6 +85,3 @@ node_modules/
 
 # Claude session brief (local only — never commit)
 CLAUDE.md
-
-# Local agent notes
-AGENTS.md

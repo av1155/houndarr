@@ -226,6 +226,9 @@ def test_dashboard_accessible_after_login(app: TestClient) -> None:
     response = app.get("/")
     assert response.status_code == 200
     assert b"Dashboard" in response.content
+    assert b'id="instance-grid"' in response.content
+    assert b'data-hydrated="false"' in response.content
+    assert b'hx-trigger="load, every 15s"' in response.content
 
 
 def test_logout_clears_session(app: TestClient) -> None:

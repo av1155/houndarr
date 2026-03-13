@@ -4,12 +4,12 @@
 
 {% block head %}
 <style>
-  #instance-grid.is-refreshing {
-    opacity: 0.75;
-    transition: opacity 140ms ease;
+  .instance-card {
+    opacity: 1;
+    transform: none;
   }
 
-  .instance-card {
+  .instance-card.is-entering {
     opacity: 0;
     transform: translateY(8px);
     animation: instance-card-in 220ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
@@ -73,8 +73,8 @@
   }
 
   @media (prefers-reduced-motion: reduce) {
-    #instance-grid.is-refreshing,
     .instance-card,
+    .instance-card.is-entering,
     .metric-changed {
       transition: none;
       animation: none;
@@ -100,6 +100,7 @@
 
 <!-- Instance cards — polled every 15 s via HTMX -->
 <div id="instance-grid"
+     data-hydrated="false"
      hx-get="/api/status"
      hx-trigger="load, every 15s"
      hx-swap="innerHTML"
@@ -222,6 +223,8 @@
       return;
     }
 
+    const isInitialHydration = evt.detail.target.dataset.hydrated !== 'true';
+
     const cards = data.map((inst, index) => {
       const previous = previousMetrics.get(inst.id);
       const lastHourChanged = previous && previous.searches_last_hour !== inst.searches_last_hour;
@@ -252,8 +255,10 @@
         items_found_total: inst.items_found_total,
       });
 
+      const entryClass = isInitialHydration ? ' is-entering' : '';
+
       return `
-        <div class="instance-card bg-slate-900 border border-slate-800 rounded-xl p-5 flex flex-col gap-4" style="animation-delay: ${animationDelay}ms;">
+        <div class="instance-card${entryClass} bg-slate-900 border border-slate-800 rounded-xl p-5 flex flex-col gap-4" style="animation-delay: ${animationDelay}ms;">
           <!-- Header -->
           <div class="flex items-start justify-between gap-3">
             <div>
@@ -305,6 +310,7 @@
     }).join("");
 
     evt.detail.serverResponse = `<div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">${cards}</div>`;
+    evt.detail.target.dataset.hydrated = 'true';
   });
 
   function escHtml(s) {
@@ -334,10 +340,6 @@
   }
 
   document.body.addEventListener('htmx:beforeRequest', function(evt) {
-    if (evt.detail.target && evt.detail.target.id === 'instance-grid') {
-      evt.detail.target.classList.add('is-refreshing');
-    }
-
     const triggerEl = evt.detail.elt;
     if (!triggerEl || !triggerEl.matches('[data-run-now-btn="true"]')) {
       return;
@@ -348,10 +350,6 @@
   });
 
   document.body.addEventListener('htmx:afterRequest', function(evt) {
-    if (evt.detail.target && evt.detail.target.id === 'instance-grid') {
-      evt.detail.target.classList.remove('is-refreshing');
-    }
-
     const triggerEl = evt.detail.elt;
     if (!triggerEl || !triggerEl.matches('[data-run-now-btn="true"]')) {
       return;

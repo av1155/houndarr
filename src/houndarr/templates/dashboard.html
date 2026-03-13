@@ -11,18 +11,132 @@
   </a>
 </div>
 
-<!-- Instance cards will be loaded here in Issue #12 -->
-<div id="instance-grid">
+<!-- Instance cards — polled every 15 s via HTMX -->
+<div id="instance-grid"
+     hx-get="/api/status"
+     hx-trigger="load, every 15s"
+     hx-swap="innerHTML"
+     hx-target="#instance-grid">
+  <!-- Skeleton shown while the first poll loads -->
   <div class="text-center py-20 text-slate-500">
-    <svg class="w-16 h-16 mx-auto mb-4 opacity-30" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
-        d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+    <svg class="w-8 h-8 mx-auto mb-3 opacity-30 animate-spin" fill="none" viewBox="0 0 24 24">
+      <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+      <path class="opacity-75" fill="currentColor"
+        d="M4 12a8 8 0 018-8v8H4z"></path>
     </svg>
-    <p class="text-lg font-medium text-slate-400">No instances configured yet</p>
-    <p class="mt-2 text-sm">
-      <a href="/settings" class="text-brand-400 hover:text-brand-300">Add a Sonarr or Radarr instance</a>
-      to get started.
-    </p>
+    <p class="text-sm text-slate-500">Loading…</p>
   </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  // HTMX renders JSON from /api/status into the grid — we use a response
+  // handler to convert the JSON array into cards.
+  document.body.addEventListener("htmx:beforeSwap", function (evt) {
+    if (evt.detail.target.id !== "instance-grid") return;
+
+    let data;
+    try {
+      data = JSON.parse(evt.detail.serverResponse);
+    } catch {
+      return; // leave default swap behaviour
+    }
+
+    if (!Array.isArray(data)) return;
+
+    if (data.length === 0) {
+      evt.detail.serverResponse = `
+        <div class="text-center py-20 text-slate-500">
+          <svg class="w-16 h-16 mx-auto mb-4 opacity-30" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+              d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          </svg>
+          <p class="text-lg font-medium text-slate-400">No instances configured yet</p>
+          <p class="mt-2 text-sm">
+            <a href="/settings" class="text-brand-400 hover:text-brand-300">Add a Sonarr or Radarr instance</a>
+            to get started.
+          </p>
+        </div>`;
+      return;
+    }
+
+    const cards = data.map(inst => {
+      const badge = inst.enabled
+        ? `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-green-900/60 text-green-300">
+             <span class="w-1.5 h-1.5 rounded-full bg-green-400 inline-block"></span> Active
+           </span>`
+        : `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-slate-700 text-slate-400">
+             <span class="w-1.5 h-1.5 rounded-full bg-slate-500 inline-block"></span> Disabled
+           </span>`;
+
+      const typeBadge = inst.type === "sonarr"
+        ? `<span class="text-xs font-mono bg-sky-900/50 text-sky-300 px-2 py-0.5 rounded">Sonarr</span>`
+        : `<span class="text-xs font-mono bg-violet-900/50 text-violet-300 px-2 py-0.5 rounded">Radarr</span>`;
+
+      const lastSearch = inst.last_search_at
+        ? new Date(inst.last_search_at).toLocaleString()
+        : "Never";
+
+      return `
+        <div class="bg-slate-900 border border-slate-800 rounded-xl p-5 flex flex-col gap-4">
+          <!-- Header -->
+          <div class="flex items-start justify-between gap-3">
+            <div>
+              <div class="flex items-center gap-2 flex-wrap">
+                <h2 class="text-base font-semibold text-white">${escHtml(inst.name)}</h2>
+                ${typeBadge}
+              </div>
+              <div class="mt-1">${badge}</div>
+            </div>
+            <button
+              hx-post="/api/instances/${inst.id}/run-now"
+              hx-swap="none"
+              title="Run search now"
+              class="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium
+                     bg-brand-600 hover:bg-brand-500 text-white transition-colors disabled:opacity-50">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/>
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+              </svg>
+              Run now
+            </button>
+          </div>
+
+          <!-- Stats grid -->
+          <dl class="grid grid-cols-3 gap-3 text-center">
+            <div class="bg-slate-800/60 rounded-lg px-3 py-2">
+              <dt class="text-[11px] text-slate-500 uppercase tracking-wide">Last hour</dt>
+              <dd class="text-lg font-bold text-white mt-0.5">${inst.searches_last_hour}</dd>
+            </div>
+            <div class="bg-slate-800/60 rounded-lg px-3 py-2">
+              <dt class="text-[11px] text-slate-500 uppercase tracking-wide">Today</dt>
+              <dd class="text-lg font-bold text-white mt-0.5">${inst.searches_today}</dd>
+            </div>
+            <div class="bg-slate-800/60 rounded-lg px-3 py-2">
+              <dt class="text-[11px] text-slate-500 uppercase tracking-wide">Total</dt>
+              <dd class="text-lg font-bold text-white mt-0.5">${inst.items_found_total}</dd>
+            </div>
+          </dl>
+
+          <!-- Last search -->
+          <p class="text-xs text-slate-500">
+            Last search: <span class="text-slate-400">${lastSearch}</span>
+          </p>
+        </div>`;
+    }).join("");
+
+    evt.detail.serverResponse = `<div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">${cards}</div>`;
+  });
+
+  function escHtml(s) {
+    return String(s)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+</script>
 {% endblock %}

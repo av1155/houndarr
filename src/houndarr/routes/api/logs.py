@@ -370,14 +370,11 @@ async def get_logs_partial(
         before,
         limit,
     )
-    summary = _summarize_rows(rows)
-
     return _get_templates().TemplateResponse(
         request=request,
-        name="partials/log_rows_partial.html",
+        name="partials/log_rows.html",
         context={
             "rows": rows,
-            "summary": summary,
             # Pass back current filter values so the partial can render pagination
             "instance_id": parsed_instance_id,
             "action": parsed_action,

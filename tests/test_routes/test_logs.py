@@ -530,7 +530,6 @@ async def test_logs_partial_returns_rows(seeded_log: None, async_client: object)
     assert "run_now" in content
     assert "skips only" in content
     assert "unknown" in content
-    assert 'hx-swap-oob="outerHTML"' in content
 
 
 @pytest.mark.asyncio()
@@ -571,7 +570,6 @@ async def test_logs_partial_hide_system_rows_excludes_system_entries(
     resp = await async_client.get("/api/logs/partial?hide_system=true&limit=200")
     assert resp.status_code == 200
     assert "Supervisor started" not in resp.text
-    assert "Visible rows 5" in resp.text
 
 
 @pytest.mark.asyncio()

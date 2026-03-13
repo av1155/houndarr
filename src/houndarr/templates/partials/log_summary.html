@@ -1,15 +1,11 @@
 <div class="rounded-xl border border-slate-800 bg-slate-900/70 px-3 py-2.5">
   <div class="flex flex-wrap items-center gap-x-3 gap-y-2 text-[11px] text-slate-400">
-    <span class="text-slate-300">Visible rows {{ summary.total_rows }}</span>
-    <span>cycles {{ summary.total_cycles }}</span>
-    <span class="text-green-300">searched cycles {{ summary.searched_cycles }}</span>
-    <span class="text-zinc-300">skip-only cycles {{ summary.skip_only_cycles }}</span>
-    {% if summary.unknown_cycles %}
-    <span class="text-slate-500">unknown cycles {{ summary.unknown_cycles }}</span>
-    {% endif %}
-    {% if summary.legacy_rows %}
-    <span class="text-slate-500">legacy rows {{ summary.legacy_rows }}</span>
-    {% endif %}
-    <span class="text-slate-500">rows: searched {{ summary.searched_rows }} · skipped {{ summary.skipped_rows }} · error {{ summary.error_rows }} · info {{ summary.info_rows }}</span>
+    <span class="text-slate-300">Visible rows <span id="summary-total-rows">{{ summary.total_rows }}</span></span>
+    <span>cycles <span id="summary-total-cycles">{{ summary.total_cycles }}</span></span>
+    <span class="text-green-300">searched cycles <span id="summary-searched-cycles">{{ summary.searched_cycles }}</span></span>
+    <span class="text-zinc-300">skip-only cycles <span id="summary-skip-cycles">{{ summary.skip_only_cycles }}</span></span>
+    <span class="text-slate-500">unknown cycles <span id="summary-unknown-cycles">{{ summary.unknown_cycles }}</span></span>
+    <span class="text-slate-500">legacy rows <span id="summary-legacy-rows">{{ summary.legacy_rows }}</span></span>
+    <span class="text-slate-500">rows: searched <span id="summary-searched-rows">{{ summary.searched_rows }}</span> · skipped <span id="summary-skipped-rows">{{ summary.skipped_rows }}</span> · error <span id="summary-error-rows">{{ summary.error_rows }}</span> · info <span id="summary-info-rows">{{ summary.info_rows }}</span></span>
   </div>
 </div>

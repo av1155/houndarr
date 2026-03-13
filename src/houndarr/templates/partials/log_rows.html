@@ -24,7 +24,10 @@
   </tr>
   {% endif %}
 
-  <tr class="border-b border-slate-800 hover:bg-slate-800/40 transition-colors" data-log-row="true">
+  <tr class="border-b border-slate-800 hover:bg-slate-800/40 transition-colors"
+      data-log-row="true"
+      data-cycle-id="{{ row.cycle_id or '' }}"
+      data-cycle-progress="{{ row.cycle_progress or '' }}">
     {# Timestamp #}
     <td class="px-3 py-2.5 text-xs text-slate-400 whitespace-nowrap font-mono" data-log-ts="{{ row.timestamp or '' }}" data-col="timestamp">
       {{ row.timestamp[:19].replace("T", " ") if row.timestamp else "—" }}

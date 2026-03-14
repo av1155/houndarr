@@ -170,3 +170,39 @@ def test_unresolvable_hostname_defers_to_connection_check(monkeypatch: pytest.Mo
     monkeypatch.setattr(socket, "getaddrinfo", _fake_getaddrinfo)
 
     assert validate_instance_url("http://unknown.internal:8989") is None
+
+
+def test_ipv4_mapped_ipv6_loopback_rejected() -> None:
+    """IPv4-mapped IPv6 loopback must be rejected as loopback."""
+    result = validate_instance_url("http://[::ffff:127.0.0.1]:8989")
+    assert result is not None
+    assert "blocked" in result.lower()
+
+
+def test_unspecified_ipv4_rejected() -> None:
+    """Unspecified IPv4 bind target must be rejected."""
+    result = validate_instance_url("http://0.0.0.0:8989")
+    assert result is not None
+    assert "blocked" in result.lower()
+
+
+def test_unspecified_ipv6_rejected() -> None:
+    """Unspecified IPv6 bind target must be rejected."""
+    result = validate_instance_url("http://[::]:8989")
+    assert result is not None
+    assert "blocked" in result.lower()
+
+
+def test_hostname_resolving_to_unspecified_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Hostnames resolving to unspecified addresses must be rejected."""
+
+    def _fake_getaddrinfo(host: str, port: object, type: int) -> list[tuple[object, ...]]:
+        assert host == "bind-target.internal"
+        assert type == socket.SOCK_STREAM
+        return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("0.0.0.0", 80))]
+
+    monkeypatch.setattr(socket, "getaddrinfo", _fake_getaddrinfo)
+
+    result = validate_instance_url("http://bind-target.internal")
+    assert result is not None
+    assert "blocked" in result.lower()

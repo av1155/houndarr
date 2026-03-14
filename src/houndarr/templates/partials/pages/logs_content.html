@@ -38,6 +38,13 @@
 
 <div class="flex items-center justify-between mb-6">
   <h1 class="text-2xl font-bold text-white">Search Logs</h1>
+  <button
+    id="copy-visible-logs-btn-mobile"
+    type="button"
+    class="sm:hidden inline-flex items-center justify-center w-[9.5rem] flex-shrink-0 px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-sm font-medium transition-colors duration-300 ease-out"
+  >
+    <span class="copy-visible-logs-label transition-opacity duration-200 ease-out">Copy visible rows</span>
+  </button>
 </div>
 
 <form
@@ -156,7 +163,7 @@
   <button
     id="copy-visible-logs-btn"
     type="button"
-    class="inline-flex items-center justify-center w-[9.5rem] flex-shrink-0 px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-sm font-medium transition-colors duration-300 ease-out"
+    class="hidden sm:inline-flex items-center justify-center w-[9.5rem] flex-shrink-0 px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-sm font-medium transition-colors duration-300 ease-out"
   >
     <span id="copy-visible-logs-label" class="transition-opacity duration-200 ease-out">Copy visible rows</span>
   </button>
@@ -401,17 +408,22 @@
     formatVisibleLogTimestamps(document);
     rebuildSummaryFromVisibleRows();
 
-    const copyBtn = document.getElementById('copy-visible-logs-btn');
-    const copyBtnLabel = document.getElementById('copy-visible-logs-label');
+    // Both the desktop (summary-row) and mobile (header-row) copy buttons share state.
+    const copyBtns = Array.from(
+      document.querySelectorAll('#copy-visible-logs-btn, #copy-visible-logs-btn-mobile'),
+    );
+    const copyLabels = Array.from(
+      document.querySelectorAll('#copy-visible-logs-label, .copy-visible-logs-label'),
+    );
     let copyButtonTimer = null;
     let copyLabelSwapTimer = null;
 
     function setCopyButtonLabel(nextLabel) {
-      if (!copyBtnLabel) {
+      if (!copyLabels.length) {
         return;
       }
 
-      if (copyBtnLabel.textContent === nextLabel) {
+      if (copyLabels[0].textContent === nextLabel) {
         return;
       }
 
@@ -420,16 +432,18 @@
         copyLabelSwapTimer = null;
       }
 
-      copyBtnLabel.classList.add('opacity-0');
+      copyLabels.forEach((el) => el.classList.add('opacity-0'));
       copyLabelSwapTimer = window.setTimeout(() => {
-        copyBtnLabel.textContent = nextLabel;
-        copyBtnLabel.classList.remove('opacity-0');
+        copyLabels.forEach((el) => {
+          el.textContent = nextLabel;
+          el.classList.remove('opacity-0');
+        });
         copyLabelSwapTimer = null;
       }, 120);
     }
 
     function flashCopyButtonState(state) {
-      if (!copyBtn) {
+      if (!copyBtns.length) {
         return;
       }
 
@@ -438,15 +452,21 @@
         copyButtonTimer = null;
       }
 
-      copyBtn.classList.remove('bg-emerald-700', 'hover:bg-emerald-600', 'border-emerald-500/60');
-      copyBtn.classList.remove('bg-red-800', 'hover:bg-red-700', 'border-red-600/60');
+      copyBtns.forEach((btn) => {
+        btn.classList.remove('bg-emerald-700', 'hover:bg-emerald-600', 'border-emerald-500/60');
+        btn.classList.remove('bg-red-800', 'hover:bg-red-700', 'border-red-600/60');
+      });
 
       if (state === 'success') {
         setCopyButtonLabel('Copied');
-        copyBtn.classList.add('bg-emerald-700', 'hover:bg-emerald-600', 'border-emerald-500/60');
+        copyBtns.forEach((btn) =>
+          btn.classList.add('bg-emerald-700', 'hover:bg-emerald-600', 'border-emerald-500/60'),
+        );
       } else if (state === 'error') {
         setCopyButtonLabel('Copy failed');
-        copyBtn.classList.add('bg-red-800', 'hover:bg-red-700', 'border-red-600/60');
+        copyBtns.forEach((btn) =>
+          btn.classList.add('bg-red-800', 'hover:bg-red-700', 'border-red-600/60'),
+        );
       } else {
         setCopyButtonLabel('Copy visible rows');
         return;
@@ -457,9 +477,7 @@
       }, 1200);
     }
 
-    if (copyBtn) {
-      copyBtn.addEventListener('click', copyVisibleLogRows, { signal });
-    }
+    copyBtns.forEach((btn) => btn.addEventListener('click', copyVisibleLogRows, { signal }));
 
     document.body.addEventListener(
       'htmx:afterSwap',

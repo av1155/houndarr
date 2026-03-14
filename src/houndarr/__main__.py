@@ -1,5 +1,7 @@
 """Entry point: python -m houndarr."""
 
+from __future__ import annotations
+
 import click
 
 from houndarr import __version__
@@ -80,9 +82,20 @@ def cli(
     missing and cutoff-unmet media in controlled batches, keeping your
     indexers happy.
     """
+    import logging
+
     import uvicorn
 
     from houndarr.config import AppSettings
+
+    # Configure the root logger so that application loggers (houndarr.*)
+    # respect --log-level.  Without this, only uvicorn's own loggers are
+    # configured and all houndarr.* INFO messages are silently dropped
+    # (Python's root logger defaults to WARNING).
+    logging.basicConfig(
+        level=getattr(logging, log_level.upper()),
+        format="%(levelname)s:     %(message)s",
+    )
 
     settings = AppSettings(
         data_dir=data_dir,

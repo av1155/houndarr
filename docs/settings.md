@@ -4,9 +4,11 @@ This guide explains each Add/Edit Instance setting in Houndarr, with safe defaul
 
 Houndarr is a polite backlog orchestrator. Keep settings conservative to reduce indexer/API pressure and avoid bans.
 
-## Search Command Contract (v0.1)
+## Search Command Contract
 
-- **Sonarr:** Houndarr sends episode-level commands (`EpisodeSearch` with `episodeIds`).
+- **Sonarr (default):** Houndarr sends episode-level commands (`EpisodeSearch` with `episodeIds`).
+- **Sonarr (advanced optional):** missing pass can use season-context commands
+  (`SeasonSearch` with `seriesId` + `seasonNumber`) when enabled per instance.
 - **Radarr:** Houndarr sends movie-level commands (`MoviesSearch` with `movieIds`).
 - Wanted-list reads are explicitly restricted to monitored items (`monitored=true`) for both
   missing and cutoff passes.
@@ -14,9 +16,8 @@ Houndarr is a polite backlog orchestrator. Keep settings conservative to reduce 
 Why this shape:
 
 - Episode/movie-level commands map cleanly to Houndarr's cooldown, cap, and batch controls.
-- It keeps retries predictable and avoids broad one-shot bursts that can over-pressure indexers.
-- Season-level Sonarr search is intentionally out of scope for v0.1 to keep behavior simple,
-  controlled, and observable.
+- Sonarr season-context mode is opt-in and advanced; it can be noisier and is not pack-only.
+- Cutoff remains episode-level for Sonarr even when season-context is enabled.
 
 ## Missing Search Controls
 
@@ -43,6 +44,14 @@ Why this shape:
     `digitalRelease` -> `physicalRelease` -> `releaseDate` -> `inCinemas`.
   - For Radarr, unavailable or clearly pre-release titles may also be skipped using
     availability signals (`isAvailable` / `status`) even when release dates are incomplete.
+
+- **Sonarr Missing Search Mode**: strategy for Sonarr missing-pass commands.
+  - Default: `Episode search (default)`
+  - Advanced: `Season-context search (advanced)`
+  - Season-context mode sends at most one `SeasonSearch` per `(series, season)` per pass.
+  - Season search is not pack-only in Sonarr and may still produce singles / noisier behavior.
+  - Cooldown in season-context mode is tracked through the representative missing episode
+    that triggered that season search.
 
 ## Cutoff Upgrade Controls
 

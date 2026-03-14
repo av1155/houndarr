@@ -8,6 +8,7 @@ from cryptography.fernet import Fernet
 from houndarr.services.instances import (
     Instance,
     InstanceType,
+    SonarrSearchMode,
     create_instance,
     delete_instance,
     get_instance,
@@ -77,6 +78,7 @@ async def test_create_applies_defaults(db: None, master_key: bytes) -> None:
     assert inst.cutoff_batch_size == 1
     assert inst.cutoff_cooldown_days == 21
     assert inst.cutoff_hourly_cap == 1
+    assert inst.sonarr_search_mode == SonarrSearchMode.episode
 
 
 @pytest.mark.asyncio()
@@ -196,6 +198,18 @@ async def test_update_multiple_fields(db: None, master_key: bytes) -> None:
     assert updated.batch_size == 20
     assert updated.hourly_cap == 50
     assert updated.enabled is False
+
+
+@pytest.mark.asyncio()
+async def test_update_sonarr_search_mode(db: None, master_key: bytes) -> None:
+    inst = await _make(master_key)
+    updated = await update_instance(
+        inst.id,
+        master_key=master_key,
+        sonarr_search_mode=SonarrSearchMode.season_context,
+    )
+    assert updated is not None
+    assert updated.sonarr_search_mode == SonarrSearchMode.season_context
 
 
 @pytest.mark.asyncio()

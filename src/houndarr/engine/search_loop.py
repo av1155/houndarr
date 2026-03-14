@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import logging
 from datetime import UTC, datetime, timedelta
-from typing import Literal
+from typing import Literal, cast
 from uuid import uuid4
 
 from houndarr.clients.radarr import MissingMovie, RadarrClient
@@ -20,7 +20,7 @@ from houndarr.services.cooldown import (
     is_on_cooldown,
     record_search,
 )
-from houndarr.services.instances import Instance, InstanceType
+from houndarr.services.instances import Instance, InstanceType, SonarrSearchMode
 
 logger = logging.getLogger(__name__)
 
@@ -160,6 +160,12 @@ def _episode_label(item: MissingEpisode) -> str:
     return f"{series} - {code}"
 
 
+def _season_context_label(item: MissingEpisode) -> str:
+    """Build a log label for Sonarr season-context search mode."""
+    series = item.series_title or "Unknown Series"
+    return f"{series} - S{item.season:02d} (season-context)"
+
+
 def _movie_label(item: MissingMovie) -> str:
     """Build a human-readable log label for Radarr movies."""
     title = item.title or "Unknown Movie"
@@ -270,6 +276,7 @@ async def run_instance_search(
     if missing_target > 0:
         searches_this_hour = await _count_searches_last_hour(instance.id, "missing")
         seen_item_ids: set[int] = set()
+        seen_season_keys: set[tuple[int, int]] = set()
         scanned = 0
         page = 1
 
@@ -295,8 +302,21 @@ async def run_instance_search(
                         break
 
                     if isinstance(item, MissingEpisode):
+                        episode_mode = instance.sonarr_search_mode == SonarrSearchMode.episode
+
+                        season_key: tuple[int, int] | None = None
+                        if not episode_mode and item.series_id is not None and item.season > 0:
+                            season_key = (item.series_id, item.season)
+                            if season_key in seen_season_keys:
+                                continue
+                            seen_season_keys.add(season_key)
+
                         item_id = item.episode_id
-                        item_label = _episode_label(item)
+                        item_label = (
+                            _episode_label(item)
+                            if episode_mode or season_key is None
+                            else _season_context_label(item)
+                        )
                         unreleased_reason = (
                             f"unreleased delay ({instance.unreleased_delay_hrs}h)"
                             if _is_within_unreleased_delay(
@@ -366,10 +386,25 @@ async def run_instance_search(
                         continue
 
                     try:
-                        async with client.__class__(
-                            url=instance.url, api_key=instance.api_key
-                        ) as c:
-                            await c.search(item_id)
+                        if isinstance(item, MissingEpisode):
+                            async with SonarrClient(
+                                url=instance.url, api_key=instance.api_key
+                            ) as raw_client:
+                                c = cast(SonarrClient, raw_client)
+                                if (
+                                    instance.sonarr_search_mode == SonarrSearchMode.season_context
+                                    and item.series_id is not None
+                                    and item.season > 0
+                                ):
+                                    await c.search_season(item.series_id, item.season)
+                                else:
+                                    await c.search(item_id)
+                        else:
+                            async with RadarrClient(
+                                url=instance.url, api_key=instance.api_key
+                            ) as raw_radarr_client:
+                                radarr_client = cast(RadarrClient, raw_radarr_client)
+                                await radarr_client.search(item_id)
                     except Exception as exc:  # noqa: BLE001
                         msg = str(exc)
                         logger.warning("[%s] search failed for %s: %s", instance.name, item_id, msg)

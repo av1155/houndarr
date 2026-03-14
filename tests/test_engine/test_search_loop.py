@@ -14,7 +14,7 @@ from cryptography.fernet import Fernet
 
 from houndarr.database import get_db
 from houndarr.engine.search_loop import run_instance_search
-from houndarr.services.instances import Instance, InstanceType
+from houndarr.services.instances import Instance, InstanceType, SonarrSearchMode
 
 # ---------------------------------------------------------------------------
 # Shared constants
@@ -27,6 +27,7 @@ MASTER_KEY: bytes = Fernet.generate_key()
 
 _EPISODE_RECORD: dict[str, Any] = {
     "id": 101,
+    "seriesId": 55,
     "title": "Pilot",
     "seasonNumber": 1,
     "episodeNumber": 1,
@@ -68,6 +69,7 @@ def _make_instance(
     cooldown_days: int = 7,
     unreleased_delay_hrs: int = 24,
     enabled: bool = True,
+    sonarr_search_mode: SonarrSearchMode = SonarrSearchMode.episode,
 ) -> Instance:
     return Instance(
         id=instance_id,
@@ -87,6 +89,7 @@ def _make_instance(
         cutoff_hourly_cap=1,
         created_at="2024-01-01T00:00:00Z",
         updated_at="2024-01-01T00:00:00Z",
+        sonarr_search_mode=sonarr_search_mode,
     )
 
 
@@ -153,6 +156,85 @@ async def test_item_is_searched_when_not_on_cooldown(seeded_instances: None) -> 
     assert rows[0]["search_kind"] == "missing"
     assert rows[0]["cycle_id"]
     assert rows[0]["cycle_trigger"] == "scheduled"
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_sonarr_season_context_missing_pass_uses_season_search(
+    seeded_instances: None,
+) -> None:
+    """Season-context mode issues one SeasonSearch per eligible season."""
+    missing_records = {
+        "records": [
+            {**_EPISODE_RECORD, "id": 101, "seriesId": 55, "seasonNumber": 1, "episodeNumber": 1},
+            {**_EPISODE_RECORD, "id": 102, "seriesId": 55, "seasonNumber": 1, "episodeNumber": 2},
+            {**_EPISODE_RECORD, "id": 103, "seriesId": 55, "seasonNumber": 2, "episodeNumber": 1},
+        ]
+    }
+    respx.get(f"{SONARR_URL}/api/v3/wanted/missing").mock(
+        side_effect=[
+            httpx.Response(200, json=missing_records),
+            httpx.Response(200, json={"records": []}),
+        ]
+    )
+    search_route = respx.post(f"{SONARR_URL}/api/v3/command").mock(
+        return_value=httpx.Response(201, json={"id": 1})
+    )
+
+    instance = _make_instance(sonarr_search_mode=SonarrSearchMode.season_context)
+    count = await run_instance_search(instance, MASTER_KEY)
+
+    assert count == 2
+    assert search_route.call_count == 2
+
+    import json
+
+    first_payload = json.loads(search_route.calls[0].request.content)
+    second_payload = json.loads(search_route.calls[1].request.content)
+    assert first_payload == {"name": "SeasonSearch", "seriesId": 55, "seasonNumber": 1}
+    assert second_payload == {"name": "SeasonSearch", "seriesId": 55, "seasonNumber": 2}
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_sonarr_season_context_missing_pass_respects_representative_cooldown(
+    seeded_instances: None,
+) -> None:
+    """Season-context skips a season when representative episode is on cooldown."""
+    from houndarr.services.cooldown import record_search
+
+    await record_search(1, 101, "episode")
+
+    missing_records = {
+        "records": [
+            {**_EPISODE_RECORD, "id": 101, "seriesId": 55, "seasonNumber": 1, "episodeNumber": 1},
+            {**_EPISODE_RECORD, "id": 102, "seriesId": 55, "seasonNumber": 1, "episodeNumber": 2},
+            {**_EPISODE_RECORD, "id": 103, "seriesId": 55, "seasonNumber": 2, "episodeNumber": 1},
+        ]
+    }
+    respx.get(f"{SONARR_URL}/api/v3/wanted/missing").mock(
+        side_effect=[
+            httpx.Response(200, json=missing_records),
+            httpx.Response(200, json={"records": []}),
+        ]
+    )
+    search_route = respx.post(f"{SONARR_URL}/api/v3/command").mock(
+        return_value=httpx.Response(201, json={"id": 1})
+    )
+
+    instance = _make_instance(sonarr_search_mode=SonarrSearchMode.season_context)
+    count = await run_instance_search(instance, MASTER_KEY)
+
+    assert count == 1
+    assert search_route.call_count == 1
+
+    import json
+
+    payload = json.loads(search_route.calls[0].request.content)
+    assert payload == {"name": "SeasonSearch", "seriesId": 55, "seasonNumber": 2}
+
+    rows = await _get_log_rows()
+    assert any(row["reason"] == "on cooldown (7d)" for row in rows)
 
 
 @pytest.mark.asyncio()
@@ -1024,6 +1106,7 @@ def _make_cutoff_instance(
     cooldown_days: int = 7,
     cutoff_cooldown_days: int = 21,
     unreleased_delay_hrs: int = 24,
+    sonarr_search_mode: SonarrSearchMode = SonarrSearchMode.episode,
 ) -> Instance:
     return Instance(
         id=instance_id,
@@ -1043,6 +1126,7 @@ def _make_cutoff_instance(
         cutoff_hourly_cap=cutoff_hourly_cap,
         created_at="2024-01-01T00:00:00Z",
         updated_at="2024-01-01T00:00:00Z",
+        sonarr_search_mode=sonarr_search_mode,
     )
 
 
@@ -1070,6 +1154,38 @@ async def test_cutoff_pass_runs_when_enabled(seeded_instances: None) -> None:
     assert rows[0]["action"] == "searched"
     assert rows[0]["item_id"] == 101
     assert rows[0]["search_kind"] == "cutoff"
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_cutoff_stays_episode_level_when_sonarr_season_context_enabled(
+    seeded_instances: None,
+) -> None:
+    """Cutoff pass remains EpisodeSearch even when season-context mode is enabled."""
+    respx.get(f"{SONARR_URL}/api/v3/wanted/missing").mock(
+        return_value=httpx.Response(200, json={"records": []})
+    )
+    respx.get(f"{SONARR_URL}/api/v3/wanted/cutoff").mock(
+        return_value=httpx.Response(200, json=_CUTOFF_SONARR)
+    )
+    search_route = respx.post(f"{SONARR_URL}/api/v3/command").mock(
+        return_value=httpx.Response(201, json={"id": 1})
+    )
+
+    instance = _make_cutoff_instance(
+        cutoff_enabled=True,
+        sonarr_search_mode=SonarrSearchMode.season_context,
+    )
+    count = await run_instance_search(instance, MASTER_KEY)
+
+    assert count == 1
+    assert search_route.called
+
+    import json
+
+    payload = json.loads(search_route.calls[0].request.content)
+    assert payload["name"] == "EpisodeSearch"
+    assert payload["episodeIds"] == [101]
 
 
 @pytest.mark.asyncio()

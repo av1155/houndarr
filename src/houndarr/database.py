@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Schema version — bump when adding new migrations
 # ---------------------------------------------------------------------------
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 # ---------------------------------------------------------------------------
 # DDL
@@ -39,6 +39,8 @@ CREATE TABLE IF NOT EXISTS instances (
     cutoff_batch_size    INTEGER NOT NULL DEFAULT 1,
     cutoff_cooldown_days INTEGER NOT NULL DEFAULT 21,
     cutoff_hourly_cap    INTEGER NOT NULL DEFAULT 1,
+    sonarr_search_mode   TEXT    NOT NULL DEFAULT 'episode'
+                                CHECK(sonarr_search_mode IN ('episode', 'season_context')),
     enabled              INTEGER NOT NULL DEFAULT 1,
     created_at           TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     updated_at           TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
@@ -142,6 +144,8 @@ async def _run_migrations(db: aiosqlite.Connection, from_version: int) -> None:
         await _migrate_to_v2(db)
     if from_version < 3:
         await _migrate_to_v3(db)
+    if from_version < 4:
+        await _migrate_to_v4(db)
 
     logger.info("Migrated database from schema version %d to %d", from_version, SCHEMA_VERSION)
     await db.execute(
@@ -177,6 +181,14 @@ async def _migrate_to_v3(db: aiosqlite.Connection) -> None:
 
     if not await _column_exists(db, "search_log", "cycle_trigger"):
         await db.execute("ALTER TABLE search_log ADD COLUMN cycle_trigger TEXT")
+
+
+async def _migrate_to_v4(db: aiosqlite.Connection) -> None:
+    """Add v4 column for Sonarr missing-search strategy mode."""
+    if not await _column_exists(db, "instances", "sonarr_search_mode"):
+        await db.execute(
+            "ALTER TABLE instances ADD COLUMN sonarr_search_mode TEXT NOT NULL DEFAULT 'episode'"
+        )
 
 
 async def _ensure_v3_indexes(db: aiosqlite.Connection) -> None:

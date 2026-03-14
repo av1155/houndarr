@@ -16,6 +16,7 @@ _VALID_FORM = {
     "type": "sonarr",
     "url": "http://sonarr:8989",
     "api_key": "test-api-key-abc123",
+    "sonarr_search_mode": "episode",
     "connection_verified": "true",
 }
 
@@ -341,8 +342,39 @@ def test_add_form_partial_renders(app: TestClient) -> None:
     assert b'value="14"' in resp.content
     assert b'name="unreleased_delay_hrs" type="number" min="0"' in resp.content
     assert b'value="36"' in resp.content
+    assert b'name="sonarr_search_mode"' in resp.content
+    assert b"Season-context search (advanced)" in resp.content
     assert b'href="/settings/help"' not in resp.content
     assert b'target="_blank"' not in resp.content
+
+
+def test_create_instance_stores_sonarr_search_mode(app: TestClient) -> None:
+    _login(app)
+    form = {**_VALID_FORM, "sonarr_search_mode": "season_context"}
+    app.post("/settings/instances", data=form)
+    settings_resp = app.get("/settings")
+    assert settings_resp.status_code == 200
+
+    edit_resp = app.get("/settings/instances/1/edit")
+    assert edit_resp.status_code == 200
+    assert b'name="sonarr_search_mode"' in edit_resp.content
+    assert b'value="season_context"' in edit_resp.content
+    assert b"selected" in edit_resp.content
+
+
+def test_create_radarr_forces_episode_search_mode(app: TestClient) -> None:
+    _login(app)
+    form = {
+        **_VALID_FORM,
+        "name": "My Radarr",
+        "type": "radarr",
+        "url": "http://radarr:7878",
+        "sonarr_search_mode": "season_context",
+    }
+    app.post("/settings/instances", data=form)
+    edit_resp = app.get("/settings/instances/1/edit")
+    assert edit_resp.status_code == 200
+    assert b'value="episode"' in edit_resp.content
 
 
 def test_connection_check_endpoint_success(app: TestClient) -> None:

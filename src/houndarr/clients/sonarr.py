@@ -17,6 +17,7 @@ class MissingEpisode:
     """A single missing episode returned by Sonarr's wanted/missing endpoint."""
 
     episode_id: int
+    series_id: int | None
     series_title: str
     episode_title: str
     season: int
@@ -70,6 +71,20 @@ class SonarrClient(ArrClient):
             json={"name": "EpisodeSearch", "episodeIds": [item_id]},
         )
 
+    async def search_season(self, series_id: int, season_number: int) -> None:
+        """Trigger a season-context search in Sonarr.
+
+        Calls ``POST /api/v3/command`` with command ``SeasonSearch``.
+
+        Args:
+            series_id: Sonarr series ID.
+            season_number: Sonarr season number.
+        """
+        await self._post(
+            "/api/v3/command",
+            json={"name": "SeasonSearch", "seriesId": series_id, "seasonNumber": season_number},
+        )
+
     async def get_cutoff_unmet(
         self,
         *,
@@ -112,6 +127,7 @@ def _parse_episode(record: dict[str, Any]) -> MissingEpisode:
     series: dict[str, Any] = record.get("series") or {}
     return MissingEpisode(
         episode_id=record["id"],
+        series_id=record.get("seriesId") or series.get("id"),
         series_title=series.get("title") or record.get("seriesTitle") or "",
         episode_title=record.get("title") or "",
         season=record.get("seasonNumber", 0),

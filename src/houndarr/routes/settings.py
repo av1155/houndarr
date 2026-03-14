@@ -22,12 +22,14 @@ from houndarr.config import (
     DEFAULT_CUTOFF_HOURLY_CAP,
     DEFAULT_HOURLY_CAP,
     DEFAULT_SLEEP_INTERVAL_MINUTES,
+    DEFAULT_SONARR_SEARCH_MODE,
     DEFAULT_UNRELEASED_DELAY_HOURS,
 )
 from houndarr.engine.supervisor import Supervisor
 from houndarr.services.instances import (
     Instance,
     InstanceType,
+    SonarrSearchMode,
     create_instance,
     delete_instance,
     get_instance,
@@ -83,6 +85,7 @@ def _blank_instance() -> Instance:
         cutoff_batch_size=DEFAULT_CUTOFF_BATCH_SIZE,
         cutoff_cooldown_days=DEFAULT_CUTOFF_COOLDOWN_DAYS,
         cutoff_hourly_cap=DEFAULT_CUTOFF_HOURLY_CAP,
+        sonarr_search_mode=SonarrSearchMode(DEFAULT_SONARR_SEARCH_MODE),
         created_at="",
         updated_at="",
     )
@@ -277,6 +280,7 @@ async def instance_create(
     cutoff_batch_size: Annotated[int, Form()] = DEFAULT_CUTOFF_BATCH_SIZE,
     cutoff_cooldown_days: Annotated[int, Form()] = DEFAULT_CUTOFF_COOLDOWN_DAYS,
     cutoff_hourly_cap: Annotated[int, Form()] = DEFAULT_CUTOFF_HOURLY_CAP,
+    sonarr_search_mode: Annotated[str, Form()] = DEFAULT_SONARR_SEARCH_MODE,
     connection_verified: Annotated[str, Form()] = "false",
 ) -> HTMLResponse:
     """Create a new instance and return the updated instance table body."""
@@ -299,6 +303,14 @@ async def instance_create(
     if not await _connection_ok(instance_type, url.rstrip("/"), api_key):
         return _connection_guard_response("Connection test failed. Re-test before adding.")
 
+    if instance_type == InstanceType.sonarr:
+        try:
+            sonarr_mode = SonarrSearchMode(sonarr_search_mode)
+        except ValueError:
+            return _connection_guard_response("Invalid Sonarr search mode.")
+    else:
+        sonarr_mode = SonarrSearchMode.episode
+
     instance = await create_instance(
         master_key=_master_key(request),
         name=name,
@@ -315,6 +327,7 @@ async def instance_create(
         cutoff_batch_size=cutoff_batch_size,
         cutoff_cooldown_days=cutoff_cooldown_days,
         cutoff_hourly_cap=cutoff_hourly_cap,
+        sonarr_search_mode=sonarr_mode,
     )
 
     supervisor = getattr(request.app.state, "supervisor", None)
@@ -362,6 +375,7 @@ async def instance_update(
     cutoff_batch_size: Annotated[int, Form()] = DEFAULT_CUTOFF_BATCH_SIZE,
     cutoff_cooldown_days: Annotated[int, Form()] = DEFAULT_CUTOFF_COOLDOWN_DAYS,
     cutoff_hourly_cap: Annotated[int, Form()] = DEFAULT_CUTOFF_HOURLY_CAP,
+    sonarr_search_mode: Annotated[str, Form()] = DEFAULT_SONARR_SEARCH_MODE,
     connection_verified: Annotated[str, Form()] = "false",
 ) -> HTMLResponse:
     """Update an existing instance and return the refreshed row partial."""
@@ -384,6 +398,14 @@ async def instance_update(
     if not await _connection_ok(instance_type, url.rstrip("/"), api_key):
         return _connection_guard_response("Connection test failed. Re-test before saving changes.")
 
+    if instance_type == InstanceType.sonarr:
+        try:
+            sonarr_mode = SonarrSearchMode(sonarr_search_mode)
+        except ValueError:
+            return _connection_guard_response("Invalid Sonarr search mode.")
+    else:
+        sonarr_mode = SonarrSearchMode.episode
+
     current = await get_instance(instance_id, master_key=_master_key(request))
     if current is None:
         return HTMLResponse(content="Not found", status_code=404)
@@ -405,6 +427,7 @@ async def instance_update(
         cutoff_batch_size=cutoff_batch_size,
         cutoff_cooldown_days=cutoff_cooldown_days,
         cutoff_hourly_cap=cutoff_hourly_cap,
+        sonarr_search_mode=sonarr_mode,
     )
     if updated is None:
         return HTMLResponse(content="Not found", status_code=404)
@@ -455,6 +478,7 @@ async def instance_toggle_enabled(request: Request, instance_id: int) -> HTMLRes
         cutoff_batch_size=instance.cutoff_batch_size,
         cutoff_cooldown_days=instance.cutoff_cooldown_days,
         cutoff_hourly_cap=instance.cutoff_hourly_cap,
+        sonarr_search_mode=instance.sonarr_search_mode,
     )
     if updated is None:
         return HTMLResponse(content="Not found", status_code=404)

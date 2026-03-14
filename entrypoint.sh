@@ -6,6 +6,14 @@ set -e
 PUID="${PUID:-1000}"
 PGID="${PGID:-1000}"
 
+# PUID=0 means the user explicitly wants to run as root (common in LXC/Proxmox
+# environments where containers are already isolated at the hypervisor level).
+# Skip privilege-drop entirely and run directly as root.
+if [ "$PUID" = "0" ]; then
+    echo "WARNING: Running as root (PUID=0). Consider using a non-root user in production."
+    exec "$@"
+fi
+
 # If running as root, remap the appuser UID/GID to match host PUID/PGID
 if [ "$(id -u)" = "0" ]; then
     # Update group if needed

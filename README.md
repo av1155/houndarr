@@ -95,6 +95,12 @@ prompted to create an admin username and password.
 | `PGID` | `1000` | Group ID for file ownership inside the container |
 | `TZ` | `UTC` | Container timezone (e.g. `America/New_York`) |
 
+> **Note — LXC / Proxmox / root-based hosts:** If your Docker host runs containers
+> as root (a common setup in Proxmox LXC containers), set `PUID=0` and `PGID=0`.
+> Houndarr will skip the privilege-drop and run directly as root, matching the
+> security posture of the rest of your stack. A warning will be printed to stdout
+> at startup as a reminder.
+
 ## Reverse Proxy
 
 If you run Houndarr behind a reverse proxy (Nginx, Caddy, Traefik, etc.):

@@ -233,12 +233,16 @@ def test_login_page_includes_browser_identity_metadata(app: TestClient) -> None:
     assert b'<meta name="theme-color" content="#020617" />' in response.content
     assert b'<meta name="color-scheme" content="dark" />' in response.content
     assert (
-        b'<link rel="icon" type="image/png" href="/static/img/houndarr-logo.png" />'
+        b'<link rel="icon" type="image/png" href="/static/img/houndarr-logo-dark.png" />'
         in response.content
     )
-    assert b'<link rel="shortcut icon" href="/static/img/houndarr-logo.png" />' in response.content
     assert (
-        b'<link rel="apple-touch-icon" href="/static/img/houndarr-logo.png" />' in response.content
+        b'<link rel="shortcut icon" href="/static/img/houndarr-logo-dark.png" />'
+        in response.content
+    )
+    assert (
+        b'<link rel="apple-touch-icon" href="/static/img/houndarr-logo-dark.png" />'
+        in response.content
     )
 
 

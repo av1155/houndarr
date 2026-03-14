@@ -179,7 +179,10 @@ def _login(client: TestClient) -> None:
 
 ### CSRF helper for route tests
 
-All mutating route tests (POST, DELETE) require a valid CSRF token after login.
+Mutating authenticated route tests generally require a valid CSRF token after login.
+Current intentional exemptions:
+- `POST /logout` (allows stale legacy sessions to be cleared safely)
+- Public auth/setup routes (`/login`, `/setup`)
 Use the helpers from `tests/conftest.py`:
 
 ```python

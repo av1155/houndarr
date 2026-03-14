@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
+import time
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -248,26 +251,38 @@ def test_logout_clears_session(app: TestClient) -> None:
 
 
 def test_csrf_protection_rejects_missing_token(app: TestClient) -> None:
-    """POST to protected route without CSRF token should return 403."""
-    app.post(
-        "/setup",
-        data={"username": "admin", "password": "ValidPass1!", "password_confirm": "ValidPass1!"},
-    )
-    app.post("/login", data={"username": "admin", "password": "ValidPass1!"})
-    # POST logout without CSRF token — should be rejected
-    response = app.post("/logout", follow_redirects=False)
-    assert response.status_code == 403
-
-
-def test_csrf_protection_rejects_wrong_token(app: TestClient) -> None:
-    """POST to protected route with a wrong CSRF token should return 403."""
+    """POST to protected authenticated route without CSRF token should return 403."""
     app.post(
         "/setup",
         data={"username": "admin", "password": "ValidPass1!", "password_confirm": "ValidPass1!"},
     )
     app.post("/login", data={"username": "admin", "password": "ValidPass1!"})
     response = app.post(
-        "/logout",
+        "/settings/account/password",
+        data={
+            "current_password": "ValidPass1!",
+            "new_password": "BetterPass2!",
+            "new_password_confirm": "BetterPass2!",
+        },
+        follow_redirects=False,
+    )
+    assert response.status_code == 403
+
+
+def test_csrf_protection_rejects_wrong_token(app: TestClient) -> None:
+    """Wrong CSRF token on protected authenticated route should return 403."""
+    app.post(
+        "/setup",
+        data={"username": "admin", "password": "ValidPass1!", "password_confirm": "ValidPass1!"},
+    )
+    app.post("/login", data={"username": "admin", "password": "ValidPass1!"})
+    response = app.post(
+        "/settings/account/password",
+        data={
+            "current_password": "ValidPass1!",
+            "new_password": "BetterPass2!",
+            "new_password_confirm": "BetterPass2!",
+        },
         follow_redirects=False,
         headers={"X-CSRF-Token": "invalid-token-value"},
     )
@@ -290,6 +305,34 @@ def test_csrf_protection_via_form_field(app: TestClient) -> None:
         follow_redirects=False,
     )
     assert response.status_code == 303
+
+
+def test_logout_allows_legacy_session_without_csrf(app: TestClient) -> None:
+    """Legacy pre-CSRF sessions should still be able to logout cleanly."""
+    from houndarr.auth import SESSION_COOKIE_NAME, _get_serializer
+
+    app.post(
+        "/setup",
+        data={"username": "admin", "password": "ValidPass1!", "password_confirm": "ValidPass1!"},
+    )
+    app.post("/login", data={"username": "admin", "password": "ValidPass1!"})
+
+    serializer = asyncio.run(_get_serializer())
+    legacy_token = serializer.dumps({"ts": int(time.time())})
+    app.cookies.set(SESSION_COOKIE_NAME, legacy_token)
+    app.cookies.pop("houndarr_csrf", None)
+
+    response = app.post("/logout", follow_redirects=False)
+    assert response.status_code == 303
+    assert "/login" in response.headers["location"]
+
+    set_cookie_headers = response.headers.get_list("set-cookie")
+    assert any(
+        "houndarr_session=" in header and "Max-Age=0" in header for header in set_cookie_headers
+    )
+    assert any(
+        "houndarr_csrf=" in header and "Max-Age=0" in header for header in set_cookie_headers
+    )
 
 
 def test_rate_limiter_uses_direct_ip_by_default(app: TestClient) -> None:

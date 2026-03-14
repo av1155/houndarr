@@ -47,6 +47,11 @@ _PUBLIC_PATHS = frozenset(
     ]
 )
 
+# Logout is a safe, destructive-free action (session invalidation only). We
+# allow it without CSRF/session validation so stale legacy sessions can always
+# be cleared after upgrades.
+_LOGOUT_PATH = "/logout"
+
 
 # ---------------------------------------------------------------------------
 # Password hashing
@@ -357,10 +362,12 @@ class AuthMiddleware(BaseHTTPMiddleware):
         first-run setup has not been completed).
 
     CSRF protection:
-        All state-changing requests (POST, PUT, PATCH, DELETE) on authenticated
+        State-changing requests (POST, PUT, PATCH, DELETE) on authenticated
         routes must carry a valid CSRF token in either the ``X-CSRF-Token``
-        header or the ``csrf_token`` form field.  The token is validated
-        against the value embedded in the signed session cookie.
+        header or the ``csrf_token`` form field, except ``POST /logout``
+        which is intentionally exempt so stale legacy sessions can always be
+        cleared safely. The token is validated against the value embedded in
+        the signed session cookie.
     """
 
     def __init__(self, app: ASGIApp) -> None:
@@ -368,6 +375,11 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
     async def dispatch(self, request: Request, call_next: Callable[..., Any]) -> Any:
         path = request.url.path
+
+        # Always allow logout requests so stale/broken sessions can be cleared
+        # after upgrades. This endpoint only invalidates local cookies.
+        if path == _LOGOUT_PATH and request.method == "POST":
+            return await call_next(request)
 
         # Always allow public paths and static files
         if any(path.startswith(p) for p in _PUBLIC_PATHS):

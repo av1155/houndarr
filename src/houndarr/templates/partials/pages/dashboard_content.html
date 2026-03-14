@@ -269,23 +269,23 @@
         const fleetSummaryMarkup = `
       <section class="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-5" aria-label="Fleet summary">
         <div class="rounded-xl border border-slate-800 bg-slate-900/70 px-4 py-3">
-          <p class="text-[11px] uppercase tracking-wide text-slate-500">Fleet summary</p>
-          <p class="mt-1 text-sm font-semibold text-white">${fleetSummary.enabledInstances}/${fleetSummary.totalInstances} enabled</p>
+          <p class="text-[11px] leading-4 uppercase tracking-wide text-slate-500">Fleet summary</p>
+          <p class="mt-1 text-sm font-semibold tabular-nums text-white">${fleetSummary.enabledInstances}/${fleetSummary.totalInstances} enabled</p>
         </div>
         <div class="rounded-xl border border-slate-800 bg-slate-900/70 px-4 py-3">
-          <p class="text-[11px] uppercase tracking-wide text-slate-500">24h searched</p>
-          <p class="mt-1 text-sm font-semibold text-emerald-300">${fleetSummary.searched24h}</p>
+          <p class="text-[11px] leading-4 uppercase tracking-wide text-slate-500">24h searched</p>
+          <p class="mt-1 text-sm font-semibold tabular-nums text-emerald-300">${fleetSummary.searched24h}</p>
         </div>
         <div class="rounded-xl border border-slate-800 bg-slate-900/70 px-4 py-3">
-          <p class="text-[11px] uppercase tracking-wide text-slate-500">24h skipped</p>
-          <p class="mt-1 text-sm font-semibold text-amber-300">${fleetSummary.skipped24h}</p>
+          <p class="text-[11px] leading-4 uppercase tracking-wide text-slate-500">24h skipped</p>
+          <p class="mt-1 text-sm font-semibold tabular-nums text-amber-300">${fleetSummary.skipped24h}</p>
         </div>
         <div class="rounded-xl border border-slate-800 bg-slate-900/70 px-4 py-3">
-          <p class="text-[11px] uppercase tracking-wide text-slate-500">24h errors</p>
-          <p class="mt-1 text-sm font-semibold text-rose-300">${fleetSummary.errors24h}</p>
+          <p class="text-[11px] leading-4 uppercase tracking-wide text-slate-500">24h errors</p>
+          <p class="mt-1 text-sm font-semibold tabular-nums text-rose-300">${fleetSummary.errors24h}</p>
         </div>
         <div class="rounded-xl border border-slate-800 bg-slate-900/70 px-4 py-3">
-          <p class="text-[11px] uppercase tracking-wide text-slate-500">Auto-refresh</p>
+          <p class="text-[11px] leading-4 uppercase tracking-wide text-slate-500">Auto-refresh</p>
           <p class="mt-1 text-sm font-semibold text-slate-200">Every 15s</p>
         </div>
       </section>`;
@@ -382,31 +382,31 @@
           <!-- Stats grid -->
           <dl class="grid grid-cols-1 sm:grid-cols-3 gap-3 text-center">
             <div class="bg-slate-800/60 rounded-lg px-3 py-2 ${lastHourChanged ? 'metric-changed' : ''}">
-              <dt class="text-[11px] text-slate-500 uppercase tracking-wide">Last hour</dt>
-              <dd class="text-lg font-bold text-white mt-0.5">${inst.searches_last_hour}</dd>
+              <dt class="text-[11px] leading-4 text-slate-500 uppercase tracking-wide">Last hour</dt>
+              <dd class="text-lg font-bold tabular-nums text-white mt-1">${inst.searches_last_hour}</dd>
             </div>
             <div class="bg-slate-800/60 rounded-lg px-3 py-2 ${todayChanged ? 'metric-changed' : ''}">
-              <dt class="text-[11px] text-slate-500 uppercase tracking-wide">Today</dt>
-              <dd class="text-lg font-bold text-white mt-0.5">${inst.searches_today}</dd>
+              <dt class="text-[11px] leading-4 text-slate-500 uppercase tracking-wide">Today</dt>
+              <dd class="text-lg font-bold tabular-nums text-white mt-1">${inst.searches_today}</dd>
             </div>
             <div class="bg-slate-800/60 rounded-lg px-3 py-2 ${totalChanged ? 'metric-changed' : ''}">
-              <dt class="text-[11px] text-slate-500 uppercase tracking-wide">Total</dt>
-              <dd class="text-lg font-bold text-white mt-0.5">${inst.items_found_total}</dd>
+              <dt class="text-[11px] leading-4 text-slate-500 uppercase tracking-wide">Total</dt>
+              <dd class="text-lg font-bold tabular-nums text-white mt-1">${inst.items_found_total}</dd>
             </div>
           </dl>
 
           <dl class="grid grid-cols-1 sm:grid-cols-3 gap-3 text-center">
             <div class="bg-emerald-950/35 rounded-lg px-3 py-2 border border-emerald-900/40 ${searched24hChanged ? 'metric-changed' : ''}">
-              <dt class="text-[11px] text-emerald-300/80 uppercase tracking-wide">24h searched</dt>
-              <dd class="text-lg font-bold text-emerald-200 mt-0.5">${toNumber(inst.searched_24h)}</dd>
+              <dt class="text-[11px] leading-4 text-emerald-300/80 uppercase tracking-wide">24h searched</dt>
+              <dd class="text-lg font-bold tabular-nums text-emerald-200 mt-1">${toNumber(inst.searched_24h)}</dd>
             </div>
             <div class="bg-amber-950/30 rounded-lg px-3 py-2 border border-amber-900/40 ${skipped24hChanged ? 'metric-changed' : ''}">
-              <dt class="text-[11px] text-amber-300/80 uppercase tracking-wide">24h skipped</dt>
-              <dd class="text-lg font-bold text-amber-200 mt-0.5">${toNumber(inst.skipped_24h)}</dd>
+              <dt class="text-[11px] leading-4 text-amber-300/80 uppercase tracking-wide">24h skipped</dt>
+              <dd class="text-lg font-bold tabular-nums text-amber-200 mt-1">${toNumber(inst.skipped_24h)}</dd>
             </div>
             <div class="bg-rose-950/30 rounded-lg px-3 py-2 border border-rose-900/40 ${errors24hChanged ? 'metric-changed' : ''}">
-              <dt class="text-[11px] text-rose-300/80 uppercase tracking-wide">24h errors</dt>
-              <dd class="text-lg font-bold text-rose-200 mt-0.5">${toNumber(inst.errors_24h)}</dd>
+              <dt class="text-[11px] leading-4 text-rose-300/80 uppercase tracking-wide">24h errors</dt>
+              <dd class="text-lg font-bold tabular-nums text-rose-200 mt-1">${toNumber(inst.errors_24h)}</dd>
             </div>
           </dl>
 

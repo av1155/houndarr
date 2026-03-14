@@ -39,6 +39,10 @@ Why this shape:
 - **Unreleased Delay (hrs)**: minimum delay after release date before searching.
   - Default: `36`
   - If the item is still inside this window, Houndarr logs `unreleased delay (...)` and skips it.
+  - For Radarr, Houndarr evaluates release timing with fallback anchors in this order:
+    `digitalRelease` -> `physicalRelease` -> `releaseDate` -> `inCinemas`.
+  - For Radarr, unavailable or clearly pre-release titles may also be skipped using
+    availability signals (`isAvailable` / `status`) even when release dates are incomplete.
 
 ## Cutoff Upgrade Controls
 

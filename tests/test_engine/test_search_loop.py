@@ -38,6 +38,12 @@ _MOVIE_RECORD: dict[str, Any] = {
     "id": 201,
     "title": "My Movie",
     "year": 2023,
+    "status": "released",
+    "minimumAvailability": "released",
+    "isAvailable": True,
+    "inCinemas": "2023-01-01T00:00:00Z",
+    "physicalRelease": "2023-02-01T00:00:00Z",
+    "releaseDate": "2023-02-01T00:00:00Z",
     "digitalRelease": None,
 }
 
@@ -172,6 +178,144 @@ async def test_radarr_item_is_searched(seeded_instances: None) -> None:
     assert rows[0]["search_kind"] == "missing"
     assert rows[0]["cycle_id"]
     assert rows[0]["cycle_trigger"] == "scheduled"
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_radarr_announced_unavailable_with_null_digital_release_is_skipped(
+    seeded_instances: None,
+) -> None:
+    """Radarr movies flagged unavailable should not be searched."""
+    unreleased_movie = {
+        **_MOVIE_RECORD,
+        "id": 226,
+        "title": "Spider-Man: Brand New Day",
+        "year": 2026,
+        "status": "announced",
+        "isAvailable": False,
+        "releaseDate": "2026-10-27T00:00:00Z",
+        "inCinemas": "2026-07-29T00:00:00Z",
+        "physicalRelease": None,
+        "digitalRelease": None,
+    }
+    respx.get(f"{RADARR_URL}/api/v3/wanted/missing").mock(
+        return_value=httpx.Response(200, json={"records": [unreleased_movie]})
+    )
+    search_route = respx.post(f"{RADARR_URL}/api/v3/command").mock(
+        return_value=httpx.Response(201, json={"id": 2})
+    )
+
+    instance = _make_instance(instance_id=2, itype=InstanceType.radarr, url=RADARR_URL)
+    count = await run_instance_search(instance, MASTER_KEY)
+
+    assert count == 0
+    assert not search_route.called
+    rows = await _get_log_rows()
+    assert rows[0]["action"] == "skipped"
+    assert rows[0]["reason"] == "unreleased delay (24h)"
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_radarr_release_anchor_falls_back_to_physical_release_for_delay(
+    seeded_instances: None,
+) -> None:
+    """When digitalRelease is missing, physicalRelease should enforce delay."""
+    movie = {
+        **_MOVIE_RECORD,
+        "id": 350,
+        "status": "released",
+        "isAvailable": True,
+        "digitalRelease": None,
+        "physicalRelease": "2999-01-01T00:00:00Z",
+        "releaseDate": None,
+        "inCinemas": None,
+    }
+    respx.get(f"{RADARR_URL}/api/v3/wanted/missing").mock(
+        return_value=httpx.Response(200, json={"records": [movie]})
+    )
+    search_route = respx.post(f"{RADARR_URL}/api/v3/command").mock(
+        return_value=httpx.Response(201, json={"id": 2})
+    )
+
+    instance = _make_instance(
+        instance_id=2,
+        itype=InstanceType.radarr,
+        url=RADARR_URL,
+        unreleased_delay_hrs=36,
+    )
+    count = await run_instance_search(instance, MASTER_KEY)
+
+    assert count == 0
+    assert not search_route.called
+    rows = await _get_log_rows()
+    assert rows[0]["reason"] == "unreleased delay (36h)"
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_radarr_weak_release_metadata_fails_conservatively(seeded_instances: None) -> None:
+    """Future-year movies with weak metadata should be treated as unreleased."""
+    weak_movie = {
+        **_MOVIE_RECORD,
+        "id": 351,
+        "title": "Mystery Future Film",
+        "year": 2999,
+        "status": None,
+        "minimumAvailability": None,
+        "isAvailable": None,
+        "inCinemas": None,
+        "physicalRelease": None,
+        "releaseDate": None,
+        "digitalRelease": None,
+    }
+    respx.get(f"{RADARR_URL}/api/v3/wanted/missing").mock(
+        return_value=httpx.Response(200, json={"records": [weak_movie]})
+    )
+    search_route = respx.post(f"{RADARR_URL}/api/v3/command").mock(
+        return_value=httpx.Response(201, json={"id": 2})
+    )
+
+    instance = _make_instance(instance_id=2, itype=InstanceType.radarr, url=RADARR_URL)
+    count = await run_instance_search(instance, MASTER_KEY)
+
+    assert count == 0
+    assert not search_route.called
+    rows = await _get_log_rows()
+    assert rows[0]["reason"] == "future title not yet available"
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_radarr_available_movie_still_searches(seeded_instances: None) -> None:
+    """Available Radarr movies should still be searched."""
+    available_movie = {
+        **_MOVIE_RECORD,
+        "id": 352,
+        "title": "Already Released",
+        "year": 2024,
+        "status": "released",
+        "minimumAvailability": "released",
+        "isAvailable": True,
+        "digitalRelease": "2024-01-15T00:00:00Z",
+    }
+    respx.get(f"{RADARR_URL}/api/v3/wanted/missing").mock(
+        return_value=httpx.Response(200, json={"records": [available_movie]})
+    )
+    search_route = respx.post(f"{RADARR_URL}/api/v3/command").mock(
+        return_value=httpx.Response(201, json={"id": 2})
+    )
+
+    instance = _make_instance(
+        instance_id=2,
+        itype=InstanceType.radarr,
+        url=RADARR_URL,
+        unreleased_delay_hrs=36,
+    )
+    count = await run_instance_search(instance, MASTER_KEY)
+
+    assert count == 1
+    assert search_route.called
 
 
 # ---------------------------------------------------------------------------
@@ -1074,6 +1218,50 @@ async def test_cutoff_pass_radarr(seeded_instances: None) -> None:
     assert rows[0]["action"] == "searched"
     assert rows[0]["item_id"] == 201
     assert rows[0]["item_type"] == "movie"
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_cutoff_pass_radarr_skips_unreleased_announced_titles(seeded_instances: None) -> None:
+    """Cutoff pass should apply the same Radarr unreleased gate as missing pass."""
+    unreleased_movie = {
+        **_MOVIE_RECORD,
+        "id": 319,
+        "title": "Shrek 5",
+        "year": 2027,
+        "status": "announced",
+        "minimumAvailability": "released",
+        "isAvailable": False,
+        "inCinemas": "2027-06-30T00:00:00Z",
+        "physicalRelease": None,
+        "releaseDate": "2027-09-28T00:00:00Z",
+        "digitalRelease": None,
+    }
+    respx.get(f"{RADARR_URL}/api/v3/wanted/missing").mock(
+        return_value=httpx.Response(200, json={"records": []})
+    )
+    respx.get(f"{RADARR_URL}/api/v3/wanted/cutoff").mock(
+        return_value=httpx.Response(200, json={"records": [unreleased_movie]})
+    )
+    search_route = respx.post(f"{RADARR_URL}/api/v3/command").mock(
+        return_value=httpx.Response(201, json={"id": 2})
+    )
+
+    instance = _make_cutoff_instance(
+        instance_id=2,
+        itype=InstanceType.radarr,
+        url=RADARR_URL,
+        cutoff_enabled=True,
+    )
+    count = await run_instance_search(instance, MASTER_KEY)
+
+    assert count == 0
+    assert not search_route.called
+    rows = await _get_log_rows()
+    assert len(rows) == 1
+    assert rows[0]["search_kind"] == "cutoff"
+    assert rows[0]["action"] == "skipped"
+    assert rows[0]["reason"] == "unreleased delay (24h)"
 
 
 @pytest.mark.asyncio()

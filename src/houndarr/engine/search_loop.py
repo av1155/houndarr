@@ -37,6 +37,7 @@ _CUTOFF_PAGE_SIZE_MIN = 5
 _CUTOFF_PAGE_SIZE_MAX = 25
 _CUTOFF_SCAN_BUDGET_MIN = 12
 _CUTOFF_SCAN_BUDGET_MAX = 60
+_RADARR_UNRELEASED_STATUSES = {"tba", "announced"}
 
 
 # ---------------------------------------------------------------------------
@@ -120,6 +121,34 @@ def _is_within_unreleased_delay(release_at: str | None, unreleased_delay_hrs: in
         return False
 
     return datetime.now(UTC) < (release_dt + timedelta(hours=unreleased_delay_hrs))
+
+
+def _radarr_release_anchor(movie: MissingMovie) -> str | None:
+    """Return preferred Radarr release anchor in fallback order."""
+    return movie.digital_release or movie.physical_release or movie.release_date or movie.in_cinemas
+
+
+def _radarr_unreleased_reason(movie: MissingMovie, unreleased_delay_hrs: int) -> str | None:
+    """Return skip reason when a Radarr movie should be treated as unreleased."""
+    release_anchor = _radarr_release_anchor(movie)
+    if _is_within_unreleased_delay(release_anchor, unreleased_delay_hrs):
+        return f"unreleased delay ({unreleased_delay_hrs}h)"
+
+    if movie.is_available is False:
+        return "radarr reports not available"
+
+    status = (movie.status or "").lower()
+    if status in _RADARR_UNRELEASED_STATUSES and movie.is_available is not True:
+        return "radarr status indicates unreleased"
+
+    if (
+        movie.year > datetime.now(UTC).year
+        and movie.is_available is not True
+        and status != "released"
+    ):
+        return "future title not yet available"
+
+    return None
 
 
 def _episode_label(item: MissingEpisode) -> str:
@@ -268,19 +297,26 @@ async def run_instance_search(
                     if isinstance(item, MissingEpisode):
                         item_id = item.episode_id
                         item_label = _episode_label(item)
-                        release_at = item.air_date_utc
+                        unreleased_reason = (
+                            f"unreleased delay ({instance.unreleased_delay_hrs}h)"
+                            if _is_within_unreleased_delay(
+                                item.air_date_utc, instance.unreleased_delay_hrs
+                            )
+                            else None
+                        )
                     else:
                         item_id = item.movie_id
                         item_label = _movie_label(item)
-                        release_at = item.digital_release
+                        unreleased_reason = _radarr_unreleased_reason(
+                            item, instance.unreleased_delay_hrs
+                        )
 
                     if item_id in seen_item_ids:
                         continue
                     seen_item_ids.add(item_id)
                     scanned += 1
 
-                    if _is_within_unreleased_delay(release_at, instance.unreleased_delay_hrs):
-                        reason = f"unreleased delay ({instance.unreleased_delay_hrs}h)"
+                    if unreleased_reason is not None:
                         await _write_log(
                             instance.id,
                             item_id,
@@ -290,7 +326,7 @@ async def run_instance_search(
                             cycle_id=cycle_id_value,
                             cycle_trigger=cycle_trigger,
                             item_label=item_label,
-                            reason=reason,
+                            reason=unreleased_reason,
                         )
                         continue
 
@@ -584,10 +620,10 @@ async def _run_cutoff_pass(
                     scanned += 1
 
                     item_label = _movie_label(movie_item)
-                    if _is_within_unreleased_delay(
-                        movie_item.digital_release, instance.unreleased_delay_hrs
-                    ):
-                        reason = f"unreleased delay ({instance.unreleased_delay_hrs}h)"
+                    unreleased_reason = _radarr_unreleased_reason(
+                        movie_item, instance.unreleased_delay_hrs
+                    )
+                    if unreleased_reason is not None:
                         await _write_log(
                             instance.id,
                             item_id,
@@ -597,7 +633,7 @@ async def _run_cutoff_pass(
                             cycle_id=cycle_id,
                             cycle_trigger=cycle_trigger,
                             item_label=item_label,
-                            reason=reason,
+                            reason=unreleased_reason,
                         )
                         continue
 

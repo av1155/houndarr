@@ -19,6 +19,12 @@ class MissingMovie:
     movie_id: int
     title: str
     year: int
+    status: str | None
+    minimum_availability: str | None
+    is_available: bool | None
+    in_cinemas: str | None
+    physical_release: str | None
+    release_date: str | None
     digital_release: str | None  # ISO-8601 date or None if unknown
 
 
@@ -110,6 +116,12 @@ def _parse_movie(record: dict[str, Any]) -> MissingMovie:
         movie_id=record["id"],
         title=record.get("title") or "",
         year=record.get("year", 0),
+        status=record.get("status"),
+        minimum_availability=record.get("minimumAvailability"),
+        is_available=record.get("isAvailable"),
+        in_cinemas=record.get("inCinemas"),
+        physical_release=record.get("physicalRelease"),
+        release_date=record.get("releaseDate"),
         digital_release=record.get("digitalRelease"),
     )
 

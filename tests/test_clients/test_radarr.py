@@ -57,6 +57,12 @@ _MOVIE_RECORD = {
     "id": 201,
     "title": "Great Film",
     "year": 2022,
+    "status": "released",
+    "minimumAvailability": "released",
+    "isAvailable": True,
+    "inCinemas": "2022-10-15T00:00:00Z",
+    "physicalRelease": "2022-12-05T00:00:00Z",
+    "releaseDate": "2022-12-01T00:00:00Z",
     "digitalRelease": "2022-12-01",
 }
 
@@ -76,6 +82,12 @@ async def test_get_missing_returns_movies(client: RadarrClient) -> None:
     assert movie.movie_id == 201
     assert movie.title == "Great Film"
     assert movie.year == 2022
+    assert movie.status == "released"
+    assert movie.minimum_availability == "released"
+    assert movie.is_available is True
+    assert movie.in_cinemas == "2022-10-15T00:00:00Z"
+    assert movie.physical_release == "2022-12-05T00:00:00Z"
+    assert movie.release_date == "2022-12-01T00:00:00Z"
     assert movie.digital_release == "2022-12-01"
     request = route.calls[0].request
     assert request.url.params["monitored"] == "true"
@@ -102,6 +114,33 @@ async def test_get_missing_null_digital_release(client: RadarrClient) -> None:
     )
     results = await client.get_missing()
     assert results[0].digital_release is None
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_get_missing_parses_release_eligibility_fields(client: RadarrClient) -> None:
+    record = {
+        **_MOVIE_RECORD,
+        "status": "announced",
+        "minimumAvailability": "released",
+        "isAvailable": False,
+        "inCinemas": "2026-07-29T00:00:00Z",
+        "physicalRelease": None,
+        "releaseDate": "2026-10-27T00:00:00Z",
+        "digitalRelease": None,
+    }
+    respx.get(f"{BASE}/api/v3/wanted/missing").mock(
+        return_value=httpx.Response(200, json={"records": [record]})
+    )
+
+    result = (await client.get_missing())[0]
+    assert result.status == "announced"
+    assert result.minimum_availability == "released"
+    assert result.is_available is False
+    assert result.in_cinemas == "2026-07-29T00:00:00Z"
+    assert result.physical_release is None
+    assert result.release_date == "2026-10-27T00:00:00Z"
+    assert result.digital_release is None
 
 
 @pytest.mark.asyncio()

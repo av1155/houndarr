@@ -292,9 +292,17 @@ Do not use `Improved`, `Updated`, `Refactored`, `Internal`, or any other heading
 
 ### `release.yml` workflow
 
-- Triggers on `push: tags: ["v*"]` only — not a required PR check
-- Extracts the `## [X.Y.Z]` block from `CHANGELOG.md` using the tag version
-- Runs `gh release create --latest` with those notes
+- Triggers on `push: tags: ["v*"]` only — **not** a required PR check
+- Extracts the `## [X.Y.Z]` block from `CHANGELOG.md` using `awk`
+  (the `## [X.Y.Z]` heading line itself is stripped — the release title is
+  already `vX.Y.Z`)
+- Writes extracted notes to a temp file and passes `--notes-file` to
+  `gh release create` — this is intentional: passing notes via `--notes`
+  would cause shell command substitution of any backticks in the markdown,
+  silently stripping inline code formatting
+- The notes content flows through a GitHub Actions `env:` variable
+  (`RELEASE_NOTES`), not inline `${{ }}` interpolation in the `run:` script,
+  so backticks and other shell metacharacters survive intact
 - Requires `permissions: contents: write`
 
 ## Workflow

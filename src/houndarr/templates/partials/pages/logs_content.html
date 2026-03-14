@@ -693,14 +693,33 @@
       if (text === null) {
         return;
       }
-      navigator.clipboard
-        .writeText(text)
-        .then(() => {
+      // navigator.clipboard is only available in secure contexts (HTTPS or localhost).
+      // Fall back to the legacy textarea + execCommand approach for plain HTTP access.
+      if (navigator.clipboard) {
+        navigator.clipboard
+          .writeText(text)
+          .then(() => {
+            flashCopyButtonState('success');
+          })
+          .catch(() => {
+            flashCopyButtonState('error');
+          });
+      } else {
+        try {
+          const ta = document.createElement('textarea');
+          ta.value = text;
+          ta.style.position = 'fixed';
+          ta.style.opacity = '0';
+          document.body.appendChild(ta);
+          ta.focus();
+          ta.select();
+          document.execCommand('copy');
+          document.body.removeChild(ta);
           flashCopyButtonState('success');
-        })
-        .catch(() => {
+        } catch {
           flashCopyButtonState('error');
-        });
+        }
+      }
     }
 
     // Main button: copy TSV immediately, also close dropdown if open.

@@ -220,8 +220,6 @@
     <div class="flex items-center gap-2">
       <a
         href="/settings/help"
-        data-shell-nav="true"
-        data-shell-route="/settings"
         hx-get="/settings/help"
         hx-target="#app-content"
         hx-swap="innerHTML"
@@ -394,8 +392,6 @@
       <div class="flex items-center gap-3">
         <a
           href="/settings/help"
-          data-shell-nav="true"
-          data-shell-route="/settings"
           hx-get="/settings/help"
           hx-target="#app-content"
           hx-swap="innerHTML"
@@ -848,8 +844,6 @@
         }
 
         if (evt.detail.target.id.startsWith('instance-row-')) {
-          const row = document.getElementById(evt.detail.target.id);
-          flashUpdatedInstanceRow(row);
           window.houndarrCloseAddInstanceModal();
         }
 

@@ -536,8 +536,25 @@ def test_logs_page_renders(app: TestClient) -> None:
     assert b"Visible rows" in resp.content
     assert b'id="filter-hide-system"' in resp.content
     assert b"checked" in resp.content
-    assert b"Copy visible rows" in resp.content
     assert b'<option value="500">500</option>' in resp.content
+    # Split-button copy dropdown must be present.
+    assert b"Copy as TSV" in resp.content
+    assert b"Copy as Markdown" in resp.content
+    assert b"Copy as JSON" in resp.content
+    assert b"Copy as plain text" in resp.content
+    assert b'data-copy-main="true"' in resp.content
+    assert b'data-copy-chevron="true"' in resp.content
+    assert b'data-copy-format="tsv"' in resp.content
+    assert b'data-copy-format="markdown"' in resp.content
+    assert b'data-copy-format="json"' in resp.content
+    assert b'data-copy-format="text"' in resp.content
+    # Mobile and desktop groups both present.
+    assert b'id="copy-dropdown-group-mobile"' in resp.content
+    assert b'id="copy-dropdown-group-desktop"' in resp.content
+    # Old single-button IDs must not appear.
+    assert b'id="copy-visible-logs-btn"' not in resp.content
+    assert b'id="copy-visible-logs-btn-mobile"' not in resp.content
+    assert b"Copy visible rows" not in resp.content
 
 
 def test_logs_page_hx_request_returns_content_fragment(app: TestClient) -> None:
@@ -548,6 +565,51 @@ def test_logs_page_hx_request_returns_content_fragment(app: TestClient) -> None:
     assert b'data-page-key="logs"' in resp.content
     assert b'id="log-filter-form"' in resp.content
     assert b"<html" not in resp.content
+
+
+def test_logs_page_hx_request_includes_copy_dropdown(app: TestClient) -> None:
+    """HX-partial /logs response must include full split-button dropdown structure."""
+    _login(app)
+    resp = app.get("/logs", headers={"HX-Request": "true"})
+    assert resp.status_code == 200
+    # Both placements present in the fragment.
+    assert b'id="copy-dropdown-group-mobile"' in resp.content
+    assert b'id="copy-dropdown-group-desktop"' in resp.content
+    # All four format menu items present.
+    assert b'data-copy-format="tsv"' in resp.content
+    assert b'data-copy-format="markdown"' in resp.content
+    assert b'data-copy-format="json"' in resp.content
+    assert b'data-copy-format="text"' in resp.content
+    # Main button and chevron attributes present.
+    assert b'data-copy-main="true"' in resp.content
+    assert b'data-copy-chevron="true"' in resp.content
+    # Menu role attributes present (accessibility).
+    assert b'role="menu"' in resp.content
+    assert b'role="menuitem"' in resp.content
+    # No old single-button markup.
+    assert b'id="copy-visible-logs-btn"' not in resp.content
+    assert b"Copy visible rows" not in resp.content
+
+
+def test_logs_page_copy_dropdown_menu_items_text(app: TestClient) -> None:
+    """The dropdown must contain the correct human-readable label for each format."""
+    _login(app)
+    resp = app.get("/logs")
+    assert resp.status_code == 200
+    assert b"Copy as TSV" in resp.content
+    assert b"Copy as Markdown" in resp.content
+    assert b"Copy as JSON" in resp.content
+    assert b"Copy as plain text" in resp.content
+
+
+def test_logs_page_copy_dropdown_aria_attributes(app: TestClient) -> None:
+    """The chevron button must have aria-haspopup and aria-expanded attributes."""
+    _login(app)
+    resp = app.get("/logs")
+    assert resp.status_code == 200
+    assert b'aria-haspopup="menu"' in resp.content
+    assert b'aria-expanded="false"' in resp.content
+    assert b'aria-label="Open copy format menu"' in resp.content
 
 
 # ---------------------------------------------------------------------------

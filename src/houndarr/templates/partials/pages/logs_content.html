@@ -38,13 +38,6 @@
 
 <div class="flex items-center justify-between mb-6">
   <h1 class="text-2xl font-bold text-white">Search Logs</h1>
-  <button
-    id="copy-visible-logs-btn"
-    type="button"
-    class="inline-flex items-center justify-center w-[9.5rem] px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-sm font-medium transition-colors duration-300 ease-out"
-  >
-    <span id="copy-visible-logs-label" class="transition-opacity duration-200 ease-out">Copy visible rows</span>
-  </button>
 </div>
 
 <form
@@ -145,6 +138,16 @@
       class="w-4 h-4 rounded border-slate-600 bg-slate-800 text-brand-500 focus:ring-brand-500 focus:ring-offset-0"
     />
     <label for="filter-hide-system" class="text-xs text-slate-300 font-medium">Hide system rows</label>
+  </div>
+
+  <div class="sm:ml-auto flex items-center pb-2">
+    <button
+      id="copy-visible-logs-btn"
+      type="button"
+      class="inline-flex items-center justify-center w-[9.5rem] px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-sm font-medium transition-colors duration-300 ease-out"
+    >
+      <span id="copy-visible-logs-label" class="transition-opacity duration-200 ease-out">Copy visible rows</span>
+    </button>
   </div>
 
   <div id="log-spinner" class="htmx-indicator flex items-center gap-2 text-xs text-slate-400 pb-2">

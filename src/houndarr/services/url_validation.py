@@ -9,16 +9,15 @@ RFC-1918 ranges wholesale; instead it only rejects the most obviously dangerous
 targets (loopback and link-local metadata service addresses) while accepting
 private network ranges needed for Docker / LAN setups.
 
-Operators who need to allow even loopback targets (e.g. ``localhost``) for
-unusual setups can do so by reading the validation error and configuring
-their instance URL appropriately (use the container name / hostname instead
-of ``127.0.0.1``).
+Both literal IPs and resolved hostname addresses are checked against blocked
+targets, so aliases that resolve to loopback/link-local ranges are rejected.
 """
 
 from __future__ import annotations
 
 import ipaddress
 import re
+import socket
 from urllib.parse import urlparse
 
 # ---------------------------------------------------------------------------
@@ -45,6 +44,40 @@ _HOSTNAME_PATTERN = re.compile(
     r"^(?:[a-zA-Z0-9](?:[a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?\.)*"
     r"[a-zA-Z0-9](?:[a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?$"
 )
+
+
+def _is_blocked_address(addr: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
+    """Return whether *addr* falls into a blocked network range."""
+    return any(addr in blocked_net for blocked_net in _BLOCKED_NETWORKS)
+
+
+def _resolve_hostname_ips(host: str) -> set[ipaddress.IPv4Address | ipaddress.IPv6Address]:
+    """Resolve *host* to concrete IP addresses for SSRF safety checks.
+
+    Returns:
+        Set of resolved IP addresses. If the hostname cannot be resolved at
+        validation time, an empty set is returned and connectivity checks can
+        surface the operator-facing error.
+
+    Raises:
+        ValueError: If hostname is malformed.
+    """
+    if _HOSTNAME_PATTERN.fullmatch(host) is None:
+        raise ValueError(f"Instance URL host '{host}' is invalid.")
+
+    try:
+        infos = socket.getaddrinfo(host, None, type=socket.SOCK_STREAM)
+    except socket.gaierror:
+        return set()
+
+    resolved: set[ipaddress.IPv4Address | ipaddress.IPv6Address] = set()
+    for family, _socktype, _proto, _canonname, sockaddr in infos:
+        if family == socket.AF_INET:
+            resolved.add(ipaddress.IPv4Address(sockaddr[0]))
+        elif family == socket.AF_INET6:
+            resolved.add(ipaddress.IPv6Address(sockaddr[0]))
+
+    return resolved
 
 
 # ---------------------------------------------------------------------------
@@ -96,18 +129,32 @@ def validate_instance_url(url: str) -> str | None:
             "Use the container name or network hostname instead of 'localhost'."
         )
 
-    # IP address range check
+    # IP address range check (literal IP host)
     try:
         addr = ipaddress.ip_address(host)
     except ValueError:
-        # Not an IP address — hostname, which is fine unless blocked above
+        # Hostname: resolve and apply the same blocked-network rules to avoid
+        # aliases/bypass (e.g. a hostname resolving to 127.0.0.1).
+        try:
+            resolved_ips = _resolve_hostname_ips(host)
+        except ValueError as exc:
+            return str(exc)
+
+        for resolved in resolved_ips:
+            if _is_blocked_address(resolved):
+                return (
+                    f"Instance URL host '{host}' resolves to a blocked address range ({resolved}). "
+                    "Use a container name or routable hostname."
+                )
+
+        # If hostname does not currently resolve, defer the operator-facing
+        # failure to the explicit connection test.
         return None
 
-    for blocked_net in _BLOCKED_NETWORKS:
-        if addr in blocked_net:
-            return (
-                f"Instance URL points to a blocked address range ({addr}). "
-                "Use a container name or routable hostname."
-            )
+    if _is_blocked_address(addr):
+        return (
+            f"Instance URL points to a blocked address range ({addr}). "
+            "Use a container name or routable hostname."
+        )
 
     return None

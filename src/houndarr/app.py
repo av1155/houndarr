@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from collections.abc import AsyncGenerator
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -19,6 +20,26 @@ from houndarr.engine.supervisor import Supervisor
 from houndarr.services.instances import list_instances
 
 logger = logging.getLogger(__name__)
+
+_LOG_RETENTION_INTERVAL_SECONDS = 24 * 60 * 60
+
+
+async def _periodic_log_retention() -> None:
+    """Periodically purge old search_log rows during app uptime."""
+    while True:
+        await asyncio.sleep(_LOG_RETENTION_INTERVAL_SECONDS)
+        try:
+            purged = await purge_old_logs(DEFAULT_LOG_RETENTION_DAYS)
+            if purged > 0:
+                logger.info(
+                    "Periodic retention purged %d search_log rows older than %d days",
+                    purged,
+                    DEFAULT_LOG_RETENTION_DAYS,
+                )
+        except asyncio.CancelledError:
+            raise
+        except Exception:  # noqa: BLE001
+            logger.exception("Periodic log retention task failed")
 
 
 @asynccontextmanager
@@ -57,9 +78,15 @@ async def _lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     await supervisor.start()
     app.state.supervisor = supervisor
 
+    retention_task = asyncio.create_task(_periodic_log_retention(), name="log-retention-loop")
+    app.state.retention_task = retention_task
+
     yield  # Application runs here
 
     logger.info("Houndarr shutting down")
+    retention_task.cancel()
+    with suppress(asyncio.CancelledError):
+        await retention_task
     await supervisor.stop()
 
 

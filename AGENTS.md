@@ -205,6 +205,8 @@ The `test_settings` fixture also resets `_auth._serializer` and
 - **HTMX partials:** `hx-swap="outerHTML"` / `"innerHTML"`, no full-page reloads
 - **Supervisor:** one `asyncio.Task` per enabled instance; 10s shutdown timeout
 - **search_log:** every search attempt writes a row (`searched`/`skipped`/`error`/`info`)
+- **URL validation:** instance URL checks resolve hostnames and block loopback/link-local targets
+- **Log retention:** startup purge plus periodic uptime purge of stale `search_log` rows
 - **Database:** SQLite via `aiosqlite`; schema version 1; `get_db()` context manager
 
 ## Workflow

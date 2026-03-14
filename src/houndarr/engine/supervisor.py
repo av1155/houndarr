@@ -15,12 +15,15 @@ from functools import partial
 from typing import Literal
 from uuid import uuid4
 
+import httpx
+
 from houndarr.engine.search_loop import CycleTrigger, _write_log, run_instance_search
 from houndarr.services.instances import Instance, get_instance, list_instances
 
 logger = logging.getLogger(__name__)
 
 _SHUTDOWN_TIMEOUT = 10  # seconds to wait for tasks to finish on stop()
+_CONNECT_RETRY_SECS = 30  # back-off interval when a connection error occurs
 RunNowStatus = Literal["accepted", "not_found", "disabled"]
 
 
@@ -187,6 +190,7 @@ class Supervisor:
     async def _instance_loop(self, instance_id: int) -> None:
         """Run search cycles for one instance until cancelled."""
         logger.debug("Supervisor: loop started for instance id=%d", instance_id)
+        _in_connect_retry = False
         try:
             while True:
                 instance = await get_instance(instance_id, master_key=self._master_key)
@@ -204,9 +208,22 @@ class Supervisor:
                     )
                     return
 
-                await self._run_search_cycle(instance, cycle_trigger="scheduled")
+                got_connect_error = await self._run_search_cycle(
+                    instance, cycle_trigger="scheduled"
+                )
 
-                await asyncio.sleep(instance.sleep_interval_mins * 60)
+                if got_connect_error:
+                    _in_connect_retry = True
+                    await asyncio.sleep(_CONNECT_RETRY_SECS)
+                else:
+                    if _in_connect_retry:
+                        logger.info(
+                            "Supervisor: %r (%s) is reachable again",
+                            instance.name,
+                            instance.url,
+                        )
+                        _in_connect_retry = False
+                    await asyncio.sleep(instance.sleep_interval_mins * 60)
 
         except asyncio.CancelledError:
             logger.debug("Supervisor: loop cancelled for instance id=%d", instance_id)
@@ -220,8 +237,12 @@ class Supervisor:
 
         await self._run_search_cycle(instance, cycle_trigger="run_now")
 
-    async def _run_search_cycle(self, instance: Instance, *, cycle_trigger: CycleTrigger) -> None:
-        """Run exactly one cycle for *instance* under the per-instance lock."""
+    async def _run_search_cycle(self, instance: Instance, *, cycle_trigger: CycleTrigger) -> bool:
+        """Run exactly one cycle for *instance* under the per-instance lock.
+
+        Returns:
+            ``True`` if the cycle failed with a connection error, ``False`` otherwise.
+        """
         lock = self._run_locks.setdefault(instance.id, asyncio.Lock())
         async with lock:
             cycle_id = str(uuid4())
@@ -232,6 +253,24 @@ class Supervisor:
                     cycle_id=cycle_id,
                     cycle_trigger=cycle_trigger,
                 )
+                return False
+            except httpx.TransportError:
+                logger.warning(
+                    "Supervisor: could not reach %r (%s) — retrying in %d s",
+                    instance.name,
+                    instance.url,
+                    _CONNECT_RETRY_SECS,
+                )
+                await _write_log(
+                    instance_id=instance.id,
+                    item_id=None,
+                    item_type=None,
+                    action="error",
+                    cycle_id=cycle_id,
+                    cycle_trigger=cycle_trigger,
+                    message=f"Could not reach {instance.url}",
+                )
+                return True
             except Exception as exc:  # noqa: BLE001
                 logger.error(
                     "Supervisor: unhandled error in search loop for %r: %s",
@@ -247,6 +286,7 @@ class Supervisor:
                     cycle_trigger=cycle_trigger,
                     message=str(exc),
                 )
+                return False
 
     def _on_scheduled_task_done(self, instance_id: int, task: asyncio.Task[None]) -> None:
         """Remove finished scheduled task references."""

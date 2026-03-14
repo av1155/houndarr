@@ -57,8 +57,11 @@ python3 -m venv .venv
 | docker | multi-arch build (amd64/arm64); push on `v*` tags only |
 | dockerfile-lint | `hadolint Dockerfile` |
 | workflow-lint | `actionlint` |
+| ci-skip | no-op jobs matching the 7 required check names (docs-only PRs) |
 
-Branch protection currently expects 7 check runs from these workflows.
+Branch protection requires 7 named check runs. The main workflows use
+`paths-ignore` for `docs/**` and `*.md`, so `ci-skip.yml` provides passing
+no-op jobs with matching names when a PR touches only documentation.
 
 ---
 

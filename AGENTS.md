@@ -212,6 +212,91 @@ The `test_settings` fixture also resets `_auth._serializer` and
 - **Log retention:** startup purge plus periodic uptime purge of stale `search_log` rows
 - **Database:** SQLite via `aiosqlite`; schema version 4; `get_db()` context manager
 
+## Versioning & Releases
+
+### Source of truth
+
+`VERSION` and `CHANGELOG.md` are the single source of truth for the current
+version. Everything else (GitHub Releases, Docker image tags, GHCR `latest`)
+is derived from them automatically.
+
+- `VERSION` — one line, plain `X.Y.Z` (no `v` prefix, no trailing newline noise)
+- `CHANGELOG.md` — Keep a Changelog format; the `## [X.Y.Z] - YYYY-MM-DD`
+  block is extracted verbatim as the GitHub Release body
+
+### Release workflow (end-to-end)
+
+```
+1. Fix / feature PR merged to main
+2. Open a separate chore: bump version PR
+   - Bump VERSION to X.Y.Z
+   - Add ## [X.Y.Z] - YYYY-MM-DD entry to CHANGELOG.md
+   - No other changes in this PR
+3. Merge the version bump PR
+4. git tag vX.Y.Z && git push origin vX.Y.Z
+   → docker.yml  fires — builds + pushes image to GHCR as vX.Y.Z + latest
+   → release.yml fires — reads CHANGELOG.md, creates GitHub Release automatically
+```
+
+Never push a `v*` tag without a matching `## [X.Y.Z]` block in `CHANGELOG.md`
+— the `release.yml` workflow depends on it.
+
+### CHANGELOG entry rules
+
+These rules exist because the `## [X.Y.Z]` block is used verbatim as the
+GitHub Release body. Entries must be clean, consistent, and user-facing.
+
+**Structure**
+
+```markdown
+## [X.Y.Z] - YYYY-MM-DD
+
+### Fixed
+
+- One sentence. User-facing impact first. PR/issue ref at the end (#N).
+
+### Added
+
+- One sentence per bullet. (#N)
+
+### Changed
+
+- One sentence per bullet. (#N)
+
+### Removed
+
+- One sentence per bullet. (#N)
+
+---
+```
+
+**Allowed section headers:** `Added`, `Fixed`, `Changed`, `Removed` only.
+Do not use `Improved`, `Updated`, `Refactored`, `Internal`, or any other heading.
+
+**Bullet rules**
+
+- One sentence per bullet — no multi-line prose paragraphs
+- Lead with user-facing impact: what the user sees/gets, not what the code does
+- End with the issue/PR reference in parentheses: `(#N)`
+- Use backticks for identifiers, file names, env vars, and UI element names
+- Do not describe internal implementation details (variable renames, loop
+  refactors, etc.) unless they affect observable behaviour
+- Be specific — avoid vague openers like "Improve X" or "Update Y":
+  - Bad:  `- Improved connection error handling (#119)`
+  - Good: `- Connection errors now log at WARNING with instance name and URL; supervisor retries every 30 s instead of waiting the full interval (#119)`
+
+**Separators**
+
+- Each version block ends with a `---` separator line (blank line before and after)
+- Do not use `## [Unreleased]` — write entries directly under the version header
+
+### `release.yml` workflow
+
+- Triggers on `push: tags: ["v*"]` only — not a required PR check
+- Extracts the `## [X.Y.Z]` block from `CHANGELOG.md` using the tag version
+- Runs `gh release create --latest` with those notes
+- Requires `permissions: contents: write`
+
 ## Workflow
 
 - Branch naming: `feat/<slug>`, `fix/<slug>`, `chore/<slug>`

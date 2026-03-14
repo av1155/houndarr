@@ -1,5 +1,7 @@
 """Health check endpoint — unauthenticated, used by Docker HEALTHCHECK."""
 
+from __future__ import annotations
+
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 

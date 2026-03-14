@@ -31,7 +31,7 @@ python3 -m venv .venv
 ## Running Tests
 
 ```bash
-# Full suite (201 tests, async)
+# Full suite (303 tests, async)
 .venv/bin/pytest
 
 # Single test file
@@ -207,7 +207,7 @@ The `test_settings` fixture also resets `_auth._serializer` and
 - **search_log:** every search attempt writes a row (`searched`/`skipped`/`error`/`info`)
 - **URL validation:** instance URL checks resolve hostnames and block localhost/loopback/link-local/unspecified targets
 - **Log retention:** startup purge plus periodic uptime purge of stale `search_log` rows
-- **Database:** SQLite via `aiosqlite`; schema version 1; `get_db()` context manager
+- **Database:** SQLite via `aiosqlite`; schema version 4; `get_db()` context manager
 
 ## Workflow
 

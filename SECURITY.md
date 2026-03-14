@@ -2,8 +2,13 @@
 
 ## Supported versions
 
-Houndarr is currently in active pre-release development. Security fixes target
-the latest `main` branch state and the most recent published image/tag.
+| Version | Supported |
+|---------|-----------|
+| 1.0.x   | Yes       |
+| < 1.0   | No        |
+
+Security fixes target the latest release on `main` and the most recent
+published container image tag.
 
 ## Reporting a vulnerability
 

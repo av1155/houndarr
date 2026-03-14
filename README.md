@@ -80,6 +80,26 @@ docker compose up -d
 Open `http://<your-host>:8877` in your browser. On first launch you will be
 prompted to create an admin username and password.
 
+<details>
+<summary>Prefer <code>docker run</code>?</summary>
+
+```bash
+docker run -d \
+  --name houndarr \
+  --restart unless-stopped \
+  -p 8877:8877 \
+  -v /path/to/data:/data \
+  -e TZ=America/New_York \
+  -e PUID=1000 \
+  -e PGID=1000 \
+  ghcr.io/av1155/houndarr:latest
+```
+
+Replace `/path/to/data` with an absolute path on your host where Houndarr
+should store its database and master key.
+
+</details>
+
 ## Environment Variables
 
 | Variable | Default | Description |

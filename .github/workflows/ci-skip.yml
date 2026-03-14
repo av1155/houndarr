@@ -1,0 +1,66 @@
+name: CI Skip (docs-only)
+
+# Provide passing required-check statuses when a PR touches only
+# documentation files.  Every other workflow uses paths-ignore to skip
+# docs/** and *.md, so without this shim those required checks would
+# never report and the PR would stay blocked by branch protection.
+
+on:
+  pull_request:
+    paths:
+      - "docs/**"
+      - "*.md"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-skip-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ---------- Quality (quality.yml) ----------
+  lint:
+    name: Lint (ruff)
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "Docs-only change — lint not required"
+
+  format:
+    name: Format (ruff)
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "Docs-only change — format check not required"
+
+  typecheck:
+    name: Type check (mypy)
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "Docs-only change — type check not required"
+
+  # ---------- Tests (tests.yml) ----------
+  test:
+    name: Test (Python 3.12)
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "Docs-only change — tests not required"
+
+  # ---------- Security (security.yml) ----------
+  dependency-audit:
+    name: Dependency audit (pip-audit)
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "Docs-only change — dependency audit not required"
+
+  sast:
+    name: SAST (bandit)
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "Docs-only change — SAST not required"
+
+  # ---------- Docker (docker.yml) ----------
+  docker:
+    name: Build (no push)
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "Docs-only change — Docker build not required"

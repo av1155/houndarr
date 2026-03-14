@@ -141,9 +141,25 @@ The dev server will be available at `http://localhost:8877`.
 See [CONTRIBUTING.md](CONTRIBUTING.md) for development workflow, coding
 standards, and quality gates.
 
-## Security
+## Security & Trust
 
-See [SECURITY.md](SECURITY.md) to report vulnerabilities responsibly.
+Houndarr is designed for self-hosters who care about what runs on their
+network:
+
+- **No telemetry, no call-home.** The only outbound connections are to your
+  configured Sonarr/Radarr instances. There are no analytics, update checks, or
+  crash reporting.
+- **API keys are encrypted at rest** using Fernet symmetric encryption
+  (AES-128-CBC + HMAC-SHA256) and are never sent back to the browser.
+- **Authentication** uses bcrypt password hashing, signed session tokens, CSRF
+  protection, and login rate limiting.
+- **The container runs as a non-root user** after PUID/PGID remapping.
+
+For a detailed, code-grounded explanation of how Houndarr handles credentials,
+network behavior, and trust boundaries, see
+[Trust & Security](docs/trust-and-security.md).
+
+To report a vulnerability, see [SECURITY.md](SECURITY.md).
 
 ## License
 

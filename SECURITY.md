@@ -10,6 +10,9 @@
 Security fixes target the latest release on `main` and the most recent
 published container image tag.
 
+For details on how Houndarr handles credentials, encryption, and network
+behavior, see [Trust & Security](docs/trust-and-security.md).
+
 ## Reporting a vulnerability
 
 Please do not open public GitHub issues for suspected vulnerabilities.

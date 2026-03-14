@@ -28,13 +28,6 @@ _ALLOWED_SCHEMES = frozenset(["http", "https"])
 
 # Loopback ranges blocked by default.  Private ranges (10/8, 172.16/12,
 # 192.168/16) are NOT blocked because Docker / LAN setups legitimately use them.
-_BLOCKED_NETWORKS: list[ipaddress.IPv4Network | ipaddress.IPv6Network] = [
-    ipaddress.IPv4Network("127.0.0.0/8"),  # IPv4 loopback
-    ipaddress.IPv6Network("::1/128"),  # IPv6 loopback
-    ipaddress.IPv4Network("169.254.0.0/16"),  # link-local / cloud metadata (e.g. 169.254.169.254)
-    ipaddress.IPv6Network("fe80::/10"),  # IPv6 link-local
-]
-
 # Hostnames that should never be used directly — operators must use container
 # names or FQDNs instead.
 _BLOCKED_HOSTNAMES: frozenset[str] = frozenset(["localhost"])
@@ -48,7 +41,7 @@ _HOSTNAME_PATTERN = re.compile(
 
 def _is_blocked_address(addr: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
     """Return whether *addr* falls into a blocked network range."""
-    return any(addr in blocked_net for blocked_net in _BLOCKED_NETWORKS)
+    return addr.is_loopback or addr.is_link_local or addr.is_unspecified
 
 
 def _resolve_hostname_ips(host: str) -> set[ipaddress.IPv4Address | ipaddress.IPv6Address]:
@@ -92,8 +85,8 @@ def validate_instance_url(url: str) -> str | None:
     - Scheme must be ``http`` or ``https``
     - Host must be present and non-empty
     - Host must not be a blocked hostname (``localhost``)
-    - If the host is a numeric IP address, it must not be in a blocked range
-      (loopback, link-local)
+    - If the host is a numeric IP address, it must not be in a blocked class
+      (loopback, link-local, unspecified)
 
     Private IP ranges (RFC-1918) are intentionally allowed so that Docker /
     LAN deployments work without restriction.

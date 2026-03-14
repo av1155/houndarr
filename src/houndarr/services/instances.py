@@ -18,6 +18,7 @@ from houndarr.config import (
     DEFAULT_CUTOFF_HOURLY_CAP,
     DEFAULT_HOURLY_CAP,
     DEFAULT_SLEEP_INTERVAL_MINUTES,
+    DEFAULT_SONARR_SEARCH_MODE,
     DEFAULT_UNRELEASED_DELAY_HOURS,
 )
 from houndarr.crypto import decrypt, encrypt
@@ -29,6 +30,13 @@ class InstanceType(StrEnum):
 
     sonarr = "sonarr"
     radarr = "radarr"
+
+
+class SonarrSearchMode(StrEnum):
+    """Supported Sonarr missing-search strategies."""
+
+    episode = "episode"
+    season_context = "season_context"
 
 
 @dataclass
@@ -56,6 +64,7 @@ class Instance:
     cutoff_hourly_cap: int
     created_at: str
     updated_at: str
+    sonarr_search_mode: SonarrSearchMode = SonarrSearchMode.episode
 
 
 # ---------------------------------------------------------------------------
@@ -83,6 +92,7 @@ def _row_to_instance(row: Any, master_key: bytes) -> Instance:
         cutoff_hourly_cap=row["cutoff_hourly_cap"],
         created_at=row["created_at"],
         updated_at=row["updated_at"],
+        sonarr_search_mode=SonarrSearchMode(row["sonarr_search_mode"]),
     )
 
 
@@ -108,6 +118,7 @@ async def create_instance(
     cutoff_batch_size: int = DEFAULT_CUTOFF_BATCH_SIZE,
     cutoff_cooldown_days: int = DEFAULT_CUTOFF_COOLDOWN_DAYS,
     cutoff_hourly_cap: int = DEFAULT_CUTOFF_HOURLY_CAP,
+    sonarr_search_mode: SonarrSearchMode = SonarrSearchMode(DEFAULT_SONARR_SEARCH_MODE),
 ) -> Instance:
     """Insert a new instance row and return the populated :class:`Instance`.
 
@@ -127,6 +138,7 @@ async def create_instance(
         cutoff_batch_size: Number of cutoff-unmet items per run.
         cutoff_cooldown_days: Days to wait before re-searching cutoff-unmet items.
         cutoff_hourly_cap: Maximum cutoff searches allowed per hour.
+        sonarr_search_mode: Sonarr missing-search strategy mode.
 
     Returns:
         The newly created :class:`Instance` with its database-assigned *id*.
@@ -139,8 +151,9 @@ async def create_instance(
                 name, type, url, encrypted_api_key,
                 enabled, batch_size, sleep_interval_mins,
                 hourly_cap, cooldown_days, unreleased_delay_hrs,
-                cutoff_enabled, cutoff_batch_size, cutoff_cooldown_days, cutoff_hourly_cap
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                cutoff_enabled, cutoff_batch_size, cutoff_cooldown_days, cutoff_hourly_cap,
+                sonarr_search_mode
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 name,
@@ -157,6 +170,7 @@ async def create_instance(
                 cutoff_batch_size,
                 cutoff_cooldown_days,
                 cutoff_hourly_cap,
+                sonarr_search_mode.value,
             ),
         )
         await db.commit()
@@ -221,7 +235,8 @@ async def update_instance(
             ``batch_size``, ``sleep_interval_mins``, ``hourly_cap``,
             ``cooldown_days``, ``unreleased_delay_hrs``,
             ``cutoff_enabled``, ``cutoff_batch_size``,
-            ``cutoff_cooldown_days``, ``cutoff_hourly_cap``.
+            ``cutoff_cooldown_days``, ``cutoff_hourly_cap``,
+            ``sonarr_search_mode``.
 
     Returns:
         Updated :class:`Instance`, or ``None`` if *id* does not exist.
@@ -242,6 +257,7 @@ async def update_instance(
         "cutoff_batch_size": "cutoff_batch_size",
         "cutoff_cooldown_days": "cutoff_cooldown_days",
         "cutoff_hourly_cap": "cutoff_hourly_cap",
+        "sonarr_search_mode": "sonarr_search_mode",
     }
 
     assignments: list[str] = []
@@ -254,7 +270,9 @@ async def update_instance(
         # Coerce types for SQLite
         if field_name == "api_key":
             value = encrypt(str(value), master_key)
-        elif field_name == "type" and isinstance(value, InstanceType):
+        elif field_name in ("type", "sonarr_search_mode") and isinstance(
+            value, (InstanceType, SonarrSearchMode)
+        ):
             value = value.value
         elif field_name in ("enabled", "cutoff_enabled"):
             value = int(bool(value))

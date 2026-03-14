@@ -55,6 +55,7 @@ async def test_ping_network_error_returns_false(client: SonarrClient) -> None:
 
 _EPISODE_RECORD = {
     "id": 101,
+    "seriesId": 55,
     "title": "Pilot",
     "seasonNumber": 1,
     "episodeNumber": 1,
@@ -76,6 +77,7 @@ async def test_get_missing_returns_episodes(client: SonarrClient) -> None:
     ep = results[0]
     assert isinstance(ep, MissingEpisode)
     assert ep.episode_id == 101
+    assert ep.series_id == 55
     assert ep.series_title == "My Show"
     assert ep.episode_title == "Pilot"
     assert ep.season == 1
@@ -145,6 +147,23 @@ async def test_search_alias_works(client: SonarrClient) -> None:
     )
     await client.search(202)
     assert route.called
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_search_season_posts_correct_payload(client: SonarrClient) -> None:
+    route = respx.post(f"{BASE}/api/v3/command").mock(
+        return_value=httpx.Response(201, json={"id": 3, "name": "SeasonSearch"})
+    )
+    await client.search_season(55, 2)
+    assert route.called
+    sent = route.calls[0].request
+    import json
+
+    body = json.loads(sent.content)
+    assert body["name"] == "SeasonSearch"
+    assert body["seriesId"] == 55
+    assert body["seasonNumber"] == 2
 
 
 @pytest.mark.asyncio()

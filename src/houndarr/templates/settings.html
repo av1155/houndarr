@@ -505,6 +505,21 @@
     urlInput.placeholder = isRadarr ? urlInput.dataset.radarrPlaceholder : urlInput.dataset.sonarrPlaceholder;
   }
 
+  function syncSonarrOnlyControls() {
+    const typeSelect = addInstanceModalContent.querySelector('[data-instance-field="type"]');
+    if (!typeSelect) {
+      return;
+    }
+
+    const showSonarrControls = typeSelect.value === 'sonarr';
+    addInstanceModalContent.querySelectorAll('[data-sonarr-only="true"]').forEach((el) => {
+      if (!(el instanceof HTMLElement)) {
+        return;
+      }
+      el.style.display = showSonarrControls ? '' : 'none';
+    });
+  }
+
   function addConnectionStatusClass(statusTone) {
     if (statusTone === 'success') {
       return 'text-xs text-green-400';
@@ -653,6 +668,7 @@
   addInstanceModalContent.addEventListener('change', function(event) {
     if (event.target.matches('[data-instance-field="type"]')) {
       syncAddInstancePlaceholders();
+      syncSonarrOnlyControls();
     }
     resetConnectionStateOnFieldChange(event.target);
   });
@@ -725,6 +741,7 @@
         firstInput.focus();
       }
       syncAddInstancePlaceholders();
+      syncSonarrOnlyControls();
 
       if (isConnectionGuardedFormLoaded()) {
         setConnectionState(false, neutralConnectionPromptForMode(getModalFormMode()), 'neutral');

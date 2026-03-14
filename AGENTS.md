@@ -177,6 +177,23 @@ def _login(client: TestClient) -> None:
     client.post("/login", data={"username": "admin", "password": "ValidPass1!"})
 ```
 
+### CSRF helper for route tests
+
+All mutating route tests (POST, DELETE) require a valid CSRF token after login.
+Use the helpers from `tests/conftest.py`:
+
+```python
+from tests.conftest import csrf_headers, get_csrf_token
+
+# Pass as headers kwarg to client.post/client.delete:
+resp = client.post("/settings/instances", data=form, headers=csrf_headers(client))
+resp = client.delete("/settings/instances/1", headers=csrf_headers(client))
+```
+
+The CSRF cookie (`houndarr_csrf`) is set automatically when `_login` runs.
+The `test_settings` fixture also resets `_auth._serializer` and
+`_auth._login_attempts` so auth state doesn't bleed between tests.
+
 ---
 
 ## Architecture Notes

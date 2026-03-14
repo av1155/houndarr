@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.3] - 2026-03-14
+
+### Fixed
+
+- Connection errors to `*arr` instances (e.g. during a cold-start race) now
+  log at `WARNING` instead of `ERROR`, with a clear message including the
+  instance name, URL, and retry interval (#119)
+- The supervisor retries a failed connection every 30 seconds instead of
+  waiting the full search interval, and logs an `INFO` recovery message once
+  the instance is reachable again (#119)
+- UI Logs page message for connection errors now reads `"Could not reach
+  <url>"` instead of the raw internal error string (#119)
+
+---
+
 ## [1.0.2] - 2026-03-14
 
 ### Fixed

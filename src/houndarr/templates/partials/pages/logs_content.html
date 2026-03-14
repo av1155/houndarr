@@ -148,6 +148,8 @@
       <option value="200">200</option>
       <option value="300">300</option>
       <option value="500">500</option>
+      <option value="1000">1000</option>
+      <option value="5000">All</option>
     </select>
   </div>
 
@@ -469,11 +471,9 @@
       skippedRows: 0,
       errorRows: 0,
       infoRows: 0,
-      legacyRows: 0,
       totalCycles: 0,
       searchedCycles: 0,
       skipOnlyCycles: 0,
-      unknownCycles: 0,
       cycleProgressById: new Map(),
     };
 
@@ -496,7 +496,6 @@
         summaryState.skipOnlyCycles += delta;
         return;
       }
-      summaryState.unknownCycles += delta;
     }
 
     function accountSummaryRow(row) {
@@ -521,7 +520,6 @@
       const cycleId = row.getAttribute('data-cycle-id') || '';
       const cycleProgress = row.getAttribute('data-cycle-progress') || '';
       if (!cycleId) {
-        summaryState.legacyRows += 1;
         return;
       }
 
@@ -546,8 +544,6 @@
       setSummaryValue('summary-total-cycles', summaryState.totalCycles);
       setSummaryValue('summary-searched-cycles', summaryState.searchedCycles);
       setSummaryValue('summary-skip-cycles', summaryState.skipOnlyCycles);
-      setSummaryValue('summary-unknown-cycles', summaryState.unknownCycles);
-      setSummaryValue('summary-legacy-rows', summaryState.legacyRows);
       setSummaryValue('summary-searched-rows', summaryState.searchedRows);
       setSummaryValue('summary-skipped-rows', summaryState.skippedRows);
       setSummaryValue('summary-error-rows', summaryState.errorRows);
@@ -560,11 +556,9 @@
       summaryState.skippedRows = 0;
       summaryState.errorRows = 0;
       summaryState.infoRows = 0;
-      summaryState.legacyRows = 0;
       summaryState.totalCycles = 0;
       summaryState.searchedCycles = 0;
       summaryState.skipOnlyCycles = 0;
-      summaryState.unknownCycles = 0;
       summaryState.cycleProgressById.clear();
     }
 

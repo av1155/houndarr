@@ -21,7 +21,8 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 _LOG_LIMIT_DEFAULT = 50
-_LOG_LIMIT_MAX = 500
+_LOG_LIMIT_MAX = 5000
+_LOG_LIMIT_ALL = 5000
 _LOG_LOAD_MORE_CHUNK_MAX = 100
 _SEARCH_KINDS = {"missing", "cutoff"}
 _CYCLE_TRIGGERS = {"scheduled", "run_now", "system"}
@@ -39,7 +40,6 @@ def _summarize_rows(rows: list[dict[str, Any]]) -> dict[str, int]:
     skipped_rows = 0
     error_rows = 0
     info_rows = 0
-    legacy_rows = 0
 
     cycle_outcomes: dict[str, str] = {}
     for row in rows:
@@ -55,7 +55,6 @@ def _summarize_rows(rows: list[dict[str, Any]]) -> dict[str, int]:
 
         cycle_id = row.get("cycle_id")
         if cycle_id is None:
-            legacy_rows += 1
             continue
 
         cycle_id_str = str(cycle_id)
@@ -64,13 +63,10 @@ def _summarize_rows(rows: list[dict[str, Any]]) -> dict[str, int]:
         if existing == "progress" or cycle_progress == "progress":
             cycle_outcomes[cycle_id_str] = "progress"
         elif existing is None:
-            cycle_outcomes[cycle_id_str] = cycle_progress or "unknown"
+            cycle_outcomes[cycle_id_str] = cycle_progress or "no_progress"
 
     searched_cycles = sum(1 for value in cycle_outcomes.values() if value == "progress")
     skip_only_cycles = sum(1 for value in cycle_outcomes.values() if value == "no_progress")
-    unknown_cycles = sum(
-        1 for value in cycle_outcomes.values() if value not in {"progress", "no_progress"}
-    )
 
     return {
         "total_rows": len(rows),
@@ -78,11 +74,9 @@ def _summarize_rows(rows: list[dict[str, Any]]) -> dict[str, int]:
         "skipped_rows": skipped_rows,
         "error_rows": error_rows,
         "info_rows": info_rows,
-        "legacy_rows": legacy_rows,
         "total_cycles": len(cycle_outcomes),
         "searched_cycles": searched_cycles,
         "skip_only_cycles": skip_only_cycles,
-        "unknown_cycles": unknown_cycles,
     }
 
 

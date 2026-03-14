@@ -537,6 +537,8 @@ def test_logs_page_renders(app: TestClient) -> None:
     assert b'id="filter-hide-system"' in resp.content
     assert b"checked" in resp.content
     assert b'<option value="500">500</option>' in resp.content
+    assert b'<option value="1000">1000</option>' in resp.content
+    assert b'<option value="5000">All</option>' in resp.content
     # Split-button copy dropdown must be present.
     assert b"Copy as TSV" in resp.content
     assert b"Copy as Markdown" in resp.content
@@ -800,3 +802,86 @@ async def test_logs_partial_cycle_group_headers_include_cycle_context(
     assert "trigger run_now" in resp.text
     assert "searched 1" in resp.text
     assert "skipped 1" in resp.text
+
+
+# ---------------------------------------------------------------------------
+# Row-limit extensions: 1000 and All (5000)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio()
+async def test_logs_limit_1000_accepted(seeded_log: None, async_client: object) -> None:
+    """limit=1000 must be accepted and return available rows."""
+    from httpx import AsyncClient
+
+    assert isinstance(async_client, AsyncClient)
+
+    await async_client.post(
+        "/setup",
+        data={"username": "admin", "password": "ValidPass1!", "password_confirm": "ValidPass1!"},
+    )
+    await async_client.post("/login", data={"username": "admin", "password": "ValidPass1!"})
+
+    resp = await async_client.get("/api/logs?limit=1000")
+    assert resp.status_code == 200
+    assert len(resp.json()) == 6
+
+
+@pytest.mark.asyncio()
+async def test_logs_limit_all_accepted(seeded_log: None, async_client: object) -> None:
+    """limit=5000 (the 'All' sentinel) must be accepted and return available rows."""
+    from httpx import AsyncClient
+
+    assert isinstance(async_client, AsyncClient)
+
+    await async_client.post(
+        "/setup",
+        data={"username": "admin", "password": "ValidPass1!", "password_confirm": "ValidPass1!"},
+    )
+    await async_client.post("/login", data={"username": "admin", "password": "ValidPass1!"})
+
+    resp = await async_client.get("/api/logs?limit=5000")
+    assert resp.status_code == 200
+    assert len(resp.json()) == 6
+
+
+@pytest.mark.asyncio()
+async def test_logs_limit_above_max_rejected(seeded_log: None, async_client: object) -> None:
+    """limit above _LOG_LIMIT_MAX (5000) must be rejected with 422."""
+    from httpx import AsyncClient
+
+    assert isinstance(async_client, AsyncClient)
+
+    await async_client.post(
+        "/setup",
+        data={"username": "admin", "password": "ValidPass1!", "password_confirm": "ValidPass1!"},
+    )
+    await async_client.post("/login", data={"username": "admin", "password": "ValidPass1!"})
+
+    resp = await async_client.get("/api/logs?limit=5001")
+    assert resp.status_code == 422
+
+
+def test_logs_page_renders_all_limit_options(app: TestClient) -> None:
+    """The /logs page must include the 1000 and All (5000) options in the Rows selector."""
+    _login(app)
+    resp = app.get("/logs")
+    assert resp.status_code == 200
+    assert b'<option value="1000">1000</option>' in resp.content
+    assert b'<option value="5000">All</option>' in resp.content
+
+
+def test_logs_summary_no_legacy_rows_in_html(app: TestClient) -> None:
+    """The /logs summary bar must not contain a 'legacy rows' label."""
+    _login(app)
+    resp = app.get("/logs")
+    assert resp.status_code == 200
+    assert b"legacy rows" not in resp.content
+
+
+def test_logs_summary_no_unknown_cycles_in_html(app: TestClient) -> None:
+    """The /logs summary bar must not contain an 'unknown cycles' label."""
+    _login(app)
+    resp = app.get("/logs")
+    assert resp.status_code == 200
+    assert b"unknown cycles" not in resp.content

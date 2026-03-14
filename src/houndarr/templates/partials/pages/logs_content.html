@@ -140,16 +140,6 @@
     <label for="filter-hide-system" class="text-xs text-slate-300 font-medium">Hide system rows</label>
   </div>
 
-  <div class="sm:ml-auto flex items-center pb-2">
-    <button
-      id="copy-visible-logs-btn"
-      type="button"
-      class="inline-flex items-center justify-center w-[9.5rem] px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-sm font-medium transition-colors duration-300 ease-out"
-    >
-      <span id="copy-visible-logs-label" class="transition-opacity duration-200 ease-out">Copy visible rows</span>
-    </button>
-  </div>
-
   <div id="log-spinner" class="htmx-indicator flex items-center gap-2 text-xs text-slate-400 pb-2">
     <svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
       <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
@@ -159,8 +149,17 @@
   </div>
 </form>
 
-<div id="logs-summary" class="mb-4">
-  {% include "partials/log_summary.html" %}
+<div class="flex items-center justify-between mb-4">
+  <div id="logs-summary">
+    {% include "partials/log_summary.html" %}
+  </div>
+  <button
+    id="copy-visible-logs-btn"
+    type="button"
+    class="inline-flex items-center justify-center w-[9.5rem] flex-shrink-0 px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-sm font-medium transition-colors duration-300 ease-out"
+  >
+    <span id="copy-visible-logs-label" class="transition-opacity duration-200 ease-out">Copy visible rows</span>
+  </button>
 </div>
 
 <div

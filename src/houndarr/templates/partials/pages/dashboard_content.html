@@ -105,7 +105,14 @@
 
 <div class="flex items-center justify-between mb-6">
   <h1 class="text-2xl font-bold text-white">Dashboard</h1>
-  <a href="/settings" class="text-sm text-brand-400 hover:text-brand-300 transition-colors"> + Add Instance </a>
+  <a
+    href="/settings"
+    hx-get="/settings"
+    hx-target="#app-content"
+    hx-swap="innerHTML"
+    hx-push-url="true"
+    class="text-sm text-brand-400 hover:text-brand-300 transition-colors"
+  >+ Add Instance</a>
 </div>
 
 <!-- Instance cards - polled every 15 s via HTMX -->
@@ -229,7 +236,7 @@
           </svg>
           <p class="text-lg font-medium text-slate-400">No instances configured yet</p>
           <p class="mt-2 text-sm">
-            <a href="/settings" class="text-brand-400 hover:text-brand-300">Add a Sonarr or Radarr instance</a>
+            <a href="/settings" hx-get="/settings" hx-target="#app-content" hx-swap="innerHTML" hx-push-url="true" class="text-brand-400 hover:text-brand-300">Add a Sonarr or Radarr instance</a>
             to get started.
           </p>
         </div>`;

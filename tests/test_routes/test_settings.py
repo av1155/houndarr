@@ -142,6 +142,26 @@ def test_settings_help_page_renders(app: TestClient) -> None:
     assert b"https://github.com/av1155/houndarr/blob/main/docs/settings.md" in resp.content
 
 
+def test_settings_page_hx_request_returns_content_fragment(app: TestClient) -> None:
+    """HX-Request for /settings should return shell content fragment only."""
+    _login(app)
+    resp = app.get("/settings", headers={"HX-Request": "true"})
+    assert resp.status_code == 200
+    assert b'data-page-key="settings"' in resp.content
+    assert b'id="instance-tbody"' in resp.content
+    assert b"<html" not in resp.content
+
+
+def test_settings_help_hx_request_returns_content_fragment(app: TestClient) -> None:
+    """HX-Request for /settings/help should return shell content fragment only."""
+    _login(app)
+    resp = app.get("/settings/help", headers={"HX-Request": "true"})
+    assert resp.status_code == 200
+    assert b'data-page-key="settings-help"' in resp.content
+    assert b"Instance Settings Help" in resp.content
+    assert b"<html" not in resp.content
+
+
 # ---------------------------------------------------------------------------
 # POST /settings/instances (create)
 # ---------------------------------------------------------------------------

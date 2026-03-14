@@ -540,6 +540,16 @@ def test_logs_page_renders(app: TestClient) -> None:
     assert b'<option value="500">500</option>' in resp.content
 
 
+def test_logs_page_hx_request_returns_content_fragment(app: TestClient) -> None:
+    """HX-Request for /logs should return shell content fragment only."""
+    _login(app)
+    resp = app.get("/logs", headers={"HX-Request": "true"})
+    assert resp.status_code == 200
+    assert b'data-page-key="logs"' in resp.content
+    assert b'id="log-filter-form"' in resp.content
+    assert b"<html" not in resp.content
+
+
 # ---------------------------------------------------------------------------
 # GET /api/logs/partial — HTMX partial
 # ---------------------------------------------------------------------------

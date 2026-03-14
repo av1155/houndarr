@@ -242,6 +242,36 @@ def test_login_page_includes_browser_identity_metadata(app: TestClient) -> None:
     )
 
 
+def test_authenticated_shell_includes_hx_navigation_attrs(app: TestClient) -> None:
+    """Authenticated shell should expose HTMX nav swap attributes."""
+    app.post(
+        "/setup",
+        data={"username": "admin", "password": "ValidPass1!", "password_confirm": "ValidPass1!"},
+    )
+    app.post("/login", data={"username": "admin", "password": "ValidPass1!"})
+
+    response = app.get("/")
+    assert response.status_code == 200
+    assert b'id="app-content"' in response.content
+    assert b'data-shell-nav="true"' in response.content
+    assert b'hx-target="#app-content"' in response.content
+    assert b'hx-push-url="true"' in response.content
+
+
+def test_dashboard_hx_request_returns_content_fragment(app: TestClient) -> None:
+    """HX-Request for dashboard should return content fragment, not full document."""
+    app.post(
+        "/setup",
+        data={"username": "admin", "password": "ValidPass1!", "password_confirm": "ValidPass1!"},
+    )
+    app.post("/login", data={"username": "admin", "password": "ValidPass1!"})
+
+    response = app.get("/", headers={"HX-Request": "true"})
+    assert response.status_code == 200
+    assert b'data-page-key="dashboard"' in response.content
+    assert b"<html" not in response.content
+
+
 def test_login_wrong_password(app: TestClient) -> None:
     """Wrong password should return 401."""
     app.post(

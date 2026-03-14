@@ -81,6 +81,35 @@
       transition: transform 180ms ease;
     }
 
+    .shell-nav-link {
+      transition: background-color 180ms ease, color 180ms ease;
+    }
+
+    #app-content {
+      transition: opacity 150ms ease, transform 180ms ease;
+    }
+
+    #app-content.is-shell-loading {
+      opacity: 0.45;
+      transform: translateY(3px);
+    }
+
+    #app-content.is-shell-entering {
+      animation: shell-content-enter 180ms ease-out;
+    }
+
+    @keyframes shell-content-enter {
+      from {
+        opacity: 0.65;
+        transform: translateY(4px);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
     #mobile-nav-toggle[aria-expanded="true"] .mobile-nav-icon {
       transform: rotate(90deg);
     }
@@ -93,8 +122,14 @@
 
     @media (prefers-reduced-motion: reduce) {
       .mobile-nav-menu,
-      .mobile-nav-icon {
+      .mobile-nav-icon,
+      .shell-nav-link,
+      #app-content,
+      #app-content.is-shell-loading,
+      #app-content.is-shell-entering {
         transition: none;
+        animation: none;
+        transform: none;
       }
     }
 
@@ -110,7 +145,16 @@
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
       <div class="flex items-center justify-between h-16 sm:h-14">
         <!-- Logo -->
-        <a href="/" class="-ml-1 flex items-center gap-2 text-brand-400 font-semibold text-lg leading-none hover:text-brand-300 transition-colors">
+        <a
+          href="/"
+          data-shell-nav="true"
+          data-shell-route="/"
+          hx-get="/"
+          hx-target="#app-content"
+          hx-swap="innerHTML"
+          hx-push-url="true"
+          class="-ml-1 flex items-center gap-2 text-brand-400 font-semibold text-lg leading-none hover:text-brand-300 transition-colors"
+        >
           <img
             src="/static/img/houndarr-logo-dark-ui.png"
             alt="Houndarr logo"
@@ -133,15 +177,33 @@
         <!-- Nav links -->
         <div class="hidden sm:flex items-center gap-1">
           <a href="/"
-             class="px-3 py-2 rounded-md text-sm font-medium {% if request.url.path == '/' %}bg-slate-800 text-white{% else %}text-slate-400 hover:text-white hover:bg-slate-800{% endif %} transition-colors">
+             data-shell-nav="true"
+             data-shell-route="/"
+             hx-get="/"
+             hx-target="#app-content"
+             hx-swap="innerHTML"
+             hx-push-url="true"
+             class="shell-nav-link px-3 py-2 rounded-md text-sm font-medium {% if request.url.path == '/' %}bg-slate-800 text-white{% else %}text-slate-400 hover:text-white hover:bg-slate-800{% endif %}">
             Dashboard
           </a>
           <a href="/logs"
-             class="px-3 py-2 rounded-md text-sm font-medium {% if request.url.path == '/logs' %}bg-slate-800 text-white{% else %}text-slate-400 hover:text-white hover:bg-slate-800{% endif %} transition-colors">
+             data-shell-nav="true"
+             data-shell-route="/logs"
+             hx-get="/logs"
+             hx-target="#app-content"
+             hx-swap="innerHTML"
+             hx-push-url="true"
+             class="shell-nav-link px-3 py-2 rounded-md text-sm font-medium {% if request.url.path == '/logs' %}bg-slate-800 text-white{% else %}text-slate-400 hover:text-white hover:bg-slate-800{% endif %}">
             Logs
           </a>
           <a href="/settings"
-             class="px-3 py-2 rounded-md text-sm font-medium {% if request.url.path == '/settings' %}bg-slate-800 text-white{% else %}text-slate-400 hover:text-white hover:bg-slate-800{% endif %} transition-colors">
+             data-shell-nav="true"
+             data-shell-route="/settings"
+             hx-get="/settings"
+             hx-target="#app-content"
+             hx-swap="innerHTML"
+             hx-push-url="true"
+             class="shell-nav-link px-3 py-2 rounded-md text-sm font-medium {% if request.url.path == '/settings' or request.url.path.startswith('/settings/') %}bg-slate-800 text-white{% else %}text-slate-400 hover:text-white hover:bg-slate-800{% endif %}">
             Settings
           </a>
           <form action="/logout" method="post" class="ml-2">
@@ -157,15 +219,33 @@
       <div id="mobile-nav-menu" class="sm:hidden mobile-nav-menu border-t border-slate-800 py-2">
         <div class="flex flex-col gap-1">
           <a href="/"
-             class="px-3 py-2 rounded-md text-sm font-medium {% if request.url.path == '/' %}bg-slate-800 text-white{% else %}text-slate-400 hover:text-white hover:bg-slate-800{% endif %} transition-colors">
+             data-shell-nav="true"
+             data-shell-route="/"
+             hx-get="/"
+             hx-target="#app-content"
+             hx-swap="innerHTML"
+             hx-push-url="true"
+             class="shell-nav-link px-3 py-2 rounded-md text-sm font-medium {% if request.url.path == '/' %}bg-slate-800 text-white{% else %}text-slate-400 hover:text-white hover:bg-slate-800{% endif %}">
             Dashboard
           </a>
           <a href="/logs"
-             class="px-3 py-2 rounded-md text-sm font-medium {% if request.url.path == '/logs' %}bg-slate-800 text-white{% else %}text-slate-400 hover:text-white hover:bg-slate-800{% endif %} transition-colors">
+             data-shell-nav="true"
+             data-shell-route="/logs"
+             hx-get="/logs"
+             hx-target="#app-content"
+             hx-swap="innerHTML"
+             hx-push-url="true"
+             class="shell-nav-link px-3 py-2 rounded-md text-sm font-medium {% if request.url.path == '/logs' %}bg-slate-800 text-white{% else %}text-slate-400 hover:text-white hover:bg-slate-800{% endif %}">
             Logs
           </a>
           <a href="/settings"
-             class="px-3 py-2 rounded-md text-sm font-medium {% if request.url.path == '/settings' %}bg-slate-800 text-white{% else %}text-slate-400 hover:text-white hover:bg-slate-800{% endif %} transition-colors">
+             data-shell-nav="true"
+             data-shell-route="/settings"
+             hx-get="/settings"
+             hx-target="#app-content"
+             hx-swap="innerHTML"
+             hx-push-url="true"
+             class="shell-nav-link px-3 py-2 rounded-md text-sm font-medium {% if request.url.path == '/settings' or request.url.path.startswith('/settings/') %}bg-slate-800 text-white{% else %}text-slate-400 hover:text-white hover:bg-slate-800{% endif %}">
             Settings
           </a>
           <form action="/logout" method="post">
@@ -198,7 +278,7 @@
   {% endif %}
 
   <!-- Main content -->
-  <main class="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
+  <main id="app-content" class="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
     {% block content %}{% endblock %}
   </main>
 
@@ -222,6 +302,80 @@
 
   <script>
     (function () {
+      const reducedMotionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+      const navLinks = () => Array.from(document.querySelectorAll('[data-shell-nav="true"][data-shell-route]'));
+      let shellEnterTimer = null;
+
+      function routeIsActive(route, currentPath) {
+        if (route === '/') {
+          return currentPath === '/';
+        }
+        return currentPath === route || currentPath.startsWith(`${route}/`);
+      }
+
+      function syncShellNavState() {
+        const path = window.location.pathname;
+        navLinks().forEach((link) => {
+          const route = link.getAttribute('data-shell-route') || '';
+          const isActive = routeIsActive(route, path);
+
+          link.classList.toggle('bg-slate-800', isActive);
+          link.classList.toggle('text-white', isActive);
+          link.classList.toggle('text-slate-400', !isActive);
+          link.classList.toggle('hover:text-white', !isActive);
+          link.classList.toggle('hover:bg-slate-800', !isActive);
+          if (isActive) {
+            link.setAttribute('aria-current', 'page');
+          } else {
+            link.removeAttribute('aria-current');
+          }
+        });
+      }
+
+      function syncDocumentTitleFromContent() {
+        const marker = document.querySelector('#app-content [data-page-title]');
+        if (!(marker instanceof HTMLElement)) {
+          return;
+        }
+        const pageTitle = marker.dataset.pageTitle;
+        if (pageTitle) {
+          document.title = pageTitle;
+        }
+      }
+
+      function setShellLoading(isLoading) {
+        const content = document.getElementById('app-content');
+        if (!content) {
+          return;
+        }
+        content.classList.toggle('is-shell-loading', isLoading);
+      }
+
+      function triggerShellEnter() {
+        if (reducedMotionQuery.matches) {
+          return;
+        }
+        const content = document.getElementById('app-content');
+        if (!content) {
+          return;
+        }
+        content.classList.remove('is-shell-entering');
+        void content.offsetWidth;
+        content.classList.add('is-shell-entering');
+        if (shellEnterTimer !== null) {
+          window.clearTimeout(shellEnterTimer);
+        }
+        shellEnterTimer = window.setTimeout(() => {
+          content.classList.remove('is-shell-entering');
+          shellEnterTimer = null;
+        }, 190);
+      }
+
+      function syncShellUi() {
+        syncShellNavState();
+        syncDocumentTitleFromContent();
+      }
+
       const toggle = document.getElementById('mobile-nav-toggle');
       const menu = document.getElementById('mobile-nav-menu');
 
@@ -243,6 +397,49 @@
         if (window.innerWidth >= 640) {
           setExpanded(false);
         }
+      });
+
+      syncShellUi();
+
+      document.body.addEventListener('htmx:beforeRequest', function (evt) {
+        const triggerEl = evt.detail.elt;
+        if (!(triggerEl instanceof Element)) {
+          return;
+        }
+        if (!triggerEl.closest('[data-shell-nav="true"]')) {
+          return;
+        }
+        setExpanded(false);
+        setShellLoading(true);
+      });
+
+      document.body.addEventListener('htmx:afterSwap', function (evt) {
+        if (!evt.detail.target || evt.detail.target.id !== 'app-content') {
+          return;
+        }
+        setShellLoading(false);
+        syncShellUi();
+        triggerShellEnter();
+      });
+
+      document.body.addEventListener('htmx:responseError', function () {
+        setShellLoading(false);
+      });
+
+      document.body.addEventListener('htmx:sendError', function () {
+        setShellLoading(false);
+      });
+
+      document.body.addEventListener('htmx:historyRestore', function () {
+        syncShellUi();
+        triggerShellEnter();
+      });
+
+      window.addEventListener('popstate', function () {
+        window.setTimeout(function () {
+          syncShellUi();
+          triggerShellEnter();
+        }, 0);
       });
     })();
   </script>

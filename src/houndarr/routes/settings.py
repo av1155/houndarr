@@ -49,6 +49,11 @@ _API_KEY_UNCHANGED = "__UNCHANGED__"
 _templates: Jinja2Templates | None = None
 
 
+def _is_hx_request(request: Request) -> bool:
+    """Return True when request is an HTMX request."""
+    return request.headers.get("HX-Request") == "true"
+
+
 def _get_templates() -> Jinja2Templates:
     global _templates  # noqa: PLW0603
     if _templates is None:
@@ -171,9 +176,12 @@ async def _render_settings_page(
     """Render settings page with common account and instance context."""
     instances = await list_instances(master_key=_master_key(request))
     username = await get_username()
+    template_name = (
+        "partials/pages/settings_content.html" if _is_hx_request(request) else "settings.html"
+    )
     return _render(
         request,
-        "settings.html",
+        template_name,
         status_code=status_code,
         instances=instances,
         username=username,

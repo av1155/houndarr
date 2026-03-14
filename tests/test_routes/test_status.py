@@ -12,6 +12,7 @@ from fastapi.testclient import TestClient
 
 from houndarr.clients.base import ArrClient
 from houndarr.database import get_db
+from houndarr.engine import supervisor as supervisor_module
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -34,6 +35,14 @@ def _mock_connection_ping(monkeypatch: pytest.MonkeyPatch) -> None:
         return True
 
     monkeypatch.setattr(ArrClient, "ping", _always_true)
+
+
+@pytest.fixture(autouse=True)
+def _mock_supervisor_search(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def _no_op_run_instance_search(*args: object, **kwargs: object) -> int:
+        return 0
+
+    monkeypatch.setattr(supervisor_module, "run_instance_search", _no_op_run_instance_search)
 
 
 def _login(client: TestClient) -> None:

@@ -22,8 +22,15 @@ router = APIRouter()
 
 _LOG_LIMIT_DEFAULT = 50
 _LOG_LIMIT_MAX = 500
+_LOG_LOAD_MORE_CHUNK_MAX = 100
 _SEARCH_KINDS = {"missing", "cutoff"}
 _CYCLE_TRIGGERS = {"scheduled", "run_now", "system"}
+
+
+def _compute_load_more_limit(limit: int) -> int:
+    """Return a bounded per-request chunk size for load-more pagination."""
+    bounded_limit = min(max(1, limit), _LOG_LIMIT_MAX)
+    return min(bounded_limit, _LOG_LOAD_MORE_CHUNK_MAX)
 
 
 def _summarize_rows(rows: list[dict[str, Any]]) -> dict[str, int]:
@@ -361,6 +368,7 @@ async def get_logs_partial(
     parsed_search_kind = _parse_search_kind(search_kind)
     parsed_cycle_trigger = _parse_cycle_trigger(cycle_trigger)
     parsed_hide_system = _parse_hide_system(hide_system)
+    load_more_limit = _compute_load_more_limit(limit)
     rows = await _query_logs(
         parsed_instance_id,
         parsed_action,
@@ -383,5 +391,6 @@ async def get_logs_partial(
             "hide_system": parsed_hide_system,
             "before": before,
             "limit": limit,
+            "load_more_limit": load_more_limit,
         },
     )

@@ -26,6 +26,7 @@
 
   <tr class="border-b border-slate-800 hover:bg-slate-800/40 transition-colors"
       data-log-row="true"
+      data-action="{{ row.action or '' }}"
       data-cycle-id="{{ row.cycle_id or '' }}"
       data-cycle-progress="{{ row.cycle_progress or '' }}">
     {# Timestamp #}
@@ -132,10 +133,11 @@
 
   {# Pagination: "Load older" link — only show if we got a full page #}
   {% if rows | length >= limit %}
+  {% set next_limit = load_more_limit if load_more_limit is defined else limit %}
   <tr id="pagination-row">
     <td colspan="10" class="px-3 py-3 text-center">
       <button
-        hx-get="/api/logs/partial?limit={{ limit }}{% if instance_id %}&instance_id={{ instance_id }}{% endif %}{% if action %}&action={{ action }}{% endif %}{% if search_kind %}&search_kind={{ search_kind }}{% endif %}{% if cycle_trigger %}&cycle_trigger={{ cycle_trigger }}{% endif %}&hide_system={{ 'true' if hide_system else 'false' }}&before={{ rows[-1].timestamp }}"
+        hx-get="/api/logs/partial?limit={{ next_limit }}{% if instance_id %}&instance_id={{ instance_id }}{% endif %}{% if action %}&action={{ action }}{% endif %}{% if search_kind %}&search_kind={{ search_kind }}{% endif %}{% if cycle_trigger %}&cycle_trigger={{ cycle_trigger }}{% endif %}&hide_system={{ 'true' if hide_system else 'false' }}&before={{ rows[-1].timestamp }}"
         hx-target="#pagination-row"
         hx-swap="outerHTML"
         class="text-xs text-brand-400 hover:text-brand-300 transition-colors underline-offset-2 hover:underline">

@@ -42,6 +42,53 @@ def _login(client: TestClient) -> None:
     client.post("/login", data={"username": "admin", "password": "ValidPass1!"})
 
 
+async def _insert_extra_logs(count: int, *, start_index: int = 0) -> None:
+    """Insert many deterministic rows for pagination behavior tests."""
+    rows: list[tuple[object, ...]] = []
+    for index in range(start_index, start_index + count):
+        hour = (index // 3600) % 24
+        minute = (index // 60) % 60
+        second = index % 60
+        rows.append(
+            (
+                1,
+                10000 + index,
+                "episode",
+                "missing",
+                f"cycle-bulk-{index // 5}",
+                "scheduled",
+                f"Bulk row {index}",
+                "skipped",
+                "bulk",
+                None,
+                f"2024-01-02T{hour:02d}:{minute:02d}:{second:02d}.000Z",
+            )
+        )
+
+    async with get_db() as conn:
+        await conn.executemany(
+            """
+            INSERT INTO search_log
+                (
+                    instance_id,
+                    item_id,
+                    item_type,
+                    search_kind,
+                    cycle_id,
+                    cycle_trigger,
+                    item_label,
+                    action,
+                    reason,
+                    message,
+                    timestamp
+                )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            rows,
+        )
+        await conn.commit()
+
+
 @pytest_asyncio.fixture()
 async def seeded_log(db: None) -> AsyncGenerator[None, None]:  # type: ignore[misc]
     """Seed search_log with rows across two instances for filter/pagination tests."""
@@ -591,6 +638,49 @@ async def test_logs_partial_pagination_uses_append_swap(
     assert resp.status_code == 200
     assert 'hx-target="#pagination-row"' in resp.text
     assert 'hx-swap="outerHTML"' in resp.text
+
+
+@pytest.mark.asyncio()
+async def test_logs_partial_load_more_caps_chunk_size_for_high_limits(
+    seeded_log: None, async_client: object
+) -> None:
+    """High selected row counts should paginate in bounded chunks."""
+    from httpx import AsyncClient
+
+    assert isinstance(async_client, AsyncClient)
+
+    await _insert_extra_logs(620)
+    await async_client.post(
+        "/setup",
+        data={"username": "admin", "password": "ValidPass1!", "password_confirm": "ValidPass1!"},
+    )
+    await async_client.post("/login", data={"username": "admin", "password": "ValidPass1!"})
+
+    resp = await async_client.get("/api/logs/partial?limit=500&hide_system=true")
+    assert resp.status_code == 200
+    assert "limit=100" in resp.text
+    assert 'hx-target="#pagination-row"' in resp.text
+
+
+@pytest.mark.asyncio()
+async def test_logs_partial_load_more_preserves_small_limits(
+    seeded_log: None, async_client: object
+) -> None:
+    """Smaller limits should keep their original pagination chunk size."""
+    from httpx import AsyncClient
+
+    assert isinstance(async_client, AsyncClient)
+
+    await _insert_extra_logs(80, start_index=1000)
+    await async_client.post(
+        "/setup",
+        data={"username": "admin", "password": "ValidPass1!", "password_confirm": "ValidPass1!"},
+    )
+    await async_client.post("/login", data={"username": "admin", "password": "ValidPass1!"})
+
+    resp = await async_client.get("/api/logs/partial?limit=50&hide_system=true")
+    assert resp.status_code == 200
+    assert "limit=50" in resp.text
 
 
 @pytest.mark.asyncio()

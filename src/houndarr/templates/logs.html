@@ -206,10 +206,14 @@
     }).format(parsed);
   }
 
-  function formatVisibleLogTimestamps() {
-    document.querySelectorAll('[data-log-ts]').forEach((el) => {
+  function formatVisibleLogTimestamps(root = document) {
+    root.querySelectorAll('[data-log-ts]').forEach((el) => {
+      if (el.getAttribute('data-ts-formatted') === 'true') {
+        return;
+      }
       const ts = el.getAttribute('data-log-ts') || '';
       el.textContent = formatLocalTimestamp(ts);
+      el.setAttribute('data-ts-formatted', 'true');
     });
   }
 
@@ -265,63 +269,129 @@
     el.textContent = String(value);
   }
 
-  function refreshSummaryFromVisibleRows() {
-    const rows = Array.from(document.querySelectorAll('#log-tbody tr[data-log-row="true"]'));
-    const cycleProgressById = new Map();
-    let searchedRows = 0;
-    let skippedRows = 0;
-    let errorRows = 0;
-    let infoRows = 0;
-    let legacyRows = 0;
+  const summaryState = {
+    totalRows: 0,
+    searchedRows: 0,
+    skippedRows: 0,
+    errorRows: 0,
+    infoRows: 0,
+    legacyRows: 0,
+    totalCycles: 0,
+    searchedCycles: 0,
+    skipOnlyCycles: 0,
+    unknownCycles: 0,
+    cycleProgressById: new Map(),
+  };
 
-    rows.forEach((row) => {
-      const action = row.querySelector('[data-col="action"]')?.textContent?.trim().toLowerCase() || '';
-      if (action === 'searched') {
-        searchedRows += 1;
-      } else if (action === 'skipped') {
-        skippedRows += 1;
-      } else if (action === 'error') {
-        errorRows += 1;
-      } else if (action === 'info') {
-        infoRows += 1;
-      }
-
-      const cycleId = row.getAttribute('data-cycle-id') || '';
-      const cycleProgress = row.getAttribute('data-cycle-progress') || '';
-      if (!cycleId) {
-        legacyRows += 1;
-        return;
-      }
-
-      const existing = cycleProgressById.get(cycleId) || '';
-      if (existing === 'progress' || cycleProgress === 'progress') {
-        cycleProgressById.set(cycleId, 'progress');
-      } else if (!existing) {
-        cycleProgressById.set(cycleId, cycleProgress || 'unknown');
-      }
-    });
-
-    const cycleProgressValues = Array.from(cycleProgressById.values());
-    const searchedCycles = cycleProgressValues.filter((value) => value === 'progress').length;
-    const skipOnlyCycles = cycleProgressValues.filter((value) => value === 'no_progress').length;
-    const unknownCycles = cycleProgressValues.filter(
-      (value) => value !== 'progress' && value !== 'no_progress'
-    ).length;
-
-    setSummaryValue('summary-total-rows', rows.length);
-    setSummaryValue('summary-total-cycles', cycleProgressById.size);
-    setSummaryValue('summary-searched-cycles', searchedCycles);
-    setSummaryValue('summary-skip-cycles', skipOnlyCycles);
-    setSummaryValue('summary-unknown-cycles', unknownCycles);
-    setSummaryValue('summary-legacy-rows', legacyRows);
-    setSummaryValue('summary-searched-rows', searchedRows);
-    setSummaryValue('summary-skipped-rows', skippedRows);
-    setSummaryValue('summary-error-rows', errorRows);
-    setSummaryValue('summary-info-rows', infoRows);
+  function mergeCycleProgress(current, incoming) {
+    if (current === 'progress' || incoming === 'progress') {
+      return 'progress';
+    }
+    if (current) {
+      return current;
+    }
+    return incoming || 'unknown';
   }
 
-  formatVisibleLogTimestamps();
-  refreshSummaryFromVisibleRows();
+  function adjustCycleBucket(status, delta) {
+    if (status === 'progress') {
+      summaryState.searchedCycles += delta;
+      return;
+    }
+    if (status === 'no_progress') {
+      summaryState.skipOnlyCycles += delta;
+      return;
+    }
+    summaryState.unknownCycles += delta;
+  }
+
+  function accountSummaryRow(row) {
+    if (row.getAttribute('data-summary-accounted') === 'true') {
+      return;
+    }
+
+    row.setAttribute('data-summary-accounted', 'true');
+    summaryState.totalRows += 1;
+
+    const action = (row.getAttribute('data-action') || '').toLowerCase();
+    if (action === 'searched') {
+      summaryState.searchedRows += 1;
+    } else if (action === 'skipped') {
+      summaryState.skippedRows += 1;
+    } else if (action === 'error') {
+      summaryState.errorRows += 1;
+    } else if (action === 'info') {
+      summaryState.infoRows += 1;
+    }
+
+    const cycleId = row.getAttribute('data-cycle-id') || '';
+    const cycleProgress = row.getAttribute('data-cycle-progress') || '';
+    if (!cycleId) {
+      summaryState.legacyRows += 1;
+      return;
+    }
+
+    const previous = summaryState.cycleProgressById.get(cycleId) || '';
+    const next = mergeCycleProgress(previous, cycleProgress);
+    if (!previous) {
+      summaryState.totalCycles += 1;
+      summaryState.cycleProgressById.set(cycleId, next);
+      adjustCycleBucket(next, 1);
+      return;
+    }
+
+    if (previous !== next) {
+      summaryState.cycleProgressById.set(cycleId, next);
+      adjustCycleBucket(previous, -1);
+      adjustCycleBucket(next, 1);
+    }
+  }
+
+  function renderSummaryState() {
+    setSummaryValue('summary-total-rows', summaryState.totalRows);
+    setSummaryValue('summary-total-cycles', summaryState.totalCycles);
+    setSummaryValue('summary-searched-cycles', summaryState.searchedCycles);
+    setSummaryValue('summary-skip-cycles', summaryState.skipOnlyCycles);
+    setSummaryValue('summary-unknown-cycles', summaryState.unknownCycles);
+    setSummaryValue('summary-legacy-rows', summaryState.legacyRows);
+    setSummaryValue('summary-searched-rows', summaryState.searchedRows);
+    setSummaryValue('summary-skipped-rows', summaryState.skippedRows);
+    setSummaryValue('summary-error-rows', summaryState.errorRows);
+    setSummaryValue('summary-info-rows', summaryState.infoRows);
+  }
+
+  function resetSummaryState() {
+    summaryState.totalRows = 0;
+    summaryState.searchedRows = 0;
+    summaryState.skippedRows = 0;
+    summaryState.errorRows = 0;
+    summaryState.infoRows = 0;
+    summaryState.legacyRows = 0;
+    summaryState.totalCycles = 0;
+    summaryState.searchedCycles = 0;
+    summaryState.skipOnlyCycles = 0;
+    summaryState.unknownCycles = 0;
+    summaryState.cycleProgressById.clear();
+  }
+
+  function rebuildSummaryFromVisibleRows() {
+    resetSummaryState();
+    document.querySelectorAll('#log-tbody tr[data-log-row="true"]').forEach((row) => {
+      row.removeAttribute('data-summary-accounted');
+      accountSummaryRow(row);
+    });
+    renderSummaryState();
+  }
+
+  function updateSummaryForAppendedRows(rows) {
+    rows.forEach((row) => {
+      accountSummaryRow(row);
+    });
+    renderSummaryState();
+  }
+
+  formatVisibleLogTimestamps(document);
+  rebuildSummaryFromVisibleRows();
 
   const copyBtn = document.getElementById('copy-visible-logs-btn');
   const copyBtnLabel = document.getElementById('copy-visible-logs-label');
@@ -389,9 +459,22 @@
       return;
     }
 
-    if (target.id === 'log-tbody' || target.id === 'pagination-row') {
-      formatVisibleLogTimestamps();
-      refreshSummaryFromVisibleRows();
+    if (target.id === 'log-tbody') {
+      formatVisibleLogTimestamps(target);
+      rebuildSummaryFromVisibleRows();
+      return;
+    }
+
+    if (target.id === 'pagination-row') {
+      const appendedRows = Array.from(
+        document.querySelectorAll('#log-tbody tr[data-log-row="true"].htmx-added')
+      );
+      formatVisibleLogTimestamps(document);
+      if (appendedRows.length > 0) {
+        updateSummaryForAppendedRows(appendedRows);
+      } else {
+        rebuildSummaryFromVisibleRows();
+      }
     }
   });
 

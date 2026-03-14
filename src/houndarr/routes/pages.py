@@ -192,7 +192,7 @@ async def dashboard(request: Request) -> HTMLResponse:
 @router.get("/logs", response_class=HTMLResponse)
 async def logs_page(request: Request) -> HTMLResponse:
     """Search log viewer page — initial render with no filters applied."""
-    from houndarr.routes.api.logs import _query_logs, _summarize_rows
+    from houndarr.routes.api.logs import _compute_load_more_limit, _query_logs, _summarize_rows
 
     master_key: bytes = request.app.state.master_key
     instances = await list_instances(master_key=master_key)
@@ -213,6 +213,7 @@ async def logs_page(request: Request) -> HTMLResponse:
         rows=rows,
         summary=summary,
         limit=50,
+        load_more_limit=_compute_load_more_limit(50),
         selected_instance_id=None,
         selected_action=None,
         selected_search_kind=None,

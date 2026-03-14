@@ -43,8 +43,15 @@ def _render(
     status_code: int = 200,
     **kwargs: object,
 ) -> HTMLResponse:
-    """Render a Jinja2 template with common context variables."""
-    context = {"version": __version__, **kwargs}
+    """Render a Jinja2 template with common context variables.
+
+    Injects ``csrf_token`` from the CSRF cookie so templates can embed it
+    in hidden form fields for non-HTMX form submissions.
+    """
+    from houndarr.auth import CSRF_COOKIE_NAME
+
+    csrf_token = request.cookies.get(CSRF_COOKIE_NAME, "")
+    context = {"version": __version__, "csrf_token": csrf_token, **kwargs}
     return get_templates().TemplateResponse(
         request=request,
         name=template_name,

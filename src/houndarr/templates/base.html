@@ -33,6 +33,18 @@
 
   <!-- HTMX -->
   <script src="https://unpkg.com/htmx.org@2.0.4/dist/htmx.min.js" defer></script>
+  <script>
+    // Configure HTMX to send the CSRF token on every mutating request.
+    // The token is read from the readable houndarr_csrf cookie (set at login)
+    // and sent as the X-CSRF-Token header, which the server validates.
+    document.addEventListener("DOMContentLoaded", function () {
+      function getCsrfToken() {
+        var match = document.cookie.match(/(?:^|;\s*)houndarr_csrf=([^;]+)/);
+        return match ? decodeURIComponent(match[1]) : "";
+      }
+      document.body.setAttribute("hx-headers", JSON.stringify({"X-CSRF-Token": getCsrfToken()}));
+    });
+  </script>
 
   <style>
     html {

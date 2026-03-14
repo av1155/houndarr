@@ -39,6 +39,12 @@ from houndarr.services.instances import (
 
 router = APIRouter()
 
+# Sentinel value used in the edit form API key field to indicate "no change".
+# The actual key is never sent back to the browser; the form pre-fills this
+# placeholder so users know a key is already stored.  On save, if the
+# submitted value equals this sentinel, the existing encrypted key is kept.
+_API_KEY_UNCHANGED = "__UNCHANGED__"
+
 _templates: Jinja2Templates | None = None
 
 
@@ -55,7 +61,10 @@ def _render(
     status_code: int = 200,
     **ctx: object,
 ) -> HTMLResponse:
-    context = {"version": __version__, **ctx}
+    from houndarr.auth import CSRF_COOKIE_NAME
+
+    csrf_token = request.cookies.get(CSRF_COOKIE_NAME, "")
+    context = {"version": __version__, "csrf_token": csrf_token, **ctx}
     return _get_templates().TemplateResponse(
         request=request,
         name=template_name,
@@ -234,8 +243,14 @@ async def instance_test_connection(
     type: Annotated[str, Form()],  # noqa: A002
     url: Annotated[str, Form()],
     api_key: Annotated[str, Form()],
+    instance_id: Annotated[str, Form()] = "",
 ) -> HTMLResponse:
-    """Test Sonarr/Radarr connectivity and return a status snippet."""
+    """Test Sonarr/Radarr connectivity and return a status snippet.
+
+    When testing from the edit form, ``api_key`` may be the unchanged sentinel
+    value (``__UNCHANGED__``).  In that case the existing stored key is
+    retrieved from the database and used for the connection test.
+    """
     try:
         instance_type = InstanceType(type)
     except ValueError:
@@ -245,7 +260,26 @@ async def instance_test_connection(
             status_code=422,
         )
 
-    ok = await _connection_ok(instance_type, url.rstrip("/"), api_key)
+    resolved_api_key = api_key
+    if api_key == _API_KEY_UNCHANGED and instance_id:
+        try:
+            iid = int(instance_id)
+        except ValueError:
+            return _connection_status_response(
+                "Invalid instance ID for key lookup.",
+                ok=False,
+                status_code=422,
+            )
+        existing = await get_instance(iid, master_key=_master_key(request))
+        if existing is None:
+            return _connection_status_response(
+                "Instance not found.",
+                ok=False,
+                status_code=404,
+            )
+        resolved_api_key = existing.api_key
+
+    ok = await _connection_ok(instance_type, url.rstrip("/"), resolved_api_key)
     if ok:
         return _connection_status_response(
             "Connection successful.",
@@ -378,7 +412,13 @@ async def instance_update(
     sonarr_search_mode: Annotated[str, Form()] = DEFAULT_SONARR_SEARCH_MODE,
     connection_verified: Annotated[str, Form()] = "false",
 ) -> HTMLResponse:
-    """Update an existing instance and return the refreshed row partial."""
+    """Update an existing instance and return the refreshed row partial.
+
+    The ``api_key`` field may contain the unchanged sentinel value
+    (``__UNCHANGED__``) when the operator has not modified the key.  In that
+    case the existing encrypted key is preserved; otherwise the new key is
+    encrypted and stored.
+    """
     try:
         instance_type = InstanceType(type)
     except ValueError:
@@ -392,10 +432,18 @@ async def instance_update(
     if validation_error is not None:
         return _connection_guard_response(validation_error)
 
+    # Fetch the current instance early; needed for both key resolution and save
+    current = await get_instance(instance_id, master_key=_master_key(request))
+    if current is None:
+        return HTMLResponse(content="Not found", status_code=404)
+
+    # Resolve the actual API key to use (sentinel → keep existing)
+    resolved_api_key = current.api_key if api_key == _API_KEY_UNCHANGED else api_key
+
     if connection_verified != "true":
         return _connection_guard_response("Test connection successfully before saving changes.")
 
-    if not await _connection_ok(instance_type, url.rstrip("/"), api_key):
+    if not await _connection_ok(instance_type, url.rstrip("/"), resolved_api_key):
         return _connection_guard_response("Connection test failed. Re-test before saving changes.")
 
     if instance_type == InstanceType.sonarr:
@@ -406,17 +454,13 @@ async def instance_update(
     else:
         sonarr_mode = SonarrSearchMode.episode
 
-    current = await get_instance(instance_id, master_key=_master_key(request))
-    if current is None:
-        return HTMLResponse(content="Not found", status_code=404)
-
     updated = await update_instance(
         instance_id,
         master_key=_master_key(request),
         name=name,
         type=instance_type,
         url=url.rstrip("/"),
-        api_key=api_key,
+        api_key=resolved_api_key,
         enabled=current.enabled,
         batch_size=batch_size,
         sleep_interval_mins=sleep_interval_mins,

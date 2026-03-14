@@ -70,8 +70,8 @@
           <div>
             <label class="block text-xs font-medium text-slate-400 mb-1.5" for="{{ form_id }}-api-key">API Key</label>
             <input id="{{ form_id }}-api-key" name="api_key" type="password" required
-                   value="{{ instance.api_key if is_edit else '' }}"
-                   placeholder="••••••••••••••••"
+                   value="{{ '__UNCHANGED__' if is_edit else '' }}"
+                   placeholder="{{ '(stored — enter new value to change)' if is_edit else '••••••••••••••••' }}"
                    class="w-full h-11 bg-slate-900/80 border border-slate-700/80 rounded-lg px-3 text-sm text-white placeholder:text-slate-500
                           focus:outline-none focus:border-brand-400/80 focus:ring-2 focus:ring-brand-500/25" />
           </div>
@@ -182,12 +182,17 @@
       </section>
 
       <div class="border-t border-slate-800/80 pt-4 space-y-3">
+        {# Hidden field carries instance_id when editing so test-connection can resolve the stored key #}
+        {% if is_edit %}
+        <input type="hidden" name="instance_id" value="{{ instance.id }}" />
+        {% endif %}
+
         <div class="flex flex-wrap items-center gap-2 sm:gap-3">
           <button type="button"
                   id="instance-test-connection-btn"
                   data-test-connection-btn="true"
                   hx-post="/settings/instances/test-connection"
-                  hx-include="#{{ form_id }} [name='type'],#{{ form_id }} [name='url'],#{{ form_id }} [name='api_key']"
+                  hx-include="#{{ form_id }} [name='type'],#{{ form_id }} [name='url'],#{{ form_id }} [name='api_key']{% if is_edit %},#{{ form_id }} [name='instance_id']{% endif %}"
                   hx-target="#instance-connection-status"
                   hx-swap="innerHTML"
                   class="w-[10.5rem] px-4 py-2.5 rounded-lg border border-slate-700 bg-slate-800 hover:bg-slate-700 text-slate-200 text-sm font-medium transition-colors">

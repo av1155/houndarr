@@ -6,6 +6,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from houndarr.clients.base import ArrClient
+from tests.conftest import csrf_headers
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -148,21 +149,21 @@ def test_settings_help_page_renders(app: TestClient) -> None:
 
 def test_create_instance_returns_table_body(app: TestClient) -> None:
     _login(app)
-    resp = app.post("/settings/instances", data=_VALID_FORM)
+    resp = app.post("/settings/instances", data=_VALID_FORM, headers=csrf_headers(app))
     assert resp.status_code == 200
     assert b"My Sonarr" in resp.content
 
 
 def test_create_instance_sonarr_badge(app: TestClient) -> None:
     _login(app)
-    resp = app.post("/settings/instances", data=_VALID_FORM)
+    resp = app.post("/settings/instances", data=_VALID_FORM, headers=csrf_headers(app))
     assert b"Sonarr" in resp.content
 
 
 def test_create_instance_radarr(app: TestClient) -> None:
     _login(app)
     form = {**_VALID_FORM, "name": "My Radarr", "type": "radarr", "url": "http://radarr:7878"}
-    resp = app.post("/settings/instances", data=form)
+    resp = app.post("/settings/instances", data=form, headers=csrf_headers(app))
     assert resp.status_code == 200
     assert b"My Radarr" in resp.content
     assert b"Radarr" in resp.content
@@ -170,7 +171,7 @@ def test_create_instance_radarr(app: TestClient) -> None:
 
 def test_create_instance_defaults_to_enabled(app: TestClient) -> None:
     _login(app)
-    resp = app.post("/settings/instances", data=_VALID_FORM)
+    resp = app.post("/settings/instances", data=_VALID_FORM, headers=csrf_headers(app))
     assert resp.status_code == 200
     assert b"Search enabled" in resp.content
 
@@ -178,14 +179,14 @@ def test_create_instance_defaults_to_enabled(app: TestClient) -> None:
 def test_create_instance_invalid_type_returns_422(app: TestClient) -> None:
     _login(app)
     form = {**_VALID_FORM, "type": "plex"}
-    resp = app.post("/settings/instances", data=form)
+    resp = app.post("/settings/instances", data=form, headers=csrf_headers(app))
     assert resp.status_code == 422
 
 
 def test_create_instance_requires_successful_test(app: TestClient) -> None:
     _login(app)
     form = {k: v for k, v in _VALID_FORM.items() if k != "connection_verified"}
-    resp = app.post("/settings/instances", data=form)
+    resp = app.post("/settings/instances", data=form, headers=csrf_headers(app))
     assert resp.status_code == 422
     assert b"Test connection successfully before adding" in resp.content
 
@@ -193,14 +194,14 @@ def test_create_instance_requires_successful_test(app: TestClient) -> None:
 def test_create_instance_missing_name_returns_422(app: TestClient) -> None:
     _login(app)
     form = {k: v for k, v in _VALID_FORM.items() if k != "name"}
-    resp = app.post("/settings/instances", data=form)
+    resp = app.post("/settings/instances", data=form, headers=csrf_headers(app))
     assert resp.status_code == 422
 
 
 def test_create_instance_missing_api_key_returns_422(app: TestClient) -> None:
     _login(app)
     form = {k: v for k, v in _VALID_FORM.items() if k != "api_key"}
-    resp = app.post("/settings/instances", data=form)
+    resp = app.post("/settings/instances", data=form, headers=csrf_headers(app))
     assert resp.status_code == 422
 
 
@@ -211,7 +212,7 @@ def test_create_instance_missing_api_key_returns_422(app: TestClient) -> None:
 
 def test_edit_form_returns_partial(app: TestClient) -> None:
     _login(app)
-    app.post("/settings/instances", data=_VALID_FORM)
+    app.post("/settings/instances", data=_VALID_FORM, headers=csrf_headers(app))
     resp = app.get("/settings/instances/1/edit")
     assert resp.status_code == 200
     assert b"My Sonarr" in resp.content
@@ -219,6 +220,8 @@ def test_edit_form_returns_partial(app: TestClient) -> None:
     assert b"<tr" not in resp.content
     assert b'data-form-mode="edit"' in resp.content
     assert b'name="enabled"' not in resp.content
+    # API key field must not contain the real key — only the sentinel
+    assert b"__UNCHANGED__" in resp.content
 
 
 def test_edit_form_not_found(app: TestClient) -> None:
@@ -234,20 +237,31 @@ def test_edit_form_not_found(app: TestClient) -> None:
 
 def test_update_instance(app: TestClient) -> None:
     _login(app)
-    app.post("/settings/instances", data=_VALID_FORM)
+    app.post("/settings/instances", data=_VALID_FORM, headers=csrf_headers(app))
     updated_form = {**_VALID_FORM, "name": "Renamed Sonarr"}
-    resp = app.post("/settings/instances/1", data=updated_form)
+    resp = app.post("/settings/instances/1", data=updated_form, headers=csrf_headers(app))
+    assert resp.status_code == 200
+    assert b"Renamed Sonarr" in resp.content
+
+
+def test_update_instance_with_unchanged_api_key(app: TestClient) -> None:
+    """Submitting the sentinel key value should preserve the existing stored key."""
+    _login(app)
+    app.post("/settings/instances", data=_VALID_FORM, headers=csrf_headers(app))
+    # Use the sentinel value — server must keep the original key
+    sentinel_form = {**_VALID_FORM, "name": "Renamed Sonarr", "api_key": "__UNCHANGED__"}
+    resp = app.post("/settings/instances/1", data=sentinel_form, headers=csrf_headers(app))
     assert resp.status_code == 200
     assert b"Renamed Sonarr" in resp.content
 
 
 def test_update_instance_preserves_enabled_state(app: TestClient) -> None:
     _login(app)
-    app.post("/settings/instances", data=_VALID_FORM)
-    app.post("/settings/instances/1/toggle-enabled")
+    app.post("/settings/instances", data=_VALID_FORM, headers=csrf_headers(app))
+    app.post("/settings/instances/1/toggle-enabled", headers=csrf_headers(app))
 
     updated_form = {**_VALID_FORM, "name": "Still Disabled"}
-    resp = app.post("/settings/instances/1", data=updated_form)
+    resp = app.post("/settings/instances/1", data=updated_form, headers=csrf_headers(app))
 
     assert resp.status_code == 200
     assert b"Still Disabled" in resp.content
@@ -257,29 +271,29 @@ def test_update_instance_preserves_enabled_state(app: TestClient) -> None:
 
 def test_update_instance_requires_successful_test(app: TestClient) -> None:
     _login(app)
-    app.post("/settings/instances", data=_VALID_FORM)
+    app.post("/settings/instances", data=_VALID_FORM, headers=csrf_headers(app))
     updated_form = {k: v for k, v in _VALID_FORM.items() if k != "connection_verified"}
-    resp = app.post("/settings/instances/1", data=updated_form)
+    resp = app.post("/settings/instances/1", data=updated_form, headers=csrf_headers(app))
     assert resp.status_code == 422
     assert b"Test connection successfully before saving changes" in resp.content
 
 
 def test_update_instance_not_found(app: TestClient) -> None:
     _login(app)
-    resp = app.post("/settings/instances/9999", data=_VALID_FORM)
+    resp = app.post("/settings/instances/9999", data=_VALID_FORM, headers=csrf_headers(app))
     assert resp.status_code == 404
 
 
 def test_toggle_instance_enabled(app: TestClient) -> None:
     _login(app)
-    app.post("/settings/instances", data=_VALID_FORM)
+    app.post("/settings/instances", data=_VALID_FORM, headers=csrf_headers(app))
 
-    first = app.post("/settings/instances/1/toggle-enabled")
+    first = app.post("/settings/instances/1/toggle-enabled", headers=csrf_headers(app))
     assert first.status_code == 200
     assert b"Enable" in first.content
     assert b"Search disabled" in first.content
 
-    second = app.post("/settings/instances/1/toggle-enabled")
+    second = app.post("/settings/instances/1/toggle-enabled", headers=csrf_headers(app))
     assert second.status_code == 200
     assert b"Disable" in second.content
     assert b"Search enabled" in second.content
@@ -287,7 +301,7 @@ def test_toggle_instance_enabled(app: TestClient) -> None:
 
 def test_toggle_instance_not_found(app: TestClient) -> None:
     _login(app)
-    resp = app.post("/settings/instances/9999/toggle-enabled")
+    resp = app.post("/settings/instances/9999/toggle-enabled", headers=csrf_headers(app))
     assert resp.status_code == 404
 
 
@@ -298,15 +312,15 @@ def test_toggle_instance_not_found(app: TestClient) -> None:
 
 def test_delete_instance_returns_200(app: TestClient) -> None:
     _login(app)
-    app.post("/settings/instances", data=_VALID_FORM)
-    resp = app.delete("/settings/instances/1")
+    app.post("/settings/instances", data=_VALID_FORM, headers=csrf_headers(app))
+    resp = app.delete("/settings/instances/1", headers=csrf_headers(app))
     assert resp.status_code == 200
 
 
 def test_delete_instance_gone_from_settings(app: TestClient) -> None:
     _login(app)
-    app.post("/settings/instances", data=_VALID_FORM)
-    app.delete("/settings/instances/1")
+    app.post("/settings/instances", data=_VALID_FORM, headers=csrf_headers(app))
+    app.delete("/settings/instances/1", headers=csrf_headers(app))
     resp = app.get("/settings")
     assert resp.status_code == 200
     assert b"No instances configured" in resp.content
@@ -315,7 +329,7 @@ def test_delete_instance_gone_from_settings(app: TestClient) -> None:
 def test_delete_nonexistent_returns_200(app: TestClient) -> None:
     """Deleting a non-existent ID is idempotent — still 200."""
     _login(app)
-    resp = app.delete("/settings/instances/9999")
+    resp = app.delete("/settings/instances/9999", headers=csrf_headers(app))
     assert resp.status_code == 200
 
 
@@ -351,7 +365,7 @@ def test_add_form_partial_renders(app: TestClient) -> None:
 def test_create_instance_stores_sonarr_search_mode(app: TestClient) -> None:
     _login(app)
     form = {**_VALID_FORM, "sonarr_search_mode": "season_context"}
-    app.post("/settings/instances", data=form)
+    app.post("/settings/instances", data=form, headers=csrf_headers(app))
     settings_resp = app.get("/settings")
     assert settings_resp.status_code == 200
 
@@ -371,7 +385,7 @@ def test_create_radarr_forces_episode_search_mode(app: TestClient) -> None:
         "url": "http://radarr:7878",
         "sonarr_search_mode": "season_context",
     }
-    app.post("/settings/instances", data=form)
+    app.post("/settings/instances", data=form, headers=csrf_headers(app))
     edit_resp = app.get("/settings/instances/1/edit")
     assert edit_resp.status_code == 200
     assert b'value="episode"' in edit_resp.content
@@ -382,6 +396,7 @@ def test_connection_check_endpoint_success(app: TestClient) -> None:
     resp = app.post(
         "/settings/instances/test-connection",
         data={"type": "sonarr", "url": "http://sonarr:8989", "api_key": "abc"},
+        headers=csrf_headers(app),
     )
     assert resp.status_code == 200
     assert b"Connection successful" in resp.content
@@ -392,6 +407,7 @@ def test_connection_check_endpoint_invalid_type(app: TestClient) -> None:
     resp = app.post(
         "/settings/instances/test-connection",
         data={"type": "plex", "url": "http://sonarr:8989", "api_key": "abc"},
+        headers=csrf_headers(app),
     )
     assert resp.status_code == 422
     assert b"Invalid type" in resp.content
@@ -400,7 +416,7 @@ def test_connection_check_endpoint_invalid_type(app: TestClient) -> None:
 def test_create_instance_rejects_invalid_cutoff_controls(app: TestClient) -> None:
     _login(app)
     form = {**_VALID_FORM, "cutoff_batch_size": "0", "cutoff_cooldown_days": "-1"}
-    resp = app.post("/settings/instances", data=form)
+    resp = app.post("/settings/instances", data=form, headers=csrf_headers(app))
     assert resp.status_code == 422
     assert b"Cutoff batch size" in resp.content
 
@@ -414,12 +430,13 @@ def test_password_change_success(app: TestClient) -> None:
             "new_password": "BetterPass2!",
             "new_password_confirm": "BetterPass2!",
         },
+        headers=csrf_headers(app),
     )
     assert resp.status_code == 200
     assert b"Password updated successfully" in resp.content
     assert b'id="account-settings" open' in resp.content
 
-    app.post("/logout")
+    app.post("/logout", headers=csrf_headers(app))
     login_resp = app.post(
         "/login",
         data={"username": "admin", "password": "BetterPass2!"},
@@ -437,6 +454,7 @@ def test_password_change_requires_correct_current_password(app: TestClient) -> N
             "new_password": "AnotherGoodPass2!",
             "new_password_confirm": "AnotherGoodPass2!",
         },
+        headers=csrf_headers(app),
     )
     assert resp.status_code == 422
     assert b"Current password is incorrect" in resp.content
@@ -452,6 +470,7 @@ def test_password_change_requires_matching_confirmation(app: TestClient) -> None
             "new_password": "AnotherGoodPass2!",
             "new_password_confirm": "MismatchPass2!",
         },
+        headers=csrf_headers(app),
     )
     assert resp.status_code == 422
     assert b"New passwords do not match" in resp.content

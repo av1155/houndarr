@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import os
 import re
+import secrets
 import time
 from collections.abc import Callable
 from hmac import compare_digest
@@ -17,6 +18,7 @@ from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp
 
+from houndarr.config import get_settings
 from houndarr.database import get_setting, set_setting
 
 logger = logging.getLogger(__name__)
@@ -25,11 +27,15 @@ logger = logging.getLogger(__name__)
 # Constants
 # ---------------------------------------------------------------------------
 SESSION_COOKIE_NAME = "houndarr_session"
+CSRF_COOKIE_NAME = "houndarr_csrf"
 SESSION_MAX_AGE_SECONDS = 86400  # 24 hours
 BCRYPT_COST = 12
 USERNAME_MIN_LENGTH = 3
 USERNAME_MAX_LENGTH = 32
 _USERNAME_PATTERN = re.compile(r"^[a-z0-9_.-]+$")
+
+# HTTP methods that mutate state and require CSRF protection.
+_CSRF_PROTECTED_METHODS = frozenset(["POST", "PUT", "PATCH", "DELETE"])
 
 # Routes that don't require authentication
 _PUBLIC_PATHS = frozenset(
@@ -84,19 +90,45 @@ async def _get_serializer() -> URLSafeTimedSerializer:
 # ---------------------------------------------------------------------------
 
 
-async def create_session(response: Response) -> None:
-    """Create a new session and set the cookie on response."""
+async def create_session(response: Response) -> str:
+    """Create a new session, set the session cookie, and return a CSRF token.
+
+    The session cookie is ``HttpOnly`` (JS cannot read it).  A separate
+    CSRF cookie (``houndarr_csrf``) is set without ``HttpOnly`` so that
+    JavaScript / HTMX can read it and include it in request headers.
+
+    Args:
+        response: The outgoing HTTP response to attach cookies to.
+
+    Returns:
+        The CSRF token string (also stored in the CSRF cookie).
+    """
+    settings = get_settings()
     serializer = await _get_serializer()
-    payload = {"ts": int(time.time())}
+    csrf_token = secrets.token_hex(32)
+    payload = {"ts": int(time.time()), "csrf": csrf_token}
     token = serializer.dumps(payload)
+
+    cookie_kwargs: dict[str, Any] = {
+        "max_age": SESSION_MAX_AGE_SECONDS,
+        "httponly": True,
+        "samesite": "strict",
+        "secure": settings.secure_cookies,
+    }
+
+    response.set_cookie(key=SESSION_COOKIE_NAME, value=token, **cookie_kwargs)
+
+    # CSRF cookie: readable by JS/HTMX, NOT httponly
     response.set_cookie(
-        key=SESSION_COOKIE_NAME,
-        value=token,
+        key=CSRF_COOKIE_NAME,
+        value=csrf_token,
         max_age=SESSION_MAX_AGE_SECONDS,
-        httponly=True,
-        samesite="lax",
-        secure=False,  # Users set HTTPS via reverse proxy; we don't force it
+        httponly=False,
+        samesite="strict",
+        secure=settings.secure_cookies,
     )
+
+    return csrf_token
 
 
 async def validate_session(request: Request) -> bool:
@@ -112,9 +144,70 @@ async def validate_session(request: Request) -> bool:
         return False
 
 
+async def get_session_csrf_token(request: Request) -> str | None:
+    """Extract the CSRF token embedded in the signed session cookie.
+
+    Returns:
+        The CSRF token string, or ``None`` if the session is invalid/missing.
+    """
+    token = request.cookies.get(SESSION_COOKIE_NAME)
+    if not token:
+        return None
+    try:
+        serializer = await _get_serializer()
+        payload: dict[str, Any] = serializer.loads(token, max_age=SESSION_MAX_AGE_SECONDS)
+        csrf: str | None = payload.get("csrf")
+        return csrf
+    except (SignatureExpired, BadSignature):
+        return None
+
+
 def clear_session(response: Response) -> None:
-    """Delete the session cookie."""
+    """Delete the session and CSRF cookies."""
     response.delete_cookie(SESSION_COOKIE_NAME)
+    response.delete_cookie(CSRF_COOKIE_NAME)
+
+
+# ---------------------------------------------------------------------------
+# CSRF validation
+# ---------------------------------------------------------------------------
+
+
+async def validate_csrf(request: Request) -> bool:
+    """Return True if the request carries a valid CSRF token.
+
+    Accepts the token from either:
+    - ``X-CSRF-Token`` request header (HTMX sends this when configured via
+      ``hx-headers``), or
+    - ``csrf_token`` form field (plain HTML form submissions).
+
+    The token is compared against the one embedded in the signed session
+    cookie using a constant-time comparison to prevent timing attacks.
+
+    Args:
+        request: The incoming HTTP request.
+
+    Returns:
+        ``True`` if the CSRF token is present and valid; ``False`` otherwise.
+    """
+    expected = await get_session_csrf_token(request)
+    if not expected:
+        return False
+
+    # Try header first (HTMX), then form body
+    submitted = request.headers.get("X-CSRF-Token")
+    if not submitted:
+        # Form data requires us to peek at the body; HTMX always uses the header
+        try:
+            form = await request.form()
+            submitted = form.get("csrf_token")  # type: ignore[assignment]
+        except Exception:
+            return False
+
+    if not submitted:
+        return False
+
+    return compare_digest(str(submitted), expected)
 
 
 # ---------------------------------------------------------------------------
@@ -199,10 +292,30 @@ _LOGIN_WINDOW_SECONDS = 60
 
 
 def _client_ip(request: Request) -> str:
-    forwarded = request.headers.get("X-Forwarded-For")
-    if forwarded:
-        return forwarded.split(",")[0].strip()
-    return request.client.host if request.client else "unknown"
+    """Return the real client IP, honouring ``X-Forwarded-For`` only from
+    configured trusted proxies.
+
+    When ``HOUNDARR_TRUSTED_PROXIES`` is set (a comma-separated list of
+    proxy IPs), and the direct connection IP matches one of those proxies,
+    the left-most IP in ``X-Forwarded-For`` is used as the client IP.
+
+    When no trusted proxies are configured (the default), only
+    ``request.client.host`` is used, preventing header spoofing.
+
+    Args:
+        request: The incoming HTTP request.
+
+    Returns:
+        The best-effort client IP string, or ``"unknown"`` as a fallback.
+    """
+    direct_ip = request.client.host if request.client else "unknown"
+    settings = get_settings()
+    trusted = settings.trusted_proxy_set()
+    if trusted and direct_ip in trusted:
+        forwarded = request.headers.get("X-Forwarded-For")
+        if forwarded:
+            return forwarded.split(",")[0].strip()
+    return direct_ip
 
 
 def check_login_rate_limit(request: Request) -> bool:
@@ -232,12 +345,23 @@ def clear_login_attempts(request: Request) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Auth middleware
+# Auth + CSRF middleware
 # ---------------------------------------------------------------------------
 
 
 class AuthMiddleware(BaseHTTPMiddleware):
-    """Redirect unauthenticated requests to /login (or /setup if not set up)."""
+    """Enforce authentication and CSRF protection on all non-public routes.
+
+    Authentication:
+        Redirects unauthenticated requests to ``/login`` (or ``/setup`` if
+        first-run setup has not been completed).
+
+    CSRF protection:
+        All state-changing requests (POST, PUT, PATCH, DELETE) on authenticated
+        routes must carry a valid CSRF token in either the ``X-CSRF-Token``
+        header or the ``csrf_token`` form field.  The token is validated
+        against the value embedded in the signed session cookie.
+    """
 
     def __init__(self, app: ASGIApp) -> None:
         super().__init__(app)
@@ -258,5 +382,20 @@ class AuthMiddleware(BaseHTTPMiddleware):
         # Require valid session for all other routes
         if not await validate_session(request):
             return RedirectResponse(url="/login", status_code=302)
+
+        # CSRF check on state-changing methods
+        if request.method in _CSRF_PROTECTED_METHODS and not await validate_csrf(request):
+            logger.warning(
+                "CSRF validation failed for %s %s from %s",
+                request.method,
+                path,
+                _client_ip(request),
+            )
+            from fastapi.responses import HTMLResponse
+
+            return HTMLResponse(
+                content="<h1>403 Forbidden</h1><p>CSRF token invalid or missing.</p>",
+                status_code=403,
+            )
 
         return await call_next(request)

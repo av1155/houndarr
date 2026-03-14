@@ -13,6 +13,7 @@ from fastapi.testclient import TestClient
 from houndarr.clients.base import ArrClient
 from houndarr.database import get_db
 from houndarr.engine import supervisor as supervisor_module
+from tests.conftest import csrf_headers
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -140,7 +141,7 @@ def test_status_empty_when_no_instances(app: TestClient) -> None:
 def test_status_returns_correct_shape(app: TestClient) -> None:
     _login(app)
     # Create one instance via the settings UI
-    app.post("/settings/instances", data=_VALID_FORM)
+    app.post("/settings/instances", data=_VALID_FORM, headers=csrf_headers(app))
 
     resp = app.get("/api/status")
     assert resp.status_code == 200
@@ -171,10 +172,11 @@ def test_status_returns_correct_shape(app: TestClient) -> None:
 
 def test_status_returns_multiple_instances(app: TestClient) -> None:
     _login(app)
-    app.post("/settings/instances", data=_VALID_FORM)
+    app.post("/settings/instances", data=_VALID_FORM, headers=csrf_headers(app))
     app.post(
         "/settings/instances",
         data={**_VALID_FORM, "name": "My Radarr", "type": "radarr", "url": "http://radarr:7878"},
+        headers=csrf_headers(app),
     )
 
     resp = app.get("/api/status")
@@ -187,10 +189,14 @@ def test_status_returns_multiple_instances(app: TestClient) -> None:
 
 def test_status_includes_24h_outcomes_and_last_activity(app: TestClient) -> None:
     _login(app)
-    app.post("/settings/instances", data={**_VALID_FORM, "name": "Seeded Sonarr"})
+    app.post(
+        "/settings/instances",
+        data={**_VALID_FORM, "name": "Seeded Sonarr"},
+        headers=csrf_headers(app),
+    )
     created = app.get("/api/status").json()
     inst_id = int(created[0]["id"])
-    app.post(f"/settings/instances/{inst_id}/toggle-enabled")
+    app.post(f"/settings/instances/{inst_id}/toggle-enabled", headers=csrf_headers(app))
     asyncio.run(_seed_status_activity_logs(inst_id))
 
     resp = app.get("/api/status")
@@ -216,7 +222,7 @@ def test_status_includes_24h_outcomes_and_last_activity(app: TestClient) -> None
 @respx.mock
 def test_run_now_returns_202(app: TestClient) -> None:
     _login(app)
-    app.post("/settings/instances", data=_VALID_FORM)
+    app.post("/settings/instances", data=_VALID_FORM, headers=csrf_headers(app))
 
     # Get the instance id from status
     status = app.get("/api/status").json()
@@ -227,7 +233,7 @@ def test_run_now_returns_202(app: TestClient) -> None:
         return_value=httpx.Response(200, json={"records": []})
     )
 
-    resp = app.post(f"/api/instances/{inst_id}/run-now")
+    resp = app.post(f"/api/instances/{inst_id}/run-now", headers=csrf_headers(app))
     assert resp.status_code == 202
     body = resp.json()
     assert body["status"] == "accepted"
@@ -236,18 +242,18 @@ def test_run_now_returns_202(app: TestClient) -> None:
 
 def test_run_now_404_for_unknown_instance(app: TestClient) -> None:
     _login(app)
-    resp = app.post("/api/instances/9999/run-now")
+    resp = app.post("/api/instances/9999/run-now", headers=csrf_headers(app))
     assert resp.status_code == 404
 
 
 def test_run_now_409_for_disabled_instance(app: TestClient) -> None:
     _login(app)
-    app.post("/settings/instances", data=_VALID_FORM)
+    app.post("/settings/instances", data=_VALID_FORM, headers=csrf_headers(app))
 
     status = app.get("/api/status").json()
     inst_id = status[0]["id"]
 
-    app.post(f"/settings/instances/{inst_id}/toggle-enabled")
+    app.post(f"/settings/instances/{inst_id}/toggle-enabled", headers=csrf_headers(app))
 
-    resp = app.post(f"/api/instances/{inst_id}/run-now")
+    resp = app.post(f"/api/instances/{inst_id}/run-now", headers=csrf_headers(app))
     assert resp.status_code == 409

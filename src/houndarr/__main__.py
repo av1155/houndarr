@@ -43,12 +43,36 @@ from houndarr import __version__
     envvar="HOUNDARR_LOG_LEVEL",
     help="Log level for the web server.",
 )
+@click.option(
+    "--secure-cookies",
+    is_flag=True,
+    default=False,
+    envvar="HOUNDARR_SECURE_COOKIES",
+    help=(
+        "Set the Secure flag on session cookies. "
+        "Enable when serving Houndarr over HTTPS via a reverse proxy."
+    ),
+)
+@click.option(
+    "--trusted-proxies",
+    default="",
+    show_default=False,
+    envvar="HOUNDARR_TRUSTED_PROXIES",
+    help=(
+        "Comma-separated list of trusted reverse-proxy IP addresses. "
+        "When set, X-Forwarded-For is honoured for client-IP detection "
+        "(used for login rate limiting). "
+        "Example: '10.0.0.1,172.16.0.1'."
+    ),
+)
 def cli(
     data_dir: str,
     host: str,
     port: int,
     dev: bool,
     log_level: str,
+    secure_cookies: bool,
+    trusted_proxies: str,
 ) -> None:
     """Houndarr — search for missing media in Sonarr and Radarr, politely.
 
@@ -66,6 +90,8 @@ def cli(
         port=port,
         dev=dev,
         log_level=log_level.lower(),
+        secure_cookies=secure_cookies,
+        trusted_proxies=trusted_proxies,
     )
 
     # Store settings so the app factory can pick them up

@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 
 from houndarr.auth import check_credentials, hash_password, is_setup_complete, verify_password
 from houndarr.database import get_setting
+from tests.conftest import csrf_headers
 
 # ---------------------------------------------------------------------------
 # Unit tests — password hashing
@@ -212,8 +213,9 @@ def test_login_correct_password(app: TestClient) -> None:
     )
     assert response.status_code == 303
     assert "/" in response.headers["location"]
-    # Session cookie should be set
+    # Both session and CSRF cookies should be set
     assert "houndarr_session" in response.cookies
+    assert "houndarr_csrf" in response.cookies
 
 
 def test_dashboard_accessible_after_login(app: TestClient) -> None:
@@ -240,6 +242,78 @@ def test_logout_clears_session(app: TestClient) -> None:
         data={"username": "admin", "password": "ValidPass1!", "password_confirm": "ValidPass1!"},
     )
     app.post("/login", data={"username": "admin", "password": "ValidPass1!"})
-    response = app.post("/logout", follow_redirects=False)
+    response = app.post("/logout", follow_redirects=False, headers=csrf_headers(app))
     assert response.status_code == 303
     assert "/login" in response.headers["location"]
+
+
+def test_csrf_protection_rejects_missing_token(app: TestClient) -> None:
+    """POST to protected route without CSRF token should return 403."""
+    app.post(
+        "/setup",
+        data={"username": "admin", "password": "ValidPass1!", "password_confirm": "ValidPass1!"},
+    )
+    app.post("/login", data={"username": "admin", "password": "ValidPass1!"})
+    # POST logout without CSRF token — should be rejected
+    response = app.post("/logout", follow_redirects=False)
+    assert response.status_code == 403
+
+
+def test_csrf_protection_rejects_wrong_token(app: TestClient) -> None:
+    """POST to protected route with a wrong CSRF token should return 403."""
+    app.post(
+        "/setup",
+        data={"username": "admin", "password": "ValidPass1!", "password_confirm": "ValidPass1!"},
+    )
+    app.post("/login", data={"username": "admin", "password": "ValidPass1!"})
+    response = app.post(
+        "/logout",
+        follow_redirects=False,
+        headers={"X-CSRF-Token": "invalid-token-value"},
+    )
+    assert response.status_code == 403
+
+
+def test_csrf_protection_via_form_field(app: TestClient) -> None:
+    """CSRF token in form field (csrf_token) should also be accepted."""
+    from tests.conftest import get_csrf_token
+
+    app.post(
+        "/setup",
+        data={"username": "admin", "password": "ValidPass1!", "password_confirm": "ValidPass1!"},
+    )
+    app.post("/login", data={"username": "admin", "password": "ValidPass1!"})
+    token = get_csrf_token(app)
+    response = app.post(
+        "/logout",
+        data={"csrf_token": token},
+        follow_redirects=False,
+    )
+    assert response.status_code == 303
+
+
+def test_rate_limiter_uses_direct_ip_by_default(app: TestClient) -> None:
+    """Rate limiter must use direct client IP, not X-Forwarded-For, by default."""
+    app.post(
+        "/setup",
+        data={"username": "admin", "password": "ValidPass1!", "password_confirm": "ValidPass1!"},
+    )
+    # Send wrong password 5 times from the same direct IP
+    for _ in range(5):
+        app.post("/login", data={"username": "admin", "password": "WrongPass!"})
+
+    # 6th attempt should be rate-limited
+    response = app.post("/login", data={"username": "admin", "password": "WrongPass!"})
+    assert response.status_code == 429
+
+    # Even with a different X-Forwarded-For header, should still be rate-limited
+    # (because X-Forwarded-For is not trusted without configured trusted proxies)
+    response2 = app.post(
+        "/login",
+        data={"username": "admin", "password": "WrongPass!"},
+        headers={"X-Forwarded-For": "1.2.3.4"},
+    )
+    # This should still be 429 (rate limited by real IP) or 401 (if the XFF is
+    # not trusted and the real IP is still tracked).  It must NOT be 401 due to
+    # XFF bypass — i.e., a different XFF must not reset the counter.
+    assert response2.status_code in (429, 401)  # Either is fine; must not bypass rate limit

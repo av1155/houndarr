@@ -7,7 +7,7 @@ from pathlib import Path
 import aiosqlite
 import pytest
 
-from houndarr.database import get_db, get_setting, init_db, set_db_path, set_setting
+from houndarr.database import get_db, get_setting, init_db, purge_old_logs, set_db_path, set_setting
 
 
 @pytest.mark.asyncio()
@@ -261,3 +261,66 @@ async def test_set_setting_upsert(db: None) -> None:
     await set_setting("upsert_key", "second")
     value = await get_setting("upsert_key")
     assert value == "second"
+
+
+# ---------------------------------------------------------------------------
+# Log retention
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio()
+async def test_purge_old_logs_removes_stale_rows(db: None) -> None:
+    """purge_old_logs should delete rows older than the retention window."""
+    async with get_db() as conn:
+        # Insert two rows: one old (beyond retention), one recent
+        await conn.executemany(
+            "INSERT INTO search_log (instance_id, action, timestamp) VALUES (?, ?, ?)",
+            [
+                (None, "info", "2000-01-01T00:00:00.000Z"),  # very old — should be purged
+                (None, "info", "2099-01-01T00:00:00.000Z"),  # future — should be kept
+            ],
+        )
+        await conn.commit()
+
+    purged = await purge_old_logs(30)
+    assert purged == 1
+
+    async with get_db() as conn:
+        async with conn.execute("SELECT COUNT(*) FROM search_log") as cur:
+            row = await cur.fetchone()
+    assert row is not None
+    assert row[0] == 1  # only the future row remains
+
+
+@pytest.mark.asyncio()
+async def test_purge_old_logs_zero_retention_does_nothing(db: None) -> None:
+    """purge_old_logs with retention_days=0 should not delete any rows."""
+    async with get_db() as conn:
+        await conn.execute(
+            "INSERT INTO search_log (instance_id, action, timestamp) VALUES (?, ?, ?)",
+            (None, "info", "2000-01-01T00:00:00.000Z"),
+        )
+        await conn.commit()
+
+    purged = await purge_old_logs(0)
+    assert purged == 0
+
+    async with get_db() as conn:
+        async with conn.execute("SELECT COUNT(*) FROM search_log") as cur:
+            row = await cur.fetchone()
+    assert row is not None
+    assert row[0] == 1  # row remains
+
+
+@pytest.mark.asyncio()
+async def test_purge_old_logs_negative_retention_does_nothing(db: None) -> None:
+    """purge_old_logs with negative retention should be a no-op."""
+    purged = await purge_old_logs(-1)
+    assert purged == 0
+
+
+@pytest.mark.asyncio()
+async def test_purge_old_logs_empty_table_returns_zero(db: None) -> None:
+    """purge_old_logs on an empty table should return 0."""
+    purged = await purge_old_logs(30)
+    assert purged == 0

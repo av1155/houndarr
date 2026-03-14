@@ -12,9 +12,9 @@ from fastapi.staticfiles import StaticFiles
 
 from houndarr import __version__
 from houndarr.auth import AuthMiddleware
-from houndarr.config import get_settings
+from houndarr.config import DEFAULT_LOG_RETENTION_DAYS, get_settings
 from houndarr.crypto import ensure_master_key
-from houndarr.database import init_db, set_db_path
+from houndarr.database import init_db, purge_old_logs, set_db_path
 from houndarr.engine.supervisor import Supervisor
 from houndarr.services.instances import list_instances
 
@@ -37,6 +37,13 @@ async def _lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     set_db_path(str(settings.db_path))
     await init_db()
     logger.info("Database ready at %s", settings.db_path)
+
+    # Purge old search log rows to prevent unbounded growth
+    purged = await purge_old_logs(DEFAULT_LOG_RETENTION_DAYS)
+    if purged > 0:
+        logger.info(
+            "Purged %d search_log rows older than %d days", purged, DEFAULT_LOG_RETENTION_DAYS
+        )
 
     # Warn if no instances are configured yet
     instances = await list_instances(master_key=app.state.master_key)

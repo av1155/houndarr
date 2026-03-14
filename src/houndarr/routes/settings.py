@@ -36,6 +36,7 @@ from houndarr.services.instances import (
     list_instances,
     update_instance,
 )
+from houndarr.services.url_validation import validate_instance_url
 
 router = APIRouter()
 
@@ -260,6 +261,10 @@ async def instance_test_connection(
             status_code=422,
         )
 
+    url_error = validate_instance_url(url)
+    if url_error is not None:
+        return _connection_status_response(url_error, ok=False, status_code=422)
+
     resolved_api_key = api_key
     if api_key == _API_KEY_UNCHANGED and instance_id:
         try:
@@ -322,6 +327,10 @@ async def instance_create(
         instance_type = InstanceType(type)
     except ValueError:
         return _connection_guard_response("Invalid instance type.")
+
+    url_error = validate_instance_url(url)
+    if url_error is not None:
+        return _connection_guard_response(url_error)
 
     validation_error = _validate_cutoff_controls(
         cutoff_batch_size,
@@ -423,6 +432,10 @@ async def instance_update(
         instance_type = InstanceType(type)
     except ValueError:
         return _connection_guard_response("Invalid instance type.")
+
+    url_error = validate_instance_url(url)
+    if url_error is not None:
+        return _connection_guard_response(url_error)
 
     validation_error = _validate_cutoff_controls(
         cutoff_batch_size,

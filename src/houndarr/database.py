@@ -227,3 +227,33 @@ async def set_setting(key: str, value: str) -> None:
             (key, value),
         )
         await db.commit()
+
+
+# ---------------------------------------------------------------------------
+# Log retention
+# ---------------------------------------------------------------------------
+
+
+async def purge_old_logs(retention_days: int) -> int:
+    """Delete ``search_log`` rows older than *retention_days* days.
+
+    Called at startup (and optionally on a schedule) to prevent unbounded
+    log growth on long-running instances.
+
+    Args:
+        retention_days: Rows with a ``timestamp`` older than this many days
+            are deleted.  Pass ``0`` or a negative value to disable purging.
+
+    Returns:
+        Number of rows deleted (0 if retention is disabled or nothing to purge).
+    """
+    if retention_days <= 0:
+        return 0
+
+    async with get_db() as db:
+        cur = await db.execute(
+            "DELETE FROM search_log WHERE timestamp < datetime('now', ? || ' days')",
+            (f"-{retention_days}",),
+        )
+        await db.commit()
+        return cur.rowcount or 0

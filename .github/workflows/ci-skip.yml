@@ -64,3 +64,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - run: echo "Docs-only change — Docker build not required"
+
+  # ---------- Version Check (version-check.yml) ----------
+  version-check:
+    name: Version consistency
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "Docs-only change — version check not required"

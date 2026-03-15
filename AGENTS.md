@@ -63,6 +63,13 @@ Branch protection requires 7 named check runs. The main workflows use
 `paths-ignore` for `docs/**` and `*.md`, so `ci-skip.yml` provides passing
 no-op jobs with matching names when a PR touches only documentation.
 
+Additional non-required workflows:
+
+| Workflow | Trigger | Purpose |
+|----------|---------|---------|
+| version-check | PRs changing `VERSION` or `CHANGELOG.md` | Validates VERSION format, CHANGELOG consistency, allowed `###` headers, `---` separator |
+| release | `v*` tag push | Pre-flight validates VERSION == tag and CHANGELOG entry, then creates GitHub Release |
+
 ---
 
 ## Code Style
@@ -272,6 +279,8 @@ GitHub Release body. Entries must be clean, consistent, and user-facing.
 
 **Allowed section headers:** `Added`, `Fixed`, `Changed`, `Removed` only.
 Do not use `Improved`, `Updated`, `Refactored`, `Internal`, or any other heading.
+Level-4 subheadings (`####`) may be used within `###` sections to group items
+in major releases with many entries (see the `1.0.0` block for an example).
 
 **Bullet rules**
 
@@ -290,9 +299,23 @@ Do not use `Improved`, `Updated`, `Refactored`, `Internal`, or any other heading
 - Each version block ends with a `---` separator line (blank line before and after)
 - Do not use `## [Unreleased]` — write entries directly under the version header
 
+### CI-enforced release validation
+
+Two layers of automated validation keep `VERSION`, `CHANGELOG.md`, and tags
+in sync:
+
+1. **PR-time** (`version-check.yml`) — runs on PRs that change `VERSION` or
+   `CHANGELOG.md`. Validates VERSION format (`X.Y.Z`), matching CHANGELOG
+   heading, non-empty block with valid `###` headers, and `---` separator.
+2. **Tag-time** (`release.yml`) — runs before creating a GitHub Release.
+   Fails if `VERSION` doesn't match the tag, the CHANGELOG heading is
+   missing, or the extracted notes are empty.
+
 ### `release.yml` workflow
 
 - Triggers on `push: tags: ["v*"]` only — **not** a required PR check
+- Pre-flight validates `VERSION` == tag and CHANGELOG entry presence before
+  any release is created
 - Extracts the `## [X.Y.Z]` block from `CHANGELOG.md` using `awk`
   (the `## [X.Y.Z]` heading line itself is stripped — the release title is
   already `vX.Y.Z`)
@@ -323,6 +346,17 @@ Do not use `Improved`, `Updated`, `Refactored`, `Internal`, or any other heading
 7. Open a scoped PR with native linking (`Closes #N`).
 8. Merge only after all required checks are green.
 9. Housekeeping after merge: sync `main`, delete branch, prune refs.
+
+### Issue title convention (required)
+
+Issue titles use the same Conventional Commits `type:` prefix as commit
+messages: `type: short imperative description` (lowercase, no period).
+
+Examples:
+- `fix: application INFO logs missing from stdout — root logger never configured`
+- `ci: automate GitHub Release creation on version tag push`
+- `chore: bump version to 1.0.3`
+- `feat: add persistent shell navigation and smooth content transitions`
 
 ### Issue label policy (required)
 

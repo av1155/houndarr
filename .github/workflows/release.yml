@@ -15,16 +15,45 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Validate VERSION and CHANGELOG before release
+        run: |
+          set -euo pipefail
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+
+          # VERSION file must match the tag
+          FILE_VERSION=$(cat VERSION | tr -d '[:space:]')
+          if [ "$FILE_VERSION" != "$TAG_VERSION" ]; then
+            echo "::error::VERSION file ($FILE_VERSION) does not match tag ($TAG_VERSION)"
+            exit 1
+          fi
+
+          # CHANGELOG.md must contain a matching version heading
+          if ! grep -qE "^## \[${TAG_VERSION}\] - [0-9]{4}-[0-9]{2}-[0-9]{2}" CHANGELOG.md; then
+            echo "::error::CHANGELOG.md has no '## [${TAG_VERSION}] - YYYY-MM-DD' entry"
+            exit 1
+          fi
+
+          echo "Validation passed: VERSION=$FILE_VERSION, CHANGELOG entry found"
+
       - name: Extract release notes from CHANGELOG.md
         id: notes
         run: |
+          set -euo pipefail
           VERSION="${GITHUB_REF_NAME#v}"
           NOTES=$(awk "/^## \[${VERSION}\]/{found=1; next} found && /^---/{exit} found{print}" CHANGELOG.md)
           # Strip leading/trailing blank lines
           NOTES=$(echo "$NOTES" | sed '/./,$!d' | sed -e :a -e '/^\n*$/{$d;N;ba}')
-          echo "notes<<EOF" >> "$GITHUB_OUTPUT"
-          echo "$NOTES" >> "$GITHUB_OUTPUT"
-          echo "EOF" >> "$GITHUB_OUTPUT"
+
+          if [ -z "$NOTES" ]; then
+            echo "::error::Extracted release notes are empty for version ${VERSION}"
+            exit 1
+          fi
+
+          {
+            echo "notes<<EOF"
+            echo "$NOTES"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Create GitHub Release
         env:

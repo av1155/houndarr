@@ -1,24 +1,44 @@
 # AGENTS.md — Houndarr
 
 Coding-agent reference for the Houndarr repository.
-Python 3.12+ / FastAPI / SQLite / HTMX self-hosted media search companion.
+This file is the primary source of truth for autonomous agents operating here.
+
+## Project Overview
+
+Houndarr is a self-hosted companion for Sonarr and Radarr that automatically
+searches for missing and cutoff-unmet media in small, rate-limited batches.
+It runs as a single Docker container alongside an existing *arr stack.
+
+**Tech stack:** Python 3.12 / FastAPI / aiosqlite (SQLite) / Jinja2 / HTMX /
+Tailwind CSS CDN. Published to GHCR at `ghcr.io/av1155/houndarr`.
+
+**Scope guard:** Houndarr is a single-purpose tool. Every change must help
+search for missing or cutoff-unmet media in a controlled, polite way.
+Do not add download-client integration, indexer management, request workflows,
+multi-user support, or media file manipulation.
 
 ---
 
-## Build & Run
+## Setup & Run
 
 ```bash
-# Setup
+# Create venv and install
 python3 -m venv .venv
 .venv/bin/pip install --upgrade pip
 .venv/bin/pip install -r requirements-dev.txt
 .venv/bin/pip install -e .
 
-# Run locally (dev mode)
+# Run locally (dev mode — auto-reload, API docs at /docs)
 .venv/bin/python -m houndarr --data-dir ./data-dev --dev
 ```
 
-## Quality Gates (run all before every commit)
+Dev server: `http://localhost:8877`.
+
+---
+
+## Quality Gates
+
+Run **all five** before every commit. CI enforces the same checks.
 
 ```bash
 .venv/bin/python -m ruff check src/ tests/          # lint
@@ -28,47 +48,75 @@ python3 -m venv .venv
 .venv/bin/pytest                                     # all tests
 ```
 
+---
+
 ## Running Tests
 
 ```bash
-# Full suite (303 tests, async)
+# Full suite (303 tests, async — count includes parametrised expansions)
 .venv/bin/pytest
 
-# Single test file
+# Single file
 .venv/bin/pytest tests/test_auth.py
 
 # Single test by name
 .venv/bin/pytest tests/test_auth.py::test_check_password_valid -v
 
-# Single test directory
+# Tests matching a keyword expression
+.venv/bin/pytest -k "csrf" -v
+
+# Single directory
 .venv/bin/pytest tests/test_services/
 
 # With coverage
 .venv/bin/pytest --cov=houndarr --cov-report=term-missing
 ```
 
-## CI Checks (all required checks must pass before merge)
+**Pytest config** (from `pyproject.toml`):
 
-| Workflow | Command |
-|----------|---------|
-| quality | `ruff check .` / `ruff format --check .` / `mypy src/` |
-| tests | `pytest -q --tb=short` (Python 3.12) |
-| security | `pip-audit` / `bandit -r src/ -c pyproject.toml` |
-| docker | multi-arch build (amd64/arm64); push on `v*` tags only |
-| dockerfile-lint | `hadolint Dockerfile` |
-| workflow-lint | `actionlint` |
-| ci-skip | no-op jobs matching the 7 required check names (docs-only PRs) |
+- `asyncio_mode = "auto"` — async tests run without manual event-loop setup
+- `asyncio_default_fixture_loop_scope = "function"` — each test gets its own loop
+- `addopts = "-q --tb=short"` — default quiet output with short tracebacks
 
-Branch protection requires 7 named check runs. The main workflows use
-`paths-ignore` for `docs/**` and `*.md`, so `ci-skip.yml` provides passing
-no-op jobs with matching names when a PR touches only documentation.
+---
 
-Additional non-required workflows:
+## CI Checks
+
+### Required checks (7 — branch protection enforced)
+
+| Check name | Workflow file | What it runs |
+|------------|---------------|--------------|
+| Lint (ruff) | `quality.yml` | `ruff check .` |
+| Format (ruff) | `quality.yml` | `ruff format --check .` |
+| Type check (mypy) | `quality.yml` | `mypy src/` |
+| Test (Python 3.12) | `tests.yml` | `pytest -q --tb=short` + compile check + `--help` |
+| Dependency audit (pip-audit) | `security.yml` | `pip-audit -r requirements.txt -r requirements-dev.txt` |
+| SAST (bandit) | `security.yml` | `bandit -r src/ -c pyproject.toml` |
+| Build (no push) | `docker.yml` | Multi-arch Docker build (amd64/arm64), no push |
+
+The four main workflows (`quality`, `tests`, `security`, `docker`) use
+`paths-ignore: ["docs/**", "*.md"]`. When a PR touches only those paths,
+`ci-skip.yml` provides passing no-op jobs with identical check names so
+branch protection is satisfied.
+
+### Additional workflows (not required checks)
 
 | Workflow | Trigger | Purpose |
 |----------|---------|---------|
-| version-check | PRs changing `VERSION` or `CHANGELOG.md` | Validates VERSION format, CHANGELOG consistency, allowed `###` headers, `---` separator |
-| release | `v*` tag push | Pre-flight validates VERSION == tag and CHANGELOG entry, then creates GitHub Release |
+| `version-check.yml` | PRs changing `VERSION` or `CHANGELOG.md` | Validates VERSION format, CHANGELOG heading match, allowed `###` headers, `---` separator |
+| `release.yml` | `v*` tag push | Validates VERSION == tag, extracts CHANGELOG block, creates GitHub Release |
+| `dockerfile-lint.yml` | Changes to `Dockerfile` | `hadolint Dockerfile` |
+| `workflow-lint.yml` | Changes to `.github/workflows/**` | `actionlint` via reviewdog |
+| `api-snapshot-refresh.yml` | Weekly (Monday 10:00 UTC) + manual | Fetches upstream Sonarr/Radarr OpenAPI specs, updates `docs/api/` snapshots and `tests/test_docs_api.py` hashes, opens a PR if changed |
+
+### Branch protection on `main`
+
+- 7 required status checks (strict — branch must be up to date)
+- Required PR reviews enabled (dismiss stale reviews, required conversation resolution)
+- Linear history enforced (no merge commits)
+- No force pushes, no branch deletions
+- Enforce admins enabled
+- CODEOWNERS: `@av1155` owns all files
 
 ---
 
@@ -78,10 +126,10 @@ Additional non-required workflows:
 
 - **Line length:** 100 characters
 - **Indentation:** 4 spaces (2 for YAML/JSON/TOML)
-- **Target Python:** 3.12+ (`pyproject.toml` sets `target-version = "py312"`)
-- **Formatter/linter:** Ruff — rules `E W F I B C4 UP SIM ANN S N`
+- **Target Python:** 3.12+ (`target-version = "py312"` in `pyproject.toml`)
+- **Linter/formatter:** Ruff — selected rule sets: `E W F I B C4 UP SIM ANN S N`
 
-### Imports (every file, no exceptions)
+### Imports
 
 ```python
 from __future__ import annotations          # ALWAYS first line
@@ -100,68 +148,201 @@ from houndarr.config import get_settings
 from houndarr.database import get_db
 ```
 
+- `from __future__ import annotations` is mandatory in every `.py` file that
+  contains code. Empty `__init__.py` package markers are exempt.
 - isort via Ruff; `known-first-party = ["houndarr"]`
-- `from __future__ import annotations` is mandatory in every `.py` file
 
 ### Type Annotations
 
 - **mypy strict mode** — all public functions need full signatures
-- Use modern union syntax: `str | None`, not `Optional[str]`
-- Use builtin generics: `list[str]`, `dict[str, Any]`, not `List`/`Dict`
-- Use `collections.abc.AsyncGenerator`, not `typing.AsyncGenerator`
-- Specific `# type: ignore[error-code]` when needed; never bare `# type: ignore`
-- Tests are exempt from `ANN` rules (per-file-ignores)
+- Modern union syntax: `str | None`, not `Optional[str]`
+- Builtin generics: `list[str]`, `dict[str, Any]`, not `List`/`Dict`
+- `collections.abc.AsyncGenerator`, not `typing.AsyncGenerator`
+- Specific error codes: `# type: ignore[assignment]` — never bare `# type: ignore`
+- Tests are exempt from `ANN` rules (per-file-ignores in `pyproject.toml`)
 
 ### Naming Conventions
 
 | Kind | Style | Example |
 |------|-------|---------|
-| Classes / dataclasses | PascalCase | `SonarrClient`, `MissingEpisode` |
+| Classes / dataclasses | PascalCase | `SonarrClient`, `AppSettings` |
 | Functions / methods | snake_case | `create_instance`, `run_instance_search` |
-| Private functions | `_leading_underscore` | `_write_log`, `_parse_episode` |
+| Private helpers | `_leading_underscore` | `_write_log`, `_render` |
 | Constants | UPPER_SNAKE_CASE | `SESSION_MAX_AGE_SECONDS`, `SCHEMA_VERSION` |
 | Module-level state | `_leading_underscore` | `_db_path`, `_runtime_settings` |
-| Enums | StrEnum, lowercase values | `InstanceType.sonarr` |
+| Enums | `StrEnum`, lowercase values | `InstanceType.sonarr` |
 | Type aliases | PascalCase or Literal | `ItemType = Literal["episode", "movie"]` |
 
 ### Docstrings
 
-- Module-level docstring on every file
+- Module-level docstring on every file that contains code
 - Google-style for functions: `Args:`, `Returns:`, `Raises:` sections
-- Test functions may have brief single-line docstrings
+- Test functions may use brief single-line docstrings
+
+### Logging
+
+Every module that logs uses `logger = logging.getLogger(__name__)` at module
+level. Root logger is configured in `__main__.py` via `logging.basicConfig()`.
+No alternative logging libraries (structlog, loguru) are used.
 
 ### Error Handling
 
-- Background tasks: broad `except Exception` with `# noqa: BLE001`, log + continue
-- HTTP clients: `response.raise_for_status()` — callers handle `httpx.HTTPError`
-- `asyncio.CancelledError`: always catch and re-raise
-- Auth helpers: catch-all returns `False` (never leaks info)
+- **Background tasks:** `except asyncio.CancelledError: raise` first, then
+  broad `except Exception` with `# noqa: BLE001` — log + continue/retry
+- **HTTP clients:** `response.raise_for_status()` in `_get()`/`_post()`;
+  callers catch `httpx.HTTPError` or `httpx.TransportError`
+- **Auth helpers:** catch-all returns `False` (never leaks info)
+- **Routes:** return re-rendered templates with `status_code=422` for
+  validation errors; use `HTTPException` in API routes
 
-### Known noqa / nosec Suppressions
+### Known `noqa` / `nosec` Suppressions
 
 | Code | Reason |
 |------|--------|
-| `SIM117` | Nested `async with` required by aiosqlite |
-| `S104` / `B104` | Intentional bind to `0.0.0.0` for self-hosted server |
-| `S101` / `B101` | Asserts used in non-test code (post-insert sanity) |
+| `SIM117` | Nested `async with` required by aiosqlite pattern |
+| `S104` | Intentional bind to `0.0.0.0` for self-hosted server |
 | `B008` | FastAPI `Depends()` in function defaults |
-| `S608` / `B608` | Dynamic SQL with explicit column allowlist |
-| `BLE001` | Broad exception in background loops |
-| `PLW0603` | Module-level global reassignment (settings/db singletons) |
+| `S608` + `nosec B608` | Dynamic SQL with explicit column allowlist (3 files) |
+| `BLE001` | Broad exception in background loops (always with logging) |
+| `SLF001` | Test fixtures accessing private module state for reset |
+| `PLW0603` | Module-level global reassignment (singletons) — note: the `PLW` rule family is not currently selected in ruff config, so these comments are defensive/inert |
+
+---
+
+## Architecture
+
+### Source layout
+
+```
+src/houndarr/
+  __main__.py          # CLI entry point (Click), logging setup, uvicorn.run
+  app.py               # create_app(), lifespan, middleware registration
+  auth.py              # AuthMiddleware, bcrypt, CSRF, rate limiter
+  config.py            # AppSettings dataclass, get_settings() singleton
+  crypto.py            # Fernet encrypt/decrypt, master key management
+  database.py          # get_db() context manager, schema migrations
+  clients/             # httpx-based Sonarr/Radarr API clients
+    base.py            # BaseClient with _get()/_post() + raise_for_status()
+    sonarr.py          # SonarrClient (episode/season search)
+    radarr.py          # RadarrClient (movie search)
+  engine/
+    search_loop.py     # run_instance_search() — one search pass
+    supervisor.py      # Supervisor — one asyncio.Task per enabled instance
+  routes/
+    pages.py           # Dashboard, Logs, Settings page routes
+    settings.py        # Settings CRUD (instance add/edit/delete/toggle)
+    health.py          # GET /api/health (Docker HEALTHCHECK)
+    api/
+      logs.py          # GET /api/logs (JSON, with cursor-based pagination)
+      status.py        # GET /api/status (JSON, dashboard polling)
+  services/
+    instances.py       # Instance CRUD, InstanceType StrEnum
+    cooldown.py        # Per-item search cooldown tracking
+    url_validation.py  # SSRF guard for instance URLs
+```
+
+### Key patterns
+
+- **Database:** SQLite via aiosqlite; schema version 4; `get_db()` async
+  context manager opens a fresh connection per call (WAL mode, FKs enabled)
+- **Config:** `AppSettings` is a plain dataclass (not Pydantic); `get_settings()`
+  is a lazy singleton
+- **Encryption:** Master key in `request.app.state.master_key`; passed
+  explicitly to service functions as `master_key=` kwarg — never imported globally
+- **Auth:** Global `AuthMiddleware` (Starlette `BaseHTTPMiddleware`) handles
+  session validation and CSRF enforcement; no per-route auth decorators
+- **HTMX:** SPA-like shell navigation — nav links use `hx-target="#app-content"`
+  with `hx-swap="innerHTML"` and `hx-push-url="true"`. Routes check
+  `_is_hx_request(request)` and return either partial or full template.
+  Templates are lazily initialised via a module-level singleton
+- **Supervisor:** One `asyncio.Task` per enabled instance; 10s shutdown timeout
+- **search_log:** Every search attempt writes a row with action
+  `searched`/`skipped`/`error`/`info`
+
+### Database schema (SQLite, schema version 4)
+
+```sql
+settings    (key TEXT PK, value TEXT NOT NULL)
+
+instances   (id INTEGER PK AUTOINCREMENT,
+             name, type CHECK IN ('sonarr','radarr'), url,
+             encrypted_api_key DEFAULT '',
+             batch_size DEFAULT 2, sleep_interval_mins DEFAULT 30,
+             hourly_cap DEFAULT 4, cooldown_days DEFAULT 14,
+             unreleased_delay_hrs DEFAULT 36,
+             cutoff_enabled DEFAULT 0, cutoff_batch_size DEFAULT 1,
+             cutoff_cooldown_days DEFAULT 21, cutoff_hourly_cap DEFAULT 1,
+             sonarr_search_mode DEFAULT 'episode'
+                 CHECK IN ('episode','season_context'),
+             enabled DEFAULT 1, created_at, updated_at)
+
+cooldowns   (id INTEGER PK AUTOINCREMENT,
+             instance_id FK→instances ON DELETE CASCADE,
+             item_id, item_type CHECK IN ('episode','movie'),
+             searched_at,
+             UNIQUE(instance_id, item_id, item_type))
+             -- index: idx_cooldowns_lookup(instance_id, item_type, searched_at)
+
+search_log  (id INTEGER PK AUTOINCREMENT,
+             instance_id FK→instances ON DELETE SET NULL,
+             item_id, item_type CHECK IN ('episode','movie'),
+             search_kind, cycle_id,
+             cycle_trigger CHECK IN ('scheduled','run_now','system'),
+             item_label,
+             action NOT NULL CHECK IN ('searched','skipped','error','info'),
+             reason, message, timestamp)
+             -- indexes: idx_search_log_timestamp(timestamp DESC)
+             --          idx_search_log_instance(instance_id, timestamp DESC)
+             --          idx_search_log_cycle(cycle_id, timestamp DESC)
+```
+
+Full DDL is in `src/houndarr/database.py`. Migrations are incremental
+(`_migrate_to_v2` through `_migrate_to_v4`); bump `SCHEMA_VERSION` when
+adding new ones.
+
+### Sonarr / Radarr API reference (local)
+
+Full upstream OpenAPI specs are vendored locally and kept current:
+
+- `docs/api/sonarr_openapi.json` — Sonarr v3 API (OpenAPI 3.0.1)
+- `docs/api/radarr_openapi.json` — Radarr v3 API (OpenAPI 3.0.4)
+
+**Use these as the source of truth** when modifying `clients/sonarr.py` or
+`clients/radarr.py`. They document every endpoint, parameter, request body,
+and response schema. See `docs/api-context.md` for usage guidelines.
+
+**Freshness:** `api-snapshot-refresh.yml` auto-fetches upstream specs weekly
+(Monday 10:00 UTC) and opens a PR if changed — local specs are never more
+than one week stale.
 
 ---
 
 ## Testing Patterns
 
 - **Framework:** pytest + pytest-asyncio (`asyncio_mode = "auto"`)
-- **Async tests:** decorated with `@pytest.mark.asyncio()` (with parens), return `-> None`
+- **Async tests:** use `@pytest.mark.asyncio()` (with parens), return `-> None`
 - **HTTP mocking:** `respx` for httpx calls — use `@respx.mock` decorator
-- **App testing:** `TestClient` (sync) or `AsyncClient` via `ASGITransport` (async)
-- **Fixtures hierarchy:** `tmp_data_dir` -> `db` -> `test_settings` -> `app`/`async_client`
+- **App testing:** `TestClient` (sync) or `AsyncClient` via `ASGITransport`
 
-### FK constraint pattern (cooldown / engine tests)
+### Fixture dependency graph
 
-Tests touching `cooldowns` or `search_log` must seed the `instances` table first:
+```
+tmp_data_dir          (temp directory, no deps)
+  ├── db              (init SQLite, depends on tmp_data_dir)
+  └── test_settings   (AppSettings + auth state reset, depends on tmp_data_dir)
+        ├── app       (TestClient, depends on test_settings)
+        └── async_client (AsyncClient, depends on test_settings)
+```
+
+`db` and `test_settings` are **siblings** — both depend on `tmp_data_dir`
+independently. Tests that need a database AND the app must request both
+`db` and `app` (or use fixtures that depend on `db`).
+
+### FK constraint pattern
+
+Tests touching `cooldowns` or `search_log` must seed the `instances` table
+first via the `seeded_instances` fixture (defined locally in
+`tests/test_engine/test_search_loop.py` and `tests/test_services/test_cooldown.py`):
 
 ```python
 @pytest_asyncio.fixture()
@@ -176,10 +357,12 @@ async def seeded_instances(db: None) -> AsyncGenerator[None, None]:
     yield
 ```
 
-Use `seeded_instances` (not bare `db`) as the fixture dependency in those tests.
 Engine tests also set `encrypted_api_key` to a valid Fernet-encrypted value.
 
 ### Login helper for route tests
+
+A `_login()` helper is defined locally in each route test file that needs it
+(`test_logs.py`, `test_settings.py`, `test_status.py`):
 
 ```python
 def _login(client: TestClient) -> None:
@@ -189,78 +372,119 @@ def _login(client: TestClient) -> None:
 
 ### CSRF helper for route tests
 
-Mutating authenticated route tests generally require a valid CSRF token after login.
-Current intentional exemptions:
-- `POST /logout` (allows stale legacy sessions to be cleared safely)
-- Public auth/setup routes (`/login`, `/setup`)
-Use the helpers from `tests/conftest.py`:
+Mutating authenticated routes require a valid CSRF token. Use the helpers from
+`tests/conftest.py`:
 
 ```python
 from tests.conftest import csrf_headers, get_csrf_token
 
-# Pass as headers kwarg to client.post/client.delete:
 resp = client.post("/settings/instances", data=form, headers=csrf_headers(client))
 resp = client.delete("/settings/instances/1", headers=csrf_headers(client))
 ```
 
-The CSRF cookie (`houndarr_csrf`) is set automatically when `_login` runs.
-The `test_settings` fixture also resets `_auth._serializer` and
-`_auth._login_attempts` so auth state doesn't bleed between tests.
+Current CSRF exemptions: `POST /logout`, `/login`, `/setup`.
+
+The `test_settings` fixture resets `_auth._serializer` and
+`_auth._login_attempts` so auth state does not bleed between tests.
 
 ---
 
-## Architecture Notes
+## Git & GitHub Workflow
 
-- **Encryption key:** `request.app.state.master_key` — pass explicitly to services
-- **HTMX partials:** `hx-swap="outerHTML"` / `"innerHTML"`, no full-page reloads
-- **Supervisor:** one `asyncio.Task` per enabled instance; 10s shutdown timeout
-- **search_log:** every search attempt writes a row (`searched`/`skipped`/`error`/`info`)
-- **URL validation:** instance URL checks resolve hostnames and block localhost/loopback/link-local/unspecified targets
-- **Log retention:** startup purge plus periodic uptime purge of stale `search_log` rows
-- **Database:** SQLite via `aiosqlite`; schema version 4; `get_db()` context manager
+### Issue-first (required)
 
-## Versioning & Releases
+Every PR must link a pre-existing issue (`Closes #N`). Create the issue
+first, then the branch and PR.
+
+**Issue title convention:**
+`type: short imperative description` (lowercase, no period)
+
+Examples:
+- `fix: application INFO logs missing from stdout`
+- `feat: add persistent shell navigation`
+- `chore: bump version to 1.0.4`
+
+**Issue label policy — every issue must have:**
+- Exactly one `type:*` label (`type: bug`, `type: feature`, `type: docs`,
+  `type: chore`, `type: test`, `type: ci`, `type: security`)
+- Exactly one `priority:*` label (`priority: high`, `priority: medium`,
+  `priority: low`)
+- At most one `phase:*` label (for roadmap work only)
+
+Issue templates auto-apply `type:` and `priority: medium` labels.
+
+### Branch naming
+
+`type/short-slug` from `main`:
+
+```
+feat/multi-format-copy     fix/clipboard-http-fallback
+chore/bump-1.0.4           ci/release-validation
+docs/trust-security
+```
+
+### Commits
+
+Conventional Commits format: `type(scope): description`
+
+Allowed types: `feat`, `fix`, `docs`, `refactor`, `perf`, `test`, `build`,
+`ci`, `chore`, `revert`.
+
+### Pull requests
+
+- **Squash-merge only.** Linear history is enforced by branch protection.
+  All three merge strategies are enabled in repo settings, but only squash-merge
+  preserves the required linear history.
+- All 7 required CI checks must pass before merge.
+- Use the PR template: fill in `Closes #N`, check the checklist.
+- Branches auto-delete on merge (`deleteBranchOnMerge: true`).
+
+> **Observed practice note:** Issues consistently carry `type:*` and
+> `priority:*` labels, but PRs have no labels applied. The PR template
+> checklist verifies that the *linked issue* has labels, not the PR itself.
+
+### Restrictions on `main`
+
+- No direct pushes (branch protection + enforce admins)
+- No force pushes
+- No branch deletion
+- All changes go through PRs with passing required checks
+
+---
+
+## Versioning, Changelog & Releases
 
 ### Source of truth
 
-`VERSION` and `CHANGELOG.md` are the single source of truth for the current
-version. Everything else (GitHub Releases, Docker image tags, GHCR `latest`)
-is derived from them automatically.
+`VERSION` and `CHANGELOG.md` are the single source of truth. Everything else
+(GitHub Releases, Docker tags, GHCR `latest`) is derived automatically.
 
-- `VERSION` — one line, plain `X.Y.Z` (no `v` prefix, no trailing newline noise)
-- `CHANGELOG.md` — Keep a Changelog format; the `## [X.Y.Z] - YYYY-MM-DD`
-  block is extracted verbatim as the GitHub Release body
+- `VERSION` — one line, plain `X.Y.Z` (no `v` prefix)
+- `CHANGELOG.md` — Keep a Changelog format
 
-### Release workflow (end-to-end)
+### Release workflow
 
 ```
-1. Fix / feature PR merged to main
-2. Open a separate chore: bump version PR
-   - Bump VERSION to X.Y.Z
-   - Add ## [X.Y.Z] - YYYY-MM-DD entry to CHANGELOG.md
-   - No other changes in this PR
+1. Fix/feature PR merged to main
+2. Open a separate "chore: bump version to X.Y.Z" PR
+   - Change only VERSION and CHANGELOG.md
+   - No other files
 3. Merge the version bump PR
-4. git tag vX.Y.Z && git push origin vX.Y.Z
-   → docker.yml  fires — builds + pushes image to GHCR as vX.Y.Z + latest
-   → release.yml fires — reads CHANGELOG.md, creates GitHub Release automatically
+4. Tag and push:  git tag vX.Y.Z && git push origin vX.Y.Z
+   → docker.yml  builds + pushes to GHCR as vX.Y.Z + latest
+   → release.yml extracts CHANGELOG block, creates GitHub Release
 ```
 
-Never push a `v*` tag without a matching `## [X.Y.Z]` block in `CHANGELOG.md`
-— the `release.yml` workflow depends on it.
+Never push a `v*` tag without a matching `## [X.Y.Z]` block in `CHANGELOG.md`.
 
 ### CHANGELOG entry rules
-
-These rules exist because the `## [X.Y.Z]` block is used verbatim as the
-GitHub Release body. Entries must be clean, consistent, and user-facing.
-
-**Structure**
 
 ```markdown
 ## [X.Y.Z] - YYYY-MM-DD
 
 ### Fixed
 
-- One sentence. User-facing impact first. PR/issue ref at the end (#N).
+- One sentence. User-facing impact first. Issue/PR ref at end (#N).
 
 ### Added
 
@@ -277,118 +501,88 @@ GitHub Release body. Entries must be clean, consistent, and user-facing.
 ---
 ```
 
-**Allowed section headers:** `Added`, `Fixed`, `Changed`, `Removed` only.
-Do not use `Improved`, `Updated`, `Refactored`, `Internal`, or any other heading.
-Level-4 subheadings (`####`) may be used within `###` sections to group items
-in major releases with many entries (see the `1.0.0` block for an example).
+**Allowed `###` headers:** `Added`, `Fixed`, `Changed`, `Removed` only.
+Level-4 `####` subheadings may group items within `###` sections for major
+releases.
 
-**Bullet rules**
+**Bullet rules:**
+- One sentence per bullet — no multi-line prose
+- Lead with user-facing impact, not implementation details
+- End with `(#N)` issue/PR reference
+- Use backticks for identifiers, file names, env vars, UI elements
+- Be specific: `Connection errors now log at WARNING with instance name`
+  not `Improved error handling`
 
-- One sentence per bullet — no multi-line prose paragraphs
-- Lead with user-facing impact: what the user sees/gets, not what the code does
-- End with the issue/PR reference in parentheses: `(#N)`
-- Use backticks for identifiers, file names, env vars, and UI element names
-- Do not describe internal implementation details (variable renames, loop
-  refactors, etc.) unless they affect observable behaviour
-- Be specific — avoid vague openers like "Improve X" or "Update Y":
-  - Bad:  `- Improved connection error handling (#119)`
-  - Good: `- Connection errors now log at WARNING with instance name and URL; supervisor retries every 30 s instead of waiting the full interval (#119)`
+**Separators:** Each version block ends with a `---` line (blank line before
+and after). Do not use `## [Unreleased]`.
 
-**Separators**
+### CI-enforced validation
 
-- Each version block ends with a `---` separator line (blank line before and after)
-- Do not use `## [Unreleased]` — write entries directly under the version header
+1. **PR-time** (`version-check.yml`): Runs on PRs touching `VERSION` or
+   `CHANGELOG.md`. Validates format, heading match, valid `###` headers,
+   `---` separator.
+2. **Tag-time** (`release.yml`): Validates VERSION == tag, extracts release
+   notes via `awk`, creates GitHub Release using `--notes-file` (avoids
+   backtick shell substitution).
 
-### CI-enforced release validation
+---
 
-Two layers of automated validation keep `VERSION`, `CHANGELOG.md`, and tags
-in sync:
+## Agent Operating Rules
 
-1. **PR-time** (`version-check.yml`) — runs on PRs that change `VERSION` or
-   `CHANGELOG.md`. Validates VERSION format (`X.Y.Z`), matching CHANGELOG
-   heading, non-empty block with valid `###` headers, and `---` separator.
-2. **Tag-time** (`release.yml`) — runs before creating a GitHub Release.
-   Fails if `VERSION` doesn't match the tag, the CHANGELOG heading is
-   missing, or the extracted notes are empty.
-
-### `release.yml` workflow
-
-- Triggers on `push: tags: ["v*"]` only — **not** a required PR check
-- Pre-flight validates `VERSION` == tag and CHANGELOG entry presence before
-  any release is created
-- Extracts the `## [X.Y.Z]` block from `CHANGELOG.md` using `awk`
-  (the `## [X.Y.Z]` heading line itself is stripped — the release title is
-  already `vX.Y.Z`)
-- Writes extracted notes to a temp file and passes `--notes-file` to
-  `gh release create` — this is intentional: passing notes via `--notes`
-  would cause shell command substitution of any backticks in the markdown,
-  silently stripping inline code formatting
-- The notes content flows through a GitHub Actions `env:` variable
-  (`RELEASE_NOTES`), not inline `${{ }}` interpolation in the `run:` script,
-  so backticks and other shell metacharacters survive intact
-- Requires `permissions: contents: write`
-
-## Workflow
-
-- Branch naming: `feat/<slug>`, `fix/<slug>`, `chore/<slug>`
-- Commits: Conventional Commits (`feat:`, `fix:`, `ci:`, `chore:`, etc.)
-- PRs: squash-merge only; all required CI checks green before merge
-- If mypy CI fails with "merge ref not found": push empty commit to retrigger
-
-### Staged execution discipline (required)
+### Scope discipline
 
 1. Investigate and define a tight scope before editing code.
 2. Create a GitHub issue first with clear acceptance criteria.
-3. Apply mandatory labels on the issue before implementation starts.
-4. Create a scoped branch (`type/short-slug`) for that issue only.
-5. Implement only issue-scoped changes; avoid mixed concerns.
-6. Run all local quality gates before committing.
-7. Open a scoped PR with native linking (`Closes #N`).
-8. Merge only after all required checks are green.
-9. Housekeeping after merge: sync `main`, delete branch, prune refs.
+3. Apply mandatory labels on the issue before starting work.
+4. Create a scoped branch (`type/short-slug`) from `main`.
+5. Implement only issue-scoped changes — avoid mixed concerns.
+6. Run all five quality gates before committing.
+7. Open a scoped PR linking the issue (`Closes #N`).
+8. Merge only after all required checks pass.
 
-### Issue title convention (required)
+### What not to change casually
 
-Issue titles use the same Conventional Commits `type:` prefix as commit
-messages: `type: short imperative description` (lowercase, no period).
+- `VERSION` and `CHANGELOG.md` — only in dedicated version bump PRs
+- `pyproject.toml` tool config (ruff rules, mypy strictness, pytest settings)
+- `.github/workflows/` — changes trigger workflow-lint and may affect required checks
+- `src/houndarr/database.py` schema migrations — requires `SCHEMA_VERSION` bump
+- `tests/conftest.py` shared fixtures — changes affect all test files
+- `requirements.txt` / `requirements-dev.txt` — dependency changes require
+  `pip-audit` to pass
 
-Examples:
-- `fix: application INFO logs missing from stdout — root logger never configured`
-- `ci: automate GitHub Release creation on version tag push`
-- `chore: bump version to 1.0.3`
-- `feat: add persistent shell navigation and smooth content transitions`
+### When to add or update tests
 
-### Issue label policy (required)
+- Every behaviour change needs a corresponding test change
+- New routes need auth, CSRF, and happy-path tests at minimum
+- New service functions need unit tests covering success, error, and edge cases
+- If fixing a bug, add a regression test that fails without the fix
 
-Every issue must have:
-- Exactly one `type:*` label
-- Exactly one `priority:*` label
-- At most one `phase:*` label (required for roadmap/product delivery work)
+### When to stop and ask
 
-#### Type labels
+- Ambiguous requirements or conflicting documentation
+- Changes that would affect the release workflow or CI required checks
+- Schema migrations or database changes
+- Scope creep beyond the linked issue
+- Security-sensitive changes (auth, crypto, SSRF validation)
 
-- `type: bug` — incorrect behavior, regressions, broken UX
-- `type: feature` — user-facing capability additions
-- `type: docs` — documentation-only work
-- `type: chore` — maintenance, refactors, tooling, process
-- `type: test` — test-only additions/changes
-- `type: ci` — workflow/pipeline automation changes
-- `type: security` — vulnerability or security hardening work
+### Avoiding CI/release breakage
 
-#### Priority labels
+- Do not modify the 7 required check job names — branch protection depends
+  on exact name matches
+- Do not add `## [Unreleased]` to CHANGELOG.md — the release workflow
+  extracts content between `## [X.Y.Z]` headings
+- Do not change `ci-skip.yml` job names without updating branch protection
+- If mypy CI fails with "merge ref not found": push an empty commit to retrigger
+- Keep `paths-ignore` patterns in sync across the four main workflows
 
-- `priority: high` — release-blocking, data-risk, security, or urgent breakage
-- `priority: medium` — default for normal planned work
-- `priority: low` — optional improvements and non-urgent polish
+### Handling conflicts between docs and practice
 
-#### Phase labels
+When documented guidance and observed practice differ, follow the safer rule.
+Currently known minor discrepancies:
 
-- `phase: 0-workflow` — process, templates, policy, governance
-- `phase: 1-foundation` to `phase: 6-release` — roadmap execution phases
-
-#### Deprecated generic labels
-
-Use namespaced `type:*` labels only. Legacy generic labels are deprecated:
-- `bug`
-- `enhancement`
-- `documentation`
+- Repo settings allow merge commits and rebase merges, but linear history
+  protection effectively requires squash-merge. **Always squash-merge.**
+- AGENTS.md previously listed `PLW0603` as a suppressed rule, but the `PLW`
+  rule family is not selected in the ruff config. The `# noqa: PLW0603`
+  comments in source are defensive/inert. **Leave them in place but do not
+  rely on `PLW` rules being enforced.**

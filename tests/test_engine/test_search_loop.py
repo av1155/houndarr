@@ -197,13 +197,20 @@ async def test_sonarr_season_context_missing_pass_uses_season_search(
 
 @pytest.mark.asyncio()
 @respx.mock
-async def test_sonarr_season_context_missing_pass_respects_representative_cooldown(
+async def test_sonarr_season_context_missing_pass_respects_season_cooldown(
     seeded_instances: None,
 ) -> None:
-    """Season-context skips a season when representative episode is on cooldown."""
+    """Season-context skips a season when the season-level cooldown is active.
+
+    Updated from the old 'representative episode cooldown' test: the cooldown
+    must now be keyed on the synthetic season ID, not on an individual episode
+    ID, so we seed it using _season_item_id directly.
+    """
+    from houndarr.engine.search_loop import _season_item_id
     from houndarr.services.cooldown import record_search
 
-    await record_search(1, 101, "episode")
+    # Seed cooldown for S01 of series 55 using the season-level synthetic key.
+    await record_search(1, _season_item_id(55, 1), "episode")
 
     missing_records = {
         "records": [
@@ -235,6 +242,182 @@ async def test_sonarr_season_context_missing_pass_respects_representative_cooldo
 
     rows = await _get_log_rows()
     assert any(row["reason"] == "on cooldown (7d)" for row in rows)
+
+
+def test_season_item_id_properties() -> None:
+    """_season_item_id produces negative, deterministic, and distinct values.
+
+    Verifies the collision-safety contract of the synthetic season key:
+    - Always negative  → no overlap with real Sonarr episode IDs (always positive)
+    - Deterministic    → same inputs always yield the same key
+    - Distinct by season within a series
+    - Distinct by series for the same season number
+    - Not commutative  → _season_item_id(a, b) != _season_item_id(b, a) when a != b
+    """
+    from houndarr.engine.search_loop import _season_item_id
+
+    # Always negative — cannot collide with positive Sonarr episode IDs
+    assert _season_item_id(1, 1) < 0
+    assert _season_item_id(999, 50) < 0
+    assert _season_item_id(100_000, 999) < 0
+
+    # Deterministic
+    assert _season_item_id(55, 3) == _season_item_id(55, 3)
+
+    # Distinct for different seasons of the same series
+    assert _season_item_id(55, 1) != _season_item_id(55, 2)
+    assert _season_item_id(55, 1) != _season_item_id(55, 99)
+
+    # Distinct for the same season number across different series
+    assert _season_item_id(10, 1) != _season_item_id(20, 1)
+    assert _season_item_id(1, 1) != _season_item_id(2, 1)
+
+    # Encoding is not commutative (rules out trivial symmetric collisions)
+    assert _season_item_id(3, 5) != _season_item_id(5, 3)
+
+    # Spot-check known values
+    assert _season_item_id(55, 1) == -(55 * 1000 + 1)
+    assert _season_item_id(55, 2) == -(55 * 1000 + 2)
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_sonarr_season_context_cross_cycle_cooldown(
+    seeded_instances: None,
+) -> None:
+    """Season-context cooldown persists across cycles even when the representative episode changes.
+
+    Regression test for the bug where each cycle picks a different representative
+    episode ID for the same season, defeating the cooldown entirely.  After cycle 1
+    searches S01 the season must be blocked in cycle 2 regardless of which episode
+    would be selected as representative.
+
+    The single respx.get mock uses a combined side_effect list covering both
+    cycles: cycle-1 page-1, cycle-1 empty terminator, cycle-2 page-1 (rotated),
+    cycle-2 empty terminator.
+    """
+    import json
+
+    # Five missing episodes from the same season — more than batch_size so the
+    # representative *would* rotate in the old (buggy) implementation.
+    season_episodes = {
+        "records": [
+            {**_EPISODE_RECORD, "id": 101, "seriesId": 55, "seasonNumber": 1, "episodeNumber": 1},
+            {**_EPISODE_RECORD, "id": 102, "seriesId": 55, "seasonNumber": 1, "episodeNumber": 2},
+            {**_EPISODE_RECORD, "id": 103, "seriesId": 55, "seasonNumber": 1, "episodeNumber": 3},
+            {**_EPISODE_RECORD, "id": 104, "seriesId": 55, "seasonNumber": 1, "episodeNumber": 4},
+            {**_EPISODE_RECORD, "id": 105, "seriesId": 55, "seasonNumber": 1, "episodeNumber": 5},
+        ]
+    }
+    # Cycle 2: episode 101 has moved to the end so episode 102 would be the new
+    # representative under the old buggy scheme (episode-level cooldown).
+    season_episodes_rotated = {
+        "records": [
+            {**_EPISODE_RECORD, "id": 102, "seriesId": 55, "seasonNumber": 1, "episodeNumber": 2},
+            {**_EPISODE_RECORD, "id": 103, "seriesId": 55, "seasonNumber": 1, "episodeNumber": 3},
+            {**_EPISODE_RECORD, "id": 104, "seriesId": 55, "seasonNumber": 1, "episodeNumber": 4},
+            {**_EPISODE_RECORD, "id": 105, "seriesId": 55, "seasonNumber": 1, "episodeNumber": 5},
+            {**_EPISODE_RECORD, "id": 101, "seriesId": 55, "seasonNumber": 1, "episodeNumber": 1},
+        ]
+    }
+    empty = {"records": []}
+
+    # Cycle 1 with batch_size=1: the loop finds the season on page 1, searches
+    # it (searched==missing_target==1), and exits before fetching page 2.
+    # → 1 GET for cycle 1.
+    #
+    # Cycle 2: the season is on cooldown so the inner loop exhausts the page
+    # without incrementing `searched`, then the outer loop fetches page 2
+    # (empty) and terminates.
+    # → 2 GETs for cycle 2.
+    #
+    # Total side_effect list: [c1-p1, c2-p1(rotated), c2-p2(empty)].
+    respx.get(f"{SONARR_URL}/api/v3/wanted/missing").mock(
+        side_effect=[
+            httpx.Response(200, json=season_episodes),
+            httpx.Response(200, json=season_episodes_rotated),
+            httpx.Response(200, json=empty),
+        ]
+    )
+    search_route = respx.post(f"{SONARR_URL}/api/v3/command").mock(
+        return_value=httpx.Response(201, json={"id": 1})
+    )
+
+    instance = _make_instance(
+        sonarr_search_mode=SonarrSearchMode.season_context,
+        batch_size=1,
+        cooldown_days=7,
+    )
+
+    # --- Cycle 1 ---------------------------------------------------------------
+    count_1 = await run_instance_search(instance, MASTER_KEY)
+    assert count_1 == 1, "Cycle 1 must search the season once"
+    assert search_route.call_count == 1
+    payload = json.loads(search_route.calls[0].request.content)
+    assert payload == {"name": "SeasonSearch", "seriesId": 55, "seasonNumber": 1}
+
+    # --- Cycle 2 ---------------------------------------------------------------
+    count_2 = await run_instance_search(instance, MASTER_KEY)
+    assert count_2 == 0, "Cycle 2 must be blocked: season is on cooldown"
+    assert search_route.call_count == 1, "SeasonSearch must NOT be called a second time"
+
+    rows = await _get_log_rows()
+    skipped = [r for r in rows if r["action"] == "skipped" and "cooldown" in (r["reason"] or "")]
+    assert skipped, "A cooldown-skip log entry must exist for cycle 2"
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_sonarr_season_context_log_id_stable_across_cycles(
+    seeded_instances: None,
+) -> None:
+    """The item_id logged for a season-context search is stable across cycles.
+
+    The logged id must not change between cycle 1 and cycle 2 because the
+    identity must be season-level, not episode-level.
+    """
+    season_episodes = {
+        "records": [
+            {**_EPISODE_RECORD, "id": 201, "seriesId": 77, "seasonNumber": 3, "episodeNumber": 1},
+            {**_EPISODE_RECORD, "id": 202, "seriesId": 77, "seasonNumber": 3, "episodeNumber": 2},
+        ]
+    }
+    # Cycle 2 — rotated so episode 202 appears first; item_id must still match.
+    season_episodes_rotated = {
+        "records": [
+            {**_EPISODE_RECORD, "id": 202, "seriesId": 77, "seasonNumber": 3, "episodeNumber": 2},
+            {**_EPISODE_RECORD, "id": 201, "seriesId": 77, "seasonNumber": 3, "episodeNumber": 1},
+        ]
+    }
+
+    # With batch_size=1 and cooldown_days=0 both cycles search the season and
+    # each exits after finding 1 eligible item on page 1 — 1 GET per cycle.
+    # Total side_effect list: [c1-p1, c2-p1(rotated)].
+    respx.get(f"{SONARR_URL}/api/v3/wanted/missing").mock(
+        side_effect=[
+            httpx.Response(200, json=season_episodes),
+            httpx.Response(200, json=season_episodes_rotated),
+        ]
+    )
+    respx.post(f"{SONARR_URL}/api/v3/command").mock(
+        return_value=httpx.Response(201, json={"id": 1})
+    )
+
+    instance = _make_instance(
+        sonarr_search_mode=SonarrSearchMode.season_context,
+        batch_size=1,
+        cooldown_days=0,  # cooldown disabled so both cycles can search
+    )
+
+    await run_instance_search(instance, MASTER_KEY)  # cycle 1
+    await run_instance_search(instance, MASTER_KEY)  # cycle 2
+
+    rows = await _get_log_rows()
+    searched = [r for r in rows if r["action"] == "searched" and r["search_kind"] == "missing"]
+    assert len(searched) == 2, "Both cycles should have searched"
+
+    ids = {r["item_id"] for r in searched}
+    assert len(ids) == 1, f"item_id must be identical across cycles for the same season, got: {ids}"
 
 
 @pytest.mark.asyncio()

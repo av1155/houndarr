@@ -166,6 +166,32 @@ def _season_context_label(item: MissingEpisode) -> str:
     return f"{series} - S{item.season:02d} (season-context)"
 
 
+def _season_item_id(series_id: int, season_number: int) -> int:
+    """Return a stable, negative synthetic ID representing a (series, season) pair.
+
+    Season-context searches must be keyed on a season-level identity rather than
+    an individual episode ID so that cooldown and log history remain consistent
+    across cycles regardless of which episode happens to be the first candidate.
+
+    The scheme encodes ``series_id`` and ``season_number`` as a single negative
+    integer: ``-(series_id * 1000 + season_number)``.  Sonarr episode IDs are
+    always positive, so there is no collision risk with real episode IDs stored
+    in the same ``cooldowns``/``search_log`` tables.
+
+    The multiplier 1000 supports up to 999 seasons per series, which exceeds
+    any realistic Sonarr library.
+
+    Args:
+        series_id: Sonarr series ID (positive integer).
+        season_number: Season number (0-based specials supported; positive for
+            regular seasons).
+
+    Returns:
+        A unique negative integer that identifies this season across all cycles.
+    """
+    return -(series_id * 1000 + season_number)
+
+
 def _movie_label(item: MissingMovie) -> str:
     """Build a human-readable log label for Radarr movies."""
     title = item.title or "Unknown Movie"
@@ -311,7 +337,18 @@ async def run_instance_search(
                                 continue
                             seen_season_keys.add(season_key)
 
-                        item_id = item.episode_id
+                        # In season-context mode use a stable synthetic season ID
+                        # so that cooldown and log history are keyed at season
+                        # granularity rather than per-representative-episode.
+                        # Episode mode retains the real Sonarr episode ID.
+                        # season_key being non-None guarantees item.series_id is
+                        # also non-None (same guard: `item.series_id is not None
+                        # and item.season > 0`), so the assertion is safe.
+                        if season_key is not None:
+                            assert item.series_id is not None  # noqa: S101
+                            item_id = _season_item_id(item.series_id, item.season)
+                        else:
+                            item_id = item.episode_id
                         item_label = (
                             _episode_label(item)
                             if episode_mode or season_key is None

@@ -24,6 +24,7 @@ logger = logging.getLogger(__name__)
 
 _SHUTDOWN_TIMEOUT = 10  # seconds to wait for tasks to finish on stop()
 _CONNECT_RETRY_SECS = 30  # back-off interval when a connection error occurs
+_STARTUP_GRACE_SECS = 10  # one-time delay before the first cycle fires per instance
 RunNowStatus = Literal["accepted", "not_found", "disabled"]
 
 
@@ -188,9 +189,23 @@ class Supervisor:
     # ------------------------------------------------------------------
 
     async def _instance_loop(self, instance_id: int) -> None:
-        """Run search cycles for one instance until cancelled."""
+        """Run search cycles for one instance until cancelled.
+
+        A one-time startup grace delay gives co-located services (Sonarr, Radarr)
+        time to become ready before the first cycle fires.  Connection errors are
+        logged to ``search_log`` only on state transitions (first failure and
+        recovery) to avoid inflating the dashboard error counter with retry noise.
+        """
         logger.debug("Supervisor: loop started for instance id=%d", instance_id)
         _in_connect_retry = False
+
+        logger.info(
+            "Supervisor: waiting %d s startup grace for instance id=%d",
+            _STARTUP_GRACE_SECS,
+            instance_id,
+        )
+        await asyncio.sleep(_STARTUP_GRACE_SECS)
+
         try:
             while True:
                 instance = await get_instance(instance_id, master_key=self._master_key)
@@ -213,14 +228,33 @@ class Supervisor:
                 )
 
                 if got_connect_error:
+                    if not _in_connect_retry:
+                        # First failure — write one error row and enter retry state.
+                        await _write_log(
+                            instance_id=instance.id,
+                            item_id=None,
+                            item_type=None,
+                            action="error",
+                            cycle_trigger="scheduled",
+                            message=f"Could not reach {instance.url}",
+                        )
                     _in_connect_retry = True
                     await asyncio.sleep(_CONNECT_RETRY_SECS)
                 else:
                     if _in_connect_retry:
+                        # Recovery — write one info row and leave retry state.
                         logger.info(
                             "Supervisor: %r (%s) is reachable again",
                             instance.name,
                             instance.url,
+                        )
+                        await _write_log(
+                            instance_id=instance.id,
+                            item_id=None,
+                            item_type=None,
+                            action="info",
+                            cycle_trigger="scheduled",
+                            message=f"{instance.name!r} ({instance.url}) is reachable again",
                         )
                         _in_connect_retry = False
                     await asyncio.sleep(instance.sleep_interval_mins * 60)
@@ -260,15 +294,6 @@ class Supervisor:
                     instance.name,
                     instance.url,
                     _CONNECT_RETRY_SECS,
-                )
-                await _write_log(
-                    instance_id=instance.id,
-                    item_id=None,
-                    item_type=None,
-                    action="error",
-                    cycle_id=cycle_id,
-                    cycle_trigger=cycle_trigger,
-                    message=f"Could not reach {instance.url}",
                 )
                 return True
             except Exception as exc:  # noqa: BLE001

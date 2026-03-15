@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 from typing import Any
+from unittest.mock import patch
 
 import httpx
 import pytest
@@ -18,6 +19,7 @@ import respx
 from cryptography.fernet import Fernet
 
 from houndarr.database import get_db
+from houndarr.engine import supervisor as _supervisor_mod
 from houndarr.engine.search_loop import run_instance_search
 from houndarr.engine.supervisor import Supervisor
 from houndarr.services.cooldown import record_search
@@ -334,13 +336,14 @@ async def test_supervisor_runs_both_instances(
         return_value=httpx.Response(201, json={"id": 2})
     )
 
-    sup = Supervisor(master_key=master_key)
-    await sup.start()
-    assert len(sup._tasks) == 2  # noqa: SLF001
+    with patch.object(_supervisor_mod, "_STARTUP_GRACE_SECS", 0):
+        sup = Supervisor(master_key=master_key)
+        await sup.start()
+        assert len(sup._tasks) == 2  # noqa: SLF001
 
-    # Let both tasks complete their first search cycle before stopping
-    await asyncio.sleep(0.2)
-    await sup.stop()
+        # Let both tasks complete their first search cycle before stopping
+        await asyncio.sleep(0.2)
+        await sup.stop()
 
     # Both instances must have a 'searched' log entry
     logs = await _log_rows()

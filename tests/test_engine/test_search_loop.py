@@ -1219,12 +1219,16 @@ async def test_supervisor_scheduled_cycles_pass_scheduled_trigger(seeded_instanc
     """Scheduled supervisor loop should call engine with cycle_trigger='scheduled'."""
     import asyncio
 
+    import houndarr.engine.supervisor as _sup_mod
     from houndarr.engine.supervisor import Supervisor
 
-    with patch(
-        "houndarr.engine.supervisor.run_instance_search",
-        new=AsyncMock(return_value=0),
-    ) as run_mock:
+    with (
+        patch.object(_sup_mod, "_STARTUP_GRACE_SECS", 0),
+        patch(
+            "houndarr.engine.supervisor.run_instance_search",
+            new=AsyncMock(return_value=0),
+        ) as run_mock,
+    ):
         sup = Supervisor(master_key=MASTER_KEY)
         await sup.start()
         await asyncio.sleep(0.05)

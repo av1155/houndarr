@@ -22,9 +22,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-# Install gosu for privilege dropping (audited, Debian-native)
-# hadolint ignore=DL3008
+# Apply base-image security patches and install gosu for privilege dropping
+# hadolint ignore=DL3008,DL3009
 RUN apt-get update \
+    && apt-get upgrade -y \
     && apt-get install -y --no-install-recommends gosu \
     && rm -rf /var/lib/apt/lists/*
 

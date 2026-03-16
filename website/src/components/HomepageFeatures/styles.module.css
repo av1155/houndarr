@@ -4,3 +4,17 @@
   padding: 2rem 0;
   width: 100%;
 }
+
+/* Ensure consistent vertical spacing between wrapped rows of cards */
+.features :global(.row) {
+  row-gap: 1rem;
+}
+
+/* Stretch cards to equal height within each row */
+.features :global(.col) {
+  display: flex;
+}
+
+.features :global(.col) > * {
+  flex: 1;
+}

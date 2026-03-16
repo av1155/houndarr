@@ -9,10 +9,10 @@ description = "A focused, self-hosted companion for Sonarr and Radarr that autom
 readme = "README.md"
 license = { file = "LICENSE" }
 requires-python = ">=3.12"
-authors = [{ name = "Andrea Venti", email = "av@example.com" }]
+authors = [{ name = "Andrea A. Venti Fuentes", email = "av1155.dev@gmail.com" }]
 keywords = ["sonarr", "radarr", "media", "automation", "self-hosted"]
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 5 - Production/Stable",
     "Intended Audience :: End Users/Desktop",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",

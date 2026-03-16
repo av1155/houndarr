@@ -82,7 +82,7 @@ Run **all five** before every commit. CI enforces the same checks.
 
 ## CI Checks
 
-### Required checks (7 — branch protection enforced)
+### Required checks (10 — branch protection enforced)
 
 | Check name | Workflow file | What it runs |
 |------------|---------------|--------------|
@@ -92,12 +92,15 @@ Run **all five** before every commit. CI enforces the same checks.
 | Test (Python 3.12) | `tests.yml` | `pytest -q --tb=short` + compile check + `--help` |
 | Dependency audit (pip-audit) | `security.yml` | `pip-audit -r requirements.txt -r requirements-dev.txt` |
 | SAST (bandit) | `security.yml` | `bandit -r src/ -c pyproject.toml` |
+| Trivy filesystem scan | `security.yml` | `trivy fs .` — CRITICAL/HIGH with known fix |
+| Dependency review | `dependency-review.yml` | PR dependency diff vs GitHub Advisory Database |
 | Build (no push) | `docker.yml` | Multi-arch Docker build (amd64/arm64), no push |
+| Trivy image scan | `docker.yml` | Trivy scan of built Docker image — CRITICAL/HIGH with known fix |
 
-The four main workflows (`quality`, `tests`, `security`, `docker`) use
-`paths-ignore: ["docs/**", "*.md"]`. When a PR touches only those paths,
-`ci-skip.yml` provides passing no-op jobs with identical check names so
-branch protection is satisfied.
+The five main workflows (`quality`, `tests`, `security`, `dependency-review`,
+`docker`) use `paths-ignore: ["docs/**", "*.md", "website/**"]`. When a PR
+touches only those paths, `ci-skip.yml` provides passing no-op jobs with
+identical check names so branch protection is satisfied.
 
 ### Additional workflows (not required checks)
 
@@ -111,7 +114,7 @@ branch protection is satisfied.
 
 ### Branch protection on `main`
 
-- 7 required status checks (strict — branch must be up to date)
+- 10 required status checks (strict — branch must be up to date)
 - Required PR reviews enabled (dismiss stale reviews, required conversation resolution)
 - Linear history enforced (no merge commits)
 - No force pushes, no branch deletions
@@ -435,7 +438,7 @@ Allowed types: `feat`, `fix`, `docs`, `refactor`, `perf`, `test`, `build`,
 - **Squash-merge only.** Linear history is enforced by branch protection.
   All three merge strategies are enabled in repo settings, but only squash-merge
   preserves the required linear history.
-- All 7 required CI checks must pass before merge.
+- All 10 required CI checks must pass before merge.
 - Use the PR template: fill in `Closes #N`, check the checklist.
 - Branches auto-delete on merge (`deleteBranchOnMerge: true`).
 
@@ -567,13 +570,13 @@ and after). Do not use `## [Unreleased]`.
 
 ### Avoiding CI/release breakage
 
-- Do not modify the 7 required check job names — branch protection depends
+- Do not modify the 10 required check job names — branch protection depends
   on exact name matches
 - Do not add `## [Unreleased]` to CHANGELOG.md — the release workflow
   extracts content between `## [X.Y.Z]` headings
 - Do not change `ci-skip.yml` job names without updating branch protection
 - If mypy CI fails with "merge ref not found": push an empty commit to retrigger
-- Keep `paths-ignore` patterns in sync across the four main workflows
+- Keep `paths-ignore` patterns in sync across the five main workflows
 
 ### Handling conflicts between docs and practice
 

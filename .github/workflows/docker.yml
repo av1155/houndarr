@@ -14,9 +14,8 @@ on:
       - "*.md"
       - "website/**"
 
-permissions:
-  contents: read
-  packages: write
+# Permissions set at job level for least-privilege.
+permissions: {}
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -29,6 +28,9 @@ jobs:
   build:
     name: Build ${{ startsWith(github.ref, 'refs/tags/v') && '+ Push' || '(no push)' }}
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -72,3 +74,58 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  scan:
+    name: Trivy image scan
+    runs-on: ubuntu-latest
+    needs: build
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      # Build a single-platform image and load it into the local daemon
+      # for Trivy to scan.  This reuses the GHA build cache from the
+      # multi-arch build job so the extra cost is minimal.
+      - name: Build image for scanning
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          platforms: linux/amd64
+          load: true
+          tags: houndarr:scan
+          cache-from: type=gha
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: houndarr:scan
+          format: table
+          severity: CRITICAL,HIGH
+          ignore-unfixed: "true"
+          exit-code: "1"
+
+      # Upload SARIF to the GitHub Security tab for non-fork runs.
+      # Fork PRs lack security-events: write so this step is skipped.
+      - name: Run Trivy (SARIF for GitHub Security tab)
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: houndarr:scan
+          format: sarif
+          output: trivy-results.sarif
+          severity: CRITICAL,HIGH
+          ignore-unfixed: "true"
+          exit-code: "0"
+
+      - name: Upload Trivy SARIF to GitHub Security tab
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-results.sarif
+          category: trivy-image

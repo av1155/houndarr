@@ -1,0 +1,33 @@
+name: Dependency Review
+
+# Check PR dependency changes against the GitHub Advisory Database.
+# Catches newly introduced vulnerable packages at review time before
+# pip-audit runs post-install.  This is a required status check — a
+# matching no-op job in ci-skip.yml satisfies docs-only PRs.
+
+on:
+  pull_request:
+    paths-ignore:
+      - "docs/**"
+      - "*.md"
+      - "website/**"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  dependency-review:
+    name: Dependency review
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Dependency review
+        uses: actions/dependency-review-action@v4
+        with:
+          fail-on-severity: high

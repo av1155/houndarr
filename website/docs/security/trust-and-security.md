@@ -232,5 +232,7 @@ Every pull request runs automated security checks before merge:
 |------|---------|
 | [Bandit](https://bandit.readthedocs.io/) | Static application security testing (SAST) for Python |
 | [pip-audit](https://pypi.org/project/pip-audit/) | Known vulnerability scanning for Python dependencies |
+| [Trivy](https://github.com/aquasecurity/trivy) | Vulnerability scanning for the filesystem and Docker image (CRITICAL/HIGH, fixable only) |
+| [Dependency Review](https://github.com/actions/dependency-review-action) | PR-time check of new dependencies against the GitHub Advisory Database |
 | [Hadolint](https://github.com/hadolint/hadolint) | Dockerfile best-practice linting |
 | [actionlint](https://github.com/rhysd/actionlint) | GitHub Actions workflow linting |

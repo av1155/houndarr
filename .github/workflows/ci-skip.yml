@@ -59,12 +59,31 @@ jobs:
     steps:
       - run: echo "Docs-only change — SAST not required"
 
+  trivy-fs:
+    name: Trivy filesystem scan
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "Docs-only change — Trivy filesystem scan not required"
+
+  # ---------- Dependency Review (dependency-review.yml) ----------
+  dependency-review:
+    name: Dependency review
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "Docs-only change — dependency review not required"
+
   # ---------- Docker (docker.yml) ----------
   docker:
     name: Build (no push)
     runs-on: ubuntu-latest
     steps:
       - run: echo "Docs-only change — Docker build not required"
+
+  trivy-image:
+    name: Trivy image scan
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "Docs-only change — Trivy image scan not required"
 
   # ---------- Version Check (version-check.yml) ----------
   version-check:

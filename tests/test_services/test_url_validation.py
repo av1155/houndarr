@@ -193,6 +193,17 @@ def test_unspecified_ipv6_rejected() -> None:
     assert "blocked" in result.lower()
 
 
+def test_malformed_hostname_rejected() -> None:
+    """Hostnames that fail the RFC-1123 pattern check must be rejected with a safe message."""
+    # Underscore characters are not valid in hostnames per RFC 1123
+    result = validate_instance_url("http://invalid_host:8989")
+    assert result is not None
+    assert "invalid" in result.lower()
+    # Must not expose exception details — message must be a plain controlled string
+    assert "traceback" not in result.lower()
+    assert "valueerror" not in result.lower()
+
+
 def test_hostname_resolving_to_unspecified_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
     """Hostnames resolving to unspecified addresses must be rejected."""
 

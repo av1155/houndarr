@@ -130,8 +130,8 @@ def validate_instance_url(url: str) -> str | None:
         # aliases/bypass (e.g. a hostname resolving to 127.0.0.1).
         try:
             resolved_ips = _resolve_hostname_ips(host)
-        except ValueError as exc:
-            return str(exc)
+        except ValueError:
+            return f"Instance URL host '{host}' is invalid."
 
         for resolved in resolved_ips:
             if _is_blocked_address(resolved):

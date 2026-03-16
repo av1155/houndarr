@@ -15,7 +15,7 @@ If you are unsure whether Houndarr is actually doing anything, follow these step
 In Sonarr: **Wanted → Missing** and **Wanted → Cutoff Unmet**  
 In Radarr: **Movies → Discover** or use the **Wanted** filter
 
-If those pages are empty, Houndarr has nothing to search. A Houndarr with an empty wanted list will log `skipped` for every item it considers, and that is completely correct behavior.
+If those pages are empty, Houndarr has nothing to search.
 
 ### Step 2 — Compare items to Houndarr logs
 
@@ -54,19 +54,13 @@ If most of your log entries say `skipped`, check the reasons:
 - **`unreleased delay (N hrs remaining)`** — the release date is too recent or in the future. Houndarr will search once the delay window clears.
 - **`hourly cap reached`** — your per-hour search limit has been hit for this cycle.
 
-None of these are errors. They are all normal scheduling behavior.
+These are all normal scheduling behavior.
 
-### Step 5 — Zero errors is a strong health signal
+### Step 5 — Check the error count
 
-Look at your logs. If you see:
+Look at your logs. If you see many `skipped` entries, some `searched` entries, and zero `error` entries, Houndarr is connected and running correctly. Errors mean something is wrong with the connection or API key — skips do not.
 
-- Many `skipped` entries
-- Some `searched` entries
-- **Zero `error` entries**
-
-Houndarr is healthy. It is examining candidates, applying its rules, and issuing searches at the configured rate. The absence of errors means it is connecting to Sonarr/Radarr successfully and the search commands are being accepted.
-
-### Step 6 — Understand that conservative settings progress slowly but correctly
+### Step 6 — Conservative defaults are slow by design
 
 The default settings are intentionally conservative:
 
@@ -74,7 +68,7 @@ The default settings are intentionally conservative:
 - **Hourly cap 4** — maximum 4 searches per hour
 - **Cooldown 14 days** — no item is searched more than once every two weeks
 
-With these defaults, Houndarr might search 4–8 items in a day. If your backlog has hundreds of items, clearing it will take weeks. That is by design. You can increase throughput by raising the batch size or hourly cap, but do so gradually and monitor your indexer health.
+With these defaults, Houndarr might search 4–8 items in a day. If your backlog has hundreds of items, clearing it takes weeks. You can increase throughput by raising the batch size or hourly cap, but do so gradually and monitor your indexer health.
 
 See [Instance Settings](/docs/configuration/instance-settings#increasing-throughput) for the recommended order of adjustments.
 

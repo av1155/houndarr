@@ -183,7 +183,7 @@ network:
   protection, and login rate limiting.
 - **The container runs as a non-root user** after PUID/PGID remapping.
 
-For a detailed, code-grounded explanation of how Houndarr handles credentials,
+For a detailed explanation of how Houndarr handles credentials,
 network behavior, and trust boundaries, see
 [Trust & Security](https://av1155.github.io/houndarr/docs/security/trust-and-security).
 

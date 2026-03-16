@@ -589,3 +589,122 @@ Currently known minor discrepancies:
   rule family is not selected in the ruff config. The `# noqa: PLW0603`
   comments in source are defensive/inert. **Leave them in place but do not
   rely on `PLW` rules being enforced.**
+
+---
+
+## Public-Facing Voice
+
+All text posted to GitHub under the maintainer's account must read as if a
+human wrote it. Agents ghostwrite — they do not narrate, report, or
+self-identify.
+
+### Prohibited in all GitHub-visible text
+
+This applies to issue titles, issue bodies, PR titles, PR bodies, PR/issue
+comments, commit messages, CHANGELOG entries, and release notes.
+
+Never include:
+
+- References to AGENTS.md, CLAUDE.md, or any instruction file
+  (`"I have read AGENTS.md"`, `"per AGENTS.md"`, `"scope discipline"`)
+- Agent compliance declarations
+  (`"this change is within scope"`, `"I verified"`, `"I audited"`)
+- Audit/verification narration
+  (`"truth audit"`, `"verified TRUE"`, `"confirmed against the codebase"`,
+  `"cross-reference audit"`, `"code-grounded"`, `"release-readiness
+  verification"`)
+- Finding-ID numbering schemes (`SEC-1`, `F-1`, `FINDING-1`)
+- Process theater
+  (`"post-fix verification"`, `"remediation plan"`, `"close the remaining
+  gaps"`, `"completed housekeeping"`, `"this task is now complete"`)
+- Exhaustive negative-finding enumerations (listing every file where
+  something was NOT found)
+- Quality-gate recitation with exact tool names and test counts
+  (`"All 5 quality gates pass: ruff check, ruff format, mypy strict,
+  bandit SAST, pytest (312 tests)"` — just say `"all checks pass"`)
+- grep/search verification as proof (`"grep -ri returns zero matches"`)
+- Post-merge instruction lists in PR bodies
+- `"Follow-up recommendations (not in this PR)"` sections
+- Item-count narration (`"9 Q&A entries covering every misconception"`)
+- Prompt-shaped headings (`"Success criteria"`, `"Evidence"`, `"Decision"`)
+- Layer-by-layer audit tables in issue bodies
+
+### Required voice
+
+- Write as the maintainer would: concise, direct, technical.
+- Issue bodies: state the problem and what needs to change. A few sentences
+  for routine issues, more detail for complex ones.
+- PR bodies: say what changed and why. Use the PR template. Do not add
+  custom compliance checklists beyond the template.
+- PR template checklist: only check items that actually apply. Leave
+  inapplicable items unchecked or mark `N/A`.
+- Comments: short and human (`"Done"`, `"Fixed in abc1234"`, `"Merged"`).
+- Commit messages: follow Conventional Commits. Body optional — if present,
+  explain why, not what the agent did.
+- CHANGELOG: follow existing bullet rules (already defined above).
+
+### Internal-only text
+
+References to agents, prompts, instruction files, and workflow mechanics
+belong only in:
+
+- `AGENTS.md` itself
+- `.claude/` or `.cursor/` directories
+- Git-ignored local files
+
+They must never appear in any GitHub-visible artifact.
+
+### Documentation voice
+
+All user-facing documentation (website pages, README, CONTRIBUTING, SECURITY,
+in-app help text) must read as if a single human maintainer wrote it — direct,
+concise, and conversational. Documentation should feel authored, not assembled.
+
+**Prohibited in documentation:**
+
+- `"Mental model"` as a framing device or callout label
+- Defensive credibility claims about the document itself
+  (`"every claim is based on the source code"`,
+  `"where limitations exist, they are stated plainly"`,
+  `"these are honest trade-offs"`)
+- Summary sections that restate the page's content bullet-by-bullet
+- Worked examples that read like textbook exercises (step-by-step arithmetic
+  with bold emphasis on each subtraction)
+- Exhaustive enumeration of things that are absent (listing many specific
+  analytics services that are not used — just say "no analytics or error
+  tracking")
+- FAQ questions that feel reverse-engineered from a prompt rather than
+  sourced from real user confusion
+- The same concept explained in near-identical phrasing on more than two pages
+
+**Cross-page repetition rule:**
+
+Each concept (e.g. "skips are normal", "monitored does not mean wanted",
+"conservative defaults are slow by design") should have ONE authoritative
+explanation on one page. Other pages that mention the concept should use a
+brief statement (one sentence) and link to the authority page. Never repeat
+the same reassurance formula verbatim across pages.
+
+**Reassurance discipline:**
+
+Avoid repeating reassurance phrases (`"this is expected"`,
+`"this does not mean Houndarr is stuck"`, `"a high skip count is healthy"`)
+more than once across the entire documentation set. State the fact once,
+clearly, and trust the reader.
+
+**FAQ rules:**
+
+- Keep answers to 2–4 sentences. Link to concept pages for detail.
+- Do not re-explain the full search funnel in every FAQ entry.
+- Write questions in the voice of a real user, not as preemptive
+  corrections of anticipated misconceptions.
+
+**Required voice:**
+
+- Write as a maintainer explaining their own tool to a peer.
+- Be concise. Prefer short paragraphs and direct statements.
+- Vary phrasing across pages — do not use the same sentence structure
+  to explain similar concepts.
+- Use callouts and admonitions sparingly.
+- Headings should be descriptive or action-oriented, not reassuring
+  (`"Check the error count"` not `"Zero errors is a strong health signal"`).

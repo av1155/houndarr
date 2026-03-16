@@ -6,9 +6,8 @@ description: How Houndarr handles credentials, network behavior, and trust bound
 
 # Trust & Security
 
-This document explains how Houndarr handles sensitive credentials, network
-behavior, and trust boundaries. Every claim is based on the actual source code.
-Where limitations exist, they are stated plainly.
+This document covers how Houndarr handles credentials, network behavior,
+and trust boundaries.
 
 If you find a discrepancy between this document and the code, please
 [report it](https://github.com/av1155/houndarr/security/advisories/new).
@@ -34,11 +33,9 @@ is present in the source tree.
 
 ### What the server does not connect to
 
-- No analytics services (Google Analytics, Mixpanel, Amplitude, Segment, etc.)
-- No error tracking services (Sentry, Bugsnag, Datadog, etc.)
+- No analytics, error tracking, or telemetry services
 - No developer-controlled servers
 - No package registries, update servers, or version-check endpoints
-- No webhooks or notification services
 
 ### Browser-side CDN resources
 
@@ -289,9 +286,6 @@ The persistent data directory (default `/data` in Docker) contains:
 - [ ] Keep the Docker image updated for security patches
 
 ## Known limitations
-
-These are honest trade-offs in the current implementation. They are appropriate
-for the single-admin self-hosted deployment model but should be understood.
 
 **Stateless sessions.** Sessions are signed tokens with no server-side session
 store. Logout deletes the cookie client-side, but a stolen token remains valid

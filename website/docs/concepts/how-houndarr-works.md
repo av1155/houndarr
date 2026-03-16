@@ -71,6 +71,16 @@ Houndarr reads the `wanted/cutoff` API endpoint from each instance. Sonarr and R
 
 If you are not seeing cutoff searches happen, the first thing to check is whether the item actually appears in Sonarr/Radarr's own "Wanted → Cutoff Unmet" view.
 
+:::tip Quality profiles are managed in Sonarr/Radarr — not Houndarr
+Houndarr works best when your Sonarr/Radarr instances are already configured with
+quality profiles you trust. It does not manage quality profiles or custom formats.
+
+If you manage multiple instances or want help keeping quality settings consistent,
+community tools such as [Profilarr](https://github.com/Dictionarry-Hub/profilarr)
+can sync profiles and custom formats across instances. These tools are optional and
+fully independent of Houndarr.
+:::
+
 ## The search funnel — why your search count is small
 
 Think of it as a funnel. At each stage, items are filtered out:

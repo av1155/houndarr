@@ -5,6 +5,30 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.8] - 2026-03-16
+
+### Fixed
+
+- In-app Settings Help page now links to the Docusaurus documentation site instead of a deleted repository markdown file (#181)
+- Homepage "View on GitHub" button now centres correctly on mobile when the button row wraps to a second line (#177)
+- Removed unimplemented "quiet hours" mention from README and homepage to match actual feature set (#179)
+- Docker image pip upgraded at build time to patch CVE-2025-8869 and CVE-2026-1703 (#175)
+
+### Added
+
+- New Concepts documentation section: "How Houndarr Works" explains the search funnel, "monitored vs wanted" distinction, and why low search counts are normal (#177)
+- New Troubleshooting page with step-by-step verification guide, log context fields reference, and common issue diagnosis (#177)
+- New FAQ page addressing nine common misconceptions about search behavior (#177)
+- Trust & Security documentation now includes all previously omitted technical detail (unauthenticated routes table, PUID/PGID, health check, CSRF exemptions, sentinel value handling) (#181)
+
+### Changed
+
+- Documentation consolidated to Docusaurus website as single source of truth; removed duplicate `docs/settings.md` and `docs/trust-and-security.md` (#181)
+- README and SECURITY.md now link to Docusaurus documentation site instead of repository markdown files (#181)
+- Daily GitHub Actions cache cleanup workflow added to prune stale PR/tag caches and deduplicate build caches (#175)
+
+---
+
 ## [1.0.7] - 2026-03-16
 
 ### Fixed

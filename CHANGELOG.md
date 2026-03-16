@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.7] - 2026-03-16
+
+### Fixed
+
+- Instance connection-test responses now escape HTML to prevent reflective XSS; exception details are no longer exposed in error responses (#168)
+- Docker image base-layer packages are now upgraded at build time, patching CVE-2026-0861 (glibc integer overflow) (#170)
+
+### Added
+
+- Trivy filesystem scan, Trivy Docker image scan, and dependency-review PR check are now required CI checks (10 total, up from 7) (#170)
+
+---
+
 ## [1.0.6] - 2026-03-15
 
 ### Fixed

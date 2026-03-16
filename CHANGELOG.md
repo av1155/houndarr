@@ -11,7 +11,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - In-app Settings Help page now links to the documentation website instead of a removed repository file (#181)
 - Docker image pip upgraded at build time to patch CVE-2025-8869 and CVE-2026-1703 (#175)
-- Homepage "View on GitHub" button now centres correctly on mobile devices (#177)
 
 ---
 

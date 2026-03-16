@@ -1,0 +1,287 @@
+name: Cleanup Actions Cache
+
+# Automatically prunes stale and noisy GitHub Actions caches to stay
+# well under the 10 GB repository limit.
+#
+# Strategy (conservative for main, aggressive everywhere else):
+#
+#   1. PR caches       — bulk-delete every refs/pull/*/merge ref.
+#   2. Tag caches      — bulk-delete every refs/heads/refs/tags/* and
+#                        refs/tags/* ref (immutable; layers never reused).
+#   3. Main duplicates — for refs/heads/main, delete older duplicates of
+#                        binfmt, Trivy DB, and Trivy binary caches (keep
+#                        only the newest of each pattern).
+#   4. Main BuildKit   — keep the 50 most recent BuildKit blob/index
+#                        entries (enough for a warm multi-arch layer
+#                        cache); delete older ones.
+#
+# Dry-run mode: set the "dry_run" input to true to preview what would
+# be deleted without actually removing anything.
+
+on:
+  schedule:
+    # Every day at 05:00 UTC (low-traffic window).
+    - cron: "0 5 * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Preview deletions without deleting (true/false)"
+        required: false
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
+
+permissions:
+  # gh cache delete requires actions: write.
+  actions: write
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  cleanup:
+    name: Prune stale caches
+    runs-on: ubuntu-latest
+    steps:
+      - name: Prune caches
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          # workflow_dispatch provides the input; scheduled runs default
+          # to "false" (always execute).
+          DRY_RUN: ${{ inputs.dry_run || 'false' }}
+        run: |
+          set -euo pipefail
+
+          deleted=0
+          failed=0
+          dry_label=""
+          if [[ "$DRY_RUN" == "true" ]]; then
+            dry_label=" [DRY RUN]"
+            echo "::notice::Dry-run mode enabled — no caches will be deleted."
+          fi
+
+          # -----------------------------------------------------------
+          # Helper: fetch the full cache list via the REST API with
+          # proper pagination (gh cache list does not paginate beyond
+          # its --limit).  Returns a JSON array on stdout.
+          # -----------------------------------------------------------
+          fetch_all_caches() {
+            local page=1 per_page=100 result="[]" batch count
+            while true; do
+              batch=$(gh api \
+                "repos/${GH_REPO}/actions/caches?per_page=${per_page}&page=${page}" \
+                --jq '.actions_caches // []' 2>/dev/null || echo "[]")
+              count=$(echo "$batch" | jq 'length')
+              if [[ "$count" -eq 0 ]]; then break; fi
+              result=$(echo "$result" "$batch" | jq -s 'add')
+              if [[ "$count" -lt "$per_page" ]]; then break; fi
+              ((page++))
+              # Safety: GitHub caps at ~10 000 entries.
+              if [[ "$page" -gt 110 ]]; then
+                echo "::warning::Pagination safety limit reached." >&2
+                break
+              fi
+            done
+            echo "$result"
+          }
+
+          # -----------------------------------------------------------
+          # Helper: delete a cache by numeric ID.
+          # Logs the action; never fails the script.
+          # -----------------------------------------------------------
+          delete_by_id() {
+            local cache_id="$1" key="$2" ref="$3" reason="$4"
+            if [[ "$DRY_RUN" == "true" ]]; then
+              echo "  [DRY RUN] would delete: id=${cache_id} key=${key:0:72} ref=${ref} (${reason})"
+              ((deleted++)) || true
+              return
+            fi
+            if gh api --method DELETE "repos/${GH_REPO}/actions/caches/${cache_id}" >/dev/null 2>&1; then
+              echo "  deleted: id=${cache_id} key=${key:0:72} (${reason})"
+              ((deleted++)) || true
+            else
+              echo "  FAILED: id=${cache_id} key=${key:0:72} (${reason})"
+              ((failed++)) || true
+            fi
+          }
+
+          # -----------------------------------------------------------
+          # Helper: bulk-delete all caches for a given ref.
+          # Uses gh cache delete --all --ref which is a single API call.
+          # -----------------------------------------------------------
+          bulk_delete_ref() {
+            local ref="$1" reason="$2" count="$3"
+            if [[ "$DRY_RUN" == "true" ]]; then
+              echo "  [DRY RUN] would bulk-delete ${count} caches for ref=${ref} (${reason})"
+              deleted=$((deleted + count))
+              return
+            fi
+            if gh cache delete --all --ref "$ref" 2>/dev/null; then
+              echo "  bulk-deleted ${count} caches for ref=${ref} (${reason})"
+              deleted=$((deleted + count))
+            else
+              echo "  FAILED bulk-delete for ref=${ref} (${reason})"
+              ((failed++)) || true
+            fi
+          }
+
+          # ===========================================================
+          #  Inventory
+          # ===========================================================
+          echo "Fetching full cache inventory…"
+          all_caches=$(fetch_all_caches)
+          total=$(echo "$all_caches" | jq 'length')
+          total_mb=$(echo "$all_caches" | jq 'if length == 0 then 0 else ([.[].size_in_bytes] | add / 1048576 | floor) end')
+          echo "Found ${total} cache entries (~${total_mb} MiB)."
+          echo ""
+
+          if [[ "$total" -eq 0 ]]; then
+            echo "Nothing to clean up."
+            exit 0
+          fi
+
+          # ===========================================================
+          #  PASS 1 — PR caches: bulk-delete each refs/pull/*/merge ref
+          # ===========================================================
+          echo "=== Pass 1: PR-scoped caches ==="
+          pr_refs=$(echo "$all_caches" | jq -r '[.[] | select(.ref | startswith("refs/pull/")) | .ref] | unique[]')
+          pr_total=$(echo "$all_caches" | jq '[.[] | select(.ref | startswith("refs/pull/"))] | length')
+          echo "  ${pr_total} caches across $(echo "$pr_refs" | grep -c . || echo 0) PR refs."
+
+          while IFS= read -r ref; do
+            [[ -z "$ref" ]] && continue
+            ref_count=$(echo "$all_caches" | jq --arg r "$ref" '[.[] | select(.ref == $r)] | length')
+            bulk_delete_ref "$ref" "stale PR cache" "$ref_count"
+          done <<< "$pr_refs"
+          echo ""
+
+          # ===========================================================
+          #  PASS 2 — Tag caches: bulk-delete refs containing "refs/tags/"
+          #  This covers both refs/tags/* and refs/heads/refs/tags/*
+          #  (the latter is created by docker.yml concurrency groups).
+          # ===========================================================
+          echo "=== Pass 2: Tag-scoped caches ==="
+          tag_refs=$(echo "$all_caches" | jq -r '[.[] | select(.ref | contains("refs/tags/")) | .ref] | unique[]')
+          tag_total=$(echo "$all_caches" | jq '[.[] | select(.ref | contains("refs/tags/"))] | length')
+          echo "  ${tag_total} caches across $(echo "$tag_refs" | grep -c . || echo 0) tag refs."
+
+          while IFS= read -r ref; do
+            [[ -z "$ref" ]] && continue
+            ref_count=$(echo "$all_caches" | jq --arg r "$ref" '[.[] | select(.ref == $r)] | length')
+            bulk_delete_ref "$ref" "stale tag cache" "$ref_count"
+          done <<< "$tag_refs"
+          echo ""
+
+          # ===========================================================
+          #  Remaining passes: main-branch caches only
+          # ===========================================================
+          main_caches=$(echo "$all_caches" | jq -c '
+            [.[] | select(
+              (.ref | startswith("refs/pull/") | not) and
+              (.ref | contains("refs/tags/") | not)
+            )]')
+          main_count=$(echo "$main_caches" | jq 'length')
+          echo "=== Main-branch caches remaining: ${main_count} ==="
+          echo ""
+
+          # -----------------------------------------------------------
+          #  PASS 3 — binfmt duplicates: keep only the newest
+          # -----------------------------------------------------------
+          echo "=== Pass 3: binfmt image duplicates ==="
+          binfmt_ids=$(echo "$main_caches" | jq -r '
+            [.[] | select(.key | startswith("docker.io--tonistiigi"))]
+            | sort_by(.created_at) | reverse
+            | .[1:][]
+            | "\(.id)\t\(.key)\t\(.ref)"')
+          binfmt_total=$(echo "$main_caches" | jq '[.[] | select(.key | startswith("docker.io--tonistiigi"))] | length')
+          echo "  ${binfmt_total} binfmt caches found; keeping newest, pruning rest."
+
+          while IFS=$'\t' read -r cache_id key ref; do
+            [[ -z "$cache_id" ]] && continue
+            delete_by_id "$cache_id" "$key" "$ref" "older binfmt duplicate"
+          done <<< "$binfmt_ids"
+          echo ""
+
+          # -----------------------------------------------------------
+          #  PASS 4 — Trivy DB caches (cache-trivy-*): keep newest only
+          #  These include a date suffix so old ones are never reused.
+          # -----------------------------------------------------------
+          echo "=== Pass 4: Trivy DB cache duplicates ==="
+          trivy_db_ids=$(echo "$main_caches" | jq -r '
+            [.[] | select(.key | startswith("cache-trivy-"))]
+            | sort_by(.created_at) | reverse
+            | .[1:][]
+            | "\(.id)\t\(.key)\t\(.ref)"')
+          trivy_db_total=$(echo "$main_caches" | jq '[.[] | select(.key | startswith("cache-trivy-"))] | length')
+          echo "  ${trivy_db_total} Trivy DB caches found; keeping newest."
+
+          while IFS=$'\t' read -r cache_id key ref; do
+            [[ -z "$cache_id" ]] && continue
+            delete_by_id "$cache_id" "$key" "$ref" "older Trivy DB cache"
+          done <<< "$trivy_db_ids"
+          echo ""
+
+          # -----------------------------------------------------------
+          #  PASS 5 — Trivy binary caches: keep newest only
+          # -----------------------------------------------------------
+          echo "=== Pass 5: Trivy binary duplicates ==="
+          trivy_bin_ids=$(echo "$main_caches" | jq -r '
+            [.[] | select(.key | startswith("trivy-binary-"))]
+            | sort_by(.created_at) | reverse
+            | .[1:][]
+            | "\(.id)\t\(.key)\t\(.ref)"')
+          trivy_bin_total=$(echo "$main_caches" | jq '[.[] | select(.key | startswith("trivy-binary-"))] | length')
+          echo "  ${trivy_bin_total} Trivy binary caches found; keeping newest."
+
+          while IFS=$'\t' read -r cache_id key ref; do
+            [[ -z "$cache_id" ]] && continue
+            delete_by_id "$cache_id" "$key" "$ref" "older Trivy binary"
+          done <<< "$trivy_bin_ids"
+          echo ""
+
+          # -----------------------------------------------------------
+          #  PASS 6 — BuildKit blobs + indexes on main: keep the 50
+          #  most recent entries (enough for a warm multi-arch build
+          #  cache), delete the rest.
+          # -----------------------------------------------------------
+          echo "=== Pass 6: BuildKit layer pruning (main) ==="
+          KEEP=50
+          buildkit_ids=$(echo "$main_caches" | jq -r --argjson keep "$KEEP" '
+            [.[] | select(
+              (.key | startswith("buildkit-blob-")) or
+              (.key | startswith("index-buildkit-"))
+            )]
+            | sort_by(.created_at) | reverse
+            | .[$keep:][]
+            | "\(.id)\t\(.key)\t\(.ref)"')
+          buildkit_total=$(echo "$main_caches" | jq '
+            [.[] | select(
+              (.key | startswith("buildkit-blob-")) or
+              (.key | startswith("index-buildkit-"))
+            )] | length')
+          echo "  ${buildkit_total} BuildKit caches on main; keeping newest ${KEEP}."
+
+          while IFS=$'\t' read -r cache_id key ref; do
+            [[ -z "$cache_id" ]] && continue
+            delete_by_id "$cache_id" "$key" "$ref" "old BuildKit layer"
+          done <<< "$buildkit_ids"
+          echo ""
+
+          # ===========================================================
+          #  Summary
+          # ===========================================================
+          echo "============================================"
+          echo "  Cache cleanup summary${dry_label}"
+          echo "============================================"
+          echo "  Total caches scanned : ${total}"
+          echo "  Deleted (or would be): ${deleted}"
+          echo "  Deletion failures    : ${failed}"
+          echo "============================================"
+
+          if [[ "$failed" -gt 0 ]]; then
+            echo "::warning::${failed} cache deletion(s) failed (non-fatal)."
+          fi

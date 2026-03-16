@@ -516,6 +516,30 @@ releases.
 - Be specific: `Connection errors now log at WARNING with instance name`
   not `Improved error handling`
 
+**Scope rule — what belongs in the CHANGELOG:**
+
+The CHANGELOG documents changes to the **shipped artifact** (the Docker image)
+and user-facing surfaces (the Houndarr web UI, the project landing page).
+Only include entries that affect what users get when they pull a new image tag
+or visit the homepage.
+
+Include:
+- Application code changes (routes, templates, search logic, config)
+- In-app UI fixes or features
+- Docker image / build changes (base image patches, CVE fixes, entrypoint)
+- Landing page / homepage fixes (these are the first thing users see)
+- Security fixes that affect the running container
+
+Do **not** include:
+- Docusaurus documentation-only changes (new pages, rewording, nav updates)
+- CI workflow additions or changes (unless they affect the shipped image)
+- README / SECURITY.md / AGENTS.md edits
+- Test-only changes
+- Developer tooling changes
+
+These non-shipped changes are still tracked in PRs and issues but do not
+warrant CHANGELOG entries or version bumps.
+
 **Separators:** Each version block ends with a `---` line (blank line before
 and after). Do not use `## [Unreleased]`.
 

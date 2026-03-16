@@ -24,6 +24,16 @@ const sidebars: SidebarsConfig = {
     },
     {
       type: 'category',
+      label: 'Concepts',
+      collapsed: false,
+      items: [
+        'concepts/how-houndarr-works',
+        'concepts/troubleshooting',
+        'concepts/faq',
+      ],
+    },
+    {
+      type: 'category',
       label: 'Security',
       collapsed: false,
       items: [

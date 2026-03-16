@@ -98,6 +98,10 @@ const config: Config = {
               label: 'Instance Settings',
               to: '/docs/configuration/instance-settings',
             },
+            {
+              label: 'How Houndarr Works',
+              to: '/docs/concepts/how-houndarr-works',
+            },
           ],
         },
         {

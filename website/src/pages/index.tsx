@@ -30,7 +30,7 @@ function HomepageHeader() {
           </Link>
           <Link
             className="button button--outline button--lg"
-            style={{marginLeft: '1rem', color: '#fff', borderColor: '#fff'}}
+            style={{color: '#fff', borderColor: '#fff'}}
             href="https://github.com/av1155/houndarr">
             View on GitHub
           </Link>

@@ -120,6 +120,15 @@ delay, or caps), but it stays bounded:
 
 This improves backlog rotation while preserving polite API behavior.
 
+:::tip Why am I seeing mostly skips?
+A high skip count is normal. Houndarr only searches items that Sonarr/Radarr report
+as missing or cutoff-unmet — it does not search your whole library. Each skipped item
+has a reason (cooldown, unreleased delay, hourly cap) logged alongside it. Zero errors
+and occasional `searched` entries means everything is working correctly.
+
+See [How Houndarr Works](/docs/concepts/how-houndarr-works) and the [FAQ](/docs/concepts/faq) for a detailed explanation.
+:::
+
 ## Recommended starting profile
 
 | Setting | Value |

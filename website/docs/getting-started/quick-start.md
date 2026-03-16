@@ -51,6 +51,10 @@ prompted to create an admin username and password.
 
 For more details, see [First-Run Setup](first-run-setup.md).
 
+:::info Mental model
+Houndarr does not search your entire library. It asks Sonarr/Radarr which items are **missing** or **below your quality cutoff**, then searches for those items in small, rate-limited batches. Seeing many skips and few searches is normal and expected. See [How Houndarr Works](/docs/concepts/how-houndarr-works) for a full explanation.
+:::
+
 ## Using `docker run`
 
 If you prefer `docker run` over Compose:

@@ -11,7 +11,7 @@ Security fixes target the latest release on `main` and the most recent
 published container image tag.
 
 For details on how Houndarr handles credentials, encryption, and network
-behavior, see [Trust & Security](docs/trust-and-security.md).
+behavior, see [Trust & Security](https://av1155.github.io/houndarr/docs/security/trust-and-security).
 
 ## Reporting a vulnerability
 

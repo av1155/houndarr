@@ -30,6 +30,18 @@ Open Houndarr's **Logs** page and look at recent activity. Each row shows:
 
 If you see `searched` entries for items that also appear in Sonarr/Radarr's wanted views, Houndarr is working correctly.
 
+#### Log context fields
+
+Each log row includes context fields that help you group and filter activity:
+
+- **`cycle_id`** — a unique ID shared by all rows from a single search cycle (both missing and cutoff passes). Use this to see everything that happened in one run.
+- **`cycle_trigger`** — one of `scheduled` (normal timer), `run_now` (manual button press), or `system` (supervisor lifecycle events like startup).
+- **`search_kind`** — `missing` or `cutoff` for item-level rows; empty for system rows.
+
+The Logs page groups rows by cycle when metadata exists and shows a **Cycle outcome** indicator: `searched` (at least one item was searched), `skips only` (all candidates were ineligible), or `unknown` (no metadata).
+
+By default, system rows (supervisor startup messages) are hidden. Use the filter controls to show them if needed.
+
 ### Step 3 — Check "Last Searched" timestamps in Sonarr/Radarr
 
 In Sonarr's cutoff-unmet view, each episode shows when it was last searched. If those timestamps match recent Houndarr log entries, you have confirmed end-to-end that the search commands are reaching Sonarr and being executed.

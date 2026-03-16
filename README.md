@@ -141,7 +141,7 @@ If you run Houndarr behind a reverse proxy (Nginx, Caddy, Traefik, etc.):
 5. Enable each instance — Houndarr will begin searching on the configured schedule.
 
 For detailed per-instance configuration options, see the
-[Instance Settings Guide](docs/settings.md).
+[Instance Settings Guide](https://av1155.github.io/houndarr/docs/configuration/instance-settings).
 
 ---
 
@@ -185,7 +185,7 @@ network:
 
 For a detailed, code-grounded explanation of how Houndarr handles credentials,
 network behavior, and trust boundaries, see
-[Trust & Security](docs/trust-and-security.md).
+[Trust & Security](https://av1155.github.io/houndarr/docs/security/trust-and-security).
 
 To report a vulnerability, see [SECURITY.md](SECURITY.md).
 

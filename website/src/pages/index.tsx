@@ -94,8 +94,8 @@ function WhatItDoes() {
             <p>
               <strong>Houndarr searches slowly, politely, and automatically:</strong>{' '}
               small batches, configurable sleep intervals, per-item cooldowns,
-              hourly API caps, and quiet hours. It runs as a single Docker
-              container alongside your existing *arr stack.
+              and hourly API caps. It runs as a single Docker container alongside
+              your existing *arr stack.
             </p>
           </div>
         </div>

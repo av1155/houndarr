@@ -18,8 +18,8 @@ below your quality cutoff. Their built-in "Search All Missing" button fires
 every item at once, overwhelming indexer API limits.
 
 Houndarr searches **slowly, politely, and automatically**: small batches,
-configurable sleep intervals, per-item cooldowns, hourly API caps, and quiet
-hours. It runs as a single Docker container alongside your existing *arr stack.
+configurable sleep intervals, per-item cooldowns, and hourly API caps.
+It runs as a single Docker container alongside your existing *arr stack.
 
 **Key capabilities:**
 

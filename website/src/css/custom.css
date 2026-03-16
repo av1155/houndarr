@@ -1,0 +1,84 @@
+/**
+ * Custom CSS for Houndarr documentation site.
+ * Uses Infima CSS framework variables from Docusaurus.
+ */
+
+/* Light mode — deep blue-gray primary */
+:root {
+  --ifm-color-primary: #1a73e8;
+  --ifm-color-primary-dark: #1765d0;
+  --ifm-color-primary-darker: #155fc5;
+  --ifm-color-primary-darkest: #114ea2;
+  --ifm-color-primary-light: #2d80eb;
+  --ifm-color-primary-lighter: #3888ec;
+  --ifm-color-primary-lightest: #5c9ef0;
+  --ifm-code-font-size: 95%;
+  --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.1);
+}
+
+/* Dark mode — teal accent to match Houndarr's dark-themed UI */
+[data-theme='dark'] {
+  --ifm-color-primary: #4ecdc4;
+  --ifm-color-primary-dark: #37c6bc;
+  --ifm-color-primary-darker: #30bfb5;
+  --ifm-color-primary-darkest: #27a199;
+  --ifm-color-primary-light: #65d4cc;
+  --ifm-color-primary-lighter: #73d8d1;
+  --ifm-color-primary-lightest: #97e3dd;
+  --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.3);
+}
+
+/* Hero section styling */
+.hero--primary {
+  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+  color: #ffffff;
+}
+
+[data-theme='light'] .hero--primary {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+.hero__title {
+  font-size: 3rem;
+  font-weight: 800;
+}
+
+.hero__subtitle {
+  font-size: 1.3rem;
+  opacity: 0.9;
+}
+
+/* Screenshot gallery */
+.screenshot-gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 1.5rem;
+  margin: 2rem 0;
+}
+
+.screenshot-gallery img {
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  width: 100%;
+  height: auto;
+  transition: transform 0.2s ease;
+}
+
+.screenshot-gallery img:hover {
+  transform: scale(1.02);
+}
+
+/* Feature cards on homepage */
+.feature-card {
+  padding: 1.5rem;
+  border-radius: 8px;
+  text-align: center;
+}
+
+[data-theme='dark'] .feature-card {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+[data-theme='light'] .feature-card {
+  background: rgba(0, 0, 0, 0.03);
+}

@@ -27,6 +27,14 @@ updates:
           - "pytest*"
           - "anyio"
 
+  # npm (Docusaurus docs site)
+  - package-ecosystem: "npm"
+    directory: "/website"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+
   # GitHub Actions
   - package-ecosystem: "github-actions"
     directory: "/"

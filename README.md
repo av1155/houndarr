@@ -5,6 +5,8 @@
 </p>
 
 > A focused, self-hosted companion for Sonarr and Radarr that automatically searches for missing media in polite, controlled batches.
+>
+> **[Documentation](https://av1155.github.io/houndarr/)** | **[Quick Start](https://av1155.github.io/houndarr/docs/getting-started/quick-start)**
 
 ---
 

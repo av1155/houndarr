@@ -77,8 +77,12 @@ secrets/
 # Docker
 .docker/
 
-# Node (for CDN fallback cache etc. — should not exist but just in case)
+# Node
 node_modules/
+
+# Docusaurus
+website/build/
+website/.docusaurus/
 
 # Research artifacts
 .opencode/

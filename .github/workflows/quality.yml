@@ -6,10 +6,12 @@ on:
     paths-ignore:
       - "docs/**"
       - "*.md"
+      - "website/**"
   pull_request:
     paths-ignore:
       - "docs/**"
       - "*.md"
+      - "website/**"
 
 permissions:
   contents: read

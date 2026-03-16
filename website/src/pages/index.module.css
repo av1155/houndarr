@@ -1,0 +1,50 @@
+/**
+ * Homepage styles for Houndarr documentation site.
+ */
+
+.heroBanner {
+  padding: 4rem 0;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+}
+
+@media screen and (max-width: 996px) {
+  .heroBanner {
+    padding: 2rem;
+  }
+}
+
+.heroLogo {
+  width: 160px;
+  height: auto;
+  margin-bottom: 1.5rem;
+}
+
+.buttons {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.screenshots {
+  padding: 3rem 0;
+}
+
+.whatItDoes {
+  padding: 3rem 0;
+}
+
+[data-theme='dark'] .whatItDoes {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+[data-theme='light'] .whatItDoes {
+  background: rgba(0, 0, 0, 0.02);
+}
+
+.scopeSection {
+  padding: 2rem 0 3rem;
+}

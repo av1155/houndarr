@@ -73,8 +73,10 @@ Season-context mode sends at most one `SeasonSearch` per `(series, season)` per 
 Season search is not pack-only in Sonarr and may still produce singles or noisier behavior.
 
 :::info
-Cooldown in season-context mode is tracked through the representative missing episode
-that triggered that season search.
+Cooldown in season-context mode is tracked at the season level using a stable synthetic
+identifier derived from the series ID and season number — not through any individual
+episode. This ensures cooldown history is consistent across cycles regardless of which
+episode happens to appear first on the wanted list.
 :::
 
 ## Cutoff upgrade controls

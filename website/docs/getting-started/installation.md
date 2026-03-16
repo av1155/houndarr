@@ -19,7 +19,7 @@ docker pull ghcr.io/av1155/houndarr:latest
 Or pin to a specific version:
 
 ```bash
-docker pull ghcr.io/av1155/houndarr:v1.0.6
+docker pull ghcr.io/av1155/houndarr:v1.0.8
 ```
 
 Available architectures: `linux/amd64` and `linux/arm64`.
@@ -52,7 +52,7 @@ The dev server will be available at `http://localhost:8877`.
 - Python 3.12 or later
 - pip
 
-Development mode enables auto-reload and exposes the FastAPI Swagger UI at `/docs`.
+Development mode enables auto-reload and exposes the FastAPI Swagger UI at `/api/docs`.
 
 ## Container details
 

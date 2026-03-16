@@ -137,7 +137,6 @@ Every item Houndarr considers but does not search is logged with an action of `s
 | `cooldown (N days remaining)` | Item was searched recently; waiting to retry |
 | `unreleased delay (N hrs remaining)` | Release date is too recent or in the future |
 | `hourly cap reached` | This instance has hit its per-hour search limit |
-| `not in wanted list` | Item is monitored but Sonarr/Radarr do not report it as missing or cutoff-unmet |
 
 A high skip count with zero errors is a **strong signal of health**. It means Houndarr is examining candidates, finding most of them ineligible under your rules, and waiting patiently for them to become eligible.
 

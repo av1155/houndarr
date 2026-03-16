@@ -16,7 +16,7 @@ Houndarr is configured primarily through environment variables set in your
 | `HOUNDARR_DATA_DIR` | `/data` | Directory for persistent data (SQLite DB and master key) |
 | `HOUNDARR_HOST` | `0.0.0.0` | Host address to bind the web server to |
 | `HOUNDARR_PORT` | `8877` | Port to bind the web server to |
-| `HOUNDARR_DEV` | `false` | Enable development mode (auto-reload, API docs at `/docs`) |
+| `HOUNDARR_DEV` | `false` | Enable development mode (auto-reload, API docs at `/api/docs`) |
 | `HOUNDARR_LOG_LEVEL` | `info` | Log level: `debug`, `info`, `warning`, `error` |
 
 ## Security settings
@@ -48,7 +48,7 @@ stack. A warning will be printed to stdout at startup as a reminder.
 Setting `HOUNDARR_DEV=true` enables:
 
 - Auto-reload on code changes
-- FastAPI Swagger UI at `/docs`
+- FastAPI Swagger UI at `/api/docs`
 
 :::warning
 Do not run with `HOUNDARR_DEV=true` in production. It exposes the Swagger UI

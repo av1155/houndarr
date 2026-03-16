@@ -5,7 +5,7 @@ import type * as Preset from '@docusaurus/preset-classic';
 const config: Config = {
   title: 'Houndarr',
   tagline: 'Polite, automated media searching for Sonarr and Radarr',
-  favicon: 'img/houndarr-logo.png',
+  favicon: 'img/houndarr-logo-dark.png',
 
   future: {
     v4: true,
@@ -58,7 +58,7 @@ const config: Config = {
       title: 'Houndarr',
       logo: {
         alt: 'Houndarr logo',
-        src: 'img/houndarr-logo.png',
+        src: 'img/houndarr-logo-dark.png',
         srcDark: 'img/houndarr-logo-dark.png',
       },
       items: [

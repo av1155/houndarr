@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import html
 from pathlib import Path
 from typing import Annotated
 
@@ -122,7 +123,7 @@ def _connection_status_response(message: str, ok: bool, status_code: int) -> HTM
     trigger = "houndarr-connection-test-success" if ok else "houndarr-connection-test-failure"
     color = "text-green-400" if ok else "text-red-400"
     return HTMLResponse(
-        content=f'<span class="text-xs {color}">{message}</span>',
+        content=f'<span class="text-xs {color}">{html.escape(message)}</span>',
         status_code=status_code,
         headers={"HX-Trigger": trigger},
     )
@@ -130,7 +131,7 @@ def _connection_status_response(message: str, ok: bool, status_code: int) -> HTM
 
 def _connection_guard_response(message: str) -> HTMLResponse:
     return HTMLResponse(
-        content=f'<span class="text-xs text-red-400">{message}</span>',
+        content=f'<span class="text-xs text-red-400">{html.escape(message)}</span>',
         status_code=422,
         headers={
             "HX-Retarget": "#instance-connection-status",

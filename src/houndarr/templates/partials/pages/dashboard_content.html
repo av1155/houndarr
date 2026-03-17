@@ -236,7 +236,7 @@
           </svg>
           <p class="text-lg font-medium text-slate-400">No instances configured yet</p>
           <p class="mt-2 text-sm">
-            <a href="/settings" hx-get="/settings" hx-target="#app-content" hx-swap="innerHTML" hx-push-url="true" class="text-brand-400 hover:text-brand-300">Add a Sonarr or Radarr instance</a>
+            <a href="/settings" hx-get="/settings" hx-target="#app-content" hx-swap="innerHTML" hx-push-url="true" class="text-brand-400 hover:text-brand-300">Add an instance</a>
             to get started.
           </p>
         </div>`;
@@ -308,10 +308,14 @@
              <span class="w-1.5 h-1.5 rounded-full bg-slate-500 inline-block"></span> Disabled
            </span>`;
 
-            const typeBadge =
-              inst.type === 'sonarr'
-                ? `<span class="text-xs font-mono bg-sky-900/50 text-sky-300 px-2 py-0.5 rounded">Sonarr</span>`
-                : `<span class="text-xs font-mono bg-red-900/50 text-red-300 px-2 py-0.5 rounded">Radarr</span>`;
+            const typeBadgeMap = {
+              sonarr:  '<span class="text-xs font-mono bg-sky-900/50 text-sky-300 px-2 py-0.5 rounded">Sonarr</span>',
+              radarr:  '<span class="text-xs font-mono bg-amber-900/50 text-amber-300 px-2 py-0.5 rounded">Radarr</span>',
+              lidarr:  '<span class="text-xs font-mono bg-emerald-900/50 text-emerald-300 px-2 py-0.5 rounded">Lidarr</span>',
+              readarr: '<span class="text-xs font-mono bg-red-900/50 text-red-300 px-2 py-0.5 rounded">Readarr</span>',
+              whisparr:'<span class="text-xs font-mono bg-pink-900/50 text-pink-300 px-2 py-0.5 rounded">Whisparr</span>',
+            };
+            const typeBadge = typeBadgeMap[inst.type] || typeBadgeMap.sonarr;
 
             const lastSearch = inst.last_search_at ? formatLocalTimestamp(inst.last_search_at) : 'Never';
 

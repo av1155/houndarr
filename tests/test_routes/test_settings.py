@@ -430,7 +430,7 @@ def test_connection_check_endpoint_invalid_type(app: TestClient) -> None:
         headers=csrf_headers(app),
     )
     assert resp.status_code == 422
-    assert b"Invalid type" in resp.content
+    assert b"Invalid instance type" in resp.content
 
 
 def test_create_instance_rejects_invalid_cutoff_controls(app: TestClient) -> None:

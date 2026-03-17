@@ -69,9 +69,7 @@ async def _lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # Warn if no instances are configured yet
     instances = await list_instances(master_key=app.state.master_key)
     if not instances:
-        logger.warning(
-            "No instances configured — visit the Settings page to add a Sonarr or Radarr instance"
-        )
+        logger.warning("No instances configured — visit the Settings page to add an instance")
 
     # Start the background search supervisor
     supervisor = Supervisor(master_key=app.state.master_key)

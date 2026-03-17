@@ -1,4 +1,4 @@
-"""Abstract base class for *arr API clients (Sonarr / Radarr)."""
+"""Abstract base class for *arr API clients."""
 
 from __future__ import annotations
 
@@ -15,10 +15,13 @@ _DEFAULT_TIMEOUT = httpx.Timeout(30.0, connect=5.0)
 
 
 class ArrClient(ABC):
-    """Thin async wrapper around the *arr v3 REST API.
+    """Thin async wrapper around an *arr REST API.
 
     Subclasses implement :meth:`get_missing`, :meth:`get_cutoff_unmet`, and
-    :meth:`search` for their specific resource type (episodes vs. movies).
+    :meth:`search` for their specific resource type.
+
+    Override :attr:`_SYSTEM_STATUS_PATH` for apps whose API version differs
+    from the v3 default (e.g. Lidarr and Readarr use ``/api/v1/``).
 
     Usage::
 
@@ -28,6 +31,8 @@ class ArrClient(ABC):
     The client can also be used without the context manager if the caller
     manages the lifecycle of the underlying :class:`httpx.AsyncClient`.
     """
+
+    _SYSTEM_STATUS_PATH: str = "/api/v3/system/status"
 
     def __init__(
         self,
@@ -80,11 +85,12 @@ class ArrClient(ABC):
     async def ping(self) -> bool:
         """Return ``True`` if the instance is reachable and healthy.
 
-        Uses the ``/api/v3/system/status`` endpoint which all *arr v3
-        applications expose without extra permissions.
+        Uses the system/status endpoint at :attr:`_SYSTEM_STATUS_PATH`.
+        Defaults to ``/api/v3/system/status`` (Sonarr, Radarr, Whisparr);
+        Lidarr and Readarr override to ``/api/v1/system/status``.
         """
         try:
-            await self._get("/api/v3/system/status")
+            await self._get(self._SYSTEM_STATUS_PATH)
             return True
         except (httpx.HTTPError, httpx.InvalidURL):
             return False

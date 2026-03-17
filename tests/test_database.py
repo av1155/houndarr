@@ -29,7 +29,7 @@ async def test_schema_created(db: None) -> None:
 async def test_schema_version_set(db: None) -> None:
     """Schema version should be set after init."""
     version = await get_setting("schema_version")
-    assert version == "4"
+    assert version == "5"
 
 
 @pytest.mark.asyncio()
@@ -50,6 +50,9 @@ async def test_search_log_and_instance_v3_columns_exist(db: None) -> None:
     assert "cutoff_cooldown_days" in instance_columns
     assert "cutoff_hourly_cap" in instance_columns
     assert "sonarr_search_mode" in instance_columns
+    assert "lidarr_search_mode" in instance_columns
+    assert "readarr_search_mode" in instance_columns
+    assert "whisparr_search_mode" in instance_columns
 
 
 @pytest.mark.asyncio()
@@ -106,7 +109,7 @@ async def test_init_db_migrates_v1_schema_to_v3(tmp_path: Path) -> None:
         search_log_columns = {row[1] async for row in search_log_cur}
         instance_columns = {row[1] async for row in instances_cur}
 
-    assert await get_setting("schema_version") == "4"
+    assert await get_setting("schema_version") == "5"
     assert "item_label" in search_log_columns
     assert "search_kind" in search_log_columns
     assert "cycle_id" in search_log_columns
@@ -114,6 +117,9 @@ async def test_init_db_migrates_v1_schema_to_v3(tmp_path: Path) -> None:
     assert "cutoff_cooldown_days" in instance_columns
     assert "cutoff_hourly_cap" in instance_columns
     assert "sonarr_search_mode" in instance_columns
+    assert "lidarr_search_mode" in instance_columns
+    assert "readarr_search_mode" in instance_columns
+    assert "whisparr_search_mode" in instance_columns
 
 
 @pytest.mark.asyncio()
@@ -170,7 +176,7 @@ async def test_init_db_migrates_v2_schema_to_v4(tmp_path: Path) -> None:
         async with conn.execute("PRAGMA table_info(search_log)") as cur:
             search_log_columns = {row[1] async for row in cur}
 
-    assert await get_setting("schema_version") == "4"
+    assert await get_setting("schema_version") == "5"
     assert "cycle_id" in search_log_columns
     assert "cycle_trigger" in search_log_columns
 
@@ -178,6 +184,9 @@ async def test_init_db_migrates_v2_schema_to_v4(tmp_path: Path) -> None:
         async with conn.execute("PRAGMA table_info(instances)") as cur:
             instance_columns = {row[1] async for row in cur}
     assert "sonarr_search_mode" in instance_columns
+    assert "lidarr_search_mode" in instance_columns
+    assert "readarr_search_mode" in instance_columns
+    assert "whisparr_search_mode" in instance_columns
 
 
 @pytest.mark.asyncio()
@@ -232,11 +241,129 @@ async def test_init_db_migrates_v3_schema_to_v4(tmp_path: Path) -> None:
     set_db_path(str(db_path))
     await init_db()
 
-    assert await get_setting("schema_version") == "4"
+    assert await get_setting("schema_version") == "5"
     async with get_db() as conn:
         async with conn.execute("PRAGMA table_info(instances)") as cur:
             instance_columns = {row[1] async for row in cur}
     assert "sonarr_search_mode" in instance_columns
+    assert "lidarr_search_mode" in instance_columns
+    assert "readarr_search_mode" in instance_columns
+    assert "whisparr_search_mode" in instance_columns
+
+
+@pytest.mark.asyncio()
+async def test_init_db_migrates_v4_schema_to_v5(tmp_path: Path) -> None:
+    """init_db should migrate existing schema_version=4 databases to v5."""
+    db_path = tmp_path / "migrate-v4.db"
+
+    async with aiosqlite.connect(str(db_path)) as conn:
+        await conn.executescript(
+            """
+            CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+            INSERT INTO settings (key, value) VALUES ('schema_version', '4');
+
+            CREATE TABLE instances (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                type TEXT NOT NULL CHECK(type IN ('sonarr', 'radarr')),
+                url TEXT NOT NULL,
+                encrypted_api_key TEXT NOT NULL DEFAULT '',
+                batch_size INTEGER NOT NULL DEFAULT 2,
+                sleep_interval_mins INTEGER NOT NULL DEFAULT 30,
+                hourly_cap INTEGER NOT NULL DEFAULT 4,
+                cooldown_days INTEGER NOT NULL DEFAULT 14,
+                unreleased_delay_hrs INTEGER NOT NULL DEFAULT 36,
+                cutoff_enabled INTEGER NOT NULL DEFAULT 0,
+                cutoff_batch_size INTEGER NOT NULL DEFAULT 1,
+                cutoff_cooldown_days INTEGER NOT NULL DEFAULT 21,
+                cutoff_hourly_cap INTEGER NOT NULL DEFAULT 1,
+                sonarr_search_mode TEXT NOT NULL DEFAULT 'episode',
+                enabled INTEGER NOT NULL DEFAULT 1,
+                created_at TEXT NOT NULL DEFAULT '2024-01-01T00:00:00.000Z',
+                updated_at TEXT NOT NULL DEFAULT '2024-01-01T00:00:00.000Z'
+            );
+
+            INSERT INTO instances (id, name, type, url, sonarr_search_mode)
+            VALUES (1, 'Test Sonarr', 'sonarr', 'http://sonarr:8989', 'episode');
+
+            CREATE TABLE cooldowns (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                instance_id INTEGER NOT NULL REFERENCES instances(id) ON DELETE CASCADE,
+                item_id INTEGER NOT NULL,
+                item_type TEXT NOT NULL CHECK(item_type IN ('episode', 'movie')),
+                searched_at TEXT NOT NULL,
+                UNIQUE(instance_id, item_id, item_type)
+            );
+
+            INSERT INTO cooldowns (instance_id, item_id, item_type, searched_at)
+            VALUES (1, 42, 'episode', '2024-06-01T12:00:00.000Z');
+
+            CREATE TABLE search_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                instance_id INTEGER REFERENCES instances(id) ON DELETE SET NULL,
+                item_id INTEGER,
+                item_type TEXT CHECK(item_type IN ('episode', 'movie')),
+                search_kind TEXT,
+                cycle_id TEXT,
+                cycle_trigger TEXT,
+                item_label TEXT,
+                action TEXT NOT NULL,
+                reason TEXT,
+                message TEXT,
+                timestamp TEXT NOT NULL DEFAULT '2024-01-01T00:00:00.000Z'
+            );
+
+            INSERT INTO search_log (instance_id, item_id, item_type, action, timestamp)
+            VALUES (1, 42, 'episode', 'searched', '2024-06-01T12:00:00.000Z');
+            """
+        )
+        await conn.commit()
+
+    set_db_path(str(db_path))
+    await init_db()
+
+    assert await get_setting("schema_version") == "5"
+
+    async with get_db() as conn:
+        # Verify new columns exist
+        async with conn.execute("PRAGMA table_info(instances)") as cur:
+            instance_columns = {row[1] async for row in cur}
+        assert "lidarr_search_mode" in instance_columns
+        assert "readarr_search_mode" in instance_columns
+        assert "whisparr_search_mode" in instance_columns
+
+        # Verify existing data survived migration
+        async with conn.execute("SELECT name, type FROM instances WHERE id = 1") as cur:
+            row = await cur.fetchone()
+        assert row is not None
+        assert row["name"] == "Test Sonarr"
+        assert row["type"] == "sonarr"
+
+        async with conn.execute("SELECT item_id, item_type FROM cooldowns WHERE id = 1") as cur:
+            row = await cur.fetchone()
+        assert row is not None
+        assert row["item_id"] == 42
+        assert row["item_type"] == "episode"
+
+        async with conn.execute("SELECT item_id, action FROM search_log WHERE id = 1") as cur:
+            row = await cur.fetchone()
+        assert row is not None
+        assert row["item_id"] == 42
+        assert row["action"] == "searched"
+
+        # Verify new type values are accepted in CHECK constraints
+        await conn.execute(
+            "INSERT INTO instances (id, name, type, url) VALUES (2, 'Lidarr', 'lidarr', 'http://lidarr:8686')"
+        )
+        await conn.execute(
+            "INSERT INTO cooldowns (instance_id, item_id, item_type, searched_at) "
+            "VALUES (2, 1, 'album', '2024-06-01T12:00:00.000Z')"
+        )
+        await conn.execute(
+            "INSERT INTO search_log (instance_id, item_id, item_type, action, timestamp) "
+            "VALUES (2, 1, 'album', 'searched', '2024-06-01T12:00:00.000Z')"
+        )
+        await conn.commit()
 
 
 @pytest.mark.asyncio()

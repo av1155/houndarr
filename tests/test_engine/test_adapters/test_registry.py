@@ -27,8 +27,32 @@ class TestAdapterRegistry:
         assert callable(adapter.dispatch_search)
         assert callable(adapter.make_client)
 
-    def test_exactly_two_entries(self):
-        assert len(ADAPTERS) == 2
+    def test_has_lidarr(self):
+        adapter = ADAPTERS[InstanceType.lidarr]
+        assert isinstance(adapter, AppAdapter)
+        assert callable(adapter.adapt_missing)
+        assert callable(adapter.adapt_cutoff)
+        assert callable(adapter.dispatch_search)
+        assert callable(adapter.make_client)
+
+    def test_has_readarr(self):
+        adapter = ADAPTERS[InstanceType.readarr]
+        assert isinstance(adapter, AppAdapter)
+        assert callable(adapter.adapt_missing)
+        assert callable(adapter.adapt_cutoff)
+        assert callable(adapter.dispatch_search)
+        assert callable(adapter.make_client)
+
+    def test_has_whisparr(self):
+        adapter = ADAPTERS[InstanceType.whisparr]
+        assert isinstance(adapter, AppAdapter)
+        assert callable(adapter.adapt_missing)
+        assert callable(adapter.adapt_cutoff)
+        assert callable(adapter.dispatch_search)
+        assert callable(adapter.make_client)
+
+    def test_exactly_five_entries(self):
+        assert len(ADAPTERS) == 5
 
     def test_get_adapter_sonarr(self):
         adapter = get_adapter(InstanceType.sonarr)
@@ -37,6 +61,18 @@ class TestAdapterRegistry:
     def test_get_adapter_radarr(self):
         adapter = get_adapter(InstanceType.radarr)
         assert adapter is ADAPTERS[InstanceType.radarr]
+
+    def test_get_adapter_lidarr(self):
+        adapter = get_adapter(InstanceType.lidarr)
+        assert adapter is ADAPTERS[InstanceType.lidarr]
+
+    def test_get_adapter_readarr(self):
+        adapter = get_adapter(InstanceType.readarr)
+        assert adapter is ADAPTERS[InstanceType.readarr]
+
+    def test_get_adapter_whisparr(self):
+        adapter = get_adapter(InstanceType.whisparr)
+        assert adapter is ADAPTERS[InstanceType.whisparr]
 
     def test_get_adapter_unknown_raises(self):
         with pytest.raises(ValueError, match="No adapter registered"):

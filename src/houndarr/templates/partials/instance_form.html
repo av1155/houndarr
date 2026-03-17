@@ -41,6 +41,9 @@
                    data-instance-field="name"
                    data-sonarr-placeholder="My Sonarr"
                    data-radarr-placeholder="My Radarr"
+                   data-lidarr-placeholder="My Lidarr"
+                   data-readarr-placeholder="My Readarr"
+                   data-whisparr-placeholder="My Whisparr"
                    value="{{ instance.name if is_edit else '' }}"
                    placeholder="My Sonarr"
                    class="w-full h-11 bg-slate-900/80 border border-slate-700/80 rounded-lg px-3 text-sm text-white placeholder:text-slate-500
@@ -54,6 +57,9 @@
                            focus:outline-none focus:border-brand-400/80 focus:ring-2 focus:ring-brand-500/25">
               <option value="sonarr" {% if is_edit and instance.type.value == 'sonarr' %}selected{% endif %}>Sonarr</option>
               <option value="radarr" {% if is_edit and instance.type.value == 'radarr' %}selected{% endif %}>Radarr</option>
+              <option value="lidarr" {% if is_edit and instance.type.value == 'lidarr' %}selected{% endif %}>Lidarr</option>
+              <option value="readarr" {% if is_edit and instance.type.value == 'readarr' %}selected{% endif %}>Readarr</option>
+              <option value="whisparr" {% if is_edit and instance.type.value == 'whisparr' %}selected{% endif %}>Whisparr</option>
             </select>
           </div>
           <div>
@@ -62,6 +68,9 @@
                    data-instance-field="url"
                    data-sonarr-placeholder="http://sonarr:8989"
                    data-radarr-placeholder="http://radarr:7878"
+                   data-lidarr-placeholder="http://lidarr:8686"
+                   data-readarr-placeholder="http://readarr:8787"
+                   data-whisparr-placeholder="http://whisparr:6969"
                    value="{{ instance.url if is_edit else '' }}"
                    placeholder="http://sonarr:8989"
                    class="w-full h-11 bg-slate-900/80 border border-slate-700/80 rounded-lg px-3 text-sm text-white placeholder:text-slate-500
@@ -138,6 +147,69 @@
             </select>
             <p class="mt-2 text-xs text-amber-300/90">
               Advanced mode: Sonarr season search is not pack-only and may still pull singles/noisier results.
+            </p>
+          </div>
+          <div class="sm:col-span-2" data-lidarr-only="true"
+               {% if instance.type.value != 'lidarr' %}style="display:none;"{% endif %}>
+            <label class="block text-xs font-medium text-slate-400 mb-1.5" for="{{ form_id }}-lidarr-mode">
+              Lidarr Missing Search Mode
+            </label>
+            <select id="{{ form_id }}-lidarr-mode" name="lidarr_search_mode"
+                    class="w-full h-11 bg-slate-900/80 border border-slate-700/80 rounded-lg px-3 text-sm text-white
+                           focus:outline-none focus:border-brand-400/80 focus:ring-2 focus:ring-brand-500/25">
+              <option value="album"
+                      {% if instance.lidarr_search_mode.value == 'album' %}selected{% endif %}>
+                Album search (default)
+              </option>
+              <option value="artist_context"
+                      {% if instance.lidarr_search_mode.value == 'artist_context' %}selected{% endif %}>
+                Artist-context search (advanced)
+              </option>
+            </select>
+            <p class="mt-2 text-xs text-amber-300/90">
+              Advanced mode: searches for all missing albums by an artist in a single request.
+            </p>
+          </div>
+          <div class="sm:col-span-2" data-readarr-only="true"
+               {% if instance.type.value != 'readarr' %}style="display:none;"{% endif %}>
+            <label class="block text-xs font-medium text-slate-400 mb-1.5" for="{{ form_id }}-readarr-mode">
+              Readarr Missing Search Mode
+            </label>
+            <select id="{{ form_id }}-readarr-mode" name="readarr_search_mode"
+                    class="w-full h-11 bg-slate-900/80 border border-slate-700/80 rounded-lg px-3 text-sm text-white
+                           focus:outline-none focus:border-brand-400/80 focus:ring-2 focus:ring-brand-500/25">
+              <option value="book"
+                      {% if instance.readarr_search_mode.value == 'book' %}selected{% endif %}>
+                Book search (default)
+              </option>
+              <option value="author_context"
+                      {% if instance.readarr_search_mode.value == 'author_context' %}selected{% endif %}>
+                Author-context search (advanced)
+              </option>
+            </select>
+            <p class="mt-2 text-xs text-amber-300/90">
+              Advanced mode: searches for all missing books by an author in a single request.
+            </p>
+          </div>
+          <div class="sm:col-span-2" data-whisparr-only="true"
+               {% if instance.type.value != 'whisparr' %}style="display:none;"{% endif %}>
+            <label class="block text-xs font-medium text-slate-400 mb-1.5" for="{{ form_id }}-whisparr-mode">
+              Whisparr Missing Search Mode
+            </label>
+            <select id="{{ form_id }}-whisparr-mode" name="whisparr_search_mode"
+                    class="w-full h-11 bg-slate-900/80 border border-slate-700/80 rounded-lg px-3 text-sm text-white
+                           focus:outline-none focus:border-brand-400/80 focus:ring-2 focus:ring-brand-500/25">
+              <option value="episode"
+                      {% if instance.whisparr_search_mode.value == 'episode' %}selected{% endif %}>
+                Episode search (default)
+              </option>
+              <option value="season_context"
+                      {% if instance.whisparr_search_mode.value == 'season_context' %}selected{% endif %}>
+                Season-context search (advanced)
+              </option>
+            </select>
+            <p class="mt-2 text-xs text-amber-300/90">
+              Advanced mode: season search may still pull singles/noisier results.
             </p>
           </div>
         </div>

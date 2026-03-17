@@ -17,9 +17,12 @@ from houndarr.config import (
     DEFAULT_CUTOFF_COOLDOWN_DAYS,
     DEFAULT_CUTOFF_HOURLY_CAP,
     DEFAULT_HOURLY_CAP,
+    DEFAULT_LIDARR_SEARCH_MODE,
+    DEFAULT_READARR_SEARCH_MODE,
     DEFAULT_SLEEP_INTERVAL_MINUTES,
     DEFAULT_SONARR_SEARCH_MODE,
     DEFAULT_UNRELEASED_DELAY_HOURS,
+    DEFAULT_WHISPARR_SEARCH_MODE,
 )
 from houndarr.crypto import decrypt, encrypt
 from houndarr.database import get_db
@@ -30,10 +33,34 @@ class InstanceType(StrEnum):
 
     sonarr = "sonarr"
     radarr = "radarr"
+    lidarr = "lidarr"
+    readarr = "readarr"
+    whisparr = "whisparr"
 
 
 class SonarrSearchMode(StrEnum):
     """Supported Sonarr missing-search strategies."""
+
+    episode = "episode"
+    season_context = "season_context"
+
+
+class LidarrSearchMode(StrEnum):
+    """Supported Lidarr missing-search strategies."""
+
+    album = "album"
+    artist_context = "artist_context"
+
+
+class ReadarrSearchMode(StrEnum):
+    """Supported Readarr missing-search strategies."""
+
+    book = "book"
+    author_context = "author_context"
+
+
+class WhisparrSearchMode(StrEnum):
+    """Supported Whisparr missing-search strategies."""
 
     episode = "episode"
     season_context = "season_context"
@@ -65,6 +92,9 @@ class Instance:
     created_at: str
     updated_at: str
     sonarr_search_mode: SonarrSearchMode = SonarrSearchMode.episode
+    lidarr_search_mode: LidarrSearchMode = LidarrSearchMode.album
+    readarr_search_mode: ReadarrSearchMode = ReadarrSearchMode.book
+    whisparr_search_mode: WhisparrSearchMode = WhisparrSearchMode.episode
 
 
 # ---------------------------------------------------------------------------
@@ -93,6 +123,9 @@ def _row_to_instance(row: Any, master_key: bytes) -> Instance:
         created_at=row["created_at"],
         updated_at=row["updated_at"],
         sonarr_search_mode=SonarrSearchMode(row["sonarr_search_mode"]),
+        lidarr_search_mode=LidarrSearchMode(row["lidarr_search_mode"]),
+        readarr_search_mode=ReadarrSearchMode(row["readarr_search_mode"]),
+        whisparr_search_mode=WhisparrSearchMode(row["whisparr_search_mode"]),
     )
 
 
@@ -119,13 +152,16 @@ async def create_instance(
     cutoff_cooldown_days: int = DEFAULT_CUTOFF_COOLDOWN_DAYS,
     cutoff_hourly_cap: int = DEFAULT_CUTOFF_HOURLY_CAP,
     sonarr_search_mode: SonarrSearchMode = SonarrSearchMode(DEFAULT_SONARR_SEARCH_MODE),
+    lidarr_search_mode: LidarrSearchMode = LidarrSearchMode(DEFAULT_LIDARR_SEARCH_MODE),
+    readarr_search_mode: ReadarrSearchMode = ReadarrSearchMode(DEFAULT_READARR_SEARCH_MODE),
+    whisparr_search_mode: WhisparrSearchMode = WhisparrSearchMode(DEFAULT_WHISPARR_SEARCH_MODE),
 ) -> Instance:
     """Insert a new instance row and return the populated :class:`Instance`.
 
     Args:
         master_key: Fernet key used to encrypt *api_key* before storage.
         name: Human-readable label for the instance.
-        type: ``sonarr`` or ``radarr``.
+        type: One of ``sonarr``, ``radarr``, ``lidarr``, ``readarr``, ``whisparr``.
         url: Base URL of the *arr instance (e.g. ``http://sonarr:8989``).
         api_key: Plaintext API key — will be encrypted before being written.
         enabled: Whether the search engine should process this instance.
@@ -139,6 +175,9 @@ async def create_instance(
         cutoff_cooldown_days: Days to wait before re-searching cutoff-unmet items.
         cutoff_hourly_cap: Maximum cutoff searches allowed per hour.
         sonarr_search_mode: Sonarr missing-search strategy mode.
+        lidarr_search_mode: Lidarr missing-search strategy mode.
+        readarr_search_mode: Readarr missing-search strategy mode.
+        whisparr_search_mode: Whisparr missing-search strategy mode.
 
     Returns:
         The newly created :class:`Instance` with its database-assigned *id*.
@@ -152,8 +191,9 @@ async def create_instance(
                 enabled, batch_size, sleep_interval_mins,
                 hourly_cap, cooldown_days, unreleased_delay_hrs,
                 cutoff_enabled, cutoff_batch_size, cutoff_cooldown_days, cutoff_hourly_cap,
-                sonarr_search_mode
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                sonarr_search_mode, lidarr_search_mode, readarr_search_mode,
+                whisparr_search_mode
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 name,
@@ -171,6 +211,9 @@ async def create_instance(
                 cutoff_cooldown_days,
                 cutoff_hourly_cap,
                 sonarr_search_mode.value,
+                lidarr_search_mode.value,
+                readarr_search_mode.value,
+                whisparr_search_mode.value,
             ),
         )
         await db.commit()
@@ -258,6 +301,16 @@ async def update_instance(
         "cutoff_cooldown_days": "cutoff_cooldown_days",
         "cutoff_hourly_cap": "cutoff_hourly_cap",
         "sonarr_search_mode": "sonarr_search_mode",
+        "lidarr_search_mode": "lidarr_search_mode",
+        "readarr_search_mode": "readarr_search_mode",
+        "whisparr_search_mode": "whisparr_search_mode",
+    }
+
+    _search_mode_fields = {
+        "sonarr_search_mode",
+        "lidarr_search_mode",
+        "readarr_search_mode",
+        "whisparr_search_mode",
     }
 
     assignments: list[str] = []
@@ -270,8 +323,8 @@ async def update_instance(
         # Coerce types for SQLite
         if field_name == "api_key":
             value = encrypt(str(value), master_key)
-        elif field_name in ("type", "sonarr_search_mode") and isinstance(
-            value, (InstanceType, SonarrSearchMode)
+        elif (field_name == "type" and isinstance(value, InstanceType)) or (
+            field_name in _search_mode_fields and isinstance(value, StrEnum)
         ):
             value = value.value
         elif field_name in ("enabled", "cutoff_enabled"):

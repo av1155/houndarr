@@ -1,0 +1,164 @@
+"""Whisparr v3 API client — missing episodes and automatic search.
+
+Whisparr is a Sonarr fork with the same v3 API structure.  Key differences:
+episodes use a ``DateOnly`` release date object instead of an ISO-8601
+``airDateUtc`` string, and there is no ``episodeNumber`` field.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from datetime import UTC, datetime
+from typing import Any
+
+import httpx
+
+from houndarr.clients.base import ArrClient
+
+__all__ = ["MissingWhisparrEpisode", "WhisparrClient"]
+
+
+@dataclass(frozen=True)
+class MissingWhisparrEpisode:
+    """A single missing episode returned by Whisparr's wanted/missing endpoint."""
+
+    episode_id: int
+    series_id: int | None
+    series_title: str
+    episode_title: str
+    season_number: int
+    absolute_episode_number: int | None
+    release_date: datetime | None  # parsed from DateOnly {year, month, day}
+
+
+class WhisparrClient(ArrClient):
+    """Async client for the Whisparr v3 REST API."""
+
+    async def get_missing(
+        self,
+        *,
+        page: int = 1,
+        page_size: int = 10,
+    ) -> list[MissingWhisparrEpisode]:
+        """Return a page of monitored missing episodes.
+
+        Calls ``GET /api/v3/wanted/missing`` with ``includeSeries=true``
+        so that series metadata is embedded in each record.
+
+        Args:
+            page: 1-based page number.
+            page_size: Number of records per page.
+
+        Returns:
+            List of :class:`MissingWhisparrEpisode` dataclasses, oldest first.
+        """
+        data: dict[str, Any] = await self._get(
+            "/api/v3/wanted/missing",
+            page=page,
+            pageSize=page_size,
+            sortKey="releaseDate",
+            sortDirection="ascending",
+            includeSeries="true",
+            monitored="true",
+        )
+        records: list[dict[str, Any]] = data.get("records", [])
+        return [_parse_episode(r) for r in records]
+
+    async def search(self, item_id: int) -> None:
+        """Trigger an automatic episode search in Whisparr.
+
+        Calls ``POST /api/v3/command`` with command ``EpisodeSearch``.
+
+        Args:
+            item_id: Whisparr episode ID to search for.
+        """
+        await self._post(
+            "/api/v3/command",
+            json={"name": "EpisodeSearch", "episodeIds": [item_id]},
+        )
+
+    async def search_season(self, series_id: int, season_number: int) -> None:
+        """Trigger a season-context search in Whisparr.
+
+        Calls ``POST /api/v3/command`` with command ``SeasonSearch``.
+
+        Args:
+            series_id: Whisparr series ID.
+            season_number: Whisparr season number.
+        """
+        await self._post(
+            "/api/v3/command",
+            json={"name": "SeasonSearch", "seriesId": series_id, "seasonNumber": season_number},
+        )
+
+    async def get_cutoff_unmet(
+        self,
+        *,
+        page: int = 1,
+        page_size: int = 10,
+    ) -> list[MissingWhisparrEpisode]:
+        """Return a page of monitored episodes that have not met their quality cutoff.
+
+        Calls ``GET /api/v3/wanted/cutoff`` with ``includeSeries=true``.
+
+        Args:
+            page: 1-based page number.
+            page_size: Number of records per page.
+
+        Returns:
+            List of :class:`MissingWhisparrEpisode` dataclasses.
+        """
+        data: dict[str, Any] = await self._get(
+            "/api/v3/wanted/cutoff",
+            page=page,
+            pageSize=page_size,
+            includeSeries="true",
+            monitored="true",
+        )
+        records: list[dict[str, Any]] = data.get("records", [])
+        return [_parse_episode(r) for r in records]
+
+
+# ---------------------------------------------------------------------------
+# Parsing helpers
+# ---------------------------------------------------------------------------
+
+
+def _parse_date_only(obj: dict[str, Any] | None) -> datetime | None:
+    """Convert a Whisparr ``DateOnly`` object ``{year, month, day}`` to a UTC datetime.
+
+    Returns ``None`` if the input is missing, empty, or has invalid values.
+    """
+    if not obj:
+        return None
+    try:
+        return datetime(obj["year"], obj["month"], obj["day"], tzinfo=UTC)
+    except (KeyError, TypeError, ValueError):
+        return None
+
+
+def _parse_episode(record: dict[str, Any]) -> MissingWhisparrEpisode:
+    series: dict[str, Any] = record.get("series") or {}
+    return MissingWhisparrEpisode(
+        episode_id=record["id"],
+        series_id=record.get("seriesId") or series.get("id"),
+        series_title=series.get("title") or record.get("seriesTitle") or "",
+        episode_title=record.get("title") or "",
+        season_number=record.get("seasonNumber", 0),
+        absolute_episode_number=record.get("absoluteEpisodeNumber"),
+        release_date=_parse_date_only(record.get("releaseDate")),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Convenience factory
+# ---------------------------------------------------------------------------
+
+
+def make_whisparr_client(
+    url: str,
+    api_key: str,
+    timeout: httpx.Timeout = httpx.Timeout(30.0, connect=5.0),
+) -> WhisparrClient:
+    """Return a :class:`WhisparrClient` ready for use as an async context manager."""
+    return WhisparrClient(url=url, api_key=api_key, timeout=timeout)

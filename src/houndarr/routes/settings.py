@@ -13,8 +13,11 @@ from fastapi.templating import Jinja2Templates
 from houndarr import __version__
 from houndarr.auth import check_password, get_username, set_password
 from houndarr.clients.base import ArrClient
+from houndarr.clients.lidarr import LidarrClient
 from houndarr.clients.radarr import RadarrClient
+from houndarr.clients.readarr import ReadarrClient
 from houndarr.clients.sonarr import SonarrClient
+from houndarr.clients.whisparr import WhisparrClient
 from houndarr.config import (
     DEFAULT_BATCH_SIZE,
     DEFAULT_COOLDOWN_DAYS,
@@ -22,15 +25,21 @@ from houndarr.config import (
     DEFAULT_CUTOFF_COOLDOWN_DAYS,
     DEFAULT_CUTOFF_HOURLY_CAP,
     DEFAULT_HOURLY_CAP,
+    DEFAULT_LIDARR_SEARCH_MODE,
+    DEFAULT_READARR_SEARCH_MODE,
     DEFAULT_SLEEP_INTERVAL_MINUTES,
     DEFAULT_SONARR_SEARCH_MODE,
     DEFAULT_UNRELEASED_DELAY_HOURS,
+    DEFAULT_WHISPARR_SEARCH_MODE,
 )
 from houndarr.engine.supervisor import Supervisor
 from houndarr.services.instances import (
     Instance,
     InstanceType,
+    LidarrSearchMode,
+    ReadarrSearchMode,
     SonarrSearchMode,
+    WhisparrSearchMode,
     create_instance,
     delete_instance,
     get_instance,
@@ -102,15 +111,29 @@ def _blank_instance() -> Instance:
         cutoff_cooldown_days=DEFAULT_CUTOFF_COOLDOWN_DAYS,
         cutoff_hourly_cap=DEFAULT_CUTOFF_HOURLY_CAP,
         sonarr_search_mode=SonarrSearchMode(DEFAULT_SONARR_SEARCH_MODE),
+        lidarr_search_mode=LidarrSearchMode(DEFAULT_LIDARR_SEARCH_MODE),
+        readarr_search_mode=ReadarrSearchMode(DEFAULT_READARR_SEARCH_MODE),
+        whisparr_search_mode=WhisparrSearchMode(DEFAULT_WHISPARR_SEARCH_MODE),
         created_at="",
         updated_at="",
     )
 
 
+_CLIENT_CONSTRUCTORS: dict[InstanceType, type[ArrClient]] = {
+    InstanceType.sonarr: SonarrClient,
+    InstanceType.radarr: RadarrClient,
+    InstanceType.lidarr: LidarrClient,
+    InstanceType.readarr: ReadarrClient,
+    InstanceType.whisparr: WhisparrClient,
+}
+
+
 def _build_client(instance_type: InstanceType, url: str, api_key: str) -> ArrClient:
-    if instance_type == InstanceType.sonarr:
-        return SonarrClient(url=url, api_key=api_key)
-    return RadarrClient(url=url, api_key=api_key)
+    client_cls = _CLIENT_CONSTRUCTORS.get(instance_type)
+    if client_cls is None:
+        msg = f"No client for instance type: {instance_type!r}"
+        raise ValueError(msg)
+    return client_cls(url=url, api_key=api_key)
 
 
 async def _connection_ok(instance_type: InstanceType, url: str, api_key: str) -> bool:
@@ -154,6 +177,81 @@ def _validate_cutoff_controls(
     if cutoff_hourly_cap < 0:
         return "Cutoff hourly cap must be 0 or greater."
     return None
+
+
+class _SearchModes:
+    """Resolved per-app search mode enum values."""
+
+    __slots__ = ("sonarr", "lidarr", "readarr", "whisparr")
+
+    def __init__(
+        self,
+        sonarr: SonarrSearchMode,
+        lidarr: LidarrSearchMode,
+        readarr: ReadarrSearchMode,
+        whisparr: WhisparrSearchMode,
+    ) -> None:
+        self.sonarr = sonarr
+        self.lidarr = lidarr
+        self.readarr = readarr
+        self.whisparr = whisparr
+
+
+def _resolve_search_modes(
+    instance_type: InstanceType,
+    sonarr_raw: str,
+    lidarr_raw: str,
+    readarr_raw: str,
+    whisparr_raw: str,
+) -> _SearchModes | str:
+    """Validate and resolve per-app search mode strings into enum values.
+
+    Returns a :class:`_SearchModes` with validated values, or a plain error
+    string if any value is invalid.  Non-applicable search modes default to
+    their enum's first value.
+    """
+    try:
+        sonarr_mode = (
+            SonarrSearchMode(sonarr_raw)
+            if instance_type == InstanceType.sonarr
+            else SonarrSearchMode.episode
+        )
+    except ValueError:
+        return "Invalid Sonarr search mode."
+
+    try:
+        lidarr_mode = (
+            LidarrSearchMode(lidarr_raw)
+            if instance_type == InstanceType.lidarr
+            else LidarrSearchMode.album
+        )
+    except ValueError:
+        return "Invalid Lidarr search mode."
+
+    try:
+        readarr_mode = (
+            ReadarrSearchMode(readarr_raw)
+            if instance_type == InstanceType.readarr
+            else ReadarrSearchMode.book
+        )
+    except ValueError:
+        return "Invalid Readarr search mode."
+
+    try:
+        whisparr_mode = (
+            WhisparrSearchMode(whisparr_raw)
+            if instance_type == InstanceType.whisparr
+            else WhisparrSearchMode.episode
+        )
+    except ValueError:
+        return "Invalid Whisparr search mode."
+
+    return _SearchModes(
+        sonarr=sonarr_mode,
+        lidarr=lidarr_mode,
+        readarr=readarr_mode,
+        whisparr=whisparr_mode,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -265,7 +363,7 @@ async def instance_test_connection(
         instance_type = InstanceType(type)
     except ValueError:
         return _connection_status_response(
-            "Invalid type. Must be Sonarr or Radarr.",
+            "Invalid instance type.",
             ok=False,
             status_code=422,
         )
@@ -329,6 +427,9 @@ async def instance_create(
     cutoff_cooldown_days: Annotated[int, Form()] = DEFAULT_CUTOFF_COOLDOWN_DAYS,
     cutoff_hourly_cap: Annotated[int, Form()] = DEFAULT_CUTOFF_HOURLY_CAP,
     sonarr_search_mode: Annotated[str, Form()] = DEFAULT_SONARR_SEARCH_MODE,
+    lidarr_search_mode: Annotated[str, Form()] = DEFAULT_LIDARR_SEARCH_MODE,
+    readarr_search_mode: Annotated[str, Form()] = DEFAULT_READARR_SEARCH_MODE,
+    whisparr_search_mode: Annotated[str, Form()] = DEFAULT_WHISPARR_SEARCH_MODE,
     connection_verified: Annotated[str, Form()] = "false",
 ) -> HTMLResponse:
     """Create a new instance and return the updated instance table body."""
@@ -355,13 +456,15 @@ async def instance_create(
     if not await _connection_ok(instance_type, url.rstrip("/"), api_key):
         return _connection_guard_response("Connection test failed. Re-test before adding.")
 
-    if instance_type == InstanceType.sonarr:
-        try:
-            sonarr_mode = SonarrSearchMode(sonarr_search_mode)
-        except ValueError:
-            return _connection_guard_response("Invalid Sonarr search mode.")
-    else:
-        sonarr_mode = SonarrSearchMode.episode
+    search_modes = _resolve_search_modes(
+        instance_type,
+        sonarr_search_mode,
+        lidarr_search_mode,
+        readarr_search_mode,
+        whisparr_search_mode,
+    )
+    if isinstance(search_modes, str):
+        return _connection_guard_response(search_modes)
 
     instance = await create_instance(
         master_key=_master_key(request),
@@ -379,7 +482,10 @@ async def instance_create(
         cutoff_batch_size=cutoff_batch_size,
         cutoff_cooldown_days=cutoff_cooldown_days,
         cutoff_hourly_cap=cutoff_hourly_cap,
-        sonarr_search_mode=sonarr_mode,
+        sonarr_search_mode=search_modes.sonarr,
+        lidarr_search_mode=search_modes.lidarr,
+        readarr_search_mode=search_modes.readarr,
+        whisparr_search_mode=search_modes.whisparr,
     )
 
     supervisor = getattr(request.app.state, "supervisor", None)
@@ -428,6 +534,9 @@ async def instance_update(
     cutoff_cooldown_days: Annotated[int, Form()] = DEFAULT_CUTOFF_COOLDOWN_DAYS,
     cutoff_hourly_cap: Annotated[int, Form()] = DEFAULT_CUTOFF_HOURLY_CAP,
     sonarr_search_mode: Annotated[str, Form()] = DEFAULT_SONARR_SEARCH_MODE,
+    lidarr_search_mode: Annotated[str, Form()] = DEFAULT_LIDARR_SEARCH_MODE,
+    readarr_search_mode: Annotated[str, Form()] = DEFAULT_READARR_SEARCH_MODE,
+    whisparr_search_mode: Annotated[str, Form()] = DEFAULT_WHISPARR_SEARCH_MODE,
     connection_verified: Annotated[str, Form()] = "false",
 ) -> HTMLResponse:
     """Update an existing instance and return the refreshed row partial.
@@ -468,13 +577,15 @@ async def instance_update(
     if not await _connection_ok(instance_type, url.rstrip("/"), resolved_api_key):
         return _connection_guard_response("Connection test failed. Re-test before saving changes.")
 
-    if instance_type == InstanceType.sonarr:
-        try:
-            sonarr_mode = SonarrSearchMode(sonarr_search_mode)
-        except ValueError:
-            return _connection_guard_response("Invalid Sonarr search mode.")
-    else:
-        sonarr_mode = SonarrSearchMode.episode
+    search_modes = _resolve_search_modes(
+        instance_type,
+        sonarr_search_mode,
+        lidarr_search_mode,
+        readarr_search_mode,
+        whisparr_search_mode,
+    )
+    if isinstance(search_modes, str):
+        return _connection_guard_response(search_modes)
 
     updated = await update_instance(
         instance_id,
@@ -493,7 +604,10 @@ async def instance_update(
         cutoff_batch_size=cutoff_batch_size,
         cutoff_cooldown_days=cutoff_cooldown_days,
         cutoff_hourly_cap=cutoff_hourly_cap,
-        sonarr_search_mode=sonarr_mode,
+        sonarr_search_mode=search_modes.sonarr,
+        lidarr_search_mode=search_modes.lidarr,
+        readarr_search_mode=search_modes.readarr,
+        whisparr_search_mode=search_modes.whisparr,
     )
     if updated is None:
         return HTMLResponse(content="Not found", status_code=404)
@@ -545,6 +659,9 @@ async def instance_toggle_enabled(request: Request, instance_id: int) -> HTMLRes
         cutoff_cooldown_days=instance.cutoff_cooldown_days,
         cutoff_hourly_cap=instance.cutoff_hourly_cap,
         sonarr_search_mode=instance.sonarr_search_mode,
+        lidarr_search_mode=instance.lidarr_search_mode,
+        readarr_search_mode=instance.readarr_search_mode,
+        whisparr_search_mode=instance.whisparr_search_mode,
     )
     if updated is None:
         return HTMLResponse(content="Not found", status_code=404)

@@ -386,7 +386,7 @@
           Add Instance
         </h3>
         <p id="add-instance-modal-subtitle" class="text-sm text-slate-400">
-          Configure a Sonarr or Radarr instance.
+          Configure an *arr instance.
         </p>
       </div>
       <div class="flex items-center gap-3">
@@ -547,7 +547,7 @@
       }
 
       addInstanceModalTitle.textContent = 'Add Instance';
-      addInstanceModalSubtitle.textContent = 'Configure a Sonarr or Radarr instance.';
+      addInstanceModalSubtitle.textContent = 'Configure an *arr instance.';
     }
 
     function getModalForm() {
@@ -576,27 +576,27 @@
         return;
       }
 
-      const isRadarr = typeSelect.value === 'radarr';
-      nameInput.placeholder = isRadarr
-        ? nameInput.dataset.radarrPlaceholder
-        : nameInput.dataset.sonarrPlaceholder;
-      urlInput.placeholder = isRadarr
-        ? urlInput.dataset.radarrPlaceholder
-        : urlInput.dataset.sonarrPlaceholder;
+      const t = typeSelect.value;
+      nameInput.placeholder = nameInput.dataset[t + 'Placeholder'] || nameInput.dataset.sonarrPlaceholder;
+      urlInput.placeholder = urlInput.dataset[t + 'Placeholder'] || urlInput.dataset.sonarrPlaceholder;
     }
 
-    function syncSonarrOnlyControls() {
+    function syncAppOnlyControls() {
       const typeSelect = addInstanceModalContent.querySelector('[data-instance-field="type"]');
       if (!typeSelect) {
         return;
       }
 
-      const showSonarrControls = typeSelect.value === 'sonarr';
-      addInstanceModalContent.querySelectorAll('[data-sonarr-only="true"]').forEach((el) => {
-        if (!(el instanceof HTMLElement)) {
-          return;
-        }
-        el.style.display = showSonarrControls ? '' : 'none';
+      const t = typeSelect.value;
+      const appOnlyAttrs = ['data-sonarr-only', 'data-lidarr-only', 'data-readarr-only', 'data-whisparr-only'];
+      appOnlyAttrs.forEach(function (attr) {
+        const appType = attr.replace('data-', '').replace('-only', '');
+        addInstanceModalContent.querySelectorAll('[' + attr + '="true"]').forEach(function (el) {
+          if (!(el instanceof HTMLElement)) {
+            return;
+          }
+          el.style.display = (t === appType) ? '' : 'none';
+        });
       });
     }
 
@@ -765,7 +765,7 @@
       function (event) {
         if (event.target.matches('[data-instance-field="type"]')) {
           syncAddInstancePlaceholders();
-          syncSonarrOnlyControls();
+          syncAppOnlyControls();
         }
         resetConnectionStateOnFieldChange(event.target);
       },
@@ -858,7 +858,7 @@
             firstInput.focus();
           }
           syncAddInstancePlaceholders();
-          syncSonarrOnlyControls();
+          syncAppOnlyControls();
 
           if (isConnectionGuardedFormLoaded()) {
             setConnectionState(false, neutralConnectionPromptForMode(getModalFormMode()), 'neutral');

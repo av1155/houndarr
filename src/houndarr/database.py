@@ -13,12 +13,15 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Schema version — bump when adding new migrations
 # ---------------------------------------------------------------------------
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 
 # ---------------------------------------------------------------------------
 # DDL
 # ---------------------------------------------------------------------------
-_SCHEMA_SQL = """
+_INSTANCE_TYPES = "'sonarr', 'radarr', 'lidarr', 'readarr', 'whisparr'"
+_ITEM_TYPES = "'episode', 'movie', 'album', 'book', 'whisparr_episode'"
+
+_SCHEMA_SQL = f"""
 CREATE TABLE IF NOT EXISTS settings (
     key   TEXT PRIMARY KEY,
     value TEXT NOT NULL
@@ -27,7 +30,7 @@ CREATE TABLE IF NOT EXISTS settings (
 CREATE TABLE IF NOT EXISTS instances (
     id                   INTEGER PRIMARY KEY AUTOINCREMENT,
     name                 TEXT    NOT NULL,
-    type                 TEXT    NOT NULL CHECK(type IN ('sonarr', 'radarr')),
+    type                 TEXT    NOT NULL CHECK(type IN ({_INSTANCE_TYPES})),
     url                  TEXT    NOT NULL,
     encrypted_api_key    TEXT    NOT NULL DEFAULT '',
     batch_size           INTEGER NOT NULL DEFAULT 2,
@@ -41,6 +44,12 @@ CREATE TABLE IF NOT EXISTS instances (
     cutoff_hourly_cap    INTEGER NOT NULL DEFAULT 1,
     sonarr_search_mode   TEXT    NOT NULL DEFAULT 'episode'
                                 CHECK(sonarr_search_mode IN ('episode', 'season_context')),
+    lidarr_search_mode   TEXT    NOT NULL DEFAULT 'album'
+                                CHECK(lidarr_search_mode IN ('album', 'artist_context')),
+    readarr_search_mode  TEXT    NOT NULL DEFAULT 'book'
+                                CHECK(readarr_search_mode IN ('book', 'author_context')),
+    whisparr_search_mode TEXT    NOT NULL DEFAULT 'episode'
+                                CHECK(whisparr_search_mode IN ('episode', 'season_context')),
     enabled              INTEGER NOT NULL DEFAULT 1,
     created_at           TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     updated_at           TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
@@ -50,7 +59,7 @@ CREATE TABLE IF NOT EXISTS cooldowns (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     instance_id INTEGER NOT NULL REFERENCES instances(id) ON DELETE CASCADE,
     item_id     INTEGER NOT NULL,
-    item_type   TEXT    NOT NULL CHECK(item_type IN ('episode', 'movie')),
+    item_type   TEXT    NOT NULL CHECK(item_type IN ({_ITEM_TYPES})),
     searched_at TEXT    NOT NULL,
     UNIQUE(instance_id, item_id, item_type)
 );
@@ -62,7 +71,7 @@ CREATE TABLE IF NOT EXISTS search_log (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     instance_id INTEGER REFERENCES instances(id) ON DELETE SET NULL,
     item_id     INTEGER,
-    item_type   TEXT    CHECK(item_type IN ('episode', 'movie')),
+    item_type   TEXT    CHECK(item_type IN ({_ITEM_TYPES})),
     search_kind TEXT,
     cycle_id    TEXT,
     cycle_trigger TEXT CHECK(cycle_trigger IN ('scheduled', 'run_now', 'system')),
@@ -146,6 +155,8 @@ async def _run_migrations(db: aiosqlite.Connection, from_version: int) -> None:
         await _migrate_to_v3(db)
     if from_version < 4:
         await _migrate_to_v4(db)
+    if from_version < 5:
+        await _migrate_to_v5(db)
 
     logger.info("Migrated database from schema version %d to %d", from_version, SCHEMA_VERSION)
     await db.execute(
@@ -189,6 +200,151 @@ async def _migrate_to_v4(db: aiosqlite.Connection) -> None:
         await db.execute(
             "ALTER TABLE instances ADD COLUMN sonarr_search_mode TEXT NOT NULL DEFAULT 'episode'"
         )
+
+
+async def _migrate_to_v5(db: aiosqlite.Connection) -> None:
+    """Expand CHECK constraints for multi-app support and add per-app search mode columns.
+
+    SQLite cannot ALTER CHECK constraints, so affected tables are recreated.
+    Foreign keys are temporarily disabled to prevent CASCADE deletes when
+    the parent ``instances`` table is dropped and recreated.
+    New columns (lidarr/readarr/whisparr search modes) are added afterwards
+    via ALTER TABLE since they have defaults.
+    """
+    # Disable FK enforcement during table recreation to prevent CASCADE deletes
+    await db.execute("PRAGMA foreign_keys=OFF")
+
+    # -- 1) Recreate instances with expanded type CHECK ----------------------
+    await db.execute(
+        f"""
+        CREATE TABLE instances_new (
+            id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+            name                 TEXT    NOT NULL,
+            type                 TEXT    NOT NULL CHECK(type IN ({_INSTANCE_TYPES})),
+            url                  TEXT    NOT NULL,
+            encrypted_api_key    TEXT    NOT NULL DEFAULT '',
+            batch_size           INTEGER NOT NULL DEFAULT 2,
+            sleep_interval_mins  INTEGER NOT NULL DEFAULT 30,
+            hourly_cap           INTEGER NOT NULL DEFAULT 4,
+            cooldown_days        INTEGER NOT NULL DEFAULT 14,
+            unreleased_delay_hrs INTEGER NOT NULL DEFAULT 36,
+            cutoff_enabled       INTEGER NOT NULL DEFAULT 0,
+            cutoff_batch_size    INTEGER NOT NULL DEFAULT 1,
+            cutoff_cooldown_days INTEGER NOT NULL DEFAULT 21,
+            cutoff_hourly_cap    INTEGER NOT NULL DEFAULT 1,
+            sonarr_search_mode   TEXT    NOT NULL DEFAULT 'episode'
+                                        CHECK(sonarr_search_mode IN ('episode', 'season_context')),
+            enabled              INTEGER NOT NULL DEFAULT 1,
+            created_at           TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+            updated_at           TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+        )
+        """
+    )
+    await db.execute(
+        """
+        INSERT INTO instances_new (
+            id, name, type, url, encrypted_api_key,
+            batch_size, sleep_interval_mins, hourly_cap, cooldown_days,
+            unreleased_delay_hrs, cutoff_enabled, cutoff_batch_size,
+            cutoff_cooldown_days, cutoff_hourly_cap, sonarr_search_mode,
+            enabled, created_at, updated_at
+        )
+        SELECT
+            id, name, type, url, encrypted_api_key,
+            batch_size, sleep_interval_mins, hourly_cap, cooldown_days,
+            unreleased_delay_hrs, cutoff_enabled, cutoff_batch_size,
+            cutoff_cooldown_days, cutoff_hourly_cap, sonarr_search_mode,
+            enabled, created_at, updated_at
+        FROM instances
+        """
+    )
+    await db.execute("DROP TABLE instances")
+    await db.execute("ALTER TABLE instances_new RENAME TO instances")
+
+    # -- 2) Recreate cooldowns with expanded item_type CHECK -----------------
+    await db.execute(
+        f"""
+        CREATE TABLE cooldowns_new (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            instance_id INTEGER NOT NULL REFERENCES instances(id) ON DELETE CASCADE,
+            item_id     INTEGER NOT NULL,
+            item_type   TEXT    NOT NULL CHECK(item_type IN ({_ITEM_TYPES})),
+            searched_at TEXT    NOT NULL,
+            UNIQUE(instance_id, item_id, item_type)
+        )
+        """
+    )
+    await db.execute(
+        """
+        INSERT INTO cooldowns_new (id, instance_id, item_id, item_type, searched_at)
+        SELECT id, instance_id, item_id, item_type, searched_at
+        FROM cooldowns
+        """
+    )
+    await db.execute("DROP TABLE cooldowns")
+    await db.execute("ALTER TABLE cooldowns_new RENAME TO cooldowns")
+    await db.execute(
+        "CREATE INDEX IF NOT EXISTS idx_cooldowns_lookup "
+        "ON cooldowns(instance_id, item_type, searched_at)"
+    )
+
+    # -- 3) Recreate search_log with expanded item_type CHECK ----------------
+    await db.execute(
+        f"""
+        CREATE TABLE search_log_new (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            instance_id INTEGER REFERENCES instances(id) ON DELETE SET NULL,
+            item_id     INTEGER,
+            item_type   TEXT    CHECK(item_type IN ({_ITEM_TYPES})),
+            search_kind TEXT,
+            cycle_id    TEXT,
+            cycle_trigger TEXT CHECK(cycle_trigger IN ('scheduled', 'run_now', 'system')),
+            item_label  TEXT,
+            action      TEXT    NOT NULL CHECK(action IN ('searched', 'skipped', 'error', 'info')),
+            reason      TEXT,
+            message     TEXT,
+            timestamp   TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+        )
+        """
+    )
+    await db.execute(
+        """
+        INSERT INTO search_log_new (
+            id, instance_id, item_id, item_type, search_kind,
+            cycle_id, cycle_trigger, item_label, action, reason, message, timestamp
+        )
+        SELECT
+            id, instance_id, item_id, item_type, search_kind,
+            cycle_id, cycle_trigger, item_label, action, reason, message, timestamp
+        FROM search_log
+        """
+    )
+    await db.execute("DROP TABLE search_log")
+    await db.execute("ALTER TABLE search_log_new RENAME TO search_log")
+    await db.execute(
+        "CREATE INDEX IF NOT EXISTS idx_search_log_timestamp ON search_log(timestamp DESC)"
+    )
+    await db.execute(
+        "CREATE INDEX IF NOT EXISTS idx_search_log_instance "
+        "ON search_log(instance_id, timestamp DESC)"
+    )
+
+    # -- 4) Add new per-app search mode columns via ALTER TABLE --------------
+    if not await _column_exists(db, "instances", "lidarr_search_mode"):
+        await db.execute(
+            "ALTER TABLE instances ADD COLUMN lidarr_search_mode TEXT NOT NULL DEFAULT 'album'"
+        )
+    if not await _column_exists(db, "instances", "readarr_search_mode"):
+        await db.execute(
+            "ALTER TABLE instances ADD COLUMN readarr_search_mode TEXT NOT NULL DEFAULT 'book'"
+        )
+    if not await _column_exists(db, "instances", "whisparr_search_mode"):
+        await db.execute(
+            "ALTER TABLE instances ADD COLUMN whisparr_search_mode TEXT NOT NULL DEFAULT 'episode'"
+        )
+
+    # Re-enable FK enforcement after table recreation
+    await db.execute("PRAGMA foreign_keys=ON")
 
 
 async def _ensure_v3_indexes(db: aiosqlite.Connection) -> None:

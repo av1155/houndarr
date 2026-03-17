@@ -13,7 +13,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 
 from houndarr.clients.base import ArrClient
-from houndarr.engine.adapters import radarr, sonarr
+from houndarr.engine.adapters import lidarr, radarr, readarr, sonarr, whisparr
 from houndarr.engine.candidates import SearchCandidate
 from houndarr.services.instances import Instance, InstanceType
 
@@ -47,6 +47,24 @@ ADAPTERS: dict[InstanceType, AppAdapter] = {
         adapt_cutoff=radarr.adapt_cutoff,
         dispatch_search=radarr.dispatch_search,
         make_client=radarr.make_client,
+    ),
+    InstanceType.lidarr: AppAdapter(
+        adapt_missing=lidarr.adapt_missing,
+        adapt_cutoff=lidarr.adapt_cutoff,
+        dispatch_search=lidarr.dispatch_search,
+        make_client=lidarr.make_client,
+    ),
+    InstanceType.readarr: AppAdapter(
+        adapt_missing=readarr.adapt_missing,
+        adapt_cutoff=readarr.adapt_cutoff,
+        dispatch_search=readarr.dispatch_search,
+        make_client=readarr.make_client,
+    ),
+    InstanceType.whisparr: AppAdapter(
+        adapt_missing=whisparr.adapt_missing,
+        adapt_cutoff=whisparr.adapt_cutoff,
+        dispatch_search=whisparr.dispatch_search,
+        make_client=whisparr.make_client,
     ),
 }
 

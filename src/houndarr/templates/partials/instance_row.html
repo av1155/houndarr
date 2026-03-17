@@ -3,15 +3,17 @@
     class="border-b border-slate-800 hover:bg-slate-800/40 transition-colors">
   <td class="px-4 py-3 font-medium text-white">{{ instance.name }}</td>
   <td class="px-4 py-3">
-    {% if instance.type.value == 'sonarr' %}
-      <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-sky-900/60 text-sky-300 border border-sky-700">
-        Sonarr
-      </span>
-    {% else %}
-      <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-900/60 text-red-300 border border-red-700">
-        Radarr
-      </span>
-    {% endif %}
+    {%- set badge_map = {
+      'sonarr':  {'bg': 'bg-sky-900/60',     'text': 'text-sky-300',     'border': 'border-sky-700',     'label': 'Sonarr'},
+      'radarr':  {'bg': 'bg-amber-900/60',   'text': 'text-amber-300',   'border': 'border-amber-700',   'label': 'Radarr'},
+      'lidarr':  {'bg': 'bg-emerald-900/60', 'text': 'text-emerald-300', 'border': 'border-emerald-700', 'label': 'Lidarr'},
+      'readarr': {'bg': 'bg-red-900/60',     'text': 'text-red-300',     'border': 'border-red-700',     'label': 'Readarr'},
+      'whisparr':{'bg': 'bg-pink-900/60',    'text': 'text-pink-300',    'border': 'border-pink-700',    'label': 'Whisparr'},
+    } -%}
+    {%- set b = badge_map.get(instance.type.value, badge_map['sonarr']) -%}
+    <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium {{ b.bg }} {{ b.text }} {{ b.border }}">
+      {{ b.label }}
+    </span>
   </td>
   <td class="px-4 py-3 text-slate-400 text-sm truncate max-w-xs">{{ instance.url }}</td>
   <td class="px-4 py-3 text-center">

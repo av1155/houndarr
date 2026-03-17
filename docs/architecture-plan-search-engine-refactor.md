@@ -17,6 +17,19 @@ implementation plan for two goals:
 The analysis includes security review, future-app compatibility analysis
 (Whisparr, Lidarr, Readarr), and risk assessment.
 
+### Sources
+
+**Local API specs (vendored, auto-refreshed weekly):**
+
+- `docs/api/sonarr_openapi.json` — Sonarr v3 API
+- `docs/api/radarr_openapi.json` — Radarr v3 API
+
+**Upstream API specs (fetched for this analysis):**
+
+- Whisparr v3: <https://raw.githubusercontent.com/Whisparr/Whisparr/develop/src/Whisparr.Api.V3/openapi.json>
+- Lidarr v1: <https://raw.githubusercontent.com/lidarr/Lidarr/develop/src/Lidarr.Api.V1/openapi.json>
+- Readarr v1: <https://raw.githubusercontent.com/Readarr/Readarr/develop/src/Readarr.Api.V1/openapi.json>
+
 ---
 
 ## Table of Contents
@@ -1198,6 +1211,19 @@ by what would need to change to add a new instance type.
 ---
 
 ## Appendix 3: Upstream API Compatibility Matrix
+
+**Spec sources used for this analysis:**
+
+| App | Spec URL |
+|---|---|
+| Sonarr | `docs/api/sonarr_openapi.json` (local, vendored) |
+| Radarr | `docs/api/radarr_openapi.json` (local, vendored) |
+| Whisparr | <https://raw.githubusercontent.com/Whisparr/Whisparr/develop/src/Whisparr.Api.V3/openapi.json> |
+| Lidarr | <https://raw.githubusercontent.com/lidarr/Lidarr/develop/src/Lidarr.Api.V1/openapi.json> |
+| Readarr | <https://raw.githubusercontent.com/Readarr/Readarr/develop/src/Readarr.Api.V1/openapi.json> |
+
+> These upstream URLs point to the `develop` branch and may change over
+> time. Re-fetch before implementation to confirm accuracy.
 
 ### Wanted/Missing endpoints
 

@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] - 2026-03-17
+
+### Added
+
+- Lidarr (music), Readarr (books), and Whisparr support with dedicated API clients, search adapters, per-app search modes, and full UI integration (#200)
+
+### Changed
+
+- Database schema migrated to v5 with expanded instance-type constraints and per-app search-mode columns (#200)
+- Search engine refactored around a unified adapter registry and `SearchCandidate` model, cutting `search_loop.py` by ~45% with zero behavior change (#200)
+- Development status classifier updated to Production/Stable in `pyproject.toml` (#190)
+
+---
+
 ## [1.0.8] - 2026-03-16
 
 ### Fixed

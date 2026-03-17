@@ -1,12 +1,12 @@
 # API context for Houndarr
 
-Use these files as API reference when working on *arr integrations:
+The files in this directory are the API reference when working on *arr integrations:
 
-- `docs/api/sonarr_openapi.json`
-- `docs/api/radarr_openapi.json`
-- `docs/api/whisparr_openapi.json`
-- `docs/api/lidarr_openapi.json`
-- `docs/api/readarr_openapi.json`
+- `sonarr_openapi.json`
+- `radarr_openapi.json`
+- `whisparr_openapi.json`
+- `lidarr_openapi.json`
+- `readarr_openapi.json`
 
 Guidelines:
 
@@ -22,3 +22,6 @@ https://raw.githubusercontent.com/Radarr/Radarr/develop/src/Radarr.Api.V3/openap
 https://raw.githubusercontent.com/Whisparr/Whisparr/develop/src/Whisparr.Api.V3/openapi.json
 https://raw.githubusercontent.com/lidarr/Lidarr/develop/src/Lidarr.Api.V1/openapi.json
 https://raw.githubusercontent.com/Readarr/Readarr/develop/src/Readarr.Api.V1/openapi.json
+
+See also: [arr-search-commands.md](arr-search-commands.md) for the confirmed upstream command
+classes and POST body formats used by Houndarr's search engine.

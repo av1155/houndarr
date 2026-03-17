@@ -281,55 +281,16 @@ src/houndarr/
 
 ### Database schema (SQLite, schema version 5)
 
-```sql
-settings    (key TEXT PK, value TEXT NOT NULL)
+| Table | Purpose | Key constraints |
+|-------|---------|-----------------|
+| `settings` | Key-value config store | `key TEXT PK` |
+| `instances` | *arr instance configs | `type CHECK IN ('sonarr','radarr','lidarr','readarr','whisparr')`; per-type `*_search_mode` columns with CHECK constraints |
+| `cooldowns` | Per-item search cooldown tracking | `instance_id FK→instances ON DELETE CASCADE`; `UNIQUE(instance_id, item_id, item_type)` |
+| `search_log` | Audit trail for every search cycle | `instance_id FK→instances ON DELETE SET NULL`; `action CHECK IN ('searched','skipped','error','info')` |
 
-instances   (id INTEGER PK AUTOINCREMENT,
-             name, type CHECK IN ('sonarr','radarr','lidarr',
-                                   'readarr','whisparr'),
-             url, encrypted_api_key DEFAULT '',
-             batch_size DEFAULT 2, sleep_interval_mins DEFAULT 30,
-             hourly_cap DEFAULT 4, cooldown_days DEFAULT 14,
-             unreleased_delay_hrs DEFAULT 36,
-             cutoff_enabled DEFAULT 0, cutoff_batch_size DEFAULT 1,
-             cutoff_cooldown_days DEFAULT 21, cutoff_hourly_cap DEFAULT 1,
-             sonarr_search_mode DEFAULT 'episode'
-                 CHECK IN ('episode','season_context'),
-             lidarr_search_mode DEFAULT 'album'
-                 CHECK IN ('album','artist_context'),
-             readarr_search_mode DEFAULT 'book'
-                 CHECK IN ('book','author_context'),
-             whisparr_search_mode DEFAULT 'episode'
-                 CHECK IN ('episode','season_context'),
-             enabled DEFAULT 1, created_at, updated_at)
-
-cooldowns   (id INTEGER PK AUTOINCREMENT,
-             instance_id FK→instances ON DELETE CASCADE,
-             item_id,
-             item_type CHECK IN ('episode','movie','album',
-                                  'book','whisparr_episode'),
-             searched_at,
-             UNIQUE(instance_id, item_id, item_type))
-             -- index: idx_cooldowns_lookup(instance_id, item_type, searched_at)
-
-search_log  (id INTEGER PK AUTOINCREMENT,
-             instance_id FK→instances ON DELETE SET NULL,
-             item_id,
-             item_type CHECK IN ('episode','movie','album',
-                                  'book','whisparr_episode'),
-             search_kind, cycle_id,
-             cycle_trigger CHECK IN ('scheduled','run_now','system'),
-             item_label,
-             action NOT NULL CHECK IN ('searched','skipped','error','info'),
-             reason, message, timestamp)
-             -- indexes: idx_search_log_timestamp(timestamp DESC)
-             --          idx_search_log_instance(instance_id, timestamp DESC)
-             --          idx_search_log_cycle(cycle_id, timestamp DESC)
-```
-
-Full DDL is in `src/houndarr/database.py`. Migrations are incremental
-(`_migrate_to_v2` through `_migrate_to_v5`); bump `SCHEMA_VERSION` when
-adding new ones.
+Full DDL, column definitions, indexes, and migrations (`_migrate_to_v2`
+through `_migrate_to_v5`) are in `src/houndarr/database.py`. Bump
+`SCHEMA_VERSION` when adding new migrations.
 
 ### *arr API reference (local)
 
@@ -343,7 +304,7 @@ Full upstream OpenAPI specs are vendored locally and kept current:
 
 **Use these as the source of truth** when modifying or creating *arr client
 code. They document every endpoint, parameter, request body, and response
-schema. See `docs/api-context.md` for usage guidelines.
+schema. See `docs/api/README.md` for usage guidelines.
 
 All five specs are actively used by their respective clients in `clients/`.
 

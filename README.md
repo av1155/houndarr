@@ -53,7 +53,7 @@ It runs as a single Docker container alongside your existing *arr stack.
 
 | Dashboard | Logs | Settings |
 |:---------:|:----:|:--------:|
-| ![Dashboard](docs/screenshots/Dashboard_Houndarr.jpeg) | ![Logs](docs/screenshots/Logs_Houndarr.jpeg) | ![Settings](docs/screenshots/Settings_Houndarr.jpeg) |
+| ![Dashboard](docs/images/Dashboard_Houndarr.jpeg) | ![Logs](docs/images/Logs_Houndarr.jpeg) | ![Settings](docs/images/Settings_Houndarr.jpeg) |
 
 ---
 

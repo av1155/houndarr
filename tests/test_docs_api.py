@@ -29,7 +29,7 @@ def test_api_snapshot_files_exist() -> None:
     assert (root / "docs" / "api" / "whisparr_openapi.json").is_file()
     assert (root / "docs" / "api" / "lidarr_openapi.json").is_file()
     assert (root / "docs" / "api" / "readarr_openapi.json").is_file()
-    assert (root / "docs" / "api-context.md").is_file()
+    assert (root / "docs" / "api" / "README.md").is_file()
 
 
 def test_api_snapshot_hashes_match_expected() -> None:

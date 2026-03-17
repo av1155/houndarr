@@ -1,18 +1,15 @@
-# Architecture Plan: Search Engine Refactor + Queue-Awareness
+# Architecture Plan: Search Engine Refactor
 
 > **Status:** Draft reference for future implementation
 > **Created:** 2026-03-16
 > **Base commit:** `50eed12` (v1.0.8, main)
-> **Branch:** `feat/search-engine-refactor-queue-awareness`
+> **Branch:** `feat/search-engine-refactor`
 
 This document captures a thorough analysis of Houndarr's current search
 engine architecture, identifies what should change, and provides a concrete
-implementation plan for two goals:
-
-1. **Refactor** the search engine to eliminate internal duplication and
-   create cleaner boundaries between engine logic and app-specific logic
-2. **Add queue-awareness** so Houndarr skips items already in the download
-   queue before triggering redundant searches
+implementation plan to **refactor** the search engine -- eliminating
+internal duplication and creating cleaner boundaries between engine logic
+and app-specific logic.
 
 The analysis includes security review, future-app compatibility analysis
 (Whisparr, Lidarr, Readarr), and risk assessment.
@@ -51,15 +48,13 @@ The analysis includes security review, future-app compatibility analysis
 - [J. API-Doc and Workflow Recommendation](#j-api-doc-and-workflow-recommendation)
 - [K. Step-by-Step Implementation Plan](#k-step-by-step-implementation-plan)
 - [L. Risks and Tradeoffs](#l-risks-and-tradeoffs)
-- [M. Queue-Awareness Bridge Plan](#m-queue-awareness-bridge-plan)
-- [N. Final Recommendation](#n-final-recommendation)
+- [M. Final Recommendation](#m-final-recommendation)
 - [Appendix 1: Complete Search Flow Map](#appendix-1-complete-search-flow-map)
 - [Appendix 2: Complete sonarr/radarr Reference Inventory](#appendix-2-complete-sonarrradarr-reference-inventory)
 - [Appendix 3: Upstream API Compatibility Matrix](#appendix-3-upstream-api-compatibility-matrix)
 - [Appendix 4: Database Schema Reference](#appendix-4-database-schema-reference)
 - [Appendix 5: Test Coupling Analysis](#appendix-5-test-coupling-analysis)
 - [Appendix 6: Security Boundary Map](#appendix-6-security-boundary-map)
-- [Appendix 7: Existing Queue-Related Code](#appendix-7-existing-queue-related-code)
 
 ---
 
@@ -277,9 +272,8 @@ No API key, password, or session secret is ever written to logs or
 info, but keys travel via headers. The `search_log.message` column stores
 exception strings and is exposed via `/api/logs`.
 
-**Preservation rule:** Any new queue endpoint or adapter method must follow
-the same pattern: keys in headers, never in URLs or logged exception
-context.
+**Preservation rule:** Any new adapter method must follow the same
+pattern: keys in headers, never in URLs or logged exception context.
 
 ### 6. SQL injection prevention
 
@@ -287,8 +281,8 @@ context.
 (lines 245-261) for dynamic SQL. Three dynamic SQL locations all use
 code-controlled allowlists, never user input.
 
-**Preservation rule:** Any new per-instance settings (e.g., queue-related
-flags) must be added to the `allowed_cols` allowlist.
+**Preservation rule:** Any new per-instance settings must be added to
+the `allowed_cols` allowlist.
 
 ### 7. `__UNCHANGED__` sentinel for API keys
 
@@ -311,13 +305,12 @@ connection testing via the same gate.
 
 ### Option 1: Do nothing (status quo)
 
-Keep the binary `if/else` pattern. Add queue-awareness as another branch
-inside `run_instance_search()`.
+Keep the binary `if/else` pattern.
 
 | Pros | Cons |
 |---|---|
 | No abstraction risk | Cutoff pass already 260 lines duplicated |
-| No migration needed | Adding queue checks quadruples integration points |
+| No migration needed | Any new feature must be implemented 4 times |
 | Minimal change surface | `search_loop.py` grows toward 1200+ lines |
 
 ### Option 2: Extract per-app adapter modules (full adapter pattern)
@@ -329,8 +322,8 @@ and item-type mapping. The search loop becomes a generic pipeline.
 | Pros | Cons |
 |---|---|
 | Eliminates all duplication | Introduces a new abstraction layer |
-| Queue-awareness slots in cleanly | Requires defining an adapter contract |
-| Future apps add adapter modules | Could be premature with only two apps |
+| Future apps add adapter modules | Requires defining an adapter contract |
+| Single integration point for new features | Could be premature with only two apps |
 
 ### Option 3: Extract only the cutoff pass deduplication
 
@@ -340,7 +333,7 @@ missing pass, without a full adapter abstraction.
 | Pros | Cons |
 |---|---|
 | Smaller change | Type-branching still scattered in search_loop.py |
-| Eliminates worst duplication | Queue-awareness still needs multiple branch points |
+| Eliminates worst duplication | New features still need multiple branch points |
 | No new abstractions | |
 
 ### Option 4: Normalized candidate model + thin adapter functions (recommended)
@@ -355,7 +348,7 @@ clients unchanged.
 | Unified pipeline eliminates ~260 lines | Can't fully normalize Radarr's unreleased check |
 | Preserves existing client code exactly | New dataclass must stay in sync |
 | Adapter is a mapping function, not a class hierarchy | |
-| Queue-awareness becomes single insertion point | |
+| Single integration point for future features | |
 | Doesn't expand trust boundaries | |
 
 ---
@@ -378,14 +371,11 @@ clients unchanged.
    `unreleased_reason: str | None` during candidate construction. The
    engine just sees "this candidate has an unreleased_reason or not."
 
-4. **Supports queue-awareness naturally.** Queue items can be checked
-   against the same `(item_id, item_type)` identity space.
-
-5. **Doesn't expand trust boundaries.** Adapter functions receive
+4. **Doesn't expand trust boundaries.** Adapter functions receive
    already-decrypted `Instance` + raw client response data. No new
    secret handling. No new outbound communication.
 
-6. **Doesn't require a class hierarchy.** A dispatch dict
+5. **Doesn't require a class hierarchy.** A dispatch dict
    `{InstanceType: adapter_functions}` is sufficient.
 
 ### What this is NOT
@@ -478,7 +468,7 @@ ADAPTERS: dict[InstanceType, AppAdapter] = {
 
 | Abstraction | Problem it solves | Changes trust boundaries? | Increases attack surface? | Simpler alternative? |
 |---|---|---|---|---|
-| `SearchCandidate` | Eliminates 260-line cutoff duplication | No | No | Option 3 (partial dedup) is simpler but doesn't support queue-awareness cleanly |
+| `SearchCandidate` | Eliminates 260-line cutoff duplication | No | No | Option 3 (partial dedup) is simpler but still leaves scattered type-branching |
 | Adapter dispatch dict | Replaces scattered `if/else` branches | No | No (raises `ValueError` for unknown types) | Keep `if/else` but still duplicated |
 | `_run_search_pass()` | Single pipeline for missing+cutoff | No | No | None that solves both passes |
 
@@ -526,19 +516,6 @@ sortDirection, totalRecords, records}`.
 All via `POST /api/{version}/command`. The `CommandResource` schema is
 identical across all five apps.
 
-#### Queue endpoints
-
-| App | Path | Item ID field | Parent ID field | Include params |
-|---|---|---|---|---|
-| Sonarr | `GET /api/v3/queue` | `episodeId` | `seriesId` | `includeSeries`, `includeEpisode` |
-| Radarr | `GET /api/v3/queue` | (N/A, movie is item) | `movieId` | `includeMovie` |
-| Whisparr | `GET /api/v3/queue` | `episodeId` | `seriesId` | `includeSeries`, `includeEpisode` |
-| Lidarr | `GET /api/v1/queue` | `albumId` | `artistId` | `includeArtist`, `includeAlbum` |
-| Readarr | `GET /api/v1/queue` | `bookId` | `authorId` | `includeAuthor`, `includeBook` |
-
-Queue/details endpoints also available at `/queue/details` with
-per-item filtering.
-
 #### Release date handling
 
 | App | Date field(s) | Type |
@@ -551,16 +528,14 @@ per-item filtering.
 
 ### Whisparr vs Sonarr (fork analysis)
 
-Whisparr is a Sonarr fork. Shared: endpoint paths, command names, queue
-structure, `seriesId` + `episodeId` identification.
+Whisparr is a Sonarr fork. Shared: endpoint paths, command names,
+`seriesId` + `episodeId` identification.
 
 **Key divergences from Sonarr:**
 1. `releaseDate` (DateOnly) replaces `airDate`/`airDateUtc`
 2. No `episodeNumber` on `EpisodeResource`
 3. No scene numbering fields
 4. Adds `actors`, `seriesTitle` (direct field), `grabbed` boolean
-5. Queue `status` is `string` (nullable) instead of `QueueStatus` enum
-6. Queue `sizeleft`/`timeleft` are NOT deprecated
 
 **Verdict:** A Sonarr adapter could support Whisparr with conditional
 date-field mapping. Not a "just works" scenario.
@@ -591,7 +566,6 @@ locked to current values.
 | Search command names | `EpisodeSearch`, `MoviesSearch`, `AlbumSearch`, `BookSearch` |
 | Date field names | `airDateUtc` vs `inCinemas`+3 more vs `releaseDate` (DateOnly) vs `releaseDate` (date-time) |
 | Parent/child hierarchy | Two-level (Sonarr/Whisparr/Lidarr/Readarr) vs flat (Radarr) |
-| Queue filter params | `seriesIds` vs `movieIds` vs `artistIds` -- Whisparr/Readarr have none |
 | Availability logic | Only Radarr has `minimumAvailability` + `isAvailable` |
 | Season-context search | Only Sonarr/Whisparr have `SeasonSearch` |
 
@@ -601,8 +575,7 @@ locked to current values.
 
 | Question | Answer |
 |---|---|
-| DB schema changes needed now? | **No.** Refactor is purely code reorganization. |
-| Queue-awareness needs schema change? | Only if adding `skip_if_queued` setting. Simple `ALTER TABLE ADD COLUMN`. |
+| DB schema changes needed? | **No.** Refactor is purely code reorganization. |
 | Current instance types can remain? | **Yes.** `sonarr`/`radarr` unchanged. |
 | Log item types can remain? | **Yes.** `episode`/`movie` unchanged. |
 | Settings/UI can remain? | **Yes.** No form changes, no template changes. |
@@ -612,11 +585,10 @@ locked to current values.
 
 ## I. Recommended Sequencing
 
-Five phases, each scoped to a single coding session and independently
-verifiable. Phases 1-3 are the internal refactor (zero behavior change).
-Phases 4-5 add queue-awareness (new behavior).
+Three phases, each scoped to a single coding session and independently
+verifiable. All three are internal refactoring with zero behavior change.
 
-### Phase 1: Core abstractions (session 1 -- no behavior change)
+### Phase 1: Core abstractions (session 1)
 
 Define `SearchCandidate` dataclass, write Sonarr and Radarr adapter
 functions, create the adapter registry. No changes to `search_loop.py`
@@ -626,7 +598,7 @@ yet -- the new modules exist alongside the old code.
 `engine/adapters/radarr.py`, `engine/adapters/__init__.py`. Unit tests
 for all adapter functions in isolation.
 
-### Phase 2: Unified search pipeline (session 2 -- no behavior change)
+### Phase 2: Unified search pipeline (session 2)
 
 Replace `run_instance_search()` internals with the unified
 `_run_search_pass()` that uses the adapter registry. Delete
@@ -635,42 +607,13 @@ Replace `run_instance_search()` internals with the unified
 **Deliverables:** Rewritten `search_loop.py` (~260 fewer lines), moved
 helpers, all existing tests passing with identical behavior.
 
-### Phase 3: Test hardening (session 3 -- no behavior change)
+### Phase 3: Test hardening and validation (session 3)
 
 Write the "golden test" that captures exact `search_log` row sequences
 for known inputs. Update any import paths broken by Phase 2. Run all
 five quality gates. This phase validates zero behavior drift.
 
 **Deliverables:** Golden tests, import fixes, all quality gates green.
-
-### Phase 4: Queue client methods + pipeline integration (session 4 -- new behavior)
-
-Add `get_queue_item_ids()` to both clients and the `ArrClient` ABC.
-Wire queue-gating into `_run_search_pass()`. Handle fetch failures
-gracefully. No UI or settings changes yet -- queue-awareness is always on.
-
-**Deliverables:** Client queue methods, pipeline queue check, queue
-failure handling, respx-based queue tests.
-
-### Phase 5: Queue settings, UI, and polish (session 5 -- new behavior)
-
-Add `skip_if_queued` instance setting (DB migration v5, Instance
-dataclass, `allowed_cols`, settings form toggle). Write remaining tests
-(toggle off, season-context skip, pagination). Run all quality gates.
-
-**Deliverables:** DB migration, settings form update, full test
-coverage, all quality gates green.
-
-### Why this order
-
-| Approach | Queue integration points | Risk |
-|---|---|---|
-| Queue first (no refactor) | 4 locations (missing-sonarr, missing-radarr, cutoff-sonarr, cutoff-radarr) | Quadrupled integration surface; eventual refactor is harder |
-| Refactor first | 1 location (`_run_search_pass` pipeline) | Clean insertion point |
-| Combined | 1 location but larger diff | Harder to verify zero behavior drift from refactor |
-
-**Minimum enabling change before queue-awareness:** The cutoff-pass
-deduplication. Without it, queue-awareness must be implemented 4 times.
 
 ### Session boundaries
 
@@ -681,8 +624,6 @@ Each phase is designed so that:
 - Phase 1 can be merged independently (new modules, no integration)
 - Phase 2 depends on Phase 1 (uses the adapters)
 - Phase 3 depends on Phase 2 (validates the integration)
-- Phase 4 depends on Phase 2 (uses `_run_search_pass`)
-- Phase 5 depends on Phase 4 (adds settings for queue behavior)
 
 ---
 
@@ -691,9 +632,7 @@ Each phase is designed so that:
 - All five OpenAPI specs are vendored locally in `docs/api/`:
   `sonarr_openapi.json`, `radarr_openapi.json`, `whisparr_openapi.json`,
   `lidarr_openapi.json`, `readarr_openapi.json`
-- Reference these when implementing queue endpoint client methods or
-  future app adapters
-- Queue endpoint schemas are fully documented in the local specs
+- Reference these when implementing future app adapters
 - Follow `docs/api-context.md` guidelines for new client methods
 - The `api-snapshot-refresh.yml` workflow auto-refreshes all five specs
   weekly and syncs hashes in `tests/test_docs_api.py`
@@ -702,7 +641,7 @@ Each phase is designed so that:
 
 ## K. Step-by-Step Implementation Plan
 
-### Phase 1: Core abstractions (session 1 -- no behavior change)
+### Phase 1: Core abstractions (session 1)
 
 > **Goal:** Create all new modules alongside existing code. The search
 > loop is not modified -- these modules are wired in during Phase 2.
@@ -796,7 +735,7 @@ Existing tests are unaffected since `search_loop.py` is unchanged.
 
 ---
 
-### Phase 2: Unified search pipeline (session 2 -- no behavior change)
+### Phase 2: Unified search pipeline (session 2)
 
 > **Goal:** Rewrite `run_instance_search()` to use the adapter registry
 > and a single `_run_search_pass()`. Delete all duplicated code.
@@ -868,7 +807,7 @@ These functions were copied in Phase 1; now delete the originals.
 
 ---
 
-### Phase 3: Test hardening and validation (session 3 -- no behavior change)
+### Phase 3: Test hardening and validation (session 3)
 
 > **Goal:** Prove zero behavior drift from the refactor. Harden test
 > coverage for the new adapter modules.
@@ -895,104 +834,6 @@ These functions were copied in Phase 1; now delete the originals.
 - Check that `_write_log` import by `supervisor.py` is unaffected
 
 #### Step 3.4: Run all quality gates
-
-`ruff check`, `ruff format`, `mypy`, `bandit`, `pytest` -- all must pass.
-
----
-
-### Phase 4: Queue client methods + pipeline integration (session 4 -- new behavior)
-
-> **Goal:** Add queue-fetching to clients and wire queue-gating into the
-> unified pipeline. No UI or settings changes -- queue-awareness is
-> always on (hardcoded) in this phase.
-
-#### Step 4.1: Add `get_queue_item_ids()` to clients
-
-- `SonarrClient.get_queue_item_ids() -> set[int]` -- calls
-  `GET /api/v3/queue` with `includeSeries=false`, `includeEpisode=false`,
-  `pageSize=200`, extracts `episodeId` from each record
-- `RadarrClient.get_queue_item_ids() -> set[int]` -- calls
-  `GET /api/v3/queue` with `includeMovie=false`, `pageSize=200`, extracts
-  `movieId`
-- Add to `ArrClient` ABC:
-  `@abstractmethod async def get_queue_item_ids(self) -> set[int]`
-
-#### Step 4.2: Add queue-gating to the unified pipeline
-
-At the start of `_run_search_pass()`, call
-`client.get_queue_item_ids()` once.
-
-In the eligibility pipeline, after cooldown check and before search
-dispatch: if `candidate.item_id in queued_ids`, log `"skipped"` with
-reason `"already in download queue"`, continue.
-
-**Season-context limitation:** The queue returns `episodeId`, but
-season-context uses synthetic negative IDs. The simplest correct
-approach: skip the queue check for season-context candidates (where
-`candidate.group_key is not None`). Document this as a known limitation.
-
-Eligibility pipeline order:
-
-1. Dedup (seen_item_ids)
-2. Unreleased delay
-3. Hourly cap
-4. Cooldown
-5. **Queue check** (new)
-6. Search dispatch
-
-#### Step 4.3: Handle queue fetch failures gracefully
-
-If `get_queue_item_ids()` raises `httpx.HTTPError`:
-- Log an `"info"` row: `"queue check unavailable, proceeding without"`
-- Set `queued_ids = set()` (empty, so no items are skipped)
-- Continue the search pass normally
-
-This ensures queue-awareness is advisory, not blocking.
-
-#### Step 4.4: Write queue tests
-
-- Mock `GET /api/v3/queue` responses in `respx`
-- Test: item in queue -> skipped with reason `"already in download queue"`
-- Test: item not in queue -> searched normally
-- Test: queue fetch failure -> info log, continue searching
-- Test: season-context candidates -> queue check skipped
-- Test: paginated queue (>200 items) -> all pages fetched
-
-#### Step 4.5: Run all quality gates
-
-`ruff check`, `ruff format`, `mypy`, `bandit`, `pytest` -- all must pass.
-
----
-
-### Phase 5: Queue settings, UI, and polish (session 5 -- new behavior)
-
-> **Goal:** Add the user-facing `skip_if_queued` toggle so
-> queue-awareness can be disabled per instance. Complete test coverage.
-
-#### Step 5.1: Add `skip_if_queued` instance setting
-
-- Default: `True` (queue-aware by default)
-- DB migration v5:
-  `ALTER TABLE instances ADD COLUMN skip_if_queued INTEGER NOT NULL DEFAULT 1`
-- Add to `Instance` dataclass
-- Add to `create_instance`, `update_instance` `allowed_cols`
-- `_run_search_pass` checks `instance.skip_if_queued` before calling
-  `get_queue_item_ids()`
-
-#### Step 5.2: Update settings form
-
-- Add toggle for `skip_if_queued` in instance form
-- Default checked (True)
-- Applicable to both Sonarr and Radarr
-
-#### Step 5.3: Write settings and toggle tests
-
-- Test: `skip_if_queued=False` -> queue not fetched
-- Test: toggle persists correctly in DB
-- Test: new instances default to `skip_if_queued=True`
-- Test: form renders toggle in correct state
-
-#### Step 5.4: Run all quality gates
 
 `ruff check`, `ruff format`, `mypy`, `bandit`, `pytest` -- all must pass.
 
@@ -1049,80 +890,22 @@ continues to run.
 
 ### 7. Accidental trust-boundary expansion
 
-**Risk:** Adapter contract grows to include queue fetching, and a future
+**Risk:** Adapter contract grows to include HTTP calls, and a future
 adapter fetches from unexpected endpoint.
-**Mitigation:** Queue fetching stays in well-typed client classes. The
-adapter never makes HTTP calls -- it only transforms data.
-
-### 8. Queue-awareness false negatives
-
-**Risk:** Race condition between queue fetch and search dispatch.
-**Mitigation:** Inherently best-effort. Skipped items retry on next cycle.
-Document explicitly. Queue check reduces unnecessary searches but doesn't
-guarantee zero duplicates.
-
-### 9. Queue-awareness performance
-
-**Risk:** Extra API call per search pass could slow down cycles.
-**Mitigation:** One call per pass (not per item). `pageSize=200` covers
-most queues in one request. Timeout is 30s (same as other API calls).
-Failure is gracefully handled.
+**Mitigation:** Adapters never make HTTP calls -- they only transform
+data. Client classes own all outbound communication.
 
 ---
 
-## M. Queue-Awareness Bridge Plan
-
-### Where queue fetching belongs
-
-In the **client classes** (`SonarrClient.get_queue_item_ids()`,
-`RadarrClient.get_queue_item_ids()`), as a new method on the `ArrClient`
-ABC. The client knows the correct endpoint and field names, already holds
-the HTTP connection and auth headers, and no new trust boundary is created.
-
-### Where queue normalization belongs
-
-Nowhere for skip-if-queued. The queue response is reduced to `set[int]`
-at the client level. The engine receives a plain set and checks
-membership. No queue model or dataclass is needed.
-
-If Houndarr ever needs to display queue information in the UI, a
-`QueueSummary` dataclass could be added later as a separate feature.
-
-### Where queue gating belongs
-
-In `_run_search_pass()`, as a check in the eligibility pipeline, after
-cooldown and before search dispatch.
-
-### How often should queue be fetched
-
-**Once per search pass.** Missing pass fetches once, cutoff pass fetches
-once. This is 1-2 API calls per cycle (or 0 if `skip_if_queued=False`).
-
-### How to avoid duplication
-
-With the unified `_run_search_pass()`, queue-gating is implemented once.
-Client methods for fetching queue IDs are per-app, but the gating logic
-is shared.
-
-### How to preserve security posture
-
-- Queue fetch uses the same `httpx.AsyncClient` and `X-Api-Key` header
-- Queue data reduced to `set[int]` -- no sensitive info persisted or logged
-- Skip reason logged is `"already in download queue"` -- no queue details
-- Queue fetch failure -> graceful degradation, not blocking
-
----
-
-## N. Final Recommendation
+## M. Final Recommendation
 
 **The refactor is warranted.** The cutoff-pass duplication (260 lines) is
-a concrete maintainability problem today. Queue-awareness would make it
-worse. The `SearchCandidate` + adapter function pattern is the smallest
-change that solves both problems.
+a concrete maintainability problem today. The `SearchCandidate` + adapter
+function pattern is the smallest change that solves it.
 
-**Five phases, each scoped to one coding session.** Phases 1-3 are the
-internal refactor (zero behavior change). Phases 4-5 add queue-awareness
-(new behavior). Each phase leaves the codebase in a passing state.
+**Three phases, each scoped to one coding session.** All three are
+internal refactoring with zero behavior change. Each phase leaves the
+codebase in a passing state.
 
 **Do not pre-build for Whisparr, Lidarr, or Readarr.** The design makes
 adding them easier later, but no code should target them now.
@@ -1142,12 +925,11 @@ adding them easier later, but no code should target them now.
 - Do not add new instance types, item types, or DB CHECK values
 - Do not write Whisparr/Lidarr/Readarr clients
 - Do not create an abstract `Adapter` base class
-- Do not add queue-awareness in the same PR as the refactor
 - Do not add "plugin" or "registration" mechanisms
 - Do not rename `sonarr_search_mode` to something generic
-- Do not modify the database schema in Phase 1
+- Do not modify the database schema
 - Do not change any API response format, status payload, or log structure
-- Do not change UI, templates, or settings forms in Phase 1
+- Do not change UI, templates, or settings forms
 - Do not relax any CHECK constraints or validation rules
 - Do not move the SSRF validation boundary
 - Do not introduce module-level master key state or global client registries
@@ -1396,42 +1178,6 @@ Same structure as missing per-app. Sonarr/Whisparr add
 | Lidarr | `AlbumSearch` | `{"name": "AlbumSearch", "albumIds": [int]}` |
 | Readarr | `BookSearch` | `{"name": "BookSearch", "bookIds": [int]}` |
 
-### Queue endpoints
-
-| App | Path | Item ID field | Parent ID field |
-|---|---|---|---|
-| Sonarr | `GET /api/v3/queue` | `episodeId` | `seriesId` |
-| Radarr | `GET /api/v3/queue` | `movieId` | (N/A) |
-| Whisparr | `GET /api/v3/queue` | `episodeId` | `seriesId` |
-| Lidarr | `GET /api/v1/queue` | `albumId` | `artistId` |
-| Readarr | `GET /api/v1/queue` | `bookId` | `authorId` |
-
-### Queue resource fields (common across all apps)
-
-```
-id, title, size, sizeleft, estimatedCompletionTime, status,
-trackedDownloadStatus, trackedDownloadState, statusMessages,
-errorMessage, downloadId, protocol, downloadClient, indexer,
-outputPath, quality, customFormats, customFormatScore,
-downloadClientHasPostImportCategory
-```
-
-### Queue resource fields (app-specific)
-
-| Field | Sonarr | Radarr | Whisparr | Lidarr | Readarr |
-|---|---|---|---|---|---|
-| `seriesId` | yes | no | yes | no | no |
-| `episodeId` | yes | no | yes | no | no |
-| `seasonNumber` | yes | no | yes | no | no |
-| `movieId` | no | yes | no | no | no |
-| `artistId` | no | no | no | yes | no |
-| `albumId` | no | no | no | yes | no |
-| `authorId` | no | no | no | no | yes |
-| `bookId` | no | no | no | no | yes |
-| `languages` | yes | yes | yes | no | no |
-| `added` | yes | yes | no | yes | no |
-| `downloadForced` | no | no | no | yes | yes |
-
 ### Release date fields
 
 | App | Fields | Types |
@@ -1444,13 +1190,13 @@ downloadClientHasPostImportCategory
 
 ### Item identification for cooldown/logging
 
-| App | Wanted item ID | Queue item ID | Search payload key | Proposed `item_type` |
-|---|---|---|---|---|
-| Sonarr | `id` (episode) | `episodeId` | `episodeIds` | `"episode"` |
-| Radarr | `id` (movie) | `movieId` | `movieIds` | `"movie"` |
-| Whisparr | `id` (episode) | `episodeId` | `episodeIds` | `"episode"` |
-| Lidarr | `id` (album) | `albumId` | `albumIds` | `"album"` |
-| Readarr | `id` (book) | `bookId` | `bookIds` | `"book"` |
+| App | Wanted item ID | Search payload key | Proposed `item_type` |
+|---|---|---|---|
+| Sonarr | `id` (episode) | `episodeIds` | `"episode"` |
+| Radarr | `id` (movie) | `movieIds` | `"movie"` |
+| Whisparr | `id` (episode) | `episodeIds` | `"episode"` |
+| Lidarr | `id` (album) | `albumIds` | `"album"` |
+| Readarr | `id` (book) | `bookIds` | `"book"` |
 
 ### Fork/lineage summary
 
@@ -1566,27 +1312,6 @@ constraints requires the table-rebuild pattern:
 4. Rename new table
 5. Recreate indexes and FK references
 6. Do this for all three tables (`instances`, `cooldowns`, `search_log`)
-
-### What a v5 migration for queue-awareness would require
-
-**Option A (skip-if-queued, no persistence):** Simple column addition:
-```sql
-ALTER TABLE instances ADD COLUMN skip_if_queued INTEGER NOT NULL DEFAULT 1
-```
-
-**Option B (persisted queue state):** New table:
-```sql
-CREATE TABLE IF NOT EXISTS queue_items (
-    instance_id INTEGER NOT NULL REFERENCES instances(id) ON DELETE CASCADE,
-    item_id     INTEGER NOT NULL,
-    item_type   TEXT    NOT NULL CHECK(item_type IN ('episode', 'movie')),
-    last_seen   TEXT    NOT NULL,
-    UNIQUE(instance_id, item_id, item_type)
-);
-```
-
-Option A is recommended. Queue state is ephemeral and should be fetched
-fresh each cycle.
 
 ---
 
@@ -1723,18 +1448,3 @@ calls, or interact with the database. Their sole job is data
 transformation (raw API response -> `SearchCandidate`) and search
 dispatch (calling the existing client's `search()` method).
 
----
-
-## Appendix 7: Existing Queue-Related Code
-
-As of the base commit, there are exactly 3 occurrences of "queue" in the
-codebase, none of which relate to Sonarr/Radarr download queues:
-
-| File | Line | Context |
-|---|---|---|
-| `engine/supervisor.py:167` | Docstring for `trigger_run_now()` | "Queue one immediate search cycle" (verb) |
-| `dashboard_content.html:173` | JavaScript UI label | `label.textContent = 'Queued'` (Run Now button state) |
-| `tests/test_routes/test_logs.py:185` | Test fixture data | `"already queued"` reason string in seeded search_log |
-
-Neither `SonarrClient` nor `RadarrClient` has any method for
-`/api/v3/queue`. No code references the download queue concept.

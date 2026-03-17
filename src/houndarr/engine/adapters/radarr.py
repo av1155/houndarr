@@ -98,17 +98,7 @@ def adapt_cutoff(item: MissingMovie, instance: Instance) -> SearchCandidate:
     Returns:
         A fully populated :class:`SearchCandidate`.
     """
-    return SearchCandidate(
-        item_id=item.movie_id,
-        item_type="movie",
-        label=_movie_label(item),
-        unreleased_reason=_radarr_unreleased_reason(item, instance.unreleased_delay_hrs),
-        group_key=None,
-        search_payload={
-            "command": "MoviesSearch",
-            "movie_id": item.movie_id,
-        },
-    )
+    return adapt_missing(item, instance)
 
 
 async def dispatch_search(client: RadarrClient, candidate: SearchCandidate) -> None:

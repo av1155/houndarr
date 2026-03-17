@@ -217,6 +217,49 @@ class TestRadarrUnreleasedReason:
         movie = _make_movie(status=None, is_available=True)
         assert _radarr_unreleased_reason(movie, 24) is None
 
+    def test_all_dates_none_current_year(self):
+        """All date fields None with current year and is_available=None."""
+        movie = _make_movie(
+            digital_release=None,
+            physical_release=None,
+            release_date=None,
+            in_cinemas=None,
+            status=None,
+            is_available=None,
+            year=datetime.now(UTC).year,
+        )
+        # Layer 1: anchor is None → delay returns False.
+        # Layer 2: is_available is not False → skip.
+        # Layer 3: status="" not in unreleased set → skip.
+        # Layer 4: year == current_year, not > → skip.
+        assert _radarr_unreleased_reason(movie, 24) is None
+
+    def test_all_dates_none_future_year(self):
+        """All date fields None with future year triggers layer 4."""
+        future_year = datetime.now(UTC).year + 5
+        movie = _make_movie(
+            digital_release=None,
+            physical_release=None,
+            release_date=None,
+            in_cinemas=None,
+            status=None,
+            is_available=None,
+            year=future_year,
+        )
+        assert _radarr_unreleased_reason(movie, 24) == "future title not yet available"
+
+    def test_boundary_exact_delay(self):
+        """Release date exactly past the delay window is eligible."""
+        exactly_past = (datetime.now(UTC) - timedelta(hours=24, seconds=1)).isoformat()
+        movie = _make_movie(digital_release=exactly_past, is_available=True)
+        assert _radarr_unreleased_reason(movie, 24) is None
+
+    def test_layer4_future_year_released_available(self):
+        """Future year + status='released' + is_available=True bypasses all layers."""
+        future_year = datetime.now(UTC).year + 2
+        movie = _make_movie(year=future_year, status="released", is_available=True)
+        assert _radarr_unreleased_reason(movie, 24) is None
+
 
 # ---------------------------------------------------------------------------
 # adapt_missing
@@ -285,6 +328,17 @@ class TestAdaptCutoff:
         item = _make_movie(digital_release=recent, is_available=True)
         candidate = adapt_cutoff(item, instance)
         assert candidate.unreleased_reason == "unreleased delay (24h)"
+
+    def test_delegates_to_missing_for_varied_inputs(self):
+        """adapt_cutoff produces identical output to adapt_missing for edge cases."""
+        instance = _make_instance(unreleased_delay_hrs=48)
+        cases = [
+            _make_movie(status="tba", is_available=None),
+            _make_movie(digital_release=None, physical_release=None, in_cinemas=None),
+            _make_movie(year=0, title=""),
+        ]
+        for movie in cases:
+            assert adapt_cutoff(movie, instance) == adapt_missing(movie, instance)
 
 
 # ---------------------------------------------------------------------------

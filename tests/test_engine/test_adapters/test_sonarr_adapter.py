@@ -167,6 +167,28 @@ class TestAdaptMissingEpisodeMode:
         candidate = adapt_missing(item, instance)
         assert candidate.unreleased_reason == "unreleased delay (24h)"
 
+    def test_null_air_date_is_eligible(self):
+        """Missing air_date_utc means the item is treated as eligible."""
+        instance = _make_instance(unreleased_delay_hrs=24)
+        item = _make_episode(air_date_utc=None)
+        candidate = adapt_missing(item, instance)
+        assert candidate.unreleased_reason is None
+
+    def test_empty_air_date_is_eligible(self):
+        """Empty string air_date_utc is treated the same as None."""
+        instance = _make_instance(unreleased_delay_hrs=24)
+        item = _make_episode(air_date_utc="")
+        candidate = adapt_missing(item, instance)
+        assert candidate.unreleased_reason is None
+
+    def test_boundary_exact_delay(self):
+        """An item whose delay has exactly elapsed is eligible (not unreleased)."""
+        instance = _make_instance(unreleased_delay_hrs=24)
+        exactly_past = (datetime.now(UTC) - timedelta(hours=24, seconds=1)).isoformat()
+        item = _make_episode(air_date_utc=exactly_past)
+        candidate = adapt_missing(item, instance)
+        assert candidate.unreleased_reason is None
+
 
 # ---------------------------------------------------------------------------
 # adapt_missing — season-context mode
@@ -210,6 +232,20 @@ class TestAdaptMissingSeasonContext:
         assert candidate.item_id == 101  # episode_id
         assert candidate.group_key is None
         assert candidate.search_payload["command"] == "EpisodeSearch"
+
+    def test_large_season_number(self):
+        """High season numbers produce valid, distinct synthetic IDs."""
+        instance = _make_instance(sonarr_search_mode=SonarrSearchMode.season_context)
+        item = _make_episode(series_id=1, season=999)
+        candidate = adapt_missing(item, instance)
+
+        assert candidate.item_id == _season_item_id(1, 999)
+        assert candidate.item_id < 0
+        assert candidate.group_key == (1, 999)
+        # Must not collide with a different series/season combination.
+        other = _make_episode(series_id=999, season=1)
+        other_candidate = adapt_missing(other, instance)
+        assert candidate.item_id != other_candidate.item_id
 
 
 # ---------------------------------------------------------------------------

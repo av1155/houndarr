@@ -1,10 +1,16 @@
-## Linked Issue (required)
-
-Closes #<!-- ISSUE NUMBER — every PR must link a pre-existing issue -->
-
 ## Summary
 
 <!-- What does this PR do? Be concise. -->
+
+Closes #<!-- ISSUE NUMBER — every PR must link a pre-existing issue -->
+
+## Changes
+
+<!-- Bullet the specific changes. Lead with user-facing impact. -->
+
+## Testing <!-- If applicable -->
+
+<!-- How was this verified? "All checks pass" is fine for routine changes. -->
 
 ## Type of Change
 

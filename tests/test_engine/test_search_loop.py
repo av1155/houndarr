@@ -206,7 +206,7 @@ async def test_sonarr_season_context_missing_pass_respects_season_cooldown(
     must now be keyed on the synthetic season ID, not on an individual episode
     ID, so we seed it using _season_item_id directly.
     """
-    from houndarr.engine.search_loop import _season_item_id
+    from houndarr.engine.adapters.sonarr import _season_item_id
     from houndarr.services.cooldown import record_search
 
     # Seed cooldown for S01 of series 55 using the season-level synthetic key.
@@ -254,7 +254,7 @@ def test_season_item_id_properties() -> None:
     - Distinct by series for the same season number
     - Not commutative  → _season_item_id(a, b) != _season_item_id(b, a) when a != b
     """
-    from houndarr.engine.search_loop import _season_item_id
+    from houndarr.engine.adapters.sonarr import _season_item_id
 
     # Always negative — cannot collide with positive Sonarr episode IDs
     assert _season_item_id(1, 1) < 0

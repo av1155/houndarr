@@ -17,8 +17,8 @@ _DEFAULT_TIMEOUT = httpx.Timeout(30.0, connect=5.0)
 class ArrClient(ABC):
     """Thin async wrapper around the *arr v3 REST API.
 
-    Subclasses implement :meth:`get_missing` and :meth:`search` for their
-    specific resource type (episodes vs. movies).
+    Subclasses implement :meth:`get_missing`, :meth:`get_cutoff_unmet`, and
+    :meth:`search` for their specific resource type (episodes vs. movies).
 
     Usage::
 
@@ -96,6 +96,10 @@ class ArrClient(ABC):
     @abstractmethod
     async def get_missing(self, *, page: int = 1, page_size: int = 10) -> list[Any]:
         """Return a page of missing items from the *arr instance."""
+
+    @abstractmethod
+    async def get_cutoff_unmet(self, *, page: int = 1, page_size: int = 10) -> list[Any]:
+        """Return a page of cutoff-unmet items from the *arr instance."""
 
     @abstractmethod
     async def search(self, item_id: int) -> None:

@@ -9,18 +9,19 @@ triggers the *arr search command for each eligible item, and writes a row to
 from __future__ import annotations
 
 import logging
+from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime, timedelta
-from typing import Literal, cast
+from typing import Any, Literal
 from uuid import uuid4
 
-from houndarr.clients.radarr import MissingMovie, RadarrClient
-from houndarr.clients.sonarr import MissingEpisode, SonarrClient
 from houndarr.database import get_db
+from houndarr.engine.adapters import AppAdapter, get_adapter
+from houndarr.engine.candidates import SearchCandidate
 from houndarr.services.cooldown import (
     is_on_cooldown,
     record_search,
 )
-from houndarr.services.instances import Instance, InstanceType, SonarrSearchMode
+from houndarr.services.instances import Instance
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +38,6 @@ _CUTOFF_PAGE_SIZE_MIN = 5
 _CUTOFF_PAGE_SIZE_MAX = 25
 _CUTOFF_SCAN_BUDGET_MIN = 12
 _CUTOFF_SCAN_BUDGET_MAX = 60
-_RADARR_UNRELEASED_STATUSES = {"tba", "announced"}
 
 
 # ---------------------------------------------------------------------------
@@ -92,114 +92,6 @@ async def _write_log(
         await db.commit()
 
 
-def _parse_iso_utc(value: str | None) -> datetime | None:
-    """Parse an ISO-8601 value into a timezone-aware UTC datetime."""
-    if not value:
-        return None
-
-    normalized = value.strip()
-    if normalized.endswith("Z"):
-        normalized = normalized[:-1] + "+00:00"
-
-    try:
-        parsed = datetime.fromisoformat(normalized)
-    except ValueError:
-        return None
-
-    if parsed.tzinfo is None:
-        return parsed.replace(tzinfo=UTC)
-    return parsed.astimezone(UTC)
-
-
-def _is_within_unreleased_delay(release_at: str | None, unreleased_delay_hrs: int) -> bool:
-    """Return True when an item is still inside the configured unreleased delay."""
-    if unreleased_delay_hrs <= 0:
-        return False
-
-    release_dt = _parse_iso_utc(release_at)
-    if release_dt is None:
-        return False
-
-    return datetime.now(UTC) < (release_dt + timedelta(hours=unreleased_delay_hrs))
-
-
-def _radarr_release_anchor(movie: MissingMovie) -> str | None:
-    """Return preferred Radarr release anchor in fallback order."""
-    return movie.digital_release or movie.physical_release or movie.release_date or movie.in_cinemas
-
-
-def _radarr_unreleased_reason(movie: MissingMovie, unreleased_delay_hrs: int) -> str | None:
-    """Return skip reason when a Radarr movie should be treated as unreleased."""
-    release_anchor = _radarr_release_anchor(movie)
-    if _is_within_unreleased_delay(release_anchor, unreleased_delay_hrs):
-        return f"unreleased delay ({unreleased_delay_hrs}h)"
-
-    if movie.is_available is False:
-        return "radarr reports not available"
-
-    status = (movie.status or "").lower()
-    if status in _RADARR_UNRELEASED_STATUSES and movie.is_available is not True:
-        return "radarr status indicates unreleased"
-
-    if (
-        movie.year > datetime.now(UTC).year
-        and movie.is_available is not True
-        and status != "released"
-    ):
-        return "future title not yet available"
-
-    return None
-
-
-def _episode_label(item: MissingEpisode) -> str:
-    """Build a human-readable log label for Sonarr episodes."""
-    code = f"S{item.season:02d}E{item.episode:02d}"
-    series = item.series_title or "Unknown Series"
-    if item.episode_title:
-        return f"{series} - {code} - {item.episode_title}"
-    return f"{series} - {code}"
-
-
-def _season_context_label(item: MissingEpisode) -> str:
-    """Build a log label for Sonarr season-context search mode."""
-    series = item.series_title or "Unknown Series"
-    return f"{series} - S{item.season:02d} (season-context)"
-
-
-def _season_item_id(series_id: int, season_number: int) -> int:
-    """Return a stable, negative synthetic ID representing a (series, season) pair.
-
-    Season-context searches must be keyed on a season-level identity rather than
-    an individual episode ID so that cooldown and log history remain consistent
-    across cycles regardless of which episode happens to be the first candidate.
-
-    The scheme encodes ``series_id`` and ``season_number`` as a single negative
-    integer: ``-(series_id * 1000 + season_number)``.  Sonarr episode IDs are
-    always positive, so there is no collision risk with real episode IDs stored
-    in the same ``cooldowns``/``search_log`` tables.
-
-    The multiplier 1000 supports up to 999 seasons per series, which exceeds
-    any realistic Sonarr library.
-
-    Args:
-        series_id: Sonarr series ID (positive integer).
-        season_number: Season number (0-based specials supported; positive for
-            regular seasons).
-
-    Returns:
-        A unique negative integer that identifies this season across all cycles.
-    """
-    return -(series_id * 1000 + season_number)
-
-
-def _movie_label(item: MissingMovie) -> str:
-    """Build a human-readable log label for Radarr movies."""
-    title = item.title or "Unknown Movie"
-    if item.year > 0:
-        return f"{title} ({item.year})"
-    return title
-
-
 def _clamp(value: int, minimum: int, maximum: int) -> int:
     """Clamp *value* to the [minimum, maximum] range."""
     return max(minimum, min(value, maximum))
@@ -248,6 +140,218 @@ async def _count_searches_last_hour(instance_id: int, search_kind: SearchKind) -
 
 
 # ---------------------------------------------------------------------------
+# Unified search pass
+# ---------------------------------------------------------------------------
+
+
+async def _run_search_pass(  # noqa: C901
+    instance: Instance,
+    adapter: AppAdapter,
+    *,
+    adapt_fn: Callable[..., SearchCandidate],
+    dispatch_fn: Callable[..., Awaitable[None]],
+    fetch_fn: Callable[..., Awaitable[list[Any]]],
+    search_kind: SearchKind,
+    batch_size: int,
+    hourly_cap: int,
+    cooldown_days: int,
+    page_size: int,
+    scan_budget: int,
+    cycle_id: str,
+    cycle_trigger: CycleTrigger,
+) -> int:
+    """Execute a single search pass (missing or cutoff) using the adapter.
+
+    This is the unified pipeline that replaces the previously duplicated
+    missing-pass inline code and the bifurcated ``_run_cutoff_pass()``
+    function.  It pages through items, converts each to a
+    :class:`SearchCandidate` via *adapt_fn*, applies eligibility checks
+    (unreleased delay, hourly cap, cooldown), and dispatches searches via
+    *dispatch_fn*.
+
+    Args:
+        instance: Fully-populated (decrypted) instance.
+        adapter: The :class:`AppAdapter` for this instance type.
+        adapt_fn: Converts a raw API item to a :class:`SearchCandidate`.
+        dispatch_fn: Sends the search command via the appropriate client.
+        fetch_fn: Bound method to fetch a page of items
+            (e.g. ``client.get_missing`` or ``client.get_cutoff_unmet``).
+        search_kind: ``"missing"`` or ``"cutoff"``.
+        batch_size: Maximum items to search in this pass.
+        hourly_cap: Hourly search limit for this pass kind (0 = unlimited).
+        cooldown_days: Cooldown window for this pass kind.
+        page_size: Number of items to request per page.
+        scan_budget: Maximum candidates to evaluate before stopping.
+        cycle_id: Shared cycle identifier for all log rows.
+        cycle_trigger: How this cycle was initiated.
+
+    Returns:
+        Count of items searched in this pass.
+    """
+    target = max(0, batch_size)
+    if target == 0:
+        return 0
+
+    is_cutoff = search_kind == "cutoff"
+    log_prefix = "cutoff " if is_cutoff else ""
+
+    searches_this_hour = await _count_searches_last_hour(instance.id, search_kind)
+    seen_item_ids: set[int] = set()
+    seen_group_keys: set[tuple[int, int]] = set()
+    searched = 0
+    scanned = 0
+    page = 1
+
+    for _ in range(_MAX_LIST_PAGES_PER_PASS):
+        if searched >= target or scanned >= scan_budget:
+            break
+
+        items = await fetch_fn(page=page, page_size=page_size)
+        logger.debug(
+            "[%s] fetched %d %sitem(s) from page %d",
+            instance.name,
+            len(items),
+            "cutoff-unmet " if is_cutoff else "missing ",
+            page,
+        )
+        if not items:
+            break
+
+        stop_pass = False
+        for item in items:
+            if searched >= target or scanned >= scan_budget:
+                break
+
+            candidate = adapt_fn(item, instance)
+
+            # Group-key dedup (season-context mode).
+            if candidate.group_key is not None:
+                if candidate.group_key in seen_group_keys:
+                    continue
+                seen_group_keys.add(candidate.group_key)
+
+            # Item-id dedup across pages.
+            if candidate.item_id in seen_item_ids:
+                continue
+            seen_item_ids.add(candidate.item_id)
+            scanned += 1
+
+            # Unreleased delay.
+            if candidate.unreleased_reason is not None:
+                await _write_log(
+                    instance.id,
+                    candidate.item_id,
+                    candidate.item_type,
+                    "skipped",
+                    search_kind=search_kind,
+                    cycle_id=cycle_id,
+                    cycle_trigger=cycle_trigger,
+                    item_label=candidate.label,
+                    reason=candidate.unreleased_reason,
+                )
+                continue
+
+            # Hourly cap.
+            if hourly_cap > 0 and searches_this_hour >= hourly_cap:
+                reason = (
+                    f"cutoff hourly cap reached ({hourly_cap})"
+                    if is_cutoff
+                    else f"hourly cap reached ({hourly_cap})"
+                )
+                logger.info("[%s] %s%s — %s", instance.name, log_prefix, candidate.item_id, reason)
+                await _write_log(
+                    instance.id,
+                    candidate.item_id,
+                    candidate.item_type,
+                    "skipped",
+                    search_kind=search_kind,
+                    cycle_id=cycle_id,
+                    cycle_trigger=cycle_trigger,
+                    item_label=candidate.label,
+                    reason=reason,
+                )
+                stop_pass = True
+                break
+
+            # Cooldown.
+            if await is_on_cooldown(
+                instance.id, candidate.item_id, candidate.item_type, cooldown_days
+            ):
+                reason = (
+                    f"on cutoff cooldown ({cooldown_days}d)"
+                    if is_cutoff
+                    else f"on cooldown ({cooldown_days}d)"
+                )
+                logger.debug("[%s] %s%s — %s", instance.name, log_prefix, candidate.item_id, reason)
+                await _write_log(
+                    instance.id,
+                    candidate.item_id,
+                    candidate.item_type,
+                    "skipped",
+                    search_kind=search_kind,
+                    cycle_id=cycle_id,
+                    cycle_trigger=cycle_trigger,
+                    item_label=candidate.label,
+                    reason=reason,
+                )
+                continue
+
+            # Dispatch search via a fresh client context.
+            try:
+                async with adapter.make_client(instance) as dispatch_client:
+                    await dispatch_fn(dispatch_client, candidate)
+            except Exception as exc:  # noqa: BLE001
+                msg = str(exc)
+                logger.warning(
+                    "[%s] %ssearch failed for %s: %s",
+                    instance.name,
+                    log_prefix,
+                    candidate.item_id,
+                    msg,
+                )
+                await _write_log(
+                    instance.id,
+                    candidate.item_id,
+                    candidate.item_type,
+                    "error",
+                    search_kind=search_kind,
+                    cycle_id=cycle_id,
+                    cycle_trigger=cycle_trigger,
+                    item_label=candidate.label,
+                    message=msg,
+                )
+                continue
+
+            await record_search(instance.id, candidate.item_id, candidate.item_type)
+            await _write_log(
+                instance.id,
+                candidate.item_id,
+                candidate.item_type,
+                "searched",
+                search_kind=search_kind,
+                cycle_id=cycle_id,
+                cycle_trigger=cycle_trigger,
+                item_label=candidate.label,
+            )
+            searched += 1
+            searches_this_hour += 1
+            logger.info(
+                "[%s] %ssearched %s %s",
+                instance.name,
+                log_prefix,
+                candidate.item_type,
+                candidate.item_id,
+            )
+
+        if stop_pass:
+            break
+
+        page += 1
+
+    return searched
+
+
+# ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
 
@@ -262,13 +366,10 @@ async def run_instance_search(
     """Execute one search cycle for *instance*.
 
     Steps:
-    1. Build the appropriate client (Sonarr or Radarr).
-    2. Fetch one page of missing items (size = ``instance.batch_size``).
-    3. For each item:
-       - If the hourly cap is reached → log *skipped* and stop.
-       - If the item is on cooldown → log *skipped* and continue.
-       - Otherwise → trigger search, record cooldown, log *searched*.
-    4. Return the number of items actually searched.
+    1. Look up the adapter for the instance type.
+    2. Run the missing pass via :func:`_run_search_pass`.
+    3. Optionally run the cutoff pass via :func:`_run_search_pass`.
+    4. Return the total number of items searched.
 
     Args:
         instance: Fully-populated (decrypted) instance.
@@ -284,515 +385,60 @@ async def run_instance_search(
         instance.batch_size,
     )
 
-    searched = 0
+    adapter = get_adapter(instance.type)
+    client = adapter.make_client(instance)
     cycle_id_value = cycle_id or str(uuid4())
+    searched = 0
+
+    # --- Missing pass ---
     missing_target = max(0, instance.batch_size)
-    missing_page_size = _missing_page_size(missing_target)
-    missing_scan_budget = _missing_scan_budget(missing_target)
-
-    if instance.type == InstanceType.sonarr:
-        client: SonarrClient | RadarrClient = SonarrClient(
-            url=instance.url, api_key=instance.api_key
-        )
-        item_type: ItemType = "episode"
-    else:
-        client = RadarrClient(url=instance.url, api_key=instance.api_key)
-        item_type = "movie"
-
     if missing_target > 0:
-        searches_this_hour = await _count_searches_last_hour(instance.id, "missing")
-        seen_item_ids: set[int] = set()
-        seen_season_keys: set[tuple[int, int]] = set()
-        scanned = 0
-        page = 1
-
         async with client:
-            for _ in range(_MAX_LIST_PAGES_PER_PASS):
-                if searched >= missing_target or scanned >= missing_scan_budget:
-                    break
-
-                items = await client.get_missing(page=page, page_size=missing_page_size)
-                logger.debug(
-                    "[%s] fetched %d missing %s(s) from page %d",
-                    instance.name,
-                    len(items),
-                    item_type,
-                    page,
-                )
-                if not items:
-                    break
-
-                stop_pass = False
-                for item in items:
-                    if searched >= missing_target or scanned >= missing_scan_budget:
-                        break
-
-                    if isinstance(item, MissingEpisode):
-                        episode_mode = instance.sonarr_search_mode == SonarrSearchMode.episode
-
-                        season_key: tuple[int, int] | None = None
-                        if not episode_mode and item.series_id is not None and item.season > 0:
-                            season_key = (item.series_id, item.season)
-                            if season_key in seen_season_keys:
-                                continue
-                            seen_season_keys.add(season_key)
-
-                        # In season-context mode use a stable synthetic season ID
-                        # so that cooldown and log history are keyed at season
-                        # granularity rather than per-representative-episode.
-                        # Episode mode retains the real Sonarr episode ID.
-                        # season_key being non-None guarantees item.series_id is
-                        # also non-None (same guard: `item.series_id is not None
-                        # and item.season > 0`), so the assertion is safe.
-                        if season_key is not None:
-                            assert item.series_id is not None  # noqa: S101
-                            item_id = _season_item_id(item.series_id, item.season)
-                        else:
-                            item_id = item.episode_id
-                        item_label = (
-                            _episode_label(item)
-                            if episode_mode or season_key is None
-                            else _season_context_label(item)
-                        )
-                        unreleased_reason = (
-                            f"unreleased delay ({instance.unreleased_delay_hrs}h)"
-                            if _is_within_unreleased_delay(
-                                item.air_date_utc, instance.unreleased_delay_hrs
-                            )
-                            else None
-                        )
-                    else:
-                        item_id = item.movie_id
-                        item_label = _movie_label(item)
-                        unreleased_reason = _radarr_unreleased_reason(
-                            item, instance.unreleased_delay_hrs
-                        )
-
-                    if item_id in seen_item_ids:
-                        continue
-                    seen_item_ids.add(item_id)
-                    scanned += 1
-
-                    if unreleased_reason is not None:
-                        await _write_log(
-                            instance.id,
-                            item_id,
-                            item_type,
-                            "skipped",
-                            search_kind="missing",
-                            cycle_id=cycle_id_value,
-                            cycle_trigger=cycle_trigger,
-                            item_label=item_label,
-                            reason=unreleased_reason,
-                        )
-                        continue
-
-                    if instance.hourly_cap > 0 and searches_this_hour >= instance.hourly_cap:
-                        reason = f"hourly cap reached ({instance.hourly_cap})"
-                        logger.info("[%s] %s — %s", instance.name, item_id, reason)
-                        await _write_log(
-                            instance.id,
-                            item_id,
-                            item_type,
-                            "skipped",
-                            search_kind="missing",
-                            cycle_id=cycle_id_value,
-                            cycle_trigger=cycle_trigger,
-                            item_label=item_label,
-                            reason=reason,
-                        )
-                        stop_pass = True
-                        break
-
-                    if await is_on_cooldown(
-                        instance.id, item_id, item_type, instance.cooldown_days
-                    ):
-                        reason = f"on cooldown ({instance.cooldown_days}d)"
-                        logger.debug("[%s] %s — %s", instance.name, item_id, reason)
-                        await _write_log(
-                            instance.id,
-                            item_id,
-                            item_type,
-                            "skipped",
-                            search_kind="missing",
-                            cycle_id=cycle_id_value,
-                            cycle_trigger=cycle_trigger,
-                            item_label=item_label,
-                            reason=reason,
-                        )
-                        continue
-
-                    try:
-                        if isinstance(item, MissingEpisode):
-                            async with SonarrClient(
-                                url=instance.url, api_key=instance.api_key
-                            ) as raw_client:
-                                c = cast(SonarrClient, raw_client)
-                                if (
-                                    instance.sonarr_search_mode == SonarrSearchMode.season_context
-                                    and item.series_id is not None
-                                    and item.season > 0
-                                ):
-                                    await c.search_season(item.series_id, item.season)
-                                else:
-                                    await c.search(item_id)
-                        else:
-                            async with RadarrClient(
-                                url=instance.url, api_key=instance.api_key
-                            ) as raw_radarr_client:
-                                radarr_client = cast(RadarrClient, raw_radarr_client)
-                                await radarr_client.search(item_id)
-                    except Exception as exc:  # noqa: BLE001
-                        msg = str(exc)
-                        logger.warning("[%s] search failed for %s: %s", instance.name, item_id, msg)
-                        await _write_log(
-                            instance.id,
-                            item_id,
-                            item_type,
-                            "error",
-                            search_kind="missing",
-                            cycle_id=cycle_id_value,
-                            cycle_trigger=cycle_trigger,
-                            item_label=item_label,
-                            message=msg,
-                        )
-                        continue
-
-                    await record_search(instance.id, item_id, item_type)
-                    await _write_log(
-                        instance.id,
-                        item_id,
-                        item_type,
-                        "searched",
-                        search_kind="missing",
-                        cycle_id=cycle_id_value,
-                        cycle_trigger=cycle_trigger,
-                        item_label=item_label,
-                    )
-                    searched += 1
-                    searches_this_hour += 1
-                    logger.info("[%s] searched %s %s", instance.name, item_type, item_id)
-
-                if stop_pass:
-                    break
-
-                page += 1
+            searched += await _run_search_pass(
+                instance,
+                adapter,
+                adapt_fn=adapter.adapt_missing,
+                dispatch_fn=adapter.dispatch_search,
+                fetch_fn=client.get_missing,
+                search_kind="missing",
+                batch_size=instance.batch_size,
+                hourly_cap=instance.hourly_cap,
+                cooldown_days=instance.cooldown_days,
+                page_size=_missing_page_size(missing_target),
+                scan_budget=_missing_scan_budget(missing_target),
+                cycle_id=cycle_id_value,
+                cycle_trigger=cycle_trigger,
+            )
 
     logger.info("[%s] cycle complete — %d searched", instance.name, searched)
 
-    # -----------------------------------------------------------------------
-    # Cutoff-unmet pass (only when enabled)
-    # -----------------------------------------------------------------------
+    # --- Cutoff-unmet pass ---
     if instance.cutoff_enabled:
-        searched += await _run_cutoff_pass(
-            instance,
-            cycle_id=cycle_id_value,
-            cycle_trigger=cycle_trigger,
-        )
-
-    return searched
-
-
-async def _run_cutoff_pass(
-    instance: Instance,
-    *,
-    cycle_id: str,
-    cycle_trigger: CycleTrigger,
-) -> int:
-    """Execute the cutoff-unmet search pass for *instance*.
-
-    Fetches one page of cutoff-unmet items and searches each eligible one,
-    applying the same hourly-cap and cooldown logic used for missing items.
-
-    Args:
-        instance: Fully-populated (decrypted) instance.
-
-    Returns:
-        Count of items searched in this pass.
-    """
-    item_type: ItemType = "episode" if instance.type == InstanceType.sonarr else "movie"
-    logger.info(
-        "[%s] starting cutoff-unmet pass (cutoff_batch_size=%d)",
-        instance.name,
-        instance.cutoff_batch_size,
-    )
-
-    searched = 0
-    cutoff_target = max(0, instance.cutoff_batch_size)
-    cutoff_page_size = _cutoff_page_size(cutoff_target)
-    cutoff_scan_budget = _cutoff_scan_budget(cutoff_target)
-
-    if cutoff_target == 0:
-        logger.info("[%s] cutoff pass complete — 0 searched", instance.name)
-        return 0
-
-    searches_this_hour = await _count_searches_last_hour(instance.id, "cutoff")
-    seen_item_ids: set[int] = set()
-    scanned = 0
-    page = 1
-
-    if instance.type == InstanceType.sonarr:
-        sonarr = SonarrClient(url=instance.url, api_key=instance.api_key)
-        async with sonarr:
-            for _ in range(_MAX_LIST_PAGES_PER_PASS):
-                if searched >= cutoff_target or scanned >= cutoff_scan_budget:
-                    break
-
-                sonarr_items = await sonarr.get_cutoff_unmet(page=page, page_size=cutoff_page_size)
-                logger.debug(
-                    "[%s] fetched %d cutoff-unmet %s(s) from page %d",
-                    instance.name,
-                    len(sonarr_items),
-                    item_type,
-                    page,
+        cutoff_target = max(0, instance.cutoff_batch_size)
+        if cutoff_target > 0:
+            logger.info(
+                "[%s] starting cutoff-unmet pass (cutoff_batch_size=%d)",
+                instance.name,
+                instance.cutoff_batch_size,
+            )
+            cutoff_client = adapter.make_client(instance)
+            async with cutoff_client:
+                cutoff_searched = await _run_search_pass(
+                    instance,
+                    adapter,
+                    adapt_fn=adapter.adapt_cutoff,
+                    dispatch_fn=adapter.dispatch_search,
+                    fetch_fn=cutoff_client.get_cutoff_unmet,
+                    search_kind="cutoff",
+                    batch_size=instance.cutoff_batch_size,
+                    hourly_cap=instance.cutoff_hourly_cap,
+                    cooldown_days=instance.cutoff_cooldown_days,
+                    page_size=_cutoff_page_size(cutoff_target),
+                    scan_budget=_cutoff_scan_budget(cutoff_target),
+                    cycle_id=cycle_id_value,
+                    cycle_trigger=cycle_trigger,
                 )
-                if not sonarr_items:
-                    break
+            logger.info("[%s] cutoff pass complete — %d searched", instance.name, cutoff_searched)
+            searched += cutoff_searched
 
-                stop_pass = False
-                for episode_item in sonarr_items:
-                    if searched >= cutoff_target or scanned >= cutoff_scan_budget:
-                        break
-
-                    item_id = episode_item.episode_id
-                    if item_id in seen_item_ids:
-                        continue
-                    seen_item_ids.add(item_id)
-                    scanned += 1
-
-                    item_label = _episode_label(episode_item)
-                    if _is_within_unreleased_delay(
-                        episode_item.air_date_utc, instance.unreleased_delay_hrs
-                    ):
-                        reason = f"unreleased delay ({instance.unreleased_delay_hrs}h)"
-                        await _write_log(
-                            instance.id,
-                            item_id,
-                            item_type,
-                            "skipped",
-                            search_kind="cutoff",
-                            cycle_id=cycle_id,
-                            cycle_trigger=cycle_trigger,
-                            item_label=item_label,
-                            reason=reason,
-                        )
-                        continue
-
-                    if (
-                        instance.cutoff_hourly_cap > 0
-                        and searches_this_hour >= instance.cutoff_hourly_cap
-                    ):
-                        reason = f"cutoff hourly cap reached ({instance.cutoff_hourly_cap})"
-                        logger.info("[%s] cutoff %s — %s", instance.name, item_id, reason)
-                        await _write_log(
-                            instance.id,
-                            item_id,
-                            item_type,
-                            "skipped",
-                            search_kind="cutoff",
-                            cycle_id=cycle_id,
-                            cycle_trigger=cycle_trigger,
-                            item_label=item_label,
-                            reason=reason,
-                        )
-                        stop_pass = True
-                        break
-
-                    if await is_on_cooldown(
-                        instance.id,
-                        item_id,
-                        item_type,
-                        instance.cutoff_cooldown_days,
-                    ):
-                        reason = f"on cutoff cooldown ({instance.cutoff_cooldown_days}d)"
-                        logger.debug("[%s] cutoff %s — %s", instance.name, item_id, reason)
-                        await _write_log(
-                            instance.id,
-                            item_id,
-                            item_type,
-                            "skipped",
-                            search_kind="cutoff",
-                            cycle_id=cycle_id,
-                            cycle_trigger=cycle_trigger,
-                            item_label=item_label,
-                            reason=reason,
-                        )
-                        continue
-
-                    try:
-                        async with SonarrClient(url=instance.url, api_key=instance.api_key) as c:
-                            await c.search(item_id)
-                    except Exception as exc:  # noqa: BLE001
-                        msg = str(exc)
-                        logger.warning(
-                            "[%s] cutoff search failed for %s: %s",
-                            instance.name,
-                            item_id,
-                            msg,
-                        )
-                        await _write_log(
-                            instance.id,
-                            item_id,
-                            item_type,
-                            "error",
-                            search_kind="cutoff",
-                            cycle_id=cycle_id,
-                            cycle_trigger=cycle_trigger,
-                            item_label=item_label,
-                            message=msg,
-                        )
-                        continue
-
-                    await record_search(instance.id, item_id, item_type)
-                    await _write_log(
-                        instance.id,
-                        item_id,
-                        item_type,
-                        "searched",
-                        search_kind="cutoff",
-                        cycle_id=cycle_id,
-                        cycle_trigger=cycle_trigger,
-                        item_label=item_label,
-                    )
-                    searched += 1
-                    searches_this_hour += 1
-                    logger.info("[%s] cutoff searched %s %s", instance.name, item_type, item_id)
-
-                if stop_pass:
-                    break
-
-                page += 1
-    else:
-        radarr = RadarrClient(url=instance.url, api_key=instance.api_key)
-        async with radarr:
-            for _ in range(_MAX_LIST_PAGES_PER_PASS):
-                if searched >= cutoff_target or scanned >= cutoff_scan_budget:
-                    break
-
-                radarr_items = await radarr.get_cutoff_unmet(page=page, page_size=cutoff_page_size)
-                logger.debug(
-                    "[%s] fetched %d cutoff-unmet %s(s) from page %d",
-                    instance.name,
-                    len(radarr_items),
-                    item_type,
-                    page,
-                )
-                if not radarr_items:
-                    break
-
-                stop_pass = False
-                for movie_item in radarr_items:
-                    if searched >= cutoff_target or scanned >= cutoff_scan_budget:
-                        break
-
-                    item_id = movie_item.movie_id
-                    if item_id in seen_item_ids:
-                        continue
-                    seen_item_ids.add(item_id)
-                    scanned += 1
-
-                    item_label = _movie_label(movie_item)
-                    unreleased_reason = _radarr_unreleased_reason(
-                        movie_item, instance.unreleased_delay_hrs
-                    )
-                    if unreleased_reason is not None:
-                        await _write_log(
-                            instance.id,
-                            item_id,
-                            item_type,
-                            "skipped",
-                            search_kind="cutoff",
-                            cycle_id=cycle_id,
-                            cycle_trigger=cycle_trigger,
-                            item_label=item_label,
-                            reason=unreleased_reason,
-                        )
-                        continue
-
-                    if (
-                        instance.cutoff_hourly_cap > 0
-                        and searches_this_hour >= instance.cutoff_hourly_cap
-                    ):
-                        reason = f"cutoff hourly cap reached ({instance.cutoff_hourly_cap})"
-                        logger.info("[%s] cutoff %s — %s", instance.name, item_id, reason)
-                        await _write_log(
-                            instance.id,
-                            item_id,
-                            item_type,
-                            "skipped",
-                            search_kind="cutoff",
-                            cycle_id=cycle_id,
-                            cycle_trigger=cycle_trigger,
-                            item_label=item_label,
-                            reason=reason,
-                        )
-                        stop_pass = True
-                        break
-
-                    if await is_on_cooldown(
-                        instance.id,
-                        item_id,
-                        item_type,
-                        instance.cutoff_cooldown_days,
-                    ):
-                        reason = f"on cutoff cooldown ({instance.cutoff_cooldown_days}d)"
-                        logger.debug("[%s] cutoff %s — %s", instance.name, item_id, reason)
-                        await _write_log(
-                            instance.id,
-                            item_id,
-                            item_type,
-                            "skipped",
-                            search_kind="cutoff",
-                            cycle_id=cycle_id,
-                            cycle_trigger=cycle_trigger,
-                            item_label=item_label,
-                            reason=reason,
-                        )
-                        continue
-
-                    try:
-                        async with RadarrClient(url=instance.url, api_key=instance.api_key) as c:
-                            await c.search(item_id)
-                    except Exception as exc:  # noqa: BLE001
-                        msg = str(exc)
-                        logger.warning(
-                            "[%s] cutoff search failed for %s: %s",
-                            instance.name,
-                            item_id,
-                            msg,
-                        )
-                        await _write_log(
-                            instance.id,
-                            item_id,
-                            item_type,
-                            "error",
-                            search_kind="cutoff",
-                            cycle_id=cycle_id,
-                            cycle_trigger=cycle_trigger,
-                            item_label=item_label,
-                            message=msg,
-                        )
-                        continue
-
-                    await record_search(instance.id, item_id, item_type)
-                    await _write_log(
-                        instance.id,
-                        item_id,
-                        item_type,
-                        "searched",
-                        search_kind="cutoff",
-                        cycle_id=cycle_id,
-                        cycle_trigger=cycle_trigger,
-                        item_label=item_label,
-                    )
-                    searched += 1
-                    searches_this_hour += 1
-                    logger.info("[%s] cutoff searched %s %s", instance.name, item_type, item_id)
-
-                if stop_pass:
-                    break
-
-                page += 1
-
-    logger.info("[%s] cutoff pass complete — %d searched", instance.name, searched)
     return searched

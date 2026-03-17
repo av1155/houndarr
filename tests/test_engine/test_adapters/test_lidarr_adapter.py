@@ -1,0 +1,333 @@
+"""Tests for the Lidarr adapter functions."""
+
+from __future__ import annotations
+
+from datetime import UTC, datetime, timedelta
+from unittest.mock import AsyncMock
+
+import pytest
+
+from houndarr.clients.lidarr import LidarrClient, MissingAlbum
+from houndarr.engine.adapters.lidarr import (
+    _album_label,
+    _artist_context_label,
+    _artist_item_id,
+    adapt_cutoff,
+    adapt_missing,
+    dispatch_search,
+    make_client,
+)
+from houndarr.engine.candidates import SearchCandidate
+from houndarr.services.instances import Instance, InstanceType, LidarrSearchMode
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+_OLD_DATE = "2020-01-01T00:00:00Z"
+
+
+def _make_instance(
+    *,
+    lidarr_search_mode: LidarrSearchMode = LidarrSearchMode.album,
+    unreleased_delay_hrs: int = 24,
+) -> Instance:
+    return Instance(
+        id=3,
+        name="Lidarr Test",
+        type=InstanceType.lidarr,
+        url="http://lidarr:8686",
+        api_key="test-key",
+        enabled=True,
+        batch_size=10,
+        sleep_interval_mins=15,
+        hourly_cap=20,
+        cooldown_days=7,
+        unreleased_delay_hrs=unreleased_delay_hrs,
+        cutoff_enabled=False,
+        cutoff_batch_size=5,
+        cutoff_cooldown_days=21,
+        cutoff_hourly_cap=1,
+        created_at="2024-01-01T00:00:00Z",
+        updated_at="2024-01-01T00:00:00Z",
+        lidarr_search_mode=lidarr_search_mode,
+    )
+
+
+def _make_album(
+    *,
+    album_id: int = 301,
+    artist_id: int = 50,
+    artist_name: str = "Test Artist",
+    title: str = "Greatest Hits",
+    release_date: str | None = _OLD_DATE,
+) -> MissingAlbum:
+    return MissingAlbum(
+        album_id=album_id,
+        artist_id=artist_id,
+        artist_name=artist_name,
+        title=title,
+        release_date=release_date,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Label builders
+# ---------------------------------------------------------------------------
+
+
+class TestAlbumLabel:
+    """Verify _album_label output."""
+
+    def test_basic(self):
+        item = _make_album(artist_name="Pink Floyd", title="The Wall")
+        assert _album_label(item) == "Pink Floyd - The Wall"
+
+    def test_unknown_artist(self):
+        item = _make_album(artist_name="", title="Some Album")
+        assert _album_label(item) == "Unknown Artist - Some Album"
+
+    def test_unknown_album(self):
+        item = _make_album(artist_name="Artist", title="")
+        assert _album_label(item) == "Artist - Unknown Album"
+
+    def test_both_unknown(self):
+        item = _make_album(artist_name="", title="")
+        assert _album_label(item) == "Unknown Artist - Unknown Album"
+
+
+class TestArtistContextLabel:
+    """Verify _artist_context_label output."""
+
+    def test_basic(self):
+        item = _make_album(artist_name="Radiohead")
+        assert _artist_context_label(item) == "Radiohead (artist-context)"
+
+    def test_unknown_artist(self):
+        item = _make_album(artist_name="")
+        assert _artist_context_label(item) == "Unknown Artist (artist-context)"
+
+
+# ---------------------------------------------------------------------------
+# Artist item ID
+# ---------------------------------------------------------------------------
+
+
+class TestArtistItemId:
+    """Verify _artist_item_id formula."""
+
+    def test_basic(self):
+        assert _artist_item_id(50) == -(50 * 1000)
+
+    def test_negative_result(self):
+        assert _artist_item_id(50) == -50000
+
+    def test_large_artist(self):
+        assert _artist_item_id(999) == -999000
+
+    def test_distinct_ids(self):
+        assert _artist_item_id(1) != _artist_item_id(2)
+
+
+# ---------------------------------------------------------------------------
+# adapt_missing — album mode
+# ---------------------------------------------------------------------------
+
+
+class TestAdaptMissingAlbumMode:
+    """Verify adapt_missing in album mode."""
+
+    def test_basic_fields(self):
+        instance = _make_instance()
+        item = _make_album()
+        candidate = adapt_missing(item, instance)
+
+        assert isinstance(candidate, SearchCandidate)
+        assert candidate.item_id == 301
+        assert candidate.item_type == "album"
+        assert candidate.label == "Test Artist - Greatest Hits"
+        assert candidate.group_key is None
+        assert candidate.search_payload == {"command": "AlbumSearch", "album_id": 301}
+
+    def test_released_no_unreleased_reason(self):
+        instance = _make_instance()
+        item = _make_album(release_date=_OLD_DATE)
+        candidate = adapt_missing(item, instance)
+        assert candidate.unreleased_reason is None
+
+    def test_unreleased_within_delay(self):
+        instance = _make_instance(unreleased_delay_hrs=24)
+        recent = (datetime.now(UTC) - timedelta(hours=1)).isoformat()
+        item = _make_album(release_date=recent)
+        candidate = adapt_missing(item, instance)
+        assert candidate.unreleased_reason == "unreleased delay (24h)"
+
+    def test_null_release_date_is_eligible(self):
+        instance = _make_instance(unreleased_delay_hrs=24)
+        item = _make_album(release_date=None)
+        candidate = adapt_missing(item, instance)
+        assert candidate.unreleased_reason is None
+
+    def test_empty_release_date_is_eligible(self):
+        instance = _make_instance(unreleased_delay_hrs=24)
+        item = _make_album(release_date="")
+        candidate = adapt_missing(item, instance)
+        assert candidate.unreleased_reason is None
+
+    def test_boundary_exact_delay(self):
+        instance = _make_instance(unreleased_delay_hrs=24)
+        exactly_past = (datetime.now(UTC) - timedelta(hours=24, seconds=1)).isoformat()
+        item = _make_album(release_date=exactly_past)
+        candidate = adapt_missing(item, instance)
+        assert candidate.unreleased_reason is None
+
+
+# ---------------------------------------------------------------------------
+# adapt_missing — artist-context mode
+# ---------------------------------------------------------------------------
+
+
+class TestAdaptMissingArtistContext:
+    """Verify adapt_missing in artist-context mode."""
+
+    def test_basic_fields(self):
+        instance = _make_instance(lidarr_search_mode=LidarrSearchMode.artist_context)
+        item = _make_album(artist_id=50)
+        candidate = adapt_missing(item, instance)
+
+        assert candidate.item_id == _artist_item_id(50)
+        assert candidate.item_type == "album"
+        assert candidate.label == "Test Artist (artist-context)"
+        assert candidate.group_key == (50, 0)
+        assert candidate.search_payload == {
+            "command": "ArtistSearch",
+            "artist_id": 50,
+        }
+
+    def test_zero_artist_id_falls_back(self):
+        """When artist_id is 0, falls back to album-mode behavior."""
+        instance = _make_instance(lidarr_search_mode=LidarrSearchMode.artist_context)
+        item = _make_album(artist_id=0)
+        candidate = adapt_missing(item, instance)
+
+        assert candidate.item_id == 301  # album_id
+        assert candidate.group_key is None
+        assert candidate.search_payload["command"] == "AlbumSearch"
+
+    def test_large_artist_id(self):
+        """Large artist IDs produce valid, distinct synthetic IDs."""
+        instance = _make_instance(lidarr_search_mode=LidarrSearchMode.artist_context)
+        item = _make_album(artist_id=999)
+        candidate = adapt_missing(item, instance)
+
+        assert candidate.item_id == _artist_item_id(999)
+        assert candidate.item_id < 0
+        assert candidate.group_key == (999, 0)
+
+    def test_distinct_artists_produce_distinct_ids(self):
+        instance = _make_instance(lidarr_search_mode=LidarrSearchMode.artist_context)
+        item_a = _make_album(artist_id=10)
+        item_b = _make_album(artist_id=20)
+        assert adapt_missing(item_a, instance).item_id != adapt_missing(item_b, instance).item_id
+
+
+# ---------------------------------------------------------------------------
+# adapt_cutoff
+# ---------------------------------------------------------------------------
+
+
+class TestAdaptCutoff:
+    """Verify adapt_cutoff always uses album mode."""
+
+    def test_album_mode(self):
+        instance = _make_instance()
+        item = _make_album()
+        candidate = adapt_cutoff(item, instance)
+
+        assert candidate.item_id == 301
+        assert candidate.item_type == "album"
+        assert candidate.label == "Test Artist - Greatest Hits"
+        assert candidate.group_key is None
+        assert candidate.search_payload == {"command": "AlbumSearch", "album_id": 301}
+
+    def test_ignores_artist_context_mode(self):
+        """Even with artist_context mode, cutoff uses album-mode."""
+        instance = _make_instance(lidarr_search_mode=LidarrSearchMode.artist_context)
+        item = _make_album(artist_id=50)
+        candidate = adapt_cutoff(item, instance)
+
+        assert candidate.item_id == 301  # album_id, NOT synthetic artist ID
+        assert candidate.group_key is None
+        assert candidate.search_payload["command"] == "AlbumSearch"
+
+    def test_unreleased(self):
+        instance = _make_instance(unreleased_delay_hrs=24)
+        recent = (datetime.now(UTC) - timedelta(hours=1)).isoformat()
+        item = _make_album(release_date=recent)
+        candidate = adapt_cutoff(item, instance)
+        assert candidate.unreleased_reason == "unreleased delay (24h)"
+
+
+# ---------------------------------------------------------------------------
+# dispatch_search
+# ---------------------------------------------------------------------------
+
+
+class TestDispatchSearch:
+    """Verify dispatch_search calls the correct client method."""
+
+    @pytest.mark.asyncio()
+    async def test_album_search(self):
+        client = AsyncMock(spec=LidarrClient)
+        candidate = SearchCandidate(
+            item_id=301,
+            item_type="album",
+            label="Test",
+            unreleased_reason=None,
+            group_key=None,
+            search_payload={"command": "AlbumSearch", "album_id": 301},
+        )
+        await dispatch_search(client, candidate)
+        client.search.assert_awaited_once_with(301)
+
+    @pytest.mark.asyncio()
+    async def test_artist_search(self):
+        client = AsyncMock(spec=LidarrClient)
+        candidate = SearchCandidate(
+            item_id=-50000,
+            item_type="album",
+            label="Test",
+            unreleased_reason=None,
+            group_key=(50, 0),
+            search_payload={"command": "ArtistSearch", "artist_id": 50},
+        )
+        await dispatch_search(client, candidate)
+        client.search_artist.assert_awaited_once_with(50)
+
+    @pytest.mark.asyncio()
+    async def test_unknown_command_raises(self):
+        client = AsyncMock(spec=LidarrClient)
+        candidate = SearchCandidate(
+            item_id=1,
+            item_type="album",
+            label="Test",
+            unreleased_reason=None,
+            group_key=None,
+            search_payload={"command": "UnknownCommand"},
+        )
+        with pytest.raises(ValueError, match="Unknown Lidarr search command"):
+            await dispatch_search(client, candidate)
+
+
+# ---------------------------------------------------------------------------
+# make_client
+# ---------------------------------------------------------------------------
+
+
+class TestMakeClient:
+    """Verify make_client returns a correctly configured LidarrClient."""
+
+    def test_returns_lidarr_client(self):
+        instance = _make_instance()
+        client = make_client(instance)
+        assert isinstance(client, LidarrClient)

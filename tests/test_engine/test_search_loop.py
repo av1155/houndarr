@@ -14,7 +14,14 @@ from cryptography.fernet import Fernet
 
 from houndarr.database import get_db
 from houndarr.engine.search_loop import run_instance_search
-from houndarr.services.instances import Instance, InstanceType, SonarrSearchMode
+from houndarr.services.instances import (
+    Instance,
+    InstanceType,
+    LidarrSearchMode,
+    ReadarrSearchMode,
+    SonarrSearchMode,
+    WhisparrSearchMode,
+)
 
 # ---------------------------------------------------------------------------
 # Shared constants
@@ -22,6 +29,9 @@ from houndarr.services.instances import Instance, InstanceType, SonarrSearchMode
 
 SONARR_URL = "http://sonarr:8989"
 RADARR_URL = "http://radarr:7878"
+LIDARR_URL = "http://lidarr:8686"
+READARR_URL = "http://readarr:8787"
+WHISPARR_URL = "http://whisparr:6969"
 # Valid Fernet key required wherever crypto.decrypt is called (supervisor tests)
 MASTER_KEY: bytes = Fernet.generate_key()
 
@@ -48,8 +58,42 @@ _MOVIE_RECORD: dict[str, Any] = {
     "digitalRelease": None,
 }
 
+_ALBUM_RECORD: dict[str, Any] = {
+    "id": 301,
+    "artistId": 50,
+    "title": "Greatest Hits",
+    "releaseDate": "2023-03-15T00:00:00Z",
+    "artist": {"id": 50, "artistName": "Test Artist"},
+}
+
+_BOOK_RECORD: dict[str, Any] = {
+    "id": 401,
+    "authorId": 60,
+    "title": "Test Book",
+    "releaseDate": "2023-06-01T00:00:00Z",
+    "author": {"id": 60, "authorName": "Test Author"},
+}
+
+_WHISPARR_EPISODE_RECORD: dict[str, Any] = {
+    "id": 501,
+    "seriesId": 70,
+    "title": "Scene Title",
+    "seasonNumber": 1,
+    "absoluteEpisodeNumber": 5,
+    "releaseDate": {"year": 2023, "month": 9, "day": 1},
+    "series": {"id": 70, "title": "My Whisparr Show"},
+}
+
 _MISSING_SONARR = {"page": 1, "pageSize": 10, "totalRecords": 1, "records": [_EPISODE_RECORD]}
 _MISSING_RADARR = {"page": 1, "pageSize": 10, "totalRecords": 1, "records": [_MOVIE_RECORD]}
+_MISSING_LIDARR = {"page": 1, "pageSize": 10, "totalRecords": 1, "records": [_ALBUM_RECORD]}
+_MISSING_READARR = {"page": 1, "pageSize": 10, "totalRecords": 1, "records": [_BOOK_RECORD]}
+_MISSING_WHISPARR = {
+    "page": 1,
+    "pageSize": 10,
+    "totalRecords": 1,
+    "records": [_WHISPARR_EPISODE_RECORD],
+}
 _COMMAND_RESP = {"id": 1, "name": "EpisodeSearch"}
 _FUTURE_AIR_DATE = "2999-01-01T00:00:00Z"
 
@@ -70,6 +114,9 @@ def _make_instance(
     unreleased_delay_hrs: int = 24,
     enabled: bool = True,
     sonarr_search_mode: SonarrSearchMode = SonarrSearchMode.episode,
+    lidarr_search_mode: LidarrSearchMode = LidarrSearchMode.album,
+    readarr_search_mode: ReadarrSearchMode = ReadarrSearchMode.book,
+    whisparr_search_mode: WhisparrSearchMode = WhisparrSearchMode.episode,
 ) -> Instance:
     return Instance(
         id=instance_id,
@@ -90,6 +137,9 @@ def _make_instance(
         created_at="2024-01-01T00:00:00Z",
         updated_at="2024-01-01T00:00:00Z",
         sonarr_search_mode=sonarr_search_mode,
+        lidarr_search_mode=lidarr_search_mode,
+        readarr_search_mode=readarr_search_mode,
+        whisparr_search_mode=whisparr_search_mode,
     )
 
 
@@ -109,6 +159,9 @@ async def seeded_instances(db: None) -> AsyncGenerator[None, None]:
             [
                 (1, "Sonarr Test", "sonarr", SONARR_URL, encrypted),
                 (2, "Radarr Test", "radarr", RADARR_URL, encrypted),
+                (3, "Lidarr Test", "lidarr", LIDARR_URL, encrypted),
+                (4, "Readarr Test", "readarr", READARR_URL, encrypted),
+                (5, "Whisparr Test", "whisparr", WHISPARR_URL, encrypted),
             ],
         )
         await conn.commit()
@@ -805,6 +858,239 @@ async def test_missing_deduplicates_items_across_pages(seeded_instances: None) -
     rows = await _get_log_rows()
     assert [row["item_id"] for row in rows if row["action"] == "searched"] == [1201, 1202]
     assert not any(row["item_id"] == 1201 and row["action"] == "skipped" for row in rows)
+
+
+# ---------------------------------------------------------------------------
+# Tests — Lidarr items searched
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_lidarr_item_is_searched(seeded_instances: None) -> None:
+    """A Lidarr missing album should be searched with the album item_type."""
+    respx.get(f"{LIDARR_URL}/api/v1/wanted/missing").mock(
+        return_value=httpx.Response(200, json=_MISSING_LIDARR)
+    )
+    respx.post(f"{LIDARR_URL}/api/v1/command").mock(
+        return_value=httpx.Response(201, json={"id": 3})
+    )
+
+    instance = _make_instance(instance_id=3, itype=InstanceType.lidarr, url=LIDARR_URL)
+    count = await run_instance_search(instance, MASTER_KEY)
+
+    assert count == 1
+    rows = await _get_log_rows()
+    assert rows[0]["action"] == "searched"
+    assert rows[0]["item_id"] == 301
+    assert rows[0]["item_type"] == "album"
+    assert rows[0]["item_label"] == "Test Artist - Greatest Hits"
+    assert rows[0]["search_kind"] == "missing"
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_lidarr_artist_context_mode(seeded_instances: None) -> None:
+    """Artist-context mode issues one ArtistSearch per eligible artist."""
+    missing_records = {
+        "records": [
+            {**_ALBUM_RECORD, "id": 301, "artistId": 50},
+            {**_ALBUM_RECORD, "id": 302, "artistId": 50, "title": "Album 2"},
+            {
+                **_ALBUM_RECORD,
+                "id": 303,
+                "artistId": 60,
+                "title": "Other Artist Album",
+                "artist": {"id": 60, "artistName": "Other Artist"},
+            },
+        ]
+    }
+    respx.get(f"{LIDARR_URL}/api/v1/wanted/missing").mock(
+        side_effect=[
+            httpx.Response(200, json=missing_records),
+            httpx.Response(200, json={"records": []}),
+        ]
+    )
+    search_route = respx.post(f"{LIDARR_URL}/api/v1/command").mock(
+        return_value=httpx.Response(201, json={"id": 1})
+    )
+
+    instance = _make_instance(
+        instance_id=3,
+        itype=InstanceType.lidarr,
+        url=LIDARR_URL,
+        lidarr_search_mode=LidarrSearchMode.artist_context,
+    )
+    count = await run_instance_search(instance, MASTER_KEY)
+
+    assert count == 2
+    assert search_route.call_count == 2
+
+    import json as json_mod
+
+    first_payload = json_mod.loads(search_route.calls[0].request.content)
+    second_payload = json_mod.loads(search_route.calls[1].request.content)
+    assert first_payload == {"name": "ArtistSearch", "artistId": 50}
+    assert second_payload == {"name": "ArtistSearch", "artistId": 60}
+
+
+# ---------------------------------------------------------------------------
+# Tests — Readarr items searched
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_readarr_item_is_searched(seeded_instances: None) -> None:
+    """A Readarr missing book should be searched with the book item_type."""
+    respx.get(f"{READARR_URL}/api/v1/wanted/missing").mock(
+        return_value=httpx.Response(200, json=_MISSING_READARR)
+    )
+    respx.post(f"{READARR_URL}/api/v1/command").mock(
+        return_value=httpx.Response(201, json={"id": 4})
+    )
+
+    instance = _make_instance(instance_id=4, itype=InstanceType.readarr, url=READARR_URL)
+    count = await run_instance_search(instance, MASTER_KEY)
+
+    assert count == 1
+    rows = await _get_log_rows()
+    assert rows[0]["action"] == "searched"
+    assert rows[0]["item_id"] == 401
+    assert rows[0]["item_type"] == "book"
+    assert rows[0]["item_label"] == "Test Author - Test Book"
+    assert rows[0]["search_kind"] == "missing"
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_readarr_author_context_mode(seeded_instances: None) -> None:
+    """Author-context mode issues one AuthorSearch per eligible author."""
+    missing_records = {
+        "records": [
+            {**_BOOK_RECORD, "id": 401, "authorId": 60},
+            {**_BOOK_RECORD, "id": 402, "authorId": 60, "title": "Book 2"},
+            {
+                **_BOOK_RECORD,
+                "id": 403,
+                "authorId": 70,
+                "title": "Other Book",
+                "author": {"id": 70, "authorName": "Other Author"},
+            },
+        ]
+    }
+    respx.get(f"{READARR_URL}/api/v1/wanted/missing").mock(
+        side_effect=[
+            httpx.Response(200, json=missing_records),
+            httpx.Response(200, json={"records": []}),
+        ]
+    )
+    search_route = respx.post(f"{READARR_URL}/api/v1/command").mock(
+        return_value=httpx.Response(201, json={"id": 1})
+    )
+
+    instance = _make_instance(
+        instance_id=4,
+        itype=InstanceType.readarr,
+        url=READARR_URL,
+        readarr_search_mode=ReadarrSearchMode.author_context,
+    )
+    count = await run_instance_search(instance, MASTER_KEY)
+
+    assert count == 2
+    assert search_route.call_count == 2
+
+    import json as json_mod
+
+    first_payload = json_mod.loads(search_route.calls[0].request.content)
+    second_payload = json_mod.loads(search_route.calls[1].request.content)
+    assert first_payload == {"name": "AuthorSearch", "authorId": 60}
+    assert second_payload == {"name": "AuthorSearch", "authorId": 70}
+
+
+# ---------------------------------------------------------------------------
+# Tests — Whisparr items searched
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_whisparr_item_is_searched(seeded_instances: None) -> None:
+    """A Whisparr missing episode should be searched with whisparr_episode item_type."""
+    respx.get(f"{WHISPARR_URL}/api/v3/wanted/missing").mock(
+        return_value=httpx.Response(200, json=_MISSING_WHISPARR)
+    )
+    respx.post(f"{WHISPARR_URL}/api/v3/command").mock(
+        return_value=httpx.Response(201, json={"id": 5})
+    )
+
+    instance = _make_instance(instance_id=5, itype=InstanceType.whisparr, url=WHISPARR_URL)
+    count = await run_instance_search(instance, MASTER_KEY)
+
+    assert count == 1
+    rows = await _get_log_rows()
+    assert rows[0]["action"] == "searched"
+    assert rows[0]["item_id"] == 501
+    assert rows[0]["item_type"] == "whisparr_episode"
+    assert rows[0]["item_label"] == "My Whisparr Show - S01 - Scene Title"
+    assert rows[0]["search_kind"] == "missing"
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_whisparr_season_context_mode(seeded_instances: None) -> None:
+    """Season-context mode issues one SeasonSearch per eligible season."""
+    missing_records = {
+        "records": [
+            {**_WHISPARR_EPISODE_RECORD, "id": 501, "seriesId": 70, "seasonNumber": 1},
+            {
+                **_WHISPARR_EPISODE_RECORD,
+                "id": 502,
+                "seriesId": 70,
+                "seasonNumber": 1,
+                "title": "Scene 2",
+            },
+            {
+                **_WHISPARR_EPISODE_RECORD,
+                "id": 503,
+                "seriesId": 70,
+                "seasonNumber": 2,
+                "title": "Scene 3",
+            },
+        ]
+    }
+    respx.get(f"{WHISPARR_URL}/api/v3/wanted/missing").mock(
+        side_effect=[
+            httpx.Response(200, json=missing_records),
+            httpx.Response(200, json={"records": []}),
+        ]
+    )
+    search_route = respx.post(f"{WHISPARR_URL}/api/v3/command").mock(
+        return_value=httpx.Response(201, json={"id": 1})
+    )
+
+    instance = _make_instance(
+        instance_id=5,
+        itype=InstanceType.whisparr,
+        url=WHISPARR_URL,
+        whisparr_search_mode=WhisparrSearchMode.season_context,
+    )
+    count = await run_instance_search(instance, MASTER_KEY)
+
+    assert count == 2
+    assert search_route.call_count == 2
+
+    import json as json_mod
+
+    first_payload = json_mod.loads(search_route.calls[0].request.content)
+    second_payload = json_mod.loads(search_route.calls[1].request.content)
+    assert first_payload == {"name": "SeasonSearch", "seriesId": 70, "seasonNumber": 1}
+    assert second_payload == {"name": "SeasonSearch", "seriesId": 70, "seasonNumber": 2}
+
+
+# ---------------------------------------------------------------------------
+# Tests — page scanning
+# ---------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio()

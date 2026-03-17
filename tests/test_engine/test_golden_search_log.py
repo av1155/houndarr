@@ -23,7 +23,14 @@ from cryptography.fernet import Fernet
 
 from houndarr.database import get_db
 from houndarr.engine.search_loop import run_instance_search
-from houndarr.services.instances import Instance, InstanceType, SonarrSearchMode
+from houndarr.services.instances import (
+    Instance,
+    InstanceType,
+    LidarrSearchMode,
+    ReadarrSearchMode,
+    SonarrSearchMode,
+    WhisparrSearchMode,
+)
 
 # ---------------------------------------------------------------------------
 # Shared constants
@@ -31,6 +38,9 @@ from houndarr.services.instances import Instance, InstanceType, SonarrSearchMode
 
 SONARR_URL = "http://sonarr:8989"
 RADARR_URL = "http://radarr:7878"
+LIDARR_URL = "http://lidarr:8686"
+READARR_URL = "http://readarr:8787"
+WHISPARR_URL = "http://whisparr:6969"
 MASTER_KEY: bytes = Fernet.generate_key()
 
 # Two distinct Sonarr episodes — same series, different seasons.
@@ -101,6 +111,9 @@ def _make_instance(
     cutoff_hourly_cap: int = 10,
     cutoff_cooldown_days: int = 21,
     sonarr_search_mode: SonarrSearchMode = SonarrSearchMode.episode,
+    lidarr_search_mode: LidarrSearchMode = LidarrSearchMode.album,
+    readarr_search_mode: ReadarrSearchMode = ReadarrSearchMode.book,
+    whisparr_search_mode: WhisparrSearchMode = WhisparrSearchMode.episode,
 ) -> Instance:
     return Instance(
         id=instance_id,
@@ -121,6 +134,9 @@ def _make_instance(
         created_at="2024-01-01T00:00:00Z",
         updated_at="2024-01-01T00:00:00Z",
         sonarr_search_mode=sonarr_search_mode,
+        lidarr_search_mode=lidarr_search_mode,
+        readarr_search_mode=readarr_search_mode,
+        whisparr_search_mode=whisparr_search_mode,
     )
 
 
@@ -143,6 +159,9 @@ async def seeded_instances(db: None) -> AsyncGenerator[None, None]:
             [
                 (1, "Sonarr Test", "sonarr", SONARR_URL, encrypted),
                 (2, "Radarr Test", "radarr", RADARR_URL, encrypted),
+                (3, "Lidarr Test", "lidarr", LIDARR_URL, encrypted),
+                (4, "Readarr Test", "readarr", READARR_URL, encrypted),
+                (5, "Whisparr Test", "whisparr", WHISPARR_URL, encrypted),
             ],
         )
         await conn.commit()
@@ -519,3 +538,254 @@ async def test_golden_mixed_eligibility(seeded_instances: None) -> None:
     assert rows[4]["search_kind"] == "missing"
     assert rows[4]["reason"] == "hourly cap reached (2)"
     assert rows[4]["cycle_id"] == "golden-g4"
+
+
+# ---------------------------------------------------------------------------
+# G5: Lidarr missing + cutoff (album mode)
+# ---------------------------------------------------------------------------
+
+_ALBUM_A: dict[str, Any] = {
+    "id": 301,
+    "artistId": 50,
+    "title": "Greatest Hits",
+    "releaseDate": "2023-03-15T00:00:00Z",
+    "artist": {"id": 50, "artistName": "Test Artist"},
+}
+_ALBUM_B: dict[str, Any] = {
+    "id": 302,
+    "artistId": 50,
+    "title": "Live Sessions",
+    "releaseDate": "2023-06-01T00:00:00Z",
+    "artist": {"id": 50, "artistName": "Test Artist"},
+}
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_golden_lidarr_album_missing_and_cutoff(seeded_instances: None) -> None:
+    """Lidarr album-mode cycle with both missing and cutoff passes.
+
+    Expected sequence:
+      1. searched — album 301, missing
+      2. searched — album 302, missing
+      3. skipped  — album 301, cutoff (on cutoff cooldown from missing pass)
+      4. searched — album 303, cutoff
+    """
+    album_c: dict[str, Any] = {
+        "id": 303,
+        "artistId": 50,
+        "title": "Rarities",
+        "releaseDate": "2024-01-01T00:00:00Z",
+        "artist": {"id": 50, "artistName": "Test Artist"},
+    }
+
+    missing_page = {"records": [_ALBUM_A, _ALBUM_B]}
+    cutoff_page = {"records": [_ALBUM_A, album_c]}
+
+    respx.get(f"{LIDARR_URL}/api/v1/wanted/missing").mock(
+        return_value=httpx.Response(200, json=missing_page)
+    )
+    respx.get(f"{LIDARR_URL}/api/v1/wanted/cutoff").mock(
+        return_value=httpx.Response(200, json=cutoff_page)
+    )
+    respx.post(f"{LIDARR_URL}/api/v1/command").mock(
+        return_value=httpx.Response(201, json=_COMMAND_RESP)
+    )
+
+    instance = _make_instance(
+        instance_id=3,
+        itype=InstanceType.lidarr,
+        url=LIDARR_URL,
+        batch_size=10,
+        cutoff_enabled=True,
+        cutoff_batch_size=5,
+        cutoff_cooldown_days=21,
+    )
+    count = await run_instance_search(instance, MASTER_KEY, cycle_id="golden-g5")
+
+    assert count == 3
+    rows = await _get_log_rows()
+    assert len(rows) == 4
+
+    assert rows[0]["action"] == "searched"
+    assert rows[0]["item_id"] == 301
+    assert rows[0]["item_type"] == "album"
+    assert rows[0]["item_label"] == "Test Artist - Greatest Hits"
+    assert rows[0]["search_kind"] == "missing"
+    assert rows[0]["cycle_id"] == "golden-g5"
+
+    assert rows[1]["action"] == "searched"
+    assert rows[1]["item_id"] == 302
+    assert rows[1]["item_type"] == "album"
+    assert rows[1]["item_label"] == "Test Artist - Live Sessions"
+    assert rows[1]["search_kind"] == "missing"
+
+    assert rows[2]["action"] == "skipped"
+    assert rows[2]["item_id"] == 301
+    assert rows[2]["item_type"] == "album"
+    assert rows[2]["search_kind"] == "cutoff"
+    assert rows[2]["reason"] == "on cutoff cooldown (21d)"
+
+    assert rows[3]["action"] == "searched"
+    assert rows[3]["item_id"] == 303
+    assert rows[3]["item_type"] == "album"
+    assert rows[3]["item_label"] == "Test Artist - Rarities"
+    assert rows[3]["search_kind"] == "cutoff"
+
+
+# ---------------------------------------------------------------------------
+# G6: Readarr missing + cutoff (book mode)
+# ---------------------------------------------------------------------------
+
+_BOOK_A: dict[str, Any] = {
+    "id": 401,
+    "authorId": 60,
+    "title": "Foundation",
+    "releaseDate": "2023-01-01T00:00:00Z",
+    "author": {"id": 60, "authorName": "Asimov"},
+}
+_BOOK_B: dict[str, Any] = {
+    "id": 402,
+    "authorId": 60,
+    "title": "Foundation and Empire",
+    "releaseDate": "2023-06-01T00:00:00Z",
+    "author": {"id": 60, "authorName": "Asimov"},
+}
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_golden_readarr_book_missing_and_cutoff(seeded_instances: None) -> None:
+    """Readarr book-mode cycle with both missing and cutoff passes.
+
+    Expected sequence:
+      1. searched — book 401, missing
+      2. searched — book 402, missing
+      3. skipped  — book 401, cutoff (on cutoff cooldown from missing pass)
+      4. searched — book 403, cutoff
+    """
+    book_c: dict[str, Any] = {
+        "id": 403,
+        "authorId": 60,
+        "title": "Second Foundation",
+        "releaseDate": "2024-01-01T00:00:00Z",
+        "author": {"id": 60, "authorName": "Asimov"},
+    }
+
+    missing_page = {"records": [_BOOK_A, _BOOK_B]}
+    cutoff_page = {"records": [_BOOK_A, book_c]}
+
+    respx.get(f"{READARR_URL}/api/v1/wanted/missing").mock(
+        return_value=httpx.Response(200, json=missing_page)
+    )
+    respx.get(f"{READARR_URL}/api/v1/wanted/cutoff").mock(
+        return_value=httpx.Response(200, json=cutoff_page)
+    )
+    respx.post(f"{READARR_URL}/api/v1/command").mock(
+        return_value=httpx.Response(201, json=_COMMAND_RESP)
+    )
+
+    instance = _make_instance(
+        instance_id=4,
+        itype=InstanceType.readarr,
+        url=READARR_URL,
+        batch_size=10,
+        cutoff_enabled=True,
+        cutoff_batch_size=5,
+        cutoff_cooldown_days=21,
+    )
+    count = await run_instance_search(instance, MASTER_KEY, cycle_id="golden-g6")
+
+    assert count == 3
+    rows = await _get_log_rows()
+    assert len(rows) == 4
+
+    assert rows[0]["action"] == "searched"
+    assert rows[0]["item_id"] == 401
+    assert rows[0]["item_type"] == "book"
+    assert rows[0]["item_label"] == "Asimov - Foundation"
+    assert rows[0]["search_kind"] == "missing"
+    assert rows[0]["cycle_id"] == "golden-g6"
+
+    assert rows[1]["action"] == "searched"
+    assert rows[1]["item_id"] == 402
+    assert rows[1]["item_type"] == "book"
+    assert rows[1]["item_label"] == "Asimov - Foundation and Empire"
+
+    assert rows[2]["action"] == "skipped"
+    assert rows[2]["item_id"] == 401
+    assert rows[2]["search_kind"] == "cutoff"
+    assert rows[2]["reason"] == "on cutoff cooldown (21d)"
+
+    assert rows[3]["action"] == "searched"
+    assert rows[3]["item_id"] == 403
+    assert rows[3]["item_type"] == "book"
+    assert rows[3]["item_label"] == "Asimov - Second Foundation"
+    assert rows[3]["search_kind"] == "cutoff"
+
+
+# ---------------------------------------------------------------------------
+# G7: Whisparr missing (episode mode)
+# ---------------------------------------------------------------------------
+
+_WHISPARR_EP_A: dict[str, Any] = {
+    "id": 501,
+    "seriesId": 70,
+    "title": "Scene A",
+    "seasonNumber": 1,
+    "absoluteEpisodeNumber": 1,
+    "releaseDate": {"year": 2023, "month": 3, "day": 1},
+    "series": {"id": 70, "title": "Whisparr Show"},
+}
+_WHISPARR_EP_B: dict[str, Any] = {
+    "id": 502,
+    "seriesId": 70,
+    "title": "Scene B",
+    "seasonNumber": 2,
+    "absoluteEpisodeNumber": 2,
+    "releaseDate": {"year": 2023, "month": 6, "day": 1},
+    "series": {"id": 70, "title": "Whisparr Show"},
+}
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_golden_whisparr_episode_missing(seeded_instances: None) -> None:
+    """Whisparr episode-mode missing pass with two episodes.
+
+    Expected sequence:
+      1. searched — ep 501, missing, item_type=whisparr_episode
+      2. searched — ep 502, missing, item_type=whisparr_episode
+    """
+    missing_page = {"records": [_WHISPARR_EP_A, _WHISPARR_EP_B]}
+
+    respx.get(f"{WHISPARR_URL}/api/v3/wanted/missing").mock(
+        return_value=httpx.Response(200, json=missing_page)
+    )
+    respx.post(f"{WHISPARR_URL}/api/v3/command").mock(
+        return_value=httpx.Response(201, json=_COMMAND_RESP)
+    )
+
+    instance = _make_instance(
+        instance_id=5,
+        itype=InstanceType.whisparr,
+        url=WHISPARR_URL,
+    )
+    count = await run_instance_search(instance, MASTER_KEY, cycle_id="golden-g7")
+
+    assert count == 2
+    rows = await _get_log_rows()
+    assert len(rows) == 2
+
+    assert rows[0]["action"] == "searched"
+    assert rows[0]["item_id"] == 501
+    assert rows[0]["item_type"] == "whisparr_episode"
+    assert rows[0]["item_label"] == "Whisparr Show - S01 - Scene A"
+    assert rows[0]["search_kind"] == "missing"
+    assert rows[0]["cycle_id"] == "golden-g7"
+
+    assert rows[1]["action"] == "searched"
+    assert rows[1]["item_id"] == 502
+    assert rows[1]["item_type"] == "whisparr_episode"
+    assert rows[1]["item_label"] == "Whisparr Show - S02 - Scene B"
+    assert rows[1]["search_kind"] == "missing"

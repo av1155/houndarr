@@ -31,6 +31,9 @@ from houndarr.services.instances import Instance, InstanceType, create_instance
 
 SONARR_URL = "http://sonarr:8989"
 RADARR_URL = "http://radarr:7878"
+LIDARR_URL = "http://lidarr:8686"
+READARR_URL = "http://readarr:8787"
+WHISPARR_URL = "http://whisparr:6969"
 
 _EPISODE: dict[str, Any] = {
     "id": 101,
@@ -46,9 +49,35 @@ _MOVIE: dict[str, Any] = {
     "year": 2023,
     "digitalRelease": None,
 }
+_ALBUM: dict[str, Any] = {
+    "id": 301,
+    "artistId": 50,
+    "title": "Greatest Hits",
+    "releaseDate": "2023-03-15T00:00:00Z",
+    "artist": {"id": 50, "artistName": "Test Artist"},
+}
+_BOOK: dict[str, Any] = {
+    "id": 401,
+    "authorId": 60,
+    "title": "Test Book",
+    "releaseDate": "2023-06-01T00:00:00Z",
+    "author": {"id": 60, "authorName": "Test Author"},
+}
+_WHISPARR_EP: dict[str, Any] = {
+    "id": 501,
+    "seriesId": 70,
+    "title": "Scene Title",
+    "seasonNumber": 1,
+    "absoluteEpisodeNumber": 5,
+    "releaseDate": {"year": 2023, "month": 9, "day": 1},
+    "series": {"id": 70, "title": "My Whisparr Show"},
+}
 
 _MISSING_SONARR_1 = {"records": [_EPISODE]}
 _MISSING_RADARR_1 = {"records": [_MOVIE]}
+_MISSING_LIDARR_1 = {"records": [_ALBUM]}
+_MISSING_READARR_1 = {"records": [_BOOK]}
+_MISSING_WHISPARR_1 = {"records": [_WHISPARR_EP]}
 _MISSING_EMPTY = {"records": []}
 _FUTURE_AIR_DATE = "2999-01-01T00:00:00Z"
 
@@ -421,3 +450,150 @@ async def test_missing_list_calls_are_bounded_per_cycle(
     assert count == 0
     assert missing_route.call_count == 3
     assert not search_route.called
+
+
+# ---------------------------------------------------------------------------
+# Fixtures — Lidarr, Readarr, Whisparr
+# ---------------------------------------------------------------------------
+
+
+@pytest_asyncio.fixture()
+async def lidarr_instance(db: None, master_key: bytes) -> Instance:
+    """Create a real Lidarr instance row (with encrypted API key)."""
+    return await create_instance(
+        master_key=master_key,
+        name="E2E Lidarr",
+        type=InstanceType.lidarr,
+        url=LIDARR_URL,
+        api_key="lidarr-key",
+        batch_size=5,
+        hourly_cap=10,
+        cooldown_days=7,
+        sleep_interval_mins=15,
+    )
+
+
+@pytest_asyncio.fixture()
+async def readarr_instance(db: None, master_key: bytes) -> Instance:
+    """Create a real Readarr instance row (with encrypted API key)."""
+    return await create_instance(
+        master_key=master_key,
+        name="E2E Readarr",
+        type=InstanceType.readarr,
+        url=READARR_URL,
+        api_key="readarr-key",
+        batch_size=5,
+        hourly_cap=10,
+        cooldown_days=7,
+        sleep_interval_mins=15,
+    )
+
+
+@pytest_asyncio.fixture()
+async def whisparr_instance(db: None, master_key: bytes) -> Instance:
+    """Create a real Whisparr instance row (with encrypted API key)."""
+    return await create_instance(
+        master_key=master_key,
+        name="E2E Whisparr",
+        type=InstanceType.whisparr,
+        url=WHISPARR_URL,
+        api_key="whisparr-key",
+        batch_size=5,
+        hourly_cap=10,
+        cooldown_days=7,
+        sleep_interval_mins=15,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Test — Full cycle: Lidarr
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_full_cycle_lidarr(lidarr_instance: Instance, master_key: bytes) -> None:
+    """One complete Lidarr search cycle — album is searched, log and cooldown written."""
+    respx.get(f"{LIDARR_URL}/api/v1/wanted/missing").mock(
+        return_value=httpx.Response(200, json=_MISSING_LIDARR_1)
+    )
+    respx.post(f"{LIDARR_URL}/api/v1/command").mock(
+        return_value=httpx.Response(201, json={"id": 3})
+    )
+
+    count = await run_instance_search(lidarr_instance, master_key)
+
+    assert count == 1
+    logs = await _log_rows()
+    assert len(logs) == 1
+    assert logs[0]["action"] == "searched"
+    assert logs[0]["item_id"] == 301
+    assert logs[0]["item_type"] == "album"
+    assert logs[0]["instance_id"] == lidarr_instance.id
+
+    cds = await _cooldown_rows(lidarr_instance.id)
+    assert len(cds) == 1
+    assert cds[0]["item_id"] == 301
+    assert cds[0]["item_type"] == "album"
+
+
+# ---------------------------------------------------------------------------
+# Test — Full cycle: Readarr
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_full_cycle_readarr(readarr_instance: Instance, master_key: bytes) -> None:
+    """One complete Readarr search cycle — book is searched, log and cooldown written."""
+    respx.get(f"{READARR_URL}/api/v1/wanted/missing").mock(
+        return_value=httpx.Response(200, json=_MISSING_READARR_1)
+    )
+    respx.post(f"{READARR_URL}/api/v1/command").mock(
+        return_value=httpx.Response(201, json={"id": 4})
+    )
+
+    count = await run_instance_search(readarr_instance, master_key)
+
+    assert count == 1
+    logs = await _log_rows()
+    assert len(logs) == 1
+    assert logs[0]["action"] == "searched"
+    assert logs[0]["item_id"] == 401
+    assert logs[0]["item_type"] == "book"
+
+    cds = await _cooldown_rows(readarr_instance.id)
+    assert len(cds) == 1
+    assert cds[0]["item_id"] == 401
+    assert cds[0]["item_type"] == "book"
+
+
+# ---------------------------------------------------------------------------
+# Test — Full cycle: Whisparr
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_full_cycle_whisparr(whisparr_instance: Instance, master_key: bytes) -> None:
+    """One complete Whisparr search cycle — episode is searched, log and cooldown written."""
+    respx.get(f"{WHISPARR_URL}/api/v3/wanted/missing").mock(
+        return_value=httpx.Response(200, json=_MISSING_WHISPARR_1)
+    )
+    respx.post(f"{WHISPARR_URL}/api/v3/command").mock(
+        return_value=httpx.Response(201, json={"id": 5})
+    )
+
+    count = await run_instance_search(whisparr_instance, master_key)
+
+    assert count == 1
+    logs = await _log_rows()
+    assert len(logs) == 1
+    assert logs[0]["action"] == "searched"
+    assert logs[0]["item_id"] == 501
+    assert logs[0]["item_type"] == "whisparr_episode"
+
+    cds = await _cooldown_rows(whisparr_instance.id)
+    assert len(cds) == 1
+    assert cds[0]["item_id"] == 501
+    assert cds[0]["item_type"] == "whisparr_episode"

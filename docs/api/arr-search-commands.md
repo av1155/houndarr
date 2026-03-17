@@ -1,329 +1,324 @@
 # \*arr search command reference
 
-This file documents the confirmed upstream command classes and C# property names for search commands in:
+Reference for Houndarr client code that dispatches search commands to Sonarr,
+Radarr, Lidarr, Readarr, and Whisparr.
 
-1. Sonarr
-2. Radarr
-3. Lidarr
-4. Readarr
-5. Whisparr
+This file is scoped to the search commands Houndarr needs for missing and
+cutoff-unmet items. It documents the minimal request bodies accepted by the
+tested app versions and the command endpoint each app uses.
 
-## Confidence
+## Tested versions
 
-- 100% confirmed from upstream source:
-    - command class names
-    - derived API command names
-    - exact C# property names
-- Very high confidence / expected API form:
-    - lower-camel JSON field names in POST bodies
+- Sonarr `4.0.16.2944`
+- Radarr `6.0.4.10291`
+- Lidarr `3.1.0.4875`
+- Bookshelf `0.4.20.129` (Readarr fork; readarr was archived by the owner on Jun 27, 2025)
+- Whisparr `2.2.0.108`
 
-The API `name` value is derived by the shared base command logic that removes the `Command` suffix from the class name.
+## Sources used
 
-Examples:
+- upstream command classes
+- local OpenAPI snapshots
+- runtime request captures from the tested versions
 
-- `EpisodeSearchCommand` -> `EpisodeSearch`
-- `MoviesSearchCommand` -> `MoviesSearch`
-- `AlbumSearchCommand` -> `AlbumSearch`
+## What is reliable here
+
+For the tested versions above, the following are established:
+
+- command endpoint path/version
+- command `name` values
+- request field names and casing
+- scalar vs array field shape
+- minimal request bodies accepted by the UI-backed API flow
+
+## What OpenAPI does and does not cover
+
+The local OpenAPI snapshots confirm the command endpoint exists and document the
+generic command resource. They do not model per-command search payload fields
+such as `episodeIds`, `movieIds`, `albumIds`, `bookIds`, `authorId`,
+`artistId`, `seriesId`, or `seasonNumber`.
+
+Those command-specific fields come from upstream command classes and runtime
+captures.
+
+## Implementation rule
+
+Send the minimal request body shown for the target app and command.
+
+Do not send response-only fields such as:
+
+- `sendUpdatesToClient`
+- `updateScheduledTask`
+- `requiresDiskAccess`
+- `isExclusive`
+- `isTypeExclusive`
+- `isLongRunning`
+- `trigger`
+- `suppressMessages`
+- `clientUserAgent`
+
+The server includes those in the created command resource. They are not needed
+for the request bodies documented here.
 
 ---
 
-## 1. Sonarr
+## Sonarr
 
-### Episode search
+**Version tested:** `4.0.16.2944`  
+**Command endpoint:** `POST /api/v3/command`
 
-Confirmed:
+### EpisodeSearch
 
-- Command class: `EpisodeSearchCommand`
-- API command name: `EpisodeSearch`
-- C# property: `EpisodeIds`
-- C# property type: `List<int>`
+**Upstream command class:** `EpisodeSearchCommand`  
+**C# property:** `EpisodeIds` (`List<int>`)
 
-Source URLs:
-
-- `https://raw.githubusercontent.com/Sonarr/Sonarr/develop/src/NzbDrone.Core/IndexerSearch/EpisodeSearchCommand.cs`
-- `https://raw.githubusercontent.com/Sonarr/Sonarr/develop/src/NzbDrone.Core/Messaging/Commands/Command.cs`
-
-Expected POST body:
+**Request body:**
 
 ```json
 { "name": "EpisodeSearch", "episodeIds": [123] }
 ```
 
-### Season search
+### SeasonSearch
 
-Confirmed:
+**Upstream command class:** `SeasonSearchCommand`  
+**C# properties:**
 
-- Command class: `SeasonSearchCommand`
-- API command name: `SeasonSearch`
-- C# properties:
-    - `SeriesId`
-    - `SeasonNumber`
-- C# property types:
-    - `int`
-    - `int`
+- `SeriesId` (`int`)
+- `SeasonNumber` (`int`)
 
-Source URLs:
-
-- `https://raw.githubusercontent.com/Sonarr/Sonarr/develop/src/NzbDrone.Core/IndexerSearch/SeasonSearchCommand.cs`
-- `https://raw.githubusercontent.com/Sonarr/Sonarr/develop/src/NzbDrone.Core/Messaging/Commands/Command.cs`
-
-Expected POST body:
+**Request body:**
 
 ```json
 { "name": "SeasonSearch", "seriesId": 45, "seasonNumber": 2 }
 ```
 
-Sonarr summary:
-
-- `EpisodeSearch` + `EpisodeIds`
-- `SeasonSearch` + `SeriesId` / `SeasonNumber`
-
 ---
 
-## 2. Radarr
+## Radarr
 
-### Movie search
+**Version tested:** `6.0.4.10291`  
+**Command endpoint:** `POST /api/v3/command`
 
-Confirmed:
+### MoviesSearch
 
-- Command class: `MoviesSearchCommand`
-- API command name: `MoviesSearch`
-- C# property: `MovieIds`
-- C# property type: `List<int>`
+**Upstream command class:** `MoviesSearchCommand`  
+**C# property:** `MovieIds` (`List<int>`)
 
-Source URLs:
-
-- `https://raw.githubusercontent.com/Radarr/Radarr/develop/src/NzbDrone.Core/IndexerSearch/MoviesSearchCommand.cs`
-- `https://raw.githubusercontent.com/Radarr/Radarr/develop/src/NzbDrone.Core/Messaging/Commands/Command.cs`
-
-Expected POST body:
+**Request body:**
 
 ```json
 { "name": "MoviesSearch", "movieIds": [123] }
 ```
 
-Radarr summary:
-
-- `MoviesSearch` + `MovieIds`
-
 ---
 
-## 3. Lidarr
+## Lidarr
 
-### Album search
+**Version tested:** `3.1.0.4875`  
+**Command endpoint:** `POST /api/v1/command`
 
-Confirmed:
+### AlbumSearch
 
-- Command class: `AlbumSearchCommand`
-- API command name: `AlbumSearch`
-- C# property: `AlbumIds`
-- C# property type: `List<int>`
+**Upstream command class:** `AlbumSearchCommand`  
+**C# property:** `AlbumIds` (`List<int>`)
 
-Source URLs:
-
-- `https://raw.githubusercontent.com/Lidarr/Lidarr/develop/src/NzbDrone.Core/IndexerSearch/AlbumSearchCommand.cs`
-- `https://raw.githubusercontent.com/Lidarr/Lidarr/develop/src/NzbDrone.Core/Messaging/Commands/Command.cs`
-
-Expected POST body:
+**Request body:**
 
 ```json
 { "name": "AlbumSearch", "albumIds": [123] }
 ```
 
-### Artist search
+**Note:** albums, singles, and EPs all used the same `AlbumSearch` payload shape
+in runtime captures.
 
-Confirmed:
+### ArtistSearch
 
-- Command class: `ArtistSearchCommand`
-- API command name: `ArtistSearch`
-- C# property: `ArtistId`
-- C# property type: `int`
+**Upstream command class:** `ArtistSearchCommand`  
+**C# property:** `ArtistId` (`int`)
 
-Source URLs:
-
-- `https://raw.githubusercontent.com/Lidarr/Lidarr/develop/src/NzbDrone.Core/IndexerSearch/ArtistSearchCommand.cs`
-- `https://raw.githubusercontent.com/Lidarr/Lidarr/develop/src/NzbDrone.Core/Messaging/Commands/Command.cs`
-
-Expected POST body:
+**Request body:**
 
 ```json
 { "name": "ArtistSearch", "artistId": 45 }
 ```
 
-Lidarr summary:
-
-- `AlbumSearch` + `AlbumIds`
-- `ArtistSearch` + `ArtistId`
-
 ---
 
-## 4. Readarr
+## Bookshelf
 
-### Book search
+**Version tested:** `0.4.20.129`  
+**Fork:** Readarr fork  
+**Command endpoint:** `POST /api/v1/command`
 
-Confirmed:
+### BookSearch
 
-- Command class: `BookSearchCommand`
-- API command name: `BookSearch`
-- C# property: `BookIds`
-- C# property type: `List<int>`
+**Readarr-lineage command class:** `BookSearchCommand`  
+**C# property:** `BookIds` (`List<int>`)
 
-Source URLs:
-
-- `https://raw.githubusercontent.com/Readarr/Readarr/develop/src/NzbDrone.Core/IndexerSearch/BookSearchCommand.cs`
-- `https://raw.githubusercontent.com/Readarr/Readarr/develop/src/NzbDrone.Core/Messaging/Commands/Command.cs`
-
-Expected POST body:
+**Request body:**
 
 ```json
 { "name": "BookSearch", "bookIds": [123] }
 ```
 
-### Author search
+**Note:** books and audiobooks both used the same `BookSearch` payload shape in
+runtime captures.
 
-Confirmed:
+### AuthorSearch
 
-- Command class: `AuthorSearchCommand`
-- API command name: `AuthorSearch`
-- C# property: `AuthorId`
-- C# property type: `int`
+**Readarr-lineage command class:** `AuthorSearchCommand`  
+**C# property:** `AuthorId` (`int`)
 
-Source URLs:
-
-- `https://raw.githubusercontent.com/Readarr/Readarr/develop/src/NzbDrone.Core/IndexerSearch/AuthorSearchCommand.cs`
-- `https://raw.githubusercontent.com/Readarr/Readarr/develop/src/NzbDrone.Core/Messaging/Commands/Command.cs`
-
-Expected POST body:
+**Request body:**
 
 ```json
 { "name": "AuthorSearch", "authorId": 45 }
 ```
 
-Readarr summary:
-
-- `BookSearch` + `BookIds`
-- `AuthorSearch` + `AuthorId`
+**Implementation note:** runtime behavior here was captured from Bookshelf, not
+from upstream Readarr.
 
 ---
 
-## 5. Whisparr
+## Whisparr
 
-### Episode search
+**Version tested:** `2.2.0.108`  
+**Command endpoint:** `POST /api/v3/command`
 
-Confirmed:
+### EpisodeSearch
 
-- Command class: `EpisodeSearchCommand`
-- API command name: `EpisodeSearch`
-- C# property: `EpisodeIds`
-- C# property type: `List<int>`
+**Upstream command class:** `EpisodeSearchCommand`  
+**C# property:** `EpisodeIds` (`List<int>`)
 
-Source URLs:
-
-- `https://raw.githubusercontent.com/Whisparr/Whisparr/develop/src/NzbDrone.Core/IndexerSearch/EpisodeSearchCommand.cs`
-- `https://raw.githubusercontent.com/Whisparr/Whisparr/develop/src/NzbDrone.Core/Messaging/Commands/Command.cs`
-
-Expected POST body:
+**Request body:**
 
 ```json
 { "name": "EpisodeSearch", "episodeIds": [123] }
 ```
 
-### Season search
+### SeasonSearch
 
-Confirmed:
+**Upstream command class:** `SeasonSearchCommand`  
+**C# properties:**
 
-- Command class: `SeasonSearchCommand`
-- API command name: `SeasonSearch`
-- C# properties:
-    - `SeriesId`
-    - `SeasonNumber`
-- C# property types:
-    - `int`
-    - `int`
+- `SeriesId` (`int`)
+- `SeasonNumber` (`int`)
 
-Source URLs:
-
-- `https://raw.githubusercontent.com/Whisparr/Whisparr/develop/src/NzbDrone.Core/IndexerSearch/SeasonSearchCommand.cs`
-- `https://raw.githubusercontent.com/Whisparr/Whisparr/develop/src/NzbDrone.Core/Messaging/Commands/Command.cs`
-
-Expected POST body:
+**Request body:**
 
 ```json
 { "name": "SeasonSearch", "seriesId": 45, "seasonNumber": 2 }
 ```
 
-Whisparr summary:
-
-- `EpisodeSearch` + `EpisodeIds`
-- `SeasonSearch` + `SeriesId` / `SeasonNumber`
+**Note:** the UI may present these groupings as years, but the API still uses
+`SeasonSearch` with `seasonNumber`.
 
 ---
 
-## Final consolidated matrix
+## Consolidated matrix
 
 ```json
 {
-    "Sonarr": {
-        "EpisodeSearch": {
-            "commandClass": "EpisodeSearchCommand",
-            "csharpProperties": ["EpisodeIds"],
-            "body": { "name": "EpisodeSearch", "episodeIds": [123] }
-        },
-        "SeasonSearch": {
-            "commandClass": "SeasonSearchCommand",
-            "csharpProperties": ["SeriesId", "SeasonNumber"],
-            "body": { "name": "SeasonSearch", "seriesId": 45, "seasonNumber": 2 }
+    "sonarr": {
+        "version_tested": "4.0.16.2944",
+        "command_endpoint": "/api/v3/command",
+        "commands": {
+            "EpisodeSearch": {
+                "command_class": "EpisodeSearchCommand",
+                "request_body": {
+                    "name": "EpisodeSearch",
+                    "episodeIds": [123]
+                }
+            },
+            "SeasonSearch": {
+                "command_class": "SeasonSearchCommand",
+                "request_body": {
+                    "name": "SeasonSearch",
+                    "seriesId": 45,
+                    "seasonNumber": 2
+                }
+            }
         }
     },
-    "Radarr": {
-        "MoviesSearch": {
-            "commandClass": "MoviesSearchCommand",
-            "csharpProperties": ["MovieIds"],
-            "body": { "name": "MoviesSearch", "movieIds": [123] }
+    "radarr": {
+        "version_tested": "6.0.4.10291",
+        "command_endpoint": "/api/v3/command",
+        "commands": {
+            "MoviesSearch": {
+                "command_class": "MoviesSearchCommand",
+                "request_body": {
+                    "name": "MoviesSearch",
+                    "movieIds": [123]
+                }
+            }
         }
     },
-    "Lidarr": {
-        "AlbumSearch": {
-            "commandClass": "AlbumSearchCommand",
-            "csharpProperties": ["AlbumIds"],
-            "body": { "name": "AlbumSearch", "albumIds": [123] }
-        },
-        "ArtistSearch": {
-            "commandClass": "ArtistSearchCommand",
-            "csharpProperties": ["ArtistId"],
-            "body": { "name": "ArtistSearch", "artistId": 45 }
+    "lidarr": {
+        "version_tested": "3.1.0.4875",
+        "command_endpoint": "/api/v1/command",
+        "commands": {
+            "AlbumSearch": {
+                "command_class": "AlbumSearchCommand",
+                "request_body": {
+                    "name": "AlbumSearch",
+                    "albumIds": [123]
+                }
+            },
+            "ArtistSearch": {
+                "command_class": "ArtistSearchCommand",
+                "request_body": {
+                    "name": "ArtistSearch",
+                    "artistId": 45
+                }
+            }
         }
     },
-    "Readarr": {
-        "BookSearch": {
-            "commandClass": "BookSearchCommand",
-            "csharpProperties": ["BookIds"],
-            "body": { "name": "BookSearch", "bookIds": [123] }
-        },
-        "AuthorSearch": {
-            "commandClass": "AuthorSearchCommand",
-            "csharpProperties": ["AuthorId"],
-            "body": { "name": "AuthorSearch", "authorId": 45 }
+    "bookshelf": {
+        "version_tested": "0.4.20.129",
+        "fork_of": "Readarr",
+        "command_endpoint": "/api/v1/command",
+        "commands": {
+            "BookSearch": {
+                "command_class": "BookSearchCommand",
+                "request_body": {
+                    "name": "BookSearch",
+                    "bookIds": [123]
+                }
+            },
+            "AuthorSearch": {
+                "command_class": "AuthorSearchCommand",
+                "request_body": {
+                    "name": "AuthorSearch",
+                    "authorId": 45
+                }
+            }
         }
     },
-    "Whisparr": {
-        "EpisodeSearch": {
-            "commandClass": "EpisodeSearchCommand",
-            "csharpProperties": ["EpisodeIds"],
-            "body": { "name": "EpisodeSearch", "episodeIds": [123] }
-        },
-        "SeasonSearch": {
-            "commandClass": "SeasonSearchCommand",
-            "csharpProperties": ["SeriesId", "SeasonNumber"],
-            "body": { "name": "SeasonSearch", "seriesId": 45, "seasonNumber": 2 }
+    "whisparr": {
+        "version_tested": "2.2.0.108",
+        "command_endpoint": "/api/v3/command",
+        "commands": {
+            "EpisodeSearch": {
+                "command_class": "EpisodeSearchCommand",
+                "request_body": {
+                    "name": "EpisodeSearch",
+                    "episodeIds": [123]
+                }
+            },
+            "SeasonSearch": {
+                "command_class": "SeasonSearchCommand",
+                "request_body": {
+                    "name": "SeasonSearch",
+                    "seriesId": 45,
+                    "seasonNumber": 2
+                }
+            }
         }
     }
 }
 ```
 
-## Practical implementation note
-
-If your integration sends POST requests to the command endpoint, these are the request bodies to use:
+## Minimal request bodies
 
 ```json
 {"name":"EpisodeSearch","episodeIds":[123]}
@@ -335,12 +330,18 @@ If your integration sends POST requests to the command endpoint, these are the r
 {"name":"AuthorSearch","authorId":45}
 ```
 
-## Final caveat
+## Endpoint map
 
-This file is fully definitive for:
+- Sonarr: `/api/v3/command`
+- Radarr: `/api/v3/command`
+- Lidarr: `/api/v1/command`
+- Bookshelf: `/api/v1/command`
+- Whisparr: `/api/v3/command`
 
-- command class names
-- derived command names
-- C# property names
+## Notes for Houndarr client code
 
-The JSON field casing shown here is the expected API-facing lower-camel form corresponding to those confirmed C# properties.
+- Use the vendored OpenAPI snapshots for endpoint-level contracts.
+- Use the request bodies in this file for search dispatch.
+- Keep payloads minimal.
+- Re-check runtime behavior when bumping supported \*arr versions.
+- Do not use "Bookshelf" in UI and documentation, use "Readarr"

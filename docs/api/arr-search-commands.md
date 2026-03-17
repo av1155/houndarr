@@ -345,3 +345,37 @@ from upstream Readarr.
 - Keep payloads minimal.
 - Re-check runtime behavior when bumping supported \*arr versions.
 - Do not use "Bookshelf" in UI and documentation, use "Readarr"
+
+## Upstream source URLs
+
+Command class definitions and the shared base `Command` class that derives the
+API `name` value (strips the `Command` suffix from the class name).
+
+### Sonarr
+
+- [EpisodeSearchCommand.cs](https://raw.githubusercontent.com/Sonarr/Sonarr/develop/src/NzbDrone.Core/IndexerSearch/EpisodeSearchCommand.cs)
+- [SeasonSearchCommand.cs](https://raw.githubusercontent.com/Sonarr/Sonarr/develop/src/NzbDrone.Core/IndexerSearch/SeasonSearchCommand.cs)
+- [Command.cs](https://raw.githubusercontent.com/Sonarr/Sonarr/develop/src/NzbDrone.Core/Messaging/Commands/Command.cs)
+
+### Radarr
+
+- [MoviesSearchCommand.cs](https://raw.githubusercontent.com/Radarr/Radarr/develop/src/NzbDrone.Core/IndexerSearch/MoviesSearchCommand.cs)
+- [Command.cs](https://raw.githubusercontent.com/Radarr/Radarr/develop/src/NzbDrone.Core/Messaging/Commands/Command.cs)
+
+### Lidarr
+
+- [AlbumSearchCommand.cs](https://raw.githubusercontent.com/Lidarr/Lidarr/develop/src/NzbDrone.Core/IndexerSearch/AlbumSearchCommand.cs)
+- [ArtistSearchCommand.cs](https://raw.githubusercontent.com/Lidarr/Lidarr/develop/src/NzbDrone.Core/IndexerSearch/ArtistSearchCommand.cs)
+- [Command.cs](https://raw.githubusercontent.com/Lidarr/Lidarr/develop/src/NzbDrone.Core/Messaging/Commands/Command.cs)
+
+### Readarr
+
+- [BookSearchCommand.cs](https://raw.githubusercontent.com/Readarr/Readarr/develop/src/NzbDrone.Core/IndexerSearch/BookSearchCommand.cs)
+- [AuthorSearchCommand.cs](https://raw.githubusercontent.com/Readarr/Readarr/develop/src/NzbDrone.Core/IndexerSearch/AuthorSearchCommand.cs)
+- [Command.cs](https://raw.githubusercontent.com/Readarr/Readarr/develop/src/NzbDrone.Core/Messaging/Commands/Command.cs)
+
+### Whisparr
+
+- [EpisodeSearchCommand.cs](https://raw.githubusercontent.com/Whisparr/Whisparr/develop/src/NzbDrone.Core/IndexerSearch/EpisodeSearchCommand.cs)
+- [SeasonSearchCommand.cs](https://raw.githubusercontent.com/Whisparr/Whisparr/develop/src/NzbDrone.Core/IndexerSearch/SeasonSearchCommand.cs)
+- [Command.cs](https://raw.githubusercontent.com/Whisparr/Whisparr/develop/src/NzbDrone.Core/Messaging/Commands/Command.cs)

@@ -19,16 +19,21 @@ The analysis includes security review, future-app compatibility analysis
 
 ### Sources
 
-**Local API specs (vendored, auto-refreshed weekly):**
+**Local API specs (vendored in `docs/api/`, auto-refreshed weekly):**
 
 - `docs/api/sonarr_openapi.json` — Sonarr v3 API
 - `docs/api/radarr_openapi.json` — Radarr v3 API
+- `docs/api/whisparr_openapi.json` — Whisparr v3 API
+- `docs/api/lidarr_openapi.json` — Lidarr v1 API
+- `docs/api/readarr_openapi.json` — Readarr v1 API
 
-**Upstream API specs (fetched for this analysis):**
+**Upstream source URLs:**
 
-- Whisparr v3: <https://raw.githubusercontent.com/Whisparr/Whisparr/develop/src/Whisparr.Api.V3/openapi.json>
-- Lidarr v1: <https://raw.githubusercontent.com/lidarr/Lidarr/develop/src/Lidarr.Api.V1/openapi.json>
-- Readarr v1: <https://raw.githubusercontent.com/Readarr/Readarr/develop/src/Readarr.Api.V1/openapi.json>
+- Sonarr: <https://raw.githubusercontent.com/Sonarr/Sonarr/develop/src/Sonarr.Api.V3/openapi.json>
+- Radarr: <https://raw.githubusercontent.com/Radarr/Radarr/develop/src/Radarr.Api.V3/openapi.json>
+- Whisparr: <https://raw.githubusercontent.com/Whisparr/Whisparr/develop/src/Whisparr.Api.V3/openapi.json>
+- Lidarr: <https://raw.githubusercontent.com/lidarr/Lidarr/develop/src/Lidarr.Api.V1/openapi.json>
+- Readarr: <https://raw.githubusercontent.com/Readarr/Readarr/develop/src/Readarr.Api.V1/openapi.json>
 
 ---
 
@@ -632,13 +637,15 @@ deduplication. Without it, queue-awareness must be implemented 4 times.
 
 ## J. API-Doc and Workflow Recommendation
 
-- Reference `docs/api/sonarr_openapi.json` and `docs/api/radarr_openapi.json`
-  when implementing queue endpoint client methods
+- All five OpenAPI specs are vendored locally in `docs/api/`:
+  `sonarr_openapi.json`, `radarr_openapi.json`, `whisparr_openapi.json`,
+  `lidarr_openapi.json`, `readarr_openapi.json`
+- Reference these when implementing queue endpoint client methods or
+  future app adapters
 - Queue endpoint schemas are fully documented in the local specs
 - Follow `docs/api-context.md` guidelines for new client methods
-- No new local API snapshots need to be vendored for this work
-- Whisparr/Lidarr/Readarr specs are not needed until those apps are
-  implemented
+- The `api-snapshot-refresh.yml` workflow auto-refreshes all five specs
+  weekly and syncs hashes in `tests/test_docs_api.py`
 
 ---
 
@@ -1212,18 +1219,20 @@ by what would need to change to add a new instance type.
 
 ## Appendix 3: Upstream API Compatibility Matrix
 
-**Spec sources used for this analysis:**
+**All five specs are vendored locally in `docs/api/` and auto-refreshed
+weekly by `api-snapshot-refresh.yml`:**
 
-| App | Spec URL |
-|---|---|
-| Sonarr | `docs/api/sonarr_openapi.json` (local, vendored) |
-| Radarr | `docs/api/radarr_openapi.json` (local, vendored) |
-| Whisparr | <https://raw.githubusercontent.com/Whisparr/Whisparr/develop/src/Whisparr.Api.V3/openapi.json> |
-| Lidarr | <https://raw.githubusercontent.com/lidarr/Lidarr/develop/src/Lidarr.Api.V1/openapi.json> |
-| Readarr | <https://raw.githubusercontent.com/Readarr/Readarr/develop/src/Readarr.Api.V1/openapi.json> |
+| App | Local path | Upstream source |
+|---|---|---|
+| Sonarr | `docs/api/sonarr_openapi.json` | <https://raw.githubusercontent.com/Sonarr/Sonarr/develop/src/Sonarr.Api.V3/openapi.json> |
+| Radarr | `docs/api/radarr_openapi.json` | <https://raw.githubusercontent.com/Radarr/Radarr/develop/src/Radarr.Api.V3/openapi.json> |
+| Whisparr | `docs/api/whisparr_openapi.json` | <https://raw.githubusercontent.com/Whisparr/Whisparr/develop/src/Whisparr.Api.V3/openapi.json> |
+| Lidarr | `docs/api/lidarr_openapi.json` | <https://raw.githubusercontent.com/lidarr/Lidarr/develop/src/Lidarr.Api.V1/openapi.json> |
+| Readarr | `docs/api/readarr_openapi.json` | <https://raw.githubusercontent.com/Readarr/Readarr/develop/src/Readarr.Api.V1/openapi.json> |
 
-> These upstream URLs point to the `develop` branch and may change over
-> time. Re-fetch before implementation to confirm accuracy.
+> Upstream URLs point to the `develop` branch and may change. The local
+> vendored copies are the source of truth; `tests/test_docs_api.py`
+> verifies their integrity via SHA-256 hashes.
 
 ### Wanted/Missing endpoints
 

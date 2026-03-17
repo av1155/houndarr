@@ -15,7 +15,7 @@ concurrency:
 
 jobs:
   refresh:
-    name: Refresh Sonarr/Radarr OpenAPI snapshots
+    name: Refresh *arr OpenAPI snapshots
     runs-on: ubuntu-latest
 
     steps:
@@ -31,6 +31,15 @@ jobs:
           curl --fail --silent --show-error --location \
             "https://raw.githubusercontent.com/Radarr/Radarr/develop/src/Radarr.Api.V3/openapi.json" \
             --output docs/api/radarr_openapi.json.new
+          curl --fail --silent --show-error --location \
+            "https://raw.githubusercontent.com/Whisparr/Whisparr/develop/src/Whisparr.Api.V3/openapi.json" \
+            --output docs/api/whisparr_openapi.json.new
+          curl --fail --silent --show-error --location \
+            "https://raw.githubusercontent.com/lidarr/Lidarr/develop/src/Lidarr.Api.V1/openapi.json" \
+            --output docs/api/lidarr_openapi.json.new
+          curl --fail --silent --show-error --location \
+            "https://raw.githubusercontent.com/Readarr/Readarr/develop/src/Readarr.Api.V1/openapi.json" \
+            --output docs/api/readarr_openapi.json.new
 
       - name: Apply updates and sync snapshot hashes
         id: sync
@@ -42,39 +51,42 @@ jobs:
           from pathlib import Path
 
           repo = Path.cwd()
-          sonarr = repo / "docs" / "api" / "sonarr_openapi.json"
-          radarr = repo / "docs" / "api" / "radarr_openapi.json"
-          sonarr_new = repo / "docs" / "api" / "sonarr_openapi.json.new"
-          radarr_new = repo / "docs" / "api" / "radarr_openapi.json.new"
+          api_dir = repo / "docs" / "api"
           tests_file = repo / "tests" / "test_docs_api.py"
+
+          SPECS = ["sonarr", "radarr", "whisparr", "lidarr", "readarr"]
 
           changed = False
 
-          if not sonarr.exists() or sonarr.read_bytes() != sonarr_new.read_bytes():
-              sonarr_new.replace(sonarr)
-              changed = True
-          else:
-              sonarr_new.unlink()
+          for name in SPECS:
+              current = api_dir / f"{name}_openapi.json"
+              fetched = api_dir / f"{name}_openapi.json.new"
 
-          if not radarr.exists() or radarr.read_bytes() != radarr_new.read_bytes():
-              radarr_new.replace(radarr)
-              changed = True
-          else:
-              radarr_new.unlink()
+              if not fetched.exists():
+                  continue
 
-          sonarr_hash = hashlib.sha256(sonarr.read_bytes()).hexdigest()
-          radarr_hash = hashlib.sha256(radarr.read_bytes()).hexdigest()
+              if not current.exists() or current.read_bytes() != fetched.read_bytes():
+                  fetched.replace(current)
+                  changed = True
+              else:
+                  fetched.unlink()
 
           text = tests_file.read_text(encoding="utf-8")
           new_text = text
-          new_text = new_text.replace(
-              "SONARR_SNAPSHOT_SHA256 = \"" + text.split("SONARR_SNAPSHOT_SHA256 = \"")[1].split("\"", 1)[0] + "\"",
-              f'SONARR_SNAPSHOT_SHA256 = "{sonarr_hash}"',
-          )
-          new_text = new_text.replace(
-              "RADARR_SNAPSHOT_SHA256 = \"" + text.split("RADARR_SNAPSHOT_SHA256 = \"")[1].split("\"", 1)[0] + "\"",
-              f'RADARR_SNAPSHOT_SHA256 = "{radarr_hash}"',
-          )
+
+          for name in SPECS:
+              spec_path = api_dir / f"{name}_openapi.json"
+              if not spec_path.exists():
+                  continue
+              spec_hash = hashlib.sha256(spec_path.read_bytes()).hexdigest()
+              const_name = f"{name.upper()}_SNAPSHOT_SHA256"
+              marker = f'{const_name} = "'
+              if marker in new_text:
+                  old_hash = new_text.split(marker)[1].split('"', 1)[0]
+                  new_text = new_text.replace(
+                      f'{const_name} = "{old_hash}"',
+                      f'{const_name} = "{spec_hash}"',
+                  )
 
           if new_text != text:
               tests_file.write_text(new_text, encoding="utf-8")
@@ -95,12 +107,15 @@ jobs:
         with:
           branch: chore/api-snapshot-refresh
           delete-branch: true
-          commit-message: "chore: refresh sonarr and radarr api snapshots"
-          title: "chore: refresh sonarr and radarr api snapshots"
+          commit-message: "chore: refresh *arr api snapshots"
+          title: "chore: refresh *arr api snapshots"
           body: |
             ## Summary
             - Refresh `docs/api/sonarr_openapi.json` from Sonarr upstream OpenAPI source.
             - Refresh `docs/api/radarr_openapi.json` from Radarr upstream OpenAPI source.
+            - Refresh `docs/api/whisparr_openapi.json` from Whisparr upstream OpenAPI source.
+            - Refresh `docs/api/lidarr_openapi.json` from Lidarr upstream OpenAPI source.
+            - Refresh `docs/api/readarr_openapi.json` from Readarr upstream OpenAPI source.
             - Sync snapshot SHA constants in `tests/test_docs_api.py` so required CI checks run and snapshot integrity stays explicit.
 
             ## Notes

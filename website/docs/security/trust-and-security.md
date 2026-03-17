@@ -20,8 +20,9 @@ version polling, no usage reporting, no crash reporting, and no beacons.
 
 ### What the server connects to
 
-The only outbound HTTP connections are to **your own Sonarr and Radarr
-instances**, using their standard v3 API. Each request includes:
+The only outbound HTTP connections are to **your own *arr instances**
+(Sonarr, Radarr, Lidarr, Readarr, Whisparr), using their standard REST API
+(v3 for Sonarr/Radarr/Whisparr, v1 for Lidarr/Readarr). Each request includes:
 
 - An `X-Api-Key` header (the API key you configured for that instance)
 - An `Accept: application/json` header
@@ -247,7 +248,7 @@ When adding or editing an instance URL, Houndarr validates the target:
 - **Blocked:** `localhost`, loopback IPs (`127.0.0.0/8`, `::1`), link-local
   (`169.254.0.0/16`), and unspecified addresses (`0.0.0.0`)
 - **Allowed:** RFC-1918 private ranges (`10.0.0.0/8`, `172.16.0.0/12`,
-  `192.168.0.0/16`) because Sonarr/Radarr typically run on the same LAN or
+  `192.168.0.0/16`) because *arr instances typically run on the same LAN or
   Docker network
 
 Hostnames are resolved via DNS and each resolved IP is checked against the
@@ -307,7 +308,7 @@ unavailable, the UI will not render correctly. Both are loaded by the browser,
 not the server.
 
 **Private network ranges allowed.** Instance URL validation intentionally
-permits RFC-1918 private addresses because Sonarr and Radarr are typically on
+permits RFC-1918 private addresses because *arr instances are typically on
 the same LAN or Docker network. This means Houndarr can be directed at any
 reachable host on your private network.
 

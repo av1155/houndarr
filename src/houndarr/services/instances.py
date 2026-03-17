@@ -279,7 +279,8 @@ async def update_instance(
             ``cooldown_days``, ``unreleased_delay_hrs``,
             ``cutoff_enabled``, ``cutoff_batch_size``,
             ``cutoff_cooldown_days``, ``cutoff_hourly_cap``,
-            ``sonarr_search_mode``.
+            ``sonarr_search_mode``, ``lidarr_search_mode``,
+            ``readarr_search_mode``, ``whisparr_search_mode``.
 
     Returns:
         Updated :class:`Instance`, or ``None`` if *id* does not exist.

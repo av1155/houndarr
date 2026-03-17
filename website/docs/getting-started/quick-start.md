@@ -11,7 +11,7 @@ Get Houndarr running in under five minutes.
 ## Prerequisites
 
 - Docker and Docker Compose installed on your host
-- At least one running Sonarr or Radarr instance with an API key
+- At least one running Sonarr, Radarr, Lidarr, Readarr, or Whisparr instance with an API key
 
 ## Docker Compose
 
@@ -46,13 +46,13 @@ prompted to create an admin username and password.
 
 1. Create your admin account on the setup screen.
 2. Log in and go to **Settings**.
-3. Add your Sonarr/Radarr instances (URL + API key).
+3. Add your *arr instances (URL + API key).
 4. Enable each instance — Houndarr begins searching on the configured schedule.
 
 For more details, see [First-Run Setup](first-run-setup.md).
 
 :::tip Good to know
-Houndarr does not search your entire library — only items that Sonarr/Radarr report as missing or below your quality cutoff, in small batches. See [How Houndarr Works](/docs/concepts/how-houndarr-works) for details.
+Houndarr does not search your entire library — only items that your *arr instances report as missing or below your quality cutoff, in small batches. See [How Houndarr Works](/docs/concepts/how-houndarr-works) for details.
 :::
 
 ## Using `docker run`

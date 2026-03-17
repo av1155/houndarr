@@ -22,14 +22,14 @@ After creating your account, log in with your new credentials.
 
 ## 3. Add your instances
 
-Go to **Settings** and click **Add Instance** to connect your Sonarr or Radarr instances.
+Go to **Settings** and click **Add Instance** to connect your *arr instances.
 
 For each instance you need:
 
-- **Name** — a friendly label (e.g., "Sonarr 4K", "Radarr Movies")
-- **Type** — Sonarr or Radarr
+- **Name** — a friendly label (e.g., "Sonarr 4K", "Radarr Movies", "Lidarr Music")
+- **Type** — Sonarr, Radarr, Lidarr, Readarr, or Whisparr
 - **URL** — the base URL of the instance (e.g., `http://sonarr:8989`)
-- **API Key** — found in your Sonarr/Radarr instance under Settings > General
+- **API Key** — found in your *arr instance under Settings > General
 
 :::tip
 API keys are encrypted at rest using Fernet symmetric encryption and are never

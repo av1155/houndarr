@@ -1,9 +1,10 @@
 """Normalized search candidate model for the engine pipeline.
 
 :class:`SearchCandidate` is the unified representation that adapter functions
-produce from app-specific client models (``MissingEpisode``, ``MissingMovie``).
-The engine pipeline operates solely on ``SearchCandidate`` instances, removing
-the need for ``isinstance`` checks or per-app branching.
+produce from app-specific client models (``MissingEpisode``, ``MissingMovie``,
+``MissingAlbum``, ``MissingBook``, ``MissingWhisparrEpisode``).  The engine
+pipeline operates solely on ``SearchCandidate`` instances, removing the need
+for ``isinstance`` checks or per-app branching.
 """
 
 from __future__ import annotations
@@ -21,16 +22,19 @@ class SearchCandidate:
 
     Adapter functions convert app-specific models into this common shape.
     The engine sees only ``SearchCandidate`` — it never inspects the
-    original ``MissingEpisode`` or ``MissingMovie``.
+    original app-specific model.
 
     Attributes:
-        item_id: Episode ID, movie ID, or synthetic season ID.
-        item_type: ``"episode"`` or ``"movie"``.
+        item_id: Episode ID, movie ID, album ID, book ID, or synthetic
+            season/artist/author ID.
+        item_type: One of ``"episode"``, ``"movie"``, ``"album"``,
+            ``"book"``, or ``"whisparr_episode"``.
         label: Human-readable label for logging.
         unreleased_reason: ``None`` when eligible; a skip-reason string
             when the item should be treated as unreleased.
-        group_key: ``(series_id, season)`` for season-context dedup, or
-            ``None`` for episode-mode and Radarr.
+        group_key: ``(series_id, season)`` for season-context dedup,
+            ``(artist_id,)`` for artist-context, ``(author_id,)`` for
+            author-context, or ``None`` for item-level modes.
         search_payload: Opaque data consumed only by the adapter's
             ``dispatch_search`` function.
     """

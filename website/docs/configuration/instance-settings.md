@@ -6,8 +6,8 @@ description: Detailed guide to all per-instance search settings in Houndarr.
 
 # Instance Settings
 
-This guide explains each setting available when adding or editing a Sonarr/Radarr
-instance in Houndarr. The defaults are conservative — keep settings low to reduce
+This guide explains each setting available when adding or editing an instance
+in Houndarr. The defaults are conservative — keep settings low to reduce
 indexer/API pressure and avoid bans.
 
 ## Search command contract
@@ -16,8 +16,17 @@ indexer/API pressure and avoid bans.
 - **Sonarr (advanced):** Missing pass can use season-context commands
   (`SeasonSearch` with `seriesId` + `seasonNumber`) when enabled per instance.
 - **Radarr:** Sends movie-level commands (`MoviesSearch` with `movieIds`).
+- **Lidarr (default):** Sends album-level commands (`AlbumSearch` with `albumIds`).
+- **Lidarr (advanced):** Missing pass can use artist-context commands
+  (`ArtistSearch` with `artistId`) when enabled per instance.
+- **Readarr (default):** Sends book-level commands (`BookSearch` with `bookIds`).
+- **Readarr (advanced):** Missing pass can use author-context commands
+  (`AuthorSearch` with `authorId`) when enabled per instance.
+- **Whisparr (default):** Sends episode-level commands (`EpisodeSearch` with `episodeIds`).
+- **Whisparr (advanced):** Missing pass can use season-context commands
+  (`SeasonSearch` with `seriesId` + `seasonNumber`) when enabled per instance.
 - Wanted-list reads are restricted to monitored items (`monitored=true`) for both
-  missing and cutoff passes.
+  missing and cutoff passes across all app types.
 
 ## Missing search controls
 
@@ -56,11 +65,12 @@ Minimum delay after release date before searching.
 - **Default:** `36`
 - If the item is still inside this window, Houndarr logs `unreleased delay (...)` and skips it.
 
-For Radarr, Houndarr evaluates release timing with fallback anchors in this order:
-`digitalRelease` → `physicalRelease` → `releaseDate` → `inCinemas`.
+Release date evaluation varies by app type:
 
-For Radarr, unavailable or clearly pre-release titles may also be skipped using
-availability signals (`isAvailable` / `status`) even when release dates are incomplete.
+- **Radarr:** Fallback anchors in order: `digitalRelease` → `physicalRelease` → `releaseDate` → `inCinemas`. Unavailable or pre-release titles may also be skipped using availability signals (`isAvailable` / `status`).
+- **Sonarr / Whisparr:** Uses `airDateUtc` (Sonarr) or the `DateOnly` year/month/day object (Whisparr).
+- **Lidarr:** Uses the album `releaseDate` field.
+- **Readarr:** Uses the book `releaseDate` field.
 
 ### Sonarr Missing Search Mode
 
@@ -70,7 +80,6 @@ Strategy for Sonarr missing-pass commands.
 - **Advanced:** `Season-context search (advanced)`
 
 Season-context mode sends at most one `SeasonSearch` per `(series, season)` per pass.
-Season search is not pack-only in Sonarr and may still produce singles or noisier behavior.
 
 :::info
 Cooldown in season-context mode is tracked at the season level using a stable synthetic
@@ -78,6 +87,33 @@ identifier derived from the series ID and season number — not through any indi
 episode. This ensures cooldown history is consistent across cycles regardless of which
 episode happens to appear first on the wanted list.
 :::
+
+### Lidarr Missing Search Mode
+
+Strategy for Lidarr missing-pass commands.
+
+- **Default:** `Album search (default)`
+- **Advanced:** `Artist-context search (advanced)`
+
+Artist-context mode sends at most one `ArtistSearch` per artist per pass.
+
+### Readarr Missing Search Mode
+
+Strategy for Readarr missing-pass commands.
+
+- **Default:** `Book search (default)`
+- **Advanced:** `Author-context search (advanced)`
+
+Author-context mode sends at most one `AuthorSearch` per author per pass.
+
+### Whisparr Missing Search Mode
+
+Strategy for Whisparr missing-pass commands.
+
+- **Default:** `Episode search (default)`
+- **Advanced:** `Season-context search (advanced)`
+
+Season-context mode sends at most one `SeasonSearch` per `(series, season)` per pass, same as Sonarr's season-context mode.
 
 ## Cutoff upgrade controls
 

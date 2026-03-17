@@ -5,9 +5,10 @@ This file is the primary source of truth for autonomous agents operating here.
 
 ## Project Overview
 
-Houndarr is a self-hosted companion for Sonarr and Radarr that automatically
-searches for missing and cutoff-unmet media in small, rate-limited batches.
-It runs as a single Docker container alongside an existing *arr stack.
+Houndarr is a self-hosted companion for Sonarr, Radarr, Lidarr, Readarr, and
+Whisparr that automatically searches for missing and cutoff-unmet media in
+small, rate-limited batches. It runs as a single Docker container alongside
+an existing *arr stack.
 
 **Tech stack:** Python 3.12 / FastAPI / aiosqlite (SQLite) / Jinja2 / HTMX /
 Tailwind CSS CDN. Published to GHCR at `ghcr.io/av1155/houndarr`.
@@ -53,7 +54,7 @@ Run **all five** before every commit. CI enforces the same checks.
 ## Running Tests
 
 ```bash
-# Full suite (401 tests, async — count includes parametrised expansions)
+# Full suite (408 tests, async — count includes parametrised expansions)
 .venv/bin/pytest
 
 # Single file
@@ -111,6 +112,9 @@ identical check names so branch protection is satisfied.
 | `dockerfile-lint.yml` | Changes to `Dockerfile` | `hadolint Dockerfile` |
 | `workflow-lint.yml` | Changes to `.github/workflows/**` | `actionlint` via reviewdog |
 | `api-snapshot-refresh.yml` | Weekly (Monday 10:00 UTC) + manual | Fetches upstream Sonarr/Radarr/Whisparr/Lidarr/Readarr OpenAPI specs, updates `docs/api/` snapshots and `tests/test_docs_api.py` hashes, opens a PR if changed |
+| `pages.yml` | Pushes to `main` touching `website/**` | Deploys docs site to GitHub Pages |
+| `test-deploy.yml` | PRs touching `website/**` | Tests Docusaurus build without deploying |
+| `cleanup-actions-cache.yml` | Daily (05:00 UTC) + manual | Prunes stale GitHub Actions caches |
 
 ### Branch protection on `main`
 
@@ -174,7 +178,7 @@ from houndarr.database import get_db
 | Constants | UPPER_SNAKE_CASE | `SESSION_MAX_AGE_SECONDS`, `SCHEMA_VERSION` |
 | Module-level state | `_leading_underscore` | `_db_path`, `_runtime_settings` |
 | Enums | `StrEnum`, lowercase values | `InstanceType.sonarr` |
-| Type aliases | PascalCase or Literal | `ItemType = Literal["episode", "movie"]` |
+| Type aliases | PascalCase or Literal | `ItemType = Literal["episode", "movie", "album", "book", "whisparr_episode"]` |
 
 ### Docstrings
 
@@ -207,9 +211,10 @@ No alternative logging libraries (structlog, loguru) are used.
 | `B008` | FastAPI `Depends()` in function defaults |
 | `S608` + `nosec B608` | Dynamic SQL with explicit column allowlist (3 files) |
 | `BLE001` | Broad exception in background loops (always with logging) |
-| `SLF001` | Test fixtures accessing private module state for reset |
+| `A002` | Parameter names `type`/`id` shadowing builtins (FastAPI form/function signature convention) |
+| `SLF001` | Test fixtures and `__main__.py` accessing private module state |
 | `PLW0603` | Module-level global reassignment (singletons) — note: the `PLW` rule family is not currently selected in ruff config, so these comments are defensive/inert |
-| `S101` | Defensive assert for non-None `series_id` in Sonarr adapter (1 location) |
+| `S101` | Defensive assert in adapters and instance validation — also globally ignored in ruff config; per-file comments are defensive |
 
 ---
 
@@ -225,10 +230,13 @@ src/houndarr/
   config.py            # AppSettings dataclass, get_settings() singleton
   crypto.py            # Fernet encrypt/decrypt, master key management
   database.py          # get_db() context manager, schema migrations
-  clients/             # httpx-based Sonarr/Radarr API clients
-    base.py            # BaseClient with _get()/_post() + raise_for_status()
-    sonarr.py          # SonarrClient (episode/season search)
-    radarr.py          # RadarrClient (movie search)
+  clients/             # httpx-based *arr API clients
+    base.py            # ArrClient ABC with _get()/_post() + raise_for_status()
+    sonarr.py          # SonarrClient (episode/season search, v3 API)
+    radarr.py          # RadarrClient (movie search, v3 API)
+    lidarr.py          # LidarrClient (album/artist search, v1 API)
+    readarr.py         # ReadarrClient (book/author search, v1 API)
+    whisparr.py        # WhisparrClient (episode/season search, v3 API)
   engine/
     candidates.py      # SearchCandidate dataclass, ItemType, date helpers
     search_loop.py     # run_instance_search() — unified search pipeline
@@ -237,8 +245,11 @@ src/houndarr/
       __init__.py      # AppAdapter dataclass, ADAPTERS registry, get_adapter()
       sonarr.py        # Sonarr adapter: candidate conversion + dispatch
       radarr.py        # Radarr adapter: candidate conversion + dispatch
+      lidarr.py        # Lidarr adapter: candidate conversion + dispatch
+      readarr.py       # Readarr adapter: candidate conversion + dispatch
+      whisparr.py      # Whisparr adapter: candidate conversion + dispatch
   routes/
-    pages.py           # Dashboard, Logs, Settings page routes
+    pages.py           # Setup, Login, Dashboard, Logs, Settings page routes
     settings.py        # Settings CRUD (instance add/edit/delete/toggle)
     health.py          # GET /api/health (Docker HEALTHCHECK)
     api/
@@ -252,7 +263,7 @@ src/houndarr/
 
 ### Key patterns
 
-- **Database:** SQLite via aiosqlite; schema version 4; `get_db()` async
+- **Database:** SQLite via aiosqlite; schema version 5; `get_db()` async
   context manager opens a fresh connection per call (WAL mode, FKs enabled)
 - **Config:** `AppSettings` is a plain dataclass (not Pydantic); `get_settings()`
   is a lazy singleton
@@ -268,14 +279,15 @@ src/houndarr/
 - **search_log:** Every search attempt writes a row with action
   `searched`/`skipped`/`error`/`info`
 
-### Database schema (SQLite, schema version 4)
+### Database schema (SQLite, schema version 5)
 
 ```sql
 settings    (key TEXT PK, value TEXT NOT NULL)
 
 instances   (id INTEGER PK AUTOINCREMENT,
-             name, type CHECK IN ('sonarr','radarr'), url,
-             encrypted_api_key DEFAULT '',
+             name, type CHECK IN ('sonarr','radarr','lidarr',
+                                   'readarr','whisparr'),
+             url, encrypted_api_key DEFAULT '',
              batch_size DEFAULT 2, sleep_interval_mins DEFAULT 30,
              hourly_cap DEFAULT 4, cooldown_days DEFAULT 14,
              unreleased_delay_hrs DEFAULT 36,
@@ -283,18 +295,28 @@ instances   (id INTEGER PK AUTOINCREMENT,
              cutoff_cooldown_days DEFAULT 21, cutoff_hourly_cap DEFAULT 1,
              sonarr_search_mode DEFAULT 'episode'
                  CHECK IN ('episode','season_context'),
+             lidarr_search_mode DEFAULT 'album'
+                 CHECK IN ('album','artist_context'),
+             readarr_search_mode DEFAULT 'book'
+                 CHECK IN ('book','author_context'),
+             whisparr_search_mode DEFAULT 'episode'
+                 CHECK IN ('episode','season_context'),
              enabled DEFAULT 1, created_at, updated_at)
 
 cooldowns   (id INTEGER PK AUTOINCREMENT,
              instance_id FK→instances ON DELETE CASCADE,
-             item_id, item_type CHECK IN ('episode','movie'),
+             item_id,
+             item_type CHECK IN ('episode','movie','album',
+                                  'book','whisparr_episode'),
              searched_at,
              UNIQUE(instance_id, item_id, item_type))
              -- index: idx_cooldowns_lookup(instance_id, item_type, searched_at)
 
 search_log  (id INTEGER PK AUTOINCREMENT,
              instance_id FK→instances ON DELETE SET NULL,
-             item_id, item_type CHECK IN ('episode','movie'),
+             item_id,
+             item_type CHECK IN ('episode','movie','album',
+                                  'book','whisparr_episode'),
              search_kind, cycle_id,
              cycle_trigger CHECK IN ('scheduled','run_now','system'),
              item_label,
@@ -306,7 +328,7 @@ search_log  (id INTEGER PK AUTOINCREMENT,
 ```
 
 Full DDL is in `src/houndarr/database.py`. Migrations are incremental
-(`_migrate_to_v2` through `_migrate_to_v4`); bump `SCHEMA_VERSION` when
+(`_migrate_to_v2` through `_migrate_to_v5`); bump `SCHEMA_VERSION` when
 adding new ones.
 
 ### *arr API reference (local)
@@ -323,9 +345,7 @@ Full upstream OpenAPI specs are vendored locally and kept current:
 code. They document every endpoint, parameter, request body, and response
 schema. See `docs/api-context.md` for usage guidelines.
 
-Sonarr and Radarr specs are actively used by `clients/sonarr.py` and
-`clients/radarr.py`. The Whisparr, Lidarr, and Readarr specs are vendored
-as reference material for future client development.
+All five specs are actively used by their respective clients in `clients/`.
 
 **Freshness:** `api-snapshot-refresh.yml` auto-fetches all five upstream
 specs weekly (Monday 10:00 UTC) and opens a PR if changed — local specs
@@ -366,15 +386,18 @@ first via the `seeded_instances` fixture (defined locally in
 async def seeded_instances(db: None) -> AsyncGenerator[None, None]:
     async with get_db() as conn:
         await conn.executemany(
-            "INSERT INTO instances (id, name, type, url) VALUES (?, ?, ?, ?)",
-            [(1, "Sonarr Test", "sonarr", "http://sonarr:8989"),
-             (2, "Radarr Test", "radarr", "http://radarr:7878")],
+            "INSERT INTO instances (id, name, type, url, encrypted_api_key)"
+            " VALUES (?, ?, ?, ?, ?)",
+            [(1, "Sonarr Test", "sonarr", "http://sonarr:8989", _ENC_KEY),
+             (2, "Radarr Test", "radarr", "http://radarr:7878", _ENC_KEY)],
         )
         await conn.commit()
     yield
 ```
 
-Engine tests also set `encrypted_api_key` to a valid Fernet-encrypted value.
+Engine tests set `encrypted_api_key` to a valid Fernet-encrypted value
+(`_ENC_KEY`). The simpler 4-column form (without `encrypted_api_key`)
+is used in `test_cooldown.py` where only FK constraints matter.
 
 ### Login helper for route tests
 

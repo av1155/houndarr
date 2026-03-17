@@ -10,10 +10,12 @@ description: How to verify Houndarr is working correctly, interpret logs, and di
 
 If you are unsure whether Houndarr is actually doing anything, follow these steps before assuming something is broken.
 
-### Step 1 — Open Sonarr/Radarr's own wanted pages
+### Step 1 — Open your *arr instance's own wanted pages
 
-In Sonarr: **Wanted → Missing** and **Wanted → Cutoff Unmet**  
-In Radarr: **Movies → Discover** or use the **Wanted** filter
+In Sonarr/Whisparr: **Wanted → Missing** and **Wanted → Cutoff Unmet**  
+In Radarr: **Movies → Discover** or use the **Wanted** filter  
+In Lidarr: **Wanted → Missing** and **Wanted → Cutoff Unmet**  
+In Readarr: **Wanted → Missing** and **Wanted → Cutoff Unmet**
 
 If those pages are empty, Houndarr has nothing to search.
 
@@ -25,10 +27,10 @@ Open Houndarr's **Logs** page and look at recent activity. Each row shows:
 |-------|-------------------|
 | **Action** | `searched` — a search command was sent; `skipped` — item was ineligible this cycle; `error` — something went wrong |
 | **Reason** | Why the item was skipped or what kind of search was triggered |
-| **Item label** | The series/movie title and episode info |
+| **Item label** | The series/movie/album/book title and relevant details |
 | **Timestamp** | When the action occurred |
 
-If you see `searched` entries for items that also appear in Sonarr/Radarr's wanted views, Houndarr is working correctly.
+If you see `searched` entries for items that also appear in your *arr instance's wanted views, Houndarr is working correctly.
 
 #### Log context fields
 
@@ -42,9 +44,9 @@ The Logs page groups rows by cycle when metadata exists and shows a **Cycle outc
 
 By default, system rows (supervisor startup messages) are hidden. Use the filter controls to show them if needed.
 
-### Step 3 — Check "Last Searched" timestamps in Sonarr/Radarr
+### Step 3 — Check "Last Searched" timestamps in your *arr instance
 
-In Sonarr's cutoff-unmet view, each episode shows when it was last searched. If those timestamps match recent Houndarr log entries, you have confirmed end-to-end that the search commands are reaching Sonarr and being executed.
+In your instance's cutoff-unmet view, each item shows when it was last searched. If those timestamps match recent Houndarr log entries, you have confirmed end-to-end that the search commands are reaching the instance and being executed.
 
 ### Step 4 — Expect skips for cooldown and unreleased items
 
@@ -76,20 +78,20 @@ See [Instance Settings](/docs/configuration/instance-settings#increasing-through
 
 ## Common issues
 
-### Houndarr is not connecting to Sonarr/Radarr
+### Houndarr is not connecting to your *arr instance
 
 **Symptoms:** `error` entries in logs with connection refused or timeout messages.
 
 **Checks:**
-1. Verify the instance URL is reachable from the Houndarr container (try `curl <url>/api/v3/system/status?apikey=<key>` from inside the container).
+1. Verify the instance URL is reachable from the Houndarr container. Try `curl <url>/api/v3/system/status?apikey=<key>` from inside the container (use `/api/v1/` for Lidarr and Readarr instead of `/api/v3/`).
 2. Confirm the API key is correct in Houndarr's Settings page.
-3. If Sonarr/Radarr are in the same Docker Compose stack, use the container service name as the hostname (e.g., `http://sonarr:8989`), not `localhost`.
+3. If your *arr instance is in the same Docker Compose stack, use the container service name as the hostname (e.g., `http://sonarr:8989`, `http://lidarr:8686`), not `localhost`.
 4. Check that the URL does not have a trailing slash.
 
 ### An instance is enabled but nothing is happening
 
 **Checks:**
-1. Open Sonarr/Radarr's wanted pages. If they are empty, there is nothing for Houndarr to search.
+1. Open your *arr instance's wanted pages. If they are empty, there is nothing for Houndarr to search.
 2. Check the Houndarr Logs page for the instance. Look at the most recent entries — if you see `skipped` with reason `hourly cap reached`, wait until the next hour window.
 3. Confirm the instance is enabled (green toggle in Settings).
 4. Check that the sleep interval has elapsed since the last cycle. With a 30-minute sleep, Houndarr runs approximately twice per hour.
@@ -98,17 +100,17 @@ See [Instance Settings](/docs/configuration/instance-settings#increasing-through
 
 **Checks:**
 1. Confirm **Cutoff search** is enabled for the instance (it is off by default).
-2. Open Sonarr/Radarr's "Wanted → Cutoff Unmet" view. If it is empty, there is nothing to search.
-3. Check your quality profiles in Sonarr/Radarr. An item only appears in the cutoff-unmet list if the file you have does not meet the profile's cutoff quality.
+2. Open your *arr instance's "Wanted → Cutoff Unmet" view. If it is empty, there is nothing to search.
+3. Check your quality profiles in your *arr instance. An item only appears in the cutoff-unmet list if the file you have does not meet the profile's cutoff quality.
 4. Note that cutoff search uses a separate hourly cap (default: 1 per hour). With a cap of 1, you may only see one cutoff search per hour.
 
 ### I see errors in the logs
 
 `error` log entries include a message field explaining what went wrong. Common causes:
 
-- **HTTP 401** — API key is wrong or has been rotated in Sonarr/Radarr.
-- **HTTP 404** — The item was removed from Sonarr/Radarr between the time Houndarr read the wanted list and the time it issued the search.
-- **Connection refused / timeout** — Sonarr/Radarr is unreachable (see connection troubleshooting above).
+- **HTTP 401** — API key is wrong or has been rotated in your *arr instance.
+- **HTTP 404** — The item was removed from the instance between the time Houndarr read the wanted list and the time it issued the search.
+- **Connection refused / timeout** — the instance is unreachable (see connection troubleshooting above).
 
 Occasional 404 errors are harmless. A stream of connection errors suggests a network or configuration issue.
 

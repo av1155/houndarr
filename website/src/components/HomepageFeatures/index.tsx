@@ -23,9 +23,9 @@ const FeatureList: FeatureItem[] = [
     title: 'Missing & Cutoff',
     description: (
       <>
-        Automatically searches for missing episodes and movies, plus items
-        below your quality cutoff. Each search type has independent controls
-        and budgets.
+        Automatically searches for missing episodes, movies, albums, and
+        books, plus items below your quality cutoff. Each search type has
+        independent controls and budgets.
       </>
     ),
   },
@@ -33,8 +33,9 @@ const FeatureList: FeatureItem[] = [
     title: 'Multi-Instance',
     description: (
       <>
-        Connect one or more Sonarr and Radarr instances, each with their own
-        batch size, sleep interval, cooldown, and hourly cap settings.
+        Connect one or more Sonarr, Radarr, Lidarr, Readarr, and Whisparr
+        instances, each with their own batch size, sleep interval, cooldown,
+        and hourly cap settings.
       </>
     ),
   },
@@ -44,7 +45,7 @@ const FeatureList: FeatureItem[] = [
       <>
         Zero outbound connections to analytics, error tracking, or
         developer-controlled servers. The only network traffic goes to your
-        own Sonarr/Radarr instances.
+        own *arr instances.
       </>
     ),
   },

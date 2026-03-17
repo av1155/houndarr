@@ -4,7 +4,7 @@ import type * as Preset from '@docusaurus/preset-classic';
 
 const config: Config = {
   title: 'Houndarr',
-  tagline: 'Polite, automated media searching for Sonarr and Radarr',
+  tagline: 'Polite, automated media searching for your *arr stack',
   favicon: 'img/houndarr-logo-dark.png',
 
   future: {

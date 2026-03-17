@@ -5,12 +5,12 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "houndarr"
 dynamic = ["version"]
-description = "A focused, self-hosted companion for Sonarr and Radarr that automatically searches for missing media in polite, controlled batches."
+description = "A focused, self-hosted companion for Sonarr, Radarr, Lidarr, Readarr, and Whisparr that automatically searches for missing media in polite, controlled batches."
 readme = "README.md"
 license = { file = "LICENSE" }
 requires-python = ">=3.12"
 authors = [{ name = "Andrea A. Venti Fuentes", email = "av1155.dev@gmail.com" }]
-keywords = ["sonarr", "radarr", "media", "automation", "self-hosted"]
+keywords = ["sonarr", "radarr", "lidarr", "readarr", "whisparr", "media", "automation", "self-hosted"]
 classifiers = [
     "Development Status :: 5 - Production/Stable",
     "Intended Audience :: End Users/Desktop",

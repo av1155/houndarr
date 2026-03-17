@@ -4,7 +4,7 @@ Thanks for your interest in improving Houndarr.
 
 ## Scope
 
-Houndarr is a focused tool for controlled Sonarr/Radarr search automation.
+Houndarr is a focused tool for controlled *arr search automation (Sonarr, Radarr, Lidarr, Readarr, Whisparr).
 Please keep changes aligned with the project goal and avoid scope expansion.
 
 ## Development setup

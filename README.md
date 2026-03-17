@@ -4,7 +4,7 @@
   <img src="src/houndarr/static/img/houndarr-logo-dark.png" alt="Houndarr logo" width="220" />
 </p>
 
-> A focused, self-hosted companion for Sonarr and Radarr that automatically searches for missing media in polite, controlled batches.
+> A focused, self-hosted companion for Sonarr, Radarr, Lidarr, Readarr, and Whisparr that automatically searches for missing media in polite, controlled batches.
 >
 > **[Documentation](https://av1155.github.io/houndarr/)** | **[Quick Start](https://av1155.github.io/houndarr/docs/getting-started/quick-start)**
 
@@ -12,10 +12,11 @@
 
 ## What Houndarr Does
 
-Sonarr and Radarr monitor RSS feeds for new releases, but they do not go back
-and actively search for content already in your library that is missing or
-below your quality cutoff. Their built-in "Search All Missing" button fires
-every item at once, overwhelming indexer API limits.
+Sonarr, Radarr, Lidarr, Readarr, and Whisparr monitor RSS feeds for new
+releases, but they do not go back and actively search for content already in
+your library that is missing or below your quality cutoff. Their built-in
+"Search All Missing" button fires every item at once, overwhelming indexer
+API limits.
 
 Houndarr searches **slowly, politely, and automatically**: small batches,
 configurable sleep intervals, per-item cooldowns, and hourly API caps.
@@ -23,11 +24,14 @@ It runs as a single Docker container alongside your existing *arr stack.
 
 **Key capabilities:**
 
-- Connects to one or more Sonarr and Radarr instances
-- Searches for **missing** episodes and movies in small, configurable batches
+- Connects to one or more Sonarr, Radarr, Lidarr, Readarr, and Whisparr instances
+- Searches for **missing** episodes, movies, albums, and books in small, configurable batches
 - Searches for **cutoff-unmet** items (below your quality profile) separately
 - Sonarr: episode-level search by default, with optional season-context mode
 - Radarr: movie-level search
+- Lidarr: album-level search by default, with optional artist-context mode
+- Readarr: book-level search by default, with optional author-context mode
+- Whisparr: episode-level search by default, with optional season-context mode
 - Per-item cooldown prevents re-searching the same item too soon
 - Per-instance hourly API cap keeps indexer usage in check
 - Bounded multi-page scanning so deep backlog items are not starved
@@ -37,7 +41,7 @@ It runs as a single Docker container alongside your existing *arr stack.
 
 ## What Houndarr Does Not Do
 
-- **No download-client integration** — it triggers searches in Sonarr/Radarr, which handle downloads
+- **No download-client integration** — it triggers searches in your *arr instances, which handle downloads
 - **No Prowlarr/indexer management** — your *arr instances manage their own indexers
 - **No request workflows** — no Overseerr/Ombi-style request handling
 - **No multi-user support** — single admin username and password
@@ -137,7 +141,7 @@ If you run Houndarr behind a reverse proxy (Nginx, Caddy, Traefik, etc.):
 1. Navigate to `http://<your-host>:8877`.
 2. Create an admin username and password on the setup screen.
 3. Log in with your new credentials.
-4. Go to **Settings** and add your Sonarr/Radarr instances (URL + API key).
+4. Go to **Settings** and add your *arr instances (URL + API key).
 5. Enable each instance — Houndarr will begin searching on the configured schedule.
 
 For detailed per-instance configuration options, see the
@@ -175,7 +179,7 @@ Houndarr is designed for self-hosters who care about what runs on their
 network:
 
 - **No telemetry, no call-home.** The only outbound connections are to your
-  configured Sonarr/Radarr instances. There are no analytics, update checks, or
+  configured *arr instances. There are no analytics, update checks, or
   crash reporting.
 - **API keys are encrypted at rest** using Fernet symmetric encryption
   (AES-128-CBC + HMAC-SHA256) and are never sent back to the browser.

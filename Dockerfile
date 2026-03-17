@@ -9,7 +9,7 @@ ARG HOUNDARR_VERSION=dev
 
 # OCI labels
 LABEL org.opencontainers.image.title="Houndarr" \
-      org.opencontainers.image.description="Focused self-hosted companion for Sonarr and Radarr" \
+      org.opencontainers.image.description="Focused self-hosted companion for Sonarr, Radarr, Lidarr, Readarr, and Whisparr" \
       org.opencontainers.image.url="https://github.com/av1155/houndarr" \
       org.opencontainers.image.source="https://github.com/av1155/houndarr" \
       org.opencontainers.image.licenses="MIT"

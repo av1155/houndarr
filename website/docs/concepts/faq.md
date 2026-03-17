@@ -18,7 +18,7 @@ Each skip has a reason logged alongside it — cooldown, unreleased delay, or ho
 
 ## "Does Houndarr decide whether my file meets cutoff?"
 
-No. Sonarr and Radarr maintain the "Wanted > Cutoff Unmet" list based on your quality profiles. Houndarr reads that list and schedules searches for items on it. If something should be in the cutoff list but isn't, check the quality profile in Sonarr/Radarr directly.
+No. Your *arr instance maintains the "Wanted > Cutoff Unmet" list based on your quality profiles. Houndarr reads that list and schedules searches for items on it. If something should be in the cutoff list but isn't, check the quality profile in your instance directly.
 
 ## "Why are future or recently-released titles being skipped?"
 
@@ -28,22 +28,22 @@ For Radarr, release timing uses a priority chain: `digitalRelease` → `physical
 
 ## "Does Houndarr search my whole library?"
 
-No. It only acts on what Sonarr/Radarr report as wanted — items from `wanted/missing` and `wanted/cutoff`. Everything else in your library is invisible to Houndarr.
+No. It only acts on what your *arr instances report as wanted — items from `wanted/missing` and `wanted/cutoff`. Everything else in your library is invisible to Houndarr.
 
 ## "Why is Houndarr searching so slowly?"
 
 The defaults are conservative on purpose — batch size 2, hourly cap 4, 14-day cooldown. With a large backlog, clearing it takes weeks. You can increase throughput gradually; see [Increasing throughput](/docs/configuration/instance-settings#increasing-throughput).
 
-## "Sonarr/Radarr show many cutoff-unmet items. Why is Houndarr only searching a few per day?"
+## "My *arr instance shows many cutoff-unmet items. Why is Houndarr only searching a few per day?"
 
 The cutoff controls (batch 1, cap 1, cooldown 21 days) are more conservative than missing controls because quality upgrades are lower priority than acquiring missing content. With a cap of 1, that's roughly 24 cutoff searches per day. Increase **Cutoff Cap** and **Cutoff Batch** gradually if you want faster progress.
 
 ## "I enabled Houndarr but I don't see any activity"
 
-Check in order: is the instance enabled (green toggle)? Has at least one sleep interval passed (default: 30 min)? Does Sonarr/Radarr actually have items in their wanted lists? Are there `error` entries in the Logs page?
+Check in order: is the instance enabled (green toggle)? Has at least one sleep interval passed (default: 30 min)? Does your *arr instance actually have items in its wanted lists? Are there `error` entries in the Logs page?
 
 See [Troubleshooting](/docs/concepts/troubleshooting) for a step-by-step guide.
 
-## "Can Houndarr search for things that aren't in Sonarr/Radarr yet?"
+## "Can Houndarr search for things that aren't in my *arr instance yet?"
 
-No. Houndarr only triggers searches within Sonarr/Radarr for items already tracked there. For request workflows, use Overseerr or Jellyseerr alongside your *arr stack.
+No. Houndarr only triggers searches within your *arr instances for items already tracked there. For request workflows, use Overseerr or Jellyseerr alongside your *arr stack.

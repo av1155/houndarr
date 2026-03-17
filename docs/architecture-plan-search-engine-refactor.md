@@ -59,6 +59,7 @@ The analysis includes security review, future-app compatibility analysis
 - [Appendix 4: Database Schema Reference](#appendix-4-database-schema-reference)
 - [Appendix 5: Test Coupling Analysis](#appendix-5-test-coupling-analysis)
 - [Appendix 6: Security Boundary Map](#appendix-6-security-boundary-map)
+- [Appendix 7: Existing Queue-Related Code](#appendix-7-existing-queue-related-code)
 
 ---
 

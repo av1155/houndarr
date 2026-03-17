@@ -53,7 +53,7 @@ Run **all five** before every commit. CI enforces the same checks.
 ## Running Tests
 
 ```bash
-# Full suite (303 tests, async — count includes parametrised expansions)
+# Full suite (315 tests, async — count includes parametrised expansions)
 .venv/bin/pytest
 
 # Single file
@@ -110,7 +110,7 @@ identical check names so branch protection is satisfied.
 | `release.yml` | `v*` tag push | Validates VERSION == tag, extracts CHANGELOG block, creates GitHub Release |
 | `dockerfile-lint.yml` | Changes to `Dockerfile` | `hadolint Dockerfile` |
 | `workflow-lint.yml` | Changes to `.github/workflows/**` | `actionlint` via reviewdog |
-| `api-snapshot-refresh.yml` | Weekly (Monday 10:00 UTC) + manual | Fetches upstream Sonarr/Radarr OpenAPI specs, updates `docs/api/` snapshots and `tests/test_docs_api.py` hashes, opens a PR if changed |
+| `api-snapshot-refresh.yml` | Weekly (Monday 10:00 UTC) + manual | Fetches upstream Sonarr/Radarr/Whisparr/Lidarr/Readarr OpenAPI specs, updates `docs/api/` snapshots and `tests/test_docs_api.py` hashes, opens a PR if changed |
 
 ### Branch protection on `main`
 
@@ -303,20 +303,27 @@ Full DDL is in `src/houndarr/database.py`. Migrations are incremental
 (`_migrate_to_v2` through `_migrate_to_v4`); bump `SCHEMA_VERSION` when
 adding new ones.
 
-### Sonarr / Radarr API reference (local)
+### *arr API reference (local)
 
 Full upstream OpenAPI specs are vendored locally and kept current:
 
 - `docs/api/sonarr_openapi.json` — Sonarr v3 API (OpenAPI 3.0.1)
 - `docs/api/radarr_openapi.json` — Radarr v3 API (OpenAPI 3.0.4)
+- `docs/api/whisparr_openapi.json` — Whisparr v3 API (OpenAPI 3.0.1)
+- `docs/api/lidarr_openapi.json` — Lidarr v1 API (OpenAPI 3.0.4)
+- `docs/api/readarr_openapi.json` — Readarr v1 API (OpenAPI 3.0.1)
 
-**Use these as the source of truth** when modifying `clients/sonarr.py` or
-`clients/radarr.py`. They document every endpoint, parameter, request body,
-and response schema. See `docs/api-context.md` for usage guidelines.
+**Use these as the source of truth** when modifying or creating *arr client
+code. They document every endpoint, parameter, request body, and response
+schema. See `docs/api-context.md` for usage guidelines.
 
-**Freshness:** `api-snapshot-refresh.yml` auto-fetches upstream specs weekly
-(Monday 10:00 UTC) and opens a PR if changed — local specs are never more
-than one week stale.
+Sonarr and Radarr specs are actively used by `clients/sonarr.py` and
+`clients/radarr.py`. The Whisparr, Lidarr, and Readarr specs are vendored
+as reference material for future client development.
+
+**Freshness:** `api-snapshot-refresh.yml` auto-fetches all five upstream
+specs weekly (Monday 10:00 UTC) and opens a PR if changed — local specs
+are never more than one week stale.
 
 ---
 

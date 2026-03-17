@@ -53,7 +53,7 @@ Run **all five** before every commit. CI enforces the same checks.
 ## Running Tests
 
 ```bash
-# Full suite (315 tests, async — count includes parametrised expansions)
+# Full suite (401 tests, async — count includes parametrised expansions)
 .venv/bin/pytest
 
 # Single file
@@ -209,6 +209,7 @@ No alternative logging libraries (structlog, loguru) are used.
 | `BLE001` | Broad exception in background loops (always with logging) |
 | `SLF001` | Test fixtures accessing private module state for reset |
 | `PLW0603` | Module-level global reassignment (singletons) — note: the `PLW` rule family is not currently selected in ruff config, so these comments are defensive/inert |
+| `S101` | Defensive assert for non-None `series_id` in Sonarr adapter (1 location) |
 
 ---
 
@@ -229,8 +230,13 @@ src/houndarr/
     sonarr.py          # SonarrClient (episode/season search)
     radarr.py          # RadarrClient (movie search)
   engine/
-    search_loop.py     # run_instance_search() — one search pass
+    candidates.py      # SearchCandidate dataclass, ItemType, date helpers
+    search_loop.py     # run_instance_search() — unified search pipeline
     supervisor.py      # Supervisor — one asyncio.Task per enabled instance
+    adapters/
+      __init__.py      # AppAdapter dataclass, ADAPTERS registry, get_adapter()
+      sonarr.py        # Sonarr adapter: candidate conversion + dispatch
+      radarr.py        # Radarr adapter: candidate conversion + dispatch
   routes/
     pages.py           # Dashboard, Logs, Settings page routes
     settings.py        # Settings CRUD (instance add/edit/delete/toggle)
@@ -352,7 +358,8 @@ independently. Tests that need a database AND the app must request both
 
 Tests touching `cooldowns` or `search_log` must seed the `instances` table
 first via the `seeded_instances` fixture (defined locally in
-`tests/test_engine/test_search_loop.py` and `tests/test_services/test_cooldown.py`):
+`tests/test_engine/test_search_loop.py`, `tests/test_engine/test_golden_search_log.py`,
+`tests/test_engine/test_supervisor.py`, and `tests/test_services/test_cooldown.py`):
 
 ```python
 @pytest_asyncio.fixture()

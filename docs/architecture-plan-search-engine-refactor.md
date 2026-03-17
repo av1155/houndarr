@@ -612,16 +612,54 @@ locked to current values.
 
 ## I. Recommended Sequencing
 
-### Phase 1: Internal refactor (PR 1 -- no behavior change)
+Five phases, each scoped to a single coding session and independently
+verifiable. Phases 1-3 are the internal refactor (zero behavior change).
+Phases 4-5 add queue-awareness (new behavior).
 
-Extract `SearchCandidate`, adapter functions, unified `_run_search_pass()`.
-Eliminate cutoff-pass duplication. All existing tests must pass with
-identical behavior.
+### Phase 1: Core abstractions (session 1 -- no behavior change)
 
-### Phase 2: Queue-awareness (PR 2 -- new behavior)
+Define `SearchCandidate` dataclass, write Sonarr and Radarr adapter
+functions, create the adapter registry. No changes to `search_loop.py`
+yet -- the new modules exist alongside the old code.
 
-Add queue-fetching to clients, queue-gating to pipeline, optional
-`skip_if_queued` instance setting.
+**Deliverables:** `engine/candidates.py`, `engine/adapters/sonarr.py`,
+`engine/adapters/radarr.py`, `engine/adapters/__init__.py`. Unit tests
+for all adapter functions in isolation.
+
+### Phase 2: Unified search pipeline (session 2 -- no behavior change)
+
+Replace `run_instance_search()` internals with the unified
+`_run_search_pass()` that uses the adapter registry. Delete
+`_run_cutoff_pass()`. Move helper functions to their adapter modules.
+
+**Deliverables:** Rewritten `search_loop.py` (~260 fewer lines), moved
+helpers, all existing tests passing with identical behavior.
+
+### Phase 3: Test hardening (session 3 -- no behavior change)
+
+Write the "golden test" that captures exact `search_log` row sequences
+for known inputs. Update any import paths broken by Phase 2. Run all
+five quality gates. This phase validates zero behavior drift.
+
+**Deliverables:** Golden tests, import fixes, all quality gates green.
+
+### Phase 4: Queue client methods + pipeline integration (session 4 -- new behavior)
+
+Add `get_queue_item_ids()` to both clients and the `ArrClient` ABC.
+Wire queue-gating into `_run_search_pass()`. Handle fetch failures
+gracefully. No UI or settings changes yet -- queue-awareness is always on.
+
+**Deliverables:** Client queue methods, pipeline queue check, queue
+failure handling, respx-based queue tests.
+
+### Phase 5: Queue settings, UI, and polish (session 5 -- new behavior)
+
+Add `skip_if_queued` instance setting (DB migration v5, Instance
+dataclass, `allowed_cols`, settings form toggle). Write remaining tests
+(toggle off, season-context skip, pagination). Run all quality gates.
+
+**Deliverables:** DB migration, settings form update, full test
+coverage, all quality gates green.
 
 ### Why this order
 
@@ -633,6 +671,18 @@ Add queue-fetching to clients, queue-gating to pipeline, optional
 
 **Minimum enabling change before queue-awareness:** The cutoff-pass
 deduplication. Without it, queue-awareness must be implemented 4 times.
+
+### Session boundaries
+
+Each phase is designed so that:
+
+- The codebase compiles and all tests pass at the end of each phase
+- No phase leaves dead code or half-wired abstractions
+- Phase 1 can be merged independently (new modules, no integration)
+- Phase 2 depends on Phase 1 (uses the adapters)
+- Phase 3 depends on Phase 2 (validates the integration)
+- Phase 4 depends on Phase 2 (uses `_run_search_pass`)
+- Phase 5 depends on Phase 4 (adds settings for queue behavior)
 
 ---
 
@@ -652,7 +702,10 @@ deduplication. Without it, queue-awareness must be implemented 4 times.
 
 ## K. Step-by-Step Implementation Plan
 
-### Phase 1: Internal refactor (no behavior change)
+### Phase 1: Core abstractions (session 1 -- no behavior change)
+
+> **Goal:** Create all new modules alongside existing code. The search
+> loop is not modified -- these modules are wired in during Phase 2.
 
 #### Step 1.1: Define `SearchCandidate` dataclass
 
@@ -665,7 +718,8 @@ deduplication. Without it, queue-awareness must be implemented 4 times.
   - `group_key: tuple[int, int] | None` (for season-context dedup)
   - `search_payload: dict[str, Any]` (opaque data for dispatch function)
 - `ItemType` stays as `Literal["episode", "movie"]`
-- Move `_is_within_unreleased_delay` here (used by both adapters)
+- Move `_is_within_unreleased_delay` and `_parse_iso_utc` here (used by
+  both adapters)
 
 #### Step 1.2: Write Sonarr adapter functions
 
@@ -679,7 +733,9 @@ deduplication. Without it, queue-awareness must be implemented 4 times.
 - `async def dispatch_search(client: SonarrClient, candidate:
   SearchCandidate) -> None` -- reads `search_payload` to determine
   `EpisodeSearch` vs `SeasonSearch`
-- Move `_episode_label`, `_season_context_label`, `_season_item_id` here
+- `make_client(instance: Instance) -> SonarrClient`
+- Copy `_episode_label`, `_season_context_label`, `_season_item_id` here
+  (originals remain in `search_loop.py` until Phase 2)
 
 #### Step 1.3: Write Radarr adapter functions
 
@@ -691,8 +747,10 @@ deduplication. Without it, queue-awareness must be implemented 4 times.
   SearchCandidate` -- same
 - `async def dispatch_search(client: RadarrClient, candidate:
   SearchCandidate) -> None` -- sends `MoviesSearch` command
-- Move `_radarr_release_anchor`, `_radarr_unreleased_reason`,
-  `_movie_label`, `_RADARR_UNRELEASED_STATUSES` here
+- `make_client(instance: Instance) -> RadarrClient`
+- Copy `_radarr_release_anchor`, `_radarr_unreleased_reason`,
+  `_movie_label`, `_RADARR_UNRELEASED_STATUSES` here (originals remain
+  in `search_loop.py` until Phase 2)
 
 #### Step 1.4: Create adapter registry
 
@@ -722,7 +780,28 @@ ADAPTERS: dict[InstanceType, AppAdapter] = {
 }
 ```
 
-#### Step 1.5: Unify the search pipeline
+#### Step 1.5: Write unit tests for adapter functions
+
+- Test each adapter function in isolation with known inputs
+- Verify `SearchCandidate` field values match what `search_loop.py`
+  currently produces for the same inputs
+- Test `_is_within_unreleased_delay` and `_parse_iso_utc` via the new
+  module path
+- Test `dispatch_search` with mocked clients
+
+#### Step 1.6: Run all quality gates
+
+`ruff check`, `ruff format`, `mypy`, `bandit`, `pytest` -- all must pass.
+Existing tests are unaffected since `search_loop.py` is unchanged.
+
+---
+
+### Phase 2: Unified search pipeline (session 2 -- no behavior change)
+
+> **Goal:** Rewrite `run_instance_search()` to use the adapter registry
+> and a single `_run_search_pass()`. Delete all duplicated code.
+
+#### Step 2.1: Extract `_run_search_pass()`
 
 Extract `_run_search_pass()` that takes:
 - `instance`, `client`, `adapt_fn`, `dispatch_fn`
@@ -760,7 +839,7 @@ return searched
 
 Delete `_run_cutoff_pass()` entirely.
 
-#### Step 1.6: Move helper functions
+#### Step 2.2: Delete moved helper functions from `search_loop.py`
 
 | Function | From | To |
 |---|---|---|
@@ -775,22 +854,59 @@ Delete `_run_cutoff_pass()` entirely.
 | `_parse_iso_utc` | `search_loop.py` | `engine/candidates.py` |
 | Page-size/budget helpers | `search_loop.py` | Stay in `search_loop.py` |
 
-#### Step 1.7: Update tests
+These functions were copied in Phase 1; now delete the originals.
 
-- Existing tests should pass with minimal changes (import path updates)
-- Add unit tests for adapter functions in isolation
-- Add a "golden test" that captures exact `search_log` row sequence for a
-  known input, verifying identical output before and after refactor
+#### Step 2.3: Fix import paths in existing test files
+
+- Update any imports that referenced moved functions
 - The `respx`-based integration tests continue to work because actual HTTP
   calls are unchanged
 
-#### Step 1.8: Run all quality gates
+#### Step 2.4: Run all quality gates
 
 `ruff check`, `ruff format`, `mypy`, `bandit`, `pytest` -- all must pass.
 
-### Phase 2: Queue-awareness (new behavior)
+---
 
-#### Step 2.1: Add `get_queue_item_ids()` to clients
+### Phase 3: Test hardening and validation (session 3 -- no behavior change)
+
+> **Goal:** Prove zero behavior drift from the refactor. Harden test
+> coverage for the new adapter modules.
+
+#### Step 3.1: Write golden tests
+
+- Add a "golden test" that captures exact `search_log` row sequence for a
+  known input scenario (Sonarr missing + cutoff, Radarr missing + cutoff)
+- Assert action, item_id, item_type, search_kind, reason, and label match
+  expected values exactly
+- This is the definitive proof that the refactor is behavior-preserving
+
+#### Step 3.2: Add edge-case adapter tests
+
+- Sonarr season-context: synthetic ID generation, group_key, label format
+- Radarr unreleased: all 4 layers of `_radarr_unreleased_reason`
+- Boundary: items at exactly the unreleased delay threshold
+- Boundary: items with null/missing date fields
+
+#### Step 3.3: Review and clean up
+
+- Verify no dead code remains in `search_loop.py`
+- Verify no duplicate function definitions across modules
+- Check that `_write_log` import by `supervisor.py` is unaffected
+
+#### Step 3.4: Run all quality gates
+
+`ruff check`, `ruff format`, `mypy`, `bandit`, `pytest` -- all must pass.
+
+---
+
+### Phase 4: Queue client methods + pipeline integration (session 4 -- new behavior)
+
+> **Goal:** Add queue-fetching to clients and wire queue-gating into the
+> unified pipeline. No UI or settings changes -- queue-awareness is
+> always on (hardcoded) in this phase.
+
+#### Step 4.1: Add `get_queue_item_ids()` to clients
 
 - `SonarrClient.get_queue_item_ids() -> set[int]` -- calls
   `GET /api/v3/queue` with `includeSeries=false`, `includeEpisode=false`,
@@ -801,7 +917,7 @@ Delete `_run_cutoff_pass()` entirely.
 - Add to `ArrClient` ABC:
   `@abstractmethod async def get_queue_item_ids(self) -> set[int]`
 
-#### Step 2.2: Add queue-gating to the unified pipeline
+#### Step 4.2: Add queue-gating to the unified pipeline
 
 At the start of `_run_search_pass()`, call
 `client.get_queue_item_ids()` once.
@@ -824,18 +940,7 @@ Eligibility pipeline order:
 5. **Queue check** (new)
 6. Search dispatch
 
-#### Step 2.3: Add optional `skip_if_queued` instance setting
-
-- Default: `True` (queue-aware by default)
-- DB migration v5:
-  `ALTER TABLE instances ADD COLUMN skip_if_queued INTEGER NOT NULL DEFAULT 1`
-- Add to `Instance` dataclass
-- Add to `create_instance`, `update_instance` `allowed_cols`
-- Add to settings form
-- `_run_search_pass` checks `instance.skip_if_queued` before calling
-  `get_queue_item_ids()`
-
-#### Step 2.4: Handle queue fetch failures gracefully
+#### Step 4.3: Handle queue fetch failures gracefully
 
 If `get_queue_item_ids()` raises `httpx.HTTPError`:
 - Log an `"info"` row: `"queue check unavailable, proceeding without"`
@@ -844,23 +949,52 @@ If `get_queue_item_ids()` raises `httpx.HTTPError`:
 
 This ensures queue-awareness is advisory, not blocking.
 
-#### Step 2.5: Update tests
+#### Step 4.4: Write queue tests
 
 - Mock `GET /api/v3/queue` responses in `respx`
 - Test: item in queue -> skipped with reason `"already in download queue"`
 - Test: item not in queue -> searched normally
 - Test: queue fetch failure -> info log, continue searching
-- Test: `skip_if_queued=False` -> queue not fetched
 - Test: season-context candidates -> queue check skipped
 - Test: paginated queue (>200 items) -> all pages fetched
 
-#### Step 2.6: Update settings form
+#### Step 4.5: Run all quality gates
+
+`ruff check`, `ruff format`, `mypy`, `bandit`, `pytest` -- all must pass.
+
+---
+
+### Phase 5: Queue settings, UI, and polish (session 5 -- new behavior)
+
+> **Goal:** Add the user-facing `skip_if_queued` toggle so
+> queue-awareness can be disabled per instance. Complete test coverage.
+
+#### Step 5.1: Add `skip_if_queued` instance setting
+
+- Default: `True` (queue-aware by default)
+- DB migration v5:
+  `ALTER TABLE instances ADD COLUMN skip_if_queued INTEGER NOT NULL DEFAULT 1`
+- Add to `Instance` dataclass
+- Add to `create_instance`, `update_instance` `allowed_cols`
+- `_run_search_pass` checks `instance.skip_if_queued` before calling
+  `get_queue_item_ids()`
+
+#### Step 5.2: Update settings form
 
 - Add toggle for `skip_if_queued` in instance form
 - Default checked (True)
 - Applicable to both Sonarr and Radarr
 
-#### Step 2.7: Run all quality gates
+#### Step 5.3: Write settings and toggle tests
+
+- Test: `skip_if_queued=False` -> queue not fetched
+- Test: toggle persists correctly in DB
+- Test: new instances default to `skip_if_queued=True`
+- Test: form renders toggle in correct state
+
+#### Step 5.4: Run all quality gates
+
+`ruff check`, `ruff format`, `mypy`, `bandit`, `pytest` -- all must pass.
 
 ---
 
@@ -986,9 +1120,9 @@ a concrete maintainability problem today. Queue-awareness would make it
 worse. The `SearchCandidate` + adapter function pattern is the smallest
 change that solves both problems.
 
-**Do the refactor first (Phase 1), then queue-awareness (Phase 2).** Two
-PRs, each independently testable. Phase 1 changes zero behavior. Phase 2
-adds one new behavior.
+**Five phases, each scoped to one coding session.** Phases 1-3 are the
+internal refactor (zero behavior change). Phases 4-5 add queue-awareness
+(new behavior). Each phase leaves the codebase in a passing state.
 
 **Do not pre-build for Whisparr, Lidarr, or Readarr.** The design makes
 adding them easier later, but no code should target them now.

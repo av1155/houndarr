@@ -27,7 +27,6 @@ logger = logging.getLogger(__name__)
 
 SearchKind = Literal["missing", "cutoff"]
 CycleTrigger = Literal["scheduled", "run_now", "system"]
-ItemType = Literal["episode", "movie"]
 
 _MAX_LIST_PAGES_PER_PASS = 3
 _MISSING_PAGE_SIZE_MIN = 10

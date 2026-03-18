@@ -36,17 +36,17 @@ class AppAdapter:
 
 
 ADAPTERS: dict[InstanceType, AppAdapter] = {
-    InstanceType.sonarr: AppAdapter(
-        adapt_missing=sonarr.adapt_missing,
-        adapt_cutoff=sonarr.adapt_cutoff,
-        dispatch_search=sonarr.dispatch_search,
-        make_client=sonarr.make_client,
-    ),
     InstanceType.radarr: AppAdapter(
         adapt_missing=radarr.adapt_missing,
         adapt_cutoff=radarr.adapt_cutoff,
         dispatch_search=radarr.dispatch_search,
         make_client=radarr.make_client,
+    ),
+    InstanceType.sonarr: AppAdapter(
+        adapt_missing=sonarr.adapt_missing,
+        adapt_cutoff=sonarr.adapt_cutoff,
+        dispatch_search=sonarr.dispatch_search,
+        make_client=sonarr.make_client,
     ),
     InstanceType.lidarr: AppAdapter(
         adapt_missing=lidarr.adapt_missing,

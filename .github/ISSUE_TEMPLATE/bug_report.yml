@@ -55,10 +55,10 @@ body:
       required: true
 
   - type: input
-    id: sonarr-radarr-version
+    id: arr-version
     attributes:
-      label: Sonarr / Radarr Version
-      placeholder: "e.g., Sonarr 4.0.8, Radarr 5.11.0"
+      label: Radarr / Sonarr / Lidarr / Readarr / Whisparr Version
+      placeholder: "e.g., Radarr 5.11.0, Sonarr 4.0.8"
 
   - type: input
     id: docker-version

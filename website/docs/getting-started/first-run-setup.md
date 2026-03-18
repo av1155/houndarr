@@ -26,8 +26,8 @@ Go to **Settings** and click **Add Instance** to connect your *arr instances.
 
 For each instance you need:
 
-- **Name** — a friendly label (e.g., "Sonarr 4K", "Radarr Movies", "Lidarr Music")
-- **Type** — Sonarr, Radarr, Lidarr, Readarr, or Whisparr
+- **Name** — a friendly label (e.g., "Radarr Movies", "Sonarr 4K", "Lidarr Music")
+- **Type** — Radarr, Sonarr, Lidarr, Readarr, or Whisparr
 - **URL** — the base URL of the instance (e.g., `http://sonarr:8989`)
 - **API Key** — found in your *arr instance under Settings > General
 

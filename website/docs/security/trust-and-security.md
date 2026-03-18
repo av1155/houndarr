@@ -21,8 +21,8 @@ version polling, no usage reporting, no crash reporting, and no beacons.
 ### What the server connects to
 
 The only outbound HTTP connections are to **your own *arr instances**
-(Sonarr, Radarr, Lidarr, Readarr, Whisparr), using their standard REST API
-(v3 for Sonarr/Radarr/Whisparr, v1 for Lidarr/Readarr). Each request includes:
+(Radarr, Sonarr, Lidarr, Readarr, Whisparr), using their standard REST API
+(v3 for Radarr/Sonarr/Whisparr, v1 for Lidarr/Readarr). Each request includes:
 
 - An `X-Api-Key` header (the API key you configured for that instance)
 - An `Accept: application/json` header

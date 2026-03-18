@@ -339,7 +339,7 @@ async def test_supervisor_no_instances_starts_cleanly(db: None, master_key: byte
 
 
 # ---------------------------------------------------------------------------
-# Test 5 — Both Sonarr and Radarr instances run concurrently via supervisor
+# Test 5 — Both Radarr and Sonarr instances run concurrently via supervisor
 # ---------------------------------------------------------------------------
 
 
@@ -350,7 +350,7 @@ async def test_supervisor_runs_both_instances(
     radarr_instance: Instance,
     master_key: bytes,
 ) -> None:
-    """Supervisor spawns separate tasks for Sonarr and Radarr instances."""
+    """Supervisor spawns separate tasks for Radarr and Sonarr instances."""
     # Sonarr: returns one episode then empty (second cycle won't fire, but mock it anyway)
     respx.get(f"{SONARR_URL}/api/v3/wanted/missing").mock(
         return_value=httpx.Response(200, json=_MISSING_SONARR_1)

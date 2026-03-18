@@ -4,7 +4,7 @@
   <img src="src/houndarr/static/img/houndarr-logo-dark.png" alt="Houndarr logo" width="220" />
 </p>
 
-> A focused, self-hosted companion for Sonarr, Radarr, Lidarr, Readarr, and Whisparr that automatically searches for missing media in polite, controlled batches.
+> A focused, self-hosted companion for Radarr, Sonarr, Lidarr, Readarr, and Whisparr that automatically searches for missing media in polite, controlled batches.
 >
 > **[Documentation](https://av1155.github.io/houndarr/)** | **[Quick Start](https://av1155.github.io/houndarr/docs/getting-started/quick-start)**
 
@@ -12,7 +12,7 @@
 
 ## What Houndarr Does
 
-Sonarr, Radarr, Lidarr, Readarr, and Whisparr monitor RSS feeds for new
+Radarr, Sonarr, Lidarr, Readarr, and Whisparr monitor RSS feeds for new
 releases, but they do not go back and actively search for content already in
 your library that is missing or below your quality cutoff. Their built-in
 "Search All Missing" button fires every item at once, overwhelming indexer
@@ -24,11 +24,11 @@ It runs as a single Docker container alongside your existing *arr stack.
 
 **Key capabilities:**
 
-- Connects to one or more Sonarr, Radarr, Lidarr, Readarr, and Whisparr instances
+- Connects to one or more Radarr, Sonarr, Lidarr, Readarr, and Whisparr instances
 - Searches for **missing** episodes, movies, albums, and books in small, configurable batches
 - Searches for **cutoff-unmet** items (below your quality profile) separately
-- Sonarr: episode-level search by default, with optional season-context mode
 - Radarr: movie-level search
+- Sonarr: episode-level search by default, with optional season-context mode
 - Lidarr: album-level search by default, with optional artist-context mode
 - Readarr: book-level search by default, with optional author-context mode
 - Whisparr: episode-level search by default, with optional season-context mode

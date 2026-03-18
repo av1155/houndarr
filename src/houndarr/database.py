@@ -18,7 +18,7 @@ SCHEMA_VERSION = 5
 # ---------------------------------------------------------------------------
 # DDL
 # ---------------------------------------------------------------------------
-_INSTANCE_TYPES = "'sonarr', 'radarr', 'lidarr', 'readarr', 'whisparr'"
+_INSTANCE_TYPES = "'radarr', 'sonarr', 'lidarr', 'readarr', 'whisparr'"
 _ITEM_TYPES = "'episode', 'movie', 'album', 'book', 'whisparr_episode'"
 
 _SCHEMA_SQL = f"""

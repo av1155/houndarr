@@ -33,7 +33,7 @@ const FeatureList: FeatureItem[] = [
     title: 'Multi-Instance',
     description: (
       <>
-        Connect one or more Sonarr, Radarr, Lidarr, Readarr, and Whisparr
+        Connect one or more Radarr, Sonarr, Lidarr, Readarr, and Whisparr
         instances, each with their own batch size, sleep interval, cooldown,
         and hourly cap settings.
       </>

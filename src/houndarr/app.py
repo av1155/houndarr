@@ -94,7 +94,9 @@ def create_app() -> FastAPI:
 
     app = FastAPI(
         title="Houndarr",
-        description="A focused, self-hosted companion for Sonarr and Radarr.",
+        description=(
+            "A focused, self-hosted companion for Radarr, Sonarr, Lidarr, Readarr, and Whisparr."
+        ),
         version=__version__,
         docs_url="/api/docs" if settings.dev else None,
         redoc_url=None,

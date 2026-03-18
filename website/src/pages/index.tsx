@@ -85,7 +85,7 @@ function WhatItDoes() {
               Why Houndarr?
             </Heading>
             <p>
-              Sonarr, Radarr, Lidarr, Readarr, and Whisparr monitor RSS feeds
+              Radarr, Sonarr, Lidarr, Readarr, and Whisparr monitor RSS feeds
               for new releases, but they do not go back and actively search for
               content already in your library that is missing or below your
               quality cutoff. Their built-in "Search All Missing" button fires
@@ -131,7 +131,7 @@ export default function Home(): ReactNode {
   return (
     <Layout
       title="Polite media searching for your *arr stack"
-      description="A self-hosted companion for Sonarr, Radarr, Lidarr, Readarr, and Whisparr that automatically searches for missing media in polite, controlled batches.">
+      description="A self-hosted companion for Radarr, Sonarr, Lidarr, Readarr, and Whisparr that automatically searches for missing media in polite, controlled batches.">
       <HomepageHeader />
       <main>
         <HomepageFeatures />

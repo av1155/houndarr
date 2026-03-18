@@ -1,4 +1,4 @@
-"""Houndarr — focused, self-hosted companion for Sonarr and Radarr."""
+"""Houndarr — focused, self-hosted companion for Radarr, Sonarr, Lidarr, Readarr, and Whisparr."""
 
 from pathlib import Path
 

@@ -6,7 +6,7 @@ description: What Houndarr does, how it decides what to search, and why most ite
 
 # How Houndarr Works
 
-Houndarr is a search scheduler for Sonarr, Radarr, Lidarr, Readarr, and Whisparr. It triggers search commands in small, rate-limited batches so you don't have to hit "Search All Missing" and overwhelm your indexers.
+Houndarr is a search scheduler for Radarr, Sonarr, Lidarr, Readarr, and Whisparr. It triggers search commands in small, rate-limited batches so you don't have to hit "Search All Missing" and overwhelm your indexers.
 
 It does not download anything, parse releases, evaluate quality, or replace your *arr instances. It only decides **when** to ask them to search and **how many** items to include per batch.
 

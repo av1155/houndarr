@@ -5,7 +5,7 @@ This file is the primary source of truth for autonomous agents operating here.
 
 ## Project Overview
 
-Houndarr is a self-hosted companion for Sonarr, Radarr, Lidarr, Readarr, and
+Houndarr is a self-hosted companion for Radarr, Sonarr, Lidarr, Readarr, and
 Whisparr that automatically searches for missing and cutoff-unmet media in
 small, rate-limited batches. It runs as a single Docker container alongside
 an existing *arr stack.
@@ -111,7 +111,7 @@ identical check names so branch protection is satisfied.
 | `release.yml` | `v*` tag push | Validates VERSION == tag, extracts CHANGELOG block, creates GitHub Release |
 | `dockerfile-lint.yml` | Changes to `Dockerfile` | `hadolint Dockerfile` |
 | `workflow-lint.yml` | Changes to `.github/workflows/**` | `actionlint` via reviewdog |
-| `api-snapshot-refresh.yml` | Weekly (Monday 10:00 UTC) + manual | Fetches upstream Sonarr/Radarr/Whisparr/Lidarr/Readarr OpenAPI specs, updates `docs/api/` snapshots and `tests/test_docs_api.py` hashes, opens a PR if changed |
+| `api-snapshot-refresh.yml` | Weekly (Monday 10:00 UTC) + manual | Fetches upstream Radarr/Sonarr/Whisparr/Lidarr/Readarr OpenAPI specs, updates `docs/api/` snapshots and `tests/test_docs_api.py` hashes, opens a PR if changed |
 | `pages.yml` | Pushes to `main` touching `website/**` | Deploys docs site to GitHub Pages |
 | `test-deploy.yml` | PRs touching `website/**` | Tests Docusaurus build without deploying |
 | `cleanup-actions-cache.yml` | Daily (05:00 UTC) + manual | Prunes stale GitHub Actions caches |
@@ -284,7 +284,7 @@ src/houndarr/
 | Table | Purpose | Key constraints |
 |-------|---------|-----------------|
 | `settings` | Key-value config store | `key TEXT PK` |
-| `instances` | *arr instance configs | `type CHECK IN ('sonarr','radarr','lidarr','readarr','whisparr')`; per-type `*_search_mode` columns with CHECK constraints |
+| `instances` | *arr instance configs | `type CHECK IN ('radarr','sonarr','lidarr','readarr','whisparr')`; per-type `*_search_mode` columns with CHECK constraints |
 | `cooldowns` | Per-item search cooldown tracking | `instance_id FK→instances ON DELETE CASCADE`; `UNIQUE(instance_id, item_id, item_type)` |
 | `search_log` | Audit trail for every search cycle | `instance_id FK→instances ON DELETE SET NULL`; `action CHECK IN ('searched','skipped','error','info')` |
 

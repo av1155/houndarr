@@ -97,7 +97,7 @@ def _blank_instance() -> Instance:
     return Instance(
         id=0,
         name="",
-        type=InstanceType.sonarr,
+        type=InstanceType.radarr,
         url="",
         api_key="",
         enabled=True,
@@ -120,8 +120,8 @@ def _blank_instance() -> Instance:
 
 
 _CLIENT_CONSTRUCTORS: dict[InstanceType, type[ArrClient]] = {
-    InstanceType.sonarr: SonarrClient,
     InstanceType.radarr: RadarrClient,
+    InstanceType.sonarr: SonarrClient,
     InstanceType.lidarr: LidarrClient,
     InstanceType.readarr: ReadarrClient,
     InstanceType.whisparr: WhisparrClient,
@@ -353,7 +353,7 @@ async def instance_test_connection(
     api_key: Annotated[str, Form()],
     instance_id: Annotated[str, Form()] = "",
 ) -> HTMLResponse:
-    """Test Sonarr/Radarr connectivity and return a status snippet.
+    """Test *arr instance connectivity and return a status snippet.
 
     When testing from the edit form, ``api_key`` may be the unchanged sentinel
     value (``__UNCHANGED__``).  In that case the existing stored key is

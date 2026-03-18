@@ -9,7 +9,7 @@ body:
         ## Scope Check
 
         Houndarr is a **single-purpose tool** that searches for missing and cutoff-unmet
-        media in Sonarr, Radarr, Lidarr, Readarr, and Whisparr, in controlled batches.
+        media in Radarr, Sonarr, Lidarr, Readarr, and Whisparr, in controlled batches.
 
         Before submitting, please confirm your feature is within scope.
 

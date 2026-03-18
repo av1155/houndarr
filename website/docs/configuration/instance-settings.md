@@ -12,10 +12,10 @@ indexer/API pressure and avoid bans.
 
 ## Search command contract
 
+- **Radarr:** Sends movie-level commands (`MoviesSearch` with `movieIds`).
 - **Sonarr (default):** Sends episode-level commands (`EpisodeSearch` with `episodeIds`).
 - **Sonarr (advanced):** Missing pass can use season-context commands
   (`SeasonSearch` with `seriesId` + `seasonNumber`) when enabled per instance.
-- **Radarr:** Sends movie-level commands (`MoviesSearch` with `movieIds`).
 - **Lidarr (default):** Sends album-level commands (`AlbumSearch` with `albumIds`).
 - **Lidarr (advanced):** Missing pass can use artist-context commands
   (`ArtistSearch` with `artistId`) when enabled per instance.

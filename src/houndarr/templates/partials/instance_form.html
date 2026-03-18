@@ -55,8 +55,8 @@
                     data-instance-field="type"
                     class="w-full h-11 bg-slate-900/80 border border-slate-700/80 rounded-lg px-3 text-sm text-white
                            focus:outline-none focus:border-brand-400/80 focus:ring-2 focus:ring-brand-500/25">
-              <option value="sonarr" {% if is_edit and instance.type.value == 'sonarr' %}selected{% endif %}>Sonarr</option>
               <option value="radarr" {% if is_edit and instance.type.value == 'radarr' %}selected{% endif %}>Radarr</option>
+              <option value="sonarr" {% if is_edit and instance.type.value == 'sonarr' %}selected{% endif %}>Sonarr</option>
               <option value="lidarr" {% if is_edit and instance.type.value == 'lidarr' %}selected{% endif %}>Lidarr</option>
               <option value="readarr" {% if is_edit and instance.type.value == 'readarr' %}selected{% endif %}>Readarr</option>
               <option value="whisparr" {% if is_edit and instance.type.value == 'whisparr' %}selected{% endif %}>Whisparr</option>
@@ -72,7 +72,7 @@
                    data-readarr-placeholder="http://readarr:8787"
                    data-whisparr-placeholder="http://whisparr:6969"
                    value="{{ instance.url if is_edit else '' }}"
-                   placeholder="http://sonarr:8989"
+                   placeholder="http://radarr:7878"
                    class="w-full h-11 bg-slate-900/80 border border-slate-700/80 rounded-lg px-3 text-sm text-white placeholder:text-slate-500
                           focus:outline-none focus:border-brand-400/80 focus:ring-2 focus:ring-brand-500/25" />
           </div>

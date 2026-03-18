@@ -54,7 +54,7 @@ jobs:
           api_dir = repo / "docs" / "api"
           tests_file = repo / "tests" / "test_docs_api.py"
 
-          SPECS = ["sonarr", "radarr", "whisparr", "lidarr", "readarr"]
+          SPECS = ["radarr", "sonarr", "lidarr", "readarr", "whisparr"]
 
           changed = False
 

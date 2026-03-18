@@ -2,7 +2,8 @@
 
 Self-hosted context notes
 --------------------------
-Houndarr is designed to talk to Sonarr and Radarr instances that commonly run
+Houndarr is designed to talk to Radarr, Sonarr, Lidarr, Readarr, and Whisparr
+instances that commonly run
 on the same Docker network or LAN as Houndarr itself.  Private IP ranges are
 therefore *legitimate and expected* targets.  This module does **not** block
 RFC-1918 ranges wholesale; instead it only rejects the most obviously dangerous

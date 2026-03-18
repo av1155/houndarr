@@ -191,8 +191,8 @@ class Supervisor:
     async def _instance_loop(self, instance_id: int) -> None:
         """Run search cycles for one instance until cancelled.
 
-        A one-time startup grace delay gives co-located services (Sonarr, Radarr)
-        time to become ready before the first cycle fires.  Connection errors are
+        A one-time startup grace delay gives co-located *arr services time
+        to become ready before the first cycle fires.  Connection errors are
         logged to ``search_log`` only on state transitions (first failure and
         recovery) to avoid inflating the dashboard error counter with retry noise.
         """

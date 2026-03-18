@@ -226,7 +226,7 @@ def test_login_page_includes_browser_identity_metadata(app: TestClient) -> None:
     assert response.status_code == 200
     assert (
         b'<meta name="description" content="A focused, self-hosted companion for '
-        b'Sonarr and Radarr." />' in response.content
+        b'Radarr, Sonarr, Lidarr, Readarr, and Whisparr." />' in response.content
     )
     assert b'<meta name="application-name" content="Houndarr" />' in response.content
     assert b'<meta name="apple-mobile-web-app-title" content="Houndarr" />' in response.content

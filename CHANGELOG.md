@@ -47,7 +47,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Connection errors now write exactly one `action="error"` log row per outage instead of one per retry, preventing the dashboard *24h errors* counter from inflating during startup races or service restarts (#140)
 - A recovery `action="info"` row is now written to `search_log` when an unreachable instance becomes reachable again, making the recovery event visible on the Logs page (#140)
-- A 10-second startup grace delay before the first search cycle gives co-located Sonarr/Radarr services time to become ready (#140)
+- A 10-second startup grace delay before the first search cycle gives co-located *arr services time to become ready (#140)
 
 ---
 
@@ -117,7 +117,7 @@ First stable public release.
 ### Added
 
 #### Core
-- Automated missing-media search engine for Sonarr and Radarr instances
+- Automated missing-media search engine for Radarr and Sonarr instances
 - Episode-level search for Sonarr (`EpisodeSearch` + `episodeIds`) with optional
   season-context mode (`SeasonSearch`)
 - Movie-level search for Radarr (`MoviesSearch` + `movieIds`)

@@ -184,7 +184,7 @@ def test_status_returns_multiple_instances(app: TestClient) -> None:
     data = resp.json()
     assert len(data) == 2
     names = {d["name"] for d in data}
-    assert names == {"My Sonarr", "My Radarr"}
+    assert names == {"My Radarr", "My Sonarr"}
 
 
 def test_status_includes_24h_outcomes_and_last_activity(app: TestClient) -> None:

@@ -39,8 +39,8 @@ async def is_on_cooldown(
 
     Args:
         instance_id: Owning instance primary key.
-        item_id: Sonarr episode ID or Radarr movie ID.
-        item_type: ``"episode"`` or ``"movie"``.
+        item_id: Item identifier (e.g. episode, movie, album, or book ID).
+        item_type: ``"episode"``, ``"movie"``, ``"album"``, ``"book"``, or ``"whisparr_episode"``.
         cooldown_days: Number of days before the same item can be re-searched.
             Pass ``0`` to disable cooldowns entirely.
 
@@ -79,8 +79,8 @@ async def record_search(
 
     Args:
         instance_id: Owning instance primary key.
-        item_id: Sonarr episode ID or Radarr movie ID.
-        item_type: ``"episode"`` or ``"movie"``.
+        item_id: Item identifier (e.g. episode, movie, album, or book ID).
+        item_type: ``"episode"``, ``"movie"``, ``"album"``, ``"book"``, or ``"whisparr_episode"``.
     """
     now = _iso(_now_utc())
     async with get_db() as db:

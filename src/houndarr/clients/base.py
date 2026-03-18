@@ -86,7 +86,7 @@ class ArrClient(ABC):
         """Return ``True`` if the instance is reachable and healthy.
 
         Uses the system/status endpoint at :attr:`_SYSTEM_STATUS_PATH`.
-        Defaults to ``/api/v3/system/status`` (Sonarr, Radarr, Whisparr);
+        Defaults to ``/api/v3/system/status`` (Radarr, Sonarr, Whisparr);
         Lidarr and Readarr override to ``/api/v1/system/status``.
         """
         try:

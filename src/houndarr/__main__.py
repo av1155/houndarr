@@ -76,7 +76,7 @@ def cli(
     secure_cookies: bool,
     trusted_proxies: str,
 ) -> None:
-    """Houndarr — search for missing media in Sonarr and Radarr, politely.
+    """Houndarr — search for missing media in your *arr stack, politely.
 
     A focused self-hosted companion that automatically triggers searches for
     missing and cutoff-unmet media in controlled batches, keeping your

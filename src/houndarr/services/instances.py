@@ -31,8 +31,8 @@ from houndarr.database import get_db
 class InstanceType(StrEnum):
     """Supported *arr application types."""
 
-    sonarr = "sonarr"
     radarr = "radarr"
+    sonarr = "sonarr"
     lidarr = "lidarr"
     readarr = "readarr"
     whisparr = "whisparr"
@@ -161,7 +161,7 @@ async def create_instance(
     Args:
         master_key: Fernet key used to encrypt *api_key* before storage.
         name: Human-readable label for the instance.
-        type: One of ``sonarr``, ``radarr``, ``lidarr``, ``readarr``, ``whisparr``.
+        type: One of ``radarr``, ``sonarr``, ``lidarr``, ``readarr``, ``whisparr``.
         url: Base URL of the *arr instance (e.g. ``http://sonarr:8989``).
         api_key: Plaintext API key — will be encrypted before being written.
         enabled: Whether the search engine should process this instance.

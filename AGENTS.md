@@ -54,7 +54,7 @@ Run **all five** before every commit. CI enforces the same checks.
 ## Running Tests
 
 ```bash
-# Full suite (563 tests, async — count includes parametrised expansions)
+# Full suite (571 tests, async — count includes parametrised expansions)
 .venv/bin/pytest
 
 # Single file
@@ -231,7 +231,7 @@ src/houndarr/
   crypto.py            # Fernet encrypt/decrypt, master key management
   database.py          # get_db() context manager, schema migrations
   clients/             # httpx-based *arr API clients
-    base.py            # ArrClient ABC with _get()/_post() + raise_for_status()
+    base.py            # ArrClient ABC with _get()/_post() + raise_for_status() + get_queue_status()
     sonarr.py          # SonarrClient (episode/season search, v3 API)
     radarr.py          # RadarrClient (movie search, v3 API)
     lidarr.py          # LidarrClient (album/artist search, v1 API)
@@ -239,7 +239,7 @@ src/houndarr/
     whisparr.py        # WhisparrClient (episode/season search, v3 API)
   engine/
     candidates.py      # SearchCandidate dataclass, ItemType, date helpers
-    search_loop.py     # run_instance_search() — unified search pipeline
+    search_loop.py     # run_instance_search() — unified search pipeline (queue-backpressure gate)
     supervisor.py      # Supervisor — one asyncio.Task per enabled instance
     adapters/
       __init__.py      # AppAdapter dataclass, ADAPTERS registry, get_adapter()
@@ -263,7 +263,7 @@ src/houndarr/
 
 ### Key patterns
 
-- **Database:** SQLite via aiosqlite; schema version 5; `get_db()` async
+- **Database:** SQLite via aiosqlite; schema version 7; `get_db()` async
   context manager opens a fresh connection per call (WAL mode, FKs enabled)
 - **Config:** `AppSettings` is a plain dataclass (not Pydantic); `get_settings()`
   is a lazy singleton
@@ -279,17 +279,17 @@ src/houndarr/
 - **search_log:** Every search attempt writes a row with action
   `searched`/`skipped`/`error`/`info`
 
-### Database schema (SQLite, schema version 5)
+### Database schema (SQLite, schema version 7)
 
 | Table | Purpose | Key constraints |
 |-------|---------|-----------------|
 | `settings` | Key-value config store | `key TEXT PK` |
-| `instances` | *arr instance configs | `type CHECK IN ('radarr','sonarr','lidarr','readarr','whisparr')`; per-type `*_search_mode` columns with CHECK constraints |
+| `instances` | *arr instance configs | `type CHECK IN ('radarr','sonarr','lidarr','readarr','whisparr')`; per-type `*_search_mode` columns with CHECK constraints; `post_release_grace_hrs` (default 6); `queue_limit` (default 0) |
 | `cooldowns` | Per-item search cooldown tracking | `instance_id FK→instances ON DELETE CASCADE`; `UNIQUE(instance_id, item_id, item_type)` |
 | `search_log` | Audit trail for every search cycle | `instance_id FK→instances ON DELETE SET NULL`; `action CHECK IN ('searched','skipped','error','info')` |
 
 Full DDL, column definitions, indexes, and migrations (`_migrate_to_v2`
-through `_migrate_to_v5`) are in `src/houndarr/database.py`. Bump
+through `_migrate_to_v7`) are in `src/houndarr/database.py`. Bump
 `SCHEMA_VERSION` when adding new migrations.
 
 ### *arr API reference (local)

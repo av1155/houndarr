@@ -58,12 +58,13 @@ Minimum days before retrying the same missing item.
 - **Default:** `14`
 - Larger values reduce repeat search noise.
 
-### Unreleased Delay (hours)
+### Post-Release Grace (hours)
 
-Minimum delay after release date before searching.
+Hours to wait after an item's release date before searching.
 
-- **Default:** `36`
-- If the item is still inside this window, Houndarr logs `unreleased delay (...)` and skips it.
+- **Default:** `6`
+- Items still within this window are logged as `post-release grace (Nh)` and skipped.
+- Items that have not been released yet (no release date, or date in the future) are always skipped with reason `not yet released`, regardless of this setting.
 
 Release date evaluation varies by app type:
 
@@ -146,11 +147,21 @@ Maximum successful cutoff searches per hour.
 Cutoff searches use separate cap/cooldown settings from missing searches so they
 do not consume the same budget.
 
+## Queue backpressure
+
+When `Queue Limit` is set above zero, Houndarr checks the instance's download
+queue before each cycle. If the total queue count meets or exceeds the limit,
+the entire cycle is skipped and logged as `queue backpressure (N/M)`.
+
+- **Default:** `0` (disabled)
+- If the queue endpoint is unreachable, the search proceeds normally (fails open).
+- This prevents Houndarr from piling up work when the download client is already busy.
+
 ## Fair backlog scanning
 
 Houndarr does not stop at the first wanted page. During each cycle, it can scan
-deeper pages when top candidates are repeatedly ineligible (cooldown, unreleased
-delay, or caps), but it stays bounded:
+deeper pages when top candidates are repeatedly ineligible (cooldown, post-release
+grace, or caps), but it stays bounded:
 
 - Per-pass list paging has a hard cap (no unbounded page walks)
 - Per-pass candidate evaluation has a hard scan budget
@@ -170,7 +181,8 @@ Skips are normal — see [How Houndarr Works](/docs/concepts/how-houndarr-works#
 | Sleep (minutes) | `30` |
 | Hourly Cap | `4` |
 | Cooldown (days) | `14` |
-| Unreleased Delay (hrs) | `36` |
+| Post-Release Grace (hrs) | `6` |
+| Queue Limit | `0` (disabled) |
 | Cutoff search | Off |
 | Cutoff Batch | `1` |
 | Cutoff Cooldown | `21` |

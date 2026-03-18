@@ -87,14 +87,16 @@
       </div>
       <div class="rounded-lg border border-slate-800 bg-slate-950/40 p-3">
         <div class="flex items-center justify-between gap-3">
-          <h3 class="text-sm font-semibold text-slate-200">Unreleased Delay (hrs)</h3>
+          <h3 class="text-sm font-semibold text-slate-200">Post-Release Grace (hrs)</h3>
           <span
             class="text-[11px] px-2 py-0.5 rounded-full bg-brand-900/40 text-brand-200 border border-brand-800/40"
-            >Default: 36</span
+            >Default: 6</span
           >
         </div>
         <p class="mt-1 text-sm text-slate-300">
-          Wait after release date before searching. If still inside this window, item is skipped.
+          Hours to wait after an item's release date before searching. Items still within this
+          window are skipped. Unreleased items (no release date yet, or release date in the future)
+          are always skipped regardless of this setting.
         </p>
       </div>
       <div class="rounded-lg border border-slate-800 bg-slate-950/40 p-3">
@@ -112,6 +114,29 @@
         <p class="mt-2 text-xs text-amber-300">
           Advanced warning: broader searches may produce noisier results. Sonarr/Whisparr season
           search is not pack-only and may still pull singles.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <section class="help-reveal rounded-xl border border-slate-800 bg-slate-900 p-5">
+    <h2 class="text-lg font-semibold text-slate-100 mb-1">Queue Backpressure</h2>
+    <p class="text-xs text-slate-400 mb-4">
+      Prevents Houndarr from adding work when the download client is already busy.
+    </p>
+    <div class="space-y-3">
+      <div class="rounded-lg border border-slate-800 bg-slate-950/40 p-3">
+        <div class="flex items-center justify-between gap-3">
+          <h3 class="text-sm font-semibold text-slate-200">Queue Limit</h3>
+          <span
+            class="text-[11px] px-2 py-0.5 rounded-full bg-brand-900/40 text-brand-200 border border-brand-800/40"
+            >Default: 0 (disabled)</span
+          >
+        </div>
+        <p class="mt-1 text-sm text-slate-300">
+          When set above zero, Houndarr checks the instance's download queue before each cycle.
+          If the total queue count meets or exceeds this limit, the entire cycle is skipped.
+          If the queue endpoint is unreachable, the search proceeds normally.
         </p>
       </div>
     </div>
@@ -188,7 +213,10 @@
         Cooldown: <strong class="text-slate-100">14 days</strong>
       </div>
       <div class="rounded border border-slate-800 bg-slate-950/40 px-3 py-2 text-slate-300">
-        Unreleased Delay: <strong class="text-slate-100">36 hrs</strong>
+        Post-Release Grace: <strong class="text-slate-100">6 hrs</strong>
+      </div>
+      <div class="rounded border border-slate-800 bg-slate-950/40 px-3 py-2 text-slate-300">
+        Queue Limit: <strong class="text-slate-100">0 (disabled)</strong>
       </div>
       <div class="rounded border border-slate-800 bg-slate-950/40 px-3 py-2 text-slate-300">
         Cutoff Search: <strong class="text-slate-100">Off</strong>
@@ -199,7 +227,7 @@
       <div class="rounded border border-slate-800 bg-slate-950/40 px-3 py-2 text-slate-300">
         Cutoff Cooldown: <strong class="text-slate-100">21 days</strong>
       </div>
-      <div class="rounded border border-slate-800 bg-slate-950/40 px-3 py-2 text-slate-300 sm:col-span-2">
+      <div class="rounded border border-slate-800 bg-slate-950/40 px-3 py-2 text-slate-300">
         Cutoff Cap: <strong class="text-slate-100">1</strong>
       </div>
     </div>

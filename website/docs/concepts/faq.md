@@ -8,13 +8,13 @@ description: Answers to frequently asked questions about Houndarr.
 
 ## "I have 500 monitored movies. Why did Houndarr only search 3?"
 
-Monitored doesn't mean wanted. Most of your library is already downloaded and meeting your quality cutoff, so those items never appear in a wanted list. Of the items that are wanted, cooldowns, unreleased delays, and hourly caps filter out most of the rest.
+Monitored doesn't mean wanted. Most of your library is already downloaded and meeting your quality cutoff, so those items never appear in a wanted list. Of the items that are wanted, cooldowns, post-release grace windows, and hourly caps filter out most of the rest.
 
 See [How Houndarr Works](/docs/concepts/how-houndarr-works#why-only-a-few-items-get-searched-each-cycle) for the full breakdown.
 
 ## "Why is Houndarr skipping so much?"
 
-Each skip has a reason logged alongside it — cooldown, unreleased delay, or hourly cap. A high skip count with zero errors means Houndarr is pacing itself correctly. See [How Houndarr Works](/docs/concepts/how-houndarr-works#what-skipped-means-in-the-logs) for what each reason means.
+Each skip has a reason logged alongside it — cooldown, post-release grace, hourly cap, or queue backpressure. A high skip count with zero errors means Houndarr is pacing itself correctly. See [How Houndarr Works](/docs/concepts/how-houndarr-works#what-skipped-means-in-the-logs) for what each reason means.
 
 ## "Does Houndarr decide whether my file meets cutoff?"
 
@@ -22,9 +22,13 @@ No. Your *arr instance maintains the "Wanted > Cutoff Unmet" list based on your 
 
 ## "Why are future or recently-released titles being skipped?"
 
-Houndarr has an **unreleased delay** setting (default: 36 hours). Items whose release date is in the future or within the delay window are skipped until the window clears. This avoids hammering indexers for content that may not be available yet.
+Items with no release date or a release date in the future are always skipped (`not yet released`). Items that have been released but are still within the **post-release grace** window (default: 6 hours) are also skipped until the window clears. This avoids hammering indexers for content that may not be available yet.
 
 For Radarr, release timing uses a priority chain: `digitalRelease` → `physicalRelease` → `releaseDate` → `inCinemas`. If none of those dates are set, or the title is marked as unavailable, it will be skipped.
+
+## "What does 'queue backpressure' mean in the logs?"
+
+If you set a **Queue Limit** on an instance, Houndarr checks the download queue before each cycle. When the queue count meets or exceeds the limit, the entire cycle is skipped and logged as `queue backpressure (N/M)`. This prevents Houndarr from adding searches when the download client is already busy. If the queue endpoint is unreachable, the search proceeds normally.
 
 ## "Does Houndarr search my whole library?"
 

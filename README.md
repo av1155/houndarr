@@ -34,6 +34,7 @@ It runs as a single Docker container alongside your existing *arr stack.
 - Whisparr: episode-level search by default, with optional season-context mode
 - Per-item cooldown prevents re-searching the same item too soon
 - Per-instance hourly API cap keeps indexer usage in check
+- Optional download-queue backpressure gate skips cycles when the queue is full
 - Bounded multi-page scanning so deep backlog items are not starved
 - Live dashboard with instance status cards and run-now buttons
 - Filterable, searchable log viewer with multi-format copy/export

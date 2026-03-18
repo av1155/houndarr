@@ -47,6 +47,8 @@ Each instance has its own search settings. The defaults are conservative and saf
 | Sleep (minutes) | 30 | Wait between cycles |
 | Hourly Cap | 4 | Max searches per hour |
 | Cooldown (days) | 14 | Min days before re-searching an item |
+| Post-Release Grace (hrs) | 6 | Hours to wait after release date before searching |
+| Queue Limit | 0 (disabled) | Skip cycle when download queue meets or exceeds this count |
 
 For detailed explanations of all settings, see [Instance Settings](/docs/configuration/instance-settings).
 

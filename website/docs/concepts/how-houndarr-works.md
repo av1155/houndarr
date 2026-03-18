@@ -19,7 +19,7 @@ It does not download anything, parse releases, evaluate quality, or replace your
    (only monitored items that are missing or below quality cutoff)
        ↓
 3. Houndarr applies its scheduling rules to each candidate
-   (cooldown, hourly cap, unreleased delay, batch size)
+   (cooldown, hourly cap, post-release grace, batch size)
        ↓
 4. Eligible items → search command sent to the instance
        ↓
@@ -66,7 +66,7 @@ Your monitored library
         ▼
   Wanted list (much smaller)
         │
-        │  Houndarr filter: cooldown, unreleased delay, hourly cap
+         │  Houndarr filter: cooldown, post-release grace, hourly cap
         ▼
   Eligible this cycle (smaller still)
         │
@@ -75,7 +75,7 @@ Your monitored library
   Actually searched (often just 1–3 items)
 ```
 
-For example, if you have 500 monitored movies in Radarr but only 50 are cutoff-unmet, and 35 of those are on cooldown, 8 are unreleased, and your batch is 1 — Houndarr searches 1 movie that cycle. The rest wait for cooldowns to expire or release windows to pass, and Houndarr works through them over days and weeks.
+For example, if you have 500 monitored movies in Radarr but only 50 are cutoff-unmet, and 35 of those are on cooldown, 8 are still in their post-release grace window, and your batch is 1 — Houndarr searches 1 movie that cycle. The rest wait for cooldowns to expire or grace windows to pass, and Houndarr works through them over days and weeks.
 
 ## The two search passes
 
@@ -83,7 +83,7 @@ Each enabled instance runs two independent passes:
 
 | Pass | What it searches | Key controls |
 |------|-----------------|--------------|
-| **Missing** | Items from the instance's `wanted/missing` list | Batch size, sleep interval, hourly cap, cooldown, unreleased delay |
+| **Missing** | Items from the instance's `wanted/missing` list | Batch size, sleep interval, hourly cap, cooldown, post-release grace |
 | **Cutoff** | Items from the instance's `wanted/cutoff` list | Cutoff batch, cutoff cap, cutoff cooldown |
 
 Cutoff search is **off by default**. Enable it only after missing items are under control so the two passes don't compete for the same indexer budget.
@@ -95,8 +95,10 @@ Every item Houndarr considers but does not search is logged as `skipped` with a 
 | Reason in logs | What it means |
 |----------------|---------------|
 | `cooldown (N days remaining)` | Item was searched recently; waiting to retry |
-| `unreleased delay (N hrs remaining)` | Release date is too recent or in the future |
+| `not yet released` | Item has no release date or release date is in the future |
+| `post-release grace (Nh)` | Release date has passed but the grace window hasn't elapsed yet |
 | `hourly cap reached` | This instance has hit its per-hour search limit |
+| `queue backpressure (N/M)` | Download queue has N items, at or above the configured limit of M (cycle-level skip) |
 
 A high skip count with zero errors means Houndarr is pacing itself correctly — examining candidates, finding most ineligible under your rules, and waiting patiently.
 

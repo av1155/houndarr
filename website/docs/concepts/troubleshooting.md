@@ -48,13 +48,15 @@ By default, system rows (supervisor startup messages) are hidden. Use the filter
 
 In your instance's cutoff-unmet view, each item shows when it was last searched. If those timestamps match recent Houndarr log entries, you have confirmed end-to-end that the search commands are reaching the instance and being executed.
 
-### Step 4 — Expect skips for cooldown and unreleased items
+### Step 4 — Expect skips for cooldown, grace, and queue items
 
 If most of your log entries say `skipped`, check the reasons:
 
 - **`cooldown (N days remaining)`** — the item was searched recently; Houndarr is waiting before trying again. This is intentional.
-- **`unreleased delay (N hrs remaining)`** — the release date is too recent or in the future. Houndarr will search once the delay window clears.
+- **`not yet released`** — the item has no release date or the release date is in the future.
+- **`post-release grace (Nh)`** — the release date has passed but the grace window hasn't elapsed yet. Houndarr will search once it clears.
 - **`hourly cap reached`** — your per-hour search limit has been hit for this cycle.
+- **`queue backpressure (N/M)`** — the download queue has N items, at or above your configured limit of M. The entire cycle was skipped.
 
 These are all normal scheduling behavior.
 

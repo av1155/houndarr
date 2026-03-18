@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.1] - 2026-03-17
+
+### Fixed
+
+- Settings help panel now describes search modes for all four apps that support them (Sonarr, Lidarr, Readarr, Whisparr) instead of Sonarr only (#210)
+- All *arr app listings across code, UI, docs, and website now use the canonical order: Radarr, Sonarr, Lidarr, Readarr, Whisparr (#210)
+- Bug report template version field expanded from "Sonarr / Radarr" to include all five apps (#210)
+
+---
+
 ## [1.1.0] - 2026-03-17
 
 ### Added

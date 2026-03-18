@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2026-03-18
+
+### Added
+
+- Optional per-instance download-queue backpressure gate skips the entire search cycle when the queue meets or exceeds a configurable limit (#216)
+
+### Fixed
+
+- Missing-pass starvation when all page-one candidates are on cooldown; the search loop now scans up to five wanted-list pages per pass (#214)
+- Replaced the monolithic `unreleased_delay_hrs` (default 36h) with a non-configurable pre-release gate and a separate `post_release_grace_hrs` (default 6h), so truly unreleased items are always blocked while recently-released items clear faster (#214)
+- Existing instances with the old 36h default are migrated to 6h; custom values are preserved (#214)
+
+### Changed
+
+- Database schema migrated to v7 with `post_release_grace_hrs` replacing `unreleased_delay_hrs` (v6) and new `queue_limit` column (v7) (#214, #216)
+- Documentation updated across AGENTS.md, in-app settings help, website docs, and README to reflect post-release grace, queue backpressure, and updated log reason strings (#218)
+
+---
+
 ## [1.1.1] - 2026-03-17
 
 ### Fixed

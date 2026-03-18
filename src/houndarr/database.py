@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Schema version — bump when adding new migrations
 # ---------------------------------------------------------------------------
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 
 # ---------------------------------------------------------------------------
 # DDL
@@ -37,8 +37,8 @@ CREATE TABLE IF NOT EXISTS instances (
     sleep_interval_mins  INTEGER NOT NULL DEFAULT 30,
     hourly_cap           INTEGER NOT NULL DEFAULT 4,
     cooldown_days        INTEGER NOT NULL DEFAULT 14,
-    unreleased_delay_hrs INTEGER NOT NULL DEFAULT 36,
-    cutoff_enabled       INTEGER NOT NULL DEFAULT 0,
+    post_release_grace_hrs INTEGER NOT NULL DEFAULT 6,
+    cutoff_enabled         INTEGER NOT NULL DEFAULT 0,
     cutoff_batch_size    INTEGER NOT NULL DEFAULT 1,
     cutoff_cooldown_days INTEGER NOT NULL DEFAULT 21,
     cutoff_hourly_cap    INTEGER NOT NULL DEFAULT 1,
@@ -157,6 +157,8 @@ async def _run_migrations(db: aiosqlite.Connection, from_version: int) -> None:
         await _migrate_to_v4(db)
     if from_version < 5:
         await _migrate_to_v5(db)
+    if from_version < 6:
+        await _migrate_to_v6(db)
 
     logger.info("Migrated database from schema version %d to %d", from_version, SCHEMA_VERSION)
     await db.execute(
@@ -345,6 +347,43 @@ async def _migrate_to_v5(db: aiosqlite.Connection) -> None:
 
     # Re-enable FK enforcement after table recreation
     await db.execute("PRAGMA foreign_keys=ON")
+
+
+async def _migrate_to_v6(db: aiosqlite.Connection) -> None:
+    """Rename ``unreleased_delay_hrs`` to ``post_release_grace_hrs``.
+
+    The old 36-hour default is migrated to the new 6-hour default for
+    instances that were never customised.  Instances with a user-set value
+    (anything other than 36) keep their existing value.
+
+    SQLite does not support ``RENAME COLUMN`` with default changes, so the
+    migration adds the new column, copies values, and drops the old column
+    via table recreation.
+    """
+    if not await _column_exists(db, "instances", "unreleased_delay_hrs"):
+        # Already migrated (e.g. fresh DB created at schema version 6).
+        return
+
+    # Add the new column
+    await db.execute(
+        "ALTER TABLE instances ADD COLUMN post_release_grace_hrs INTEGER NOT NULL DEFAULT 6"
+    )
+
+    # Copy existing values: 36 → 6 (old default → new default), others as-is
+    await db.execute(
+        """
+        UPDATE instances
+        SET post_release_grace_hrs = CASE
+            WHEN unreleased_delay_hrs = 36 THEN 6
+            ELSE unreleased_delay_hrs
+        END
+        """
+    )
+
+    # Drop the old column.  SQLite 3.35+ supports DROP COLUMN directly.
+    # For older SQLite (pre-3.35), table recreation is needed — but Python
+    # 3.12 ships with SQLite ≥3.40, so DROP COLUMN is safe.
+    await db.execute("ALTER TABLE instances DROP COLUMN unreleased_delay_hrs")
 
 
 async def _ensure_v3_indexes(db: aiosqlite.Connection) -> None:

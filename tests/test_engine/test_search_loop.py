@@ -111,7 +111,7 @@ def _make_instance(
     batch_size: int = 10,
     hourly_cap: int = 20,
     cooldown_days: int = 7,
-    unreleased_delay_hrs: int = 24,
+    post_release_grace_hrs: int = 24,
     enabled: bool = True,
     sonarr_search_mode: SonarrSearchMode = SonarrSearchMode.episode,
     lidarr_search_mode: LidarrSearchMode = LidarrSearchMode.album,
@@ -129,7 +129,7 @@ def _make_instance(
         sleep_interval_mins=15,
         hourly_cap=hourly_cap,
         cooldown_days=cooldown_days,
-        unreleased_delay_hrs=unreleased_delay_hrs,
+        post_release_grace_hrs=post_release_grace_hrs,
         cutoff_enabled=False,
         cutoff_batch_size=5,
         cutoff_cooldown_days=21,
@@ -530,7 +530,7 @@ async def test_radarr_announced_unavailable_with_null_digital_release_is_skipped
     assert not search_route.called
     rows = await _get_log_rows()
     assert rows[0]["action"] == "skipped"
-    assert rows[0]["reason"] == "unreleased delay (24h)"
+    assert rows[0]["reason"] == "not yet released"
 
 
 @pytest.mark.asyncio()
@@ -560,14 +560,14 @@ async def test_radarr_release_anchor_falls_back_to_physical_release_for_delay(
         instance_id=2,
         itype=InstanceType.radarr,
         url=RADARR_URL,
-        unreleased_delay_hrs=36,
+        post_release_grace_hrs=6,
     )
     count = await run_instance_search(instance, MASTER_KEY)
 
     assert count == 0
     assert not search_route.called
     rows = await _get_log_rows()
-    assert rows[0]["reason"] == "unreleased delay (36h)"
+    assert rows[0]["reason"] == "not yet released"
 
 
 @pytest.mark.asyncio()
@@ -628,7 +628,7 @@ async def test_radarr_available_movie_still_searches(seeded_instances: None) -> 
         instance_id=2,
         itype=InstanceType.radarr,
         url=RADARR_URL,
-        unreleased_delay_hrs=36,
+        post_release_grace_hrs=6,
     )
     count = await run_instance_search(instance, MASTER_KEY)
 
@@ -755,7 +755,7 @@ async def test_missing_scans_next_pages_when_first_page_items_ineligible(
         return_value=httpx.Response(201, json=_COMMAND_RESP)
     )
 
-    instance = _make_instance(batch_size=1, cooldown_days=7, unreleased_delay_hrs=36)
+    instance = _make_instance(batch_size=1, cooldown_days=7, post_release_grace_hrs=6)
     count = await run_instance_search(instance, MASTER_KEY)
 
     assert count == 1
@@ -771,7 +771,7 @@ async def test_missing_scans_next_pages_when_first_page_items_ineligible(
 @pytest.mark.asyncio()
 @respx.mock
 async def test_missing_list_page_calls_are_hard_bounded(seeded_instances: None) -> None:
-    """Missing pass should not fetch more than three list pages per cycle."""
+    """Missing pass should not fetch more than five list pages per cycle."""
     page_payloads = [
         {
             "records": [
@@ -783,7 +783,7 @@ async def test_missing_list_page_calls_are_hard_bounded(seeded_instances: None) 
                 for i in range(start, start + 10)
             ]
         }
-        for start in (1000, 2000, 3000, 4000)
+        for start in (1000, 2000, 3000, 4000, 5000, 6000)
     ]
 
     missing_route = respx.get(f"{SONARR_URL}/api/v3/wanted/missing").mock(
@@ -793,11 +793,11 @@ async def test_missing_list_page_calls_are_hard_bounded(seeded_instances: None) 
         return_value=httpx.Response(201, json=_COMMAND_RESP)
     )
 
-    instance = _make_instance(batch_size=2, unreleased_delay_hrs=36)
+    instance = _make_instance(batch_size=2, post_release_grace_hrs=6)
     count = await run_instance_search(instance, MASTER_KEY)
 
     assert count == 0
-    assert missing_route.call_count == 3
+    assert missing_route.call_count == 5
     assert not search_route.called
 
 
@@ -818,7 +818,7 @@ async def test_missing_stops_fetching_pages_when_target_is_reached(seeded_instan
         return_value=httpx.Response(201, json=_COMMAND_RESP)
     )
 
-    instance = _make_instance(batch_size=1, cooldown_days=0, unreleased_delay_hrs=0)
+    instance = _make_instance(batch_size=1, cooldown_days=0, post_release_grace_hrs=0)
     count = await run_instance_search(instance, MASTER_KEY)
 
     assert count == 1
@@ -848,7 +848,7 @@ async def test_missing_deduplicates_items_across_pages(seeded_instances: None) -
         return_value=httpx.Response(201, json=_COMMAND_RESP)
     )
 
-    instance = _make_instance(batch_size=2, cooldown_days=0, unreleased_delay_hrs=0)
+    instance = _make_instance(batch_size=2, cooldown_days=0, post_release_grace_hrs=0)
     count = await run_instance_search(instance, MASTER_KEY)
 
     assert count == 2
@@ -1120,7 +1120,7 @@ async def test_missing_hourly_cap_stops_additional_page_fetches(seeded_instances
         return_value=httpx.Response(201, json=_COMMAND_RESP)
     )
 
-    instance = _make_instance(hourly_cap=1, cooldown_days=0, unreleased_delay_hrs=0)
+    instance = _make_instance(hourly_cap=1, cooldown_days=0, post_release_grace_hrs=0)
     count = await run_instance_search(instance, MASTER_KEY)
 
     assert count == 0
@@ -1178,7 +1178,7 @@ async def test_unreleased_delay_skips_item_until_delay_elapses(seeded_instances:
         return_value=httpx.Response(201, json=_COMMAND_RESP)
     )
 
-    instance = _make_instance(unreleased_delay_hrs=36)
+    instance = _make_instance(post_release_grace_hrs=6)
     count = await run_instance_search(instance, MASTER_KEY)
 
     assert count == 0
@@ -1186,7 +1186,7 @@ async def test_unreleased_delay_skips_item_until_delay_elapses(seeded_instances:
     rows = await _get_log_rows()
     assert len(rows) == 1
     assert rows[0]["action"] == "skipped"
-    assert rows[0]["reason"] == "unreleased delay (36h)"
+    assert rows[0]["reason"] == "not yet released"
     assert rows[0]["item_id"] == 303
 
 
@@ -1230,7 +1230,7 @@ async def test_cycle_id_is_shared_between_missing_and_cutoff_passes(seeded_insta
         cutoff_batch_size=1,
         cooldown_days=0,
         cutoff_cooldown_days=0,
-        unreleased_delay_hrs=0,
+        post_release_grace_hrs=0,
     )
     count = await run_instance_search(instance, MASTER_KEY)
 
@@ -1259,7 +1259,7 @@ async def test_cycle_id_changes_across_distinct_invocations(seeded_instances: No
         return_value=httpx.Response(201, json=_COMMAND_RESP)
     )
 
-    instance = _make_instance(cooldown_days=0, unreleased_delay_hrs=0, batch_size=1)
+    instance = _make_instance(cooldown_days=0, post_release_grace_hrs=0, batch_size=1)
     first_count = await run_instance_search(instance, MASTER_KEY)
     second_count = await run_instance_search(instance, MASTER_KEY)
 
@@ -1284,7 +1284,7 @@ async def test_run_now_trigger_is_persisted_in_log_rows(seeded_instances: None) 
         return_value=httpx.Response(201, json=_COMMAND_RESP)
     )
 
-    instance = _make_instance(cooldown_days=0, unreleased_delay_hrs=0, batch_size=1)
+    instance = _make_instance(cooldown_days=0, post_release_grace_hrs=0, batch_size=1)
     count = await run_instance_search(instance, MASTER_KEY, cycle_trigger="run_now")
 
     assert count == 1
@@ -1578,7 +1578,7 @@ def _make_cutoff_instance(
     cutoff_hourly_cap: int = 1,
     cooldown_days: int = 7,
     cutoff_cooldown_days: int = 21,
-    unreleased_delay_hrs: int = 24,
+    post_release_grace_hrs: int = 24,
     sonarr_search_mode: SonarrSearchMode = SonarrSearchMode.episode,
 ) -> Instance:
     return Instance(
@@ -1592,7 +1592,7 @@ def _make_cutoff_instance(
         sleep_interval_mins=15,
         hourly_cap=hourly_cap,
         cooldown_days=cooldown_days,
-        unreleased_delay_hrs=unreleased_delay_hrs,
+        post_release_grace_hrs=post_release_grace_hrs,
         cutoff_enabled=cutoff_enabled,
         cutoff_batch_size=cutoff_batch_size,
         cutoff_cooldown_days=cutoff_cooldown_days,
@@ -1850,7 +1850,7 @@ async def test_cutoff_pass_radarr_skips_unreleased_announced_titles(seeded_insta
     assert len(rows) == 1
     assert rows[0]["search_kind"] == "cutoff"
     assert rows[0]["action"] == "skipped"
-    assert rows[0]["reason"] == "unreleased delay (24h)"
+    assert rows[0]["reason"] == "not yet released"
 
 
 @pytest.mark.asyncio()
@@ -1895,7 +1895,7 @@ async def test_cutoff_scans_next_pages_when_first_page_items_ineligible(
 @pytest.mark.asyncio()
 @respx.mock
 async def test_cutoff_list_page_calls_are_hard_bounded(seeded_instances: None) -> None:
-    """Cutoff pass should not fetch more than three list pages per cycle."""
+    """Cutoff pass should not fetch more than five list pages per cycle."""
     respx.get(f"{SONARR_URL}/api/v3/wanted/missing").mock(
         return_value=httpx.Response(200, json={"records": []})
     )
@@ -1911,7 +1911,7 @@ async def test_cutoff_list_page_calls_are_hard_bounded(seeded_instances: None) -
                 for i in range(start, start + 10)
             ]
         }
-        for start in (5000, 6000, 7000, 8000)
+        for start in (5000, 6000, 7000, 8000, 9000, 10000)
     ]
 
     cutoff_route = respx.get(f"{SONARR_URL}/api/v3/wanted/cutoff").mock(
@@ -1925,7 +1925,7 @@ async def test_cutoff_list_page_calls_are_hard_bounded(seeded_instances: None) -
     count = await run_instance_search(instance, MASTER_KEY)
 
     assert count == 0
-    assert cutoff_route.call_count <= 3
+    assert cutoff_route.call_count <= 5
     assert not search_route.called
 
 

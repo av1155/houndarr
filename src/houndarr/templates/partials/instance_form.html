@@ -122,9 +122,9 @@
                           focus:outline-none focus:border-brand-400/80 focus:ring-2 focus:ring-brand-500/25" />
           </div>
           <div class="sm:col-span-2">
-            <label class="block text-xs font-medium text-slate-400 mb-1.5" for="{{ form_id }}-delay">Unreleased Delay (hrs)</label>
-            <input id="{{ form_id }}-delay" name="unreleased_delay_hrs" type="number" min="0"
-                   value="{{ instance.unreleased_delay_hrs }}"
+            <label class="block text-xs font-medium text-slate-400 mb-1.5" for="{{ form_id }}-delay">Post-Release Grace (hrs)</label>
+            <input id="{{ form_id }}-delay" name="post_release_grace_hrs" type="number" min="0"
+                   value="{{ instance.post_release_grace_hrs }}"
                    class="w-full h-11 bg-slate-900/80 border border-slate-700/80 rounded-lg px-3 text-sm text-white
                           focus:outline-none focus:border-brand-400/80 focus:ring-2 focus:ring-brand-500/25" />
           </div>

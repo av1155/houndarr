@@ -27,7 +27,7 @@ from houndarr.services.instances import Instance, InstanceType, SonarrSearchMode
 _OLD_DATE = "2020-01-01T00:00:00Z"
 
 
-def _make_instance(*, unreleased_delay_hrs: int = 24) -> Instance:
+def _make_instance(*, post_release_grace_hrs: int = 24) -> Instance:
     return Instance(
         id=2,
         name="Radarr Test",
@@ -39,7 +39,7 @@ def _make_instance(*, unreleased_delay_hrs: int = 24) -> Instance:
         sleep_interval_mins=15,
         hourly_cap=20,
         cooldown_days=7,
-        unreleased_delay_hrs=unreleased_delay_hrs,
+        post_release_grace_hrs=post_release_grace_hrs,
         cutoff_enabled=False,
         cutoff_batch_size=5,
         cutoff_cooldown_days=21,
@@ -169,7 +169,7 @@ class TestRadarrUnreleasedReason:
         """Movie within delay window triggers layer 1."""
         recent = (datetime.now(UTC) - timedelta(hours=1)).isoformat()
         movie = _make_movie(digital_release=recent, is_available=True)
-        assert _radarr_unreleased_reason(movie, 24) == "unreleased delay (24h)"
+        assert _radarr_unreleased_reason(movie, 24) == "post-release grace (24h)"
 
     def test_layer2_not_available(self):
         """is_available=False triggers layer 2."""
@@ -288,11 +288,11 @@ class TestAdaptMissing:
         assert candidate.unreleased_reason is None
 
     def test_unreleased_delay(self):
-        instance = _make_instance(unreleased_delay_hrs=24)
+        instance = _make_instance(post_release_grace_hrs=24)
         recent = (datetime.now(UTC) - timedelta(hours=1)).isoformat()
         item = _make_movie(digital_release=recent, is_available=True)
         candidate = adapt_missing(item, instance)
-        assert candidate.unreleased_reason == "unreleased delay (24h)"
+        assert candidate.unreleased_reason == "post-release grace (24h)"
 
     def test_not_available(self):
         instance = _make_instance()
@@ -323,15 +323,15 @@ class TestAdaptCutoff:
         assert missing_candidate.search_payload == cutoff_candidate.search_payload
 
     def test_unreleased(self):
-        instance = _make_instance(unreleased_delay_hrs=24)
+        instance = _make_instance(post_release_grace_hrs=24)
         recent = (datetime.now(UTC) - timedelta(hours=1)).isoformat()
         item = _make_movie(digital_release=recent, is_available=True)
         candidate = adapt_cutoff(item, instance)
-        assert candidate.unreleased_reason == "unreleased delay (24h)"
+        assert candidate.unreleased_reason == "post-release grace (24h)"
 
     def test_delegates_to_missing_for_varied_inputs(self):
         """adapt_cutoff produces identical output to adapt_missing for edge cases."""
-        instance = _make_instance(unreleased_delay_hrs=48)
+        instance = _make_instance(post_release_grace_hrs=48)
         cases = [
             _make_movie(status="tba", is_available=None),
             _make_movie(digital_release=None, physical_release=None, in_cinemas=None),

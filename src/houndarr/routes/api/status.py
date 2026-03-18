@@ -169,7 +169,7 @@ async def get_status(request: Request) -> JSONResponse:
                 "cooldown_days": inst.cooldown_days,
                 "cutoff_enabled": inst.cutoff_enabled,
                 "cutoff_batch_size": inst.cutoff_batch_size,
-                "unreleased_delay_hrs": inst.unreleased_delay_hrs,
+                "post_release_grace_hrs": inst.post_release_grace_hrs,
             }
         )
 

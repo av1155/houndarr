@@ -105,7 +105,7 @@ def _make_instance(
     batch_size: int = 10,
     hourly_cap: int = 20,
     cooldown_days: int = 7,
-    unreleased_delay_hrs: int = 24,
+    post_release_grace_hrs: int = 24,
     cutoff_enabled: bool = False,
     cutoff_batch_size: int = 5,
     cutoff_hourly_cap: int = 10,
@@ -126,7 +126,7 @@ def _make_instance(
         sleep_interval_mins=15,
         hourly_cap=hourly_cap,
         cooldown_days=cooldown_days,
-        unreleased_delay_hrs=unreleased_delay_hrs,
+        post_release_grace_hrs=post_release_grace_hrs,
         cutoff_enabled=cutoff_enabled,
         cutoff_batch_size=cutoff_batch_size,
         cutoff_cooldown_days=cutoff_cooldown_days,
@@ -434,7 +434,7 @@ async def test_golden_mixed_eligibility(seeded_instances: None) -> None:
 
     Expected sequence:
       1. searched — ep 101
-      2. skipped  — ep 102, "unreleased delay (24h)"
+      2. skipped  — ep 102, "not yet released"
       3. skipped  — ep 103, "on cooldown (7d)"
       4. searched — ep 104
       5. skipped  — ep 105, "hourly cap reached (2)"
@@ -485,7 +485,7 @@ async def test_golden_mixed_eligibility(seeded_instances: None) -> None:
     instance = _make_instance(
         hourly_cap=2,
         cooldown_days=7,
-        unreleased_delay_hrs=24,
+        post_release_grace_hrs=24,
     )
     count = await run_instance_search(instance, MASTER_KEY, cycle_id="golden-g4")
 
@@ -509,7 +509,7 @@ async def test_golden_mixed_eligibility(seeded_instances: None) -> None:
     assert rows[1]["item_type"] == "episode"
     assert rows[1]["item_label"] == "My Show - S01E02 - Future"
     assert rows[1]["search_kind"] == "missing"
-    assert rows[1]["reason"] == "unreleased delay (24h)"
+    assert rows[1]["reason"] == "not yet released"
     assert rows[1]["cycle_id"] == "golden-g4"
 
     # Row 2: skipped — cooldown

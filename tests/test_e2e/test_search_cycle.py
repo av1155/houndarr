@@ -434,7 +434,7 @@ async def test_missing_list_calls_are_bounded_per_cycle(
                 for i in range(start, start + 10)
             ]
         }
-        for start in (900, 1000, 1100, 1200)
+        for start in (900, 1000, 1100, 1200, 1300, 1400)
     ]
 
     missing_route = respx.get(f"{SONARR_URL}/api/v3/wanted/missing").mock(
@@ -448,7 +448,7 @@ async def test_missing_list_calls_are_bounded_per_cycle(
     count = await run_instance_search(sonarr_instance, master_key)
 
     assert count == 0
-    assert missing_route.call_count == 3
+    assert missing_route.call_count == 5
     assert not search_route.called
 
 

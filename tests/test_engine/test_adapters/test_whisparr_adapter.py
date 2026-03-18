@@ -10,9 +10,9 @@ import pytest
 from houndarr.clients.whisparr import MissingWhisparrEpisode, WhisparrClient
 from houndarr.engine.adapters.whisparr import (
     _episode_label,
-    _is_within_unreleased_delay,
     _season_context_label,
     _season_item_id,
+    _whisparr_unreleased_reason,
     adapt_cutoff,
     adapt_missing,
     dispatch_search,
@@ -31,7 +31,7 @@ _OLD_RELEASE = datetime(2020, 1, 1, tzinfo=UTC)
 def _make_instance(
     *,
     whisparr_search_mode: WhisparrSearchMode = WhisparrSearchMode.episode,
-    unreleased_delay_hrs: int = 24,
+    post_release_grace_hrs: int = 24,
 ) -> Instance:
     return Instance(
         id=5,
@@ -44,7 +44,7 @@ def _make_instance(
         sleep_interval_mins=15,
         hourly_cap=20,
         cooldown_days=7,
-        unreleased_delay_hrs=unreleased_delay_hrs,
+        post_release_grace_hrs=post_release_grace_hrs,
         cutoff_enabled=False,
         cutoff_batch_size=5,
         cutoff_cooldown_days=21,
@@ -138,34 +138,38 @@ class TestSeasonItemId:
 
 
 # ---------------------------------------------------------------------------
-# Custom _is_within_unreleased_delay (operates on datetime, not str)
+# _whisparr_unreleased_reason (operates on datetime, not str)
 # ---------------------------------------------------------------------------
 
 
-class TestIsWithinUnreleasedDelay:
-    """Verify the Whisparr-specific unreleased delay function."""
+class TestWhisparrUnreleasedReason:
+    """Verify the Whisparr-specific unreleased reason function."""
 
-    def test_old_date_is_not_within_delay(self):
-        assert _is_within_unreleased_delay(_OLD_RELEASE, 24) is False
+    def test_old_date_returns_none(self):
+        assert _whisparr_unreleased_reason(_OLD_RELEASE, 24) is None
 
-    def test_recent_date_is_within_delay(self):
+    def test_recent_date_returns_grace_reason(self):
         recent = datetime.now(UTC) - timedelta(hours=1)
-        assert _is_within_unreleased_delay(recent, 24) is True
+        assert _whisparr_unreleased_reason(recent, 24) == "post-release grace (24h)"
 
-    def test_none_is_not_within_delay(self):
-        assert _is_within_unreleased_delay(None, 24) is False
+    def test_future_date_returns_not_yet_released(self):
+        future = datetime.now(UTC) + timedelta(hours=100)
+        assert _whisparr_unreleased_reason(future, 24) == "not yet released"
 
-    def test_zero_delay_always_false(self):
+    def test_none_returns_none(self):
+        assert _whisparr_unreleased_reason(None, 24) is None
+
+    def test_zero_grace_returns_none(self):
         recent = datetime.now(UTC) - timedelta(hours=1)
-        assert _is_within_unreleased_delay(recent, 0) is False
+        assert _whisparr_unreleased_reason(recent, 0) is None
 
-    def test_negative_delay_always_false(self):
+    def test_negative_grace_returns_none(self):
         recent = datetime.now(UTC) - timedelta(hours=1)
-        assert _is_within_unreleased_delay(recent, -1) is False
+        assert _whisparr_unreleased_reason(recent, -1) is None
 
-    def test_boundary_exact_delay(self):
+    def test_boundary_exact_grace(self):
         exactly_past = datetime.now(UTC) - timedelta(hours=24, seconds=1)
-        assert _is_within_unreleased_delay(exactly_past, 24) is False
+        assert _whisparr_unreleased_reason(exactly_past, 24) is None
 
 
 # ---------------------------------------------------------------------------
@@ -195,20 +199,20 @@ class TestAdaptMissingEpisodeMode:
         assert candidate.unreleased_reason is None
 
     def test_unreleased_within_delay(self):
-        instance = _make_instance(unreleased_delay_hrs=24)
+        instance = _make_instance(post_release_grace_hrs=24)
         recent = datetime.now(UTC) - timedelta(hours=1)
         item = _make_episode(release_date=recent)
         candidate = adapt_missing(item, instance)
-        assert candidate.unreleased_reason == "unreleased delay (24h)"
+        assert candidate.unreleased_reason == "post-release grace (24h)"
 
     def test_null_release_date_is_eligible(self):
-        instance = _make_instance(unreleased_delay_hrs=24)
+        instance = _make_instance(post_release_grace_hrs=24)
         item = _make_episode(release_date=None)
         candidate = adapt_missing(item, instance)
         assert candidate.unreleased_reason is None
 
     def test_boundary_exact_delay(self):
-        instance = _make_instance(unreleased_delay_hrs=24)
+        instance = _make_instance(post_release_grace_hrs=24)
         exactly_past = datetime.now(UTC) - timedelta(hours=24, seconds=1)
         item = _make_episode(release_date=exactly_past)
         candidate = adapt_missing(item, instance)
@@ -303,11 +307,11 @@ class TestAdaptCutoff:
         assert candidate.search_payload["command"] == "EpisodeSearch"
 
     def test_unreleased(self):
-        instance = _make_instance(unreleased_delay_hrs=24)
+        instance = _make_instance(post_release_grace_hrs=24)
         recent = datetime.now(UTC) - timedelta(hours=1)
         item = _make_episode(release_date=recent)
         candidate = adapt_cutoff(item, instance)
-        assert candidate.unreleased_reason == "unreleased delay (24h)"
+        assert candidate.unreleased_reason == "post-release grace (24h)"
 
 
 # ---------------------------------------------------------------------------

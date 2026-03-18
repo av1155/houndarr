@@ -30,7 +30,7 @@ _OLD_DATE = "2020-01-01T00:00:00Z"
 def _make_instance(
     *,
     readarr_search_mode: ReadarrSearchMode = ReadarrSearchMode.book,
-    unreleased_delay_hrs: int = 24,
+    post_release_grace_hrs: int = 24,
 ) -> Instance:
     return Instance(
         id=4,
@@ -43,7 +43,7 @@ def _make_instance(
         sleep_interval_mins=15,
         hourly_cap=20,
         cooldown_days=7,
-        unreleased_delay_hrs=unreleased_delay_hrs,
+        post_release_grace_hrs=post_release_grace_hrs,
         cutoff_enabled=False,
         cutoff_batch_size=5,
         cutoff_cooldown_days=21,
@@ -156,26 +156,26 @@ class TestAdaptMissingBookMode:
         assert candidate.unreleased_reason is None
 
     def test_unreleased_within_delay(self):
-        instance = _make_instance(unreleased_delay_hrs=24)
+        instance = _make_instance(post_release_grace_hrs=24)
         recent = (datetime.now(UTC) - timedelta(hours=1)).isoformat()
         item = _make_book(release_date=recent)
         candidate = adapt_missing(item, instance)
-        assert candidate.unreleased_reason == "unreleased delay (24h)"
+        assert candidate.unreleased_reason == "post-release grace (24h)"
 
     def test_null_release_date_is_eligible(self):
-        instance = _make_instance(unreleased_delay_hrs=24)
+        instance = _make_instance(post_release_grace_hrs=24)
         item = _make_book(release_date=None)
         candidate = adapt_missing(item, instance)
         assert candidate.unreleased_reason is None
 
     def test_empty_release_date_is_eligible(self):
-        instance = _make_instance(unreleased_delay_hrs=24)
+        instance = _make_instance(post_release_grace_hrs=24)
         item = _make_book(release_date="")
         candidate = adapt_missing(item, instance)
         assert candidate.unreleased_reason is None
 
     def test_boundary_exact_delay(self):
-        instance = _make_instance(unreleased_delay_hrs=24)
+        instance = _make_instance(post_release_grace_hrs=24)
         exactly_past = (datetime.now(UTC) - timedelta(hours=24, seconds=1)).isoformat()
         item = _make_book(release_date=exactly_past)
         candidate = adapt_missing(item, instance)
@@ -261,11 +261,11 @@ class TestAdaptCutoff:
         assert candidate.search_payload["command"] == "BookSearch"
 
     def test_unreleased(self):
-        instance = _make_instance(unreleased_delay_hrs=24)
+        instance = _make_instance(post_release_grace_hrs=24)
         recent = (datetime.now(UTC) - timedelta(hours=1)).isoformat()
         item = _make_book(release_date=recent)
         candidate = adapt_cutoff(item, instance)
-        assert candidate.unreleased_reason == "unreleased delay (24h)"
+        assert candidate.unreleased_reason == "post-release grace (24h)"
 
 
 # ---------------------------------------------------------------------------

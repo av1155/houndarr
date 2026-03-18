@@ -10,7 +10,11 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 from houndarr.clients.radarr import MissingMovie, RadarrClient
-from houndarr.engine.candidates import SearchCandidate, _is_within_unreleased_delay
+from houndarr.engine.candidates import (
+    SearchCandidate,
+    _is_unreleased,
+    _is_within_post_release_grace,
+)
 from houndarr.services.instances import Instance
 
 _RADARR_UNRELEASED_STATUSES = {"tba", "announced"}
@@ -26,11 +30,13 @@ def _radarr_release_anchor(movie: MissingMovie) -> str | None:
     return movie.digital_release or movie.physical_release or movie.release_date or movie.in_cinemas
 
 
-def _radarr_unreleased_reason(movie: MissingMovie, unreleased_delay_hrs: int) -> str | None:
-    """Return skip reason when a Radarr movie should be treated as unreleased."""
+def _radarr_unreleased_reason(movie: MissingMovie, grace_hrs: int) -> str | None:
+    """Return skip reason when a Radarr movie should be treated as not yet searchable."""
     release_anchor = _radarr_release_anchor(movie)
-    if _is_within_unreleased_delay(release_anchor, unreleased_delay_hrs):
-        return f"unreleased delay ({unreleased_delay_hrs}h)"
+    if _is_unreleased(release_anchor):
+        return "not yet released"
+    if _is_within_post_release_grace(release_anchor, grace_hrs):
+        return f"post-release grace ({grace_hrs}h)"
 
     if movie.is_available is False:
         return "radarr reports not available"
@@ -76,7 +82,7 @@ def adapt_missing(item: MissingMovie, instance: Instance) -> SearchCandidate:
         item_id=item.movie_id,
         item_type="movie",
         label=_movie_label(item),
-        unreleased_reason=_radarr_unreleased_reason(item, instance.unreleased_delay_hrs),
+        unreleased_reason=_radarr_unreleased_reason(item, instance.post_release_grace_hrs),
         group_key=None,
         search_payload={
             "command": "MoviesSearch",

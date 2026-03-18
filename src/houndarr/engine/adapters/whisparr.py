@@ -49,19 +49,23 @@ def _season_item_id(series_id: int, season_number: int) -> int:
     return -(series_id * 1000 + season_number)
 
 
-def _is_within_unreleased_delay(
+def _whisparr_unreleased_reason(
     release_dt: datetime | None,
-    unreleased_delay_hrs: int,
-) -> bool:
-    """Return True when an episode is still inside the configured unreleased delay.
+    grace_hrs: int,
+) -> str | None:
+    """Return skip reason when a Whisparr episode is not yet searchable.
 
     Whisparr provides a parsed ``datetime`` (from DateOnly) rather than an
-    ISO-8601 string, so this helper operates on ``datetime`` directly instead
-    of delegating to :func:`candidates._is_within_unreleased_delay`.
+    ISO-8601 string, so this helper operates on ``datetime`` directly.
     """
-    if unreleased_delay_hrs <= 0 or release_dt is None:
-        return False
-    return datetime.now(UTC) < (release_dt + timedelta(hours=unreleased_delay_hrs))
+    if release_dt is None:
+        return None
+    now = datetime.now(UTC)
+    if now < release_dt:
+        return "not yet released"
+    if grace_hrs > 0 and now < (release_dt + timedelta(hours=grace_hrs)):
+        return f"post-release grace ({grace_hrs}h)"
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -102,10 +106,8 @@ def adapt_missing(item: MissingWhisparrEpisode, instance: Instance) -> SearchCan
             "episode_id": item.episode_id,
         }
 
-    unreleased_reason: str | None = (
-        f"unreleased delay ({instance.unreleased_delay_hrs}h)"
-        if _is_within_unreleased_delay(item.release_date, instance.unreleased_delay_hrs)
-        else None
+    unreleased_reason = _whisparr_unreleased_reason(
+        item.release_date, instance.post_release_grace_hrs
     )
 
     return SearchCandidate(
@@ -130,10 +132,8 @@ def adapt_cutoff(item: MissingWhisparrEpisode, instance: Instance) -> SearchCand
     Returns:
         A fully populated :class:`SearchCandidate`.
     """
-    unreleased_reason: str | None = (
-        f"unreleased delay ({instance.unreleased_delay_hrs}h)"
-        if _is_within_unreleased_delay(item.release_date, instance.unreleased_delay_hrs)
-        else None
+    unreleased_reason = _whisparr_unreleased_reason(
+        item.release_date, instance.post_release_grace_hrs
     )
 
     return SearchCandidate(

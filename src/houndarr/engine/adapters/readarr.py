@@ -8,7 +8,11 @@ commands via :class:`~houndarr.clients.readarr.ReadarrClient`.
 from __future__ import annotations
 
 from houndarr.clients.readarr import MissingBook, ReadarrClient
-from houndarr.engine.candidates import SearchCandidate, _is_within_unreleased_delay
+from houndarr.engine.candidates import (
+    SearchCandidate,
+    _is_unreleased,
+    _is_within_post_release_grace,
+)
 from houndarr.services.instances import Instance, ReadarrSearchMode
 
 # ---------------------------------------------------------------------------
@@ -36,6 +40,15 @@ def _author_item_id(author_id: int) -> int:
     Lidarr's artist-context pattern.
     """
     return -(author_id * 1000)
+
+
+def _readarr_unreleased_reason(release_date: str | None, grace_hrs: int) -> str | None:
+    """Return skip reason when a book should be treated as not yet searchable."""
+    if _is_unreleased(release_date):
+        return "not yet released"
+    if _is_within_post_release_grace(release_date, grace_hrs):
+        return f"post-release grace ({grace_hrs}h)"
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -74,10 +87,8 @@ def adapt_missing(item: MissingBook, instance: Instance) -> SearchCandidate:
             "book_id": item.book_id,
         }
 
-    unreleased_reason: str | None = (
-        f"unreleased delay ({instance.unreleased_delay_hrs}h)"
-        if _is_within_unreleased_delay(item.release_date, instance.unreleased_delay_hrs)
-        else None
+    unreleased_reason = _readarr_unreleased_reason(
+        item.release_date, instance.post_release_grace_hrs
     )
 
     return SearchCandidate(
@@ -102,10 +113,8 @@ def adapt_cutoff(item: MissingBook, instance: Instance) -> SearchCandidate:
     Returns:
         A fully populated :class:`SearchCandidate`.
     """
-    unreleased_reason: str | None = (
-        f"unreleased delay ({instance.unreleased_delay_hrs}h)"
-        if _is_within_unreleased_delay(item.release_date, instance.unreleased_delay_hrs)
-        else None
+    unreleased_reason = _readarr_unreleased_reason(
+        item.release_date, instance.post_release_grace_hrs
     )
 
     return SearchCandidate(

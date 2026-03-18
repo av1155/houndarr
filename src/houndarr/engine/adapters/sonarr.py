@@ -8,7 +8,11 @@ commands via :class:`~houndarr.clients.sonarr.SonarrClient`.
 from __future__ import annotations
 
 from houndarr.clients.sonarr import MissingEpisode, SonarrClient
-from houndarr.engine.candidates import SearchCandidate, _is_within_unreleased_delay
+from houndarr.engine.candidates import (
+    SearchCandidate,
+    _is_unreleased,
+    _is_within_post_release_grace,
+)
 from houndarr.services.instances import Instance, SonarrSearchMode
 
 # ---------------------------------------------------------------------------
@@ -57,6 +61,15 @@ def _season_item_id(series_id: int, season_number: int) -> int:
     return -(series_id * 1000 + season_number)
 
 
+def _sonarr_unreleased_reason(air_date_utc: str | None, grace_hrs: int) -> str | None:
+    """Return skip reason when an episode should be treated as not yet searchable."""
+    if _is_unreleased(air_date_utc):
+        return "not yet released"
+    if _is_within_post_release_grace(air_date_utc, grace_hrs):
+        return f"post-release grace ({grace_hrs}h)"
+    return None
+
+
 # ---------------------------------------------------------------------------
 # Adapter functions
 # ---------------------------------------------------------------------------
@@ -100,10 +113,8 @@ def adapt_missing(item: MissingEpisode, instance: Instance) -> SearchCandidate:
             "episode_id": item.episode_id,
         }
 
-    unreleased_reason: str | None = (
-        f"unreleased delay ({instance.unreleased_delay_hrs}h)"
-        if _is_within_unreleased_delay(item.air_date_utc, instance.unreleased_delay_hrs)
-        else None
+    unreleased_reason = _sonarr_unreleased_reason(
+        item.air_date_utc, instance.post_release_grace_hrs
     )
 
     return SearchCandidate(
@@ -130,10 +141,8 @@ def adapt_cutoff(item: MissingEpisode, instance: Instance) -> SearchCandidate:
     Returns:
         A fully populated :class:`SearchCandidate`.
     """
-    unreleased_reason: str | None = (
-        f"unreleased delay ({instance.unreleased_delay_hrs}h)"
-        if _is_within_unreleased_delay(item.air_date_utc, instance.unreleased_delay_hrs)
-        else None
+    unreleased_reason = _sonarr_unreleased_reason(
+        item.air_date_utc, instance.post_release_grace_hrs
     )
 
     return SearchCandidate(

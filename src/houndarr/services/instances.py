@@ -18,10 +18,10 @@ from houndarr.config import (
     DEFAULT_CUTOFF_HOURLY_CAP,
     DEFAULT_HOURLY_CAP,
     DEFAULT_LIDARR_SEARCH_MODE,
+    DEFAULT_POST_RELEASE_GRACE_HOURS,
     DEFAULT_READARR_SEARCH_MODE,
     DEFAULT_SLEEP_INTERVAL_MINUTES,
     DEFAULT_SONARR_SEARCH_MODE,
-    DEFAULT_UNRELEASED_DELAY_HOURS,
     DEFAULT_WHISPARR_SEARCH_MODE,
 )
 from houndarr.crypto import decrypt, encrypt
@@ -84,7 +84,7 @@ class Instance:
     sleep_interval_mins: int
     hourly_cap: int
     cooldown_days: int
-    unreleased_delay_hrs: int
+    post_release_grace_hrs: int
     cutoff_enabled: bool
     cutoff_batch_size: int
     cutoff_cooldown_days: int
@@ -115,7 +115,7 @@ def _row_to_instance(row: Any, master_key: bytes) -> Instance:
         sleep_interval_mins=row["sleep_interval_mins"],
         hourly_cap=row["hourly_cap"],
         cooldown_days=row["cooldown_days"],
-        unreleased_delay_hrs=row["unreleased_delay_hrs"],
+        post_release_grace_hrs=row["post_release_grace_hrs"],
         cutoff_enabled=bool(row["cutoff_enabled"]),
         cutoff_batch_size=row["cutoff_batch_size"],
         cutoff_cooldown_days=row["cutoff_cooldown_days"],
@@ -146,7 +146,7 @@ async def create_instance(
     sleep_interval_mins: int = DEFAULT_SLEEP_INTERVAL_MINUTES,
     hourly_cap: int = DEFAULT_HOURLY_CAP,
     cooldown_days: int = DEFAULT_COOLDOWN_DAYS,
-    unreleased_delay_hrs: int = DEFAULT_UNRELEASED_DELAY_HOURS,
+    post_release_grace_hrs: int = DEFAULT_POST_RELEASE_GRACE_HOURS,
     cutoff_enabled: bool = False,
     cutoff_batch_size: int = DEFAULT_CUTOFF_BATCH_SIZE,
     cutoff_cooldown_days: int = DEFAULT_CUTOFF_COOLDOWN_DAYS,
@@ -169,7 +169,7 @@ async def create_instance(
         sleep_interval_mins: Minutes to sleep between search cycles.
         hourly_cap: Maximum searches allowed per hour.
         cooldown_days: Days to wait before re-searching the same item.
-        unreleased_delay_hrs: Hours to wait after an item's air date.
+        post_release_grace_hrs: Hours to wait after release before searching.
         cutoff_enabled: Whether cutoff-unmet searching is active.
         cutoff_batch_size: Number of cutoff-unmet items per run.
         cutoff_cooldown_days: Days to wait before re-searching cutoff-unmet items.
@@ -189,7 +189,7 @@ async def create_instance(
             INSERT INTO instances (
                 name, type, url, encrypted_api_key,
                 enabled, batch_size, sleep_interval_mins,
-                hourly_cap, cooldown_days, unreleased_delay_hrs,
+                hourly_cap, cooldown_days, post_release_grace_hrs,
                 cutoff_enabled, cutoff_batch_size, cutoff_cooldown_days, cutoff_hourly_cap,
                 sonarr_search_mode, lidarr_search_mode, readarr_search_mode,
                 whisparr_search_mode
@@ -205,7 +205,7 @@ async def create_instance(
                 sleep_interval_mins,
                 hourly_cap,
                 cooldown_days,
-                unreleased_delay_hrs,
+                post_release_grace_hrs,
                 int(cutoff_enabled),
                 cutoff_batch_size,
                 cutoff_cooldown_days,
@@ -276,7 +276,7 @@ async def update_instance(
         **fields: Column-value pairs to update.  Accepted keys:
             ``name``, ``type``, ``url``, ``api_key``, ``enabled``,
             ``batch_size``, ``sleep_interval_mins``, ``hourly_cap``,
-            ``cooldown_days``, ``unreleased_delay_hrs``,
+            ``cooldown_days``, ``post_release_grace_hrs``,
             ``cutoff_enabled``, ``cutoff_batch_size``,
             ``cutoff_cooldown_days``, ``cutoff_hourly_cap``,
             ``sonarr_search_mode``, ``lidarr_search_mode``,
@@ -296,7 +296,7 @@ async def update_instance(
         "sleep_interval_mins": "sleep_interval_mins",
         "hourly_cap": "hourly_cap",
         "cooldown_days": "cooldown_days",
-        "unreleased_delay_hrs": "unreleased_delay_hrs",
+        "post_release_grace_hrs": "post_release_grace_hrs",
         "cutoff_enabled": "cutoff_enabled",
         "cutoff_batch_size": "cutoff_batch_size",
         "cutoff_cooldown_days": "cutoff_cooldown_days",

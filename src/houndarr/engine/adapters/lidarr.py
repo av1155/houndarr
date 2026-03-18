@@ -8,7 +8,11 @@ commands via :class:`~houndarr.clients.lidarr.LidarrClient`.
 from __future__ import annotations
 
 from houndarr.clients.lidarr import LidarrClient, MissingAlbum
-from houndarr.engine.candidates import SearchCandidate, _is_within_unreleased_delay
+from houndarr.engine.candidates import (
+    SearchCandidate,
+    _is_unreleased,
+    _is_within_post_release_grace,
+)
 from houndarr.services.instances import Instance, LidarrSearchMode
 
 # ---------------------------------------------------------------------------
@@ -37,6 +41,15 @@ def _artist_item_id(artist_id: int) -> int:
     real album IDs (always positive).
     """
     return -(artist_id * 1000)
+
+
+def _lidarr_unreleased_reason(release_date: str | None, grace_hrs: int) -> str | None:
+    """Return skip reason when an album should be treated as not yet searchable."""
+    if _is_unreleased(release_date):
+        return "not yet released"
+    if _is_within_post_release_grace(release_date, grace_hrs):
+        return f"post-release grace ({grace_hrs}h)"
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -75,10 +88,8 @@ def adapt_missing(item: MissingAlbum, instance: Instance) -> SearchCandidate:
             "album_id": item.album_id,
         }
 
-    unreleased_reason: str | None = (
-        f"unreleased delay ({instance.unreleased_delay_hrs}h)"
-        if _is_within_unreleased_delay(item.release_date, instance.unreleased_delay_hrs)
-        else None
+    unreleased_reason = _lidarr_unreleased_reason(
+        item.release_date, instance.post_release_grace_hrs
     )
 
     return SearchCandidate(
@@ -103,10 +114,8 @@ def adapt_cutoff(item: MissingAlbum, instance: Instance) -> SearchCandidate:
     Returns:
         A fully populated :class:`SearchCandidate`.
     """
-    unreleased_reason: str | None = (
-        f"unreleased delay ({instance.unreleased_delay_hrs}h)"
-        if _is_within_unreleased_delay(item.release_date, instance.unreleased_delay_hrs)
-        else None
+    unreleased_reason = _lidarr_unreleased_reason(
+        item.release_date, instance.post_release_grace_hrs
     )
 
     return SearchCandidate(

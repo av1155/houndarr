@@ -66,8 +66,44 @@ def _parse_iso_utc(value: str | None) -> datetime | None:
     return parsed.astimezone(UTC)
 
 
+def _is_unreleased(release_at: str | None) -> bool:
+    """Return True when an item has not yet been released.
+
+    Items with no release date are treated as released (eligible for search)
+    because the *arr app has already classified them as wanted.
+    """
+    release_dt = _parse_iso_utc(release_at)
+    if release_dt is None:
+        return False
+    return datetime.now(UTC) < release_dt
+
+
+def _is_within_post_release_grace(release_at: str | None, grace_hrs: int) -> bool:
+    """Return True when an item is released but still inside the grace period.
+
+    The grace period gives indexers time to process newly released content.
+    Returns False for truly unreleased items (use :func:`_is_unreleased` first).
+    """
+    if grace_hrs <= 0:
+        return False
+
+    release_dt = _parse_iso_utc(release_at)
+    if release_dt is None:
+        return False
+
+    now = datetime.now(UTC)
+    # Only applies to already-released items within the grace window.
+    return release_dt <= now < (release_dt + timedelta(hours=grace_hrs))
+
+
 def _is_within_unreleased_delay(release_at: str | None, unreleased_delay_hrs: int) -> bool:
-    """Return True when an item is still inside the configured unreleased delay."""
+    """Return True when an item is still inside the configured unreleased delay.
+
+    .. deprecated::
+        Kept for backward compatibility during the transition.  New adapter
+        code should use :func:`_is_unreleased` and
+        :func:`_is_within_post_release_grace` instead.
+    """
     if unreleased_delay_hrs <= 0:
         return False
 

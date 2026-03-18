@@ -47,7 +47,7 @@ def _make_instance(
         sleep_interval_mins=sleep_interval_mins,
         hourly_cap=4,
         cooldown_days=14,
-        unreleased_delay_hrs=36,
+        post_release_grace_hrs=6,
         cutoff_enabled=False,
         cutoff_batch_size=1,
         cutoff_cooldown_days=21,

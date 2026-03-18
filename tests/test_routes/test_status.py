@@ -167,7 +167,7 @@ def test_status_returns_correct_shape(app: TestClient) -> None:
     assert item["cooldown_days"] == 14
     assert item["cutoff_enabled"] is False
     assert item["cutoff_batch_size"] == 1
-    assert item["unreleased_delay_hrs"] == 36
+    assert item["post_release_grace_hrs"] == 6
 
 
 def test_status_returns_multiple_instances(app: TestClient) -> None:

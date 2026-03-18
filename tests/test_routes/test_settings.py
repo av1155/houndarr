@@ -374,8 +374,8 @@ def test_add_form_partial_renders(app: TestClient) -> None:
     assert b'value="4"' in resp.content
     assert b'name="cooldown_days" type="number" min="0"' in resp.content
     assert b'value="14"' in resp.content
-    assert b'name="unreleased_delay_hrs" type="number" min="0"' in resp.content
-    assert b'value="36"' in resp.content
+    assert b'name="post_release_grace_hrs" type="number" min="0"' in resp.content
+    assert b'value="6"' in resp.content
     assert b'name="sonarr_search_mode"' in resp.content
     assert b"Season-context search (advanced)" in resp.content
     assert b'href="/settings/help"' not in resp.content

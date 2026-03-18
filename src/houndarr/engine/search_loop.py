@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 SearchKind = Literal["missing", "cutoff"]
 CycleTrigger = Literal["scheduled", "run_now", "system"]
 
-_MAX_LIST_PAGES_PER_PASS = 3
+_MAX_LIST_PAGES_PER_PASS = 5
 _MISSING_PAGE_SIZE_MIN = 10
 _MISSING_PAGE_SIZE_MAX = 50
 _MISSING_SCAN_BUDGET_MIN = 24
@@ -233,22 +233,25 @@ async def _run_search_pass(  # noqa: C901
             if candidate.item_id in seen_item_ids:
                 continue
             seen_item_ids.add(candidate.item_id)
-            scanned += 1
 
-            # Unreleased delay.
+            # Unreleased / post-release grace checks.
+            # Pre-release gate is unconditional; post-release grace is
+            # bypassed by run_now so the user's manual intent is respected.
             if candidate.unreleased_reason is not None:
-                await _write_log(
-                    instance.id,
-                    candidate.item_id,
-                    candidate.item_type,
-                    "skipped",
-                    search_kind=search_kind,
-                    cycle_id=cycle_id,
-                    cycle_trigger=cycle_trigger,
-                    item_label=candidate.label,
-                    reason=candidate.unreleased_reason,
-                )
-                continue
+                is_grace = candidate.unreleased_reason.startswith("post-release grace")
+                if not (is_grace and cycle_trigger == "run_now"):
+                    await _write_log(
+                        instance.id,
+                        candidate.item_id,
+                        candidate.item_type,
+                        "skipped",
+                        search_kind=search_kind,
+                        cycle_id=cycle_id,
+                        cycle_trigger=cycle_trigger,
+                        item_label=candidate.label,
+                        reason=candidate.unreleased_reason,
+                    )
+                    continue
 
             # Hourly cap.
             if hourly_cap > 0 and searches_this_hour >= hourly_cap:
@@ -294,6 +297,9 @@ async def _run_search_pass(  # noqa: C901
                     reason=reason,
                 )
                 continue
+
+            # Count only eligible (non-skipped) candidates against scan budget.
+            scanned += 1
 
             # Dispatch search via a fresh client context.
             try:

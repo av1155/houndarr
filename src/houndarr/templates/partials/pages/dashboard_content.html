@@ -333,7 +333,7 @@
               `Batch ${toNumber(inst.batch_size)}`,
               `Cap/h ${toNumber(inst.hourly_cap)}`,
               `Cooldown ${toNumber(inst.cooldown_days)}d`,
-              `Delay ${toNumber(inst.unreleased_delay_hrs)}h`,
+              `Grace ${toNumber(inst.post_release_grace_hrs)}h`,
               inst.cutoff_enabled ? `Cutoff on (${toNumber(inst.cutoff_batch_size)})` : 'Cutoff off',
             ]
               .map(function (label) {

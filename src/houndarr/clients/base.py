@@ -33,6 +33,7 @@ class ArrClient(ABC):
     """
 
     _SYSTEM_STATUS_PATH: str = "/api/v3/system/status"
+    _QUEUE_STATUS_PATH: str = "/api/v3/queue/status"
 
     def __init__(
         self,
@@ -94,6 +95,27 @@ class ArrClient(ABC):
             return True
         except (httpx.HTTPError, httpx.InvalidURL):
             return False
+
+    # ------------------------------------------------------------------
+    # Queue status
+    # ------------------------------------------------------------------
+
+    async def get_queue_status(self) -> dict[str, Any]:
+        """Fetch the download queue status from the *arr instance.
+
+        Returns a dict with at least ``totalCount`` (int) — the total number
+        of items currently in the download queue.  All five *arr apps expose
+        an identical ``QueueStatusResource`` schema on this endpoint.
+
+        Uses :attr:`_QUEUE_STATUS_PATH` which defaults to
+        ``/api/v3/queue/status`` (Sonarr, Radarr, Whisparr) and is overridden
+        to ``/api/v1/queue/status`` by Lidarr and Readarr.
+
+        Raises:
+            httpx.HTTPError: If the request fails or returns a non-2xx status.
+        """
+        result: dict[str, Any] = await self._get(self._QUEUE_STATUS_PATH)
+        return result
 
     # ------------------------------------------------------------------
     # Abstract interface

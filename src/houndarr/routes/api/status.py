@@ -170,6 +170,7 @@ async def get_status(request: Request) -> JSONResponse:
                 "cutoff_enabled": inst.cutoff_enabled,
                 "cutoff_batch_size": inst.cutoff_batch_size,
                 "post_release_grace_hrs": inst.post_release_grace_hrs,
+                "queue_limit": inst.queue_limit,
             }
         )
 

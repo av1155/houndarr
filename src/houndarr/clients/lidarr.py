@@ -27,6 +27,7 @@ class LidarrClient(ArrClient):
     """Async client for the Lidarr v1 REST API."""
 
     _SYSTEM_STATUS_PATH: str = "/api/v1/system/status"
+    _QUEUE_STATUS_PATH: str = "/api/v1/queue/status"
 
     async def get_missing(
         self,

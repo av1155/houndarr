@@ -14,6 +14,8 @@ from datetime import UTC, datetime, timedelta
 from typing import Any, Literal
 from uuid import uuid4
 
+import httpx
+
 from houndarr.database import get_db
 from houndarr.engine.adapters import AppAdapter, get_adapter
 from houndarr.engine.candidates import SearchCandidate
@@ -394,6 +396,44 @@ async def run_instance_search(
     client = adapter.make_client(instance)
     cycle_id_value = cycle_id or str(uuid4())
     searched = 0
+
+    # --- Queue backpressure gate ---
+    if instance.queue_limit > 0:
+        try:
+            async with adapter.make_client(instance) as queue_client:
+                queue_status = await queue_client.get_queue_status()
+            total_queued = int(queue_status.get("totalCount", 0))
+            if total_queued >= instance.queue_limit:
+                reason = f"queue backpressure ({total_queued}/{instance.queue_limit})"
+                logger.info("[%s] skipping cycle — %s", instance.name, reason)
+                await _write_log(
+                    instance.id,
+                    None,
+                    None,
+                    "info",
+                    cycle_id=cycle_id_value,
+                    cycle_trigger=cycle_trigger,
+                    reason=reason,
+                    message=(
+                        f"Download queue has {total_queued} items, limit is {instance.queue_limit}"
+                    ),
+                )
+                return 0
+            logger.debug(
+                "[%s] queue check passed (%d/%d)",
+                instance.name,
+                total_queued,
+                instance.queue_limit,
+            )
+        except (httpx.HTTPError, httpx.InvalidURL, KeyError, ValueError):
+            # If the queue check fails, log a warning and continue with the
+            # search cycle — failing open avoids blocking searches when the
+            # queue endpoint is temporarily unavailable.
+            logger.warning(
+                "[%s] queue status check failed — proceeding with search",
+                instance.name,
+                exc_info=True,
+            )
 
     # --- Missing pass ---
     missing_target = max(0, instance.batch_size)

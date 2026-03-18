@@ -112,6 +112,7 @@ def _make_instance(
     hourly_cap: int = 20,
     cooldown_days: int = 7,
     post_release_grace_hrs: int = 24,
+    queue_limit: int = 0,
     enabled: bool = True,
     sonarr_search_mode: SonarrSearchMode = SonarrSearchMode.episode,
     lidarr_search_mode: LidarrSearchMode = LidarrSearchMode.album,
@@ -130,6 +131,7 @@ def _make_instance(
         hourly_cap=hourly_cap,
         cooldown_days=cooldown_days,
         post_release_grace_hrs=post_release_grace_hrs,
+        queue_limit=queue_limit,
         cutoff_enabled=False,
         cutoff_batch_size=5,
         cutoff_cooldown_days=21,
@@ -1313,6 +1315,125 @@ async def test_no_log_rows_when_no_missing_items(seeded_instances: None) -> None
 
 
 # ---------------------------------------------------------------------------
+# Tests — queue backpressure
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_queue_backpressure_skips_cycle_when_over_limit(
+    seeded_instances: None,
+) -> None:
+    """When the download queue exceeds queue_limit, the cycle is skipped."""
+    respx.get(f"{SONARR_URL}/api/v3/queue/status").mock(
+        return_value=httpx.Response(200, json={"totalCount": 25, "count": 25})
+    )
+    missing_route = respx.get(f"{SONARR_URL}/api/v3/wanted/missing").mock(
+        return_value=httpx.Response(200, json=_MISSING_SONARR)
+    )
+    search_route = respx.post(f"{SONARR_URL}/api/v3/command").mock(
+        return_value=httpx.Response(201, json=_COMMAND_RESP)
+    )
+
+    instance = _make_instance(queue_limit=20)
+    count = await run_instance_search(instance, MASTER_KEY)
+
+    assert count == 0
+    assert not missing_route.called
+    assert not search_route.called
+
+    rows = await _get_log_rows()
+    assert len(rows) == 1
+    assert rows[0]["action"] == "info"
+    assert "queue backpressure" in (rows[0]["reason"] or "")
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_queue_backpressure_allows_when_under_limit(
+    seeded_instances: None,
+) -> None:
+    """When the download queue is below queue_limit, the search proceeds."""
+    respx.get(f"{SONARR_URL}/api/v3/queue/status").mock(
+        return_value=httpx.Response(200, json={"totalCount": 5, "count": 5})
+    )
+    respx.get(f"{SONARR_URL}/api/v3/wanted/missing").mock(
+        return_value=httpx.Response(200, json=_MISSING_SONARR)
+    )
+    respx.post(f"{SONARR_URL}/api/v3/command").mock(
+        return_value=httpx.Response(201, json=_COMMAND_RESP)
+    )
+
+    instance = _make_instance(queue_limit=20)
+    count = await run_instance_search(instance, MASTER_KEY)
+
+    assert count == 1
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_queue_backpressure_disabled_when_limit_is_zero(
+    seeded_instances: None,
+) -> None:
+    """queue_limit=0 disables the check — no queue status request is made."""
+    queue_route = respx.get(f"{SONARR_URL}/api/v3/queue/status").mock(
+        return_value=httpx.Response(200, json={"totalCount": 999, "count": 999})
+    )
+    respx.get(f"{SONARR_URL}/api/v3/wanted/missing").mock(
+        return_value=httpx.Response(200, json=_MISSING_SONARR)
+    )
+    respx.post(f"{SONARR_URL}/api/v3/command").mock(
+        return_value=httpx.Response(201, json=_COMMAND_RESP)
+    )
+
+    instance = _make_instance(queue_limit=0)
+    count = await run_instance_search(instance, MASTER_KEY)
+
+    assert count == 1
+    assert not queue_route.called
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_queue_backpressure_fails_open_on_error(
+    seeded_instances: None,
+) -> None:
+    """If the queue status endpoint fails, the search proceeds anyway."""
+    respx.get(f"{SONARR_URL}/api/v3/queue/status").mock(return_value=httpx.Response(500))
+    respx.get(f"{SONARR_URL}/api/v3/wanted/missing").mock(
+        return_value=httpx.Response(200, json=_MISSING_SONARR)
+    )
+    respx.post(f"{SONARR_URL}/api/v3/command").mock(
+        return_value=httpx.Response(201, json=_COMMAND_RESP)
+    )
+
+    instance = _make_instance(queue_limit=20)
+    count = await run_instance_search(instance, MASTER_KEY)
+
+    assert count == 1
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_queue_backpressure_skips_at_exact_limit(
+    seeded_instances: None,
+) -> None:
+    """When totalCount == queue_limit (at the boundary), the cycle is skipped."""
+    respx.get(f"{SONARR_URL}/api/v3/queue/status").mock(
+        return_value=httpx.Response(200, json={"totalCount": 10, "count": 10})
+    )
+    missing_route = respx.get(f"{SONARR_URL}/api/v3/wanted/missing").mock(
+        return_value=httpx.Response(200, json=_MISSING_SONARR)
+    )
+
+    instance = _make_instance(queue_limit=10)
+    count = await run_instance_search(instance, MASTER_KEY)
+
+    assert count == 0
+    assert not missing_route.called
+
+
+# ---------------------------------------------------------------------------
 # Tests — supervisor
 # ---------------------------------------------------------------------------
 
@@ -1593,6 +1714,7 @@ def _make_cutoff_instance(
         hourly_cap=hourly_cap,
         cooldown_days=cooldown_days,
         post_release_grace_hrs=post_release_grace_hrs,
+        queue_limit=0,
         cutoff_enabled=cutoff_enabled,
         cutoff_batch_size=cutoff_batch_size,
         cutoff_cooldown_days=cutoff_cooldown_days,

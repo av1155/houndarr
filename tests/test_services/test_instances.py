@@ -74,6 +74,7 @@ async def test_create_applies_defaults(db: None, master_key: bytes) -> None:
     assert inst.hourly_cap == 4
     assert inst.cooldown_days == 14
     assert inst.post_release_grace_hrs == 6
+    assert inst.queue_limit == 0
     assert inst.cutoff_enabled is False
     assert inst.cutoff_batch_size == 1
     assert inst.cutoff_cooldown_days == 21

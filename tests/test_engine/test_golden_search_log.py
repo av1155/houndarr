@@ -127,6 +127,7 @@ def _make_instance(
         hourly_cap=hourly_cap,
         cooldown_days=cooldown_days,
         post_release_grace_hrs=post_release_grace_hrs,
+        queue_limit=0,
         cutoff_enabled=cutoff_enabled,
         cutoff_batch_size=cutoff_batch_size,
         cutoff_cooldown_days=cutoff_cooldown_days,

@@ -328,14 +328,16 @@
               ? `${activityLabelMap[inst.last_activity_action] || 'Activity'} at ${formatLocalTimestamp(inst.last_activity_at)}`
               : 'No activity in recent history';
 
+            const queueLimit = toNumber(inst.queue_limit);
             const policyChips = [
               `Every ${toNumber(inst.sleep_interval_mins)}m`,
               `Batch ${toNumber(inst.batch_size)}`,
               `Cap/h ${toNumber(inst.hourly_cap)}`,
               `Cooldown ${toNumber(inst.cooldown_days)}d`,
               `Grace ${toNumber(inst.post_release_grace_hrs)}h`,
+              queueLimit > 0 ? `Queue limit ${queueLimit}` : null,
               inst.cutoff_enabled ? `Cutoff on (${toNumber(inst.cutoff_batch_size)})` : 'Cutoff off',
-            ]
+            ].filter(Boolean)
               .map(function (label) {
                 return `<span class="rounded-md border border-slate-700 bg-slate-800/60 px-2 py-1 text-[11px] text-slate-300">${label}</span>`;
               })

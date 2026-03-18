@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Schema version — bump when adding new migrations
 # ---------------------------------------------------------------------------
-SCHEMA_VERSION = 6
+SCHEMA_VERSION = 7
 
 # ---------------------------------------------------------------------------
 # DDL
@@ -38,6 +38,7 @@ CREATE TABLE IF NOT EXISTS instances (
     hourly_cap           INTEGER NOT NULL DEFAULT 4,
     cooldown_days        INTEGER NOT NULL DEFAULT 14,
     post_release_grace_hrs INTEGER NOT NULL DEFAULT 6,
+    queue_limit            INTEGER NOT NULL DEFAULT 0,
     cutoff_enabled         INTEGER NOT NULL DEFAULT 0,
     cutoff_batch_size    INTEGER NOT NULL DEFAULT 1,
     cutoff_cooldown_days INTEGER NOT NULL DEFAULT 21,
@@ -159,6 +160,8 @@ async def _run_migrations(db: aiosqlite.Connection, from_version: int) -> None:
         await _migrate_to_v5(db)
     if from_version < 6:
         await _migrate_to_v6(db)
+    if from_version < 7:
+        await _migrate_to_v7(db)
 
     logger.info("Migrated database from schema version %d to %d", from_version, SCHEMA_VERSION)
     await db.execute(
@@ -384,6 +387,17 @@ async def _migrate_to_v6(db: aiosqlite.Connection) -> None:
     # For older SQLite (pre-3.35), table recreation is needed — but Python
     # 3.12 ships with SQLite ≥3.40, so DROP COLUMN is safe.
     await db.execute("ALTER TABLE instances DROP COLUMN unreleased_delay_hrs")
+
+
+async def _migrate_to_v7(db: aiosqlite.Connection) -> None:
+    """Add ``queue_limit`` column for download-queue backpressure.
+
+    Default is 0 (disabled — no backpressure check).  When set to a positive
+    value, the search loop skips cycles while the *arr download queue exceeds
+    the configured threshold.
+    """
+    if not await _column_exists(db, "instances", "queue_limit"):
+        await db.execute("ALTER TABLE instances ADD COLUMN queue_limit INTEGER NOT NULL DEFAULT 0")
 
 
 async def _ensure_v3_indexes(db: aiosqlite.Connection) -> None:

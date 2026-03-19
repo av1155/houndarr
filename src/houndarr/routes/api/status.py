@@ -50,7 +50,7 @@ async def _searches_last_hour(instance_id: int) -> int:
             SELECT COUNT(*) FROM search_log
             WHERE instance_id = ?
               AND action = 'searched'
-              AND timestamp >= datetime('now', '-1 hour')
+              AND julianday(timestamp) >= julianday('now', '-1 hour')
             """,
             (instance_id,),
         ) as cur:

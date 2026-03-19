@@ -245,48 +245,29 @@
 
         const isInitialHydration = evt.detail.target.dataset.hydrated !== 'true';
 
-        const fleetSummary = data.reduce(
+        const totals24h = data.reduce(
           function (acc, inst) {
-            const enabled = Boolean(inst.enabled);
-            acc.totalInstances += 1;
-            if (enabled) {
-              acc.enabledInstances += 1;
-            }
-            acc.searched24h += toNumber(inst.searched_24h);
-            acc.skipped24h += toNumber(inst.skipped_24h);
-            acc.errors24h += toNumber(inst.errors_24h);
+            acc.searched += toNumber(inst.searched_24h);
+            acc.skipped += toNumber(inst.skipped_24h);
+            acc.errors += toNumber(inst.errors_24h);
             return acc;
           },
-          {
-            totalInstances: 0,
-            enabledInstances: 0,
-            searched24h: 0,
-            skipped24h: 0,
-            errors24h: 0,
-          },
+          { searched: 0, skipped: 0, errors: 0 },
         );
 
-        const fleetSummaryMarkup = `
-      <section class="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-5" aria-label="Fleet summary">
-        <div class="rounded-xl border border-slate-800 bg-slate-900/70 px-4 py-3">
-          <p class="text-[11px] leading-4 uppercase tracking-wide text-slate-500">Fleet summary</p>
-          <p class="mt-1 text-sm font-semibold tabular-nums text-white">${fleetSummary.enabledInstances}/${fleetSummary.totalInstances} enabled</p>
+        const summaryStripMarkup = `
+      <section class="mb-6 grid grid-cols-3 gap-3" aria-label="Search activity (24h)">
+        <div class="rounded-xl border border-slate-800 border-t-2 border-t-emerald-500/60 bg-slate-900/70 px-4 py-4 text-center">
+          <p class="text-[11px] leading-4 uppercase tracking-wide text-emerald-400/70">Searched</p>
+          <p class="mt-2 text-2xl font-bold tabular-nums text-emerald-200">${totals24h.searched}</p>
         </div>
-        <div class="rounded-xl border border-slate-800 bg-slate-900/70 px-4 py-3">
-          <p class="text-[11px] leading-4 uppercase tracking-wide text-slate-500">24h searched</p>
-          <p class="mt-1 text-sm font-semibold tabular-nums text-emerald-300">${fleetSummary.searched24h}</p>
+        <div class="rounded-xl border border-slate-800 border-t-2 border-t-amber-500/50 bg-slate-900/70 px-4 py-4 text-center">
+          <p class="text-[11px] leading-4 uppercase tracking-wide text-amber-400/70">Skipped</p>
+          <p class="mt-2 text-2xl font-bold tabular-nums text-amber-200">${totals24h.skipped}</p>
         </div>
-        <div class="rounded-xl border border-slate-800 bg-slate-900/70 px-4 py-3">
-          <p class="text-[11px] leading-4 uppercase tracking-wide text-slate-500">24h skipped</p>
-          <p class="mt-1 text-sm font-semibold tabular-nums text-amber-300">${fleetSummary.skipped24h}</p>
-        </div>
-        <div class="rounded-xl border border-slate-800 bg-slate-900/70 px-4 py-3">
-          <p class="text-[11px] leading-4 uppercase tracking-wide text-slate-500">24h errors</p>
-          <p class="mt-1 text-sm font-semibold tabular-nums text-rose-300">${fleetSummary.errors24h}</p>
-        </div>
-        <div class="rounded-xl border border-slate-800 bg-slate-900/70 px-4 py-3">
-          <p class="text-[11px] leading-4 uppercase tracking-wide text-slate-500">Auto-refresh</p>
-          <p class="mt-1 text-sm font-semibold text-slate-200">Every 15s</p>
+        <div class="rounded-xl border border-slate-800 border-t-2 border-t-rose-500/50 bg-slate-900/70 px-4 py-4 text-center">
+          <p class="text-[11px] leading-4 uppercase tracking-wide text-rose-400/70">Errors</p>
+          <p class="mt-2 text-2xl font-bold tabular-nums text-rose-200">${totals24h.errors}</p>
         </div>
       </section>`;
 
@@ -428,7 +409,7 @@
           })
           .join('');
 
-        evt.detail.serverResponse = `${fleetSummaryMarkup}<div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">${cards}</div>`;
+        evt.detail.serverResponse = `${summaryStripMarkup}<div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">${cards}</div>`;
         evt.detail.target.dataset.hydrated = 'true';
       },
       { signal },

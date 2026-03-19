@@ -329,7 +329,7 @@ def test_dashboard_accessible_after_login(app: TestClient) -> None:
     assert b'id="instance-grid"' in response.content
     assert b'data-hydrated="false"' in response.content
     assert b'hx-trigger="load, every 15s"' in response.content
-    assert b"Fleet summary" in response.content
+    assert b"Search activity (24h)" in response.content
     assert b"24h searched" in response.content
 
 

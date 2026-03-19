@@ -212,6 +212,142 @@ def test_status_includes_24h_outcomes_and_last_activity(app: TestClient) -> None
     assert item["last_activity_action"] == "error"
     assert isinstance(item["last_activity_at"], str)
     assert item["last_search_at"] is not None
+    # The only 'searched' within the last hour is at -2h, so last-hour must be 0.
+    assert item["searches_last_hour"] == 0
+
+
+async def _seed_last_hour_regression(instance_id: int) -> None:
+    """Seed rows that would expose the old ISO-format comparison bug.
+
+    Before the fix, the ``>=`` comparison between ISO timestamps (``T``
+    separator) and ``datetime('now', …)`` results (space separator) was
+    purely lexicographic, causing *all* same-UTC-day rows to match.
+    """
+    now = datetime.now(UTC)
+    rows = [
+        # Within last hour — should be counted
+        (
+            instance_id,
+            201,
+            "episode",
+            "missing",
+            "searched",
+            (now - timedelta(minutes=20)).strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
+        ),
+        # Outside last hour — must NOT be counted
+        (
+            instance_id,
+            202,
+            "episode",
+            "missing",
+            "searched",
+            (now - timedelta(hours=3)).strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
+        ),
+        # Way outside — must NOT be counted
+        (
+            instance_id,
+            203,
+            "episode",
+            "missing",
+            "searched",
+            (now - timedelta(hours=10)).strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
+        ),
+    ]
+
+    async with get_db() as conn:
+        await conn.execute("DELETE FROM search_log WHERE instance_id = ?", (instance_id,))
+        await conn.executemany(
+            """
+            INSERT INTO search_log (instance_id, item_id, item_type, search_kind, action, timestamp)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            rows,
+        )
+        await conn.commit()
+
+
+def test_searches_last_hour_excludes_older_rows(app: TestClient) -> None:
+    """Regression: searches_last_hour must count only the rolling 60-min window."""
+    _login(app)
+    app.post(
+        "/settings/instances",
+        data={**_VALID_FORM, "name": "Hour Regression"},
+        headers=csrf_headers(app),
+    )
+    created = app.get("/api/status").json()
+    inst_id = int(created[0]["id"])
+    asyncio.run(_seed_last_hour_regression(inst_id))
+
+    resp = app.get("/api/status")
+    assert resp.status_code == 200
+    item = resp.json()[0]
+
+    # Only 1 of 3 'searched' rows is within the last hour.
+    assert item["searches_last_hour"] == 1
+
+
+async def _seed_today_boundary(instance_id: int) -> None:
+    """Seed rows on either side of the UTC midnight boundary."""
+    now = datetime.now(UTC)
+    # A row clearly in today (UTC)
+    today_ts = now.replace(hour=0, minute=5, second=0, microsecond=0)
+    # A row clearly in yesterday (UTC)
+    yesterday_ts = (now - timedelta(days=1)).replace(
+        hour=23,
+        minute=55,
+        second=0,
+        microsecond=0,
+    )
+
+    rows = [
+        (
+            instance_id,
+            301,
+            "episode",
+            "missing",
+            "searched",
+            today_ts.strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
+        ),
+        (
+            instance_id,
+            302,
+            "episode",
+            "missing",
+            "searched",
+            yesterday_ts.strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
+        ),
+    ]
+
+    async with get_db() as conn:
+        await conn.execute("DELETE FROM search_log WHERE instance_id = ?", (instance_id,))
+        await conn.executemany(
+            """
+            INSERT INTO search_log (instance_id, item_id, item_type, search_kind, action, timestamp)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            rows,
+        )
+        await conn.commit()
+
+
+def test_searches_today_uses_utc_day(app: TestClient) -> None:
+    """searches_today counts rows whose date matches the current UTC day."""
+    _login(app)
+    app.post(
+        "/settings/instances",
+        data={**_VALID_FORM, "name": "Today Boundary"},
+        headers=csrf_headers(app),
+    )
+    created = app.get("/api/status").json()
+    inst_id = int(created[0]["id"])
+    asyncio.run(_seed_today_boundary(inst_id))
+
+    resp = app.get("/api/status")
+    assert resp.status_code == 200
+    item = resp.json()[0]
+
+    # Only the row from today-UTC is counted; yesterday's is excluded.
+    assert item["searches_today"] == 1
 
 
 # ---------------------------------------------------------------------------

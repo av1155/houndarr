@@ -1,0 +1,30 @@
+<a href="/"
+   data-shell-nav="true"
+   data-shell-route="/"
+   hx-get="/"
+   hx-target="#app-content"
+   hx-swap="innerHTML"
+   hx-push-url="true"
+   class="shell-nav-link px-3 py-2 rounded-md text-sm font-medium {% if request.url.path == '/' %}bg-slate-800 text-white{% else %}text-slate-400 hover:text-white hover:bg-slate-800{% endif %}">
+  Dashboard
+</a>
+<a href="/logs"
+   data-shell-nav="true"
+   data-shell-route="/logs"
+   hx-get="/logs"
+   hx-target="#app-content"
+   hx-swap="innerHTML"
+   hx-push-url="true"
+   class="shell-nav-link px-3 py-2 rounded-md text-sm font-medium {% if request.url.path == '/logs' %}bg-slate-800 text-white{% else %}text-slate-400 hover:text-white hover:bg-slate-800{% endif %}">
+  Logs
+</a>
+<a href="/settings"
+   data-shell-nav="true"
+   data-shell-route="/settings"
+   hx-get="/settings"
+   hx-target="#app-content"
+   hx-swap="innerHTML"
+   hx-push-url="true"
+   class="shell-nav-link px-3 py-2 rounded-md text-sm font-medium {% if request.url.path == '/settings' or request.url.path.startswith('/settings/') %}bg-slate-800 text-white{% else %}text-slate-400 hover:text-white hover:bg-slate-800{% endif %}">
+  Settings
+</a>

@@ -38,7 +38,7 @@
       {# Edit — swaps this row with the edit form partial #}
       <button
         type="button"
-        onclick="window.houndarrOpenAddInstanceModal()"
+        data-open-add-instance-modal="true"
         hx-get="/settings/instances/{{ instance.id }}/edit"
         hx-target="#add-instance-modal-content"
         hx-swap="innerHTML"

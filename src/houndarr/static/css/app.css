@@ -1,0 +1,89 @@
+html {
+  scrollbar-gutter: stable both-edges;
+}
+
+.mobile-nav-menu {
+  overflow: hidden;
+  max-height: 0;
+  opacity: 0;
+  transform: translateY(-4px);
+  pointer-events: none;
+  border-top-color: transparent;
+  transition: max-height 200ms ease, opacity 160ms ease, transform 200ms ease;
+}
+
+.mobile-nav-menu.is-open {
+  max-height: 16rem;
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+  border-top-color: rgb(30 41 59);
+}
+
+.mobile-nav-icon {
+  transition: transform 180ms ease;
+}
+
+.shell-nav-link {
+  transition: background-color 180ms ease, color 180ms ease;
+}
+
+#app-content {
+  transition: opacity 150ms ease, transform 180ms ease;
+}
+
+#app-content.is-shell-loading {
+  opacity: 0.45;
+  transform: translateY(3px);
+}
+
+#app-content.is-shell-entering {
+  animation: shell-content-enter 180ms ease-out;
+}
+
+@keyframes shell-content-enter {
+  from {
+    opacity: 0.65;
+    transform: translateY(4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+#mobile-nav-toggle[aria-expanded="true"] .mobile-nav-icon {
+  transform: rotate(90deg);
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #1e293b;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #475569;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #64748b;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mobile-nav-menu,
+  .mobile-nav-icon,
+  .shell-nav-link,
+  #app-content,
+  #app-content.is-shell-loading,
+  #app-content.is-shell-entering {
+    transition: none;
+    animation: none;
+    transform: none;
+  }
+}

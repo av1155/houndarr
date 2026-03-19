@@ -230,7 +230,7 @@
       </a>
       <button
         type="button"
-        onclick="window.houndarrOpenAddInstanceModal()"
+        data-open-add-instance-modal="true"
         hx-get="/settings/instances/add-form"
         hx-target="#add-instance-modal-content"
         hx-swap="innerHTML"
@@ -403,7 +403,7 @@
         <button
           type="button"
           aria-label="Close add instance dialog"
-          onclick="window.houndarrCloseAddInstanceModal()"
+          data-close-add-instance-modal="true"
           class="rounded-lg border border-slate-700 bg-slate-900/90 p-2 text-slate-400 hover:bg-slate-800 hover:text-slate-200 transition-colors focus:outline-none focus:ring-2 focus:ring-brand-500/30"
         >
           <span aria-hidden="true" class="text-xl leading-none">&times;</span>
@@ -740,6 +740,28 @@
       addInstanceModal.classList.add('is-closing');
       window.setTimeout(finalizeClose, closeAnimationMs);
     };
+
+    document.body.addEventListener(
+      'click',
+      function (event) {
+        const target = event.target;
+        if (!(target instanceof Element)) {
+          return;
+        }
+
+        const openBtn = target.closest('[data-open-add-instance-modal="true"]');
+        if (openBtn) {
+          window.houndarrOpenAddInstanceModal();
+          return;
+        }
+
+        const closeBtn = target.closest('[data-close-add-instance-modal="true"]');
+        if (closeBtn) {
+          window.houndarrCloseAddInstanceModal();
+        }
+      },
+      { signal },
+    );
 
     addInstanceModal.addEventListener(
       'cancel',

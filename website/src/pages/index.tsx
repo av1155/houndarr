@@ -8,6 +8,74 @@ import Heading from '@theme/Heading';
 
 import styles from './index.module.css';
 
+type ScreenshotItem = {
+  src: string;
+  alt: string;
+  caption: string;
+};
+
+const DASHBOARD_SCREENSHOT: ScreenshotItem = {
+  src: require('@site/static/img/screenshots/Dashboard_Houndarr.jpeg').default,
+  alt: 'Houndarr Dashboard — instance cards with search metrics and activity',
+  caption: 'Dashboard — live search metrics, instance status, and on-demand triggers',
+};
+
+const SUPPORTING_SCREENSHOTS: ScreenshotItem[] = [
+  {
+    src: require('@site/static/img/screenshots/Logs_Houndarr.jpeg').default,
+    alt: 'Houndarr Logs — filterable search activity log',
+    caption: 'Logs',
+  },
+  {
+    src: require('@site/static/img/screenshots/Settings_Houndarr.jpeg').default,
+    alt: 'Houndarr Settings — instance list with enable toggles',
+    caption: 'Settings',
+  },
+  {
+    src: require('@site/static/img/screenshots/Settings_Houndarr_Add_Instance_Settings.jpeg').default,
+    alt: 'Houndarr Add Instance — search and cutoff configuration',
+    caption: 'Instance config',
+  },
+  {
+    src: require('@site/static/img/screenshots/Settings_Account_Houndarr.jpeg').default,
+    alt: 'Houndarr Account settings — password and session management',
+    caption: 'Account',
+  },
+  {
+    src: require('@site/static/img/screenshots/Settings_Help_Houndarr.jpeg').default,
+    alt: 'Houndarr Help — in-app settings reference',
+    caption: 'Help',
+  },
+];
+
+type ScopeItem = {
+  title: string;
+  detail: string;
+};
+
+const SCOPE_EXCLUSIONS: ScopeItem[] = [
+  {
+    title: 'No download-client integration',
+    detail: 'it triggers searches in your *arr instances, which handle downloads',
+  },
+  {
+    title: 'No Prowlarr/indexer management',
+    detail: 'your *arr instances manage their own indexers',
+  },
+  {
+    title: 'No request workflows',
+    detail: 'no Overseerr/Ombi-style request handling',
+  },
+  {
+    title: 'No multi-user support',
+    detail: 'single admin username and password',
+  },
+  {
+    title: 'No media file manipulation',
+    detail: 'it never touches your library files',
+  },
+];
+
 function HomepageHeader() {
   const {siteConfig} = useDocusaurusContext();
   return (
@@ -29,8 +97,7 @@ function HomepageHeader() {
             Get Started
           </Link>
           <Link
-            className="button button--outline button--lg"
-            style={{color: '#fff', borderColor: '#fff'}}
+            className={clsx('button button--outline button--lg', styles.githubButton)}
             href="https://github.com/av1155/houndarr">
             View on GitHub
           </Link>
@@ -49,51 +116,23 @@ function Screenshots() {
         </Heading>
 
         {/* Hero — Dashboard takes full width */}
-        <div className="screenshot-hero">
-          <img
-            src={require('@site/static/img/screenshots/Dashboard_Houndarr.jpeg').default}
-            alt="Houndarr Dashboard — instance cards with search metrics and activity"
-          />
-          <p className="screenshot-caption"><strong>Dashboard</strong> — live search metrics, instance status, and on-demand triggers</p>
+        <div className={styles.screenshotHero}>
+          <img src={DASHBOARD_SCREENSHOT.src} alt={DASHBOARD_SCREENSHOT.alt} />
+          <p className={styles.screenshotCaption}>
+            <strong>Dashboard</strong> — live search metrics, instance status, and on-demand triggers
+          </p>
         </div>
 
         {/* Supporting grid — remaining screens */}
-        <div className="screenshot-gallery">
-          <div>
-            <img
-              src={require('@site/static/img/screenshots/Logs_Houndarr.jpeg').default}
-              alt="Houndarr Logs — filterable search activity log"
-            />
-            <p className="screenshot-caption"><strong>Logs</strong></p>
-          </div>
-          <div>
-            <img
-              src={require('@site/static/img/screenshots/Settings_Houndarr.jpeg').default}
-              alt="Houndarr Settings — instance list with enable toggles"
-            />
-            <p className="screenshot-caption"><strong>Settings</strong></p>
-          </div>
-          <div>
-            <img
-              src={require('@site/static/img/screenshots/Settings_Houndarr_Add_Instance_Settings.jpeg').default}
-              alt="Houndarr Add Instance — search and cutoff configuration"
-            />
-            <p className="screenshot-caption"><strong>Instance config</strong></p>
-          </div>
-          <div>
-            <img
-              src={require('@site/static/img/screenshots/Settings_Account_Houndarr.jpeg').default}
-              alt="Houndarr Account settings — password and session management"
-            />
-            <p className="screenshot-caption"><strong>Account</strong></p>
-          </div>
-          <div>
-            <img
-              src={require('@site/static/img/screenshots/Settings_Help_Houndarr.jpeg').default}
-              alt="Houndarr Help — in-app settings reference"
-            />
-            <p className="screenshot-caption"><strong>Help</strong></p>
-          </div>
+        <div className={styles.screenshotGallery}>
+          {SUPPORTING_SCREENSHOTS.map((item) => (
+            <div key={item.caption}>
+              <img src={item.src} alt={item.alt} />
+              <p className={styles.screenshotCaption}>
+                <strong>{item.caption}</strong>
+              </p>
+            </div>
+          ))}
         </div>
       </div>
     </section>
@@ -139,11 +178,11 @@ function WhatItDoesNot() {
               Focused by Design
             </Heading>
             <ul>
-              <li><strong>No download-client integration</strong> — it triggers searches in your *arr instances, which handle downloads</li>
-              <li><strong>No Prowlarr/indexer management</strong> — your *arr instances manage their own indexers</li>
-              <li><strong>No request workflows</strong> — no Overseerr/Ombi-style request handling</li>
-              <li><strong>No multi-user support</strong> — single admin username and password</li>
-              <li><strong>No media file manipulation</strong> — it never touches your library files</li>
+              {SCOPE_EXCLUSIONS.map((item) => (
+                <li key={item.title}>
+                  <strong>{item.title}</strong> — {item.detail}
+                </li>
+              ))}
             </ul>
           </div>
         </div>

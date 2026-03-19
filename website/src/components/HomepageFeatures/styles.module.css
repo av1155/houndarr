@@ -18,3 +18,17 @@
 .features :global(.col) > * {
   flex: 1;
 }
+
+.featureCard {
+  padding: 1.5rem;
+  border-radius: 8px;
+  text-align: center;
+}
+
+:global([data-theme='dark']) .featureCard {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+:global([data-theme='light']) .featureCard {
+  background: rgba(0, 0, 0, 0.03);
+}

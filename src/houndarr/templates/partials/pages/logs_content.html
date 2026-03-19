@@ -72,22 +72,7 @@
       aria-label="Copy format options"
       class="copy-dropdown-menu hidden absolute right-0 top-full mt-1 z-50 min-w-[11rem] rounded-lg border border-slate-700 bg-slate-800 shadow-lg py-1"
     >
-      <button type="button" role="menuitem" data-copy-format="tsv"
-        class="copy-format-item w-full text-left px-4 py-2 text-sm text-slate-200 hover:bg-slate-700 focus:outline-none focus:bg-slate-700 transition-colors duration-150">
-        Copy as TSV
-      </button>
-      <button type="button" role="menuitem" data-copy-format="markdown"
-        class="copy-format-item w-full text-left px-4 py-2 text-sm text-slate-200 hover:bg-slate-700 focus:outline-none focus:bg-slate-700 transition-colors duration-150">
-        Copy as Markdown
-      </button>
-      <button type="button" role="menuitem" data-copy-format="json"
-        class="copy-format-item w-full text-left px-4 py-2 text-sm text-slate-200 hover:bg-slate-700 focus:outline-none focus:bg-slate-700 transition-colors duration-150">
-        Copy as JSON
-      </button>
-      <button type="button" role="menuitem" data-copy-format="text"
-        class="copy-format-item w-full text-left px-4 py-2 text-sm text-slate-200 hover:bg-slate-700 focus:outline-none focus:bg-slate-700 transition-colors duration-150">
-        Copy as plain text
-      </button>
+      {% include "partials/copy_format_menu_items.html" %}
     </div>
   </div>
 </div>
@@ -241,22 +226,7 @@
       aria-label="Copy format options"
       class="copy-dropdown-menu hidden absolute right-0 top-full mt-1 z-50 min-w-[11rem] rounded-lg border border-slate-700 bg-slate-800 shadow-lg py-1"
     >
-      <button type="button" role="menuitem" data-copy-format="tsv"
-        class="copy-format-item w-full text-left px-4 py-2 text-sm text-slate-200 hover:bg-slate-700 focus:outline-none focus:bg-slate-700 transition-colors duration-150">
-        Copy as TSV
-      </button>
-      <button type="button" role="menuitem" data-copy-format="markdown"
-        class="copy-format-item w-full text-left px-4 py-2 text-sm text-slate-200 hover:bg-slate-700 focus:outline-none focus:bg-slate-700 transition-colors duration-150">
-        Copy as Markdown
-      </button>
-      <button type="button" role="menuitem" data-copy-format="json"
-        class="copy-format-item w-full text-left px-4 py-2 text-sm text-slate-200 hover:bg-slate-700 focus:outline-none focus:bg-slate-700 transition-colors duration-150">
-        Copy as JSON
-      </button>
-      <button type="button" role="menuitem" data-copy-format="text"
-        class="copy-format-item w-full text-left px-4 py-2 text-sm text-slate-200 hover:bg-slate-700 focus:outline-none focus:bg-slate-700 transition-colors duration-150">
-        Copy as plain text
-      </button>
+      {% include "partials/copy_format_menu_items.html" %}
     </div>
   </div>
 </div>
@@ -297,27 +267,29 @@
     // Timestamp formatting
     // -------------------------------------------------------------------------
 
-    function formatLocalTimestamp(isoTimestamp) {
-      if (!isoTimestamp) {
-        return '—';
-      }
+    const formatLocalTimestamp =
+      window.houndarrClientHelpers?.formatLocalTimestamp ||
+      function (isoTimestamp) {
+        if (!isoTimestamp) {
+          return '—';
+        }
 
-      const parsed = new Date(isoTimestamp);
-      if (Number.isNaN(parsed.getTime())) {
-        return isoTimestamp;
-      }
+        const parsed = new Date(isoTimestamp);
+        if (Number.isNaN(parsed.getTime())) {
+          return isoTimestamp;
+        }
 
-      return new Intl.DateTimeFormat(undefined, {
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-        hour12: false,
-        timeZoneName: 'short',
-      }).format(parsed);
-    }
+        return new Intl.DateTimeFormat(undefined, {
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+          hour12: false,
+          timeZoneName: 'short',
+        }).format(parsed);
+      };
 
     function formatVisibleLogTimestamps(root = document) {
       root.querySelectorAll('[data-log-ts]').forEach((el) => {

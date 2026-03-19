@@ -59,6 +59,10 @@ Minimum days before retrying the same missing item.
 
 - **Default:** `14`
 - Larger values reduce repeat search noise.
+- Missing only: if the latest missing-pass skip for an item was `not yet released`
+  or `post-release grace (Nh)`, Houndarr allows one retry as soon as the item
+  becomes eligible, even if the normal missing cooldown has not fully elapsed.
+- After that retry, normal missing cooldown resumes.
 
 ### Post-Release Grace (hours)
 
@@ -67,6 +71,9 @@ Hours to wait after an item's release date before searching.
 - **Default:** `6`
 - Items still within this window are logged as `post-release grace (Nh)` and skipped.
 - Items that have not been released yet (no release date, or date in the future) are always skipped with reason `not yet released`, regardless of this setting.
+- Once a missing item clears `not yet released` or `post-release grace (Nh)`,
+  Houndarr may retry it on the next missing pass without waiting for the full
+  missing cooldown.
 
 Release date evaluation varies by app type:
 
@@ -148,6 +155,8 @@ Maximum successful cutoff searches per hour.
 
 Cutoff searches use separate cap/cooldown settings from missing searches so they
 do not consume the same budget.
+
+The release-aware retry above does not apply to cutoff searches.
 
 ## Queue backpressure
 

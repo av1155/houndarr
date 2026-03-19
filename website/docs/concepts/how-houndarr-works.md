@@ -75,7 +75,7 @@ Your monitored library
   Actually searched (often just 1–3 items)
 ```
 
-For example, if you have 500 monitored movies in Radarr but only 50 are cutoff-unmet, and 35 of those are on cooldown, 8 are still in their post-release grace window, and your batch is 1 — Houndarr searches 1 movie that cycle. The rest wait for cooldowns to expire or grace windows to pass, and Houndarr works through them over days and weeks.
+For example, if you have 500 monitored movies in Radarr but only 50 are cutoff-unmet, and 35 of those are on cooldown, 8 are still in their post-release grace window, and your batch is 1 — Houndarr searches 1 movie that cycle. The rest wait for cooldowns to expire or grace windows to pass, and Houndarr works through them over days and weeks. Missing items that were blocked only by release timing can get one early retry once they become eligible.
 
 ## The two search passes
 
@@ -88,16 +88,23 @@ Each enabled instance runs two independent passes:
 
 Cutoff search is **off by default**. Enable it only after missing items are under control so the two passes don't compete for the same indexer budget.
 
+If a missing item was skipped because it was `not yet released` or still inside
+`post-release grace (Nh)`, Houndarr allows one retry as soon as that release-timing
+gate clears instead of waiting for the full missing cooldown. Cutoff keeps its
+normal cooldown behavior.
+
 ## What "skipped" means in the logs
 
 Every item Houndarr considers but does not search is logged as `skipped` with a reason:
 
 | Reason in logs | What it means |
 |----------------|---------------|
-| `cooldown (N days remaining)` | Item was searched recently; waiting to retry |
+| `on cooldown (Nd)` | Item was searched recently; waiting to retry |
+| `on cutoff cooldown (Nd)` | Cutoff item was searched recently; waiting to retry |
 | `not yet released` | Item has no release date or release date is in the future |
 | `post-release grace (Nh)` | Release date has passed but the grace window hasn't elapsed yet |
-| `hourly cap reached` | This instance has hit its per-hour search limit |
+| `hourly cap reached (N)` | This instance has hit its missing-pass hourly search limit of `N` |
+| `cutoff hourly cap reached (N)` | This instance has hit its cutoff hourly search limit of `N` |
 | `queue backpressure (N/M)` | Download queue has N items, at or above the configured limit of M (cycle-level skip) |
 
 A high skip count with zero errors means Houndarr is pacing itself correctly — examining candidates, finding most ineligible under your rules, and waiting patiently.

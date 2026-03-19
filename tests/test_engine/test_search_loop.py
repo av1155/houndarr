@@ -13,6 +13,7 @@ import respx
 from cryptography.fernet import Fernet
 
 from houndarr.database import get_db
+from houndarr.engine.candidates import ItemType
 from houndarr.engine.search_loop import run_instance_search
 from houndarr.services.instances import (
     Instance,
@@ -200,6 +201,26 @@ async def _insert_search_log_row(
             (instance_id, item_id, item_type, search_kind, action, reason),
         )
         await conn.commit()
+
+
+async def _seed_release_timing_retry(
+    *,
+    instance_id: int,
+    item_id: int,
+    item_type: ItemType,
+    reason: str = "not yet released",
+) -> None:
+    from houndarr.services.cooldown import record_search
+
+    await record_search(instance_id, item_id, item_type)
+    await _insert_search_log_row(
+        instance_id=instance_id,
+        item_id=item_id,
+        item_type=item_type,
+        search_kind="missing",
+        action="skipped",
+        reason=reason,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -699,17 +720,7 @@ async def test_missing_release_timing_skip_allows_one_retry_while_on_cooldown(
     seeded_instances: None,
 ) -> None:
     """Missing pass may override cooldown after the latest release-timing skip."""
-    from houndarr.services.cooldown import record_search
-
-    await record_search(1, 101, "episode")
-    await _insert_search_log_row(
-        instance_id=1,
-        item_id=101,
-        item_type="episode",
-        search_kind="missing",
-        action="skipped",
-        reason="not yet released",
-    )
+    await _seed_release_timing_retry(instance_id=1, item_id=101, item_type="episode")
 
     respx.get(f"{SONARR_URL}/api/v3/wanted/missing").mock(
         return_value=httpx.Response(200, json=_MISSING_SONARR)
@@ -802,6 +813,295 @@ async def test_missing_release_timing_override_does_not_bypass_current_grace(
     rows = await _get_log_rows()
     assert rows[-1]["action"] == "skipped"
     assert rows[-1]["reason"] == "post-release grace (6h)"
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_radarr_release_timing_skip_allows_one_retry_while_on_cooldown(
+    seeded_instances: None,
+) -> None:
+    """Radarr missing pass may override cooldown after a release-timing skip."""
+    await _seed_release_timing_retry(instance_id=2, item_id=201, item_type="movie")
+
+    respx.get(f"{RADARR_URL}/api/v3/wanted/missing").mock(
+        return_value=httpx.Response(200, json=_MISSING_RADARR)
+    )
+    search_route = respx.post(f"{RADARR_URL}/api/v3/command").mock(
+        return_value=httpx.Response(201, json={"id": 2})
+    )
+
+    instance = _make_instance(instance_id=2, itype=InstanceType.radarr, url=RADARR_URL)
+    count = await run_instance_search(instance, MASTER_KEY)
+
+    assert count == 1
+    assert search_route.called
+    rows = await _get_log_rows()
+    assert rows[-1]["action"] == "searched"
+    assert rows[-1]["item_type"] == "movie"
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_sonarr_season_context_release_timing_skip_allows_one_retry_while_on_cooldown(
+    seeded_instances: None,
+) -> None:
+    """Season-context mode may override season cooldown after a release-timing skip."""
+    from houndarr.engine.adapters.sonarr import _season_item_id
+
+    await _seed_release_timing_retry(
+        instance_id=1,
+        item_id=_season_item_id(55, 1),
+        item_type="episode",
+    )
+
+    respx.get(f"{SONARR_URL}/api/v3/wanted/missing").mock(
+        return_value=httpx.Response(200, json=_MISSING_SONARR)
+    )
+    search_route = respx.post(f"{SONARR_URL}/api/v3/command").mock(
+        return_value=httpx.Response(201, json=_COMMAND_RESP)
+    )
+
+    instance = _make_instance(sonarr_search_mode=SonarrSearchMode.season_context)
+    count = await run_instance_search(instance, MASTER_KEY)
+
+    assert count == 1
+    assert search_route.called
+
+    import json as json_mod
+
+    payload = json_mod.loads(search_route.calls[0].request.content)
+    assert payload == {"name": "SeasonSearch", "seriesId": 55, "seasonNumber": 1}
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_sonarr_season_context_skips_unreleased_record_and_searches_later_eligible_one(
+    seeded_instances: None,
+) -> None:
+    """Season-context mode should not let an unreleased record block a peer."""
+    mixed_records = {
+        "records": [
+            {**_EPISODE_RECORD, "id": 101, "airDateUtc": _FUTURE_AIR_DATE},
+            {
+                **_EPISODE_RECORD,
+                "id": 102,
+                "episodeNumber": 2,
+                "airDateUtc": "2023-09-01T00:00:00Z",
+            },
+        ]
+    }
+    respx.get(f"{SONARR_URL}/api/v3/wanted/missing").mock(
+        side_effect=[
+            httpx.Response(200, json=mixed_records),
+            httpx.Response(200, json={"records": []}),
+        ]
+    )
+    search_route = respx.post(f"{SONARR_URL}/api/v3/command").mock(
+        return_value=httpx.Response(201, json=_COMMAND_RESP)
+    )
+
+    instance = _make_instance(sonarr_search_mode=SonarrSearchMode.season_context)
+    count = await run_instance_search(instance, MASTER_KEY)
+
+    assert count == 1
+    assert search_route.called
+    rows = await _get_log_rows()
+    assert rows[0]["action"] == "skipped"
+    assert rows[0]["reason"] == "not yet released"
+    assert rows[-1]["action"] == "searched"
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_lidarr_release_timing_skip_allows_one_retry_while_on_cooldown(
+    seeded_instances: None,
+) -> None:
+    """Lidarr missing pass may override cooldown after a release-timing skip."""
+    await _seed_release_timing_retry(instance_id=3, item_id=301, item_type="album")
+
+    respx.get(f"{LIDARR_URL}/api/v1/wanted/missing").mock(
+        return_value=httpx.Response(200, json=_MISSING_LIDARR)
+    )
+    search_route = respx.post(f"{LIDARR_URL}/api/v1/command").mock(
+        return_value=httpx.Response(201, json={"id": 3})
+    )
+
+    instance = _make_instance(instance_id=3, itype=InstanceType.lidarr, url=LIDARR_URL)
+    count = await run_instance_search(instance, MASTER_KEY)
+
+    assert count == 1
+    assert search_route.called
+    rows = await _get_log_rows()
+    assert rows[-1]["action"] == "searched"
+    assert rows[-1]["item_type"] == "album"
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_lidarr_artist_context_release_timing_skip_allows_one_retry_while_on_cooldown(
+    seeded_instances: None,
+) -> None:
+    """Artist-context mode may override artist cooldown after a release-timing skip."""
+    from houndarr.engine.adapters.lidarr import _artist_item_id
+
+    await _seed_release_timing_retry(
+        instance_id=3,
+        item_id=_artist_item_id(50),
+        item_type="album",
+    )
+
+    respx.get(f"{LIDARR_URL}/api/v1/wanted/missing").mock(
+        return_value=httpx.Response(200, json=_MISSING_LIDARR)
+    )
+    search_route = respx.post(f"{LIDARR_URL}/api/v1/command").mock(
+        return_value=httpx.Response(201, json={"id": 3})
+    )
+
+    instance = _make_instance(
+        instance_id=3,
+        itype=InstanceType.lidarr,
+        url=LIDARR_URL,
+        lidarr_search_mode=LidarrSearchMode.artist_context,
+    )
+    count = await run_instance_search(instance, MASTER_KEY)
+
+    assert count == 1
+    assert search_route.called
+
+    import json as json_mod
+
+    payload = json_mod.loads(search_route.calls[0].request.content)
+    assert payload == {"name": "ArtistSearch", "artistId": 50}
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_readarr_release_timing_skip_allows_one_retry_while_on_cooldown(
+    seeded_instances: None,
+) -> None:
+    """Readarr missing pass may override cooldown after a release-timing skip."""
+    await _seed_release_timing_retry(instance_id=4, item_id=401, item_type="book")
+
+    respx.get(f"{READARR_URL}/api/v1/wanted/missing").mock(
+        return_value=httpx.Response(200, json=_MISSING_READARR)
+    )
+    search_route = respx.post(f"{READARR_URL}/api/v1/command").mock(
+        return_value=httpx.Response(201, json={"id": 4})
+    )
+
+    instance = _make_instance(instance_id=4, itype=InstanceType.readarr, url=READARR_URL)
+    count = await run_instance_search(instance, MASTER_KEY)
+
+    assert count == 1
+    assert search_route.called
+    rows = await _get_log_rows()
+    assert rows[-1]["action"] == "searched"
+    assert rows[-1]["item_type"] == "book"
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_readarr_author_context_release_timing_skip_allows_one_retry_while_on_cooldown(
+    seeded_instances: None,
+) -> None:
+    """Author-context mode may override author cooldown after a release-timing skip."""
+    from houndarr.engine.adapters.readarr import _author_item_id
+
+    await _seed_release_timing_retry(
+        instance_id=4,
+        item_id=_author_item_id(60),
+        item_type="book",
+    )
+
+    respx.get(f"{READARR_URL}/api/v1/wanted/missing").mock(
+        return_value=httpx.Response(200, json=_MISSING_READARR)
+    )
+    search_route = respx.post(f"{READARR_URL}/api/v1/command").mock(
+        return_value=httpx.Response(201, json={"id": 4})
+    )
+
+    instance = _make_instance(
+        instance_id=4,
+        itype=InstanceType.readarr,
+        url=READARR_URL,
+        readarr_search_mode=ReadarrSearchMode.author_context,
+    )
+    count = await run_instance_search(instance, MASTER_KEY)
+
+    assert count == 1
+    assert search_route.called
+
+    import json as json_mod
+
+    payload = json_mod.loads(search_route.calls[0].request.content)
+    assert payload == {"name": "AuthorSearch", "authorId": 60}
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_whisparr_release_timing_skip_allows_one_retry_while_on_cooldown(
+    seeded_instances: None,
+) -> None:
+    """Whisparr missing pass may override cooldown after a release-timing skip."""
+    await _seed_release_timing_retry(
+        instance_id=5,
+        item_id=501,
+        item_type="whisparr_episode",
+    )
+
+    respx.get(f"{WHISPARR_URL}/api/v3/wanted/missing").mock(
+        return_value=httpx.Response(200, json=_MISSING_WHISPARR)
+    )
+    search_route = respx.post(f"{WHISPARR_URL}/api/v3/command").mock(
+        return_value=httpx.Response(201, json={"id": 5})
+    )
+
+    instance = _make_instance(instance_id=5, itype=InstanceType.whisparr, url=WHISPARR_URL)
+    count = await run_instance_search(instance, MASTER_KEY)
+
+    assert count == 1
+    assert search_route.called
+    rows = await _get_log_rows()
+    assert rows[-1]["action"] == "searched"
+    assert rows[-1]["item_type"] == "whisparr_episode"
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_whisparr_season_context_release_timing_skip_allows_one_retry_while_on_cooldown(
+    seeded_instances: None,
+) -> None:
+    """Whisparr season-context mode may override season cooldown after a release-timing skip."""
+    from houndarr.engine.adapters.whisparr import _season_item_id
+
+    await _seed_release_timing_retry(
+        instance_id=5,
+        item_id=_season_item_id(70, 1),
+        item_type="whisparr_episode",
+    )
+
+    respx.get(f"{WHISPARR_URL}/api/v3/wanted/missing").mock(
+        return_value=httpx.Response(200, json=_MISSING_WHISPARR)
+    )
+    search_route = respx.post(f"{WHISPARR_URL}/api/v3/command").mock(
+        return_value=httpx.Response(201, json={"id": 5})
+    )
+
+    instance = _make_instance(
+        instance_id=5,
+        itype=InstanceType.whisparr,
+        url=WHISPARR_URL,
+        whisparr_search_mode=WhisparrSearchMode.season_context,
+    )
+    count = await run_instance_search(instance, MASTER_KEY)
+
+    assert count == 1
+    assert search_route.called
+
+    import json as json_mod
+
+    payload = json_mod.loads(search_route.calls[0].request.content)
+    assert payload == {"name": "SeasonSearch", "seriesId": 70, "seasonNumber": 1}
 
 
 # ---------------------------------------------------------------------------

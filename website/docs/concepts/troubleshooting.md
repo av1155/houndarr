@@ -54,13 +54,19 @@ In your instance's cutoff-unmet view, each item shows when it was last searched.
 
 If most of your log entries say `skipped`, check the reasons:
 
-- **`cooldown (N days remaining)`** — the item was searched recently; Houndarr is waiting before trying again. This is intentional.
+- **`on cooldown (Nd)`** — the item was searched recently; Houndarr is waiting before trying again. This is intentional.
+- **`on cutoff cooldown (Nd)`** — a cutoff item was searched recently; cutoff keeps its own separate cooldown.
 - **`not yet released`** — the item has no release date or the release date is in the future.
 - **`post-release grace (Nh)`** — the release date has passed but the grace window hasn't elapsed yet. Houndarr will search once it clears.
-- **`hourly cap reached`** — your per-hour search limit has been hit for this cycle.
+- **`hourly cap reached (N)`** — your missing-pass hourly search limit of `N` has been hit for this cycle.
+- **`cutoff hourly cap reached (N)`** — your cutoff hourly search limit of `N` has been hit for this cycle.
 - **`queue backpressure (N/M)`** — the download queue has N items, at or above your configured limit of M. The entire cycle was skipped.
 
 These are all normal scheduling behavior.
+
+For missing items only, a prior `not yet released` or `post-release grace (Nh)`
+skip can be followed by one immediate retry on a later cycle once the item
+becomes eligible, even if the normal missing cooldown has not fully elapsed.
 
 ### Step 5 — Check the error count
 

@@ -257,16 +257,13 @@ async def _run_search_pass(  # noqa: C901
 
             candidate = adapt_fn(item, instance)
 
-            # Group-key dedup (season-context mode).
-            if candidate.group_key is not None:
-                if candidate.group_key in seen_group_keys:
+            # Item-level modes can dedup immediately. Context modes defer dedup
+            # until after release-timing checks so a temporarily blocked record
+            # does not hide a later eligible record from the same group.
+            if candidate.group_key is None:
+                if candidate.item_id in seen_item_ids:
                     continue
-                seen_group_keys.add(candidate.group_key)
-
-            # Item-id dedup across pages.
-            if candidate.item_id in seen_item_ids:
-                continue
-            seen_item_ids.add(candidate.item_id)
+                seen_item_ids.add(candidate.item_id)
 
             # Unreleased / post-release grace checks.
             # Pre-release gate is unconditional; post-release grace is
@@ -286,6 +283,18 @@ async def _run_search_pass(  # noqa: C901
                         reason=candidate.unreleased_reason,
                     )
                     continue
+
+            # Context-mode dedup happens after release-timing checks so a later
+            # eligible record in the same season/artist/author can still drive
+            # the group search when an earlier record was temporarily blocked.
+            if candidate.group_key is not None:
+                if candidate.group_key in seen_group_keys:
+                    continue
+                seen_group_keys.add(candidate.group_key)
+
+                if candidate.item_id in seen_item_ids:
+                    continue
+                seen_item_ids.add(candidate.item_id)
 
             # Hourly cap.
             if hourly_cap > 0 and searches_this_hour >= hourly_cap:

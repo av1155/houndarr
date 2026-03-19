@@ -14,7 +14,7 @@ See [How Houndarr Works](/docs/concepts/how-houndarr-works#why-only-a-few-items-
 
 ## "Why is Houndarr skipping so much?"
 
-Each skip has a reason logged alongside it — cooldown, post-release grace, hourly cap, or queue backpressure. A high skip count with zero errors means Houndarr is pacing itself correctly. See [How Houndarr Works](/docs/concepts/how-houndarr-works#what-skipped-means-in-the-logs) for what each reason means.
+Each skip has a reason logged alongside it — `on cooldown (Nd)`, `post-release grace (Nh)`, hourly cap, or queue backpressure. A high skip count with zero errors means Houndarr is pacing itself correctly. See [How Houndarr Works](/docs/concepts/how-houndarr-works#what-skipped-means-in-the-logs) for what each reason means.
 
 ## "Does Houndarr decide whether my file meets cutoff?"
 
@@ -23,6 +23,8 @@ No. Your *arr instance maintains the "Wanted > Cutoff Unmet" list based on your 
 ## "Why are future or recently-released titles being skipped?"
 
 Items with no release date or a release date in the future are always skipped (`not yet released`). Items that have been released but are still within the **post-release grace** window (default: 6 hours) are also skipped until the window clears. This avoids hammering indexers for content that may not be available yet.
+
+When that release-timing block clears, the missing pass can retry the item once right away instead of waiting for the full missing cooldown. Cutoff searches do not use that early retry.
 
 For Radarr, release timing uses a priority chain: `digitalRelease` → `physicalRelease` → `releaseDate` → `inCinemas`. If none of those dates are set, or the title is marked as unavailable, it will be skipped.
 

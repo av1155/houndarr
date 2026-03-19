@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.1] - 2026-03-19
+
+### Fixed
+
+- `Last hour` metric on dashboard instance cards now counts only the trailing 60-minute window; the previous `datetime()` string comparison mis-matched ISO-8601 timestamps, causing the value to equal the daily total (#222)
+- Radarr troubleshooting instructions corrected from `Movies → Discover` to `Wanted → Missing` / `Wanted → Cutoff Unmet` (#222)
+
+### Changed
+
+- Dashboard top section replaced with a focused three-metric strip (Searched, Skipped, Errors over 24 h) with semantic color accents; Fleet Summary and Auto-refresh cards removed (#222)
+- Documentation screenshots refreshed and added to pages that previously had none; homepage screenshot gallery redesigned with a full-width hero and supporting grid (#222)
+
+---
+
 ## [1.2.0] - 2026-03-18
 
 ### Added

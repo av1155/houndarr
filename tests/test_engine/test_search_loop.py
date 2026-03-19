@@ -182,6 +182,26 @@ async def _get_log_rows() -> list[dict[str, Any]]:
     return [dict(r) for r in rows]
 
 
+async def _insert_search_log_row(
+    *,
+    instance_id: int,
+    item_id: int,
+    item_type: str,
+    search_kind: str,
+    action: str,
+    reason: str | None = None,
+) -> None:
+    async with get_db() as conn:
+        await conn.execute(
+            """
+            INSERT INTO search_log (instance_id, item_id, item_type, search_kind, action, reason)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (instance_id, item_id, item_type, search_kind, action, reason),
+        )
+        await conn.commit()
+
+
 # ---------------------------------------------------------------------------
 # Tests — items searched
 # ---------------------------------------------------------------------------
@@ -671,6 +691,117 @@ async def test_item_skipped_when_on_cooldown(seeded_instances: None) -> None:
     assert rows[0]["action"] == "skipped"
     assert rows[0]["item_id"] == 101
     assert "cooldown" in (rows[0]["reason"] or "")
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_missing_release_timing_skip_allows_one_retry_while_on_cooldown(
+    seeded_instances: None,
+) -> None:
+    """Missing pass may override cooldown after the latest release-timing skip."""
+    from houndarr.services.cooldown import record_search
+
+    await record_search(1, 101, "episode")
+    await _insert_search_log_row(
+        instance_id=1,
+        item_id=101,
+        item_type="episode",
+        search_kind="missing",
+        action="skipped",
+        reason="not yet released",
+    )
+
+    respx.get(f"{SONARR_URL}/api/v3/wanted/missing").mock(
+        return_value=httpx.Response(200, json=_MISSING_SONARR)
+    )
+    search_route = respx.post(f"{SONARR_URL}/api/v3/command").mock(
+        return_value=httpx.Response(201, json=_COMMAND_RESP)
+    )
+
+    instance = _make_instance(cooldown_days=7, post_release_grace_hrs=6)
+    count = await run_instance_search(instance, MASTER_KEY)
+
+    assert count == 1
+    assert search_route.called
+    rows = await _get_log_rows()
+    assert rows[-1]["action"] == "searched"
+    assert rows[-1]["search_kind"] == "missing"
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_missing_release_timing_override_does_not_apply_without_prior_release_block(
+    seeded_instances: None,
+) -> None:
+    """Missing pass should keep normal cooldown when latest missing reason is unrelated."""
+    from houndarr.services.cooldown import record_search
+
+    await record_search(1, 101, "episode")
+    await _insert_search_log_row(
+        instance_id=1,
+        item_id=101,
+        item_type="episode",
+        search_kind="missing",
+        action="skipped",
+        reason="on cooldown (7d)",
+    )
+
+    respx.get(f"{SONARR_URL}/api/v3/wanted/missing").mock(
+        return_value=httpx.Response(200, json=_MISSING_SONARR)
+    )
+    search_route = respx.post(f"{SONARR_URL}/api/v3/command").mock(
+        return_value=httpx.Response(201, json=_COMMAND_RESP)
+    )
+
+    instance = _make_instance(cooldown_days=7, post_release_grace_hrs=6)
+    count = await run_instance_search(instance, MASTER_KEY)
+
+    assert count == 0
+    assert not search_route.called
+    rows = await _get_log_rows()
+    assert rows[-1]["action"] == "skipped"
+    assert rows[-1]["reason"] == "on cooldown (7d)"
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_missing_release_timing_override_does_not_bypass_current_grace(
+    seeded_instances: None,
+) -> None:
+    """Scheduled runs should still skip items that remain inside post-release grace."""
+    from datetime import UTC, datetime, timedelta
+
+    from houndarr.services.cooldown import record_search
+
+    await record_search(1, 101, "episode")
+    await _insert_search_log_row(
+        instance_id=1,
+        item_id=101,
+        item_type="episode",
+        search_kind="missing",
+        action="skipped",
+        reason="not yet released",
+    )
+
+    recent_release = (datetime.now(UTC) - timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    respx.get(f"{SONARR_URL}/api/v3/wanted/missing").mock(
+        return_value=httpx.Response(
+            200,
+            json={"records": [{**_EPISODE_RECORD, "id": 101, "airDateUtc": recent_release}]},
+        )
+    )
+    search_route = respx.post(f"{SONARR_URL}/api/v3/command").mock(
+        return_value=httpx.Response(201, json=_COMMAND_RESP)
+    )
+
+    instance = _make_instance(cooldown_days=7, post_release_grace_hrs=6)
+    count = await run_instance_search(instance, MASTER_KEY)
+
+    assert count == 0
+    assert not search_route.called
+    rows = await _get_log_rows()
+    assert rows[-1]["action"] == "skipped"
+    assert rows[-1]["reason"] == "post-release grace (6h)"
 
 
 # ---------------------------------------------------------------------------
@@ -1885,6 +2016,50 @@ async def test_cutoff_pass_uses_cutoff_cooldown_setting(seeded_instances: None) 
     assert len(rows) == 1
     assert rows[0]["action"] == "skipped"
     assert rows[0]["reason"] == "on cutoff cooldown (21d)"
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_cutoff_pass_does_not_use_missing_release_timing_override(
+    seeded_instances: None,
+) -> None:
+    """Cutoff cooldown should remain unchanged even after a missing release-timing skip."""
+    from houndarr.services.cooldown import record_search
+
+    await record_search(1, 101, "episode")
+    await _insert_search_log_row(
+        instance_id=1,
+        item_id=101,
+        item_type="episode",
+        search_kind="missing",
+        action="skipped",
+        reason="not yet released",
+    )
+
+    respx.get(f"{SONARR_URL}/api/v3/wanted/missing").mock(
+        return_value=httpx.Response(200, json={"records": []})
+    )
+    respx.get(f"{SONARR_URL}/api/v3/wanted/cutoff").mock(
+        return_value=httpx.Response(200, json={"records": [_EPISODE_RECORD]})
+    )
+    search_route = respx.post(f"{SONARR_URL}/api/v3/command").mock(
+        return_value=httpx.Response(201, json=_COMMAND_RESP)
+    )
+
+    instance = _make_cutoff_instance(
+        cutoff_enabled=True,
+        cooldown_days=7,
+        cutoff_cooldown_days=21,
+        post_release_grace_hrs=6,
+    )
+    count = await run_instance_search(instance, MASTER_KEY)
+
+    assert count == 0
+    assert not search_route.called
+    rows = await _get_log_rows()
+    assert rows[-1]["action"] == "skipped"
+    assert rows[-1]["search_kind"] == "cutoff"
+    assert rows[-1]["reason"] == "on cutoff cooldown (21d)"
 
 
 @pytest.mark.asyncio()

@@ -13,7 +13,7 @@ If you are unsure whether Houndarr is actually doing anything, follow these step
 ### Step 1 — Open your *arr instance's own wanted pages
 
 In Sonarr/Whisparr: **Wanted → Missing** and **Wanted → Cutoff Unmet**  
-In Radarr: **Movies → Discover** or use the **Wanted** filter  
+In Radarr: **Wanted → Missing** and **Wanted → Cutoff Unmet**  
 In Lidarr: **Wanted → Missing** and **Wanted → Cutoff Unmet**  
 In Readarr: **Wanted → Missing** and **Wanted → Cutoff Unmet**
 
@@ -31,6 +31,8 @@ Open Houndarr's **Logs** page and look at recent activity. Each row shows:
 | **Timestamp** | When the action occurred |
 
 If you see `searched` entries for items that also appear in your *arr instance's wanted views, Houndarr is working correctly.
+
+![Logs page](../../static/img/screenshots/Logs_Houndarr.jpeg)
 
 #### Log context fields
 

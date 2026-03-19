@@ -24,6 +24,8 @@ After creating your account, log in with your new credentials.
 
 Go to **Settings** and click **Add Instance** to connect your *arr instances.
 
+![Settings page](../../static/img/screenshots/Settings_Houndarr.jpeg)
+
 For each instance you need:
 
 - **Name** — a friendly label (e.g., "Radarr Movies", "Sonarr 4K", "Lidarr Music")
@@ -51,6 +53,8 @@ Each instance has its own search settings. The defaults are conservative and saf
 | Queue Limit | 0 (disabled) | Skip cycle when download queue meets or exceeds this count |
 
 For detailed explanations of all settings, see [Instance Settings](/docs/configuration/instance-settings).
+
+![Add instance settings](../../static/img/screenshots/Settings_Houndarr_Add_Instance_Settings.jpeg)
 
 ## 5. Enable the instance
 

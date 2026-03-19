@@ -10,6 +10,8 @@ This guide explains each setting available when adding or editing an instance
 in Houndarr. The defaults are conservative — keep settings low to reduce
 indexer/API pressure and avoid bans.
 
+![Add instance form](../../static/img/screenshots/Settings_Houndarr_Add_Instance_Settings.jpeg)
+
 ## Search command contract
 
 - **Radarr:** Sends movie-level commands (`MoviesSearch` with `movieIds`).

@@ -66,7 +66,7 @@ Your monitored library
         ▼
   Wanted list (much smaller)
         │
-         │  Houndarr filter: cooldown, post-release grace, hourly cap
+        │  Houndarr filter: cooldown, post-release grace, hourly cap
         ▼
   Eligible this cycle (smaller still)
         │
@@ -101,5 +101,7 @@ Every item Houndarr considers but does not search is logged as `skipped` with a 
 | `queue backpressure (N/M)` | Download queue has N items, at or above the configured limit of M (cycle-level skip) |
 
 A high skip count with zero errors means Houndarr is pacing itself correctly — examining candidates, finding most ineligible under your rules, and waiting patiently.
+
+![Logs page](../../static/img/screenshots/Logs_Houndarr.jpeg)
 
 See [FAQ](/docs/concepts/faq) for answers to specific questions, and [Troubleshooting](/docs/concepts/troubleshooting) if you want to verify everything is connected and running.

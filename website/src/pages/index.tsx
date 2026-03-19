@@ -47,27 +47,52 @@ function Screenshots() {
         <Heading as="h2" className="text--center margin-bottom--lg">
           See It in Action
         </Heading>
+
+        {/* Hero — Dashboard takes full width */}
+        <div className="screenshot-hero">
+          <img
+            src={require('@site/static/img/screenshots/Dashboard_Houndarr.jpeg').default}
+            alt="Houndarr Dashboard — instance cards with search metrics and activity"
+          />
+          <p className="screenshot-caption"><strong>Dashboard</strong> — live search metrics, instance status, and on-demand triggers</p>
+        </div>
+
+        {/* Supporting grid — remaining screens */}
         <div className="screenshot-gallery">
           <div>
             <img
-              src={require('@site/static/img/screenshots/Dashboard_Houndarr.jpeg').default}
-              alt="Houndarr Dashboard"
-            />
-            <p className="text--center margin-top--sm"><strong>Dashboard</strong></p>
-          </div>
-          <div>
-            <img
               src={require('@site/static/img/screenshots/Logs_Houndarr.jpeg').default}
-              alt="Houndarr Logs"
+              alt="Houndarr Logs — filterable search activity log"
             />
-            <p className="text--center margin-top--sm"><strong>Logs</strong></p>
+            <p className="screenshot-caption"><strong>Logs</strong></p>
           </div>
           <div>
             <img
               src={require('@site/static/img/screenshots/Settings_Houndarr.jpeg').default}
-              alt="Houndarr Settings"
+              alt="Houndarr Settings — instance list with enable toggles"
             />
-            <p className="text--center margin-top--sm"><strong>Settings</strong></p>
+            <p className="screenshot-caption"><strong>Settings</strong></p>
+          </div>
+          <div>
+            <img
+              src={require('@site/static/img/screenshots/Settings_Houndarr_Add_Instance_Settings.jpeg').default}
+              alt="Houndarr Add Instance — search and cutoff configuration"
+            />
+            <p className="screenshot-caption"><strong>Instance config</strong></p>
+          </div>
+          <div>
+            <img
+              src={require('@site/static/img/screenshots/Settings_Account_Houndarr.jpeg').default}
+              alt="Houndarr Account settings — password and session management"
+            />
+            <p className="screenshot-caption"><strong>Account</strong></p>
+          </div>
+          <div>
+            <img
+              src={require('@site/static/img/screenshots/Settings_Help_Houndarr.jpeg').default}
+              alt="Houndarr Help — in-app settings reference"
+            />
+            <p className="screenshot-caption"><strong>Help</strong></p>
           </div>
         </div>
       </div>

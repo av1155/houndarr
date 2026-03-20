@@ -1,5 +1,5 @@
 ---
-sidebar_position: 3
+sidebar_position: 4
 title: First-Run Setup
 description: Walk through the initial setup after starting Houndarr for the first time.
 ---

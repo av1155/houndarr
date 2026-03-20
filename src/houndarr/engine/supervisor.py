@@ -25,6 +25,7 @@ logger = logging.getLogger(__name__)
 _SHUTDOWN_TIMEOUT = 10  # seconds to wait for tasks to finish on stop()
 _CONNECT_RETRY_SECS = 30  # back-off interval when a connection error occurs
 _STARTUP_GRACE_SECS = 10  # one-time delay before the first cycle fires per instance
+_STARTUP_STAGGER_SECS = 30  # per-instance offset added to startup grace at initial start()
 RunNowStatus = Literal["accepted", "not_found", "disabled"]
 
 
@@ -55,8 +56,10 @@ class Supervisor:
         instances = await list_instances(master_key=self._master_key)
         enabled = [i for i in instances if i.enabled]
 
-        for instance in enabled:
-            await self.start_instance_task(instance.id, instance=instance)
+        for idx, instance in enumerate(enabled):
+            await self.start_instance_task(
+                instance.id, instance=instance, startup_offset=idx * _STARTUP_STAGGER_SECS
+            )
 
         if not self._tasks:
             logger.warning("Supervisor: no enabled instances configured — nothing to do")
@@ -107,7 +110,7 @@ class Supervisor:
         logger.info("Supervisor: all tasks stopped")
 
     async def start_instance_task(
-        self, instance_id: int, *, instance: Instance | None = None
+        self, instance_id: int, *, instance: Instance | None = None, startup_offset: int = 0
     ) -> bool:
         """Ensure the scheduled loop task exists for *instance_id* when enabled."""
         self._prune_scheduled_tasks()
@@ -123,7 +126,7 @@ class Supervisor:
             return False
 
         task = asyncio.create_task(
-            self._instance_loop(instance_id),
+            self._instance_loop(instance_id, startup_offset=startup_offset),
             name=f"search-loop-{instance_id}",
         )
         task.add_done_callback(partial(self._on_scheduled_task_done, instance_id))
@@ -188,7 +191,7 @@ class Supervisor:
     # Internal
     # ------------------------------------------------------------------
 
-    async def _instance_loop(self, instance_id: int) -> None:
+    async def _instance_loop(self, instance_id: int, startup_offset: int = 0) -> None:
         """Run search cycles for one instance until cancelled.
 
         A one-time startup grace delay gives co-located *arr services time
@@ -201,10 +204,10 @@ class Supervisor:
 
         logger.info(
             "Supervisor: waiting %d s startup grace for instance id=%d",
-            _STARTUP_GRACE_SECS,
+            _STARTUP_GRACE_SECS + startup_offset,
             instance_id,
         )
-        await asyncio.sleep(_STARTUP_GRACE_SECS)
+        await asyncio.sleep(_STARTUP_GRACE_SECS + startup_offset)
 
         try:
             while True:

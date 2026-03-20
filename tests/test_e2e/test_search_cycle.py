@@ -365,7 +365,10 @@ async def test_supervisor_runs_both_instances(
         return_value=httpx.Response(201, json={"id": 2})
     )
 
-    with patch.object(_supervisor_mod, "_STARTUP_GRACE_SECS", 0):
+    with (
+        patch.object(_supervisor_mod, "_STARTUP_GRACE_SECS", 0),
+        patch.object(_supervisor_mod, "_STARTUP_STAGGER_SECS", 0),
+    ):
         sup = Supervisor(master_key=master_key)
         await sup.start()
         assert len(sup._tasks) == 2  # noqa: SLF001

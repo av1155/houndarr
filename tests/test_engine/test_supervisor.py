@@ -126,6 +126,60 @@ async def test_instance_loop_waits_startup_grace_before_first_cycle(
     mock_search.assert_not_called()
 
 
+@pytest.mark.asyncio()
+async def test_instance_loop_applies_startup_offset(
+    seeded_instances: None,
+) -> None:
+    """startup_offset is added to _STARTUP_GRACE_SECS for the first sleep."""
+    instance = _make_instance()
+    sleep_calls: list[float] = []
+
+    async def fake_sleep(secs: float) -> None:
+        sleep_calls.append(secs)
+        raise asyncio.CancelledError
+
+    with (
+        patch.object(_supervisor_mod, "_STARTUP_GRACE_SECS", 10),
+        patch("houndarr.engine.supervisor.get_instance", return_value=instance),
+        patch("houndarr.engine.supervisor.asyncio.sleep", side_effect=fake_sleep),
+        patch(
+            "houndarr.engine.supervisor.run_instance_search",
+            new_callable=AsyncMock,
+        ) as mock_search,
+    ):
+        supervisor = Supervisor(master_key=MASTER_KEY)
+        with pytest.raises(asyncio.CancelledError):  # noqa: PT012
+            await supervisor._instance_loop(instance.id, startup_offset=60)  # noqa: SLF001
+
+    assert sleep_calls, "expected at least one asyncio.sleep call"
+    assert sleep_calls[0] == 70  # 10 (grace) + 60 (offset)
+    mock_search.assert_not_called()
+
+
+@pytest.mark.asyncio()
+async def test_start_staggers_instance_tasks() -> None:
+    """start() passes idx * _STARTUP_STAGGER_SECS as startup_offset to each task."""
+    from houndarr.engine.supervisor import _STARTUP_STAGGER_SECS
+
+    instance1 = _make_instance(instance_id=1)
+    instance2 = _make_instance(instance_id=2, url="http://radarr:7878")
+
+    with (
+        patch.object(_supervisor_mod, "_STARTUP_STAGGER_SECS", 30),
+        patch("houndarr.engine.supervisor.list_instances", return_value=[instance1, instance2]),
+    ):
+        supervisor = Supervisor(master_key=MASTER_KEY)
+        mock_start = AsyncMock(return_value=True)
+        supervisor.start_instance_task = mock_start  # noqa: SLF001
+        await supervisor.start()
+
+    assert mock_start.call_count == 2
+    assert mock_start.call_args_list[0].args == (instance1.id,)
+    assert mock_start.call_args_list[0].kwargs["startup_offset"] == 0
+    assert mock_start.call_args_list[1].args == (instance2.id,)
+    assert mock_start.call_args_list[1].kwargs["startup_offset"] == _STARTUP_STAGGER_SECS
+
+
 # ---------------------------------------------------------------------------
 # Tests — state-transition error logging
 # ---------------------------------------------------------------------------

@@ -24,7 +24,7 @@ Houndarr is configured primarily through environment variables set in your
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `HOUNDARR_SECURE_COOKIES` | `false` | Set `Secure` flag on cookies (enable when behind HTTPS) |
-| `HOUNDARR_TRUSTED_PROXIES` | _(empty)_ | Comma-separated trusted reverse-proxy IPs for `X-Forwarded-For` |
+| `HOUNDARR_TRUSTED_PROXIES` | _(empty)_ | Comma-separated trusted reverse-proxy IPs or CIDR subnets (e.g. `10.0.0.1,172.18.0.0/16`) for `X-Forwarded-For` |
 
 ## Container settings
 

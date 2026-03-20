@@ -15,8 +15,9 @@ that terminates HTTPS.
 When running behind a reverse proxy with HTTPS:
 
 1. Set `HOUNDARR_SECURE_COOKIES=true` so session cookies require HTTPS.
-2. Set `HOUNDARR_TRUSTED_PROXIES` to your proxy's IP address (e.g. `172.18.0.1`)
-   so the login rate limiter sees real client IPs via `X-Forwarded-For`.
+2. Set `HOUNDARR_TRUSTED_PROXIES` to your proxy's IP or subnet (e.g. `172.18.0.1`
+   or `172.18.0.0/16`) so the login rate limiter sees real client IPs via
+   `X-Forwarded-For`.
 3. Proxy all traffic to `http://houndarr:8877`.
 
 :::warning
@@ -68,14 +69,15 @@ services:
       - "traefik.http.services.houndarr.loadbalancer.server.port=8877"
     environment:
       - HOUNDARR_SECURE_COOKIES=true
-      - HOUNDARR_TRUSTED_PROXIES=172.18.0.1
+      - HOUNDARR_TRUSTED_PROXIES=172.18.0.0/16
 ```
 
 ## Trusted proxies
 
 The `HOUNDARR_TRUSTED_PROXIES` variable accepts a comma-separated list of IP
-addresses. When set, Houndarr honors the `X-Forwarded-For` header from those
-IPs to determine the real client IP for rate limiting.
+addresses or CIDR subnets (e.g. `172.18.0.1` or `172.18.0.0/16`). When set,
+Houndarr honors the `X-Forwarded-For` header from matching IPs to determine
+the real client IP for rate limiting.
 
 When no trusted proxies are configured (the default), the `X-Forwarded-For`
 header is ignored entirely, preventing IP spoofing.

@@ -301,8 +301,9 @@ def _client_ip(request: Request) -> str:
     configured trusted proxies.
 
     When ``HOUNDARR_TRUSTED_PROXIES`` is set (a comma-separated list of
-    proxy IPs), and the direct connection IP matches one of those proxies,
-    the left-most IP in ``X-Forwarded-For`` is used as the client IP.
+    proxy IPs or CIDR subnets), and the direct connection IP matches one
+    of those proxies or falls within a trusted subnet, the left-most IP
+    in ``X-Forwarded-For`` is used as the client IP.
 
     When no trusted proxies are configured (the default), only
     ``request.client.host`` is used, preventing header spoofing.

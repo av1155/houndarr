@@ -117,7 +117,7 @@ should store its database and master key.
 | `HOUNDARR_DEV` | `false` | Enable development mode (auto-reload, API docs) |
 | `HOUNDARR_LOG_LEVEL` | `info` | Log level: `debug`, `info`, `warning`, `error` |
 | `HOUNDARR_SECURE_COOKIES` | `false` | Set `Secure` flag on cookies (enable when behind HTTPS) |
-| `HOUNDARR_TRUSTED_PROXIES` | _(empty)_ | Comma-separated trusted reverse-proxy IPs for `X-Forwarded-For` |
+| `HOUNDARR_TRUSTED_PROXIES` | _(empty)_ | Comma-separated trusted reverse-proxy IPs or CIDR subnets for `X-Forwarded-For` |
 | `PUID` | `1000` | User ID for file ownership inside the container |
 | `PGID` | `1000` | Group ID for file ownership inside the container |
 | `TZ` | `UTC` | Container timezone (e.g. `America/New_York`) |
@@ -133,8 +133,9 @@ should store its database and master key.
 If you run Houndarr behind a reverse proxy (Nginx, Caddy, Traefik, etc.):
 
 1. Set `HOUNDARR_SECURE_COOKIES=true` so session cookies require HTTPS.
-2. Set `HOUNDARR_TRUSTED_PROXIES` to your proxy's IP address (e.g. `172.18.0.1`)
-   so the login rate limiter sees real client IPs via `X-Forwarded-For`.
+2. Set `HOUNDARR_TRUSTED_PROXIES` to your proxy's IP or subnet (e.g. `172.18.0.1`
+   or `172.18.0.0/16`) so the login rate limiter sees real client IPs via
+   `X-Forwarded-For`.
 3. Proxy all traffic to `http://houndarr:8877`.
 
 ## First-Run Setup

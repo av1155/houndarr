@@ -89,3 +89,9 @@ website/.docusaurus/
 
 # Claude session brief (local only — never commit)
 CLAUDE.md
+
+# Claude Code project state (local only — never commit)
+.claude/
+
+# uv lock file (project uses requirements.txt — uv is a local dev runner)
+uv.lock

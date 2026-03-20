@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2026-03-20
+
+### Added
+
+- Missing-pass cycles now retry an item on the first eligible pass after its release date when the previous skip was caused by a release-timing block, avoiding unnecessary cooldown waits (#226)
+
+### Fixed
+
+- Log cycles from concurrent instances no longer interleave; all rows for a given cycle now appear contiguously even when multiple instances run at the same second (#230)
+
+### Changed
+
+- Station dark theme gains ambient depth on desktop: faint radial glows on the page body, a subtle horizontal line texture, and a soft cyan halo below the navbar (#230)
+- App shell and templates updated for consistent Station design system layout with improved desktop and mobile parity (#228, #230)
+
+---
+
 ## [1.2.1] - 2026-03-19
 
 ### Fixed

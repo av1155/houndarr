@@ -54,12 +54,14 @@ def _parse_trusted_proxies(raw: str) -> TrustedProxies:
             try:
                 networks.append(ipaddress.ip_network(entry, strict=False))
             except ValueError:
-                logger.warning("Ignoring invalid trusted proxy subnet: %s", entry)
+                logger.warning(
+                    "HOUNDARR_TRUSTED_PROXIES contains an invalid subnet entry; skipping it"
+                )
         else:
             try:
                 addresses.add(ipaddress.ip_address(entry))
             except ValueError:
-                logger.warning("Ignoring invalid trusted proxy IP: %s", entry)
+                logger.warning("HOUNDARR_TRUSTED_PROXIES contains an invalid IP entry; skipping it")
     return TrustedProxies(frozenset(addresses), tuple(networks))
 
 

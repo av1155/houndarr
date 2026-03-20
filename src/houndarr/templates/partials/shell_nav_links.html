@@ -5,7 +5,7 @@
    hx-target="#app-content"
    hx-swap="innerHTML"
    hx-push-url="true"
-   class="shell-nav-link px-3 py-2 rounded-md text-sm font-medium {% if request.url.path == '/' %}bg-slate-800 text-white{% else %}text-slate-400 hover:text-white hover:bg-slate-800{% endif %}">
+   class="shell-nav-link px-3 py-2 rounded-md text-sm font-medium {% if request.url.path == '/' %}bg-surface-3 text-white{% else %}text-slate-400 hover:text-white hover:bg-surface-2{% endif %}">
   Dashboard
 </a>
 <a href="/logs"
@@ -15,7 +15,7 @@
    hx-target="#app-content"
    hx-swap="innerHTML"
    hx-push-url="true"
-   class="shell-nav-link px-3 py-2 rounded-md text-sm font-medium {% if request.url.path == '/logs' %}bg-slate-800 text-white{% else %}text-slate-400 hover:text-white hover:bg-slate-800{% endif %}">
+   class="shell-nav-link px-3 py-2 rounded-md text-sm font-medium {% if request.url.path == '/logs' %}bg-surface-3 text-white{% else %}text-slate-400 hover:text-white hover:bg-surface-2{% endif %}">
   Logs
 </a>
 <a href="/settings"
@@ -25,6 +25,6 @@
    hx-target="#app-content"
    hx-swap="innerHTML"
    hx-push-url="true"
-   class="shell-nav-link px-3 py-2 rounded-md text-sm font-medium {% if request.url.path == '/settings' or request.url.path.startswith('/settings/') %}bg-slate-800 text-white{% else %}text-slate-400 hover:text-white hover:bg-slate-800{% endif %}">
+   class="shell-nav-link px-3 py-2 rounded-md text-sm font-medium {% if request.url.path == '/settings' or request.url.path.startswith('/settings/') %}bg-surface-3 text-white{% else %}text-slate-400 hover:text-white hover:bg-surface-2{% endif %}">
   Settings
 </a>

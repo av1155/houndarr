@@ -1,16 +1,27 @@
 .features {
   display: flex;
-  align-items: center;
-  padding: 2rem 0;
+  align-items: stretch;
+  padding: 3rem 0;
   width: 100%;
 }
 
-/* Ensure consistent vertical spacing between wrapped rows of cards */
+/* Station dark: subtle surface-1 background for the feature strip */
+:global([data-theme='dark']) .features {
+  background: #0e1117;
+  border-top: 1px solid #1e2638;
+  border-bottom: 1px solid #1e2638;
+}
+
+:global([data-theme='light']) .features {
+  background: rgba(0, 0, 0, 0.025);
+  border-top: 1px solid rgba(0, 0, 0, 0.06);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+}
+
 .features :global(.row) {
   row-gap: 1rem;
 }
 
-/* Stretch cards to equal height within each row */
 .features :global(.col) {
   display: flex;
 }
@@ -19,16 +30,64 @@
   flex: 1;
 }
 
+/* ── Feature card ─────────────────────────────────────────────────────────── */
 .featureCard {
-  padding: 1.5rem;
+  padding: 1.25rem 1.5rem;
   border-radius: 8px;
-  text-align: center;
+  border: 1px solid transparent;
+  text-align: left;
 }
 
 :global([data-theme='dark']) .featureCard {
-  background: rgba(255, 255, 255, 0.05);
+  background: #07080f;
+  border-color: #1e2638;
 }
 
 :global([data-theme='light']) .featureCard {
-  background: rgba(0, 0, 0, 0.03);
+  background: rgba(255, 255, 255, 0.6);
+  border-color: rgba(0, 0, 0, 0.06);
+}
+
+.featureCard :global(h3) {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  margin-top: 0;
+  margin-bottom: 0.5rem;
+}
+
+:global([data-theme='dark']) .featureCard :global(h3) {
+  color: #e2e8f0;
+}
+
+.featureCard p {
+  font-size: 0.875rem;
+  line-height: 1.65;
+  margin-bottom: 0;
+}
+
+:global([data-theme='dark']) .featureCard p {
+  color: #64748b;
+}
+
+/* ── Feature icon badge ───────────────────────────────────────────────────── */
+.featureIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 6px;
+  margin-bottom: 0.875rem;
+  font-size: 0.9375rem;
+  line-height: 1;
+}
+
+:global([data-theme='dark']) .featureIcon {
+  background: rgba(34, 211, 238, 0.07);
+  border: 1px solid rgba(34, 211, 238, 0.13);
+}
+
+:global([data-theme='light']) .featureIcon {
+  background: rgba(8, 145, 178, 0.08);
+  border: 1px solid rgba(8, 145, 178, 0.15);
 }

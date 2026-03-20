@@ -111,4 +111,8 @@ A high skip count with zero errors means Houndarr is pacing itself correctly —
 
 ![Logs page](../../static/img/screenshots/Logs_Houndarr.jpeg)
 
+On mobile, log entries are presented as stacked cards — each card corresponds to one cycle group or individual row:
+
+![Logs page on mobile](../../static/img/screenshots/Logs_Houndarr_Smartphone.jpeg)
+
 See [FAQ](/docs/concepts/faq) for answers to specific questions, and [Troubleshooting](/docs/concepts/troubleshooting) if you want to verify everything is connected and running.

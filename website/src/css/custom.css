@@ -1,49 +1,217 @@
 /**
  * Custom CSS for Houndarr documentation site.
- * Uses Infima CSS framework variables from Docusaurus.
+ * Station design system — shared tokens imported below.
  */
 
-/* Light mode — deep blue-gray primary */
+/* Google Fonts must come first */
+@import url('https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,400;0,14..32,500;0,14..32,600;0,14..32,700;0,14..32,800;1,14..32,400&family=JetBrains+Mono:ital,wght@0,400;0,500;1,400&display=swap');
+
+@import './tokens.css';
+
+/* ── Infima overrides — Light mode ────────────────────────────────────────── */
 :root {
-  --ifm-color-primary: #1a73e8;
-  --ifm-color-primary-dark: #1765d0;
-  --ifm-color-primary-darker: #155fc5;
-  --ifm-color-primary-darkest: #114ea2;
-  --ifm-color-primary-light: #2d80eb;
-  --ifm-color-primary-lighter: #3888ec;
-  --ifm-color-primary-lightest: #5c9ef0;
-  --ifm-code-font-size: 95%;
-  --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.1);
+  --ifm-color-primary: #0891b2;
+  --ifm-color-primary-dark: #0e7490;
+  --ifm-color-primary-darker: #155e75;
+  --ifm-color-primary-darkest: #164e63;
+  --ifm-color-primary-light: #06b6d4;
+  --ifm-color-primary-lighter: #22d3ee;
+  --ifm-color-primary-lightest: #67e8f9;
+
+  --ifm-font-family-base: var(--font-sans);
+  --ifm-font-family-monospace: var(--font-mono);
+  --ifm-code-font-size: 90%;
+  --ifm-border-radius: var(--radius-md);
+  --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.08);
 }
 
-/* Dark mode — teal accent to match Houndarr's dark-themed UI */
+/* ── Infima overrides — Dark mode (Station) ───────────────────────────────── */
 [data-theme='dark'] {
-  --ifm-color-primary: #4ecdc4;
-  --ifm-color-primary-dark: #37c6bc;
-  --ifm-color-primary-darker: #30bfb5;
-  --ifm-color-primary-darkest: #27a199;
-  --ifm-color-primary-light: #65d4cc;
-  --ifm-color-primary-lighter: #73d8d1;
-  --ifm-color-primary-lightest: #97e3dd;
-  --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.3);
+  /* Brand */
+  --ifm-color-primary: var(--color-brand-400);
+  --ifm-color-primary-dark: var(--color-brand-500);
+  --ifm-color-primary-darker: var(--color-brand-600);
+  --ifm-color-primary-darkest: var(--color-brand-700);
+  --ifm-color-primary-light: var(--color-brand-300);
+  --ifm-color-primary-lighter: var(--color-brand-200);
+  --ifm-color-primary-lightest: var(--color-brand-100);
+
+  /* Backgrounds */
+  --ifm-background-color: var(--color-base);
+  --ifm-background-surface-color: var(--color-surface-1);
+
+  /* Navbar */
+  --ifm-navbar-background-color: var(--color-surface-1);
+  --ifm-navbar-shadow: 0 1px 0 0 var(--color-border-subtle);
+
+  /* Footer */
+  --ifm-footer-background-color: var(--color-surface-1);
+
+  /* Code */
+  --ifm-code-background: rgba(34, 211, 238, 0.07);
+  --ifm-pre-background: #0d0d14;
+
+  /* Borders */
+  --ifm-border-color: var(--color-border-subtle);
+  --ifm-table-border-color: var(--color-border-subtle);
+  --ifm-hr-border-color: var(--color-border-subtle);
+  --ifm-toc-border-color: var(--color-border-subtle);
+
+  /* Typography */
+  --ifm-font-family-base: var(--font-sans);
+  --ifm-font-family-monospace: var(--font-mono);
+
+  /* Sidebar */
+  --ifm-menu-color-active: var(--color-brand-400);
+
+  /* Highlighted code line */
+  --docusaurus-highlighted-code-line-bg: rgba(34, 211, 238, 0.08);
 }
 
-/* Hero section styling */
+/* ── Body atmosphere — desktop ambient depth ────────────────────────────── */
+[data-theme='dark'] body {
+  background-image:
+    radial-gradient(ellipse 55% 40% at 0% 0%,    rgba(6, 182, 212, 0.055) 0%, transparent 60%),
+    radial-gradient(ellipse 40% 30% at 100% 100%, rgba(14, 116, 144, 0.030) 0%, transparent 55%),
+    repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 31px,
+      rgba(34, 211, 238, 0.018) 31px,
+      rgba(34, 211, 238, 0.018) 32px
+    );
+}
+
+/* ── Nav atmospheric glow (dark mode) ──────────────────────────────────── */
+[data-theme='dark'] .navbar {
+  box-shadow:
+    0 1px 0 var(--color-border-subtle),
+    0 2px 20px rgba(6, 182, 212, 0.060);
+}
+
+/* ── Hero — Station midnight + radial glow ────────────────────────────────── */
 .hero--primary {
-  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
-  color: #ffffff;
+  background: var(--color-base, #07080f);
+  color: #f8fafc;
+  position: relative;
+  overflow: hidden;
+}
+
+.hero--primary::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse 70% 65% at 15% 50%, rgba(6, 182, 212, 0.10) 0%, transparent 65%);
+  pointer-events: none;
 }
 
 [data-theme='light'] .hero--primary {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, #0c1a2e 0%, #0f2240 100%);
+  color: #f8fafc;
 }
 
-.hero__title {
-  font-size: 3rem;
-  font-weight: 800;
+[data-theme='light'] .hero--primary::before {
+  display: none;
 }
 
-.hero__subtitle {
-  font-size: 1.3rem;
-  opacity: 0.9;
+/* ── Inline code — Station tinted ─────────────────────────────────────────── */
+[data-theme='dark'] :not(pre) > code {
+  background-color: rgba(34, 211, 238, 0.07);
+  border: 1px solid rgba(34, 211, 238, 0.14);
+  color: var(--color-brand-300);
+  border-radius: var(--radius-sm);
+  padding: 0.1em 0.4em;
+}
+
+/* ── Code blocks ─────────────────────────────────────────────────────────── */
+[data-theme='dark'] pre {
+  background: #0d0d14;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+}
+
+/* ── Sidebar — left-border active indicator ───────────────────────────────── */
+[data-theme='dark'] .menu__link--active:not(.menu__link--sublist) {
+  border-left: 2px solid var(--color-brand-400);
+  padding-left: calc(var(--ifm-menu-link-padding-horizontal) - 2px);
+}
+
+/* ── Admonitions — left-border Station style ──────────────────────────────── */
+[data-theme='dark'] .admonition {
+  background-color: var(--color-surface-1);
+  border-left-width: 4px;
+  border-top: none;
+  border-right: none;
+  border-bottom: none;
+}
+
+[data-theme='dark'] .admonition-note {
+  border-left-color: var(--color-brand-400);
+}
+
+[data-theme='dark'] .admonition-tip {
+  border-left-color: var(--color-success);
+}
+
+[data-theme='dark'] .admonition-warning {
+  border-left-color: var(--color-warning);
+}
+
+[data-theme='dark'] .admonition-danger {
+  border-left-color: var(--color-danger);
+}
+
+[data-theme='dark'] .admonition-info {
+  border-left-color: var(--color-info);
+}
+
+/* ── Tables ──────────────────────────────────────────────────────────────── */
+[data-theme='dark'] table {
+  border-color: var(--color-border-subtle);
+}
+
+[data-theme='dark'] tr {
+  border-color: var(--color-border-subtle);
+}
+
+[data-theme='dark'] tr:nth-child(2n) {
+  background-color: rgba(255, 255, 255, 0.02);
+}
+
+/* ── Footer ──────────────────────────────────────────────────────────────── */
+[data-theme='dark'] .footer {
+  border-top: 1px solid var(--color-border-subtle);
+}
+
+[data-theme='dark'] .footer__copyright {
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  color: #475569;
+}
+
+/* ── TOC — refined link styles ───────────────────────────────────────────── */
+[data-theme='dark'] .table-of-contents__link {
+  color: #475569;
+  font-size: 0.8125rem;
+}
+
+[data-theme='dark'] .table-of-contents__link:hover,
+[data-theme='dark'] .table-of-contents__link--active {
+  color: var(--color-brand-400);
+}
+
+/* ── Pagination / doc nav cards ──────────────────────────────────────────── */
+[data-theme='dark'] .pagination-nav__link {
+  border-color: var(--color-border-subtle);
+  background: var(--color-surface-1);
+}
+
+[data-theme='dark'] .pagination-nav__link:hover {
+  border-color: var(--color-brand-500);
+  background: var(--color-surface-2);
+}
+
+/* ── Breadcrumbs ─────────────────────────────────────────────────────────── */
+[data-theme='dark'] .breadcrumbs__item--active .breadcrumbs__link {
+  color: #94a3b8;
 }

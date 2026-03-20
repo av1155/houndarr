@@ -8,7 +8,7 @@
 <div class="max-w-5xl mx-auto space-y-6">
   <div class="help-reveal flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
     <div>
-      <h1 class="text-2xl font-bold text-white">Instance Settings Help</h1>
+      <h1 class="text-xl font-bold text-white tracking-tight">Instance Settings Help</h1>
       <p class="mt-2 text-sm text-slate-400 max-w-2xl leading-relaxed">
         Quick reference for each Add/Edit Instance control, with defaults and safe-operating guidance.
       </p>
@@ -21,14 +21,14 @@
       hx-target="#app-content"
       hx-swap="innerHTML"
       hx-push-url="true"
-      class="px-3 py-1.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 text-sm border border-slate-700 transition-colors"
+      class="px-3 py-1.5 rounded border border-[#2a3448] bg-[#151b27] hover:bg-[#1e2638] text-slate-200 text-sm font-sans transition-colors"
     >
       Back to Settings
     </a>
   </div>
 
   <section
-    class="help-reveal rounded-xl border border-brand-900/40 bg-gradient-to-br from-slate-900 to-slate-900/70 p-4 sm:p-5"
+    class="help-reveal rounded-xl border border-brand-800/30 bg-[#07080f]/60 p-4 sm:p-5" style="border-left: 3px solid var(--color-brand-500, #06b6d4);"
   >
     <p class="text-xs font-medium tracking-wide uppercase text-brand-300">Recommended mindset</p>
     <p class="mt-2 text-sm text-slate-300 leading-relaxed">
@@ -37,13 +37,13 @@
     </p>
   </section>
 
-  <section class="help-reveal rounded-xl border border-slate-800 bg-slate-900 p-5">
+  <section class="help-reveal rounded-xl border border-[#1e2638] bg-[#0e1117] p-5">
     <h2 class="text-lg font-semibold text-slate-100 mb-1">Missing Search Controls</h2>
     <p class="text-xs text-slate-400 mb-4">
       Primary workload. Increase slowly only if indexers remain healthy.
     </p>
     <div class="space-y-3">
-      <div class="rounded-lg border border-slate-800 bg-slate-950/40 p-3">
+      <div class="rounded-lg border border-[#1e2638] bg-[#07080f]/50 p-3">
         <div class="flex items-center justify-between gap-3">
           <h3 class="text-sm font-semibold text-slate-200">Batch Size</h3>
           <span
@@ -53,7 +53,7 @@
         </div>
         <p class="mt-1 text-sm text-slate-300">Maximum missing items considered per cycle.</p>
       </div>
-      <div class="rounded-lg border border-slate-800 bg-slate-950/40 p-3">
+      <div class="rounded-lg border border-[#1e2638] bg-[#07080f]/50 p-3">
         <div class="flex items-center justify-between gap-3">
           <h3 class="text-sm font-semibold text-slate-200">Sleep (minutes)</h3>
           <span
@@ -63,7 +63,7 @@
         </div>
         <p class="mt-1 text-sm text-slate-300">Wait time between cycles for each instance.</p>
       </div>
-      <div class="rounded-lg border border-slate-800 bg-slate-950/40 p-3">
+      <div class="rounded-lg border border-[#1e2638] bg-[#07080f]/50 p-3">
         <div class="flex items-center justify-between gap-3">
           <h3 class="text-sm font-semibold text-slate-200">Hourly Cap</h3>
           <span
@@ -75,7 +75,7 @@
           Maximum successful missing searches per hour (<code>0</code> = unlimited).
         </p>
       </div>
-      <div class="rounded-lg border border-slate-800 bg-slate-950/40 p-3">
+      <div class="rounded-lg border border-[#1e2638] bg-[#07080f]/50 p-3">
         <div class="flex items-center justify-between gap-3">
           <h3 class="text-sm font-semibold text-slate-200">Cooldown (days)</h3>
           <span
@@ -85,7 +85,7 @@
         </div>
         <p class="mt-1 text-sm text-slate-300">Minimum delay before retrying the same missing item.</p>
       </div>
-      <div class="rounded-lg border border-slate-800 bg-slate-950/40 p-3">
+      <div class="rounded-lg border border-[#1e2638] bg-[#07080f]/50 p-3">
         <div class="flex items-center justify-between gap-3">
           <h3 class="text-sm font-semibold text-slate-200">Post-Release Grace (hrs)</h3>
           <span
@@ -99,10 +99,10 @@
           are always skipped regardless of this setting.
         </p>
       </div>
-      <div class="rounded-lg border border-slate-800 bg-slate-950/40 p-3">
+      <div class="rounded-lg border border-[#1e2638] bg-[#07080f]/50 p-3">
         <div class="flex items-center justify-between gap-3">
           <h3 class="text-sm font-semibold text-slate-200">Missing Search Mode</h3>
-          <span class="text-[11px] px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700"
+          <span class="text-[11px] px-2 py-0.5 rounded-full bg-[#1e2638] text-slate-400 border border-[#2a3448] font-mono"
             >Per-app setting</span
           >
         </div>
@@ -119,13 +119,13 @@
     </div>
   </section>
 
-  <section class="help-reveal rounded-xl border border-slate-800 bg-slate-900 p-5">
+  <section class="help-reveal rounded-xl border border-[#1e2638] bg-[#0e1117] p-5">
     <h2 class="text-lg font-semibold text-slate-100 mb-1">Queue Backpressure</h2>
     <p class="text-xs text-slate-400 mb-4">
       Prevents Houndarr from adding work when the download client is already busy.
     </p>
     <div class="space-y-3">
-      <div class="rounded-lg border border-slate-800 bg-slate-950/40 p-3">
+      <div class="rounded-lg border border-[#1e2638] bg-[#07080f]/50 p-3">
         <div class="flex items-center justify-between gap-3">
           <h3 class="text-sm font-semibold text-slate-200">Queue Limit</h3>
           <span
@@ -142,16 +142,16 @@
     </div>
   </section>
 
-  <section class="help-reveal rounded-xl border border-slate-800 bg-slate-900 p-5">
+  <section class="help-reveal rounded-xl border border-[#1e2638] bg-[#0e1117] p-5">
     <h2 class="text-lg font-semibold text-slate-100 mb-1">Cutoff Upgrade Controls</h2>
     <p class="text-xs text-slate-400 mb-4">
       Lower priority than missing. Keep conservative unless backlog is stable.
     </p>
     <div class="space-y-3">
-      <div class="rounded-lg border border-slate-800 bg-slate-950/40 p-3">
+      <div class="rounded-lg border border-[#1e2638] bg-[#07080f]/50 p-3">
         <div class="flex items-center justify-between gap-3">
           <h3 class="text-sm font-semibold text-slate-200">Cutoff search</h3>
-          <span class="text-[11px] px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700"
+          <span class="text-[11px] px-2 py-0.5 rounded-full bg-[#1e2638] text-slate-400 border border-[#2a3448] font-mono"
             >Default: Off</span
           >
         </div>
@@ -159,7 +159,7 @@
           Enables cutoff-upgrade pass for items below quality cutoff.
         </p>
       </div>
-      <div class="rounded-lg border border-slate-800 bg-slate-950/40 p-3">
+      <div class="rounded-lg border border-[#1e2638] bg-[#07080f]/50 p-3">
         <div class="flex items-center justify-between gap-3">
           <h3 class="text-sm font-semibold text-slate-200">Cutoff Batch</h3>
           <span
@@ -169,7 +169,7 @@
         </div>
         <p class="mt-1 text-sm text-slate-300">Maximum cutoff items considered per cycle.</p>
       </div>
-      <div class="rounded-lg border border-slate-800 bg-slate-950/40 p-3">
+      <div class="rounded-lg border border-[#1e2638] bg-[#07080f]/50 p-3">
         <div class="flex items-center justify-between gap-3">
           <h3 class="text-sm font-semibold text-slate-200">Cutoff Cooldown</h3>
           <span
@@ -179,7 +179,7 @@
         </div>
         <p class="mt-1 text-sm text-slate-300">Minimum delay before retrying the same cutoff item.</p>
       </div>
-      <div class="rounded-lg border border-slate-800 bg-slate-950/40 p-3">
+      <div class="rounded-lg border border-[#1e2638] bg-[#07080f]/50 p-3">
         <div class="flex items-center justify-between gap-3">
           <h3 class="text-sm font-semibold text-slate-200">Cutoff Cap</h3>
           <span
@@ -197,43 +197,43 @@
     </p>
   </section>
 
-  <section class="help-reveal rounded-xl border border-slate-800 bg-slate-900 p-5">
+  <section class="help-reveal rounded-xl border border-[#1e2638] bg-[#0e1117] p-5">
     <h2 class="text-lg font-semibold text-slate-100 mb-3">Safe Starting Preset</h2>
     <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
-      <div class="rounded border border-slate-800 bg-slate-950/40 px-3 py-2 text-slate-300">
+      <div class="rounded border border-[#1e2638] bg-[#07080f]/50 px-3 py-2 text-slate-300 font-sans">
         Batch Size: <strong class="text-slate-100">2</strong>
       </div>
-      <div class="rounded border border-slate-800 bg-slate-950/40 px-3 py-2 text-slate-300">
+      <div class="rounded border border-[#1e2638] bg-[#07080f]/50 px-3 py-2 text-slate-300 font-sans">
         Sleep: <strong class="text-slate-100">30 min</strong>
       </div>
-      <div class="rounded border border-slate-800 bg-slate-950/40 px-3 py-2 text-slate-300">
+      <div class="rounded border border-[#1e2638] bg-[#07080f]/50 px-3 py-2 text-slate-300 font-sans">
         Hourly Cap: <strong class="text-slate-100">4</strong>
       </div>
-      <div class="rounded border border-slate-800 bg-slate-950/40 px-3 py-2 text-slate-300">
+      <div class="rounded border border-[#1e2638] bg-[#07080f]/50 px-3 py-2 text-slate-300 font-sans">
         Cooldown: <strong class="text-slate-100">14 days</strong>
       </div>
-      <div class="rounded border border-slate-800 bg-slate-950/40 px-3 py-2 text-slate-300">
+      <div class="rounded border border-[#1e2638] bg-[#07080f]/50 px-3 py-2 text-slate-300 font-sans">
         Post-Release Grace: <strong class="text-slate-100">6 hrs</strong>
       </div>
-      <div class="rounded border border-slate-800 bg-slate-950/40 px-3 py-2 text-slate-300">
+      <div class="rounded border border-[#1e2638] bg-[#07080f]/50 px-3 py-2 text-slate-300 font-sans">
         Queue Limit: <strong class="text-slate-100">0 (disabled)</strong>
       </div>
-      <div class="rounded border border-slate-800 bg-slate-950/40 px-3 py-2 text-slate-300">
+      <div class="rounded border border-[#1e2638] bg-[#07080f]/50 px-3 py-2 text-slate-300 font-sans">
         Cutoff Search: <strong class="text-slate-100">Off</strong>
       </div>
-      <div class="rounded border border-slate-800 bg-slate-950/40 px-3 py-2 text-slate-300">
+      <div class="rounded border border-[#1e2638] bg-[#07080f]/50 px-3 py-2 text-slate-300 font-sans">
         Cutoff Batch: <strong class="text-slate-100">1</strong>
       </div>
-      <div class="rounded border border-slate-800 bg-slate-950/40 px-3 py-2 text-slate-300">
+      <div class="rounded border border-[#1e2638] bg-[#07080f]/50 px-3 py-2 text-slate-300 font-sans">
         Cutoff Cooldown: <strong class="text-slate-100">21 days</strong>
       </div>
-      <div class="rounded border border-slate-800 bg-slate-950/40 px-3 py-2 text-slate-300">
+      <div class="rounded border border-[#1e2638] bg-[#07080f]/50 px-3 py-2 text-slate-300 font-sans">
         Cutoff Cap: <strong class="text-slate-100">1</strong>
       </div>
     </div>
   </section>
 
-  <section class="help-reveal rounded-xl border border-slate-800 bg-slate-900 p-5">
+  <section class="help-reveal rounded-xl border border-[#1e2638] bg-[#0e1117] p-5">
     <h2 class="text-lg font-semibold text-slate-100 mb-3">Need More Throughput?</h2>
     <ol class="list-decimal list-inside space-y-1.5 text-sm text-slate-300">
       <li>Increase Batch Size slightly.</li>

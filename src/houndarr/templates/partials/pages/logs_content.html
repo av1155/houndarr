@@ -2,42 +2,263 @@
 
 <style>
   #logs-table-shell {
-    transition: opacity 140ms ease;
+    transition: opacity var(--dur-fast, 120ms) var(--ease-station, cubic-bezier(0.16,1,0.3,1));
   }
 
   #logs-table-shell.is-loading {
-    opacity: 0.6;
+    opacity: 0.5;
   }
 
   #log-tbody tr.htmx-added {
-    animation: log-row-enter 180ms ease-out;
+    animation: log-row-enter var(--dur-base, 180ms) var(--ease-station, cubic-bezier(0.16,1,0.3,1));
   }
 
   @keyframes log-row-enter {
-    from {
-      opacity: 0;
-      transform: translateY(4px);
-    }
-
-    to {
-      opacity: 1;
-      transform: translateY(0);
-    }
+    from { opacity: 0; transform: translateY(4px); }
+    to   { opacity: 1; transform: translateY(0); }
   }
 
   @media (prefers-reduced-motion: reduce) {
+    #logs-table-shell { transition: none; }
+    #log-tbody tr.htmx-added { animation: none; }
+  }
+
+  /* ── Desktop (768px+): auto-layout table ────────────────────────────── */
+  /*
+   * table-layout: auto is critical here. With fixed layout, percentage-based
+   * column widths can shrink badge columns below their content minimum (~86px
+   * for "searched"), causing visible overflow into adjacent columns at 640–900px.
+   * Auto layout guarantees badge columns are never smaller than their content.
+   * The breakpoint is 768px instead of 640px — at 640–767px the card layout
+   * (below) looks far better than a cramped 7-column table.
+   */
+  @media (min-width: 768px) {
     #logs-table-shell {
-      transition: none;
+      overflow-x: hidden;
     }
 
-    #log-tbody tr.htmx-added {
-      animation: none;
+    #logs-table-shell table {
+      table-layout: auto;
+      width: 100%;
+    }
+
+    /* Preferred widths for predictable columns — auto layout uses these as
+       hints and lets content push wider if needed. */
+    th[data-col='timestamp'] { width: 150px; }
+    th[data-col='instance']  { width: 80px;  }
+    /* action / type / kind have no explicit width — they size to badge content */
+
+    /* Media and reason absorb the remaining space */
+    th[data-col='media']  { width: 35%; }
+    th[data-col='reason'] { width: 20%; }
+
+    /* Header cells: never wrap */
+    #logs-table-shell thead th {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* Cycle ID, Cycle Outcome, Trigger — shown in the cycle group header row */
+    th[data-col='cycle'],   td[data-col='cycle'],
+    th[data-col='outcome'], td[data-col='outcome'],
+    th[data-col='trigger'], td[data-col='trigger'] {
+      display: none;
+    }
+
+    /* Timestamp: clip long timezone suffixes gracefully */
+    td[data-col='timestamp'] {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* Instance: clip long names */
+    td[data-col='instance'] {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* Media: clip at cell boundary; inner <div class="truncate"> handles ellipsis */
+    td[data-col='media'] {
+      overflow: hidden;
+    }
+
+    /* Reason: word-wrap within its column */
+    td[data-col='reason'] {
+      white-space: normal;
+      overflow: hidden;
+      overflow-wrap: break-word;
+    }
+
+    /* Cycle group header: colored left accent */
+    tr[data-cycle-group] > td {
+      box-shadow: inset 3px 0 0 #334155;
+    }
+    tr[data-cycle-group][data-cycle-outcome='progress'] > td {
+      box-shadow: inset 3px 0 0 rgba(52, 211, 153, 0.55);
+    }
+    tr[data-cycle-group][data-cycle-outcome='no_progress'] > td {
+      box-shadow: inset 3px 0 0 rgba(71, 85, 105, 0.7);
+    }
+  }
+
+  /* ── Mobile/tablet (<768px): cycle groups + entry cards ─────────────── */
+  @media (max-width: 767px) {
+    /* Shell: remove scroll container, let cards flow naturally */
+    #logs-table-shell {
+      overflow-x: visible;
+      border: none;
+      border-radius: 0;
+      background: transparent;
+      max-height: none;
+    }
+
+    #logs-table-shell table {
+      min-width: 0 !important;
+      width: 100%;
+    }
+
+    #logs-table-shell thead { display: none; }
+
+    #log-tbody {
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+    }
+
+    /* ── Cycle group header ── */
+    #log-tbody tr[data-cycle-group] {
+      display: block;
+      background: #07080f;
+      border: 1px solid #1e2638;
+      border-left: 3px solid #334155;
+      border-radius: 8px;
+      margin-top: 24px;
+      margin-bottom: 6px;
+    }
+
+    #log-tbody tr[data-cycle-group]:first-child {
+      margin-top: 2px;
+    }
+
+    /* Color the left accent by cycle outcome */
+    #log-tbody tr[data-cycle-outcome='progress']    { border-left-color: #34d399; }
+    #log-tbody tr[data-cycle-outcome='no_progress'] { border-left-color: #475569; }
+
+    #log-tbody tr[data-cycle-group] > td {
+      display: block;
+      padding: 9px 12px;
+      border: none;
+    }
+
+    /* ── Individual log entry cards ── */
+    #log-tbody tr[data-log-row='true'] {
+      display: grid;
+      grid-template-columns: auto auto 1fr;
+      grid-template-rows: auto auto auto auto;
+      column-gap: 6px;
+      row-gap: 5px;
+      padding: 11px 12px;
+      background: #0e1117;
+      border: 1px solid #1e2638;
+      border-radius: 8px;
+      margin-bottom: 5px;
+    }
+
+    #log-tbody tr[data-log-row='true'] > td {
+      padding: 0;
+      border: none;
+      max-width: none;
+      overflow: visible;
+      text-overflow: initial;
+      white-space: normal;
+    }
+
+    /* Row 1: [action] [kind] [type right-aligned] */
+    #log-tbody td[data-col='action'] { grid-column: 1; grid-row: 1; align-self: center; }
+    #log-tbody td[data-col='kind']   { grid-column: 2; grid-row: 1; align-self: center; }
+    #log-tbody td[data-col='type']   {
+      grid-column: 3;
+      grid-row: 1;
+      align-self: center;
+      text-align: right;
+      font-size: 10px;
+      color: #64748b;
+      text-transform: capitalize;
+    }
+
+    /* Row 2: media title */
+    #log-tbody td[data-col='media'] {
+      grid-column: 1 / -1;
+      grid-row: 2;
+      font-size: 13px;
+      font-weight: 500;
+      color: #e2e8f0;
+      line-height: 1.4;
+    }
+
+    /* Row 3: timestamp (left) · instance (right) */
+    #log-tbody td[data-col='timestamp'] {
+      grid-column: 1 / 3;
+      grid-row: 3;
+      font-size: 10px;
+      color: #475569;
+      white-space: nowrap;
+    }
+
+    #log-tbody td[data-col='instance'] {
+      grid-column: 3;
+      grid-row: 3;
+      text-align: right;
+      font-size: 10px;
+      font-weight: 500;
+      color: #94a3b8;
+      max-width: none;
+    }
+
+    /* Cycle header: make instance name readable at a glance */
+    .log-instance-label {
+      color: #cbd5e1;
+      font-weight: 500;
+    }
+
+    /* Row 4: reason / message */
+    #log-tbody td[data-col='reason'] {
+      grid-column: 1 / -1;
+      grid-row: 4;
+      font-size: 11px;
+      color: #94a3b8;
+      white-space: normal;
+    }
+
+    /* Hide secondary columns */
+    #log-tbody td[data-col='trigger'],
+    #log-tbody td[data-col='cycle'],
+    #log-tbody td[data-col='outcome'] {
+      display: none;
+    }
+
+    /* Pagination + empty state */
+    #log-tbody tr#pagination-row,
+    #log-tbody tr#log-empty-row {
+      display: block;
+      margin-top: 16px;
+    }
+
+    #log-tbody tr#pagination-row > td,
+    #log-tbody tr#log-empty-row > td {
+      display: block;
+      padding: 16px;
+      border: none;
+      text-align: center;
     }
   }
 </style>
 
 <div class="flex items-center justify-between mb-6">
-  <h1 class="text-2xl font-bold text-white">Search Logs</h1>
+  <h1 class="text-xl font-bold text-white tracking-tight">Logs</h1>
   <!-- Mobile split-button copy group -->
   <div
     id="copy-dropdown-group-mobile"
@@ -48,7 +269,7 @@
       id="copy-main-btn-mobile"
       type="button"
       data-copy-main="true"
-      class="copy-main-btn inline-flex items-center justify-center w-[7.5rem] px-3 py-2 rounded-l-lg bg-slate-800 hover:bg-slate-700 border border-r-0 border-slate-700 text-slate-200 text-sm font-medium transition-colors duration-300 ease-out"
+      class="copy-main-btn inline-flex items-center justify-center w-[7.5rem] px-3 py-2 rounded-l-lg bg-[#151b27] hover:bg-[#1e2638] border border-r-0 border-[#2a3448] text-slate-200 text-sm font-medium font-sans transition-colors duration-300 ease-out"
       aria-label="Copy visible log rows as TSV"
     >
       <span class="copy-visible-logs-label transition-opacity duration-200 ease-out">Copy as TSV</span>
@@ -57,7 +278,7 @@
       id="copy-chevron-btn-mobile"
       type="button"
       data-copy-chevron="true"
-      class="copy-chevron-btn inline-flex items-center justify-center px-2 py-2 rounded-r-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-400 transition-colors duration-300 ease-out"
+      class="copy-chevron-btn inline-flex items-center justify-center px-2 py-2 rounded-r-lg bg-[#151b27] hover:bg-[#1e2638] border border-[#2a3448] text-slate-400 transition-colors duration-300 ease-out"
       aria-label="Open copy format menu"
       aria-haspopup="menu"
       aria-expanded="false"
@@ -70,7 +291,7 @@
       id="copy-dropdown-menu-mobile"
       role="menu"
       aria-label="Copy format options"
-      class="copy-dropdown-menu hidden absolute right-0 top-full mt-1 z-50 min-w-[11rem] rounded-lg border border-slate-700 bg-slate-800 shadow-lg py-1"
+      class="copy-dropdown-menu hidden absolute right-0 top-full mt-1 z-50 min-w-[11rem] rounded-lg border border-[#2a3448] bg-[#0e1117] py-1" style="box-shadow:var(--shadow-4);"
     >
       {% include "partials/copy_format_menu_items.html" %}
     </div>
@@ -84,15 +305,15 @@
   hx-swap="innerHTML"
   hx-trigger="change, submit"
   hx-indicator="#log-spinner"
-  class="flex flex-wrap items-end gap-3 mb-5"
+  class="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-end sm:gap-3 mb-5"
 >
-  <div class="flex flex-col gap-1 min-w-[180px]">
+  <div class="col-span-2 flex flex-col gap-1 sm:min-w-[180px]">
     <label for="filter-instance" class="text-xs text-slate-400 font-medium">Instance</label>
     <select
       id="filter-instance"
       name="instance_id"
-      class="bg-slate-800 border border-slate-700 text-slate-200 text-sm rounded-lg px-3 py-2
-                    focus:outline-none focus:ring-1 focus:ring-brand-500 focus:border-brand-500"
+      class="bg-[#151b27] border border-[#2a3448] text-slate-200 text-sm rounded-lg px-3 py-2 font-sans
+                    focus:outline-none focus:ring-1 focus:ring-brand-400 focus:border-brand-400/70"
     >
       <option value="">All instances</option>
       {% for inst in instances %}
@@ -108,8 +329,8 @@
     <select
       id="filter-action"
       name="action"
-      class="bg-slate-800 border border-slate-700 text-slate-200 text-sm rounded-lg px-3 py-2
-                    focus:outline-none focus:ring-1 focus:ring-brand-500 focus:border-brand-500"
+      class="bg-[#151b27] border border-[#2a3448] text-slate-200 text-sm rounded-lg px-3 py-2 font-sans
+                    focus:outline-none focus:ring-1 focus:ring-brand-400 focus:border-brand-400/70"
     >
       <option value="">All actions</option>
       <option value="searched" {% if selected_action == "searched" %}selected{% endif %}>Searched</option>
@@ -124,8 +345,8 @@
     <select
       id="filter-limit"
       name="limit"
-      class="bg-slate-800 border border-slate-700 text-slate-200 text-sm rounded-lg px-3 py-2
-                    focus:outline-none focus:ring-1 focus:ring-brand-500 focus:border-brand-500"
+      class="bg-[#151b27] border border-[#2a3448] text-slate-200 text-sm rounded-lg px-3 py-2 font-sans
+                    focus:outline-none focus:ring-1 focus:ring-brand-400 focus:border-brand-400/70"
     >
       <option value="25">25</option>
       <option value="50" selected>50</option>
@@ -143,8 +364,8 @@
     <select
       id="filter-search-kind"
       name="search_kind"
-      class="bg-slate-800 border border-slate-700 text-slate-200 text-sm rounded-lg px-3 py-2
-                    focus:outline-none focus:ring-1 focus:ring-brand-500 focus:border-brand-500"
+      class="bg-[#151b27] border border-[#2a3448] text-slate-200 text-sm rounded-lg px-3 py-2 font-sans
+                    focus:outline-none focus:ring-1 focus:ring-brand-400 focus:border-brand-400/70"
     >
       <option value="">All kinds</option>
       <option value="missing" {% if selected_search_kind == "missing" %}selected{% endif %}>Missing</option>
@@ -157,8 +378,8 @@
     <select
       id="filter-cycle-trigger"
       name="cycle_trigger"
-      class="bg-slate-800 border border-slate-700 text-slate-200 text-sm rounded-lg px-3 py-2
-                    focus:outline-none focus:ring-1 focus:ring-brand-500 focus:border-brand-500"
+      class="bg-[#151b27] border border-[#2a3448] text-slate-200 text-sm rounded-lg px-3 py-2 font-sans
+                    focus:outline-none focus:ring-1 focus:ring-brand-400 focus:border-brand-400/70"
     >
       <option value="">All triggers</option>
       <option value="scheduled" {% if selected_cycle_trigger == "scheduled" %}selected{% endif %}>Scheduled</option>
@@ -167,19 +388,19 @@
     </select>
   </div>
 
-  <div class="flex items-center gap-2 pb-2">
+  <div class="col-span-2 flex items-center gap-2 sm:pb-2">
     <input
       id="filter-hide-system"
       name="hide_system"
       type="checkbox"
       value="true"
       {% if selected_hide_system %}checked{% endif %}
-      class="w-4 h-4 rounded border-slate-600 bg-slate-800 text-brand-500 focus:ring-brand-500 focus:ring-offset-0"
+      class="w-4 h-4 rounded border-[#2a3448] bg-[#151b27] text-brand-500 focus:ring-brand-400 focus:ring-offset-0"
     />
     <label for="filter-hide-system" class="text-xs text-slate-300 font-medium">Hide system rows</label>
   </div>
 
-  <div id="log-spinner" class="htmx-indicator flex items-center gap-2 text-xs text-slate-400 pb-2">
+  <div id="log-spinner" class="col-span-2 htmx-indicator flex items-center gap-2 text-xs text-slate-400">
     <svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
       <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
       <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
@@ -188,8 +409,8 @@
   </div>
 </form>
 
-<div class="flex items-center justify-between gap-4 mb-4">
-  <div id="logs-summary">
+<div class="flex flex-wrap items-center justify-between gap-2 mb-4">
+  <div id="logs-summary" class="min-w-0 flex-1">
     {% include "partials/log_summary.html" %}
   </div>
   <!-- Desktop split-button copy group -->
@@ -202,7 +423,7 @@
       id="copy-main-btn-desktop"
       type="button"
       data-copy-main="true"
-      class="copy-main-btn inline-flex items-center justify-center w-[7.5rem] px-3 py-2 rounded-l-lg bg-slate-800 hover:bg-slate-700 border border-r-0 border-slate-700 text-slate-200 text-sm font-medium transition-colors duration-300 ease-out"
+      class="copy-main-btn inline-flex items-center justify-center w-[7.5rem] px-3 py-2 rounded-l-lg bg-[#151b27] hover:bg-[#1e2638] border border-r-0 border-[#2a3448] text-slate-200 text-sm font-medium font-sans transition-colors duration-300 ease-out"
       aria-label="Copy visible log rows as TSV"
     >
       <span id="copy-visible-logs-label" class="copy-visible-logs-label transition-opacity duration-200 ease-out">Copy as TSV</span>
@@ -211,7 +432,7 @@
       id="copy-chevron-btn-desktop"
       type="button"
       data-copy-chevron="true"
-      class="copy-chevron-btn inline-flex items-center justify-center px-2 py-2 rounded-r-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-400 transition-colors duration-300 ease-out"
+      class="copy-chevron-btn inline-flex items-center justify-center px-2 py-2 rounded-r-lg bg-[#151b27] hover:bg-[#1e2638] border border-[#2a3448] text-slate-400 transition-colors duration-300 ease-out"
       aria-label="Open copy format menu"
       aria-haspopup="menu"
       aria-expanded="false"
@@ -224,7 +445,7 @@
       id="copy-dropdown-menu-desktop"
       role="menu"
       aria-label="Copy format options"
-      class="copy-dropdown-menu hidden absolute right-0 top-full mt-1 z-50 min-w-[11rem] rounded-lg border border-slate-700 bg-slate-800 shadow-lg py-1"
+      class="copy-dropdown-menu hidden absolute right-0 top-full mt-1 z-50 min-w-[11rem] rounded-lg border border-[#2a3448] bg-[#0e1117] py-1" style="box-shadow:var(--shadow-4);"
     >
       {% include "partials/copy_format_menu_items.html" %}
     </div>
@@ -233,21 +454,21 @@
 
 <div
   id="logs-table-shell"
-  class="overflow-x-auto overflow-y-auto max-h-none sm:max-h-[calc(100vh-18rem)] rounded-xl border border-slate-800 bg-slate-900"
+  class="overflow-x-auto overflow-y-auto max-h-none sm:max-h-[calc(100vh-18rem)] rounded-xl border border-[#1e2638] bg-[#0e1117]"
 >
   <table class="w-full text-left text-sm">
-    <thead class="border-b border-slate-800 sticky top-0 bg-slate-900 z-10">
-      <tr class="text-[11px] uppercase tracking-wide text-slate-500">
-        <th class="px-3 py-2.5 font-medium">Timestamp (Local)</th>
-        <th class="px-3 py-2.5 font-medium">Instance</th>
-        <th class="px-3 py-2.5 font-medium">Action</th>
-        <th class="px-3 py-2.5 font-medium">Type</th>
-        <th class="px-3 py-2.5 font-medium">Kind</th>
-        <th class="px-3 py-2.5 font-medium">Trigger</th>
-        <th class="px-3 py-2.5 font-medium">Cycle</th>
-        <th class="px-3 py-2.5 font-medium">Cycle outcome</th>
-        <th class="px-3 py-2.5 font-medium">Media</th>
-        <th class="px-3 py-2.5 font-medium">Reason / Message</th>
+    <thead class="border-b border-[#1e2638] sticky top-0 bg-[#0e1117] z-10">
+      <tr class="text-[10px] uppercase tracking-widest text-slate-500 font-sans">
+        <th class="px-3 py-2.5 font-medium" data-col="timestamp">Timestamp (Local)</th>
+        <th class="px-3 py-2.5 font-medium" data-col="instance">Instance</th>
+        <th class="px-3 py-2.5 font-medium" data-col="action">Action</th>
+        <th class="px-3 py-2.5 font-medium" data-col="type">Type</th>
+        <th class="px-3 py-2.5 font-medium" data-col="kind">Kind</th>
+        <th class="px-3 py-2.5 font-medium" data-col="trigger">Trigger</th>
+        <th class="px-3 py-2.5 font-medium" data-col="cycle">Cycle</th>
+        <th class="px-3 py-2.5 font-medium" data-col="outcome">Cycle outcome</th>
+        <th class="px-3 py-2.5 font-medium" data-col="media">Media</th>
+        <th class="px-3 py-2.5 font-medium" data-col="reason">Reason / Message</th>
       </tr>
     </thead>
     <tbody id="log-tbody">

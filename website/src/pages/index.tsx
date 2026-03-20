@@ -76,32 +76,76 @@ const SCOPE_EXCLUSIONS: ScopeItem[] = [
   },
 ];
 
+type TypeBadge = {
+  name: string;
+  color: string;
+};
+
+const TYPE_BADGES: TypeBadge[] = [
+  { name: 'Radarr',   color: '#fcd34d' },
+  { name: 'Sonarr',   color: '#7dd3fc' },
+  { name: 'Lidarr',   color: '#6ee7b7' },
+  { name: 'Readarr',  color: '#fca5a5' },
+  { name: 'Whisparr', color: '#f9a8d4' },
+];
+
+function TypeBadgeStrip() {
+  return (
+    <div className={styles.typeBadgeStrip}>
+      <span className={styles.typeBadgeLabel}>Works with</span>
+      {TYPE_BADGES.map((badge, idx) => (
+        <span key={badge.name}>
+          {idx > 0 && <span className={styles.typeBadgeSep}>·</span>}
+          <span className={styles.typeBadge} style={{ color: badge.color }}>
+            {badge.name}
+          </span>
+        </span>
+      ))}
+    </div>
+  );
+}
+
 function HomepageHeader() {
   const {siteConfig} = useDocusaurusContext();
   return (
     <header className={clsx('hero hero--primary', styles.heroBanner)}>
-      <div className="container">
-        <img
-          src={require('@site/static/img/houndarr-logo-dark.png').default}
-          alt="Houndarr logo"
-          className={styles.heroLogo}
-        />
-        <Heading as="h1" className="hero__title">
-          {siteConfig.title}
-        </Heading>
-        <p className="hero__subtitle">{siteConfig.tagline}</p>
-        <div className={styles.buttons}>
-          <Link
-            className="button button--secondary button--lg"
-            to="/docs/getting-started/quick-start">
-            Get Started
-          </Link>
-          <Link
-            className={clsx('button button--outline button--lg', styles.githubButton)}
-            href="https://github.com/av1155/houndarr">
-            View on GitHub
-          </Link>
+      <div className={clsx('container', styles.heroInner)}>
+
+        {/* Left column — text content */}
+        <div className={styles.heroLeft}>
+          <img
+            src={require('@site/static/img/houndarr-logo-dark.png').default}
+            alt="Houndarr logo"
+            className={styles.heroLogo}
+          />
+          <Heading as="h1" className={styles.heroTitle}>
+            {siteConfig.title}
+          </Heading>
+          <p className={styles.heroTagline}>{siteConfig.tagline}</p>
+          <TypeBadgeStrip />
+          <div className={styles.heroCta}>
+            <Link
+              className="button button--primary button--lg"
+              to="/docs/getting-started/quick-start">
+              Get Started →
+            </Link>
+            <Link
+              className={clsx('button button--outline button--lg', styles.githubButton)}
+              href="https://github.com/av1155/houndarr">
+              View on GitHub
+            </Link>
+          </div>
         </div>
+
+        {/* Right column — dashboard preview */}
+        <div className={styles.heroRight}>
+          <img
+            src={DASHBOARD_SCREENSHOT.src}
+            alt={DASHBOARD_SCREENSHOT.alt}
+            className={styles.heroScreenshot}
+          />
+        </div>
+
       </div>
     </header>
   );

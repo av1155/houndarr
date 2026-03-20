@@ -3,20 +3,20 @@
   {% set ns = namespace(previous_cycle_id='') %}
   {% for row in rows %}
   {% if row.cycle_id and row.cycle_id != ns.previous_cycle_id %}
-  <tr class="border-b border-slate-800 bg-slate-950/70" data-cycle-group="{{ row.cycle_id }}">
+  <tr class="border-b border-[#1e2638] bg-[#07080f]/80" data-cycle-group="{{ row.cycle_id }}" data-cycle-outcome="{{ row.cycle_progress or 'unknown' }}">
     <td colspan="10" class="px-3 py-2">
-      <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-slate-400">
-        <span class="font-mono text-slate-300" title="{{ row.cycle_id }}">Cycle {{ row.cycle_id[:8] }}</span>
-        <span>instance {{ row.instance_name }}</span>
-        <span>trigger {{ row.cycle_trigger or 'unknown' }}</span>
+      <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-slate-500">
+        <span class="font-mono text-slate-400" title="{{ row.cycle_id }}">Cycle {{ row.cycle_id[:8] }}</span>
+        <span class="text-slate-500 log-instance-label">instance {{ row.instance_name }}</span>
+        <span class="text-slate-500">trigger {{ row.cycle_trigger or 'unknown' }}</span>
         {% if row.cycle_progress == "progress" %}
-        <span class="text-green-300">outcome searched</span>
+        <span class="text-emerald-400">outcome searched</span>
         {% elif row.cycle_progress == "no_progress" %}
-        <span class="text-zinc-300">outcome skips only</span>
+        <span class="text-slate-400">outcome skips only</span>
         {% else %}
-        <span class="text-slate-500">outcome unknown</span>
+        <span class="text-slate-600">outcome unknown</span>
         {% endif %}
-        <span class="text-slate-500">
+        <span class="text-slate-600 font-mono">
           searched {{ row.cycle_searched_count or 0 }} · skipped {{ row.cycle_skipped_count or 0 }} · error {{ row.cycle_error_count or 0 }}
         </span>
       </div>
@@ -24,7 +24,7 @@
   </tr>
   {% endif %}
 
-  <tr class="border-b border-slate-800 hover:bg-slate-800/40 transition-colors"
+  <tr class="border-b border-[#1e2638] hover:bg-[#151b27] transition-colors"
       data-log-row="true"
       data-action="{{ row.action or '' }}"
       data-cycle-id="{{ row.cycle_id or '' }}"
@@ -35,74 +35,74 @@
     </td>
 
     {# Instance #}
-    <td class="px-3 py-2.5 text-xs text-slate-300 max-w-[140px] truncate" title="{{ row.instance_name }}" data-col="instance">
+    <td class="px-3 py-2.5 text-xs text-slate-300 max-w-[140px] truncate font-sans" title="{{ row.instance_name }}" data-col="instance">
       {{ row.instance_name }}
     </td>
 
     {# Action badge #}
     <td class="px-3 py-2.5" data-col="action">
       {% if row.action == "searched" %}
-        <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-green-900/60 text-green-300">searched</span>
+        <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium font-mono bg-emerald-950/50 text-emerald-300 border border-emerald-900/40">searched</span>
       {% elif row.action == "skipped" %}
-        <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-yellow-900/50 text-yellow-300">skipped</span>
+        <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium font-mono bg-amber-950/40 text-amber-300 border border-amber-900/40">skipped</span>
       {% elif row.action == "error" %}
-        <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-red-900/60 text-red-300">error</span>
+        <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium font-mono bg-rose-950/50 text-rose-300 border border-rose-900/40">error</span>
       {% else %}
-        <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-slate-700 text-slate-400">info</span>
+        <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium font-mono bg-[#1e2638] text-slate-400">info</span>
       {% endif %}
     </td>
 
     {# Type #}
-    <td class="px-3 py-2.5 text-xs text-slate-400 capitalize" data-col="type">
+    <td class="px-3 py-2.5 text-xs text-slate-400 capitalize font-sans" data-col="type">
       {{ row.item_type or "—" }}
     </td>
 
     {# Search kind #}
     <td class="px-3 py-2.5" data-col="kind">
       {% if row.search_kind == "missing" %}
-        <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-sky-900/50 text-sky-300">missing</span>
+        <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium font-mono bg-sky-950/50 text-sky-300 border border-sky-900/40">missing</span>
       {% elif row.search_kind == "cutoff" %}
-        <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-amber-900/50 text-amber-300">cutoff</span>
+        <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium font-mono bg-amber-950/40 text-amber-300 border border-amber-900/40">cutoff</span>
       {% else %}
-        <span class="text-slate-500">—</span>
+        <span class="text-slate-600">—</span>
       {% endif %}
     </td>
 
     {# Cycle trigger #}
     <td class="px-3 py-2.5" data-col="trigger">
       {% if row.cycle_trigger == "scheduled" %}
-        <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-blue-900/50 text-blue-300">scheduled</span>
+        <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium font-mono bg-blue-950/50 text-blue-300 border border-blue-900/40">scheduled</span>
       {% elif row.cycle_trigger == "run_now" %}
-        <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-emerald-900/50 text-emerald-300">run_now</span>
+        <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium font-mono bg-emerald-950/50 text-emerald-300 border border-emerald-900/40">run_now</span>
       {% elif row.cycle_trigger == "system" %}
-        <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-slate-700 text-slate-300">system</span>
+        <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium font-mono bg-[#1e2638] text-slate-300">system</span>
       {% else %}
-        <span class="text-slate-500">—</span>
+        <span class="text-slate-600">—</span>
       {% endif %}
     </td>
 
     {# Cycle id #}
-    <td class="px-3 py-2.5 text-xs text-slate-300 font-mono" data-col="cycle" title="{{ row.cycle_id or '' }}">
+    <td class="px-3 py-2.5 text-xs text-slate-400 font-mono" data-col="cycle" title="{{ row.cycle_id or '' }}">
       {% if row.cycle_id %}
         {{ row.cycle_id[:8] }}
       {% else %}
-        <span class="text-slate-500">—</span>
+        <span class="text-slate-600">—</span>
       {% endif %}
     </td>
 
     {# Cycle outcome #}
     <td class="px-3 py-2.5" data-col="outcome">
       {% if row.cycle_progress == "progress" %}
-        <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-green-900/50 text-green-300">searched</span>
+        <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium font-mono bg-emerald-950/50 text-emerald-300 border border-emerald-900/40">searched</span>
       {% elif row.cycle_progress == "no_progress" %}
-        <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-zinc-700 text-zinc-300">skips only</span>
+        <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium font-mono bg-[#1e2638] text-slate-300">skips only</span>
       {% else %}
-        <span class="text-[11px] text-slate-500">unknown</span>
+        <span class="text-[10px] text-slate-600 font-mono">unknown</span>
       {% endif %}
     </td>
 
     {# Media label + ID fallback #}
-    <td class="px-3 py-2.5 text-xs text-slate-300 max-w-[320px] truncate"
+    <td class="px-3 py-2.5 text-xs text-slate-300 font-sans"
         data-col="media"
         title="{{ row.item_label or '' }}">
       {% if row.item_label %}
@@ -110,15 +110,15 @@
       {% elif row.item_type and row.item_id is not none %}
         <div class="truncate text-slate-400">{{ row.item_type|capitalize }} {{ row.item_id }}</div>
       {% else %}
-        <div class="truncate text-slate-500">—</div>
+        <div class="truncate text-slate-600">—</div>
       {% endif %}
       {% if row.item_id is not none %}
-        <div class="text-[11px] text-slate-500 font-mono">id: {{ row.item_id }}</div>
+        <div class="text-[10px] text-slate-600 font-mono">id:{{ row.item_id }}</div>
       {% endif %}
     </td>
 
     {# Reason / Message #}
-    <td class="px-3 py-2.5 text-xs text-slate-400 max-w-[260px] truncate"
+    <td class="px-3 py-2.5 text-xs text-slate-400 font-sans"
         data-col="reason"
         title="{{ (row.reason or row.message or '') }}">
       {{ row.reason or row.message or "—" }}
@@ -140,8 +140,8 @@
         hx-get="/api/logs/partial?limit={{ next_limit }}{% if instance_id %}&instance_id={{ instance_id }}{% endif %}{% if action %}&action={{ action }}{% endif %}{% if search_kind %}&search_kind={{ search_kind }}{% endif %}{% if cycle_trigger %}&cycle_trigger={{ cycle_trigger }}{% endif %}&hide_system={{ 'true' if hide_system else 'false' }}&before={{ rows[-1].timestamp }}"
         hx-target="#pagination-row"
         hx-swap="outerHTML"
-        class="text-xs text-brand-400 hover:text-brand-300 transition-colors underline-offset-2 hover:underline">
-        Load older entries &darr;
+        class="text-xs text-brand-400 hover:text-brand-300 transition-colors underline-offset-2 hover:underline font-sans">
+        Load older entries ↓
       </button>
     </td>
   </tr>
@@ -149,8 +149,9 @@
 
 {% else %}
   <tr id="log-empty-row">
-    <td colspan="10" class="px-3 py-12 text-center text-slate-500 text-sm">
-      No log entries found.
+    <td colspan="10" class="px-3 py-14 text-center">
+      <p class="text-sm font-medium text-slate-500 font-sans">No log entries found.</p>
+      <p class="mt-1 text-xs text-slate-600 font-sans">Adjust filters or wait for search activity to appear here.</p>
     </td>
   </tr>
 {% endif %}

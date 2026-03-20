@@ -282,7 +282,30 @@ async def _query_logs(
         async with db.execute(sql, params) as cur:
             rows = await cur.fetchall()
 
-    return [dict(row) for row in rows]
+    raw = [dict(row) for row in rows]
+
+    # Reorder so all rows belonging to the same cycle appear contiguously.
+    # Rows without a cycle_id (system/info) are emitted in-place.
+    # Cycle order is determined by each cycle's first appearance in the
+    # timestamp-descending result, so the overall newest-first ordering is
+    # preserved at the cycle level.
+    groups: dict[str, list[dict[str, Any]]] = {}
+    for row in raw:
+        cid = row["cycle_id"]
+        if cid is not None:
+            groups.setdefault(cid, []).append(row)
+
+    reordered: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for row in raw:
+        cid = row["cycle_id"]
+        if cid is None:
+            reordered.append(row)
+        elif cid not in seen:
+            seen.add(cid)
+            reordered.extend(groups[cid])
+
+    return reordered
 
 
 # ---------------------------------------------------------------------------

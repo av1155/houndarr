@@ -1,30 +1,5 @@
-(function () {
-  function formatLocalTimestamp(isoTimestamp) {
-    if (!isoTimestamp) {
-      return '—';
-    }
-
-    const parsed = new Date(isoTimestamp);
-    if (Number.isNaN(parsed.getTime())) {
-      return isoTimestamp;
-    }
-
-    return new Intl.DateTimeFormat(undefined, {
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-      hour12: false,
-      timeZoneName: 'short',
-    }).format(parsed);
-  }
-
-  window.houndarrClientHelpers = {
-    formatLocalTimestamp,
-  };
-})();
+// houndarrClientHelpers (including formatLocalTimestamp) is defined in base.html <head>
+// so it is available on both initial page load and HTMX navigation.
 
 (function () {
   function getCsrfToken() {
@@ -56,11 +31,11 @@
       const route = link.getAttribute('data-shell-route') || '';
       const isActive = routeIsActive(route, path);
 
-      link.classList.toggle('bg-slate-800', isActive);
+      link.classList.toggle('bg-surface-3', isActive);
       link.classList.toggle('text-white', isActive);
       link.classList.toggle('text-slate-400', !isActive);
       link.classList.toggle('hover:text-white', !isActive);
-      link.classList.toggle('hover:bg-slate-800', !isActive);
+      link.classList.toggle('hover:bg-surface-2', !isActive);
       if (isActive) {
         link.setAttribute('aria-current', 'page');
       } else {
@@ -115,6 +90,7 @@
 
   const toggle = document.getElementById('mobile-nav-toggle');
   const menu = document.getElementById('mobile-nav-menu');
+  const backdrop = document.getElementById('mobile-nav-backdrop');
 
   if (!toggle || !menu) {
     return;
@@ -123,7 +99,14 @@
   const setExpanded = (expanded) => {
     toggle.setAttribute('aria-expanded', expanded ? 'true' : 'false');
     menu.classList.toggle('is-open', expanded);
+    if (backdrop) {
+      backdrop.classList.toggle('is-visible', expanded);
+    }
   };
+
+  if (backdrop) {
+    backdrop.addEventListener('click', () => setExpanded(false));
+  }
 
   toggle.addEventListener('click', function () {
     const isOpen = toggle.getAttribute('aria-expanded') === 'true';

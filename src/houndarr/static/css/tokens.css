@@ -1,0 +1,95 @@
+/* ─────────────────────────────────────────────────────────────────────────── */
+/* Houndarr — Station Design System Tokens                                    */
+/* All design decisions live here. App and docs both import this file.        */
+/* ─────────────────────────────────────────────────────────────────────────── */
+
+:root {
+  /* ── Palette ─────────────────────────────────────────────────────────── */
+  --color-base:      #07080f;   /* body background — midnight navy */
+  --color-surface-1: #0e1117;   /* card / nav background */
+  --color-surface-2: #151b27;   /* secondary surface, input bg */
+  --color-surface-3: #1e2638;   /* border color, tertiary surface */
+
+  /* ── Borders ─────────────────────────────────────────────────────────── */
+  --color-border-subtle:  #1e2638;
+  --color-border-default: #2a3448;
+  --color-border-strong:  #3d4f6b;
+
+  /* ── Brand — refined Station cyan ────────────────────────────────────── */
+  --color-brand-50:  #ecfeff;
+  --color-brand-100: #cffafe;
+  --color-brand-200: #a5f3fc;
+  --color-brand-300: #67e8f9;
+  --color-brand-400: #22d3ee;  /* primary interactive accent */
+  --color-brand-500: #06b6d4;  /* hover/active */
+  --color-brand-600: #0891b2;
+  --color-brand-700: #0e7490;
+  --color-brand-800: #155e75;
+  --color-brand-900: #164e63;
+
+  /* ── Semantic status ─────────────────────────────────────────────────── */
+  --color-success:       #4ade80;
+  --color-success-bg:    rgba(22, 101, 52, 0.35);
+  --color-success-border:rgba(74, 222, 128, 0.35);
+  --color-warning:       #fbbf24;
+  --color-warning-bg:    rgba(120, 53, 15, 0.30);
+  --color-warning-border:rgba(251, 191, 36, 0.30);
+  --color-danger:        #f87171;
+  --color-danger-bg:     rgba(153, 27, 27, 0.30);
+  --color-danger-border: rgba(248, 113, 113, 0.35);
+  --color-info:          #67e8f9;
+
+  /* ── Instance type signature colors ─────────────────────────────────── */
+  --color-sonarr:       #7dd3fc;  /* sky */
+  --color-sonarr-bg:    rgba(8, 47, 73, 0.50);
+  --color-radarr:       #fcd34d;  /* amber */
+  --color-radarr-bg:    rgba(69, 26, 3, 0.50);
+  --color-lidarr:       #6ee7b7;  /* emerald */
+  --color-lidarr-bg:    rgba(6, 78, 59, 0.50);
+  --color-readarr:      #fca5a5;  /* rose */
+  --color-readarr-bg:   rgba(127, 29, 29, 0.50);
+  --color-whisparr:     #f9a8d4;  /* pink */
+  --color-whisparr-bg:  rgba(80, 7, 36, 0.50);
+
+  /* ── Typography ─────────────────────────────────────────────────────── */
+  --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system,
+               BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', 'Cascadia Code',
+               ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;
+
+  /* ── Spacing (4px base, 8px unit) ───────────────────────────────────── */
+  --space-1: 0.25rem;   /*  4px — micro gaps, badge padding */
+  --space-2: 0.5rem;    /*  8px — input padding, label gap */
+  --space-3: 0.75rem;   /* 12px — card padding units */
+  --space-4: 1rem;      /* 16px — standard section padding */
+  --space-5: 1.5rem;    /* 24px — comfortable card padding */
+  --space-6: 2rem;      /* 32px — section gaps */
+  --space-7: 3rem;      /* 48px — generous page gaps */
+  --space-8: 4rem;      /* 64px — hero rhythm */
+
+  /* ── Border radius ───────────────────────────────────────────────────── */
+  --radius-sm:   4px;     /* inputs, inline badges */
+  --radius-md:   6px;     /* cards, buttons, tooltips */
+  --radius-lg:   10px;    /* modals, panels, popovers */
+  --radius-xl:   16px;    /* large panels */
+  --radius-full: 9999px;  /* pill badges */
+
+  /* ── Shadows (cool-toned, midnight-shifted) ──────────────────────────── */
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.50);
+  --shadow-2: 0 4px 8px rgba(0, 0, 0, 0.45), 0 1px 2px rgba(0, 0, 0, 0.35);
+  --shadow-4: 0 8px 24px rgba(0, 0, 0, 0.55), 0 2px 4px rgba(0, 0, 0, 0.35);
+
+  /* ── Glows (signature Station ambient effect) ────────────────────────── */
+  --glow-brand:        0 0 10px rgba(34, 211, 238, 0.16);
+  --glow-brand-strong: 0 0 18px rgba(34, 211, 238, 0.26);
+  --glow-success:      0 0 8px  rgba(74, 222, 128, 0.20);
+  --glow-danger:       0 0 8px  rgba(248, 113, 113, 0.20);
+  --glow-logo:         0 0 18px rgba(34, 211, 238, 0.22);
+
+  /* ── Motion ─────────────────────────────────────────────────────────── */
+  --ease-station: cubic-bezier(0.16, 1, 0.3, 1);    /* precise settle */
+  --ease-spring:  cubic-bezier(0.34, 1.56, 0.64, 1);/* subtle spring */
+  --dur-fast:  120ms;
+  --dur-base:  180ms;
+  --dur-slow:  280ms;
+}

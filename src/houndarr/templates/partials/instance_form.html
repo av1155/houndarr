@@ -10,9 +10,13 @@
 {% set target  = "#instance-row-" ~ instance.id if is_edit else "#instance-tbody" %}
 {% set swap    = "outerHTML" if is_edit else "innerHTML" %}
 
+{# Shared input class — Station style #}
+{% set input_cls = "w-full h-11 bg-[#0e1117] border border-[#2a3448] rounded-lg px-3 text-sm text-white placeholder:text-slate-600 font-sans focus:outline-none focus:border-brand-400/70 focus:ring-2 focus:ring-brand-500/25 transition-colors" %}
+{% set mono_input_cls = "w-full h-11 bg-[#0e1117] border border-[#2a3448] rounded-lg px-3 text-sm text-white placeholder:text-slate-600 font-mono focus:outline-none focus:border-brand-400/70 focus:ring-2 focus:ring-brand-500/25 transition-colors" %}
+
 <div id="{{ 'edit-instance-form-shell-' ~ instance.id if is_edit else 'add-instance-form-shell' }}">
   {% if error is defined and error %}
-  <div class="mb-3 text-sm text-red-400 bg-red-900/30 border border-red-700 rounded px-3 py-2">
+  <div class="mb-3 border-l-4 border-red-500 bg-red-950/30 text-red-300 rounded-r-lg px-3 py-2 text-sm">
     {{ error }}
   </div>
   {% endif %}
@@ -23,280 +27,232 @@
         hx-post="{{ post_url }}"
         hx-target="{{ target }}"
         hx-swap="{{ swap }}"
-        class="space-y-5">
-      <input type="hidden"
-             id="instance-connection-verified"
-             name="connection_verified"
-             value="false" />
+        class="space-y-4">
+    <input type="hidden"
+           id="instance-connection-verified"
+           name="connection_verified"
+           value="false" />
 
-      <section class="rounded-xl border border-slate-800/90 bg-slate-950/35 p-4 sm:p-5 space-y-4">
+    <!-- Connection section -->
+    <section class="rounded-xl border border-[#1e2638] bg-[#07080f]/50 p-4 sm:p-5 space-y-4">
+      <div>
+        <h4 class="text-sm font-semibold text-slate-200">Connection</h4>
+        <p class="text-xs text-slate-500 mt-0.5">Basic identity and API access for this instance.</p>
+      </div>
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
-          <h4 class="text-sm font-semibold text-slate-200">Connection</h4>
-          <p class="text-xs text-slate-400 mt-1">Basic identity and API access for this instance.</p>
+          <label class="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide" for="{{ form_id }}-name">Name</label>
+          <input id="{{ form_id }}-name" name="name" type="text" required
+                 data-instance-field="name"
+                 data-sonarr-placeholder="My Sonarr"
+                 data-radarr-placeholder="My Radarr"
+                 data-lidarr-placeholder="My Lidarr"
+                 data-readarr-placeholder="My Readarr"
+                 data-whisparr-placeholder="My Whisparr"
+                 value="{{ instance.name if is_edit else '' }}"
+                 placeholder="My Sonarr"
+                 class="{{ input_cls }}" />
         </div>
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div>
-            <label class="block text-xs font-medium text-slate-400 mb-1.5" for="{{ form_id }}-name">Name</label>
-            <input id="{{ form_id }}-name" name="name" type="text" required
-                   data-instance-field="name"
-                   data-sonarr-placeholder="My Sonarr"
-                   data-radarr-placeholder="My Radarr"
-                   data-lidarr-placeholder="My Lidarr"
-                   data-readarr-placeholder="My Readarr"
-                   data-whisparr-placeholder="My Whisparr"
-                   value="{{ instance.name if is_edit else '' }}"
-                   placeholder="My Sonarr"
-                   class="w-full h-11 bg-slate-900/80 border border-slate-700/80 rounded-lg px-3 text-sm text-white placeholder:text-slate-500
-                          focus:outline-none focus:border-brand-400/80 focus:ring-2 focus:ring-brand-500/25" />
-          </div>
-          <div>
-            <label class="block text-xs font-medium text-slate-400 mb-1.5" for="{{ form_id }}-type">Type</label>
-            <select id="{{ form_id }}-type" name="type" required
-                    data-instance-field="type"
-                    class="w-full h-11 bg-slate-900/80 border border-slate-700/80 rounded-lg px-3 text-sm text-white
-                           focus:outline-none focus:border-brand-400/80 focus:ring-2 focus:ring-brand-500/25">
-              <option value="radarr" {% if is_edit and instance.type.value == 'radarr' %}selected{% endif %}>Radarr</option>
-              <option value="sonarr" {% if is_edit and instance.type.value == 'sonarr' %}selected{% endif %}>Sonarr</option>
-              <option value="lidarr" {% if is_edit and instance.type.value == 'lidarr' %}selected{% endif %}>Lidarr</option>
-              <option value="readarr" {% if is_edit and instance.type.value == 'readarr' %}selected{% endif %}>Readarr</option>
-              <option value="whisparr" {% if is_edit and instance.type.value == 'whisparr' %}selected{% endif %}>Whisparr</option>
-            </select>
-          </div>
-          <div>
-            <label class="block text-xs font-medium text-slate-400 mb-1.5" for="{{ form_id }}-url">URL</label>
-            <input id="{{ form_id }}-url" name="url" type="url" required
-                   data-instance-field="url"
-                   data-sonarr-placeholder="http://sonarr:8989"
-                   data-radarr-placeholder="http://radarr:7878"
-                   data-lidarr-placeholder="http://lidarr:8686"
-                   data-readarr-placeholder="http://readarr:8787"
-                   data-whisparr-placeholder="http://whisparr:6969"
-                   value="{{ instance.url if is_edit else '' }}"
-                   placeholder="http://radarr:7878"
-                   class="w-full h-11 bg-slate-900/80 border border-slate-700/80 rounded-lg px-3 text-sm text-white placeholder:text-slate-500
-                          focus:outline-none focus:border-brand-400/80 focus:ring-2 focus:ring-brand-500/25" />
-          </div>
-          <div>
-            <label class="block text-xs font-medium text-slate-400 mb-1.5" for="{{ form_id }}-api-key">API Key</label>
-            <input id="{{ form_id }}-api-key" name="api_key" type="password" required
-                   value="{{ '__UNCHANGED__' if is_edit else '' }}"
-                   placeholder="{{ '(stored — enter new value to change)' if is_edit else '••••••••••••••••' }}"
-                   class="w-full h-11 bg-slate-900/80 border border-slate-700/80 rounded-lg px-3 text-sm text-white placeholder:text-slate-500
-                          focus:outline-none focus:border-brand-400/80 focus:ring-2 focus:ring-brand-500/25" />
-          </div>
-        </div>
-      </section>
-
-      <section class="rounded-xl border border-slate-800/90 bg-slate-950/35 p-4 sm:p-5 space-y-4">
         <div>
-          <h4 class="text-sm font-semibold text-slate-200">Search Policy</h4>
-          <p class="text-xs text-slate-400 mt-1">Cadence and guardrails for missing-item searches.</p>
+          <label class="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide" for="{{ form_id }}-type">Type</label>
+          <select id="{{ form_id }}-type" name="type" required
+                  data-instance-field="type"
+                  class="{{ input_cls }}">
+            <option value="radarr"   {% if is_edit and instance.type.value == 'radarr'   %}selected{% endif %}>Radarr</option>
+            <option value="sonarr"   {% if is_edit and instance.type.value == 'sonarr'   %}selected{% endif %}>Sonarr</option>
+            <option value="lidarr"   {% if is_edit and instance.type.value == 'lidarr'   %}selected{% endif %}>Lidarr</option>
+            <option value="readarr"  {% if is_edit and instance.type.value == 'readarr'  %}selected{% endif %}>Readarr</option>
+            <option value="whisparr" {% if is_edit and instance.type.value == 'whisparr' %}selected{% endif %}>Whisparr</option>
+          </select>
         </div>
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div>
-            <label class="block text-xs font-medium text-slate-400 mb-1.5" for="{{ form_id }}-batch">Batch Size</label>
-            <input id="{{ form_id }}-batch" name="batch_size" type="number" min="1" max="250"
-                   value="{{ instance.batch_size }}"
-                   class="w-full h-11 bg-slate-900/80 border border-slate-700/80 rounded-lg px-3 text-sm text-white
-                          focus:outline-none focus:border-brand-400/80 focus:ring-2 focus:ring-brand-500/25" />
-          </div>
-          <div>
-            <label class="block text-xs font-medium text-slate-400 mb-1.5" for="{{ form_id }}-sleep">Sleep (minutes)</label>
-            <input id="{{ form_id }}-sleep" name="sleep_interval_mins" type="number" min="1"
-                   value="{{ instance.sleep_interval_mins }}"
-                   class="w-full h-11 bg-slate-900/80 border border-slate-700/80 rounded-lg px-3 text-sm text-white
-                          focus:outline-none focus:border-brand-400/80 focus:ring-2 focus:ring-brand-500/25" />
-          </div>
-          <div>
-            <label class="block text-xs font-medium text-slate-400 mb-1.5" for="{{ form_id }}-hcap">Hourly Cap</label>
-            <input id="{{ form_id }}-hcap" name="hourly_cap" type="number" min="0"
-                   value="{{ instance.hourly_cap }}"
-                   class="w-full h-11 bg-slate-900/80 border border-slate-700/80 rounded-lg px-3 text-sm text-white
-                          focus:outline-none focus:border-brand-400/80 focus:ring-2 focus:ring-brand-500/25" />
-          </div>
-          <div>
-            <label class="block text-xs font-medium text-slate-400 mb-1.5" for="{{ form_id }}-cool">Cooldown (days)</label>
-            <input id="{{ form_id }}-cool" name="cooldown_days" type="number" min="0"
-                   value="{{ instance.cooldown_days }}"
-                   class="w-full h-11 bg-slate-900/80 border border-slate-700/80 rounded-lg px-3 text-sm text-white
-                          focus:outline-none focus:border-brand-400/80 focus:ring-2 focus:ring-brand-500/25" />
-          </div>
-          <div>
-            <label class="block text-xs font-medium text-slate-400 mb-1.5" for="{{ form_id }}-delay">Post-Release Grace (hrs)</label>
-            <input id="{{ form_id }}-delay" name="post_release_grace_hrs" type="number" min="0"
-                   value="{{ instance.post_release_grace_hrs }}"
-                   class="w-full h-11 bg-slate-900/80 border border-slate-700/80 rounded-lg px-3 text-sm text-white
-                          focus:outline-none focus:border-brand-400/80 focus:ring-2 focus:ring-brand-500/25" />
-            <p class="mt-1.5 text-xs text-slate-500">Hours to wait after release date before searching. Unreleased items are always skipped.</p>
-          </div>
-          <div>
-            <label class="block text-xs font-medium text-slate-400 mb-1.5" for="{{ form_id }}-qlimit">Queue Limit</label>
-            <input id="{{ form_id }}-qlimit" name="queue_limit" type="number" min="0"
-                   value="{{ instance.queue_limit }}"
-                   class="w-full h-11 bg-slate-900/80 border border-slate-700/80 rounded-lg px-3 text-sm text-white
-                          focus:outline-none focus:border-brand-400/80 focus:ring-2 focus:ring-brand-500/25" />
-            <p class="mt-1.5 text-xs text-slate-500">Skip searches when the download queue exceeds this count. 0 = disabled.</p>
-          </div>
-          <div class="sm:col-span-2" data-sonarr-only="true"
-               {% if instance.type.value != 'sonarr' %}style="display:none;"{% endif %}>
-            <label class="block text-xs font-medium text-slate-400 mb-1.5" for="{{ form_id }}-sonarr-mode">
-              Sonarr Missing Search Mode
-            </label>
-            <select id="{{ form_id }}-sonarr-mode" name="sonarr_search_mode"
-                    class="w-full h-11 bg-slate-900/80 border border-slate-700/80 rounded-lg px-3 text-sm text-white
-                           focus:outline-none focus:border-brand-400/80 focus:ring-2 focus:ring-brand-500/25">
-              <option value="episode"
-                      {% if instance.sonarr_search_mode.value == 'episode' %}selected{% endif %}>
-                Episode search (default)
-              </option>
-              <option value="season_context"
-                      {% if instance.sonarr_search_mode.value == 'season_context' %}selected{% endif %}>
-                Season-context search (advanced)
-              </option>
-            </select>
-            <p class="mt-2 text-xs text-amber-300/90">
-              Advanced mode: Sonarr season search is not pack-only and may still pull singles/noisier results.
-            </p>
-          </div>
-          <div class="sm:col-span-2" data-lidarr-only="true"
-               {% if instance.type.value != 'lidarr' %}style="display:none;"{% endif %}>
-            <label class="block text-xs font-medium text-slate-400 mb-1.5" for="{{ form_id }}-lidarr-mode">
-              Lidarr Missing Search Mode
-            </label>
-            <select id="{{ form_id }}-lidarr-mode" name="lidarr_search_mode"
-                    class="w-full h-11 bg-slate-900/80 border border-slate-700/80 rounded-lg px-3 text-sm text-white
-                           focus:outline-none focus:border-brand-400/80 focus:ring-2 focus:ring-brand-500/25">
-              <option value="album"
-                      {% if instance.lidarr_search_mode.value == 'album' %}selected{% endif %}>
-                Album search (default)
-              </option>
-              <option value="artist_context"
-                      {% if instance.lidarr_search_mode.value == 'artist_context' %}selected{% endif %}>
-                Artist-context search (advanced)
-              </option>
-            </select>
-            <p class="mt-2 text-xs text-amber-300/90">
-              Advanced mode: searches for all missing albums by an artist in a single request.
-            </p>
-          </div>
-          <div class="sm:col-span-2" data-readarr-only="true"
-               {% if instance.type.value != 'readarr' %}style="display:none;"{% endif %}>
-            <label class="block text-xs font-medium text-slate-400 mb-1.5" for="{{ form_id }}-readarr-mode">
-              Readarr Missing Search Mode
-            </label>
-            <select id="{{ form_id }}-readarr-mode" name="readarr_search_mode"
-                    class="w-full h-11 bg-slate-900/80 border border-slate-700/80 rounded-lg px-3 text-sm text-white
-                           focus:outline-none focus:border-brand-400/80 focus:ring-2 focus:ring-brand-500/25">
-              <option value="book"
-                      {% if instance.readarr_search_mode.value == 'book' %}selected{% endif %}>
-                Book search (default)
-              </option>
-              <option value="author_context"
-                      {% if instance.readarr_search_mode.value == 'author_context' %}selected{% endif %}>
-                Author-context search (advanced)
-              </option>
-            </select>
-            <p class="mt-2 text-xs text-amber-300/90">
-              Advanced mode: searches for all missing books by an author in a single request.
-            </p>
-          </div>
-          <div class="sm:col-span-2" data-whisparr-only="true"
-               {% if instance.type.value != 'whisparr' %}style="display:none;"{% endif %}>
-            <label class="block text-xs font-medium text-slate-400 mb-1.5" for="{{ form_id }}-whisparr-mode">
-              Whisparr Missing Search Mode
-            </label>
-            <select id="{{ form_id }}-whisparr-mode" name="whisparr_search_mode"
-                    class="w-full h-11 bg-slate-900/80 border border-slate-700/80 rounded-lg px-3 text-sm text-white
-                           focus:outline-none focus:border-brand-400/80 focus:ring-2 focus:ring-brand-500/25">
-              <option value="episode"
-                      {% if instance.whisparr_search_mode.value == 'episode' %}selected{% endif %}>
-                Episode search (default)
-              </option>
-              <option value="season_context"
-                      {% if instance.whisparr_search_mode.value == 'season_context' %}selected{% endif %}>
-                Season-context search (advanced)
-              </option>
-            </select>
-            <p class="mt-2 text-xs text-amber-300/90">
-              Advanced mode: season search may still pull singles/noisier results.
-            </p>
-          </div>
+        <div>
+          <label class="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide" for="{{ form_id }}-url">URL</label>
+          <input id="{{ form_id }}-url" name="url" type="url" required
+                 data-instance-field="url"
+                 data-sonarr-placeholder="http://sonarr:8989"
+                 data-radarr-placeholder="http://radarr:7878"
+                 data-lidarr-placeholder="http://lidarr:8686"
+                 data-readarr-placeholder="http://readarr:8787"
+                 data-whisparr-placeholder="http://whisparr:6969"
+                 value="{{ instance.url if is_edit else '' }}"
+                 placeholder="http://radarr:7878"
+                 class="{{ mono_input_cls }}" />
         </div>
-      </section>
-
-      <section class="rounded-xl border border-slate-800/90 bg-slate-950/35 p-4 sm:p-5 space-y-4">
-        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-          <div>
-            <h4 class="text-sm font-semibold text-slate-200">Cutoff Upgrades</h4>
-            <p class="text-xs text-slate-400 mt-1">Optional lower-priority pass for quality upgrades.</p>
-          </div>
-          <label class="inline-flex items-center gap-2 cursor-pointer select-none rounded-md border border-slate-700/80 bg-slate-900/60 px-3 py-2">
-            <input type="checkbox" name="cutoff_enabled" value="on"
-                   {% if is_edit and instance.cutoff_enabled %}checked{% endif %}
-                   class="rounded border-slate-600 bg-slate-900 text-brand-500 focus:ring-brand-500 focus:ring-offset-slate-950" />
-            <span class="text-xs font-medium text-slate-300">Enable cutoff search</span>
-          </label>
-        </div>
-        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div>
-            <label class="block text-xs font-medium text-slate-400 mb-1.5" for="{{ form_id }}-cbatch">Cutoff Batch</label>
-            <input id="{{ form_id }}-cbatch" name="cutoff_batch_size" type="number" min="1" max="250"
-                   value="{{ instance.cutoff_batch_size }}"
-                   class="w-full h-11 bg-slate-900/80 border border-slate-700/80 rounded-lg px-3 text-sm text-white
-                          focus:outline-none focus:border-brand-400/80 focus:ring-2 focus:ring-brand-500/25" />
-          </div>
-          <div>
-            <label class="block text-xs font-medium text-slate-400 mb-1.5" for="{{ form_id }}-ccool">Cutoff Cooldown</label>
-            <input id="{{ form_id }}-ccool" name="cutoff_cooldown_days" type="number" min="0"
-                   value="{{ instance.cutoff_cooldown_days }}"
-                   class="w-full h-11 bg-slate-900/80 border border-slate-700/80 rounded-lg px-3 text-sm text-white
-                          focus:outline-none focus:border-brand-400/80 focus:ring-2 focus:ring-brand-500/25" />
-          </div>
-          <div>
-            <label class="block text-xs font-medium text-slate-400 mb-1.5" for="{{ form_id }}-chcap">Cutoff Cap</label>
-            <input id="{{ form_id }}-chcap" name="cutoff_hourly_cap" type="number" min="0"
-                   value="{{ instance.cutoff_hourly_cap }}"
-                   class="w-full h-11 bg-slate-900/80 border border-slate-700/80 rounded-lg px-3 text-sm text-white
-                          focus:outline-none focus:border-brand-400/80 focus:ring-2 focus:ring-brand-500/25" />
-          </div>
-        </div>
-      </section>
-
-      <div class="border-t border-slate-800/80 pt-4 space-y-3">
-        {# Hidden field carries instance_id when editing so test-connection can resolve the stored key #}
-        {% if is_edit %}
-        <input type="hidden" name="instance_id" value="{{ instance.id }}" />
-        {% endif %}
-
-        <div class="flex flex-wrap items-center gap-2 sm:gap-3">
-          <button type="button"
-                  id="instance-test-connection-btn"
-                  data-test-connection-btn="true"
-                  hx-post="/settings/instances/test-connection"
-                  hx-include="#{{ form_id }} [name='type'],#{{ form_id }} [name='url'],#{{ form_id }} [name='api_key']{% if is_edit %},#{{ form_id }} [name='instance_id']{% endif %}"
-                  hx-target="#instance-connection-status"
-                  hx-swap="innerHTML"
-                  class="w-[10.5rem] px-4 py-2.5 rounded-lg border border-slate-700 bg-slate-800 hover:bg-slate-700 text-slate-200 text-sm font-medium transition-colors">
-            Test Connection
-          </button>
-          <button id="instance-submit-btn"
-                  type="submit"
-                  disabled
-                  class="px-4 py-2.5 rounded-lg bg-brand-500 text-white text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-40 hover:enabled:bg-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/35">
-            {{ 'Save Changes' if is_edit else 'Add Instance' }}
-          </button>
-          <button type="button"
-                  data-close-add-instance-modal="true"
-                  class="px-4 py-2.5 rounded-lg border border-slate-700 bg-slate-900 hover:bg-slate-800 text-slate-300 text-sm font-medium transition-colors">
-            Cancel
-          </button>
-        </div>
-
-        <div id="instance-connection-status"
-             class="text-xs text-slate-400"
-             aria-live="polite">
-          {{ 'Test connection before saving changes.' if is_edit else 'Test connection before adding this instance.' }}
+        <div>
+          <label class="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide" for="{{ form_id }}-api-key">API Key</label>
+          <input id="{{ form_id }}-api-key" name="api_key" type="password" required
+                 value="{{ '__UNCHANGED__' if is_edit else '' }}"
+                 placeholder="{{ '(stored — enter new value to change)' if is_edit else '••••••••••••••••' }}"
+                 class="{{ mono_input_cls }}" />
         </div>
       </div>
+    </section>
+
+    <!-- Search Policy section -->
+    <section class="rounded-xl border border-[#1e2638] bg-[#07080f]/50 p-4 sm:p-5 space-y-4">
+      <div>
+        <h4 class="text-sm font-semibold text-slate-200">Search Policy</h4>
+        <p class="text-xs text-slate-500 mt-0.5">Cadence and guardrails for missing-item searches.</p>
+      </div>
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div>
+          <label class="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide" for="{{ form_id }}-batch">Batch Size</label>
+          <input id="{{ form_id }}-batch" name="batch_size" type="number" min="1" max="250"
+                 value="{{ instance.batch_size }}"
+                 class="{{ mono_input_cls }}" />
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide" for="{{ form_id }}-sleep">Sleep (minutes)</label>
+          <input id="{{ form_id }}-sleep" name="sleep_interval_mins" type="number" min="1"
+                 value="{{ instance.sleep_interval_mins }}"
+                 class="{{ mono_input_cls }}" />
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide" for="{{ form_id }}-hcap">Hourly Cap</label>
+          <input id="{{ form_id }}-hcap" name="hourly_cap" type="number" min="0"
+                 value="{{ instance.hourly_cap }}"
+                 class="{{ mono_input_cls }}" />
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide" for="{{ form_id }}-cool">Cooldown (days)</label>
+          <input id="{{ form_id }}-cool" name="cooldown_days" type="number" min="0"
+                 value="{{ instance.cooldown_days }}"
+                 class="{{ mono_input_cls }}" />
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide" for="{{ form_id }}-delay">Post-Release Grace (hrs)</label>
+          <input id="{{ form_id }}-delay" name="post_release_grace_hrs" type="number" min="0"
+                 value="{{ instance.post_release_grace_hrs }}"
+                 class="{{ mono_input_cls }}" />
+          <p class="mt-1.5 text-xs text-slate-600">Hours to wait after release date. Unreleased items are always skipped.</p>
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide" for="{{ form_id }}-qlimit">Queue Limit</label>
+          <input id="{{ form_id }}-qlimit" name="queue_limit" type="number" min="0"
+                 value="{{ instance.queue_limit }}"
+                 class="{{ mono_input_cls }}" />
+          <p class="mt-1.5 text-xs text-slate-600">Skip searches when the queue exceeds this. 0 = disabled.</p>
+        </div>
+        <div class="sm:col-span-2" data-sonarr-only="true"
+             {% if instance.type.value != 'sonarr' %}style="display:none;"{% endif %}>
+          <label class="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide" for="{{ form_id }}-sonarr-mode">
+            Sonarr Missing Search Mode
+          </label>
+          <select id="{{ form_id }}-sonarr-mode" name="sonarr_search_mode" class="{{ input_cls }}">
+            <option value="episode"        {% if instance.sonarr_search_mode.value == 'episode'        %}selected{% endif %}>Episode search (default)</option>
+            <option value="season_context" {% if instance.sonarr_search_mode.value == 'season_context' %}selected{% endif %}>Season-context search (advanced)</option>
+          </select>
+          <p class="mt-1.5 text-xs text-amber-400/80">Advanced mode: season search is not pack-only and may pull noisier results.</p>
+        </div>
+        <div class="sm:col-span-2" data-lidarr-only="true"
+             {% if instance.type.value != 'lidarr' %}style="display:none;"{% endif %}>
+          <label class="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide" for="{{ form_id }}-lidarr-mode">
+            Lidarr Missing Search Mode
+          </label>
+          <select id="{{ form_id }}-lidarr-mode" name="lidarr_search_mode" class="{{ input_cls }}">
+            <option value="album"          {% if instance.lidarr_search_mode.value == 'album'          %}selected{% endif %}>Album search (default)</option>
+            <option value="artist_context" {% if instance.lidarr_search_mode.value == 'artist_context' %}selected{% endif %}>Artist-context search (advanced)</option>
+          </select>
+          <p class="mt-1.5 text-xs text-amber-400/80">Advanced mode: searches all missing albums by artist in one request.</p>
+        </div>
+        <div class="sm:col-span-2" data-readarr-only="true"
+             {% if instance.type.value != 'readarr' %}style="display:none;"{% endif %}>
+          <label class="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide" for="{{ form_id }}-readarr-mode">
+            Readarr Missing Search Mode
+          </label>
+          <select id="{{ form_id }}-readarr-mode" name="readarr_search_mode" class="{{ input_cls }}">
+            <option value="book"           {% if instance.readarr_search_mode.value == 'book'           %}selected{% endif %}>Book search (default)</option>
+            <option value="author_context" {% if instance.readarr_search_mode.value == 'author_context' %}selected{% endif %}>Author-context search (advanced)</option>
+          </select>
+          <p class="mt-1.5 text-xs text-amber-400/80">Advanced mode: searches all missing books by author in one request.</p>
+        </div>
+        <div class="sm:col-span-2" data-whisparr-only="true"
+             {% if instance.type.value != 'whisparr' %}style="display:none;"{% endif %}>
+          <label class="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide" for="{{ form_id }}-whisparr-mode">
+            Whisparr Missing Search Mode
+          </label>
+          <select id="{{ form_id }}-whisparr-mode" name="whisparr_search_mode" class="{{ input_cls }}">
+            <option value="episode"        {% if instance.whisparr_search_mode.value == 'episode'        %}selected{% endif %}>Episode search (default)</option>
+            <option value="season_context" {% if instance.whisparr_search_mode.value == 'season_context' %}selected{% endif %}>Season-context search (advanced)</option>
+          </select>
+          <p class="mt-1.5 text-xs text-amber-400/80">Advanced mode: season search may pull noisier results.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Cutoff Upgrades section -->
+    <section class="rounded-xl border border-[#1e2638] bg-[#07080f]/50 p-4 sm:p-5 space-y-4">
+      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div>
+          <h4 class="text-sm font-semibold text-slate-200">Cutoff Upgrades</h4>
+          <p class="text-xs text-slate-500 mt-0.5">Optional lower-priority pass for quality upgrades.</p>
+        </div>
+        <label class="inline-flex items-center gap-2 cursor-pointer select-none rounded-md border border-[#2a3448] bg-[#0e1117] px-3 py-2">
+          <input type="checkbox" name="cutoff_enabled" value="on"
+                 {% if is_edit and instance.cutoff_enabled %}checked{% endif %}
+                 class="rounded border-[#2a3448] bg-[#0e1117] text-brand-500 focus:ring-brand-500 focus:ring-offset-[#07080f]" />
+          <span class="text-xs font-medium text-slate-300">Enable cutoff search</span>
+        </label>
+      </div>
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div>
+          <label class="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide" for="{{ form_id }}-cbatch">Cutoff Batch</label>
+          <input id="{{ form_id }}-cbatch" name="cutoff_batch_size" type="number" min="1" max="250"
+                 value="{{ instance.cutoff_batch_size }}"
+                 class="{{ mono_input_cls }}" />
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide" for="{{ form_id }}-ccool">Cutoff Cooldown</label>
+          <input id="{{ form_id }}-ccool" name="cutoff_cooldown_days" type="number" min="0"
+                 value="{{ instance.cutoff_cooldown_days }}"
+                 class="{{ mono_input_cls }}" />
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide" for="{{ form_id }}-chcap">Cutoff Cap</label>
+          <input id="{{ form_id }}-chcap" name="cutoff_hourly_cap" type="number" min="0"
+                 value="{{ instance.cutoff_hourly_cap }}"
+                 class="{{ mono_input_cls }}" />
+        </div>
+      </div>
+    </section>
+
+    <!-- Actions footer -->
+    <div class="border-t border-[#1e2638] pt-4 space-y-3">
+      {% if is_edit %}
+      <input type="hidden" name="instance_id" value="{{ instance.id }}" />
+      {% endif %}
+
+      <div class="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center sm:gap-3">
+        <button type="button"
+                id="instance-test-connection-btn"
+                data-test-connection-btn="true"
+                hx-post="/settings/instances/test-connection"
+                hx-include="#{{ form_id }} [name='type'],#{{ form_id }} [name='url'],#{{ form_id }} [name='api_key']{% if is_edit %},#{{ form_id }} [name='instance_id']{% endif %}"
+                hx-target="#instance-connection-status"
+                hx-swap="innerHTML"
+                class="px-4 py-2.5 rounded-lg border border-[#2a3448] bg-[#151b27] hover:bg-[#1e2638] text-slate-200 text-sm font-medium transition-colors sm:w-[10.5rem]">
+          Test Connection
+        </button>
+        <button id="instance-submit-btn"
+                type="submit"
+                disabled
+                class="px-4 py-2.5 rounded-lg bg-brand-500 text-white text-sm font-semibold transition-colors
+                       disabled:cursor-not-allowed disabled:opacity-40 hover:enabled:bg-brand-400
+                       focus:outline-none focus:ring-2 focus:ring-brand-500/35">
+          {{ 'Save Changes' if is_edit else 'Add Instance' }}
+        </button>
+        <button type="button"
+                data-close-add-instance-modal="true"
+                class="col-span-2 sm:col-auto px-4 py-2.5 rounded-lg border border-[#2a3448] bg-[#0e1117] hover:bg-[#151b27] text-slate-300 text-sm font-medium transition-colors">
+          Cancel
+        </button>
+      </div>
+
+      <div id="instance-connection-status"
+           class="text-xs text-slate-500 font-sans"
+           aria-live="polite">
+        {{ 'Test connection before saving changes.' if is_edit else 'Test connection before adding this instance.' }}
+      </div>
+    </div>
   </form>
 </div>

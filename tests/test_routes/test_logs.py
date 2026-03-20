@@ -523,7 +523,7 @@ def test_logs_page_renders(app: TestClient) -> None:
     _login(app)
     resp = app.get("/logs")
     assert resp.status_code == 200
-    assert b"Search Logs" in resp.content
+    assert b'data-page-key="logs"' in resp.content
     assert b"log-filter-form" in resp.content
     assert b"log-tbody" in resp.content
     assert b"Media" in resp.content
@@ -533,7 +533,7 @@ def test_logs_page_renders(app: TestClient) -> None:
     assert b"Cycle" in resp.content
     assert b"Cycle outcome" in resp.content
     assert b"Hide system rows" in resp.content
-    assert b"Visible rows" in resp.content
+    assert b'id="summary-total-rows"' in resp.content
     assert b'id="filter-hide-system"' in resp.content
     assert b"checked" in resp.content
     assert b'<option value="500">500</option>' in resp.content

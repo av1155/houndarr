@@ -5,12 +5,14 @@ import styles from './styles.module.css';
 
 type FeatureItem = {
   title: string;
+  icon: string;
   description: ReactNode;
 };
 
 const FeatureList: FeatureItem[] = [
   {
     title: 'Polite & Controlled',
+    icon: '⏱',
     description: (
       <>
         Small batches, configurable sleep intervals, per-item cooldowns, and
@@ -21,6 +23,7 @@ const FeatureList: FeatureItem[] = [
   },
   {
     title: 'Missing & Cutoff',
+    icon: '🔍',
     description: (
       <>
         Automatically searches for missing episodes, movies, albums, and
@@ -31,6 +34,7 @@ const FeatureList: FeatureItem[] = [
   },
   {
     title: 'Multi-Instance',
+    icon: '⬡',
     description: (
       <>
         Connect one or more Radarr, Sonarr, Lidarr, Readarr, and Whisparr
@@ -41,6 +45,7 @@ const FeatureList: FeatureItem[] = [
   },
   {
     title: 'No Telemetry',
+    icon: '🛡',
     description: (
       <>
         Zero outbound connections to analytics, error tracking, or
@@ -51,6 +56,7 @@ const FeatureList: FeatureItem[] = [
   },
   {
     title: 'Encrypted API Keys',
+    icon: '🔒',
     description: (
       <>
         API keys are encrypted at rest with Fernet (AES-128-CBC + HMAC-SHA256)
@@ -61,6 +67,7 @@ const FeatureList: FeatureItem[] = [
   },
   {
     title: 'Single Docker Container',
+    icon: '📦',
     description: (
       <>
         Runs as a single container alongside your existing *arr stack. SQLite
@@ -71,10 +78,11 @@ const FeatureList: FeatureItem[] = [
   },
 ];
 
-function Feature({title, description}: FeatureItem) {
+function Feature({title, icon, description}: FeatureItem) {
   return (
     <div className={clsx('col col--4')}>
       <div className={clsx('padding-horiz--md padding-vert--md', styles.featureCard)}>
+        <div className={styles.featureIcon} aria-hidden="true">{icon}</div>
         <Heading as="h3">{title}</Heading>
         <p>{description}</p>
       </div>

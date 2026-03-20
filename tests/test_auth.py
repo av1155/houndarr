@@ -4,11 +4,19 @@ from __future__ import annotations
 
 import asyncio
 import time
+from ipaddress import IPv4Network, IPv6Network
 
 import pytest
 from fastapi.testclient import TestClient
 
-from houndarr.auth import check_credentials, hash_password, is_setup_complete, verify_password
+from houndarr.auth import (
+    _is_trusted_proxy,
+    check_credentials,
+    hash_password,
+    is_setup_complete,
+    verify_password,
+)
+from houndarr.config import safe_ip_network
 from houndarr.database import get_setting
 from tests.conftest import csrf_headers
 
@@ -35,6 +43,46 @@ def test_verify_password_wrong() -> None:
 def test_verify_password_empty() -> None:
     h = hash_password("mypassword")
     assert verify_password("", h) is False
+
+
+# ---------------------------------------------------------------------------
+# Unit tests — ip network parsing and checking
+# ---------------------------------------------------------------------------
+
+
+def test_safe_ip_network_singe_ipv4() -> None:
+    ip = safe_ip_network("192.168.2.1")
+    assert ip == IPv4Network("192.168.2.1")
+
+
+def test_safe_ip_network_subnet_ipv4() -> None:
+    subnet = safe_ip_network("192.168.2.1/24")
+    assert subnet == IPv4Network("192.168.2.0/24")
+
+
+def test_safe_ip_network_singe_ipv6() -> None:
+    ip = safe_ip_network("2001:db8::1")
+    assert ip == IPv6Network("2001:db8::1/128")
+
+
+def test_safe_ip_network_subnet_ipv6() -> None:
+    subnet = safe_ip_network("2001:db8::/64")
+    assert subnet == IPv6Network("2001:db8::/64")
+
+
+def test_safe_ip_network_str() -> None:
+    ip = safe_ip_network("testclient")
+    assert ip == "testclient"
+
+
+def test_is_trusted_proxy() -> None:
+    trusted = frozenset((IPv4Network("192.168.2.0/24"), IPv6Network("2001:db8::/64"), "testclient"))
+    assert _is_trusted_proxy(safe_ip_network("192.168.2.1"), trusted)
+    assert _is_trusted_proxy(safe_ip_network("2001:db8::1234:5678"), trusted)
+    assert _is_trusted_proxy("testclient", trusted)
+    assert not _is_trusted_proxy(safe_ip_network("192.168.3.1"), trusted)
+    assert not _is_trusted_proxy(safe_ip_network("2001:db9::1234:5678"), trusted)
+    assert not _is_trusted_proxy("testclient2", trusted)
 
 
 # ---------------------------------------------------------------------------

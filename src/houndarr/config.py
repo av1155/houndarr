@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass, field
+from ipaddress import IPv4Network, IPv6Network, ip_network
 from pathlib import Path
 
 # ---------------------------------------------------------------------------
@@ -21,6 +22,15 @@ def _parse_bool_env(name: str, default: bool = False) -> bool:
     if raw in ("0", "false", "no"):
         return False
     return default
+
+
+def safe_ip_network(address: str, strict: bool = False) -> IPv4Network | IPv6Network | str:
+    try:
+        # strict=False allows for masked host bits to be set,
+        # e.g. 10.0.0.1/24 instead of 10.0.0.0/24
+        return ip_network(address, strict)
+    except ValueError:
+        return address
 
 
 def get_settings() -> AppSettings:
@@ -52,7 +62,7 @@ class AppSettings:
             Enable when Houndarr is served over HTTPS via a reverse proxy.
             Corresponds to ``HOUNDARR_SECURE_COOKIES`` env var.
         trusted_proxies: Comma-separated list of trusted reverse-proxy IP
-            addresses.  When set, ``X-Forwarded-For`` is honoured for client-IP
+            subnets.  When set, ``X-Forwarded-For`` is honoured for client-IP
             detection (rate limiting).  When empty, only the direct connection
             IP is used.  Corresponds to ``HOUNDARR_TRUSTED_PROXIES`` env var.
     """
@@ -74,11 +84,13 @@ class AppSettings:
         self.db_path = base / "houndarr.db"
         self.master_key_path = base / "houndarr.masterkey"
 
-    def trusted_proxy_set(self) -> frozenset[str]:
-        """Return the set of trusted proxy IPs (empty = none trusted)."""
+    def trusted_proxy_set(self) -> frozenset[IPv4Network | IPv6Network | str]:
+        """Return the set of trusted proxy IP subnets (empty = none trusted)."""
         if not self.trusted_proxies.strip():
             return frozenset()
-        return frozenset(ip.strip() for ip in self.trusted_proxies.split(",") if ip.strip())
+        return frozenset(
+            safe_ip_network(ip.strip()) for ip in self.trusted_proxies.split(",") if ip.strip()
+        )
 
 
 # ---------------------------------------------------------------------------

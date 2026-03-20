@@ -61,10 +61,10 @@ from houndarr import __version__
     show_default=False,
     envvar="HOUNDARR_TRUSTED_PROXIES",
     help=(
-        "Comma-separated list of trusted reverse-proxy IP addresses. "
+        "Comma-separated list of trusted reverse-proxy IP subnets. "
         "When set, X-Forwarded-For is honoured for client-IP detection "
         "(used for login rate limiting). "
-        "Example: '10.0.0.1,172.16.0.1'."
+        "Example: '10.0.0.1,172.16.0.1,192.168.2.0/24'."
     ),
 )
 def cli(

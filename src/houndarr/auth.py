@@ -9,7 +9,6 @@ import secrets
 import time
 from collections.abc import Callable
 from hmac import compare_digest
-from ipaddress import IPv4Network, IPv6Network
 from typing import Any
 
 import bcrypt
@@ -19,7 +18,7 @@ from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp
 
-from houndarr.config import get_settings, safe_ip_network
+from houndarr.config import get_settings
 from houndarr.database import get_setting, set_setting
 
 logger = logging.getLogger(__name__)
@@ -302,8 +301,9 @@ def _client_ip(request: Request) -> str:
     configured trusted proxies.
 
     When ``HOUNDARR_TRUSTED_PROXIES`` is set (a comma-separated list of
-    proxy IPs), and the direct connection IP matches one of those proxies,
-    the left-most IP in ``X-Forwarded-For`` is used as the client IP.
+    proxy IPs or CIDR subnets), and the direct connection IP matches one
+    of those proxies or falls within a trusted subnet, the left-most IP
+    in ``X-Forwarded-For`` is used as the client IP.
 
     When no trusted proxies are configured (the default), only
     ``request.client.host`` is used, preventing header spoofing.
@@ -315,31 +315,13 @@ def _client_ip(request: Request) -> str:
         The best-effort client IP string, or ``"unknown"`` as a fallback.
     """
     direct_ip = request.client.host if request.client else "unknown"
-    direct_ip_network = safe_ip_network(direct_ip)
     settings = get_settings()
     trusted = settings.trusted_proxy_set()
-    if trusted and _is_trusted_proxy(direct_ip_network, trusted):
+    if trusted and direct_ip in trusted:
         forwarded = request.headers.get("X-Forwarded-For")
         if forwarded:
             return forwarded.split(",")[0].strip()
     return direct_ip
-
-
-def _is_trusted_proxy(
-    direct_ip: IPv4Network | IPv6Network | str,
-    trusted: frozenset[IPv4Network | IPv6Network | str],
-) -> bool:
-    """Return whether the given direct_ip is part of any trusted proxy networks"""
-    if direct_ip is None:
-        return False
-
-    if isinstance(direct_ip, IPv4Network):
-        return any(isinstance(t, IPv4Network) and direct_ip.subnet_of(t) for t in trusted)
-
-    if isinstance(direct_ip, IPv6Network):
-        return any(isinstance(t, IPv6Network) and direct_ip.subnet_of(t) for t in trusted)
-
-    return direct_ip in trusted
 
 
 def check_login_rate_limit(request: Request) -> bool:

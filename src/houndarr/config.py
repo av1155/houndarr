@@ -2,10 +2,68 @@
 
 from __future__ import annotations
 
+import ipaddress
+import logging
 import os
 from dataclasses import dataclass, field
-from ipaddress import IPv4Network, IPv6Network, ip_network
+from ipaddress import IPv4Address, IPv4Network, IPv6Address, IPv6Network
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
+
+
+class TrustedProxies:
+    """Parsed trusted proxy IPs and CIDR subnets with membership testing."""
+
+    __slots__ = ("_addresses", "_networks")
+
+    def __init__(
+        self,
+        addresses: frozenset[IPv4Address | IPv6Address],
+        networks: tuple[IPv4Network | IPv6Network, ...],
+    ) -> None:
+        self._addresses = addresses
+        self._networks = networks
+
+    def __bool__(self) -> bool:
+        return bool(self._addresses) or bool(self._networks)
+
+    def __contains__(self, ip_str: object) -> bool:
+        if not isinstance(ip_str, str):
+            return False
+        try:
+            addr = ipaddress.ip_address(ip_str)
+        except ValueError:
+            return False
+        if addr in self._addresses:
+            return True
+        return any(addr in net for net in self._networks)
+
+
+def _parse_trusted_proxies(raw: str) -> TrustedProxies:
+    """Parse comma-separated IPs and CIDR subnets into a ``TrustedProxies``."""
+    if not raw.strip():
+        return TrustedProxies(frozenset(), ())
+    addresses: set[IPv4Address | IPv6Address] = set()
+    networks: list[IPv4Network | IPv6Network] = []
+    for entry in raw.split(","):
+        entry = entry.strip()
+        if not entry:
+            continue
+        if "/" in entry:
+            try:
+                networks.append(ipaddress.ip_network(entry, strict=False))
+            except ValueError:
+                logger.warning(
+                    "HOUNDARR_TRUSTED_PROXIES contains an invalid subnet entry; skipping it"
+                )
+        else:
+            try:
+                addresses.add(ipaddress.ip_address(entry))
+            except ValueError:
+                logger.warning("HOUNDARR_TRUSTED_PROXIES contains an invalid IP entry; skipping it")
+    return TrustedProxies(frozenset(addresses), tuple(networks))
+
 
 # ---------------------------------------------------------------------------
 # Runtime settings — set by CLI before the app factory is called
@@ -22,15 +80,6 @@ def _parse_bool_env(name: str, default: bool = False) -> bool:
     if raw in ("0", "false", "no"):
         return False
     return default
-
-
-def safe_ip_network(address: str, strict: bool = False) -> IPv4Network | IPv6Network | str:
-    try:
-        # strict=False allows for masked host bits to be set,
-        # e.g. 10.0.0.1/24 instead of 10.0.0.0/24
-        return ip_network(address, strict)
-    except ValueError:
-        return address
 
 
 def get_settings() -> AppSettings:
@@ -62,9 +111,10 @@ class AppSettings:
             Enable when Houndarr is served over HTTPS via a reverse proxy.
             Corresponds to ``HOUNDARR_SECURE_COOKIES`` env var.
         trusted_proxies: Comma-separated list of trusted reverse-proxy IP
-            subnets.  When set, ``X-Forwarded-For`` is honoured for client-IP
-            detection (rate limiting).  When empty, only the direct connection
-            IP is used.  Corresponds to ``HOUNDARR_TRUSTED_PROXIES`` env var.
+            addresses or CIDR subnets (e.g. ``10.1.1.0/24``).  When set,
+            ``X-Forwarded-For`` is honoured for client-IP detection (rate
+            limiting).  When empty, only the direct connection IP is used.
+            Corresponds to ``HOUNDARR_TRUSTED_PROXIES`` env var.
     """
 
     data_dir: str = "/data"
@@ -78,19 +128,19 @@ class AppSettings:
     # Derived paths (computed from data_dir)
     db_path: Path = field(init=False)
     master_key_path: Path = field(init=False)
+    _trusted_proxy_cache: TrustedProxies | None = field(init=False, default=None, repr=False)
 
     def __post_init__(self) -> None:
         base = Path(self.data_dir)
         self.db_path = base / "houndarr.db"
         self.master_key_path = base / "houndarr.masterkey"
 
-    def trusted_proxy_set(self) -> frozenset[IPv4Network | IPv6Network | str]:
-        """Return the set of trusted proxy IP subnets (empty = none trusted)."""
-        if not self.trusted_proxies.strip():
-            return frozenset()
-        return frozenset(
-            safe_ip_network(ip.strip()) for ip in self.trusted_proxies.split(",") if ip.strip()
-        )
+    def trusted_proxy_set(self) -> TrustedProxies:
+        """Return parsed trusted proxy IPs and subnets (empty = none trusted)."""
+        if self._trusted_proxy_cache is not None:
+            return self._trusted_proxy_cache
+        self._trusted_proxy_cache = _parse_trusted_proxies(self.trusted_proxies)
+        return self._trusted_proxy_cache
 
 
 # ---------------------------------------------------------------------------

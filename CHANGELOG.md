@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.1] - 2026-03-20
+
+### Fixed
+
+- All form inputs and selects now use 16px font size, preventing iOS Safari from auto-zooming on focus across the login, setup, instance form, and log filter controls (#234)
+- Add/Edit instance modal now scrolls fully on mobile; the Cancel button was unreachable due to a missing height constraint on the dialog element (#234)
+- Instance modal no longer auto-focuses the help link on open; the close button receives focus instead (#234)
+- Username `pattern` attribute corrected from `[A-Za-z0-9_.-]+` to `[-A-Za-z0-9_.]+` to fix an invalid descending character range that caused a console error in Chrome (#234)
+- Logs page Reason/Message column no longer hidden at mid-range viewport widths (768–1102px); table layout breakpoint raised to 1100px (#234)
+
+### Changed
+
+- Supervisor staggers instance startup by 30 seconds per instance so scheduled cycles no longer all fire simultaneously on first run (#235)
+
+---
+
 ## [1.3.0] - 2026-03-20
 
 ### Added

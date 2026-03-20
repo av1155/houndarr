@@ -435,7 +435,7 @@
                 type="password"
                 required
                 autocomplete="current-password"
-                class="w-full h-11 rounded-lg border border-[#2a3448] bg-[#0e1117] px-3 text-sm text-white placeholder:text-slate-600 font-sans
+                class="w-full h-11 rounded-lg border border-[#2a3448] bg-[#0e1117] px-3 text-base text-white placeholder:text-slate-600 font-sans
                            focus:outline-none focus:border-brand-400/70 focus:ring-2 focus:ring-brand-500/25"
               />
             </div>
@@ -450,7 +450,7 @@
                 required
                 minlength="8"
                 autocomplete="new-password"
-                class="w-full h-11 rounded-lg border border-[#2a3448] bg-[#0e1117] px-3 text-sm text-white placeholder:text-slate-600 font-sans
+                class="w-full h-11 rounded-lg border border-[#2a3448] bg-[#0e1117] px-3 text-base text-white placeholder:text-slate-600 font-sans
                            focus:outline-none focus:border-brand-400/70 focus:ring-2 focus:ring-brand-500/25"
               />
             </div>
@@ -465,7 +465,7 @@
                 required
                 minlength="8"
                 autocomplete="new-password"
-                class="w-full h-11 rounded-lg border border-[#2a3448] bg-[#0e1117] px-3 text-sm text-white placeholder:text-slate-600 font-sans
+                class="w-full h-11 rounded-lg border border-[#2a3448] bg-[#0e1117] px-3 text-base text-white placeholder:text-slate-600 font-sans
                            focus:outline-none focus:border-brand-400/70 focus:ring-2 focus:ring-brand-500/25"
               />
             </div>
@@ -499,10 +499,10 @@
 
   <dialog
     id="add-instance-modal"
-    class="m-auto p-0 w-[min(94vw,52rem)] rounded-2xl border border-[#1e2638] bg-[#0e1117] text-slate-100"
+    class="m-auto p-0 w-[min(94vw,52rem)] max-h-[min(calc(100dvh-2rem),56rem)] flex flex-col rounded-2xl border border-[#1e2638] bg-[#0e1117] text-slate-100"
     style="box-shadow:0 30px 80px rgba(0,0,0,0.7), 0 0 0 1px rgba(30,38,56,0.8);"
   >
-    <div class="flex items-start justify-between border-b border-[#1e2638] px-6 py-5">
+    <div class="flex flex-shrink-0 items-start justify-between border-b border-[#1e2638] px-6 py-5">
       <div>
         <h3 id="add-instance-modal-title" class="text-xl font-semibold tracking-tight text-white">
           Add Instance
@@ -523,6 +523,7 @@
       </div>
       <button
         type="button"
+        autofocus
         aria-label="Close add instance dialog"
         data-close-add-instance-modal="true"
         class="ml-4 flex-shrink-0 rounded-lg border border-[#2a3448] bg-[#151b27] p-2 text-slate-400 hover:bg-[#1e2638] hover:text-slate-200 transition-colors focus:outline-none focus:ring-2 focus:ring-brand-400/30"
@@ -536,7 +537,7 @@
       role="dialog"
       aria-modal="true"
       aria-labelledby="add-instance-modal-title"
-      class="max-h-[min(82vh,48rem)] overflow-y-auto px-6 py-5"
+      class="flex-1 min-h-0 overflow-y-auto px-6 py-5"
     ></div>
   </dialog>
 </section>
@@ -832,6 +833,7 @@
       setAddInstanceModalChrome('add');
       if (!addInstanceModal.open) {
         addInstanceModal.showModal();
+        document.body.style.overflow = 'hidden';
       }
     };
 
@@ -848,6 +850,7 @@
         addInstanceModalContent.innerHTML = '';
         isClosingAddInstanceModal = false;
         setAddInstanceModalChrome('add');
+        document.body.style.overflow = '';
         addInstanceBtn.focus();
       };
 
@@ -995,7 +998,7 @@
             setAddInstanceModalChrome(modalForm.dataset.formMode, modalForm.dataset.instanceName);
           }
 
-          const firstInput = addInstanceModalContent.querySelector('input, select, textarea, button');
+          const firstInput = addInstanceModalContent.querySelector('input:not([type="hidden"]), select, textarea, button');
           if (firstInput) {
             firstInput.focus();
           }

@@ -23,16 +23,20 @@
     #log-tbody tr.htmx-added { animation: none; }
   }
 
-  /* ── Desktop (768px+): auto-layout table ────────────────────────────── */
+  /* ── Desktop (1100px+): auto-layout table ───────────────────────────── */
   /*
    * table-layout: auto is critical here. With fixed layout, percentage-based
    * column widths can shrink badge columns below their content minimum (~86px
-   * for "searched"), causing visible overflow into adjacent columns at 640–900px.
+   * for "searched"), causing visible overflow into adjacent columns.
    * Auto layout guarantees badge columns are never smaller than their content.
-   * The breakpoint is 768px instead of 640px — at 640–767px the card layout
-   * (below) looks far better than a cramped 7-column table.
+   *
+   * The breakpoint is 1100px because the 7-column table requires roughly:
+   *   timestamp(150) + instance(80) + action(86) + type(60) + kind(75)
+   *   + media(35%) + reason(20%) ≈ 870px+ before reason has breathing room.
+   * Below 1100px the card layout (below) is more readable and never crushes
+   * the Reason / Message column.
    */
-  @media (min-width: 768px) {
+  @media (min-width: 1100px) {
     #logs-table-shell {
       overflow-x: hidden;
     }
@@ -104,8 +108,8 @@
     }
   }
 
-  /* ── Mobile/tablet (<768px): cycle groups + entry cards ─────────────── */
-  @media (max-width: 767px) {
+  /* ── Mobile/tablet (<1100px): cycle groups + entry cards ────────────── */
+  @media (max-width: 1099px) {
     /* Shell: remove scroll container, let cards flow naturally */
     #logs-table-shell {
       overflow-x: visible;
@@ -312,7 +316,7 @@
     <select
       id="filter-instance"
       name="instance_id"
-      class="bg-[#151b27] border border-[#2a3448] text-slate-200 text-sm rounded-lg px-3 py-2 font-sans
+      class="bg-[#151b27] border border-[#2a3448] text-slate-200 text-base rounded-lg px-3 py-2 font-sans
                     focus:outline-none focus:ring-1 focus:ring-brand-400 focus:border-brand-400/70"
     >
       <option value="">All instances</option>
@@ -329,7 +333,7 @@
     <select
       id="filter-action"
       name="action"
-      class="bg-[#151b27] border border-[#2a3448] text-slate-200 text-sm rounded-lg px-3 py-2 font-sans
+      class="bg-[#151b27] border border-[#2a3448] text-slate-200 text-base rounded-lg px-3 py-2 font-sans
                     focus:outline-none focus:ring-1 focus:ring-brand-400 focus:border-brand-400/70"
     >
       <option value="">All actions</option>
@@ -345,7 +349,7 @@
     <select
       id="filter-limit"
       name="limit"
-      class="bg-[#151b27] border border-[#2a3448] text-slate-200 text-sm rounded-lg px-3 py-2 font-sans
+      class="bg-[#151b27] border border-[#2a3448] text-slate-200 text-base rounded-lg px-3 py-2 font-sans
                     focus:outline-none focus:ring-1 focus:ring-brand-400 focus:border-brand-400/70"
     >
       <option value="25">25</option>
@@ -364,7 +368,7 @@
     <select
       id="filter-search-kind"
       name="search_kind"
-      class="bg-[#151b27] border border-[#2a3448] text-slate-200 text-sm rounded-lg px-3 py-2 font-sans
+      class="bg-[#151b27] border border-[#2a3448] text-slate-200 text-base rounded-lg px-3 py-2 font-sans
                     focus:outline-none focus:ring-1 focus:ring-brand-400 focus:border-brand-400/70"
     >
       <option value="">All kinds</option>
@@ -378,7 +382,7 @@
     <select
       id="filter-cycle-trigger"
       name="cycle_trigger"
-      class="bg-[#151b27] border border-[#2a3448] text-slate-200 text-sm rounded-lg px-3 py-2 font-sans
+      class="bg-[#151b27] border border-[#2a3448] text-slate-200 text-base rounded-lg px-3 py-2 font-sans
                     focus:outline-none focus:ring-1 focus:ring-brand-400 focus:border-brand-400/70"
     >
       <option value="">All triggers</option>

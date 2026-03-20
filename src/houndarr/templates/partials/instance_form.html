@@ -11,8 +11,8 @@
 {% set swap    = "outerHTML" if is_edit else "innerHTML" %}
 
 {# Shared input class — Station style #}
-{% set input_cls = "w-full h-11 bg-[#0e1117] border border-[#2a3448] rounded-lg px-3 text-sm text-white placeholder:text-slate-600 font-sans focus:outline-none focus:border-brand-400/70 focus:ring-2 focus:ring-brand-500/25 transition-colors" %}
-{% set mono_input_cls = "w-full h-11 bg-[#0e1117] border border-[#2a3448] rounded-lg px-3 text-sm text-white placeholder:text-slate-600 font-mono focus:outline-none focus:border-brand-400/70 focus:ring-2 focus:ring-brand-500/25 transition-colors" %}
+{% set input_cls = "w-full h-11 bg-[#0e1117] border border-[#2a3448] rounded-lg px-3 text-base text-white placeholder:text-slate-600 font-sans focus:outline-none focus:border-brand-400/70 focus:ring-2 focus:ring-brand-500/25 transition-colors" %}
+{% set mono_input_cls = "w-full h-11 bg-[#0e1117] border border-[#2a3448] rounded-lg px-3 text-base text-white placeholder:text-slate-600 font-mono focus:outline-none focus:border-brand-400/70 focus:ring-2 focus:ring-brand-500/25 transition-colors" %}
 
 <div id="{{ 'edit-instance-form-shell-' ~ instance.id if is_edit else 'add-instance-form-shell' }}">
   {% if error is defined and error %}

@@ -11,3 +11,6 @@ services:
       - TZ=America/New_York
       - PUID=1000
       - PGID=1000
+      # Reverse proxy (Nginx, Caddy, Traefik, etc.) — see docs/reverse-proxy for details:
+      # - HOUNDARR_SECURE_COOKIES=true         # set Secure flag on cookies when behind HTTPS
+      # - HOUNDARR_TRUSTED_PROXIES=127.0.0.1   # trust X-Forwarded-For from this proxy IP

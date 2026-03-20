@@ -6,6 +6,14 @@ description: Answers to frequently asked questions about Houndarr.
 
 # FAQ
 
+## "Why not just use Sonarr's built-in search?"
+
+Sonarr, Radarr, and the other *arr apps monitor RSS feeds for new releases as they appear on your indexers. RSS doesn't re-search for content that was already available before you set up your current indexers or changed your quality profile.
+
+Each app has a "Search All Missing" button, but it fires every missing item at once. With a large backlog, that floods your indexers with hundreds of simultaneous requests and can get you rate-limited or banned. Per-item manual search works but is tedious when you have hundreds of entries to work through.
+
+Houndarr fills the gap by working through your wanted lists automatically in small, rate-limited batches over time. Common scenarios where it helps: adding a new indexer, changing quality profiles, recovering after downtime, or setting up a new server with a large existing library. If your current setup already grabs everything and handles upgrades automatically, you don't need Houndarr.
+
 ## "I have 500 monitored movies. Why did Houndarr only search 3?"
 
 Monitored doesn't mean wanted. Most of your library is already downloaded and meeting your quality cutoff, so those items never appear in a wanted list. Of the items that are wanted, cooldowns, post-release grace windows, and hourly caps filter out most of the rest.

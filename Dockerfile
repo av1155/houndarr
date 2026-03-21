@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-FileCopyrightText: 2026 Andrea A. Venti Fuentes
 # syntax=docker/dockerfile:1
 # =============================================================================
 # Houndarr — production Docker image
@@ -12,7 +14,7 @@ LABEL org.opencontainers.image.title="Houndarr" \
       org.opencontainers.image.description="Focused self-hosted companion for Radarr, Sonarr, Lidarr, Readarr, and Whisparr" \
       org.opencontainers.image.url="https://github.com/av1155/houndarr" \
       org.opencontainers.image.source="https://github.com/av1155/houndarr" \
-      org.opencontainers.image.licenses="MIT"
+      org.opencontainers.image.licenses="AGPL-3.0-only"
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \

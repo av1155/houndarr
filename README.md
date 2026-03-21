@@ -207,4 +207,4 @@ To report a vulnerability, see [SECURITY.md](SECURITY.md).
 
 ## License
 
-MIT. See [LICENSE](LICENSE).
+GNU AGPLv3. See [LICENSE](LICENSE).

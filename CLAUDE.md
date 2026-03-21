@@ -1,4 +1,4 @@
-# AGENTS.md: Houndarr
+# CLAUDE.md: Houndarr
 
 Coding-agent reference for the Houndarr repository.
 This file is the primary source of truth for autonomous agents operating here.
@@ -40,7 +40,9 @@ Dev server: `http://localhost:8877`.
 
 ## Quality Gates
 
-Run **all five** before every commit. CI enforces the same checks.
+Run **all five** before every commit. These are the core local gates; CI
+also enforces them as part of the required checks, alongside additional
+security and container checks.
 
 ```bash
 .venv/bin/python -m ruff check src/ tests/          # lint
@@ -55,7 +57,7 @@ Run **all five** before every commit. CI enforces the same checks.
 ## Running Tests
 
 ```bash
-# Full suite (600 tests, async; count includes parametrised expansions)
+# Full suite (647 tests, async; count includes parametrised expansions)
 .venv/bin/pytest
 
 # Single file

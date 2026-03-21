@@ -81,7 +81,7 @@ CSRF_TOKEN=$(grep "houndarr_csrf" /tmp/houndarr_smoke_cookies 2>/dev/null | awk 
 
 LOGIN_STATUS=$(curl -s -o /tmp/houndarr_smoke_login_body \
     -w "%{http_code}" \
-    --max-redirs 5 \
+    -L --max-redirs 5 \
     -X POST \
     -c /tmp/houndarr_smoke_cookies \
     -b /tmp/houndarr_smoke_cookies \

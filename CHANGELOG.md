@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Opt-in upgrade search pass that periodically re-searches library items which already have a file and meet the quality cutoff, giving each `*arr` instance a chance to find better releases; each instance has independent batch size, cooldown, and hourly cap controls (#266).
 
+### Changed
+
+- A 3-second pause is now inserted between consecutive real searches within the same cycle to spread downstream indexer fan-out; the delay applies only to dispatched searches, not to skipped or errored items (#272).
+
 ### Fixed
 
 - Navigating to the settings help page via the "What do these settings mean?" link inside the instance modal no longer leaves the page scroll-locked until refresh (#268).

@@ -24,7 +24,9 @@ Houndarr is configured primarily through environment variables set in your
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `HOUNDARR_SECURE_COOKIES` | `false` | Set `Secure` flag on cookies (enable when behind HTTPS) |
-| `HOUNDARR_TRUSTED_PROXIES` | _(empty)_ | Comma-separated trusted reverse-proxy IPs or CIDR subnets (e.g. `10.0.0.1,172.18.0.0/16`) for `X-Forwarded-For` |
+| `HOUNDARR_TRUSTED_PROXIES` | _(empty)_ | Comma-separated trusted proxy IPs or CIDR subnets (e.g. `10.0.0.1,172.18.0.0/16`) — used for `X-Forwarded-For` and proxy auth |
+| `HOUNDARR_AUTH_MODE` | `builtin` | Authentication method: `builtin` (default) or `proxy` (delegate to SSO reverse proxy) |
+| `HOUNDARR_AUTH_PROXY_HEADER` | _(empty)_ | Header carrying the authenticated username in proxy mode (e.g. `Remote-User`, `X-authentik-username`) — required when `AUTH_MODE=proxy` |
 
 ## Container settings
 
@@ -78,3 +80,11 @@ HTTPS termination. Without this, session cookies and login credentials are
 transmitted in cleartext on the network.
 
 See [Reverse Proxy](reverse-proxy.md) for the full configuration.
+
+### Proxy authentication mode
+
+`HOUNDARR_AUTH_MODE=proxy` delegates authentication to an SSO reverse proxy
+(Authelia, Authentik, oauth2-proxy, etc.). Requires both
+`HOUNDARR_AUTH_PROXY_HEADER` and `HOUNDARR_TRUSTED_PROXIES` — the app refuses
+to start without them. See [SSO proxy authentication](reverse-proxy.md#sso-proxy-authentication)
+for setup instructions and examples.

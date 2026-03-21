@@ -117,7 +117,9 @@ should store its database and master key.
 | `HOUNDARR_DEV` | `false` | Enable development mode (auto-reload, API docs) |
 | `HOUNDARR_LOG_LEVEL` | `info` | Log level: `debug`, `info`, `warning`, `error` |
 | `HOUNDARR_SECURE_COOKIES` | `false` | Set `Secure` flag on cookies (enable when behind HTTPS) |
-| `HOUNDARR_TRUSTED_PROXIES` | _(empty)_ | Comma-separated trusted reverse-proxy IPs or CIDR subnets for `X-Forwarded-For` |
+| `HOUNDARR_TRUSTED_PROXIES` | _(empty)_ | Comma-separated trusted proxy IPs or CIDR subnets for `X-Forwarded-For` and proxy auth |
+| `HOUNDARR_AUTH_MODE` | `builtin` | Authentication method: `builtin` (default) or `proxy` (delegate to SSO reverse proxy) |
+| `HOUNDARR_AUTH_PROXY_HEADER` | _(empty)_ | Header carrying the authenticated username in proxy mode (e.g. `Remote-User`) |
 | `PUID` | `1000` | User ID for file ownership inside the container |
 | `PGID` | `1000` | Group ID for file ownership inside the container |
 | `TZ` | `UTC` | Container timezone (e.g. `America/New_York`) |
@@ -137,6 +139,13 @@ If you run Houndarr behind a reverse proxy (Nginx, Caddy, Traefik, etc.):
    or `172.18.0.0/16`) so the login rate limiter sees real client IPs via
    `X-Forwarded-For`.
 3. Proxy all traffic to `http://houndarr:8877`.
+
+If you run Houndarr behind an SSO proxy (Authelia, Authentik, oauth2-proxy),
+you can eliminate double-login by setting `HOUNDARR_AUTH_MODE=proxy` and
+`HOUNDARR_AUTH_PROXY_HEADER` to the header your proxy sets with the
+authenticated username. See the
+[Reverse Proxy docs](https://av1155.github.io/houndarr/docs/configuration/reverse-proxy#sso-proxy-authentication)
+for setup examples and security requirements.
 
 ## First-Run Setup
 

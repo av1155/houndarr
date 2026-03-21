@@ -123,73 +123,82 @@ Relevant source files:
 
 ## Authentication and session security
 
-### Password storage
+Houndarr supports two authentication modes, configured via `HOUNDARR_AUTH_MODE`.
 
-Houndarr uses a single-admin authentication model. The admin password is hashed
-with **bcrypt at cost factor 12** and stored in the SQLite `settings` table.
-Plaintext passwords are never stored.
+### Built-in auth (default)
 
-### Sessions
+The default mode. Houndarr manages its own login session.
 
-Sessions use signed tokens via `itsdangerous.URLSafeTimedSerializer` with an
-HMAC signature. The signing secret is a 64-character hex string generated from
-`os.urandom(32)` on first setup, stored in the database.
+**Password storage:** The admin password is hashed with **bcrypt at cost
+factor 12** and stored in the SQLite `settings` table. Plaintext passwords
+are never stored.
 
-The session token payload contains only a creation timestamp and a CSRF nonce.
-It does not contain the username, password, API keys, or any other sensitive
-data.
+**Sessions:** Sessions use signed tokens via `itsdangerous.URLSafeTimedSerializer`
+with an HMAC signature. The signing secret is a 64-character hex string generated
+from `os.urandom(32)` on first setup, stored in the database. The token payload
+contains only a creation timestamp and a CSRF nonce — no username, password, or
+API keys. Session tokens expire after **24 hours**, enforced server-side.
 
-Session tokens expire after **24 hours**, enforced server-side during
-validation.
+**Login rate limiting:** A brute-force limiter allows **5 failed login attempts
+per IP address within a 60-second sliding window**, after which further attempts
+return HTTP 429. Error messages are generic and do not reveal whether the
+username or password was incorrect.
+
+`X-Forwarded-For` is only honored when the connecting IP is listed in
+`HOUNDARR_TRUSTED_PROXIES`. When no trusted proxies are configured (the default),
+the header is ignored entirely, preventing IP spoofing.
+
+### Proxy auth mode
+
+When `HOUNDARR_AUTH_MODE=proxy`, Houndarr delegates authentication to the
+reverse proxy (Authelia, Authentik, oauth2-proxy, etc.) and reads the
+authenticated username from a configured HTTP header. The header is only
+read after verifying the request originates from a trusted proxy IP;
+untrusted IPs receive `403 Forbidden` with no fallback to a login form.
+
+The `HOUNDARR_AUTH_PROXY_HEADER` and `HOUNDARR_TRUSTED_PROXIES` settings must
+both be provided — the app refuses to start without them. See
+[SSO proxy authentication](/docs/configuration/reverse-proxy#sso-proxy-authentication)
+for setup instructions.
 
 ### Cookies
 
 | Cookie | HttpOnly | SameSite | Secure | Purpose |
 |--------|----------|----------|--------|---------|
-| `houndarr_session` | Yes | Strict | Configurable | Session authentication |
-| `houndarr_csrf` | No | Strict | Configurable | CSRF token for HTMX/JS |
+| `houndarr_session` | Yes | Strict | Configurable | Session authentication (built-in mode only) |
+| `houndarr_csrf` | No | Strict | Configurable | CSRF token for HTMX/JS (both modes) |
 
 The CSRF cookie is intentionally not `HttpOnly` because HTMX needs to read it
 to include the token in request headers.
 
-The `Secure` flag on both cookies is controlled by the `HOUNDARR_SECURE_COOKIES`
-environment variable. It defaults to `false` because Houndarr serves plain HTTP
-and expects HTTPS to be terminated by a reverse proxy. Set it to `true` when
-running behind HTTPS.
+The `Secure` flag on both cookies is controlled by `HOUNDARR_SECURE_COOKIES`.
+It defaults to `false` because Houndarr serves plain HTTP and expects HTTPS to
+be terminated by a reverse proxy. Set it to `true` when running behind HTTPS.
 
 ### CSRF protection
 
 All state-changing requests (POST, PUT, PATCH, DELETE) require a valid CSRF
-token. The expected token is embedded inside the HMAC-signed session cookie, so
-it cannot be forged without the signing secret. Token comparison uses
-`hmac.compare_digest()` to prevent timing attacks.
+token in both auth modes. In built-in mode, the expected token is embedded in
+the HMAC-signed session cookie and cannot be forged without the signing secret.
+In proxy mode, the double-submit cookie pattern is used: a `houndarr_csrf`
+cookie with `SameSite=Strict` is set on authenticated responses and must be
+echoed back in the `X-CSRF-Token` header or `csrf_token` form field.
 
-The only intentional CSRF exemption is `POST /logout`, which allows stale
-sessions to be cleared even when the CSRF token has expired.
+Token comparison uses `hmac.compare_digest()` in both modes to prevent timing
+attacks.
 
-### Login rate limiting
-
-A brute-force limiter allows **5 failed login attempts per IP address within a
-60-second sliding window**. After the limit is reached, further attempts return
-HTTP 429.
-
-Login error messages are generic ("Invalid credentials") and do not reveal
-whether the username or password was incorrect.
-
-`X-Forwarded-For` is only honored when the connecting IP is listed in
-`HOUNDARR_TRUSTED_PROXIES` (individual IPs or CIDR subnets). When no trusted proxies are configured (the
-default), the header is ignored entirely, preventing IP spoofing.
+The only intentional CSRF exemption is `POST /logout`.
 
 ### Unauthenticated routes
 
 Only these paths are accessible without authentication:
 
-| Path | Purpose |
-|------|---------|
-| `/setup` | First-run setup (disabled after setup completes) |
-| `/login` | Login form |
-| `/api/health` | Health check (returns only `{"status": "ok"}`) |
-| `/static/*` | Static assets (CSS, JS, images) |
+| Path | Purpose | Proxy mode |
+|------|---------|------------|
+| `/setup` | First-run setup (disabled after setup completes) | Redirects to `/` |
+| `/login` | Login form | Redirects to `/` |
+| `/api/health` | Health check (returns only `{"status": "ok"}`) | Public (unchanged) |
+| `/static/*` | Static assets (CSS, JS, images) | Public (unchanged) |
 
 No unauthenticated route exposes configuration, API keys, instance data, or
 any information beyond a static health status.
@@ -314,6 +323,15 @@ The persistent data directory (default `/data` in Docker) contains:
 - [ ] Back up the `/data` volume regularly
 - [ ] Restrict file permissions on the data directory to the container user
 - [ ] Keep the Docker image updated for security patches
+
+**If using proxy auth mode (`HOUNDARR_AUTH_MODE=proxy`):**
+
+- [ ] Set `HOUNDARR_TRUSTED_PROXIES` to only your proxy's specific IP or subnet
+      — avoid broad ranges like `0.0.0.0/0`
+- [ ] Ensure port 8877 is not reachable without going through the authenticating
+      proxy — direct access bypasses SSO
+- [ ] Verify your proxy strips/overwrites the auth header from client requests
+      before forwarding (all major SSO proxies do this by default)
 
 ## Known limitations
 

@@ -14,3 +14,7 @@ services:
       # Reverse proxy (Nginx, Caddy, Traefik, etc.) — see docs/reverse-proxy for details:
       # - HOUNDARR_SECURE_COOKIES=true         # set Secure flag on cookies when behind HTTPS
       # - HOUNDARR_TRUSTED_PROXIES=172.18.0.0/16  # trust X-Forwarded-For from this proxy IP/subnet
+      # SSO proxy auth (Authelia, Authentik, oauth2-proxy, etc.) — all three required together:
+      # - HOUNDARR_AUTH_MODE=proxy
+      # - HOUNDARR_AUTH_PROXY_HEADER=Remote-User  # header your proxy sets (e.g. X-authentik-username)
+      # - HOUNDARR_TRUSTED_PROXIES=172.18.0.0/16  # only requests from this IP/subnet are trusted

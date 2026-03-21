@@ -72,4 +72,4 @@ If the items are still monitored in your *arr instance, yes: they will appear in
 
 ## "Does Houndarr respect custom format scores?"
 
-Houndarr does not evaluate quality, custom formats, or release attributes. It only triggers search commands. Your *arr instance handles all quality evaluation, custom format scoring, and download decisions. If your quality profile and custom formats are configured correctly, Houndarr's searches will automatically produce results that satisfy them.
+Houndarr does not evaluate quality, custom formats, or release attributes. It only triggers search commands. Your *arr instance handles all quality evaluation, custom format scoring, and download decisions. If your quality profile and custom formats are configured correctly, Houndarr's searches will automatically produce results that satisfy them. If you want help keeping quality profiles and custom formats consistent across instances, [Profilarr](https://github.com/Dictionarry-Hub/profilarr) is a community tool built for that.

@@ -9,6 +9,7 @@ const sidebars: SidebarsConfig = {
       items: [
         'getting-started/quick-start',
         'getting-started/installation',
+        'getting-started/kubernetes',
         'getting-started/first-run-setup',
       ],
     },

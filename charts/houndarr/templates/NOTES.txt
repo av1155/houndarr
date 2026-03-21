@@ -1,0 +1,33 @@
+Houndarr {{ .Chart.AppVersion }} deployed in namespace {{ .Release.Namespace }}.
+
+  ⚠  SQLite constraint: replicas are fixed at 1. Do not scale this StatefulSet.
+
+Access the UI via port-forward:
+
+  kubectl port-forward -n {{ .Release.Namespace }} \
+    svc/{{ include "houndarr.fullname" . }}-web \
+    {{ .Values.service.port }}:{{ .Values.service.port }}
+
+  Then open: http://localhost:{{ .Values.service.port }}
+
+{{- if .Values.ingress.enabled }}
+
+Ingress:
+  http{{ if .Values.ingress.tls.enabled }}s{{ end }}://{{ .Values.ingress.host }}
+
+{{- if not .Values.env.secureCookies }}
+  ⚠  For HTTPS deployments, set env.secureCookies=true and env.trustedProxies
+     to your Ingress controller's pod CIDR.
+{{- end }}
+{{- else }}
+
+To expose via Ingress, set:
+  --set ingress.enabled=true
+  --set ingress.host=<your-domain>
+
+{{- end }}
+
+Data volume:
+  The PVC 'data-{{ include "houndarr.fullname" . }}-0' persists after pod deletion.
+  Back it up — it contains the database and the Fernet encryption master key.
+  Loss of the master key makes all stored *arr API keys unrecoverable.

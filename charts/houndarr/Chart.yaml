@@ -1,0 +1,22 @@
+apiVersion: v2
+name: houndarr
+description: Self-hosted companion for Radarr, Sonarr, Lidarr, Readarr, and Whisparr that automatically searches for missing and cutoff-unmet media in small, rate-limited batches.
+type: application
+version: 1.4.0
+appVersion: "1.4.0"
+icon: https://av1155.github.io/houndarr/img/houndarr-logo-dark.png
+home: https://av1155.github.io/houndarr/
+sources:
+  - https://github.com/av1155/houndarr
+keywords:
+  - houndarr
+  - radarr
+  - sonarr
+  - lidarr
+  - readarr
+  - whisparr
+  - arr
+  - media
+maintainers:
+  - name: av1155
+    url: https://github.com/av1155

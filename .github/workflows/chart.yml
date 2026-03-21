@@ -1,0 +1,55 @@
+name: Helm Chart
+
+on:
+  push:
+    tags: ["v*"]
+
+# Permissions set at job level for least-privilege.
+permissions: {}
+
+jobs:
+  publish:
+    name: Package and push Helm chart
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: "v3.20.1"
+
+      - name: Login to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Read version
+        id: version
+        run: |
+          CHART_VERSION=$(tr -d '[:space:]' < VERSION)
+          echo "version=${CHART_VERSION}" >> "$GITHUB_OUTPUT"
+
+      - name: Package chart
+        env:
+          CHART_VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          helm package charts/houndarr \
+            --version "$CHART_VERSION" \
+            --app-version "$CHART_VERSION" \
+            --destination /tmp/helm-output
+
+      - name: Push chart to GHCR
+        env:
+          CHART_VERSION: ${{ steps.version.outputs.version }}
+          CHART_OWNER: ${{ github.repository_owner }}
+        run: |
+          helm push \
+            "/tmp/helm-output/houndarr-${CHART_VERSION}.tgz" \
+            "oci://ghcr.io/${CHART_OWNER}/charts"

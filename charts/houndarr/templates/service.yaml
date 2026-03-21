@@ -1,0 +1,19 @@
+{{/*
+Headless service required by the StatefulSet for stable DNS entries.
+Pods are addressable as <pod-name>.<service-name>.<namespace>.svc.cluster.local.
+*/}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "houndarr.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "houndarr.labels" . | nindent 4 }}
+spec:
+  clusterIP: None
+  selector:
+    {{- include "houndarr.selectorLabels" . | nindent 4 }}
+  ports:
+    - name: http
+      port: {{ .Values.service.port }}
+      targetPort: http

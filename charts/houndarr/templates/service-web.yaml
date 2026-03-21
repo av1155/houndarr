@@ -1,0 +1,19 @@
+{{/*
+ClusterIP service for Ingress controllers and kubectl port-forward.
+Named with the "-web" suffix to match the documented raw-manifest pattern.
+*/}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "houndarr.fullname" . }}-web
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "houndarr.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "houndarr.selectorLabels" . | nindent 4 }}
+  ports:
+    - name: http
+      port: {{ .Values.service.port }}
+      targetPort: http

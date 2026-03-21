@@ -109,6 +109,7 @@ identical check names so branch protection is satisfied.
 |----------|---------|---------|
 | `version-check.yml` | PRs changing `VERSION` or `CHANGELOG.md` | Validates VERSION format, CHANGELOG heading match, allowed `###` headers, `---` separator |
 | `release.yml` | `v*` tag push | Validates VERSION == tag, extracts CHANGELOG block, creates GitHub Release |
+| `chart.yml` | `v*` tag push | Packages `charts/houndarr/` with version from `VERSION` file, pushes to `oci://ghcr.io/av1155/charts` |
 | `dockerfile-lint.yml` | Changes to `Dockerfile` | `hadolint Dockerfile` |
 | `workflow-lint.yml` | Changes to `.github/workflows/**` | `actionlint` via reviewdog |
 | `api-snapshot-refresh.yml` | Weekly (Monday 10:00 UTC) + manual | Fetches upstream Radarr/Sonarr/Whisparr/Lidarr/Readarr OpenAPI specs, updates `docs/api/` snapshots and `tests/test_docs_api.py` hashes, opens a PR if changed |
@@ -476,6 +477,7 @@ Subject line max 50 characters (including the `type(scope): ` prefix); body line
 4. Tag and push:  git tag vX.Y.Z && git push origin vX.Y.Z
    → docker.yml  builds + pushes to GHCR as vX.Y.Z + latest
    → release.yml extracts CHANGELOG block, creates GitHub Release
+   → chart.yml   packages + pushes Helm chart to oci://ghcr.io/av1155/charts
 ```
 
 Never push a `v*` tag without a matching `## [X.Y.Z]` block in `CHANGELOG.md`.

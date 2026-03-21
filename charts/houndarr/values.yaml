@@ -1,0 +1,86 @@
+# -- Container image settings.
+image:
+  repository: ghcr.io/av1155/houndarr
+  # -- Overrides the image tag. Defaults to the chart's appVersion when empty.
+  tag: ""
+  pullPolicy: IfNotPresent
+
+# -- Timezone passed as the TZ environment variable.
+timezone: UTC
+
+# -- Security mode for the container.
+# "compat" (default): container starts as root, remaps UID/GID via PUID/PGID,
+# then drops to a non-root user. Works on most clusters.
+# "nonroot": enforces a pod-level securityContext with runAsUser/fsGroup.
+# Suitable for clusters with Pod Security Standards (restricted profile).
+# When using "nonroot", PUID and PGID are ignored.
+securityMode: compat
+
+# -- UID to run the application as. Only used when securityMode is "compat".
+puid: 1000
+# -- GID to run the application as. Only used when securityMode is "compat".
+pgid: 1000
+
+# -- Houndarr application environment variables.
+env:
+  # -- Set HOUNDARR_SECURE_COOKIES=true. Required when serving over HTTPS.
+  secureCookies: false
+  # -- Comma-separated list of trusted proxy IPs or CIDR subnets.
+  # Sets HOUNDARR_TRUSTED_PROXIES. Required when behind a reverse proxy or Ingress.
+  trustedProxies: ""
+  # -- Authentication mode. "builtin" uses the built-in bcrypt login form.
+  # "proxy" delegates auth to an upstream SSO proxy via a header.
+  authMode: builtin
+  # -- Header name carrying the authenticated username in proxy auth mode.
+  # Example: "Remote-User", "X-authentik-username". Sets HOUNDARR_AUTH_PROXY_HEADER.
+  authProxyHeader: ""
+  # -- Log verbosity. One of: debug, info, warning, error.
+  logLevel: info
+
+# -- Persistent volume for /data (SQLite database and encryption master key).
+persistence:
+  # -- Storage size for the PVC.
+  size: 1Gi
+  # -- StorageClass name. Empty string uses the cluster's default StorageClass.
+  storageClassName: ""
+  accessMode: ReadWriteOnce
+
+# -- Resource requests and limits.
+resources:
+  requests:
+    memory: 64Mi
+    cpu: 100m
+  limits:
+    memory: 256Mi
+    cpu: 500m
+
+# -- Service port. Matches the container's default port (8877).
+service:
+  port: 8877
+
+# -- Ingress configuration. Disabled by default.
+ingress:
+  enabled: false
+  # -- IngressClass name (e.g., "nginx", "traefik").
+  className: ""
+  # -- Annotations for the Ingress resource (e.g., cert-manager, nginx rewrites).
+  annotations: {}
+  # -- Hostname for the Ingress rule.
+  host: houndarr.example.com
+  tls:
+    enabled: false
+    # -- Name of the TLS secret.
+    secretName: houndarr-tls
+
+# -- Additional environment variables injected verbatim into the container.
+# Useful for advanced settings not covered by the values above.
+# Example:
+# extraEnv:
+#   - name: HOUNDARR_PORT
+#     value: "9000"
+extraEnv: []
+
+# -- Optional name override for chart resources.
+nameOverride: ""
+# -- Optional full name override for chart resources.
+fullnameOverride: ""

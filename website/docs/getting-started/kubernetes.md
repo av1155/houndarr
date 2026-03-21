@@ -12,6 +12,8 @@ Houndarr can run on Kubernetes using a StatefulSet with persistent storage.
 Houndarr uses SQLite. Only one replica is supported — do not scale beyond 1.
 :::
 
+Prefer Helm or Flux? See the [Helm guide](./helm) for chart-based installation.
+
 ## Manifests
 
 Apply all resources with `kubectl apply -f houndarr.yaml`. The sections below
@@ -294,5 +296,5 @@ kubectl exec -n houndarr houndarr-0 -- wget -qO- http://localhost:8877/api/healt
 
 ## Helm
 
-There is no official Helm chart yet. If you'd like to contribute one, [open an
-issue on GitHub](https://github.com/av1155/houndarr/issues).
+An official Helm chart is available. See the [Helm guide](./helm) for chart
+installation and Flux HelmRelease configuration.

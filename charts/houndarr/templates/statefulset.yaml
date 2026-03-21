@@ -1,0 +1,105 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "houndarr.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "houndarr.labels" . | nindent 4 }}
+spec:
+  # SQLite: do not scale beyond 1. Multiple replicas would corrupt the database.
+  replicas: 1
+  serviceName: {{ include "houndarr.fullname" . }}
+  selector:
+    matchLabels:
+      {{- include "houndarr.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "houndarr.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- if eq .Values.securityMode "nonroot" }}
+      # nonroot mode: Kubernetes enforces user/group identity via securityContext.
+      # PUID and PGID env vars are not used in this mode.
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        runAsNonRoot: true
+      {{- end }}
+      containers:
+        - name: houndarr
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          {{- if eq .Values.securityMode "nonroot" }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+          {{- end }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.port }}
+              protocol: TCP
+          env:
+            - name: TZ
+              value: {{ .Values.timezone | quote }}
+            {{- if eq .Values.securityMode "compat" }}
+            # compat mode: entrypoint remaps UID/GID and drops privileges via gosu.
+            - name: PUID
+              value: {{ .Values.puid | quote }}
+            - name: PGID
+              value: {{ .Values.pgid | quote }}
+            {{- end }}
+            {{- if .Values.env.secureCookies }}
+            - name: HOUNDARR_SECURE_COOKIES
+              value: "true"
+            {{- end }}
+            {{- if .Values.env.trustedProxies }}
+            - name: HOUNDARR_TRUSTED_PROXIES
+              value: {{ .Values.env.trustedProxies | quote }}
+            {{- end }}
+            {{- if ne .Values.env.authMode "builtin" }}
+            - name: HOUNDARR_AUTH_MODE
+              value: {{ .Values.env.authMode | quote }}
+            {{- end }}
+            {{- if .Values.env.authProxyHeader }}
+            - name: HOUNDARR_AUTH_PROXY_HEADER
+              value: {{ .Values.env.authProxyHeader | quote }}
+            {{- end }}
+            {{- if ne .Values.env.logLevel "info" }}
+            - name: HOUNDARR_LOG_LEVEL
+              value: {{ .Values.env.logLevel | quote }}
+            {{- end }}
+            {{- with .Values.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes:
+          - {{ .Values.persistence.accessMode }}
+        {{- if .Values.persistence.storageClassName }}
+        storageClassName: {{ .Values.persistence.storageClassName | quote }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.persistence.size }}

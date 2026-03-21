@@ -1,4 +1,4 @@
-"""Tests for ReadarrClient — all HTTP calls mocked with respx."""
+"""Tests for ReadarrClient - all HTTP calls mocked with respx."""
 
 from __future__ import annotations
 
@@ -24,7 +24,7 @@ def client() -> ReadarrClient:
 
 
 # ---------------------------------------------------------------------------
-# ping — uses /api/v1/system/status (NOT v3)
+# ping - uses /api/v1/system/status (NOT v3)
 # ---------------------------------------------------------------------------
 
 
@@ -52,7 +52,7 @@ async def test_ping_network_error_returns_false(client: ReadarrClient) -> None:
 
 
 # ---------------------------------------------------------------------------
-# get_missing — /api/v1/wanted/missing
+# get_missing - /api/v1/wanted/missing
 # ---------------------------------------------------------------------------
 
 _BOOK_RECORD = {
@@ -151,7 +151,7 @@ async def test_get_missing_non_2xx_raises(client: ReadarrClient) -> None:
 
 
 # ---------------------------------------------------------------------------
-# search — BookSearch (bookIds is an array)
+# search - BookSearch (bookIds is an array)
 # ---------------------------------------------------------------------------
 
 
@@ -177,7 +177,7 @@ async def test_search_non_2xx_raises(client: ReadarrClient) -> None:
 
 
 # ---------------------------------------------------------------------------
-# search_author — AuthorSearch (authorId is a scalar)
+# search_author - AuthorSearch (authorId is a scalar)
 # ---------------------------------------------------------------------------
 
 
@@ -203,7 +203,7 @@ async def test_search_author_non_2xx_raises(client: ReadarrClient) -> None:
 
 
 # ---------------------------------------------------------------------------
-# get_cutoff_unmet — /api/v1/wanted/cutoff
+# get_cutoff_unmet - /api/v1/wanted/cutoff
 # ---------------------------------------------------------------------------
 
 _CUTOFF_RESPONSE = {

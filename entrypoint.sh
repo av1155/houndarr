@@ -20,7 +20,7 @@ if [ "$CURRENT_UID" != "0" ]; then
 
     # Warn if PUID or PGID were explicitly changed from defaults
     if [ "${PUID}" != "1000" ] || [ "${PGID}" != "1000" ]; then
-        echo "WARNING: PUID/PGID are set but will be ignored — the container is not running as root."
+        echo "WARNING: PUID/PGID are set but will be ignored; the container is not running as root."
     fi
 
     # Preflight: verify /data exists
@@ -65,7 +65,7 @@ if [ "$PUID" = "0" ]; then
 fi
 
 # ---------------------------------------------------------------------------
-# Root startup with PUID/PGID remapping (compat mode — default)
+# Root startup with PUID/PGID remapping (compat mode, default)
 # Remap the appuser UID/GID to match host PUID/PGID, chown /data,
 # then drop privileges via gosu.
 # ---------------------------------------------------------------------------

@@ -1,4 +1,4 @@
-"""Tests for SonarrClient — all HTTP calls mocked with respx."""
+"""Tests for SonarrClient - all HTTP calls mocked with respx."""
 
 from __future__ import annotations
 

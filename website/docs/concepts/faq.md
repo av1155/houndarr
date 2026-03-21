@@ -66,7 +66,7 @@ Cutoff search targets items your *arr instance flags as *below* your quality cut
 
 No. Houndarr only triggers searches within your *arr instances for items already tracked there. For request workflows, use Overseerr or Jellyseerr alongside your *arr stack.
 
-## "I deleted files to free up space — will Houndarr re-download them?"
+## "I deleted files to free up space. Will Houndarr re-download them?"
 
 If the items are still monitored in your *arr instance, yes: they will appear in the wanted/missing list and Houndarr will eventually search for them. To prevent re-downloads, unmonitor the items in your *arr instance before or after deleting the files. Houndarr only acts on what your *arr instance reports as wanted.
 

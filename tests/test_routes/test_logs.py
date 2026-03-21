@@ -232,7 +232,7 @@ def test_logs_partial_redirects_unauthenticated(app: TestClient) -> None:
 
 
 # ---------------------------------------------------------------------------
-# GET /api/logs — empty state
+# GET /api/logs - empty state
 # ---------------------------------------------------------------------------
 
 
@@ -245,7 +245,7 @@ def test_logs_empty_when_no_entries(app: TestClient) -> None:
 
 
 # ---------------------------------------------------------------------------
-# GET /api/logs — with seeded data (uses async DB fixture + sync app)
+# GET /api/logs - with seeded data (uses async DB fixture + sync app)
 # ---------------------------------------------------------------------------
 
 
@@ -615,7 +615,7 @@ def test_logs_page_copy_dropdown_aria_attributes(app: TestClient) -> None:
 
 
 # ---------------------------------------------------------------------------
-# GET /api/logs/partial — HTMX partial
+# GET /api/logs/partial - HTMX partial
 # ---------------------------------------------------------------------------
 
 

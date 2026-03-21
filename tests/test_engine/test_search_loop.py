@@ -1,4 +1,4 @@
-"""Tests for the search loop engine — all HTTP calls mocked with respx."""
+"""Tests for the search loop engine - all HTTP calls mocked with respx."""
 
 from __future__ import annotations
 
@@ -224,7 +224,7 @@ async def _seed_release_timing_retry(
 
 
 # ---------------------------------------------------------------------------
-# Tests — items searched
+# Tests - items searched
 # ---------------------------------------------------------------------------
 
 
@@ -352,7 +352,7 @@ def test_season_item_id_properties() -> None:
     """
     from houndarr.engine.adapters.sonarr import _season_item_id
 
-    # Always negative — cannot collide with positive Sonarr episode IDs
+    # Always negative - cannot collide with positive Sonarr episode IDs
     assert _season_item_id(1, 1) < 0
     assert _season_item_id(999, 50) < 0
     assert _season_item_id(100_000, 999) < 0
@@ -394,7 +394,7 @@ async def test_sonarr_season_context_cross_cycle_cooldown(
     """
     import json
 
-    # Five missing episodes from the same season — more than batch_size so the
+    # Five missing episodes from the same season - more than batch_size so the
     # representative *would* rotate in the old (buggy) implementation.
     season_episodes = {
         "records": [
@@ -478,7 +478,7 @@ async def test_sonarr_season_context_log_id_stable_across_cycles(
             {**_EPISODE_RECORD, "id": 202, "seriesId": 77, "seasonNumber": 3, "episodeNumber": 2},
         ]
     }
-    # Cycle 2 — rotated so episode 202 appears first; item_id must still match.
+    # Cycle 2 - rotated so episode 202 appears first; item_id must still match.
     season_episodes_rotated = {
         "records": [
             {**_EPISODE_RECORD, "id": 202, "seriesId": 77, "seasonNumber": 3, "episodeNumber": 2},
@@ -487,7 +487,7 @@ async def test_sonarr_season_context_log_id_stable_across_cycles(
     }
 
     # With batch_size=1 and cooldown_days=0 both cycles search the season and
-    # each exits after finding 1 eligible item on page 1 — 1 GET per cycle.
+    # each exits after finding 1 eligible item on page 1 - 1 GET per cycle.
     # Total side_effect list: [c1-p1, c2-p1(rotated)].
     respx.get(f"{SONARR_URL}/api/v3/wanted/missing").mock(
         side_effect=[
@@ -680,7 +680,7 @@ async def test_radarr_available_movie_still_searches(seeded_instances: None) -> 
 
 
 # ---------------------------------------------------------------------------
-# Tests — items skipped (cooldown)
+# Tests - items skipped (cooldown)
 # ---------------------------------------------------------------------------
 
 
@@ -1105,7 +1105,7 @@ async def test_whisparr_season_context_release_timing_skip_allows_one_retry_whil
 
 
 # ---------------------------------------------------------------------------
-# Tests — hourly cap
+# Tests - hourly cap
 # ---------------------------------------------------------------------------
 
 
@@ -1131,7 +1131,7 @@ async def test_hourly_cap_stops_searches(seeded_instances: None) -> None:
         return_value=httpx.Response(201, json=_COMMAND_RESP)
     )
 
-    # hourly_cap=5 — already used up
+    # hourly_cap=5 - already used up
     instance = _make_instance(hourly_cap=5)
     count = await run_instance_search(instance, MASTER_KEY)
 
@@ -1294,7 +1294,7 @@ async def test_missing_deduplicates_items_across_pages(seeded_instances: None) -
 
 
 # ---------------------------------------------------------------------------
-# Tests — Lidarr items searched
+# Tests - Lidarr items searched
 # ---------------------------------------------------------------------------
 
 
@@ -1368,7 +1368,7 @@ async def test_lidarr_artist_context_mode(seeded_instances: None) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Tests — Readarr items searched
+# Tests - Readarr items searched
 # ---------------------------------------------------------------------------
 
 
@@ -1442,7 +1442,7 @@ async def test_readarr_author_context_mode(seeded_instances: None) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Tests — Whisparr items searched
+# Tests - Whisparr items searched
 # ---------------------------------------------------------------------------
 
 
@@ -1522,7 +1522,7 @@ async def test_whisparr_season_context_mode(seeded_instances: None) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Tests — page scanning
+# Tests - page scanning
 # ---------------------------------------------------------------------------
 
 
@@ -1562,7 +1562,7 @@ async def test_missing_hourly_cap_stops_additional_page_fetches(seeded_instances
 
 
 # ---------------------------------------------------------------------------
-# Tests — search_log rows
+# Tests - search_log rows
 # ---------------------------------------------------------------------------
 
 
@@ -1746,7 +1746,7 @@ async def test_no_log_rows_when_no_missing_items(seeded_instances: None) -> None
 
 
 # ---------------------------------------------------------------------------
-# Tests — queue backpressure
+# Tests - queue backpressure
 # ---------------------------------------------------------------------------
 
 
@@ -1806,7 +1806,7 @@ async def test_queue_backpressure_allows_when_under_limit(
 async def test_queue_backpressure_disabled_when_limit_is_zero(
     seeded_instances: None,
 ) -> None:
-    """queue_limit=0 disables the check — no queue status request is made."""
+    """queue_limit=0 disables the check - no queue status request is made."""
     queue_route = respx.get(f"{SONARR_URL}/api/v3/queue/status").mock(
         return_value=httpx.Response(200, json={"totalCount": 999, "count": 999})
     )
@@ -1865,7 +1865,7 @@ async def test_queue_backpressure_skips_at_exact_limit(
 
 
 # ---------------------------------------------------------------------------
-# Tests — inter-search delay
+# Tests - inter-search delay
 # ---------------------------------------------------------------------------
 
 
@@ -1959,7 +1959,7 @@ async def test_inter_search_delay_fires_in_upgrade_pass(
 
 
 # ---------------------------------------------------------------------------
-# Tests — supervisor
+# Tests - supervisor
 # ---------------------------------------------------------------------------
 
 
@@ -2206,7 +2206,7 @@ async def test_supervisor_run_now_passes_run_now_trigger(seeded_instances: None)
 
 
 # ---------------------------------------------------------------------------
-# Tests — cutoff-unmet pass
+# Tests - cutoff-unmet pass
 # ---------------------------------------------------------------------------
 
 _CUTOFF_SONARR = {"page": 1, "pageSize": 5, "totalRecords": 1, "records": [_EPISODE_RECORD]}

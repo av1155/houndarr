@@ -19,7 +19,7 @@ python3 -m venv .venv
 ## Workflow
 
 1. Create a GitHub issue first. Use the Conventional Commits `type:` prefix in the
-   title (`type: short imperative description`, lowercase, no period — e.g.
+   title (`type: short imperative description`, lowercase, no period, e.g.
    `fix: login fails on empty password`). Apply exactly one `type:*` label and one
    `priority:*` label before starting work.
 2. Create a short-lived branch from `main` (for example `feat/<slug>` or `fix/<slug>`).
@@ -30,7 +30,7 @@ python3 -m venv .venv
 7. Wait for all CI checks to pass before merge.
 
 For releases, open a separate `chore: bump version to X.Y.Z` PR that changes only
-`VERSION` and `CHANGELOG.md` together — CI will validate they match.
+`VERSION` and `CHANGELOG.md` together; CI will validate they match.
 
 ## Required local checks
 

@@ -7,7 +7,7 @@ import pytest
 from houndarr.config import AppSettings
 
 # ---------------------------------------------------------------------------
-# validate_auth_config — builtin mode (default, always valid)
+# validate_auth_config - builtin mode (default, always valid)
 # ---------------------------------------------------------------------------
 
 
@@ -24,7 +24,7 @@ def test_validate_builtin_mode_explicit() -> None:
 
 
 # ---------------------------------------------------------------------------
-# validate_auth_config — proxy mode (valid configurations)
+# validate_auth_config - proxy mode (valid configurations)
 # ---------------------------------------------------------------------------
 
 
@@ -51,7 +51,7 @@ def test_validate_proxy_mode_valid_cidr() -> None:
 
 
 # ---------------------------------------------------------------------------
-# validate_auth_config — proxy mode (invalid configurations)
+# validate_auth_config - proxy mode (invalid configurations)
 # ---------------------------------------------------------------------------
 
 
@@ -105,7 +105,7 @@ def test_validate_proxy_mode_whitespace_header() -> None:
 
 
 # ---------------------------------------------------------------------------
-# validate_auth_config — reserved header blocklist
+# validate_auth_config - reserved header blocklist
 # ---------------------------------------------------------------------------
 
 
@@ -147,7 +147,7 @@ def test_validate_proxy_mode_nonreserved_header() -> None:
 
 
 # ---------------------------------------------------------------------------
-# validate_auth_config — invalid auth mode
+# validate_auth_config - invalid auth mode
 # ---------------------------------------------------------------------------
 
 

@@ -78,7 +78,7 @@ def _make_episode(
 
 
 # ---------------------------------------------------------------------------
-# Label builders — note: Whisparr labels omit episodeNumber
+# Label builders - note: Whisparr labels omit episodeNumber
 # ---------------------------------------------------------------------------
 
 
@@ -115,7 +115,7 @@ class TestSeasonContextLabel:
 
 
 # ---------------------------------------------------------------------------
-# Season item ID — same formula as Sonarr
+# Season item ID - same formula as Sonarr
 # ---------------------------------------------------------------------------
 
 
@@ -174,7 +174,7 @@ class TestWhisparrUnreleasedReason:
 
 
 # ---------------------------------------------------------------------------
-# adapt_missing — episode mode
+# adapt_missing - episode mode
 # ---------------------------------------------------------------------------
 
 
@@ -221,7 +221,7 @@ class TestAdaptMissingEpisodeMode:
 
 
 # ---------------------------------------------------------------------------
-# adapt_missing — season-context mode
+# adapt_missing - season-context mode
 # ---------------------------------------------------------------------------
 
 

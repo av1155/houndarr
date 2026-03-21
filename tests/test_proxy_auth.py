@@ -101,7 +101,7 @@ def untrusted_proxy_app(proxy_settings: AppSettings) -> Generator[TestClient, No
 
 
 # ---------------------------------------------------------------------------
-# Unit tests — _is_proxy_auth_mode / _validate_proxy_auth
+# Unit tests - _is_proxy_auth_mode / _validate_proxy_auth
 # ---------------------------------------------------------------------------
 
 
@@ -222,7 +222,7 @@ def test_trusted_proxy_empty_header_gets_401(
 
 
 # ---------------------------------------------------------------------------
-# Authenticated access — trusted proxy with valid header
+# Authenticated access - trusted proxy with valid header
 # ---------------------------------------------------------------------------
 
 
@@ -293,7 +293,7 @@ def test_proxy_csrf_valid_token_allows_post(
     csrf_token = proxy_app.cookies.get(CSRF_COOKIE_NAME, "")
     assert csrf_token
 
-    # POST with valid CSRF token — will get validation error (422) from
+    # POST with valid CSRF token - will get validation error (422) from
     # the route handler, not a 403 from CSRF check
     resp = proxy_app.post(
         "/settings/instances",
@@ -398,7 +398,7 @@ def test_proxy_settings_hides_account_section(
 
 
 # ---------------------------------------------------------------------------
-# Builtin mode unaffected — smoke test
+# Builtin mode unaffected - smoke test
 # ---------------------------------------------------------------------------
 
 

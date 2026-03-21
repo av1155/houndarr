@@ -40,7 +40,7 @@ def _login(client: TestClient) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Authentication guard — all settings routes require a session
+# Authentication guard - all settings routes require a session
 # ---------------------------------------------------------------------------
 
 
@@ -240,7 +240,7 @@ def test_edit_form_returns_partial(app: TestClient) -> None:
     assert b"<tr" not in resp.content
     assert b'data-form-mode="edit"' in resp.content
     assert b'name="enabled"' not in resp.content
-    # API key field must not contain the real key — only the sentinel
+    # API key field must not contain the real key - only the sentinel
     assert b"__UNCHANGED__" in resp.content
 
 
@@ -268,7 +268,7 @@ def test_update_instance_with_unchanged_api_key(app: TestClient) -> None:
     """Submitting the sentinel key value should preserve the existing stored key."""
     _login(app)
     app.post("/settings/instances", data=_VALID_FORM, headers=csrf_headers(app))
-    # Use the sentinel value — server must keep the original key
+    # Use the sentinel value - server must keep the original key
     sentinel_form = {**_VALID_FORM, "name": "Renamed Sonarr", "api_key": "__UNCHANGED__"}
     resp = app.post("/settings/instances/1", data=sentinel_form, headers=csrf_headers(app))
     assert resp.status_code == 200
@@ -347,7 +347,7 @@ def test_delete_instance_gone_from_settings(app: TestClient) -> None:
 
 
 def test_delete_nonexistent_returns_200(app: TestClient) -> None:
-    """Deleting a non-existent ID is idempotent — still 200."""
+    """Deleting a non-existent ID is idempotent - still 200."""
     _login(app)
     resp = app.delete("/settings/instances/9999", headers=csrf_headers(app))
     assert resp.status_code == 200

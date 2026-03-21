@@ -611,8 +611,8 @@ async def test_purge_old_logs_removes_stale_rows(db: None) -> None:
         await conn.executemany(
             "INSERT INTO search_log (instance_id, action, timestamp) VALUES (?, ?, ?)",
             [
-                (None, "info", "2000-01-01T00:00:00.000Z"),  # very old — should be purged
-                (None, "info", "2099-01-01T00:00:00.000Z"),  # future — should be kept
+                (None, "info", "2000-01-01T00:00:00.000Z"),  # very old - should be purged
+                (None, "info", "2099-01-01T00:00:00.000Z"),  # future - should be kept
             ],
         )
         await conn.commit()

@@ -4,7 +4,7 @@ These tests capture the exact ``search_log`` output for known input scenarios
 and prove that the Phase 1–2 refactor (adapter pattern + unified pipeline)
 produces bit-identical results to the pre-refactor engine.
 
-Each test asserts the complete row sequence — field values and ordering — for
+Each test asserts the complete row sequence - field values and ordering - for
 a multi-step search cycle.  They are regression snapshots, not behavioural
 unit tests, and should break only when someone intentionally changes search
 engine output.
@@ -43,7 +43,7 @@ READARR_URL = "http://readarr:8787"
 WHISPARR_URL = "http://whisparr:6969"
 MASTER_KEY: bytes = Fernet.generate_key()
 
-# Two distinct Sonarr episodes — same series, different seasons.
+# Two distinct Sonarr episodes - same series, different seasons.
 _EP_S01E01: dict[str, Any] = {
     "id": 101,
     "seriesId": 55,
@@ -63,7 +63,7 @@ _EP_S02E01: dict[str, Any] = {
     "series": {"title": "My Show"},
 }
 
-# Two Radarr movies — one released, one released.
+# Two Radarr movies - one released, one released.
 _MOVIE_A: dict[str, Any] = {
     "id": 201,
     "title": "Alpha Movie",
@@ -185,10 +185,10 @@ async def test_golden_sonarr_episode_missing_and_cutoff(seeded_instances: None) 
     episode (301) that was not in the missing response.
 
     Expected sequence:
-      1. searched — ep 101, missing
-      2. searched — ep 102, missing
-      3. skipped  — ep 101, cutoff  (on cutoff cooldown from missing pass)
-      4. searched — ep 301, cutoff
+      1. searched - ep 101, missing
+      2. searched - ep 102, missing
+      3. skipped  - ep 101, cutoff  (on cutoff cooldown from missing pass)
+      4. searched - ep 301, cutoff
     """
     missing_page = {"records": [_EP_S01E01, _EP_S02E01]}
     cutoff_ep = {
@@ -222,7 +222,7 @@ async def test_golden_sonarr_episode_missing_and_cutoff(seeded_instances: None) 
     rows = await _get_log_rows()
     assert len(rows) == 4
 
-    # Row 0: missing pass — episode 101
+    # Row 0: missing pass - episode 101
     assert rows[0]["action"] == "searched"
     assert rows[0]["item_id"] == 101
     assert rows[0]["item_type"] == "episode"
@@ -232,7 +232,7 @@ async def test_golden_sonarr_episode_missing_and_cutoff(seeded_instances: None) 
     assert rows[0]["cycle_trigger"] == "scheduled"
     assert rows[0]["reason"] is None
 
-    # Row 1: missing pass — episode 102
+    # Row 1: missing pass - episode 102
     assert rows[1]["action"] == "searched"
     assert rows[1]["item_id"] == 102
     assert rows[1]["item_type"] == "episode"
@@ -241,7 +241,7 @@ async def test_golden_sonarr_episode_missing_and_cutoff(seeded_instances: None) 
     assert rows[1]["cycle_id"] == "golden-g1"
     assert rows[1]["cycle_trigger"] == "scheduled"
 
-    # Row 2: cutoff pass — episode 101 skipped (cooldown from missing pass)
+    # Row 2: cutoff pass - episode 101 skipped (cooldown from missing pass)
     assert rows[2]["action"] == "skipped"
     assert rows[2]["item_id"] == 101
     assert rows[2]["item_type"] == "episode"
@@ -249,7 +249,7 @@ async def test_golden_sonarr_episode_missing_and_cutoff(seeded_instances: None) 
     assert rows[2]["reason"] == "on cutoff cooldown (21d)"
     assert rows[2]["cycle_id"] == "golden-g1"
 
-    # Row 3: cutoff pass — episode 301 searched
+    # Row 3: cutoff pass - episode 301 searched
     assert rows[3]["action"] == "searched"
     assert rows[3]["item_id"] == 301
     assert rows[3]["item_type"] == "episode"
@@ -268,10 +268,10 @@ async def test_golden_sonarr_episode_missing_and_cutoff(seeded_instances: None) 
 async def test_golden_sonarr_season_context(seeded_instances: None) -> None:
     """Season-context mode deduplicates by (series, season).
 
-    Input: 3 episodes — 2 in S01, 1 in S02 of series 55.
+    Input: 3 episodes - 2 in S01, 1 in S02 of series 55.
     Expected sequence:
-      1. searched — synthetic S01 ID, season-context label
-      2. searched — synthetic S02 ID, season-context label
+      1. searched - synthetic S01 ID, season-context label
+      2. searched - synthetic S02 ID, season-context label
     Episode 102 (S01E02) is silently deduped by group_key, no log row.
     """
     from houndarr.engine.adapters.sonarr import _season_item_id
@@ -332,10 +332,10 @@ async def test_golden_radarr_missing_and_cutoff(seeded_instances: None) -> None:
     includes a fresh movie (203) alongside the already-searched 201.
 
     Expected sequence:
-      1. searched — movie 201, missing
-      2. searched — movie 202, missing
-      3. skipped  — movie 201, cutoff  (on cutoff cooldown from missing pass)
-      4. searched — movie 203, cutoff
+      1. searched - movie 201, missing
+      2. searched - movie 202, missing
+      3. skipped  - movie 201, cutoff  (on cutoff cooldown from missing pass)
+      4. searched - movie 203, cutoff
     """
     movie_c: dict[str, Any] = {
         "id": 203,
@@ -378,7 +378,7 @@ async def test_golden_radarr_missing_and_cutoff(seeded_instances: None) -> None:
     rows = await _get_log_rows()
     assert len(rows) == 4
 
-    # Missing pass — movie A
+    # Missing pass - movie A
     assert rows[0]["action"] == "searched"
     assert rows[0]["item_id"] == 201
     assert rows[0]["item_type"] == "movie"
@@ -387,14 +387,14 @@ async def test_golden_radarr_missing_and_cutoff(seeded_instances: None) -> None:
     assert rows[0]["cycle_id"] == "golden-g3"
     assert rows[0]["cycle_trigger"] == "scheduled"
 
-    # Missing pass — movie B
+    # Missing pass - movie B
     assert rows[1]["action"] == "searched"
     assert rows[1]["item_id"] == 202
     assert rows[1]["item_type"] == "movie"
     assert rows[1]["item_label"] == "Beta Film (2022)"
     assert rows[1]["search_kind"] == "missing"
 
-    # Cutoff pass — movie A skipped (cooldown from missing pass)
+    # Cutoff pass - movie A skipped (cooldown from missing pass)
     assert rows[2]["action"] == "skipped"
     assert rows[2]["item_id"] == 201
     assert rows[2]["item_type"] == "movie"
@@ -402,7 +402,7 @@ async def test_golden_radarr_missing_and_cutoff(seeded_instances: None) -> None:
     assert rows[2]["reason"] == "on cutoff cooldown (21d)"
     assert rows[2]["cycle_id"] == "golden-g3"
 
-    # Cutoff pass — movie C searched
+    # Cutoff pass - movie C searched
     assert rows[3]["action"] == "searched"
     assert rows[3]["item_id"] == 203
     assert rows[3]["item_type"] == "movie"
@@ -427,18 +427,18 @@ async def test_golden_mixed_eligibility(seeded_instances: None) -> None:
     that the cooldown check is reached before the cap is exhausted.
 
     Setup:
-      - ep 101: eligible (searched — uses 1 of 2 cap slots)
+      - ep 101: eligible (searched - uses 1 of 2 cap slots)
       - ep 102: unreleased (future air date → skipped before cap check)
       - ep 103: on cooldown (passes unreleased + cap, hits cooldown)
-      - ep 104: eligible (searched — uses 2 of 2 cap slots)
+      - ep 104: eligible (searched - uses 2 of 2 cap slots)
       - ep 105: hourly cap reached (cap=2 exhausted → skipped, stop_pass)
 
     Expected sequence:
-      1. searched — ep 101
-      2. skipped  — ep 102, "not yet released"
-      3. skipped  — ep 103, "on cooldown (7d)"
-      4. searched — ep 104
-      5. skipped  — ep 105, "hourly cap reached (2)"
+      1. searched - ep 101
+      2. skipped  - ep 102, "not yet released"
+      3. skipped  - ep 103, "on cooldown (7d)"
+      4. searched - ep 104
+      5. skipped  - ep 105, "hourly cap reached (2)"
     """
     from houndarr.services.cooldown import record_search
 
@@ -504,7 +504,7 @@ async def test_golden_mixed_eligibility(seeded_instances: None) -> None:
     assert rows[0]["cycle_trigger"] == "scheduled"
     assert rows[0]["reason"] is None
 
-    # Row 1: skipped — unreleased
+    # Row 1: skipped - unreleased
     assert rows[1]["action"] == "skipped"
     assert rows[1]["item_id"] == 102
     assert rows[1]["item_type"] == "episode"
@@ -513,7 +513,7 @@ async def test_golden_mixed_eligibility(seeded_instances: None) -> None:
     assert rows[1]["reason"] == "not yet released"
     assert rows[1]["cycle_id"] == "golden-g4"
 
-    # Row 2: skipped — cooldown
+    # Row 2: skipped - cooldown
     assert rows[2]["action"] == "skipped"
     assert rows[2]["item_id"] == 103
     assert rows[2]["item_type"] == "episode"
@@ -522,7 +522,7 @@ async def test_golden_mixed_eligibility(seeded_instances: None) -> None:
     assert rows[2]["reason"] == "on cooldown (7d)"
     assert rows[2]["cycle_id"] == "golden-g4"
 
-    # Row 3: searched — fourth episode (uses second cap slot)
+    # Row 3: searched - fourth episode (uses second cap slot)
     assert rows[3]["action"] == "searched"
     assert rows[3]["item_id"] == 104
     assert rows[3]["item_type"] == "episode"
@@ -531,7 +531,7 @@ async def test_golden_mixed_eligibility(seeded_instances: None) -> None:
     assert rows[3]["cycle_id"] == "golden-g4"
     assert rows[3]["reason"] is None
 
-    # Row 4: skipped — hourly cap
+    # Row 4: skipped - hourly cap
     assert rows[4]["action"] == "skipped"
     assert rows[4]["item_id"] == 105
     assert rows[4]["item_type"] == "episode"
@@ -567,10 +567,10 @@ async def test_golden_lidarr_album_missing_and_cutoff(seeded_instances: None) ->
     """Lidarr album-mode cycle with both missing and cutoff passes.
 
     Expected sequence:
-      1. searched — album 301, missing
-      2. searched — album 302, missing
-      3. skipped  — album 301, cutoff (on cutoff cooldown from missing pass)
-      4. searched — album 303, cutoff
+      1. searched - album 301, missing
+      2. searched - album 302, missing
+      3. skipped  - album 301, cutoff (on cutoff cooldown from missing pass)
+      4. searched - album 303, cutoff
     """
     album_c: dict[str, Any] = {
         "id": 303,
@@ -660,10 +660,10 @@ async def test_golden_readarr_book_missing_and_cutoff(seeded_instances: None) ->
     """Readarr book-mode cycle with both missing and cutoff passes.
 
     Expected sequence:
-      1. searched — book 401, missing
-      2. searched — book 402, missing
-      3. skipped  — book 401, cutoff (on cutoff cooldown from missing pass)
-      4. searched — book 403, cutoff
+      1. searched - book 401, missing
+      2. searched - book 402, missing
+      3. skipped  - book 401, cutoff (on cutoff cooldown from missing pass)
+      4. searched - book 403, cutoff
     """
     book_c: dict[str, Any] = {
         "id": 403,
@@ -755,8 +755,8 @@ async def test_golden_whisparr_episode_missing(seeded_instances: None) -> None:
     """Whisparr episode-mode missing pass with two episodes.
 
     Expected sequence:
-      1. searched — ep 501, missing, item_type=whisparr_episode
-      2. searched — ep 502, missing, item_type=whisparr_episode
+      1. searched - ep 501, missing, item_type=whisparr_episode
+      2. searched - ep 502, missing, item_type=whisparr_episode
     """
     missing_page = {"records": [_WHISPARR_EP_A, _WHISPARR_EP_B]}
 

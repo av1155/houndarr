@@ -150,14 +150,14 @@ async def _cooldown_rows(instance_id: int) -> list[dict[str, Any]]:
 
 
 # ---------------------------------------------------------------------------
-# Test 1 — Full cycle: items searched, log written, cooldowns recorded
+# Test 1 - Full cycle: items searched, log written, cooldowns recorded
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio()
 @respx.mock
 async def test_full_cycle_sonarr(sonarr_instance: Instance, master_key: bytes) -> None:
-    """One complete Sonarr search cycle — item is searched, log and cooldown written."""
+    """One complete Sonarr search cycle - item is searched, log and cooldown written."""
     respx.get(f"{SONARR_URL}/api/v3/wanted/missing").mock(
         return_value=httpx.Response(200, json=_MISSING_SONARR_1)
     )
@@ -185,7 +185,7 @@ async def test_full_cycle_sonarr(sonarr_instance: Instance, master_key: bytes) -
 @pytest.mark.asyncio()
 @respx.mock
 async def test_full_cycle_radarr(radarr_instance: Instance, master_key: bytes) -> None:
-    """One complete Radarr search cycle — movie is searched, log and cooldown written."""
+    """One complete Radarr search cycle - movie is searched, log and cooldown written."""
     respx.get(f"{RADARR_URL}/api/v3/wanted/missing").mock(
         return_value=httpx.Response(200, json=_MISSING_RADARR_1)
     )
@@ -209,7 +209,7 @@ async def test_full_cycle_radarr(radarr_instance: Instance, master_key: bytes) -
 
 
 # ---------------------------------------------------------------------------
-# Test 2 — Second cycle: same items skipped (on cooldown)
+# Test 2 - Second cycle: same items skipped (on cooldown)
 # ---------------------------------------------------------------------------
 
 
@@ -227,12 +227,12 @@ async def test_second_cycle_items_skipped_on_cooldown(
         return_value=httpx.Response(201, json=_CMD_OK)
     )
 
-    # First cycle — item is searched
+    # First cycle - item is searched
     count1 = await run_instance_search(sonarr_instance, master_key)
     assert count1 == 1
     assert search_route.call_count == 1
 
-    # Second cycle — same item, now on cooldown → should be skipped
+    # Second cycle - same item, now on cooldown → should be skipped
     count2 = await run_instance_search(sonarr_instance, master_key)
     assert count2 == 0
     # search endpoint called exactly once total (first cycle only)
@@ -249,7 +249,7 @@ async def test_second_cycle_items_skipped_on_cooldown(
 
 
 # ---------------------------------------------------------------------------
-# Test 3 — Hourly cap enforced across a cycle
+# Test 3 - Hourly cap enforced across a cycle
 # ---------------------------------------------------------------------------
 
 
@@ -302,7 +302,7 @@ async def test_hourly_cap_enforced(
 
 
 # ---------------------------------------------------------------------------
-# Test 4 — Graceful shutdown: supervisor cancels tasks without error
+# Test 4 - Graceful shutdown: supervisor cancels tasks without error
 # ---------------------------------------------------------------------------
 
 
@@ -339,7 +339,7 @@ async def test_supervisor_no_instances_starts_cleanly(db: None, master_key: byte
 
 
 # ---------------------------------------------------------------------------
-# Test 5 — Both Radarr and Sonarr instances run concurrently via supervisor
+# Test 5 - Both Radarr and Sonarr instances run concurrently via supervisor
 # ---------------------------------------------------------------------------
 
 
@@ -456,7 +456,7 @@ async def test_missing_list_calls_are_bounded_per_cycle(
 
 
 # ---------------------------------------------------------------------------
-# Fixtures — Lidarr, Readarr, Whisparr
+# Fixtures - Lidarr, Readarr, Whisparr
 # ---------------------------------------------------------------------------
 
 
@@ -509,14 +509,14 @@ async def whisparr_instance(db: None, master_key: bytes) -> Instance:
 
 
 # ---------------------------------------------------------------------------
-# Test — Full cycle: Lidarr
+# Test - Full cycle: Lidarr
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio()
 @respx.mock
 async def test_full_cycle_lidarr(lidarr_instance: Instance, master_key: bytes) -> None:
-    """One complete Lidarr search cycle — album is searched, log and cooldown written."""
+    """One complete Lidarr search cycle - album is searched, log and cooldown written."""
     respx.get(f"{LIDARR_URL}/api/v1/wanted/missing").mock(
         return_value=httpx.Response(200, json=_MISSING_LIDARR_1)
     )
@@ -541,14 +541,14 @@ async def test_full_cycle_lidarr(lidarr_instance: Instance, master_key: bytes) -
 
 
 # ---------------------------------------------------------------------------
-# Test — Full cycle: Readarr
+# Test - Full cycle: Readarr
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio()
 @respx.mock
 async def test_full_cycle_readarr(readarr_instance: Instance, master_key: bytes) -> None:
-    """One complete Readarr search cycle — book is searched, log and cooldown written."""
+    """One complete Readarr search cycle - book is searched, log and cooldown written."""
     respx.get(f"{READARR_URL}/api/v1/wanted/missing").mock(
         return_value=httpx.Response(200, json=_MISSING_READARR_1)
     )
@@ -572,14 +572,14 @@ async def test_full_cycle_readarr(readarr_instance: Instance, master_key: bytes)
 
 
 # ---------------------------------------------------------------------------
-# Test — Full cycle: Whisparr
+# Test - Full cycle: Whisparr
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio()
 @respx.mock
 async def test_full_cycle_whisparr(whisparr_instance: Instance, master_key: bytes) -> None:
-    """One complete Whisparr search cycle — episode is searched, log and cooldown written."""
+    """One complete Whisparr search cycle - episode is searched, log and cooldown written."""
     respx.get(f"{WHISPARR_URL}/api/v3/wanted/missing").mock(
         return_value=httpx.Response(200, json=_MISSING_WHISPARR_1)
     )

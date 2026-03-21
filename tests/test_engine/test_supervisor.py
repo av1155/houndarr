@@ -1,4 +1,4 @@
-"""Tests for the Supervisor engine — connection-error deduplication and startup grace."""
+"""Tests for the Supervisor engine - connection-error deduplication and startup grace."""
 
 from __future__ import annotations
 
@@ -87,7 +87,7 @@ async def _get_log_rows() -> list[dict[str, Any]]:
 
 
 # ---------------------------------------------------------------------------
-# Tests — startup grace delay
+# Tests - startup grace delay
 # ---------------------------------------------------------------------------
 
 
@@ -181,7 +181,7 @@ async def test_start_staggers_instance_tasks() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Tests — state-transition error logging
+# Tests - state-transition error logging
 # ---------------------------------------------------------------------------
 
 
@@ -268,7 +268,7 @@ async def test_recovery_after_connect_error_writes_info_row(
         if call_count == 1:
             raise httpx.TransportError("refused")
         if call_count == 2:
-            return 0  # success — triggers recovery path
+            return 0  # success - triggers recovery path
         raise asyncio.CancelledError
 
     with (

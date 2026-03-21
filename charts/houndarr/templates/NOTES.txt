@@ -29,5 +29,5 @@ To expose via Ingress, set:
 
 Data volume:
   The PVC 'data-{{ include "houndarr.fullname" . }}-0' persists after pod deletion.
-  Back it up — it contains the database and the Fernet encryption master key.
+  Back it up: it contains the database and the Fernet encryption master key.
   Loss of the master key makes all stored *arr API keys unrecoverable.

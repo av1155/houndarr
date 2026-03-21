@@ -136,7 +136,7 @@ class TestSeasonItemId:
 
 
 # ---------------------------------------------------------------------------
-# adapt_missing — episode mode
+# adapt_missing - episode mode
 # ---------------------------------------------------------------------------
 
 
@@ -192,7 +192,7 @@ class TestAdaptMissingEpisodeMode:
 
 
 # ---------------------------------------------------------------------------
-# adapt_missing — season-context mode
+# adapt_missing - season-context mode
 # ---------------------------------------------------------------------------
 
 

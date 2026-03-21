@@ -154,7 +154,7 @@ class TestRadarrReleaseAnchor:
 
 
 # ---------------------------------------------------------------------------
-# _radarr_unreleased_reason — all 4 layers
+# _radarr_unreleased_reason - all 4 layers
 # ---------------------------------------------------------------------------
 
 

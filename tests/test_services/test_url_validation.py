@@ -9,7 +9,7 @@ import pytest
 from houndarr.services.url_validation import validate_instance_url
 
 # ---------------------------------------------------------------------------
-# Valid URLs — should return None
+# Valid URLs - should return None
 # ---------------------------------------------------------------------------
 
 
@@ -19,9 +19,9 @@ from houndarr.services.url_validation import validate_instance_url
         "http://sonarr:8989",
         "http://radarr:7878",
         "https://sonarr.example.com",
-        "http://192.168.1.100:8989",  # private range — allowed for LAN/Docker
-        "http://10.0.0.5:8989",  # private range — allowed
-        "http://172.16.0.10:8989",  # private range — allowed
+        "http://192.168.1.100:8989",  # private range - allowed for LAN/Docker
+        "http://10.0.0.5:8989",  # private range - allowed
+        "http://172.16.0.10:8989",  # private range - allowed
         "http://my-sonarr:8989",
         "https://sonarr.home.arpa:8989",
         "http://sonarr",  # bare hostname without port
@@ -199,7 +199,7 @@ def test_malformed_hostname_rejected() -> None:
     result = validate_instance_url("http://invalid_host:8989")
     assert result is not None
     assert "invalid" in result.lower()
-    # Must not expose exception details — message must be a plain controlled string
+    # Must not expose exception details - message must be a plain controlled string
     assert "traceback" not in result.lower()
     assert "valueerror" not in result.lower()
 

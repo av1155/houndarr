@@ -122,7 +122,7 @@ def test_run_now_redirects_unauthenticated(app: TestClient) -> None:
 
 
 # ---------------------------------------------------------------------------
-# GET /api/status — no instances
+# GET /api/status - no instances
 # ---------------------------------------------------------------------------
 
 
@@ -134,7 +134,7 @@ def test_status_empty_when_no_instances(app: TestClient) -> None:
 
 
 # ---------------------------------------------------------------------------
-# GET /api/status — with instances
+# GET /api/status - with instances
 # ---------------------------------------------------------------------------
 
 
@@ -225,7 +225,7 @@ async def _seed_last_hour_regression(instance_id: int) -> None:
     """
     now = datetime.now(UTC)
     rows = [
-        # Within last hour — should be counted
+        # Within last hour - should be counted
         (
             instance_id,
             201,
@@ -234,7 +234,7 @@ async def _seed_last_hour_regression(instance_id: int) -> None:
             "searched",
             (now - timedelta(minutes=20)).strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
         ),
-        # Outside last hour — must NOT be counted
+        # Outside last hour - must NOT be counted
         (
             instance_id,
             202,
@@ -243,7 +243,7 @@ async def _seed_last_hour_regression(instance_id: int) -> None:
             "searched",
             (now - timedelta(hours=3)).strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
         ),
-        # Way outside — must NOT be counted
+        # Way outside - must NOT be counted
         (
             instance_id,
             203,

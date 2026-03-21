@@ -18,7 +18,7 @@ from houndarr.database import get_setting
 from tests.conftest import csrf_headers
 
 # ---------------------------------------------------------------------------
-# Unit tests — password hashing
+# Unit tests - password hashing
 # ---------------------------------------------------------------------------
 
 
@@ -43,7 +43,7 @@ def test_verify_password_empty() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Unit tests — trusted proxy CIDR support (issue #245)
+# Unit tests - trusted proxy CIDR support (issue #245)
 # ---------------------------------------------------------------------------
 
 
@@ -190,7 +190,7 @@ def test_client_ip_ignores_xff_when_not_in_trusted_subnet(
 
 
 # ---------------------------------------------------------------------------
-# Async unit tests — setup state
+# Async unit tests - setup state
 # ---------------------------------------------------------------------------
 
 
@@ -251,7 +251,7 @@ async def test_check_credentials_claims_username_for_legacy_install(db: None) ->
 
 
 # ---------------------------------------------------------------------------
-# Integration tests — HTTP routes
+# Integration tests - HTTP routes
 # ---------------------------------------------------------------------------
 
 
@@ -605,5 +605,5 @@ def test_rate_limiter_uses_direct_ip_by_default(app: TestClient) -> None:
     )
     # This should still be 429 (rate limited by real IP) or 401 (if the XFF is
     # not trusted and the real IP is still tracked).  It must NOT be 401 due to
-    # XFF bypass — i.e., a different XFF must not reset the counter.
+    # XFF bypass - i.e., a different XFF must not reset the counter.
     assert response2.status_code in (429, 401)  # Either is fine; must not bypass rate limit

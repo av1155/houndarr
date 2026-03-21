@@ -1,4 +1,4 @@
-"""Tests for RadarrClient — all HTTP calls mocked with respx."""
+"""Tests for RadarrClient - all HTTP calls mocked with respx."""
 
 from __future__ import annotations
 

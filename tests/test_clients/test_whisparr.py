@@ -1,4 +1,4 @@
-"""Tests for WhisparrClient — all HTTP calls mocked with respx."""
+"""Tests for WhisparrClient - all HTTP calls mocked with respx."""
 
 from __future__ import annotations
 
@@ -25,7 +25,7 @@ def client() -> WhisparrClient:
 
 
 # ---------------------------------------------------------------------------
-# ping — uses /api/v3/system/status (same as Sonarr)
+# ping - uses /api/v3/system/status (same as Sonarr)
 # ---------------------------------------------------------------------------
 
 
@@ -53,7 +53,7 @@ async def test_ping_network_error_returns_false(client: WhisparrClient) -> None:
 
 
 # ---------------------------------------------------------------------------
-# get_missing — /api/v3/wanted/missing
+# get_missing - /api/v3/wanted/missing
 # ---------------------------------------------------------------------------
 
 _WHISPARR_EPISODE_RECORD = {
@@ -194,7 +194,7 @@ async def test_get_missing_non_2xx_raises(client: WhisparrClient) -> None:
 
 
 # ---------------------------------------------------------------------------
-# search — EpisodeSearch (episodeIds is an array)
+# search - EpisodeSearch (episodeIds is an array)
 # ---------------------------------------------------------------------------
 
 
@@ -220,7 +220,7 @@ async def test_search_non_2xx_raises(client: WhisparrClient) -> None:
 
 
 # ---------------------------------------------------------------------------
-# search_season — SeasonSearch (seriesId + seasonNumber are scalars)
+# search_season - SeasonSearch (seriesId + seasonNumber are scalars)
 # ---------------------------------------------------------------------------
 
 
@@ -247,7 +247,7 @@ async def test_search_season_non_2xx_raises(client: WhisparrClient) -> None:
 
 
 # ---------------------------------------------------------------------------
-# get_cutoff_unmet — /api/v3/wanted/cutoff
+# get_cutoff_unmet - /api/v3/wanted/cutoff
 # ---------------------------------------------------------------------------
 
 _CUTOFF_RESPONSE = {

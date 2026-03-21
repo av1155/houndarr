@@ -86,7 +86,7 @@ security and container checks.
 
 ## CI Checks
 
-### Required checks (10; branch protection enforced)
+### Required checks (11; branch protection enforced)
 
 | Check name | Workflow file | What it runs |
 |------------|---------------|--------------|
@@ -100,9 +100,10 @@ security and container checks.
 | Dependency review | `dependency-review.yml` | PR dependency diff vs GitHub Advisory Database |
 | Build (no push) | `docker.yml` | Multi-arch Docker build (amd64/arm64), no push |
 | Trivy image scan | `docker.yml` | Trivy scan of built Docker image (CRITICAL/HIGH with known fix) |
+| Security smoke test | `security-smoke-test.yml` | Live container: unauthenticated sweep, CSRF, XFF, rate limiting, API key exposure, container security |
 
-The five main workflows (`quality`, `tests`, `security`, `dependency-review`,
-`docker`) use `paths-ignore: ["docs/**", "*.md", "website/**"]`. When a PR
+The six main workflows (`quality`, `tests`, `security`, `dependency-review`,
+`docker`, `security-smoke-test`) use `paths-ignore: ["docs/**", "*.md", "website/**"]`. When a PR
 touches only those paths, `ci-skip.yml` provides passing no-op jobs with
 identical check names so branch protection is satisfied.
 
@@ -119,11 +120,10 @@ identical check names so branch protection is satisfied.
 | `pages.yml` | Pushes to `main` touching `website/**` | Deploys docs site to GitHub Pages |
 | `test-deploy.yml` | PRs touching `website/**` | Tests Docusaurus build without deploying |
 | `cleanup-actions-cache.yml` | Daily (05:00 UTC) + manual | Prunes stale GitHub Actions caches |
-| `security-smoke-test.yml` | Push to `main`, all PRs (informational) | Builds image, spins up container, runs live curl security checks + container-level audit (file perms, DB encryption, process UID, capabilities) |
 
 ### Branch protection on `main`
 
-- 10 required status checks (strict; branch must be up to date)
+- 11 required status checks (strict; branch must be up to date)
 - Required PR reviews enabled (dismiss stale reviews, required conversation resolution)
 - Linear history enforced (no merge commits)
 - No force pushes, no branch deletions
@@ -449,7 +449,7 @@ Subject line max 50 characters (including the `type(scope): ` prefix); body line
 - **Squash-merge only.** Linear history is enforced by branch protection.
   All three merge strategies are enabled in repo settings, but only squash-merge
   preserves the required linear history.
-- All 10 required CI checks must pass before merge.
+- All 11 required CI checks must pass before merge.
 - Use the PR template: fill in `Closes #N`, check the checklist.
 - Branches auto-delete on merge (`deleteBranchOnMerge: true`).
 
@@ -582,7 +582,7 @@ and after). Do not use `## [Unreleased]`.
 
 ### Avoiding CI/release breakage
 
-- Do not modify the 10 required check job names; branch protection depends
+- Do not modify the 11 required check job names; branch protection depends
   on exact name matches
 - Do not add `## [Unreleased]` to CHANGELOG.md; the release workflow
   extracts content between `## [X.Y.Z]` headings

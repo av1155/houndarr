@@ -91,3 +91,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - run: echo "Docs-only change — version check not required"
+
+  # ---------- Security Smoke Test (security-smoke-test.yml) ----------
+  smoke-test:
+    name: Security smoke test
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "Docs-only change — security smoke test not required"

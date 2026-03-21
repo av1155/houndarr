@@ -143,11 +143,7 @@ def cli(
         raise SystemExit(1)
 
     if settings.auth_mode == "proxy":
-        logging.info(
-            "Auth mode: proxy (header=%s, trusted_proxies=%s)",
-            settings.auth_proxy_header,
-            settings.trusted_proxies,
-        )
+        logging.info("Auth mode: proxy (trusted_proxies=%s)", settings.trusted_proxies)
     else:
         logging.info("Auth mode: builtin")
 

@@ -1,19 +1,12 @@
 <div class="sr-only" data-page-key="dashboard" data-page-title="Dashboard | Houndarr" aria-hidden="true"></div>
 
 <style>
-  .instance-card {
-    opacity: 1;
-    transform: none;
+  #instance-grid.is-entering {
+    animation: instance-grid-enter var(--dur-base, 180ms) var(--ease-station, cubic-bezier(0.16,1,0.3,1));
   }
 
-  .instance-card.is-entering {
-    opacity: 0;
-    transform: translateY(8px);
-    animation: instance-card-in 220ms var(--ease-station, cubic-bezier(0.16,1,0.3,1)) forwards;
-  }
-
-  @keyframes instance-card-in {
-    from { opacity: 0; transform: translateY(8px); }
+  @keyframes instance-grid-enter {
+    from { opacity: 0.65; transform: translateY(4px); }
     to   { opacity: 1; transform: translateY(0); }
   }
 
@@ -68,8 +61,7 @@
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .instance-card,
-    .instance-card.is-entering,
+    #instance-grid.is-entering,
     .metric-changed {
       transition: none;
       animation: none;
@@ -115,6 +107,7 @@
     const RUN_NOW_SUCCESS_HOLD_MS = 900;
     const RUN_NOW_ERROR_HOLD_MS   = 1100;
     const previousMetrics = new Map();
+    let gridInitialHydration = false;
 
     function toNumber(value) {
       const parsed = Number(value);
@@ -207,6 +200,7 @@
         }
 
         const isInitialHydration = evt.detail.target.dataset.hydrated !== 'true';
+        gridInitialHydration = isInitialHydration;
 
         // ── Summary strip totals ───────────────────────────────────────
         const totals24h = data.reduce(
@@ -290,8 +284,6 @@
               })
               .join('');
 
-            const animationDelay = Math.min(index * 40, 220);
-
             previousMetrics.set(inst.id, {
               searches_last_hour: inst.searches_last_hour,
               searches_today:     inst.searches_today,
@@ -301,11 +293,9 @@
               errors_24h:   toNumber(inst.errors_24h),
             });
 
-            const entryClass = isInitialHydration ? ' is-entering' : '';
-
             return `
-<div class="instance-card${entryClass} bg-[#0e1117] border border-[#1e2638] rounded-xl p-5 flex flex-col gap-4"
-     style="animation-delay:${animationDelay}ms; border-left:3px solid ${typeColor}; box-shadow:var(--shadow-2);">
+<div class="instance-card bg-[#0e1117] border border-[#1e2638] rounded-xl p-5 flex flex-col gap-4"
+     style="border-left:3px solid ${typeColor}; box-shadow:var(--shadow-2);">
 
   <!-- Header: name + type, status badge, run-now -->
   <div class="flex items-start justify-between gap-3">
@@ -405,6 +395,19 @@
           hour12: false, timeZoneName: 'short',
         }).format(parsed);
       };
+
+    document.body.addEventListener(
+      'htmx:afterSwap',
+      function (evt) {
+        if (evt.detail.target.id !== 'instance-grid') return;
+        if (!gridInitialHydration) return;
+        gridInitialHydration = false;
+        const grid = evt.detail.target;
+        grid.classList.add('is-entering');
+        window.setTimeout(function () { grid.classList.remove('is-entering'); }, 200);
+      },
+      { signal },
+    );
 
     document.body.addEventListener(
       'htmx:beforeRequest',

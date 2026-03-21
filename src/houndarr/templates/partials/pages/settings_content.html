@@ -563,6 +563,7 @@
     const accountAnimationMs = 180;
     const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     let isClosingAddInstanceModal = false;
+    let pendingModalShow = false;
     let isAccountAnimating = false;
     let connectionStatusTimer = null;
 
@@ -832,11 +833,8 @@
     window.houndarrOpenAddInstanceModal = function () {
       addInstanceModal.classList.remove('is-closing');
       isClosingAddInstanceModal = false;
+      pendingModalShow = !addInstanceModal.open;
       setAddInstanceModalChrome('add');
-      if (!addInstanceModal.open) {
-        addInstanceModal.showModal();
-        document.body.style.overflow = 'hidden';
-      }
     };
 
     window.houndarrCloseAddInstanceModal = function () {
@@ -851,6 +849,7 @@
         }
         addInstanceModalContent.innerHTML = '';
         isClosingAddInstanceModal = false;
+        pendingModalShow = false;
         setAddInstanceModalChrome('add');
         document.body.style.overflow = '';
         addInstanceBtn.focus();
@@ -986,6 +985,10 @@
     document.body.addEventListener(
       'htmx:afterSwap',
       function (evt) {
+        if (evt.detail.target.id === 'app-content') {
+          document.body.style.overflow = '';
+        }
+
         if (evt.detail.target.id === 'instance-tbody') {
           window.houndarrCloseAddInstanceModal();
         }
@@ -995,6 +998,12 @@
         }
 
         if (evt.detail.target.id === 'add-instance-modal-content') {
+          if (pendingModalShow) {
+            pendingModalShow = false;
+            addInstanceModal.showModal();
+            document.body.style.overflow = 'hidden';
+          }
+
           const modalForm = addInstanceModalContent.querySelector('form[data-form-mode]');
           if (modalForm) {
             setAddInstanceModalChrome(modalForm.dataset.formMode, modalForm.dataset.instanceName);
@@ -1012,6 +1021,22 @@
             setConnectionTestButtonState('neutral');
           }
         }
+      },
+      { signal },
+    );
+
+    document.body.addEventListener(
+      'htmx:responseError',
+      function () {
+        pendingModalShow = false;
+      },
+      { signal },
+    );
+
+    document.body.addEventListener(
+      'htmx:sendError',
+      function () {
+        pendingModalShow = false;
       },
       { signal },
     );

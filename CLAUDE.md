@@ -431,27 +431,7 @@ Conventional Commits format: `type(scope): description`
 Allowed types: `feat`, `fix`, `docs`, `refactor`, `perf`, `test`, `build`,
 `ci`, `chore`, `revert`.
 
-**50/72 rule — strictly enforced:**
-
-- Subject line (first line): **50 characters maximum** — count every character
-  including the type, scope, colon, space, and description. If it does not fit
-  in 50 characters, shorten the description; do not exceed the limit.
-- Body lines: **72 characters maximum** — hard-wrap every line at 72 chars.
-- Leave a blank line between the subject and the body.
-
-Example of a compliant commit:
-
-```
-feat(auth): add proxy authentication mode        ← 41 chars ✓
-
-Add AUTH_MODE=proxy to delegate authentication to a reverse       ← 64 ✓
-proxy instead of managing its own sessions. Requires both         ← 63 ✓
-AUTH_PROXY_HEADER and TRUSTED_PROXIES at startup.                 ← 52 ✓
-```
-
-A subject line that is too long is a hard error — fix it before committing,
-not after. The GitHub PR title is derived from the squash-merge subject line,
-so an oversized subject produces a truncated PR title.
+Subject line max 50 characters (including the `type(scope): ` prefix); body lines max 72 characters.
 
 ### Pull requests
 

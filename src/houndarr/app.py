@@ -47,6 +47,15 @@ async def _lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Application lifespan: initialize DB on startup, clean up on shutdown."""
     settings = get_settings()
 
+    # Defense-in-depth: validate auth config even if __main__ already did.
+    # Covers cases where create_app() is called directly (tests, ASGI server).
+    auth_errors = settings.validate_auth_config()
+    if auth_errors:
+        for err in auth_errors:
+            logger.critical("Configuration error: %s", err)
+        msg = "Invalid auth configuration; see log for details"
+        raise RuntimeError(msg)
+
     # Ensure data directory exists
     Path(settings.data_dir).mkdir(parents=True, exist_ok=True)
 

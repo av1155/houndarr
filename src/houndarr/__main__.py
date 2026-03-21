@@ -67,6 +67,30 @@ from houndarr import __version__
         "Example: '10.0.0.1,172.18.0.0/16'."
     ),
 )
+@click.option(
+    "--auth-mode",
+    default="builtin",
+    show_default=True,
+    type=click.Choice(["builtin", "proxy"], case_sensitive=False),
+    envvar="HOUNDARR_AUTH_MODE",
+    help=(
+        "Authentication mode.  'builtin' uses local session-based auth.  "
+        "'proxy' delegates authentication to a reverse proxy via a trusted "
+        "header (requires --auth-proxy-header and --trusted-proxies)."
+    ),
+)
+@click.option(
+    "--auth-proxy-header",
+    default="",
+    show_default=False,
+    envvar="HOUNDARR_AUTH_PROXY_HEADER",
+    help=(
+        "HTTP header carrying the authenticated username from the reverse "
+        "proxy.  Required when --auth-mode=proxy.  "
+        "Common values: 'Remote-User' (Authelia), 'X-authentik-username' "
+        "(Authentik), 'X-Auth-Request-User' (oauth2-proxy)."
+    ),
+)
 def cli(
     data_dir: str,
     host: str,
@@ -75,6 +99,8 @@ def cli(
     log_level: str,
     secure_cookies: bool,
     trusted_proxies: str,
+    auth_mode: str,
+    auth_proxy_header: str,
 ) -> None:
     """Houndarr — search for missing media in your *arr stack, politely.
 
@@ -105,7 +131,25 @@ def cli(
         log_level=log_level.lower(),
         secure_cookies=secure_cookies,
         trusted_proxies=trusted_proxies,
+        auth_mode=auth_mode.lower(),
+        auth_proxy_header=auth_proxy_header,
     )
+
+    # Validate authentication configuration before starting
+    auth_errors = settings.validate_auth_config()
+    if auth_errors:
+        for err in auth_errors:
+            logging.critical("Configuration error: %s", err)
+        raise SystemExit(1)
+
+    if settings.auth_mode == "proxy":
+        logging.info(
+            "Auth mode: proxy (header=%s, trusted_proxies=%s)",
+            settings.auth_proxy_header,
+            settings.trusted_proxies,
+        )
+    else:
+        logging.info("Auth mode: builtin")
 
     # Store settings so the app factory can pick them up
     import houndarr.config as _cfg

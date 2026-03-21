@@ -32,6 +32,7 @@ from houndarr.config import (
     DEFAULT_SLEEP_INTERVAL_MINUTES,
     DEFAULT_SONARR_SEARCH_MODE,
     DEFAULT_WHISPARR_SEARCH_MODE,
+    get_settings,
 )
 from houndarr.engine.supervisor import Supervisor
 from houndarr.services.instances import (
@@ -286,6 +287,7 @@ async def _render_settings_page(
         status_code=status_code,
         instances=instances,
         username=username,
+        auth_mode=get_settings().auth_mode,
         account_error=account_error,
         account_success=account_success,
     )

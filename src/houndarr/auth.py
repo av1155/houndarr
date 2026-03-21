@@ -13,7 +13,7 @@ from typing import Any
 
 import bcrypt
 from fastapi import Request, Response
-from fastapi.responses import RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp
@@ -351,6 +351,86 @@ def clear_login_attempts(request: Request) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Proxy authentication helpers
+# ---------------------------------------------------------------------------
+
+# Paths that serve no purpose in proxy mode and redirect to the dashboard.
+_PROXY_DEAD_PATHS = frozenset(["/setup", "/login"])
+
+
+def _is_proxy_auth_mode() -> bool:
+    """Return True if proxy-header authentication is active."""
+    return get_settings().auth_mode == "proxy"
+
+
+def _validate_proxy_auth(request: Request) -> str | None:
+    """Extract the authenticated username from a proxy header.
+
+    Security: the header is ONLY read after verifying the direct connection
+    IP is in the configured trusted proxy set.  Untrusted IPs cannot spoof
+    the header because it is never read for untrusted connections.
+
+    Returns:
+        The username string if the request is authenticated, or ``None``
+        if authentication fails (untrusted IP, missing header, etc.).
+    """
+    settings = get_settings()
+    direct_ip = request.client.host if request.client else "unknown"
+    trusted = settings.trusted_proxy_set()
+
+    # Gate 1: direct connection MUST originate from a trusted proxy
+    if not trusted or direct_ip not in trusted:
+        return None
+
+    # Gate 2: the auth header must be present and non-empty
+    username = request.headers.get(settings.auth_proxy_header, "").strip()
+    if not username:
+        return None
+
+    return username
+
+
+async def _validate_proxy_csrf(request: Request) -> bool:
+    """Validate CSRF for proxy auth mode using double-submit cookie pattern.
+
+    The CSRF cookie value must match the value submitted in the
+    ``X-CSRF-Token`` header or ``csrf_token`` form field.
+    """
+    cookie_token = request.cookies.get(CSRF_COOKIE_NAME)
+    if not cookie_token:
+        return False
+
+    # Try header first (HTMX), then form body
+    submitted = request.headers.get("X-CSRF-Token")
+    if not submitted:
+        try:
+            form = await request.form()
+            submitted = form.get("csrf_token")  # type: ignore[assignment]
+        except Exception:
+            return False
+
+    if not submitted:
+        return False
+
+    return compare_digest(str(submitted), cookie_token)
+
+
+def _ensure_proxy_csrf_cookie(request: Request, response: Response) -> None:
+    """Set the CSRF cookie on an authenticated proxy-mode response if absent."""
+    if request.cookies.get(CSRF_COOKIE_NAME):
+        return
+    settings = get_settings()
+    response.set_cookie(
+        key=CSRF_COOKIE_NAME,
+        value=secrets.token_hex(32),
+        max_age=SESSION_MAX_AGE_SECONDS,
+        httponly=False,
+        samesite="strict",
+        secure=settings.secure_cookies,
+    )
+
+
+# ---------------------------------------------------------------------------
 # Auth + CSRF middleware
 # ---------------------------------------------------------------------------
 
@@ -358,17 +438,21 @@ def clear_login_attempts(request: Request) -> None:
 class AuthMiddleware(BaseHTTPMiddleware):
     """Enforce authentication and CSRF protection on all non-public routes.
 
-    Authentication:
-        Redirects unauthenticated requests to ``/login`` (or ``/setup`` if
-        first-run setup has not been completed).
+    Supports two mutually exclusive authentication modes:
 
-    CSRF protection:
-        State-changing requests (POST, PUT, PATCH, DELETE) on authenticated
-        routes must carry a valid CSRF token in either the ``X-CSRF-Token``
-        header or the ``csrf_token`` form field, except ``POST /logout``
-        which is intentionally exempt so stale legacy sessions can always be
-        cleared safely. The token is validated against the value embedded in
-        the signed session cookie.
+    **Builtin mode** (default):
+        Session-based authentication.  Redirects unauthenticated requests to
+        ``/login`` (or ``/setup`` if first-run setup has not been completed).
+
+    **Proxy mode** (``HOUNDARR_AUTH_MODE=proxy``):
+        Delegates authentication to a reverse proxy.  Requests are
+        authenticated by a trusted header from a trusted proxy IP.  Requests
+        from untrusted IPs receive ``403``; requests from trusted proxies
+        without the auth header receive ``401``.
+
+    CSRF protection is enforced in both modes.  State-changing requests
+    (POST, PUT, PATCH, DELETE) must carry a valid CSRF token in either the
+    ``X-CSRF-Token`` header or the ``csrf_token`` form field.
     """
 
     def __init__(self, app: ASGIApp) -> None:
@@ -377,8 +461,21 @@ class AuthMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next: Callable[..., Any]) -> Any:
         path = request.url.path
 
-        # Always allow logout requests so stale/broken sessions can be cleared
-        # after upgrades. This endpoint only invalidates local cookies.
+        if _is_proxy_auth_mode():
+            return await self._dispatch_proxy(request, call_next, path)
+        return await self._dispatch_builtin(request, call_next, path)
+
+    # ------------------------------------------------------------------
+    # Builtin auth path (existing behaviour, unchanged)
+    # ------------------------------------------------------------------
+
+    async def _dispatch_builtin(
+        self,
+        request: Request,
+        call_next: Callable[..., Any],
+        path: str,
+    ) -> Any:
+        # Always allow logout so stale/broken sessions can be cleared
         if path == _LOGOUT_PATH and request.method == "POST":
             return await call_next(request)
 
@@ -387,12 +484,9 @@ class AuthMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         setup_done = await is_setup_complete()
-
-        # Redirect to setup if not configured
         if not setup_done:
             return RedirectResponse(url="/setup", status_code=302)
 
-        # Require valid session for all other routes
         if not await validate_session(request):
             return RedirectResponse(url="/login", status_code=302)
 
@@ -404,11 +498,92 @@ class AuthMiddleware(BaseHTTPMiddleware):
                 path,
                 _client_ip(request),
             )
-            from fastapi.responses import HTMLResponse
-
             return HTMLResponse(
                 content="<h1>403 Forbidden</h1><p>CSRF token invalid or missing.</p>",
                 status_code=403,
             )
 
         return await call_next(request)
+
+    # ------------------------------------------------------------------
+    # Proxy auth path
+    # ------------------------------------------------------------------
+
+    async def _dispatch_proxy(
+        self,
+        request: Request,
+        call_next: Callable[..., Any],
+        path: str,
+    ) -> Any:
+        # Health check and static assets remain public
+        if path.startswith("/api/health") or path.startswith("/static"):
+            return await call_next(request)
+
+        # Setup, login, and logout serve no purpose in proxy mode
+        if path in _PROXY_DEAD_PATHS:
+            return RedirectResponse(url="/", status_code=302)
+        if path == _LOGOUT_PATH and request.method == "POST":
+            response = RedirectResponse(url="/", status_code=302)
+            response.delete_cookie(CSRF_COOKIE_NAME)
+            return response
+
+        # --- IP trust gate ---
+        direct_ip = request.client.host if request.client else "unknown"
+        settings = get_settings()
+        trusted = settings.trusted_proxy_set()
+
+        if not trusted or direct_ip not in trusted:
+            logger.warning(
+                "Proxy auth: blocked request from untrusted IP %s to %s",
+                direct_ip,
+                path,
+            )
+            return HTMLResponse(
+                content=(
+                    "<h1>403 Forbidden</h1>"
+                    "<p>This Houndarr instance requires access through "
+                    "an authenticating reverse proxy.</p>"
+                ),
+                status_code=403,
+            )
+
+        # --- Auth header gate ---
+        username = request.headers.get(settings.auth_proxy_header, "").strip()
+        if not username:
+            logger.warning(
+                "Proxy auth: missing header '%s' from trusted proxy %s for %s",
+                settings.auth_proxy_header,
+                direct_ip,
+                path,
+            )
+            return HTMLResponse(
+                content=(
+                    "<h1>401 Unauthorized</h1>"
+                    "<p>Authentication header missing. "
+                    "Check your reverse proxy configuration.</p>"
+                ),
+                status_code=401,
+            )
+
+        # Authenticated — store username on request state for downstream use
+        request.state.proxy_auth_user = username
+
+        # CSRF check on state-changing methods
+        if request.method in _CSRF_PROTECTED_METHODS and not await _validate_proxy_csrf(request):
+            logger.warning(
+                "CSRF validation failed (proxy mode) for %s %s from user %s",
+                request.method,
+                path,
+                username,
+            )
+            return HTMLResponse(
+                content="<h1>403 Forbidden</h1><p>CSRF token invalid or missing.</p>",
+                status_code=403,
+            )
+
+        response = await call_next(request)
+
+        # Ensure the CSRF cookie exists on every authenticated response
+        _ensure_proxy_csrf_cookie(request, response)
+
+        return response

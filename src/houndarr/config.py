@@ -11,6 +11,27 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
+# Header names that must never be used as a proxy auth header because they
+# carry protocol-level or framework-level semantics that would conflict.
+_RESERVED_HEADERS: frozenset[str] = frozenset(
+    {
+        "host",
+        "content-type",
+        "content-length",
+        "cookie",
+        "authorization",
+        "x-csrf-token",
+        "hx-request",
+        "hx-target",
+        "hx-trigger",
+        "x-forwarded-for",
+        "x-forwarded-proto",
+        "x-forwarded-host",
+        "connection",
+        "upgrade",
+    }
+)
+
 
 class TrustedProxies:
     """Parsed trusted proxy IPs and CIDR subnets with membership testing."""
@@ -94,6 +115,8 @@ def get_settings() -> AppSettings:
         log_level=os.environ.get("HOUNDARR_LOG_LEVEL", "info").lower(),
         secure_cookies=_parse_bool_env("HOUNDARR_SECURE_COOKIES"),
         trusted_proxies=os.environ.get("HOUNDARR_TRUSTED_PROXIES", ""),
+        auth_mode=os.environ.get("HOUNDARR_AUTH_MODE", "builtin").lower(),
+        auth_proxy_header=os.environ.get("HOUNDARR_AUTH_PROXY_HEADER", ""),
     )
 
 
@@ -115,6 +138,14 @@ class AppSettings:
             ``X-Forwarded-For`` is honoured for client-IP detection (rate
             limiting).  When empty, only the direct connection IP is used.
             Corresponds to ``HOUNDARR_TRUSTED_PROXIES`` env var.
+        auth_mode: Authentication mode — ``builtin`` (default) uses local
+            session-based auth; ``proxy`` delegates authentication to a
+            reverse proxy via a trusted header.
+            Corresponds to ``HOUNDARR_AUTH_MODE`` env var.
+        auth_proxy_header: HTTP header name carrying the authenticated
+            username from the reverse proxy (e.g. ``Remote-User``).
+            Required when ``auth_mode`` is ``proxy``.
+            Corresponds to ``HOUNDARR_AUTH_PROXY_HEADER`` env var.
     """
 
     data_dir: str = "/data"
@@ -124,6 +155,8 @@ class AppSettings:
     log_level: str = "info"
     secure_cookies: bool = False
     trusted_proxies: str = ""
+    auth_mode: str = "builtin"
+    auth_proxy_header: str = ""
 
     # Derived paths (computed from data_dir)
     db_path: Path = field(init=False)
@@ -141,6 +174,37 @@ class AppSettings:
             return self._trusted_proxy_cache
         self._trusted_proxy_cache = _parse_trusted_proxies(self.trusted_proxies)
         return self._trusted_proxy_cache
+
+    def validate_auth_config(self) -> list[str]:
+        """Return fatal configuration errors for authentication settings.
+
+        Returns:
+            List of error messages.  Empty means the configuration is valid.
+        """
+        errors: list[str] = []
+        if self.auth_mode not in ("builtin", "proxy"):
+            errors.append(
+                f"HOUNDARR_AUTH_MODE must be 'builtin' or 'proxy', got '{self.auth_mode}'"
+            )
+            return errors
+        if self.auth_mode == "proxy":
+            if not self.auth_proxy_header.strip():
+                errors.append(
+                    "HOUNDARR_AUTH_PROXY_HEADER is required when HOUNDARR_AUTH_MODE=proxy"
+                )
+            else:
+                header_lower = self.auth_proxy_header.strip().lower()
+                if header_lower in _RESERVED_HEADERS:
+                    errors.append(
+                        f"HOUNDARR_AUTH_PROXY_HEADER '{self.auth_proxy_header}' "
+                        f"conflicts with a reserved HTTP header"
+                    )
+            if not self.trusted_proxies.strip():
+                errors.append(
+                    "HOUNDARR_TRUSTED_PROXIES is required when HOUNDARR_AUTH_MODE=proxy "
+                    "(without trusted proxies, any client can forge the auth header)"
+                )
+        return errors
 
 
 # ---------------------------------------------------------------------------

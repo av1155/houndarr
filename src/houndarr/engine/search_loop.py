@@ -8,6 +8,7 @@ triggers the *arr search command for each eligible item, and writes a row to
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime, timedelta
@@ -39,6 +40,13 @@ _CUTOFF_PAGE_SIZE_MIN = 5
 _CUTOFF_PAGE_SIZE_MAX = 25
 _CUTOFF_SCAN_BUDGET_MIN = 12
 _CUTOFF_SCAN_BUDGET_MAX = 60
+
+# Delay inserted between consecutive real searches within one cycle to spread
+# downstream indexer fan-out.  Each *arr search command causes the arr app to
+# query every configured indexer simultaneously; back-to-back searches compound
+# that burst.  A short pause keeps Houndarr polite without changing its
+# sequential architecture.  Zero this in tests via patch.object.
+_INTER_SEARCH_DELAY_SECONDS: float = 3.0
 
 # Upgrade pass hard caps (very conservative, items already have files)
 _UPGRADE_SCAN_BUDGET_MIN = 8
@@ -385,6 +393,7 @@ async def _run_search_pass(  # noqa: C901
                             candidate.item_type,
                             candidate.item_id,
                         )
+                        await asyncio.sleep(_INTER_SEARCH_DELAY_SECONDS)
                         continue
 
                 reason = (
@@ -455,6 +464,7 @@ async def _run_search_pass(  # noqa: C901
                 candidate.item_type,
                 candidate.item_id,
             )
+            await asyncio.sleep(_INTER_SEARCH_DELAY_SECONDS)
 
         if stop_pass:
             break
@@ -671,6 +681,7 @@ async def _run_upgrade_pass(
             candidate.item_type,
             candidate.item_id,
         )
+        await asyncio.sleep(_INTER_SEARCH_DELAY_SECONDS)
 
     # Persist new offset
     try:

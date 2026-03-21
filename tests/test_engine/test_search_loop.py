@@ -1865,6 +1865,100 @@ async def test_queue_backpressure_skips_at_exact_limit(
 
 
 # ---------------------------------------------------------------------------
+# Tests — inter-search delay
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_inter_search_delay_fires_after_searched_dispatch(
+    seeded_instances: None,
+) -> None:
+    """asyncio.sleep is called once per successful missing-pass search."""
+    respx.get(f"{SONARR_URL}/api/v3/wanted/missing").mock(
+        return_value=httpx.Response(200, json=_MISSING_SONARR)
+    )
+    respx.post(f"{SONARR_URL}/api/v3/command").mock(
+        return_value=httpx.Response(201, json=_COMMAND_RESP)
+    )
+
+    sleep_mock = AsyncMock()
+    instance = _make_instance()
+    with patch("houndarr.engine.search_loop.asyncio.sleep", sleep_mock):
+        count = await run_instance_search(instance, MASTER_KEY)
+
+    assert count == 1
+    assert sleep_mock.call_count == 1
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_inter_search_delay_not_fired_when_item_skipped(
+    seeded_instances: None,
+) -> None:
+    """asyncio.sleep is not called when every item is skipped due to cooldown."""
+    from houndarr.services.cooldown import record_search
+
+    await record_search(1, 101, "episode")
+
+    respx.get(f"{SONARR_URL}/api/v3/wanted/missing").mock(
+        return_value=httpx.Response(200, json=_MISSING_SONARR)
+    )
+
+    sleep_mock = AsyncMock()
+    instance = _make_instance()
+    with patch("houndarr.engine.search_loop.asyncio.sleep", sleep_mock):
+        count = await run_instance_search(instance, MASTER_KEY)
+
+    assert count == 0
+    sleep_mock.assert_not_called()
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_inter_search_delay_fires_in_upgrade_pass(
+    seeded_instances: None,
+) -> None:
+    """asyncio.sleep is called once for a successful upgrade-pass search."""
+    from dataclasses import replace
+
+    library_movie = {
+        "id": 201,
+        "title": "My Movie",
+        "year": 2023,
+        "monitored": True,
+        "hasFile": True,
+        "movieFile": {"qualityCutoffNotMet": False},
+    }
+    # Missing pass returns nothing so only the upgrade pass fires.
+    respx.get(f"{RADARR_URL}/api/v3/wanted/missing").mock(
+        return_value=httpx.Response(
+            200, json={"page": 1, "pageSize": 10, "totalRecords": 0, "records": []}
+        )
+    )
+    respx.get(f"{RADARR_URL}/api/v3/movie").mock(
+        return_value=httpx.Response(200, json=[library_movie])
+    )
+    respx.post(f"{RADARR_URL}/api/v3/command").mock(
+        return_value=httpx.Response(201, json={"id": 1, "name": "MoviesSearch"})
+    )
+
+    sleep_mock = AsyncMock()
+    instance = replace(
+        _make_instance(itype=InstanceType.radarr, url=RADARR_URL, instance_id=2, batch_size=0),
+        upgrade_enabled=True,
+        upgrade_batch_size=1,
+        upgrade_cooldown_days=7,
+        upgrade_hourly_cap=5,
+    )
+    with patch("houndarr.engine.search_loop.asyncio.sleep", sleep_mock):
+        count = await run_instance_search(instance, MASTER_KEY)
+
+    assert count == 1
+    assert sleep_mock.call_count == 1
+
+
+# ---------------------------------------------------------------------------
 # Tests — supervisor
 # ---------------------------------------------------------------------------
 

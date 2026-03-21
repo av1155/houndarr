@@ -16,6 +16,23 @@ from houndarr.auth import CSRF_COOKIE_NAME
 from houndarr.config import AppSettings
 from houndarr.database import init_db, set_db_path
 
+# ---------------------------------------------------------------------------
+# Global speed fixture
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture(autouse=True)
+def _zero_inter_search_delay(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Zero the inter-search delay constant so tests run at full speed.
+
+    The real delay exists to spread downstream indexer fan-out; tests do not
+    hit live indexers, so 3-second waits between dispatched items would make
+    the suite unusably slow.
+    """
+    import houndarr.engine.search_loop as _sl
+
+    monkeypatch.setattr(_sl, "_INTER_SEARCH_DELAY_SECONDS", 0.0)
+
 
 @pytest.fixture()
 def tmp_data_dir() -> Generator[str, None, None]:

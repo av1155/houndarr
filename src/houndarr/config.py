@@ -87,7 +87,7 @@ def _parse_trusted_proxies(raw: str) -> TrustedProxies:
 
 
 # ---------------------------------------------------------------------------
-# Runtime settings — set by CLI before the app factory is called
+# Runtime settings: set by CLI before the app factory is called
 # ---------------------------------------------------------------------------
 
 _runtime_settings: AppSettings | None = None
@@ -138,7 +138,7 @@ class AppSettings:
             ``X-Forwarded-For`` is honoured for client-IP detection (rate
             limiting).  When empty, only the direct connection IP is used.
             Corresponds to ``HOUNDARR_TRUSTED_PROXIES`` env var.
-        auth_mode: Authentication mode — ``builtin`` (default) uses local
+        auth_mode: Authentication mode. ``builtin`` (default) uses local
             session-based auth; ``proxy`` delegates authentication to a
             reverse proxy via a trusted header.
             Corresponds to ``HOUNDARR_AUTH_MODE`` env var.
@@ -225,3 +225,12 @@ DEFAULT_READARR_SEARCH_MODE: str = "book"
 DEFAULT_WHISPARR_SEARCH_MODE: str = "episode"
 DEFAULT_QUEUE_LIMIT: int = 0
 DEFAULT_LOG_RETENTION_DAYS: int = 30
+
+# Upgrade search defaults (third, opt-in pass; very conservative)
+DEFAULT_UPGRADE_BATCH_SIZE: int = 1
+DEFAULT_UPGRADE_COOLDOWN_DAYS: int = 90
+DEFAULT_UPGRADE_HOURLY_CAP: int = 1
+DEFAULT_UPGRADE_SONARR_SEARCH_MODE: str = "episode"
+DEFAULT_UPGRADE_LIDARR_SEARCH_MODE: str = "album"
+DEFAULT_UPGRADE_READARR_SEARCH_MODE: str = "book"
+DEFAULT_UPGRADE_WHISPARR_SEARCH_MODE: str = "episode"

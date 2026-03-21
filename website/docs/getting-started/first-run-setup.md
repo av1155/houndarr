@@ -14,7 +14,7 @@ Navigate to `http://<your-host>:8877`. You will see the setup screen prompting y
 to create an admin username and password.
 
 - Choose a strong password (Houndarr enforces minimum complexity requirements).
-- This is the only account — Houndarr uses a single-admin authentication model.
+- This is the only account. Houndarr uses a single-admin authentication model.
 
 ## 2. Log in
 
@@ -28,10 +28,10 @@ Go to **Settings** and click **Add Instance** to connect your *arr instances.
 
 For each instance you need:
 
-- **Name** — a friendly label (e.g., "Radarr Movies", "Sonarr 4K", "Lidarr Music")
-- **Type** — Radarr, Sonarr, Lidarr, Readarr, or Whisparr
-- **URL** — the base URL of the instance (e.g., `http://sonarr:8989`)
-- **API Key** — found in your *arr instance under Settings > General
+- **Name**: a friendly label (e.g., "Radarr Movies", "Sonarr 4K", "Lidarr Music")
+- **Type**: Radarr, Sonarr, Lidarr, Readarr, or Whisparr
+- **URL**: the base URL of the instance (e.g., `http://sonarr:8989`)
+- **API Key**: found in your *arr instance under Settings > General
 
 :::tip
 API keys are encrypted at rest using Fernet symmetric encryption and are never

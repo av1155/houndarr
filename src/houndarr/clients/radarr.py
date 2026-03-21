@@ -1,4 +1,4 @@
-"""Radarr v3 API client — missing movies and automatic search."""
+"""Radarr v3 API client: missing movies and automatic search."""
 
 from __future__ import annotations
 
@@ -9,7 +9,22 @@ import httpx
 
 from houndarr.clients.base import ArrClient
 
-__all__ = ["MissingMovie", "RadarrClient"]
+__all__ = ["LibraryMovie", "MissingMovie", "RadarrClient"]
+
+
+@dataclass(frozen=True)
+class LibraryMovie:
+    """A movie from Radarr's full library endpoint."""
+
+    movie_id: int
+    title: str
+    year: int
+    monitored: bool
+    has_file: bool
+    cutoff_met: bool
+    in_cinemas: str | None
+    physical_release: str | None
+    digital_release: str | None
 
 
 @dataclass(frozen=True)
@@ -101,6 +116,18 @@ class RadarrClient(ArrClient):
         records: list[dict[str, Any]] = data.get("records", [])
         return [_parse_movie(r) for r in records]
 
+    async def get_library(self) -> list[LibraryMovie]:
+        """Return the full movie library.
+
+        Calls ``GET /api/v3/movie`` and returns all movies with metadata
+        needed for upgrade-pass eligibility filtering.
+
+        Returns:
+            List of :class:`LibraryMovie` dataclasses.
+        """
+        records: list[dict[str, Any]] = await self._get("/api/v3/movie")
+        return [_parse_library_movie(r) for r in records]
+
     async def search_movie(self, movie_id: int) -> None:
         """Alias for :meth:`search` with a more descriptive name."""
         await self.search(movie_id)
@@ -109,6 +136,23 @@ class RadarrClient(ArrClient):
 # ---------------------------------------------------------------------------
 # Parsing helpers
 # ---------------------------------------------------------------------------
+
+
+def _parse_library_movie(record: dict[str, Any]) -> LibraryMovie:
+    has_file = bool(record.get("hasFile", False))
+    movie_file: dict[str, Any] = record.get("movieFile") or {}
+    cutoff_not_met = movie_file.get("qualityCutoffNotMet", True)
+    return LibraryMovie(
+        movie_id=record["id"],
+        title=record.get("title") or "",
+        year=record.get("year", 0),
+        monitored=bool(record.get("monitored", False)),
+        has_file=has_file,
+        cutoff_met=not cutoff_not_met if has_file else False,
+        in_cinemas=record.get("inCinemas"),
+        physical_release=record.get("physicalRelease"),
+        digital_release=record.get("digitalRelease"),
+    )
 
 
 def _parse_movie(record: dict[str, Any]) -> MissingMovie:

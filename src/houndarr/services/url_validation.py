@@ -1,4 +1,4 @@
-"""Instance URL validation — guards against SSRF and obviously unsafe targets.
+"""Instance URL validation: guards against SSRF and obviously unsafe targets.
 
 Self-hosted context notes
 --------------------------
@@ -29,7 +29,7 @@ _ALLOWED_SCHEMES = frozenset(["http", "https"])
 
 # Loopback ranges blocked by default.  Private ranges (10/8, 172.16/12,
 # 192.168/16) are NOT blocked because Docker / LAN setups legitimately use them.
-# Hostnames that should never be used directly — operators must use container
+# Hostnames that should never be used directly; operators must use container
 # names or FQDNs instead.
 _BLOCKED_HOSTNAMES: frozenset[str] = frozenset(["localhost"])
 

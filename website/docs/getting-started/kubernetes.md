@@ -9,7 +9,7 @@ description: How to deploy Houndarr on Kubernetes using a StatefulSet.
 Houndarr can run on Kubernetes using a StatefulSet with persistent storage.
 
 :::warning
-Houndarr uses SQLite. Only one replica is supported — do not scale beyond 1.
+Houndarr uses SQLite. Only one replica is supported; do not scale beyond 1.
 :::
 
 Prefer Helm or Flux? See the [Helm guide](./helm) for chart-based installation.
@@ -40,7 +40,7 @@ metadata:
   namespace: houndarr
 spec:
   serviceName: "houndarr"
-  replicas: 1 # SQLite — do not increase
+  replicas: 1 # SQLite; do not increase
   selector:
     matchLabels:
       app: houndarr
@@ -100,7 +100,7 @@ spec:
 ```
 
 The `volumeClaimTemplates` block creates a PVC automatically. The StatefulSet
-manages its lifecycle — the PVC persists even if the pod is deleted or
+manages its lifecycle; the PVC persists even if the pod is deleted or
 rescheduled.
 
 :::danger
@@ -112,7 +112,7 @@ If the master key is lost, all stored API keys become unrecoverable.
 
 If your cluster enforces Pod Security Standards or you need `runAsNonRoot:
 true`, replace the PUID/PGID env vars with a `securityContext` block. Do not
-combine both approaches — use one or the other.
+combine both approaches; use one or the other.
 
 ```yaml
 apiVersion: apps/v1
@@ -122,7 +122,7 @@ metadata:
   namespace: houndarr
 spec:
   serviceName: "houndarr"
-  replicas: 1 # SQLite — do not increase
+  replicas: 1 # SQLite; do not increase
   selector:
     matchLabels:
       app: houndarr
@@ -149,7 +149,7 @@ spec:
           env:
             - name: TZ
               value: "America/New_York"
-            # No PUID/PGID — securityContext handles user identity
+            # No PUID/PGID; securityContext handles user identity
             # Uncomment when using an Ingress with TLS:
             # - name: HOUNDARR_SECURE_COOKIES
             #   value: "true"
@@ -273,8 +273,8 @@ spec:
 
 When using TLS, uncomment the security env vars in the StatefulSet:
 
-- `HOUNDARR_SECURE_COOKIES=true` — marks session cookies as HTTPS-only
-- `HOUNDARR_TRUSTED_PROXIES` — set to your ingress controller's pod CIDR so
+- `HOUNDARR_SECURE_COOKIES=true`: marks session cookies as HTTPS-only
+- `HOUNDARR_TRUSTED_PROXIES`: set to your ingress controller's pod CIDR so
   the rate limiter sees real client IPs
 
 See [Environment Variables](/docs/configuration/environment-variables) and

@@ -22,7 +22,7 @@ See [How Houndarr Works](/docs/concepts/how-houndarr-works#why-only-a-few-items-
 
 ## "Why is Houndarr skipping so much?"
 
-Each skip has a reason logged alongside it — `on cooldown (Nd)`, `post-release grace (Nh)`, hourly cap, or queue backpressure. A high skip count with zero errors means Houndarr is pacing itself correctly. See [How Houndarr Works](/docs/concepts/how-houndarr-works#what-skipped-means-in-the-logs) for what each reason means.
+Each skip has a reason logged alongside it: `on cooldown (Nd)`, `post-release grace (Nh)`, hourly cap, or queue backpressure. A high skip count with zero errors means Houndarr is pacing itself correctly. See [How Houndarr Works](/docs/concepts/how-houndarr-works#what-skipped-means-in-the-logs) for what each reason means.
 
 ## "Does Houndarr decide whether my file meets cutoff?"
 
@@ -42,11 +42,11 @@ If you set a **Queue Limit** on an instance, Houndarr checks the download queue 
 
 ## "Does Houndarr search my whole library?"
 
-No. It only acts on what your *arr instances report as wanted — items from `wanted/missing` and `wanted/cutoff`. Everything else in your library is invisible to Houndarr.
+It searches items from `wanted/missing` and `wanted/cutoff`. If upgrade search is enabled, it also re-searches library items that already meet cutoff, rotating through your library over time. Everything else is untouched.
 
 ## "Why is Houndarr searching so slowly?"
 
-The defaults are conservative on purpose — batch size 2, hourly cap 4, 14-day cooldown. With a large backlog, clearing it takes weeks. You can increase throughput gradually; see [Increasing throughput](/docs/configuration/instance-settings#increasing-throughput).
+The defaults are conservative on purpose (batch size 2, hourly cap 4, 14-day cooldown). With a large backlog, clearing it takes weeks. You can increase throughput gradually; see [Increasing throughput](/docs/configuration/instance-settings#increasing-throughput).
 
 ## "My *arr instance shows many cutoff-unmet items. Why is Houndarr only searching a few per day?"
 
@@ -57,6 +57,10 @@ The cutoff controls (batch 1, cap 1, cooldown 21 days) are more conservative tha
 Check in order: is the instance enabled (green toggle)? Has at least one sleep interval passed (default: 30 min)? Does your *arr instance actually have items in its wanted lists? Are there `error` entries in the Logs page?
 
 See [Troubleshooting](/docs/concepts/troubleshooting) for a step-by-step guide.
+
+## "What is upgrade search? How is it different from cutoff?"
+
+Cutoff search targets items your *arr instance flags as *below* your quality cutoff (they don't meet your minimum standard). Upgrade search targets items that *already meet* cutoff but might have better releases available based on quality profiles and custom format scoring. Upgrade search reads the full library rather than the `wanted/cutoff` list, and uses much more conservative defaults (batch 1, cooldown 90 days, hourly cap 1, hard caps enforced). Enable it only after missing and cutoff backlogs are stable.
 
 ## "Can Houndarr search for things that aren't in my *arr instance yet?"
 

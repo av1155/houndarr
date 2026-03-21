@@ -66,8 +66,8 @@ The database column is named `encrypted_api_key`. Plaintext API keys are never
 stored on disk.
 
 Relevant source files:
-- `src/houndarr/crypto.py` — `encrypt()` and `decrypt()` functions
-- `src/houndarr/services/instances.py` — instance CRUD with encryption on
+- `src/houndarr/crypto.py`: `encrypt()` and `decrypt()` functions
+- `src/houndarr/services/instances.py`: instance CRUD with encryption on
   write and decryption on read
 
 ### The master key
@@ -115,10 +115,10 @@ output, or JSON API payload. Specifically:
 - The `/api/health` endpoint returns only `{"status": "ok"}`.
 
 Relevant source files:
-- `src/houndarr/routes/settings.py` — sentinel constant and resolution logic
-- `src/houndarr/templates/partials/instance_form.html` — form pre-fills
+- `src/houndarr/routes/settings.py`: sentinel constant and resolution logic
+- `src/houndarr/templates/partials/instance_form.html`: form pre-fills
   sentinel, not the key
-- `src/houndarr/routes/api/status.py` — field-level selection omitting
+- `src/houndarr/routes/api/status.py`: field-level selection omitting
   `api_key`
 
 ## Authentication and session security
@@ -136,7 +136,7 @@ are never stored.
 **Sessions:** Sessions use signed tokens via `itsdangerous.URLSafeTimedSerializer`
 with an HMAC signature. The signing secret is a 64-character hex string generated
 from `os.urandom(32)` on first setup, stored in the database. The token payload
-contains only a creation timestamp and a CSRF nonce — no username, password, or
+contains only a creation timestamp and a CSRF nonce; no username, password, or
 API keys. Session tokens expire after **24 hours**, enforced server-side.
 
 **Login rate limiting:** A brute-force limiter allows **5 failed login attempts
@@ -157,7 +157,7 @@ read after verifying the request originates from a trusted proxy IP;
 untrusted IPs receive `403 Forbidden` with no fallback to a login form.
 
 The `HOUNDARR_AUTH_PROXY_HEADER` and `HOUNDARR_TRUSTED_PROXIES` settings must
-both be provided — the app refuses to start without them. See
+both be provided; the app refuses to start without them. See
 [SSO proxy authentication](/docs/configuration/reverse-proxy#sso-proxy-authentication)
 for setup instructions.
 
@@ -225,8 +225,8 @@ Linuxserver.io and similar self-hosted container images.
 
 ### Explicit non-root mode
 
-If your container runtime starts the process as a non-root user — via `user:`
-in Docker Compose or `securityContext.runAsUser` in Kubernetes — the
+If your container runtime starts the process as a non-root user (via `user:`
+in Docker Compose or `securityContext.runAsUser` in Kubernetes), the
 entrypoint detects this and skips all PUID/PGID remapping. The application
 runs directly as the specified UID/GID.
 
@@ -327,9 +327,9 @@ The persistent data directory (default `/data` in Docker) contains:
 **If using proxy auth mode (`HOUNDARR_AUTH_MODE=proxy`):**
 
 - [ ] Set `HOUNDARR_TRUSTED_PROXIES` to only your proxy's specific IP or subnet
-      — avoid broad ranges like `0.0.0.0/0`
+      (avoid broad ranges like `0.0.0.0/0`)
 - [ ] Ensure port 8877 is not reachable without going through the authenticating
-      proxy — direct access bypasses SSO
+      proxy (direct access bypasses SSO)
 - [ ] Verify your proxy strips/overwrites the auth header from client requests
       before forwarding (all major SSO proxies do this by default)
 

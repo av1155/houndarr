@@ -22,12 +22,13 @@ const FeatureList: FeatureItem[] = [
     ),
   },
   {
-    title: 'Missing & Cutoff',
+    title: 'Missing, Cutoff & Upgrade',
     icon: '🔍',
     description: (
       <>
         Automatically searches for missing episodes, movies, albums, and
-        books, plus items below your quality cutoff. Each search type has
+        books, plus items below your quality cutoff. An optional upgrade pass
+        re-searches completed items for better releases. Each search type has
         independent controls and budgets.
       </>
     ),

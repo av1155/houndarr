@@ -7,13 +7,19 @@ commands via :class:`~houndarr.clients.readarr.ReadarrClient`.
 
 from __future__ import annotations
 
-from houndarr.clients.readarr import MissingBook, ReadarrClient
+import logging
+
+from houndarr.clients.readarr import LibraryBook, MissingBook, ReadarrClient
 from houndarr.engine.candidates import (
     SearchCandidate,
     _is_unreleased,
     _is_within_post_release_grace,
 )
 from houndarr.services.instances import Instance, ReadarrSearchMode
+
+logger = logging.getLogger(__name__)
+
+_UPGRADE_CUTOFF_EXCLUSION_MAX_PAGES = 10
 
 # ---------------------------------------------------------------------------
 # Label builders
@@ -128,6 +134,99 @@ def adapt_cutoff(item: MissingBook, instance: Instance) -> SearchCandidate:
             "book_id": item.book_id,
         },
     )
+
+
+def _library_book_label(item: LibraryBook) -> str:
+    """Build a human-readable log label for library books."""
+    author = item.author_name or "Unknown Author"
+    title = item.title or "Unknown Book"
+    return f"{author} - {title}"
+
+
+def _library_author_context_label(item: LibraryBook) -> str:
+    """Build a log label for library book in author-context mode."""
+    author = item.author_name or "Unknown Author"
+    return f"{author} (author-context)"
+
+
+def adapt_upgrade(item: LibraryBook, instance: Instance) -> SearchCandidate:
+    """Convert a Readarr library book into a :class:`SearchCandidate` for upgrade.
+
+    Respects ``instance.upgrade_readarr_search_mode`` for book vs author-context.
+    No unreleased checks: upgrade items already have files.
+
+    Args:
+        item: A library book from :meth:`ReadarrClient.get_books`.
+        instance: The configured Readarr instance.
+
+    Returns:
+        A fully populated :class:`SearchCandidate`.
+    """
+    book_mode = instance.upgrade_readarr_search_mode == ReadarrSearchMode.book
+
+    use_author_context = not book_mode and item.author_id > 0
+
+    if use_author_context:
+        item_id = _author_item_id(item.author_id)
+        label = _library_author_context_label(item)
+        group_key: tuple[int, int] | None = (item.author_id, 0)
+        search_payload = {
+            "command": "AuthorSearch",
+            "author_id": item.author_id,
+        }
+    else:
+        item_id = item.book_id
+        label = _library_book_label(item)
+        group_key = None
+        search_payload = {
+            "command": "BookSearch",
+            "book_id": item.book_id,
+        }
+
+    return SearchCandidate(
+        item_id=item_id,
+        item_type="book",
+        label=label,
+        unreleased_reason=None,
+        group_key=group_key,
+        search_payload=search_payload,
+    )
+
+
+async def fetch_upgrade_pool(
+    client: ReadarrClient,
+    instance: Instance,
+) -> list[LibraryBook]:
+    """Fetch and filter Readarr library for upgrade-eligible books.
+
+    Builds a cutoff-unmet exclusion set by paginating ``wanted/cutoff``, then
+    returns monitored books with files that are NOT in the exclusion set.
+
+    Args:
+        client: An open :class:`ReadarrClient` context.
+        instance: The configured Readarr instance.
+
+    Returns:
+        List of upgrade-eligible :class:`LibraryBook` items.
+    """
+    exclusion: set[int] = set()
+    for page in range(1, _UPGRADE_CUTOFF_EXCLUSION_MAX_PAGES + 1):
+        try:
+            cutoff_items = await client.get_cutoff_unmet(page=page, page_size=250)
+        except Exception:  # noqa: BLE001
+            logger.warning(
+                "[%s] failed to fetch cutoff page %d for exclusion set",
+                instance.name,
+                page,
+            )
+            break
+        for item in cutoff_items:
+            exclusion.add(item.book_id)
+        if len(cutoff_items) < 250:
+            break
+
+    library = await client.get_books()
+    return [b for b in library if b.monitored and b.has_file and b.book_id not in exclusion]
 
 
 async def dispatch_search(client: ReadarrClient, candidate: SearchCandidate) -> None:

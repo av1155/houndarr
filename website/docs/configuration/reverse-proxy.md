@@ -96,7 +96,7 @@ otherwise occur.
 
 In proxy auth mode, Houndarr does not show a login page. The proxy
 authenticates the user and sets a header with the username before forwarding
-the request. Houndarr reads the username from that header — but only after
+the request. Houndarr reads the username from that header, but only after
 verifying the request originates from a trusted proxy IP. Requests that
 bypass the proxy get `403 Forbidden`.
 
@@ -108,7 +108,7 @@ Three settings must all be set together:
 |----------|-------------|
 | `HOUNDARR_AUTH_MODE=proxy` | Switch from built-in session auth to proxy auth |
 | `HOUNDARR_AUTH_PROXY_HEADER` | Header name your proxy sets with the authenticated username |
-| `HOUNDARR_TRUSTED_PROXIES` | Your proxy's IP or subnet — requests from other IPs are blocked |
+| `HOUNDARR_TRUSTED_PROXIES` | Your proxy's IP or subnet; requests from other IPs are blocked |
 
 Houndarr refuses to start if `AUTH_MODE=proxy` is set without both of the
 other two variables. The auth header name cannot be a reserved HTTP header
@@ -117,7 +117,7 @@ other two variables. The auth header name cannot be a reserved HTTP header
 :::warning
 **Expose only the port your proxy sits in front of.** In proxy mode,
 Houndarr trusts that the proxy has already authenticated the user. Any client
-that reaches port 8877 directly — bypassing the proxy — can forge the auth
+that reaches port 8877 directly (bypassing the proxy) can forge the auth
 header. Do not expose port 8877 to the internet without the proxy in front.
 :::
 
@@ -185,7 +185,7 @@ services:
 
 | Area | Behavior |
 |------|---------|
-| Login / setup | Redirected to `/` — no local credentials needed |
+| Login / setup | Redirected to `/`; no local credentials needed |
 | Logout | Clears the CSRF cookie, redirects to `/` |
 | Account settings | Password change section hidden |
 | `/api/health` | Still public, no auth required |

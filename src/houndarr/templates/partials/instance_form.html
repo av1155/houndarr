@@ -10,7 +10,7 @@
 {% set target  = "#instance-row-" ~ instance.id if is_edit else "#instance-tbody" %}
 {% set swap    = "outerHTML" if is_edit else "innerHTML" %}
 
-{# Shared input class — Station style #}
+{# Shared input class: Station style #}
 {% set input_cls = "w-full h-11 bg-[#0e1117] border border-[#2a3448] rounded-lg px-3 text-base text-white placeholder:text-slate-600 font-sans focus:outline-none focus:border-brand-400/70 focus:ring-2 focus:ring-brand-500/25 transition-colors" %}
 {% set mono_input_cls = "w-full h-11 bg-[#0e1117] border border-[#2a3448] rounded-lg px-3 text-base text-white placeholder:text-slate-600 font-mono focus:outline-none focus:border-brand-400/70 focus:ring-2 focus:ring-brand-500/25 transition-colors" %}
 
@@ -82,7 +82,7 @@
           <label class="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide" for="{{ form_id }}-api-key">API Key</label>
           <input id="{{ form_id }}-api-key" name="api_key" type="password" required
                  value="{{ '__UNCHANGED__' if is_edit else '' }}"
-                 placeholder="{{ '(stored — enter new value to change)' if is_edit else '••••••••••••••••' }}"
+                 placeholder="{{ '(stored; enter new value to change)' if is_edit else '••••••••••••••••' }}"
                  class="{{ mono_input_cls }}" />
         </div>
       </div>
@@ -213,6 +213,86 @@
                  value="{{ instance.cutoff_hourly_cap }}"
                  class="{{ mono_input_cls }}" />
         </div>
+      </div>
+    </section>
+
+    <!-- Library Upgrades section -->
+    <section class="rounded-xl border border-[#1e2638] bg-[#07080f]/50 p-4 sm:p-5 space-y-4">
+      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div>
+          <h4 class="text-sm font-semibold text-slate-200">Library Upgrades</h4>
+          <p class="text-xs text-slate-500 mt-0.5">Opt-in third pass. Searches items that already meet cutoff for better releases.</p>
+        </div>
+        <label class="inline-flex items-center gap-2 cursor-pointer select-none rounded-md border border-[#2a3448] bg-[#0e1117] px-3 py-2">
+          <input type="checkbox" name="upgrade_enabled" value="on"
+                 {% if is_edit and instance.upgrade_enabled %}checked{% endif %}
+                 class="rounded border-[#2a3448] bg-[#0e1117] text-brand-500 focus:ring-brand-500 focus:ring-offset-[#07080f]" />
+          <span class="text-xs font-medium text-slate-300">Enable upgrade search</span>
+        </label>
+      </div>
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div>
+          <label class="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide" for="{{ form_id }}-ubatch">Upgrade Batch</label>
+          <input id="{{ form_id }}-ubatch" name="upgrade_batch_size" type="number" min="1" max="250"
+                 value="{{ instance.upgrade_batch_size }}"
+                 class="{{ mono_input_cls }}" />
+          <p class="mt-1.5 text-xs text-slate-600">Hard cap: 5 per cycle.</p>
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide" for="{{ form_id }}-ucool">Upgrade Cooldown (days)</label>
+          <input id="{{ form_id }}-ucool" name="upgrade_cooldown_days" type="number" min="7"
+                 value="{{ instance.upgrade_cooldown_days }}"
+                 class="{{ mono_input_cls }}" />
+          <p class="mt-1.5 text-xs text-slate-600">Minimum: 7 days.</p>
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide" for="{{ form_id }}-uhcap">Upgrade Hourly Cap</label>
+          <input id="{{ form_id }}-uhcap" name="upgrade_hourly_cap" type="number" min="0"
+                 value="{{ instance.upgrade_hourly_cap }}"
+                 class="{{ mono_input_cls }}" />
+          <p class="mt-1.5 text-xs text-slate-600">Hard cap: 5. 0 = unlimited.</p>
+        </div>
+      </div>
+      {# Per-app upgrade search mode selectors #}
+      <div data-sonarr-only="true"
+           {% if instance.type.value != 'sonarr' %}style="display:none;"{% endif %}>
+        <label class="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide" for="{{ form_id }}-upgrade-sonarr-mode">
+          Sonarr Upgrade Search Mode
+        </label>
+        <select id="{{ form_id }}-upgrade-sonarr-mode" name="upgrade_sonarr_search_mode" class="{{ input_cls }}">
+          <option value="episode"        {% if instance.upgrade_sonarr_search_mode.value == 'episode'        %}selected{% endif %}>Episode search (default)</option>
+          <option value="season_context" {% if instance.upgrade_sonarr_search_mode.value == 'season_context' %}selected{% endif %}>Season-context search</option>
+        </select>
+      </div>
+      <div data-lidarr-only="true"
+           {% if instance.type.value != 'lidarr' %}style="display:none;"{% endif %}>
+        <label class="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide" for="{{ form_id }}-upgrade-lidarr-mode">
+          Lidarr Upgrade Search Mode
+        </label>
+        <select id="{{ form_id }}-upgrade-lidarr-mode" name="upgrade_lidarr_search_mode" class="{{ input_cls }}">
+          <option value="album"          {% if instance.upgrade_lidarr_search_mode.value == 'album'          %}selected{% endif %}>Album search (default)</option>
+          <option value="artist_context" {% if instance.upgrade_lidarr_search_mode.value == 'artist_context' %}selected{% endif %}>Artist-context search</option>
+        </select>
+      </div>
+      <div data-readarr-only="true"
+           {% if instance.type.value != 'readarr' %}style="display:none;"{% endif %}>
+        <label class="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide" for="{{ form_id }}-upgrade-readarr-mode">
+          Readarr Upgrade Search Mode
+        </label>
+        <select id="{{ form_id }}-upgrade-readarr-mode" name="upgrade_readarr_search_mode" class="{{ input_cls }}">
+          <option value="book"           {% if instance.upgrade_readarr_search_mode.value == 'book'           %}selected{% endif %}>Book search (default)</option>
+          <option value="author_context" {% if instance.upgrade_readarr_search_mode.value == 'author_context' %}selected{% endif %}>Author-context search</option>
+        </select>
+      </div>
+      <div data-whisparr-only="true"
+           {% if instance.type.value != 'whisparr' %}style="display:none;"{% endif %}>
+        <label class="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide" for="{{ form_id }}-upgrade-whisparr-mode">
+          Whisparr Upgrade Search Mode
+        </label>
+        <select id="{{ form_id }}-upgrade-whisparr-mode" name="upgrade_whisparr_search_mode" class="{{ input_cls }}">
+          <option value="episode"        {% if instance.upgrade_whisparr_search_mode.value == 'episode'        %}selected{% endif %}>Episode search (default)</option>
+          <option value="season_context" {% if instance.upgrade_whisparr_search_mode.value == 'season_context' %}selected{% endif %}>Season-context search</option>
+        </select>
       </div>
     </section>
 

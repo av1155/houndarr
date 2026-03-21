@@ -1,4 +1,4 @@
-"""Instance CRUD service — create, read, update, and delete *arr instances.
+"""Instance CRUD service: create, read, update, and delete *arr instances.
 
 API keys are never stored in plaintext.  Every write encrypts with the
 caller-supplied Fernet *master_key*; every read decrypts transparently.
@@ -23,6 +23,13 @@ from houndarr.config import (
     DEFAULT_READARR_SEARCH_MODE,
     DEFAULT_SLEEP_INTERVAL_MINUTES,
     DEFAULT_SONARR_SEARCH_MODE,
+    DEFAULT_UPGRADE_BATCH_SIZE,
+    DEFAULT_UPGRADE_COOLDOWN_DAYS,
+    DEFAULT_UPGRADE_HOURLY_CAP,
+    DEFAULT_UPGRADE_LIDARR_SEARCH_MODE,
+    DEFAULT_UPGRADE_READARR_SEARCH_MODE,
+    DEFAULT_UPGRADE_SONARR_SEARCH_MODE,
+    DEFAULT_UPGRADE_WHISPARR_SEARCH_MODE,
     DEFAULT_WHISPARR_SEARCH_MODE,
 )
 from houndarr.crypto import decrypt, encrypt
@@ -71,7 +78,7 @@ class WhisparrSearchMode(StrEnum):
 class Instance:
     """In-memory representation of a configured *arr instance.
 
-    ``api_key`` is always the **decrypted** plaintext value — the encrypted
+    ``api_key`` is always the **decrypted** plaintext value; the encrypted
     form is only ever kept in the database column ``encrypted_api_key``.
     """
 
@@ -97,6 +104,16 @@ class Instance:
     lidarr_search_mode: LidarrSearchMode = LidarrSearchMode.album
     readarr_search_mode: ReadarrSearchMode = ReadarrSearchMode.book
     whisparr_search_mode: WhisparrSearchMode = WhisparrSearchMode.episode
+    upgrade_enabled: bool = False
+    upgrade_batch_size: int = DEFAULT_UPGRADE_BATCH_SIZE
+    upgrade_cooldown_days: int = DEFAULT_UPGRADE_COOLDOWN_DAYS
+    upgrade_hourly_cap: int = DEFAULT_UPGRADE_HOURLY_CAP
+    upgrade_sonarr_search_mode: SonarrSearchMode = SonarrSearchMode.episode
+    upgrade_lidarr_search_mode: LidarrSearchMode = LidarrSearchMode.album
+    upgrade_readarr_search_mode: ReadarrSearchMode = ReadarrSearchMode.book
+    upgrade_whisparr_search_mode: WhisparrSearchMode = WhisparrSearchMode.episode
+    upgrade_item_offset: int = 0
+    upgrade_series_offset: int = 0
 
 
 # ---------------------------------------------------------------------------
@@ -129,6 +146,16 @@ def _row_to_instance(row: Any, master_key: bytes) -> Instance:
         lidarr_search_mode=LidarrSearchMode(row["lidarr_search_mode"]),
         readarr_search_mode=ReadarrSearchMode(row["readarr_search_mode"]),
         whisparr_search_mode=WhisparrSearchMode(row["whisparr_search_mode"]),
+        upgrade_enabled=bool(row["upgrade_enabled"]),
+        upgrade_batch_size=row["upgrade_batch_size"],
+        upgrade_cooldown_days=row["upgrade_cooldown_days"],
+        upgrade_hourly_cap=row["upgrade_hourly_cap"],
+        upgrade_sonarr_search_mode=SonarrSearchMode(row["upgrade_sonarr_search_mode"]),
+        upgrade_lidarr_search_mode=LidarrSearchMode(row["upgrade_lidarr_search_mode"]),
+        upgrade_readarr_search_mode=ReadarrSearchMode(row["upgrade_readarr_search_mode"]),
+        upgrade_whisparr_search_mode=WhisparrSearchMode(row["upgrade_whisparr_search_mode"]),
+        upgrade_item_offset=row["upgrade_item_offset"],
+        upgrade_series_offset=row["upgrade_series_offset"],
     )
 
 
@@ -159,6 +186,22 @@ async def create_instance(
     lidarr_search_mode: LidarrSearchMode = LidarrSearchMode(DEFAULT_LIDARR_SEARCH_MODE),
     readarr_search_mode: ReadarrSearchMode = ReadarrSearchMode(DEFAULT_READARR_SEARCH_MODE),
     whisparr_search_mode: WhisparrSearchMode = WhisparrSearchMode(DEFAULT_WHISPARR_SEARCH_MODE),
+    upgrade_enabled: bool = False,
+    upgrade_batch_size: int = DEFAULT_UPGRADE_BATCH_SIZE,
+    upgrade_cooldown_days: int = DEFAULT_UPGRADE_COOLDOWN_DAYS,
+    upgrade_hourly_cap: int = DEFAULT_UPGRADE_HOURLY_CAP,
+    upgrade_sonarr_search_mode: SonarrSearchMode = SonarrSearchMode(
+        DEFAULT_UPGRADE_SONARR_SEARCH_MODE
+    ),
+    upgrade_lidarr_search_mode: LidarrSearchMode = LidarrSearchMode(
+        DEFAULT_UPGRADE_LIDARR_SEARCH_MODE
+    ),
+    upgrade_readarr_search_mode: ReadarrSearchMode = ReadarrSearchMode(
+        DEFAULT_UPGRADE_READARR_SEARCH_MODE
+    ),
+    upgrade_whisparr_search_mode: WhisparrSearchMode = WhisparrSearchMode(
+        DEFAULT_UPGRADE_WHISPARR_SEARCH_MODE
+    ),
 ) -> Instance:
     """Insert a new instance row and return the populated :class:`Instance`.
 
@@ -167,7 +210,7 @@ async def create_instance(
         name: Human-readable label for the instance.
         type: One of ``radarr``, ``sonarr``, ``lidarr``, ``readarr``, ``whisparr``.
         url: Base URL of the *arr instance (e.g. ``http://sonarr:8989``).
-        api_key: Plaintext API key — will be encrypted before being written.
+        api_key: Plaintext API key; will be encrypted before being written.
         enabled: Whether the search engine should process this instance.
         batch_size: Number of missing items to search per run.
         sleep_interval_mins: Minutes to sleep between search cycles.
@@ -184,6 +227,14 @@ async def create_instance(
         lidarr_search_mode: Lidarr missing-search strategy mode.
         readarr_search_mode: Readarr missing-search strategy mode.
         whisparr_search_mode: Whisparr missing-search strategy mode.
+        upgrade_enabled: Whether upgrade searching is active.
+        upgrade_batch_size: Number of upgrade items per run.
+        upgrade_cooldown_days: Days to wait before re-searching upgrade items.
+        upgrade_hourly_cap: Maximum upgrade searches allowed per hour.
+        upgrade_sonarr_search_mode: Sonarr upgrade-search strategy mode.
+        upgrade_lidarr_search_mode: Lidarr upgrade-search strategy mode.
+        upgrade_readarr_search_mode: Readarr upgrade-search strategy mode.
+        upgrade_whisparr_search_mode: Whisparr upgrade-search strategy mode.
 
     Returns:
         The newly created :class:`Instance` with its database-assigned *id*.
@@ -198,8 +249,15 @@ async def create_instance(
                 hourly_cap, cooldown_days, post_release_grace_hrs, queue_limit,
                 cutoff_enabled, cutoff_batch_size, cutoff_cooldown_days, cutoff_hourly_cap,
                 sonarr_search_mode, lidarr_search_mode, readarr_search_mode,
-                whisparr_search_mode
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                whisparr_search_mode,
+                upgrade_enabled, upgrade_batch_size, upgrade_cooldown_days,
+                upgrade_hourly_cap,
+                upgrade_sonarr_search_mode, upgrade_lidarr_search_mode,
+                upgrade_readarr_search_mode, upgrade_whisparr_search_mode
+            ) VALUES (
+                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                ?, ?, ?, ?, ?, ?, ?, ?
+            )
             """,
             (
                 name,
@@ -221,6 +279,14 @@ async def create_instance(
                 lidarr_search_mode.value,
                 readarr_search_mode.value,
                 whisparr_search_mode.value,
+                int(upgrade_enabled),
+                upgrade_batch_size,
+                upgrade_cooldown_days,
+                upgrade_hourly_cap,
+                upgrade_sonarr_search_mode.value,
+                upgrade_lidarr_search_mode.value,
+                upgrade_readarr_search_mode.value,
+                upgrade_whisparr_search_mode.value,
             ),
         )
         await db.commit()
@@ -228,7 +294,7 @@ async def create_instance(
         assert row_id is not None  # noqa: S101
 
     instance = await get_instance(row_id, master_key=master_key)
-    assert instance is not None  # just inserted — cannot be None  # noqa: S101
+    assert instance is not None  # just inserted, cannot be None  # noqa: S101
     return instance
 
 
@@ -287,7 +353,12 @@ async def update_instance(
             ``cutoff_enabled``, ``cutoff_batch_size``,
             ``cutoff_cooldown_days``, ``cutoff_hourly_cap``,
             ``sonarr_search_mode``, ``lidarr_search_mode``,
-            ``readarr_search_mode``, ``whisparr_search_mode``.
+            ``readarr_search_mode``, ``whisparr_search_mode``,
+            ``upgrade_enabled``, ``upgrade_batch_size``,
+            ``upgrade_cooldown_days``, ``upgrade_hourly_cap``,
+            ``upgrade_sonarr_search_mode``, ``upgrade_lidarr_search_mode``,
+            ``upgrade_readarr_search_mode``, ``upgrade_whisparr_search_mode``,
+            ``upgrade_item_offset``, ``upgrade_series_offset``.
 
     Returns:
         Updated :class:`Instance`, or ``None`` if *id* does not exist.
@@ -313,6 +384,16 @@ async def update_instance(
         "lidarr_search_mode": "lidarr_search_mode",
         "readarr_search_mode": "readarr_search_mode",
         "whisparr_search_mode": "whisparr_search_mode",
+        "upgrade_enabled": "upgrade_enabled",
+        "upgrade_batch_size": "upgrade_batch_size",
+        "upgrade_cooldown_days": "upgrade_cooldown_days",
+        "upgrade_hourly_cap": "upgrade_hourly_cap",
+        "upgrade_sonarr_search_mode": "upgrade_sonarr_search_mode",
+        "upgrade_lidarr_search_mode": "upgrade_lidarr_search_mode",
+        "upgrade_readarr_search_mode": "upgrade_readarr_search_mode",
+        "upgrade_whisparr_search_mode": "upgrade_whisparr_search_mode",
+        "upgrade_item_offset": "upgrade_item_offset",
+        "upgrade_series_offset": "upgrade_series_offset",
     }
 
     _search_mode_fields = {
@@ -320,6 +401,10 @@ async def update_instance(
         "lidarr_search_mode",
         "readarr_search_mode",
         "whisparr_search_mode",
+        "upgrade_sonarr_search_mode",
+        "upgrade_lidarr_search_mode",
+        "upgrade_readarr_search_mode",
+        "upgrade_whisparr_search_mode",
     }
 
     assignments: list[str] = []
@@ -336,13 +421,13 @@ async def update_instance(
             field_name in _search_mode_fields and isinstance(value, StrEnum)
         ):
             value = value.value
-        elif field_name in ("enabled", "cutoff_enabled"):
+        elif field_name in ("enabled", "cutoff_enabled", "upgrade_enabled"):
             value = int(bool(value))
         assignments.append(f"{col} = ?")
         values.append(value)
 
     if not assignments:
-        # Nothing to do — return current state
+        # Nothing to do; return current state
         return await get_instance(id, master_key=master_key)
 
     # Always refresh updated_at

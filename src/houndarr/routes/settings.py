@@ -1,4 +1,4 @@
-"""Settings page routes — instance management via HTMX."""
+"""Settings page routes: instance management via HTMX."""
 
 from __future__ import annotations
 
@@ -31,6 +31,13 @@ from houndarr.config import (
     DEFAULT_READARR_SEARCH_MODE,
     DEFAULT_SLEEP_INTERVAL_MINUTES,
     DEFAULT_SONARR_SEARCH_MODE,
+    DEFAULT_UPGRADE_BATCH_SIZE,
+    DEFAULT_UPGRADE_COOLDOWN_DAYS,
+    DEFAULT_UPGRADE_HOURLY_CAP,
+    DEFAULT_UPGRADE_LIDARR_SEARCH_MODE,
+    DEFAULT_UPGRADE_READARR_SEARCH_MODE,
+    DEFAULT_UPGRADE_SONARR_SEARCH_MODE,
+    DEFAULT_UPGRADE_WHISPARR_SEARCH_MODE,
     DEFAULT_WHISPARR_SEARCH_MODE,
     get_settings,
 )
@@ -179,6 +186,21 @@ def _validate_cutoff_controls(
         return "Cutoff cooldown days must be 0 or greater."
     if cutoff_hourly_cap < 0:
         return "Cutoff hourly cap must be 0 or greater."
+    return None
+
+
+def _validate_upgrade_controls(
+    upgrade_batch_size: int,
+    upgrade_cooldown_days: int,
+    upgrade_hourly_cap: int,
+) -> str | None:
+    """Validate upgrade-specific numeric controls from form submissions."""
+    if upgrade_batch_size < 1:
+        return "Upgrade batch size must be at least 1."
+    if upgrade_cooldown_days < 7:
+        return "Upgrade cooldown days must be at least 7."
+    if upgrade_hourly_cap < 0:
+        return "Upgrade hourly cap must be 0 or greater."
     return None
 
 
@@ -435,6 +457,14 @@ async def instance_create(
     lidarr_search_mode: Annotated[str, Form()] = DEFAULT_LIDARR_SEARCH_MODE,
     readarr_search_mode: Annotated[str, Form()] = DEFAULT_READARR_SEARCH_MODE,
     whisparr_search_mode: Annotated[str, Form()] = DEFAULT_WHISPARR_SEARCH_MODE,
+    upgrade_enabled: Annotated[str, Form()] = "",
+    upgrade_batch_size: Annotated[int, Form()] = DEFAULT_UPGRADE_BATCH_SIZE,
+    upgrade_cooldown_days: Annotated[int, Form()] = DEFAULT_UPGRADE_COOLDOWN_DAYS,
+    upgrade_hourly_cap: Annotated[int, Form()] = DEFAULT_UPGRADE_HOURLY_CAP,
+    upgrade_sonarr_search_mode: Annotated[str, Form()] = DEFAULT_UPGRADE_SONARR_SEARCH_MODE,
+    upgrade_lidarr_search_mode: Annotated[str, Form()] = DEFAULT_UPGRADE_LIDARR_SEARCH_MODE,
+    upgrade_readarr_search_mode: Annotated[str, Form()] = DEFAULT_UPGRADE_READARR_SEARCH_MODE,
+    upgrade_whisparr_search_mode: Annotated[str, Form()] = DEFAULT_UPGRADE_WHISPARR_SEARCH_MODE,
     connection_verified: Annotated[str, Form()] = "false",
 ) -> HTMLResponse:
     """Create a new instance and return the updated instance table body."""
@@ -455,6 +485,14 @@ async def instance_create(
     if validation_error is not None:
         return _connection_guard_response(validation_error)
 
+    upgrade_validation_error = _validate_upgrade_controls(
+        upgrade_batch_size,
+        upgrade_cooldown_days,
+        upgrade_hourly_cap,
+    )
+    if upgrade_validation_error is not None:
+        return _connection_guard_response(upgrade_validation_error)
+
     if connection_verified != "true":
         return _connection_guard_response("Test connection successfully before adding.")
 
@@ -470,6 +508,16 @@ async def instance_create(
     )
     if isinstance(search_modes, str):
         return _connection_guard_response(search_modes)
+
+    upgrade_modes = _resolve_search_modes(
+        instance_type,
+        upgrade_sonarr_search_mode,
+        upgrade_lidarr_search_mode,
+        upgrade_readarr_search_mode,
+        upgrade_whisparr_search_mode,
+    )
+    if isinstance(upgrade_modes, str):
+        return _connection_guard_response(upgrade_modes)
 
     instance = await create_instance(
         master_key=_master_key(request),
@@ -492,6 +540,14 @@ async def instance_create(
         lidarr_search_mode=search_modes.lidarr,
         readarr_search_mode=search_modes.readarr,
         whisparr_search_mode=search_modes.whisparr,
+        upgrade_enabled=upgrade_enabled == "on",
+        upgrade_batch_size=upgrade_batch_size,
+        upgrade_cooldown_days=upgrade_cooldown_days,
+        upgrade_hourly_cap=upgrade_hourly_cap,
+        upgrade_sonarr_search_mode=upgrade_modes.sonarr,
+        upgrade_lidarr_search_mode=upgrade_modes.lidarr,
+        upgrade_readarr_search_mode=upgrade_modes.readarr,
+        upgrade_whisparr_search_mode=upgrade_modes.whisparr,
     )
 
     supervisor = getattr(request.app.state, "supervisor", None)
@@ -544,6 +600,14 @@ async def instance_update(
     lidarr_search_mode: Annotated[str, Form()] = DEFAULT_LIDARR_SEARCH_MODE,
     readarr_search_mode: Annotated[str, Form()] = DEFAULT_READARR_SEARCH_MODE,
     whisparr_search_mode: Annotated[str, Form()] = DEFAULT_WHISPARR_SEARCH_MODE,
+    upgrade_enabled: Annotated[str, Form()] = "",
+    upgrade_batch_size: Annotated[int, Form()] = DEFAULT_UPGRADE_BATCH_SIZE,
+    upgrade_cooldown_days: Annotated[int, Form()] = DEFAULT_UPGRADE_COOLDOWN_DAYS,
+    upgrade_hourly_cap: Annotated[int, Form()] = DEFAULT_UPGRADE_HOURLY_CAP,
+    upgrade_sonarr_search_mode: Annotated[str, Form()] = DEFAULT_UPGRADE_SONARR_SEARCH_MODE,
+    upgrade_lidarr_search_mode: Annotated[str, Form()] = DEFAULT_UPGRADE_LIDARR_SEARCH_MODE,
+    upgrade_readarr_search_mode: Annotated[str, Form()] = DEFAULT_UPGRADE_READARR_SEARCH_MODE,
+    upgrade_whisparr_search_mode: Annotated[str, Form()] = DEFAULT_UPGRADE_WHISPARR_SEARCH_MODE,
     connection_verified: Annotated[str, Form()] = "false",
 ) -> HTMLResponse:
     """Update an existing instance and return the refreshed row partial.
@@ -570,6 +634,14 @@ async def instance_update(
     if validation_error is not None:
         return _connection_guard_response(validation_error)
 
+    upgrade_validation_error = _validate_upgrade_controls(
+        upgrade_batch_size,
+        upgrade_cooldown_days,
+        upgrade_hourly_cap,
+    )
+    if upgrade_validation_error is not None:
+        return _connection_guard_response(upgrade_validation_error)
+
     # Fetch the current instance early; needed for both key resolution and save
     current = await get_instance(instance_id, master_key=_master_key(request))
     if current is None:
@@ -594,6 +666,32 @@ async def instance_update(
     if isinstance(search_modes, str):
         return _connection_guard_response(search_modes)
 
+    upgrade_modes = _resolve_search_modes(
+        instance_type,
+        upgrade_sonarr_search_mode,
+        upgrade_lidarr_search_mode,
+        upgrade_readarr_search_mode,
+        upgrade_whisparr_search_mode,
+    )
+    if isinstance(upgrade_modes, str):
+        return _connection_guard_response(upgrade_modes)
+
+    # Reset offsets when upgrade is toggled off
+    new_upgrade_enabled = upgrade_enabled == "on"
+    upgrade_fields: dict[str, object] = {
+        "upgrade_enabled": new_upgrade_enabled,
+        "upgrade_batch_size": upgrade_batch_size,
+        "upgrade_cooldown_days": upgrade_cooldown_days,
+        "upgrade_hourly_cap": upgrade_hourly_cap,
+        "upgrade_sonarr_search_mode": upgrade_modes.sonarr,
+        "upgrade_lidarr_search_mode": upgrade_modes.lidarr,
+        "upgrade_readarr_search_mode": upgrade_modes.readarr,
+        "upgrade_whisparr_search_mode": upgrade_modes.whisparr,
+    }
+    if current.upgrade_enabled and not new_upgrade_enabled:
+        upgrade_fields["upgrade_item_offset"] = 0
+        upgrade_fields["upgrade_series_offset"] = 0
+
     updated = await update_instance(
         instance_id,
         master_key=_master_key(request),
@@ -616,6 +714,7 @@ async def instance_update(
         lidarr_search_mode=search_modes.lidarr,
         readarr_search_mode=search_modes.readarr,
         whisparr_search_mode=search_modes.whisparr,
+        **upgrade_fields,
     )
     if updated is None:
         return HTMLResponse(content="Not found", status_code=404)
@@ -637,7 +736,7 @@ async def instance_delete(request: Request, instance_id: int) -> Response:
         await supervisor.stop_instance_task(instance_id)
 
     await delete_instance(instance_id)
-    # Return an empty 200 — HTMX hx-swap="outerHTML" with empty content
+    # Return an empty 200. HTMX hx-swap="outerHTML" with empty content
     # removes the row from the DOM.
     return Response(status_code=200)
 

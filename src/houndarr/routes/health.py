@@ -1,4 +1,4 @@
-"""Health check endpoint — unauthenticated, used by Docker HEALTHCHECK."""
+"""Health check endpoint: unauthenticated, used by Docker HEALTHCHECK."""
 
 from __future__ import annotations
 

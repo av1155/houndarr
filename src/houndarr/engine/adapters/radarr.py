@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from houndarr.clients.radarr import MissingMovie, RadarrClient
+from houndarr.clients.radarr import LibraryMovie, MissingMovie, RadarrClient
 from houndarr.engine.candidates import (
     SearchCandidate,
     _is_unreleased,
@@ -21,7 +21,7 @@ _RADARR_UNRELEASED_STATUSES = {"tba", "announced"}
 
 
 # ---------------------------------------------------------------------------
-# Helpers (copied from search_loop.py — originals removed in Phase 2)
+# Helpers (copied from search_loop.py; originals removed in Phase 2)
 # ---------------------------------------------------------------------------
 
 
@@ -94,7 +94,7 @@ def adapt_missing(item: MissingMovie, instance: Instance) -> SearchCandidate:
 def adapt_cutoff(item: MissingMovie, instance: Instance) -> SearchCandidate:
     """Convert a Radarr cutoff-unmet movie into a :class:`SearchCandidate`.
 
-    The logic is identical to :func:`adapt_missing` — Radarr applies the
+    The logic is identical to :func:`adapt_missing`; Radarr applies the
     same unreleased checks and label format for both search kinds.
 
     Args:
@@ -105,6 +105,58 @@ def adapt_cutoff(item: MissingMovie, instance: Instance) -> SearchCandidate:
         A fully populated :class:`SearchCandidate`.
     """
     return adapt_missing(item, instance)
+
+
+def _library_movie_label(item: LibraryMovie) -> str:
+    """Build a human-readable log label for Radarr library movies."""
+    title = item.title or "Unknown Movie"
+    if item.year > 0:
+        return f"{title} ({item.year})"
+    return title
+
+
+def adapt_upgrade(item: LibraryMovie, instance: Instance) -> SearchCandidate:
+    """Convert a Radarr library movie into a :class:`SearchCandidate` for upgrade.
+
+    No unreleased checks: upgrade items already have files.
+
+    Args:
+        item: A library movie from :meth:`RadarrClient.get_library`.
+        instance: The configured Radarr instance.
+
+    Returns:
+        A fully populated :class:`SearchCandidate`.
+    """
+    return SearchCandidate(
+        item_id=item.movie_id,
+        item_type="movie",
+        label=_library_movie_label(item),
+        unreleased_reason=None,
+        group_key=None,
+        search_payload={
+            "command": "MoviesSearch",
+            "movie_id": item.movie_id,
+        },
+    )
+
+
+async def fetch_upgrade_pool(
+    client: RadarrClient,
+    instance: Instance,
+) -> list[LibraryMovie]:
+    """Fetch and filter Radarr library for upgrade-eligible movies.
+
+    Returns monitored movies that have a file and have met their quality cutoff.
+
+    Args:
+        client: An open :class:`RadarrClient` context.
+        instance: The configured Radarr instance.
+
+    Returns:
+        List of upgrade-eligible :class:`LibraryMovie` items.
+    """
+    library = await client.get_library()
+    return [m for m in library if m.monitored and m.has_file and m.cutoff_met]
 
 
 async def dispatch_search(client: RadarrClient, candidate: SearchCandidate) -> None:

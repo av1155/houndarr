@@ -337,7 +337,7 @@ def test_full_pages_render_consistent_titles(app: TestClient) -> None:
     """Full HTML pages should render '<Page> - Houndarr' title format."""
     setup_resp = app.get("/setup")
     assert setup_resp.status_code == 200
-    assert b"<title>Setup \xe2\x80\x94 Houndarr</title>" in setup_resp.content
+    assert b"<title>Setup | Houndarr</title>" in setup_resp.content
 
     app.post(
         "/setup",
@@ -346,25 +346,25 @@ def test_full_pages_render_consistent_titles(app: TestClient) -> None:
 
     login_resp = app.get("/login")
     assert login_resp.status_code == 200
-    assert b"<title>Login \xe2\x80\x94 Houndarr</title>" in login_resp.content
+    assert b"<title>Login | Houndarr</title>" in login_resp.content
 
     app.post("/login", data={"username": "admin", "password": "ValidPass1!"})
 
     dashboard_resp = app.get("/")
     assert dashboard_resp.status_code == 200
-    assert b"<title>Dashboard \xe2\x80\x94 Houndarr</title>" in dashboard_resp.content
+    assert b"<title>Dashboard | Houndarr</title>" in dashboard_resp.content
 
     settings_resp = app.get("/settings")
     assert settings_resp.status_code == 200
-    assert b"<title>Settings \xe2\x80\x94 Houndarr</title>" in settings_resp.content
+    assert b"<title>Settings | Houndarr</title>" in settings_resp.content
 
     logs_resp = app.get("/logs")
     assert logs_resp.status_code == 200
-    assert b"<title>Logs \xe2\x80\x94 Houndarr</title>" in logs_resp.content
+    assert b"<title>Logs | Houndarr</title>" in logs_resp.content
 
     help_resp = app.get("/settings/help")
     assert help_resp.status_code == 200
-    assert b"<title>Settings Help \xe2\x80\x94 Houndarr</title>" in help_resp.content
+    assert b"<title>Settings Help | Houndarr</title>" in help_resp.content
 
 
 def test_login_page_includes_browser_identity_metadata(app: TestClient) -> None:

@@ -47,12 +47,12 @@ prompted to create an admin username and password.
 1. Create your admin account on the setup screen.
 2. Log in and go to **Settings**.
 3. Add your *arr instances (URL + API key).
-4. Enable each instance — Houndarr begins searching on the configured schedule.
+4. Enable each instance. Houndarr begins searching on the configured schedule.
 
 For more details, see [First-Run Setup](first-run-setup.md).
 
 :::tip Good to know
-Houndarr does not search your entire library — only items that your *arr instances report as missing or below your quality cutoff, in small batches. See [How Houndarr Works](/docs/concepts/how-houndarr-works) for details.
+Houndarr does not search your entire library at once. It works through missing and cutoff-unmet items in small batches. An optional upgrade pass can also re-search items that already meet cutoff. See [How Houndarr Works](/docs/concepts/how-houndarr-works) for details.
 :::
 
 ## Using `docker run`
@@ -107,7 +107,7 @@ In this mode, `PUID` and `PGID` are ignored. The entrypoint validates that
 `/data` is writable at startup and exits with clear instructions if it is not.
 
 :::tip When to use which mode
-Most users — especially on Docker Compose, Unraid, or Proxmox — should use
+Most users (especially on Docker Compose, Unraid, or Proxmox) should use
 the default mode with `PUID`/`PGID`. The non-root mode is primarily useful
 for Kubernetes with `runAsNonRoot: true` or hardened environments that
 disallow root-starting containers. See

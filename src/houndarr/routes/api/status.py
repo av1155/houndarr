@@ -1,4 +1,4 @@
-"""Status API — per-instance search metrics and run-now trigger.
+"""Status API: per-instance search metrics and run-now trigger.
 
 GET  /api/status             → JSON list of InstanceStatus objects
 POST /api/instances/{id}/run-now → trigger an immediate search cycle (202)

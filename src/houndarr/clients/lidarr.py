@@ -1,4 +1,4 @@
-"""Lidarr v1 API client — missing albums and automatic search."""
+"""Lidarr v1 API client: missing albums and automatic search."""
 
 from __future__ import annotations
 
@@ -9,7 +9,20 @@ import httpx
 
 from houndarr.clients.base import ArrClient
 
-__all__ = ["LidarrClient", "MissingAlbum"]
+__all__ = ["LidarrClient", "LibraryAlbum", "MissingAlbum"]
+
+
+@dataclass(frozen=True)
+class LibraryAlbum:
+    """An album from Lidarr's full library endpoint."""
+
+    album_id: int
+    artist_id: int
+    artist_name: str
+    title: str
+    monitored: bool
+    has_file: bool
+    release_date: str | None
 
 
 @dataclass(frozen=True)
@@ -112,10 +125,39 @@ class LidarrClient(ArrClient):
         records: list[dict[str, Any]] = data.get("records", [])
         return [_parse_album(r) for r in records]
 
+    async def get_albums(self) -> list[LibraryAlbum]:
+        """Return the full album library.
+
+        Calls ``GET /api/v1/album`` with ``includeArtist=true``.
+
+        Returns:
+            List of :class:`LibraryAlbum` dataclasses.
+        """
+        records: list[dict[str, Any]] = await self._get(
+            "/api/v1/album",
+            includeArtist="true",
+        )
+        return [_parse_library_album(r) for r in records]
+
 
 # ---------------------------------------------------------------------------
 # Parsing helpers
 # ---------------------------------------------------------------------------
+
+
+def _parse_library_album(record: dict[str, Any]) -> LibraryAlbum:
+    artist: dict[str, Any] = record.get("artist") or {}
+    stats: dict[str, Any] = record.get("statistics") or {}
+    track_file_count = stats.get("trackFileCount", 0)
+    return LibraryAlbum(
+        album_id=record["id"],
+        artist_id=record.get("artistId") or artist.get("id") or 0,
+        artist_name=artist.get("artistName") or "",
+        title=record.get("title") or "",
+        monitored=bool(record.get("monitored", False)),
+        has_file=track_file_count > 0,
+        release_date=record.get("releaseDate"),
+    )
 
 
 def _parse_album(record: dict[str, Any]) -> MissingAlbum:

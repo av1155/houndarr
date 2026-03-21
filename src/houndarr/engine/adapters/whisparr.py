@@ -11,11 +11,17 @@ with Sonarr), and episode labels omit ``episodeNumber`` (absent in Whisparr).
 
 from __future__ import annotations
 
+import logging
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
-from houndarr.clients.whisparr import MissingWhisparrEpisode, WhisparrClient
+from houndarr.clients.whisparr import LibraryWhisparrEpisode, MissingWhisparrEpisode, WhisparrClient
 from houndarr.engine.candidates import SearchCandidate
 from houndarr.services.instances import Instance, WhisparrSearchMode
+
+logger = logging.getLogger(__name__)
+
+_UPGRADE_MAX_SERIES_PER_CYCLE = 5
 
 # ---------------------------------------------------------------------------
 # Label builders
@@ -25,7 +31,7 @@ from houndarr.services.instances import Instance, WhisparrSearchMode
 def _episode_label(item: MissingWhisparrEpisode) -> str:
     """Build a human-readable log label for Whisparr episodes.
 
-    Whisparr has no ``episodeNumber`` — labels use season only.
+    Whisparr has no ``episodeNumber``; labels use season only.
     """
     series = item.series_title or "Unknown Series"
     if item.episode_title:
@@ -147,6 +153,116 @@ def adapt_cutoff(item: MissingWhisparrEpisode, instance: Instance) -> SearchCand
             "episode_id": item.episode_id,
         },
     )
+
+
+def _library_episode_label(item: LibraryWhisparrEpisode) -> str:
+    """Build a human-readable log label for library Whisparr episodes."""
+    series = item.series_title or "Unknown Series"
+    if item.episode_title:
+        return f"{series} - S{item.season_number:02d} - {item.episode_title}"
+    return f"{series} - S{item.season_number:02d}"
+
+
+def _library_season_context_label(item: LibraryWhisparrEpisode) -> str:
+    """Build a log label for library Whisparr episode in season-context mode."""
+    series = item.series_title or "Unknown Series"
+    return f"{series} - S{item.season_number:02d} (season-context)"
+
+
+def adapt_upgrade(
+    item: LibraryWhisparrEpisode,
+    instance: Instance,
+) -> SearchCandidate:
+    """Convert a Whisparr library episode into a :class:`SearchCandidate` for upgrade.
+
+    Respects ``instance.upgrade_whisparr_search_mode`` for episode vs season-context.
+    No unreleased checks: upgrade items already have files.
+
+    Args:
+        item: A library episode from :meth:`WhisparrClient.get_episodes`.
+        instance: The configured Whisparr instance.
+
+    Returns:
+        A fully populated :class:`SearchCandidate`.
+    """
+    episode_mode = instance.upgrade_whisparr_search_mode == WhisparrSearchMode.episode
+
+    use_season_context = not episode_mode and item.series_id > 0 and item.season_number > 0
+
+    if use_season_context:
+        item_id = _season_item_id(item.series_id, item.season_number)
+        label = _library_season_context_label(item)
+        group_key: tuple[int, int] | None = (item.series_id, item.season_number)
+        search_payload: dict[str, Any] = {
+            "command": "SeasonSearch",
+            "series_id": item.series_id,
+            "season_number": item.season_number,
+        }
+    else:
+        item_id = item.episode_id
+        label = _library_episode_label(item)
+        group_key = None
+        search_payload = {
+            "command": "EpisodeSearch",
+            "episode_id": item.episode_id,
+        }
+
+    return SearchCandidate(
+        item_id=item_id,
+        item_type="whisparr_episode",
+        label=label,
+        unreleased_reason=None,
+        group_key=group_key,
+        search_payload=search_payload,
+    )
+
+
+async def fetch_upgrade_pool(
+    client: WhisparrClient,
+    instance: Instance,
+) -> list[LibraryWhisparrEpisode]:
+    """Fetch and filter Whisparr library for upgrade-eligible episodes.
+
+    Uses series rotation: fetches up to ``_UPGRADE_MAX_SERIES_PER_CYCLE``
+    monitored series per cycle, starting from ``instance.upgrade_series_offset``.
+
+    Args:
+        client: An open :class:`WhisparrClient` context.
+        instance: The configured Whisparr instance.
+
+    Returns:
+        List of upgrade-eligible :class:`LibraryWhisparrEpisode` items.
+    """
+    all_series = await client.get_series()
+    monitored = sorted(
+        [s for s in all_series if s.get("monitored", False)],
+        key=lambda s: s.get("id", 0),
+    )
+
+    if not monitored:
+        return []
+
+    offset = instance.upgrade_series_offset % len(monitored)
+    selected = monitored[offset : offset + _UPGRADE_MAX_SERIES_PER_CYCLE]
+    if len(selected) < _UPGRADE_MAX_SERIES_PER_CYCLE:
+        remaining = _UPGRADE_MAX_SERIES_PER_CYCLE - len(selected)
+        selected += monitored[:remaining]
+
+    episodes: list[LibraryWhisparrEpisode] = []
+    for s in selected:
+        series_id = s.get("id", 0)
+        try:
+            eps = await client.get_episodes(series_id)
+        except Exception:  # noqa: BLE001
+            logger.warning(
+                "[%s] failed to fetch episodes for series %d, skipping",
+                instance.name,
+                series_id,
+            )
+            continue
+        episodes.extend(e for e in eps if e.monitored and e.has_file and e.cutoff_met)
+
+    return episodes
 
 
 async def dispatch_search(client: WhisparrClient, candidate: SearchCandidate) -> None:

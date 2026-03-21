@@ -1,4 +1,4 @@
-{# Log table rows partial — rendered by GET /api/logs/partial and swapped into #log-tbody #}
+{# Log table rows partial: rendered by GET /api/logs/partial and swapped into #log-tbody #}
 {% if rows %}
   {% set ns = namespace(previous_cycle_id='') %}
   {% for row in rows %}
@@ -31,7 +31,7 @@
       data-cycle-progress="{{ row.cycle_progress or '' }}">
     {# Timestamp #}
     <td class="px-3 py-2.5 text-xs text-slate-400 whitespace-nowrap font-mono" data-log-ts="{{ row.timestamp or '' }}" data-col="timestamp">
-      {{ row.timestamp[:19].replace("T", " ") if row.timestamp else "—" }}
+      {{ row.timestamp[:19].replace("T", " ") if row.timestamp else "-" }}
     </td>
 
     {# Instance #}
@@ -54,7 +54,7 @@
 
     {# Type #}
     <td class="px-3 py-2.5 text-xs text-slate-400 capitalize font-sans" data-col="type">
-      {{ row.item_type or "—" }}
+      {{ row.item_type or "-" }}
     </td>
 
     {# Search kind #}
@@ -63,8 +63,10 @@
         <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium font-mono bg-sky-950/50 text-sky-300 border border-sky-900/40">missing</span>
       {% elif row.search_kind == "cutoff" %}
         <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium font-mono bg-amber-950/40 text-amber-300 border border-amber-900/40">cutoff</span>
+      {% elif row.search_kind == "upgrade" %}
+        <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium font-mono bg-violet-950/50 text-violet-300 border border-violet-900/40">upgrade</span>
       {% else %}
-        <span class="text-slate-600">—</span>
+        <span class="text-slate-600">-</span>
       {% endif %}
     </td>
 
@@ -77,7 +79,7 @@
       {% elif row.cycle_trigger == "system" %}
         <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium font-mono bg-[#1e2638] text-slate-300">system</span>
       {% else %}
-        <span class="text-slate-600">—</span>
+        <span class="text-slate-600">-</span>
       {% endif %}
     </td>
 
@@ -86,7 +88,7 @@
       {% if row.cycle_id %}
         {{ row.cycle_id[:8] }}
       {% else %}
-        <span class="text-slate-600">—</span>
+        <span class="text-slate-600">-</span>
       {% endif %}
     </td>
 
@@ -110,7 +112,7 @@
       {% elif row.item_type and row.item_id is not none %}
         <div class="truncate text-slate-400">{{ row.item_type|capitalize }} {{ row.item_id }}</div>
       {% else %}
-        <div class="truncate text-slate-600">—</div>
+        <div class="truncate text-slate-600">-</div>
       {% endif %}
       {% if row.item_id is not none %}
         <div class="text-[10px] text-slate-600 font-mono">id:{{ row.item_id }}</div>
@@ -121,7 +123,7 @@
     <td class="px-3 py-2.5 text-xs text-slate-400 font-sans"
         data-col="reason"
         title="{{ (row.reason or row.message or '') }}">
-      {{ row.reason or row.message or "—" }}
+      {{ row.reason or row.message or "-" }}
     </td>
   </tr>
   {% if row.cycle_id %}
@@ -131,7 +133,7 @@
   {% endif %}
   {% endfor %}
 
-  {# Pagination: "Load older" link — only show if we got a full page #}
+  {# Pagination: "Load older" link; only show if we got a full page #}
   {% if rows | length >= limit %}
   {% set next_limit = load_more_limit if load_more_limit is defined else limit %}
   <tr id="pagination-row">

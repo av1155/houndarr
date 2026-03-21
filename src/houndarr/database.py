@@ -11,9 +11,9 @@ import aiosqlite
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# Schema version — bump when adding new migrations
+# Schema version: bump when adding new migrations
 # ---------------------------------------------------------------------------
-SCHEMA_VERSION = 7
+SCHEMA_VERSION = 8
 
 # ---------------------------------------------------------------------------
 # DDL
@@ -51,6 +51,21 @@ CREATE TABLE IF NOT EXISTS instances (
                                 CHECK(readarr_search_mode IN ('book', 'author_context')),
     whisparr_search_mode TEXT    NOT NULL DEFAULT 'episode'
                                 CHECK(whisparr_search_mode IN ('episode', 'season_context')),
+    upgrade_enabled      INTEGER NOT NULL DEFAULT 0,
+    upgrade_batch_size   INTEGER NOT NULL DEFAULT 1,
+    upgrade_cooldown_days INTEGER NOT NULL DEFAULT 90,
+    upgrade_hourly_cap   INTEGER NOT NULL DEFAULT 1,
+    upgrade_sonarr_search_mode  TEXT NOT NULL DEFAULT 'episode'
+                                CHECK(upgrade_sonarr_search_mode IN ('episode', 'season_context')),
+    upgrade_lidarr_search_mode  TEXT NOT NULL DEFAULT 'album'
+                                CHECK(upgrade_lidarr_search_mode IN ('album', 'artist_context')),
+    upgrade_readarr_search_mode TEXT NOT NULL DEFAULT 'book'
+                                CHECK(upgrade_readarr_search_mode IN ('book', 'author_context')),
+    upgrade_whisparr_search_mode TEXT NOT NULL DEFAULT 'episode'
+                                CHECK(upgrade_whisparr_search_mode
+                                      IN ('episode', 'season_context')),
+    upgrade_item_offset  INTEGER NOT NULL DEFAULT 0,
+    upgrade_series_offset INTEGER NOT NULL DEFAULT 0,
     enabled              INTEGER NOT NULL DEFAULT 1,
     created_at           TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     updated_at           TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
@@ -162,6 +177,8 @@ async def _run_migrations(db: aiosqlite.Connection, from_version: int) -> None:
         await _migrate_to_v6(db)
     if from_version < 7:
         await _migrate_to_v7(db)
+    if from_version < 8:
+        await _migrate_to_v8(db)
 
     logger.info("Migrated database from schema version %d to %d", from_version, SCHEMA_VERSION)
     await db.execute(
@@ -384,7 +401,7 @@ async def _migrate_to_v6(db: aiosqlite.Connection) -> None:
     )
 
     # Drop the old column.  SQLite 3.35+ supports DROP COLUMN directly.
-    # For older SQLite (pre-3.35), table recreation is needed — but Python
+    # For older SQLite (pre-3.35), table recreation is needed, but Python
     # 3.12 ships with SQLite ≥3.40, so DROP COLUMN is safe.
     await db.execute("ALTER TABLE instances DROP COLUMN unreleased_delay_hrs")
 
@@ -392,12 +409,70 @@ async def _migrate_to_v6(db: aiosqlite.Connection) -> None:
 async def _migrate_to_v7(db: aiosqlite.Connection) -> None:
     """Add ``queue_limit`` column for download-queue backpressure.
 
-    Default is 0 (disabled — no backpressure check).  When set to a positive
+    Default is 0 (disabled; no backpressure check).  When set to a positive
     value, the search loop skips cycles while the *arr download queue exceeds
     the configured threshold.
     """
     if not await _column_exists(db, "instances", "queue_limit"):
         await db.execute("ALTER TABLE instances ADD COLUMN queue_limit INTEGER NOT NULL DEFAULT 0")
+
+
+async def _migrate_to_v8(db: aiosqlite.Connection) -> None:
+    """Add upgrade search columns for the opt-in third search pass.
+
+    Ten new columns on ``instances``: four rate controls, four per-app search
+    modes (dedicated to the upgrade pass), and two offset-tracking columns.
+    All have NOT NULL DEFAULT so the ALTER TABLE is safe for existing rows.
+    """
+    # Rate controls
+    if not await _column_exists(db, "instances", "upgrade_enabled"):
+        await db.execute(
+            "ALTER TABLE instances ADD COLUMN upgrade_enabled INTEGER NOT NULL DEFAULT 0"
+        )
+    if not await _column_exists(db, "instances", "upgrade_batch_size"):
+        await db.execute(
+            "ALTER TABLE instances ADD COLUMN upgrade_batch_size INTEGER NOT NULL DEFAULT 1"
+        )
+    if not await _column_exists(db, "instances", "upgrade_cooldown_days"):
+        await db.execute(
+            "ALTER TABLE instances ADD COLUMN upgrade_cooldown_days INTEGER NOT NULL DEFAULT 90"
+        )
+    if not await _column_exists(db, "instances", "upgrade_hourly_cap"):
+        await db.execute(
+            "ALTER TABLE instances ADD COLUMN upgrade_hourly_cap INTEGER NOT NULL DEFAULT 1"
+        )
+
+    # Per-app search modes (dedicated to upgrade pass)
+    if not await _column_exists(db, "instances", "upgrade_sonarr_search_mode"):
+        await db.execute(
+            "ALTER TABLE instances ADD COLUMN upgrade_sonarr_search_mode"
+            " TEXT NOT NULL DEFAULT 'episode'"
+        )
+    if not await _column_exists(db, "instances", "upgrade_lidarr_search_mode"):
+        await db.execute(
+            "ALTER TABLE instances ADD COLUMN upgrade_lidarr_search_mode"
+            " TEXT NOT NULL DEFAULT 'album'"
+        )
+    if not await _column_exists(db, "instances", "upgrade_readarr_search_mode"):
+        await db.execute(
+            "ALTER TABLE instances ADD COLUMN upgrade_readarr_search_mode"
+            " TEXT NOT NULL DEFAULT 'book'"
+        )
+    if not await _column_exists(db, "instances", "upgrade_whisparr_search_mode"):
+        await db.execute(
+            "ALTER TABLE instances ADD COLUMN upgrade_whisparr_search_mode"
+            " TEXT NOT NULL DEFAULT 'episode'"
+        )
+
+    # Offset tracking (operational state, not user-configurable)
+    if not await _column_exists(db, "instances", "upgrade_item_offset"):
+        await db.execute(
+            "ALTER TABLE instances ADD COLUMN upgrade_item_offset INTEGER NOT NULL DEFAULT 0"
+        )
+    if not await _column_exists(db, "instances", "upgrade_series_offset"):
+        await db.execute(
+            "ALTER TABLE instances ADD COLUMN upgrade_series_offset INTEGER NOT NULL DEFAULT 0"
+        )
 
 
 async def _ensure_v3_indexes(db: aiosqlite.Connection) -> None:

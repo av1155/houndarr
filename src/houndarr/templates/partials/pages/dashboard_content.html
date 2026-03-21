@@ -1,4 +1,4 @@
-<div class="sr-only" data-page-key="dashboard" data-page-title="Dashboard — Houndarr" aria-hidden="true"></div>
+<div class="sr-only" data-page-key="dashboard" data-page-title="Dashboard | Houndarr" aria-hidden="true"></div>
 
 <style>
   .instance-card {
@@ -94,7 +94,7 @@
   >+ Add Instance</a>
 </div>
 
-<!-- Instance grid — polled every 15 s via HTMX -->
+<!-- Instance grid: polled every 15 s via HTMX -->
 <div
   id="instance-grid"
   data-hydrated="false"
@@ -246,7 +246,7 @@
             const skipped24hChanged  = previous && previous.skipped_24h  !== toNumber(inst.skipped_24h);
             const errors24hChanged   = previous && previous.errors_24h   !== toNumber(inst.errors_24h);
 
-            // Status badge — pulsing dot for active
+            // Status badge: pulsing dot for active
             const badge = inst.enabled
               ? `<span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-950/50 text-emerald-300 border border-emerald-800/40">
                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block station-pulse-dot"></span> Active
@@ -265,7 +265,7 @@
             };
             const typeBadge = typeBadgeMap[inst.type] || typeBadgeMap.sonarr;
 
-            // Left border color — signature Station type indicator
+            // Left border color: signature Station type indicator
             const typeColor = TYPE_COLOR_MAP[inst.type] || TYPE_COLOR_MAP.sonarr;
 
             const lastSearch   = inst.last_search_at ? formatLocalTimestamp(inst.last_search_at) : 'Never';

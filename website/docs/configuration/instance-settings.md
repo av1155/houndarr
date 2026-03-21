@@ -7,7 +7,7 @@ description: Detailed guide to all per-instance search settings in Houndarr.
 # Instance Settings
 
 This guide explains each setting available when adding or editing an instance
-in Houndarr. The defaults are conservative — keep settings low to reduce
+in Houndarr. The defaults are conservative; keep settings low to reduce
 indexer/API pressure and avoid bans.
 
 ![Add instance form](../../static/img/screenshots/Settings_Houndarr_Add_Instance_Settings.jpeg)
@@ -29,6 +29,9 @@ indexer/API pressure and avoid bans.
   (`SeasonSearch` with `seriesId` + `seasonNumber`) when enabled per instance.
 - Wanted-list reads are restricted to monitored items (`monitored=true`) for both
   missing and cutoff passes across all app types.
+- **Upgrade pass:** Re-uses the same search commands as above but targets library
+  items that already have files and meet cutoff. The upgrade pass reads the full
+  library endpoint rather than the `wanted/*` APIs.
 
 ## Missing search controls
 
@@ -93,7 +96,7 @@ Season-context mode sends at most one `SeasonSearch` per `(series, season)` per 
 
 :::info
 Cooldown in season-context mode is tracked at the season level using a stable synthetic
-identifier derived from the series ID and season number — not through any individual
+identifier derived from the series ID and season number, not through any individual
 episode. This ensures cooldown history is consistent across cycles regardless of which
 episode happens to appear first on the wanted list.
 :::
@@ -158,6 +161,51 @@ do not consume the same budget.
 
 The release-aware retry above does not apply to cutoff searches.
 
+## Library upgrade controls
+
+### Upgrade search
+
+Enable searching for items that already have files and meet your quality cutoff. This lets your *arr instance find better releases based on quality profiles and custom format scoring.
+
+- **Default:** Off
+- Keep this off unless both missing and cutoff backlogs are stable.
+- Unlike cutoff search (which targets items *below* cutoff), upgrade search targets items that *already meet* cutoff.
+
+### Upgrade Batch
+
+Maximum upgrade items considered per cycle.
+
+- **Default:** `1`
+- **Hard cap:** `5`. The engine enforces this maximum regardless of the configured value.
+
+### Upgrade Cooldown (days)
+
+Minimum days before retrying the same upgrade item.
+
+- **Default:** `90`
+- **Minimum:** `7`. The engine enforces this floor.
+- Much longer than missing or cutoff cooldowns because upgrades are lowest priority.
+
+### Upgrade Cap
+
+Maximum successful upgrade searches per hour.
+
+- **Default:** `1`
+- **Hard cap:** `5`. The engine enforces this maximum.
+- Set `0` to disable upgrade hourly cap.
+
+### Upgrade Search Mode
+
+Per-app strategy for upgrade-pass search commands. Each app type (Sonarr, Lidarr, Readarr, Whisparr) has its own upgrade search mode, independent of the missing search mode. Radarr always searches at the movie level.
+
+- **Sonarr/Whisparr:** Episode (default) or Season-context
+- **Lidarr:** Album (default) or Artist-context
+- **Readarr:** Book (default) or Author-context
+
+### Offset-based rotation
+
+The upgrade pass uses a persistent offset to rotate through your library over time rather than always starting from the beginning. This ensures fair coverage across your entire library. Offsets reset to zero when upgrade search is toggled off.
+
 ## Queue backpressure
 
 When `Queue Limit` is set above zero, Houndarr checks the instance's download
@@ -181,7 +229,7 @@ grace, or caps), but it stays bounded:
 This improves backlog rotation while preserving polite API behavior.
 
 :::tip Why am I seeing mostly skips?
-Skips are normal — see [How Houndarr Works](/docs/concepts/how-houndarr-works#what-skipped-means-in-the-logs) and the [FAQ](/docs/concepts/faq) for details.
+Skips are normal. See [How Houndarr Works](/docs/concepts/how-houndarr-works#what-skipped-means-in-the-logs) and the [FAQ](/docs/concepts/faq) for details.
 :::
 
 ## Recommended starting profile
@@ -198,6 +246,10 @@ Skips are normal — see [How Houndarr Works](/docs/concepts/how-houndarr-works#
 | Cutoff Batch | `1` |
 | Cutoff Cooldown | `21` |
 | Cutoff Cap | `1` |
+| Upgrade search | Off |
+| Upgrade Batch | `1` (hard cap: 5) |
+| Upgrade Cooldown | `90` (min: 7) |
+| Upgrade Cap | `1` (hard cap: 5) |
 
 ## Increasing throughput
 
@@ -208,7 +260,8 @@ Suggested order:
 1. Increase **Batch Size** slightly.
 2. Lower **Sleep (minutes)** slightly.
 3. Increase **Hourly Cap** only if indexers remain healthy.
-4. Enable **Cutoff search** last.
+4. Enable **Cutoff search** after missing backlog is under control.
+5. Enable **Upgrade search** last, only after both missing and cutoff are stable.
 
 ## Status control
 

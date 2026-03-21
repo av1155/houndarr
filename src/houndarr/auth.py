@@ -565,7 +565,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
                 status_code=401,
             )
 
-        # Authenticated — store username on request state for downstream use
+        # Authenticated: store username on request state for downstream use
         request.state.proxy_auth_user = username
 
         # CSRF check on state-changing methods

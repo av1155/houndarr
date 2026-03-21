@@ -9,7 +9,7 @@ description: Install Houndarr with Helm or manage it via Flux using the official
 The official Houndarr Helm chart is published to GHCR as an OCI artifact and works with both plain `helm` and Flux.
 
 :::warning
-Houndarr uses SQLite. Only one replica is supported — do not scale beyond 1.
+Houndarr uses SQLite. Only one replica is supported; do not scale beyond 1.
 :::
 
 ## Prerequisites
@@ -70,7 +70,7 @@ Back up the `/data` PVC before upgrading. It contains the Fernet encryption mast
 
 ## Flux HelmRelease (OCI)
 
-Use `OCIRepository` (not `HelmRepository` with `type: oci` — that API is in maintenance mode per the Flux docs) to consume the chart in Flux.
+Use `OCIRepository` (not `HelmRepository` with `type: oci`; that API is in maintenance mode per the Flux docs) to consume the chart in Flux.
 
 ```yaml
 apiVersion: source.toolkit.fluxcd.io/v1

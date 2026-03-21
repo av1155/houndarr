@@ -1,4 +1,4 @@
-"""Background supervisor — manages one asyncio.Task per enabled instance.
+"""Background supervisor: manages one asyncio.Task per enabled instance.
 
 The supervisor is started once during application lifespan and runs until
 shutdown.  Each task loops indefinitely: run a search cycle, sleep for
@@ -62,7 +62,7 @@ class Supervisor:
             )
 
         if not self._tasks:
-            logger.warning("Supervisor: no enabled instances configured — nothing to do")
+            logger.warning("Supervisor: no enabled instances configured. Nothing to do.")
             return
 
         await _write_log(
@@ -98,7 +98,7 @@ class Supervisor:
         # Force-cancel anything that outlived the timeout
         for task in pending:
             task.cancel()
-            logger.warning("Supervisor: task did not finish within timeout — force cancelled")
+            logger.warning("Supervisor: task did not finish within timeout; force cancelled")
 
         for task in done:
             exc = task.exception() if not task.cancelled() else None
@@ -214,14 +214,14 @@ class Supervisor:
                 instance = await get_instance(instance_id, master_key=self._master_key)
                 if instance is None:
                     logger.warning(
-                        "Supervisor: instance id=%d no longer exists — stopping loop",
+                        "Supervisor: instance id=%d no longer exists; stopping loop",
                         instance_id,
                     )
                     return
 
                 if not instance.enabled:
                     logger.info(
-                        "Supervisor: instance %r disabled — stopping loop",
+                        "Supervisor: instance %r disabled; stopping loop",
                         instance.name,
                     )
                     return
@@ -232,7 +232,7 @@ class Supervisor:
 
                 if got_connect_error:
                     if not _in_connect_retry:
-                        # First failure — write one error row and enter retry state.
+                        # First failure: write one error row and enter retry state.
                         await _write_log(
                             instance_id=instance.id,
                             item_id=None,
@@ -245,7 +245,7 @@ class Supervisor:
                     await asyncio.sleep(_CONNECT_RETRY_SECS)
                 else:
                     if _in_connect_retry:
-                        # Recovery — write one info row and leave retry state.
+                        # Recovery: write one info row and leave retry state.
                         logger.info(
                             "Supervisor: %r (%s) is reachable again",
                             instance.name,
@@ -293,7 +293,7 @@ class Supervisor:
                 return False
             except httpx.TransportError:
                 logger.warning(
-                    "Supervisor: could not reach %r (%s) — retrying in %d s",
+                    "Supervisor: could not reach %r (%s); retrying in %d s",
                     instance.name,
                     instance.url,
                     _CONNECT_RETRY_SECS,

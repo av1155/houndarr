@@ -4,7 +4,7 @@
   <img src="src/houndarr/static/img/houndarr-logo-dark.png" alt="Houndarr logo" width="220" />
 </p>
 
-> A focused, self-hosted companion for Radarr, Sonarr, Lidarr, Readarr, and Whisparr that automatically searches for missing media in polite, controlled batches.
+> A focused, self-hosted companion for Radarr, Sonarr, Lidarr, Readarr, and Whisparr that automatically searches for missing and upgrade-eligible media in polite, controlled batches.
 >
 > **[Documentation](https://av1155.github.io/houndarr/)** | **[Quick Start](https://av1155.github.io/houndarr/docs/getting-started/quick-start)**
 
@@ -27,6 +27,7 @@ It runs as a single Docker container alongside your existing *arr stack.
 - Connects to one or more Radarr, Sonarr, Lidarr, Readarr, and Whisparr instances
 - Searches for **missing** episodes, movies, albums, and books in small, configurable batches
 - Searches for **cutoff-unmet** items (below your quality profile) separately
+- Optional **library upgrade** pass re-searches items that already meet cutoff, letting your *arr instance find better releases based on quality profiles and custom formats
 - Radarr: movie-level search
 - Sonarr: episode-level search by default, with optional season-context mode
 - Lidarr: album-level search by default, with optional artist-context mode
@@ -42,11 +43,11 @@ It runs as a single Docker container alongside your existing *arr stack.
 
 ## What Houndarr Does Not Do
 
-- **No download-client integration** — it triggers searches in your *arr instances, which handle downloads
-- **No Prowlarr/indexer management** — your *arr instances manage their own indexers
-- **No request workflows** — no Overseerr/Ombi-style request handling
-- **No multi-user support** — single admin username and password
-- **No media file manipulation** — it never touches your library files
+- **No download-client integration**: it triggers searches in your *arr instances, which handle downloads
+- **No Prowlarr/indexer management**: your *arr instances manage their own indexers
+- **No request workflows**: no Overseerr/Ombi-style request handling
+- **No multi-user support**: single admin username and password
+- **No media file manipulation**: it never touches your library files
 
 ---
 
@@ -124,7 +125,7 @@ should store its database and master key.
 | `PGID` | `1000` | Group ID for file ownership inside the container |
 | `TZ` | `UTC` | Container timezone (e.g. `America/New_York`) |
 
-> **Note — LXC / Proxmox / root-based hosts:** If your Docker host runs containers
+> **Note (LXC / Proxmox / root-based hosts):** If your Docker host runs containers
 > as root (a common setup in Proxmox LXC containers), set `PUID=0` and `PGID=0`.
 > Houndarr will skip the privilege-drop and run directly as root, matching the
 > security posture of the rest of your stack. A warning will be printed to stdout
@@ -153,7 +154,7 @@ for setup examples and security requirements.
 2. Create an admin username and password on the setup screen.
 3. Log in with your new credentials.
 4. Go to **Settings** and add your *arr instances (URL + API key).
-5. Enable each instance — Houndarr will begin searching on the configured schedule.
+5. Enable each instance. Houndarr will begin searching on the configured schedule.
 
 For detailed per-instance configuration options, see the
 [Instance Settings Guide](https://av1155.github.io/houndarr/docs/configuration/instance-settings).
@@ -206,4 +207,4 @@ To report a vulnerability, see [SECURITY.md](SECURITY.md).
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT. See [LICENSE](LICENSE).

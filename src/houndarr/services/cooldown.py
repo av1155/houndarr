@@ -1,13 +1,13 @@
-"""Cooldown service — per-item search tracking and per-instance hourly cap.
+"""Cooldown service: per-item search tracking and per-instance hourly cap.
 
 The ``cooldowns`` table stores the last time each (instance, item) pair was
 searched.  This module provides the four operations the search engine needs:
 
-* :func:`is_on_cooldown` — should we skip this item?
-* :func:`record_search` — mark an item as just-searched (upsert).
-* :func:`count_searches_last_hour` — how many searches has this instance done
+* :func:`is_on_cooldown` - should we skip this item?
+* :func:`record_search` - mark an item as just-searched (upsert).
+* :func:`count_searches_last_hour` - how many searches has this instance done
   in the past 60 minutes?
-* :func:`clear_cooldowns` — admin reset for a single instance.
+* :func:`clear_cooldowns` - admin reset for a single instance.
 """
 
 from __future__ import annotations

@@ -16,34 +16,34 @@ type ScreenshotItem = {
 
 const DASHBOARD_SCREENSHOT: ScreenshotItem = {
   src: require('@site/static/img/screenshots/Dashboard_Houndarr.jpeg').default,
-  alt: 'Houndarr Dashboard — instance cards with search metrics and activity',
-  caption: 'Dashboard — live search metrics, instance status, and on-demand triggers',
+  alt: 'Houndarr Dashboard: instance cards with search metrics and activity',
+  caption: 'Dashboard: live search metrics, instance status, and on-demand triggers',
 };
 
 const SUPPORTING_SCREENSHOTS: ScreenshotItem[] = [
   {
     src: require('@site/static/img/screenshots/Logs_Houndarr.jpeg').default,
-    alt: 'Houndarr Logs — filterable search activity log',
+    alt: 'Houndarr Logs: filterable search activity log',
     caption: 'Logs',
   },
   {
     src: require('@site/static/img/screenshots/Settings_Houndarr.jpeg').default,
-    alt: 'Houndarr Settings — instance list with enable toggles',
+    alt: 'Houndarr Settings: instance list with enable toggles',
     caption: 'Settings',
   },
   {
     src: require('@site/static/img/screenshots/Settings_Houndarr_Add_Instance_Settings.jpeg').default,
-    alt: 'Houndarr Add Instance — search and cutoff configuration',
+    alt: 'Houndarr Add Instance: search, cutoff, and upgrade configuration',
     caption: 'Instance config',
   },
   {
     src: require('@site/static/img/screenshots/Settings_Account_Houndarr.jpeg').default,
-    alt: 'Houndarr Account settings — password and session management',
+    alt: 'Houndarr Account settings: password and session management',
     caption: 'Account',
   },
   {
     src: require('@site/static/img/screenshots/Settings_Help_Houndarr.jpeg').default,
-    alt: 'Houndarr Help — in-app settings reference',
+    alt: 'Houndarr Help: in-app settings reference',
     caption: 'Help',
   },
 ];
@@ -111,7 +111,7 @@ function HomepageHeader() {
     <header className={clsx('hero hero--primary', styles.heroBanner)}>
       <div className={clsx('container', styles.heroInner)}>
 
-        {/* Left column — text content */}
+        {/* Left column: text content */}
         <div className={styles.heroLeft}>
           <img
             src={require('@site/static/img/houndarr-logo-dark.png').default}
@@ -137,7 +137,7 @@ function HomepageHeader() {
           </div>
         </div>
 
-        {/* Right column — dashboard preview */}
+        {/* Right column: dashboard preview */}
         <div className={styles.heroRight}>
           <img
             src={DASHBOARD_SCREENSHOT.src}
@@ -159,15 +159,15 @@ function Screenshots() {
           See It in Action
         </Heading>
 
-        {/* Hero — Dashboard takes full width */}
+        {/* Hero: Dashboard takes full width */}
         <div className={styles.screenshotHero}>
           <img src={DASHBOARD_SCREENSHOT.src} alt={DASHBOARD_SCREENSHOT.alt} />
           <p className={styles.screenshotCaption}>
-            <strong>Dashboard</strong> — live search metrics, instance status, and on-demand triggers
+            <strong>Dashboard</strong>: live search metrics, instance status, and on-demand triggers
           </p>
         </div>
 
-        {/* Supporting grid — remaining screens */}
+        {/* Supporting grid: remaining screens */}
         <div className={styles.screenshotGallery}>
           {SUPPORTING_SCREENSHOTS.map((item) => (
             <div key={item.caption}>
@@ -224,7 +224,7 @@ function WhatItDoesNot() {
             <ul>
               {SCOPE_EXCLUSIONS.map((item) => (
                 <li key={item.title}>
-                  <strong>{item.title}</strong> — {item.detail}
+                  <strong>{item.title}</strong>: {item.detail}
                 </li>
               ))}
             </ul>
@@ -239,7 +239,7 @@ export default function Home(): ReactNode {
   return (
     <Layout
       title="Polite media searching for your *arr stack"
-      description="A self-hosted companion for Radarr, Sonarr, Lidarr, Readarr, and Whisparr that automatically searches for missing media in polite, controlled batches.">
+      description="A self-hosted companion for Radarr, Sonarr, Lidarr, Readarr, and Whisparr that automatically searches for missing and upgrade-eligible media in polite, controlled batches.">
       <HomepageHeader />
       <main>
         <HomepageFeatures />

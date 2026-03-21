@@ -103,7 +103,7 @@ class ArrClient(ABC):
     async def get_queue_status(self) -> dict[str, Any]:
         """Fetch the download queue status from the *arr instance.
 
-        Returns a dict with at least ``totalCount`` (int) — the total number
+        Returns a dict with at least ``totalCount`` (int), the total number
         of items currently in the download queue.  All five *arr apps expose
         an identical ``QueueStatusResource`` schema on this endpoint.
 

@@ -1,4 +1,4 @@
-<div class="sr-only" data-page-key="logs" data-page-title="Logs — Houndarr" aria-hidden="true"></div>
+<div class="sr-only" data-page-key="logs" data-page-title="Logs | Houndarr" aria-hidden="true"></div>
 
 <style>
   #logs-table-shell {
@@ -46,11 +46,11 @@
       width: 100%;
     }
 
-    /* Preferred widths for predictable columns — auto layout uses these as
+    /* Preferred widths for predictable columns; auto layout uses these as
        hints and lets content push wider if needed. */
     th[data-col='timestamp'] { width: 150px; }
     th[data-col='instance']  { width: 80px;  }
-    /* action / type / kind have no explicit width — they size to badge content */
+    /* action / type / kind have no explicit width; they size to badge content */
 
     /* Media and reason absorb the remaining space */
     th[data-col='media']  { width: 35%; }
@@ -63,7 +63,7 @@
       text-overflow: ellipsis;
     }
 
-    /* Cycle ID, Cycle Outcome, Trigger — shown in the cycle group header row */
+    /* Cycle ID, Cycle Outcome, Trigger: shown in the cycle group header row */
     th[data-col='cycle'],   td[data-col='cycle'],
     th[data-col='outcome'], td[data-col='outcome'],
     th[data-col='trigger'], td[data-col='trigger'] {
@@ -374,6 +374,7 @@
       <option value="">All kinds</option>
       <option value="missing" {% if selected_search_kind == "missing" %}selected{% endif %}>Missing</option>
       <option value="cutoff" {% if selected_search_kind == "cutoff" %}selected{% endif %}>Cutoff</option>
+      <option value="upgrade" {% if selected_search_kind == "upgrade" %}selected{% endif %}>Upgrade</option>
     </select>
   </div>
 
@@ -496,7 +497,7 @@
       window.houndarrClientHelpers?.formatLocalTimestamp ||
       function (isoTimestamp) {
         if (!isoTimestamp) {
-          return '—';
+          return 'N/A';
         }
 
         const parsed = new Date(isoTimestamp);
@@ -577,9 +578,9 @@
     }
 
     function _mdCell(value) {
-      // Use em-dash for blank cells, as in the original behavior.
+      // Use a hyphen for blank cells.
       const str = String(value);
-      return _escapePipes(str || '—');
+      return _escapePipes(str || '-');
     }
 
     function buildMarkdown(rows) {
@@ -632,7 +633,7 @@
         if (c.cycle) parts.push(`cycle:${c.cycle}`);
         if (c.cycle_outcome) parts.push(`outcome:${c.cycle_outcome}`);
         if (c.media) parts.push(c.media);
-        if (c.reason) parts.push(`— ${c.reason}`);
+        if (c.reason) parts.push(`reason: ${c.reason}`);
         lines.push(parts.join('  '));
       });
       return lines.join('\n');

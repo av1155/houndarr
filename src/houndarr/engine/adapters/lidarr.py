@@ -7,13 +7,19 @@ commands via :class:`~houndarr.clients.lidarr.LidarrClient`.
 
 from __future__ import annotations
 
-from houndarr.clients.lidarr import LidarrClient, MissingAlbum
+import logging
+
+from houndarr.clients.lidarr import LibraryAlbum, LidarrClient, MissingAlbum
 from houndarr.engine.candidates import (
     SearchCandidate,
     _is_unreleased,
     _is_within_post_release_grace,
 )
 from houndarr.services.instances import Instance, LidarrSearchMode
+
+logger = logging.getLogger(__name__)
+
+_UPGRADE_CUTOFF_EXCLUSION_MAX_PAGES = 10
 
 # ---------------------------------------------------------------------------
 # Label builders
@@ -129,6 +135,99 @@ def adapt_cutoff(item: MissingAlbum, instance: Instance) -> SearchCandidate:
             "album_id": item.album_id,
         },
     )
+
+
+def _library_album_label(item: LibraryAlbum) -> str:
+    """Build a human-readable log label for library albums."""
+    artist = item.artist_name or "Unknown Artist"
+    title = item.title or "Unknown Album"
+    return f"{artist} - {title}"
+
+
+def _library_artist_context_label(item: LibraryAlbum) -> str:
+    """Build a log label for library album in artist-context mode."""
+    artist = item.artist_name or "Unknown Artist"
+    return f"{artist} (artist-context)"
+
+
+def adapt_upgrade(item: LibraryAlbum, instance: Instance) -> SearchCandidate:
+    """Convert a Lidarr library album into a :class:`SearchCandidate` for upgrade.
+
+    Respects ``instance.upgrade_lidarr_search_mode`` for album vs artist-context.
+    No unreleased checks: upgrade items already have files.
+
+    Args:
+        item: A library album from :meth:`LidarrClient.get_albums`.
+        instance: The configured Lidarr instance.
+
+    Returns:
+        A fully populated :class:`SearchCandidate`.
+    """
+    album_mode = instance.upgrade_lidarr_search_mode == LidarrSearchMode.album
+
+    use_artist_context = not album_mode and item.artist_id > 0
+
+    if use_artist_context:
+        item_id = _artist_item_id(item.artist_id)
+        label = _library_artist_context_label(item)
+        group_key: tuple[int, int] | None = (item.artist_id, 0)
+        search_payload = {
+            "command": "ArtistSearch",
+            "artist_id": item.artist_id,
+        }
+    else:
+        item_id = item.album_id
+        label = _library_album_label(item)
+        group_key = None
+        search_payload = {
+            "command": "AlbumSearch",
+            "album_id": item.album_id,
+        }
+
+    return SearchCandidate(
+        item_id=item_id,
+        item_type="album",
+        label=label,
+        unreleased_reason=None,
+        group_key=group_key,
+        search_payload=search_payload,
+    )
+
+
+async def fetch_upgrade_pool(
+    client: LidarrClient,
+    instance: Instance,
+) -> list[LibraryAlbum]:
+    """Fetch and filter Lidarr library for upgrade-eligible albums.
+
+    Builds a cutoff-unmet exclusion set by paginating ``wanted/cutoff``, then
+    returns monitored albums with files that are NOT in the exclusion set.
+
+    Args:
+        client: An open :class:`LidarrClient` context.
+        instance: The configured Lidarr instance.
+
+    Returns:
+        List of upgrade-eligible :class:`LibraryAlbum` items.
+    """
+    exclusion: set[int] = set()
+    for page in range(1, _UPGRADE_CUTOFF_EXCLUSION_MAX_PAGES + 1):
+        try:
+            cutoff_items = await client.get_cutoff_unmet(page=page, page_size=250)
+        except Exception:  # noqa: BLE001
+            logger.warning(
+                "[%s] failed to fetch cutoff page %d for exclusion set",
+                instance.name,
+                page,
+            )
+            break
+        for item in cutoff_items:
+            exclusion.add(item.album_id)
+        if len(cutoff_items) < 250:
+            break
+
+    library = await client.get_albums()
+    return [a for a in library if a.monitored and a.has_file and a.album_id not in exclusion]
 
 
 async def dispatch_search(client: LidarrClient, candidate: SearchCandidate) -> None:

@@ -102,7 +102,7 @@ def cli(
     auth_mode: str,
     auth_proxy_header: str,
 ) -> None:
-    """Houndarr — search for missing media in your *arr stack, politely.
+    """Houndarr: search for missing media in your *arr stack, politely.
 
     A focused self-hosted companion that automatically triggers searches for
     missing and cutoff-unmet media in controlled batches, keeping your

@@ -1,4 +1,4 @@
-"""Logs API — paginated search_log entries with optional filters.
+"""Logs API: paginated search_log entries with optional filters.
 
 GET /api/logs         → JSON list of log rows (used by tests and external consumers)
 GET /api/logs/partial → server-rendered <tbody> HTMX partial (used by the /logs page)
@@ -24,7 +24,7 @@ _LOG_LIMIT_DEFAULT = 50
 _LOG_LIMIT_MAX = 5000
 _LOG_LIMIT_ALL = 5000
 _LOG_LOAD_MORE_CHUNK_MAX = 100
-_SEARCH_KINDS = {"missing", "cutoff"}
+_SEARCH_KINDS = {"missing", "cutoff", "upgrade"}
 _CYCLE_TRIGGERS = {"scheduled", "run_now", "system"}
 
 
@@ -173,7 +173,7 @@ async def _query_logs(
         search_kind: ``missing`` or ``cutoff`` (None = all).
         cycle_trigger: ``scheduled``, ``run_now``, or ``system`` (None = all).
         hide_system: When True, hide system lifecycle rows from results.
-        before: ISO-8601 timestamp cursor — return rows older than this value.
+        before: ISO-8601 timestamp cursor; returns rows older than this value.
         limit: Maximum number of rows to return.
 
     Returns:
@@ -331,7 +331,7 @@ async def get_logs(
         search_kind: Filter by search pass kind (``missing`` or ``cutoff``).
         cycle_trigger: Filter by cycle trigger (``scheduled``, ``run_now``, ``system``).
         hide_system: When true, hide system lifecycle rows.
-        before: Timestamp cursor — only return rows older than this ISO-8601 value.
+        before: Timestamp cursor; only return rows older than this ISO-8601 value.
         limit: Max rows (1–500, default 50).
 
     Returns:

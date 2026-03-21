@@ -1,4 +1,4 @@
-"""Readarr v1 API client — missing books and automatic search."""
+"""Readarr v1 API client: missing books and automatic search."""
 
 from __future__ import annotations
 
@@ -9,7 +9,20 @@ import httpx
 
 from houndarr.clients.base import ArrClient
 
-__all__ = ["MissingBook", "ReadarrClient"]
+__all__ = ["LibraryBook", "MissingBook", "ReadarrClient"]
+
+
+@dataclass(frozen=True)
+class LibraryBook:
+    """A book from Readarr's full library endpoint."""
+
+    book_id: int
+    author_id: int
+    author_name: str
+    title: str
+    monitored: bool
+    has_file: bool
+    release_date: str | None
 
 
 @dataclass(frozen=True)
@@ -112,10 +125,39 @@ class ReadarrClient(ArrClient):
         records: list[dict[str, Any]] = data.get("records", [])
         return [_parse_book(r) for r in records]
 
+    async def get_books(self) -> list[LibraryBook]:
+        """Return the full book library.
+
+        Calls ``GET /api/v1/book`` with ``includeAuthor=true``.
+
+        Returns:
+            List of :class:`LibraryBook` dataclasses.
+        """
+        records: list[dict[str, Any]] = await self._get(
+            "/api/v1/book",
+            includeAuthor="true",
+        )
+        return [_parse_library_book(r) for r in records]
+
 
 # ---------------------------------------------------------------------------
 # Parsing helpers
 # ---------------------------------------------------------------------------
+
+
+def _parse_library_book(record: dict[str, Any]) -> LibraryBook:
+    author: dict[str, Any] = record.get("author") or {}
+    stats: dict[str, Any] = record.get("statistics") or {}
+    book_file_count = stats.get("bookFileCount", 0)
+    return LibraryBook(
+        book_id=record["id"],
+        author_id=record.get("authorId") or author.get("id") or 0,
+        author_name=author.get("authorName") or "",
+        title=record.get("title") or "",
+        monitored=bool(record.get("monitored", False)),
+        has_file=book_file_count > 0,
+        release_date=record.get("releaseDate"),
+    )
 
 
 def _parse_book(record: dict[str, Any]) -> MissingBook:

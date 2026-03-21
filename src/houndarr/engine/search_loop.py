@@ -23,11 +23,11 @@ from houndarr.services.cooldown import (
     is_on_cooldown,
     record_search,
 )
-from houndarr.services.instances import Instance
+from houndarr.services.instances import Instance, InstanceType, update_instance
 
 logger = logging.getLogger(__name__)
 
-SearchKind = Literal["missing", "cutoff"]
+SearchKind = Literal["missing", "cutoff", "upgrade"]
 CycleTrigger = Literal["scheduled", "run_now", "system"]
 
 _MAX_LIST_PAGES_PER_PASS = 5
@@ -39,6 +39,13 @@ _CUTOFF_PAGE_SIZE_MIN = 5
 _CUTOFF_PAGE_SIZE_MAX = 25
 _CUTOFF_SCAN_BUDGET_MIN = 12
 _CUTOFF_SCAN_BUDGET_MAX = 60
+
+# Upgrade pass hard caps (very conservative, items already have files)
+_UPGRADE_SCAN_BUDGET_MIN = 8
+_UPGRADE_SCAN_BUDGET_MAX = 40
+_UPGRADE_BATCH_HARD_CAP = 5
+_UPGRADE_HOURLY_CAP_HARD_CAP = 5
+_UPGRADE_MIN_COOLDOWN_DAYS = 7
 
 
 # ---------------------------------------------------------------------------
@@ -303,7 +310,7 @@ async def _run_search_pass(  # noqa: C901
                     if is_cutoff
                     else f"hourly cap reached ({hourly_cap})"
                 )
-                logger.info("[%s] %s%s — %s", instance.name, log_prefix, candidate.item_id, reason)
+                logger.info("[%s] %s%s: %s", instance.name, log_prefix, candidate.item_id, reason)
                 await _write_log(
                     instance.id,
                     candidate.item_id,
@@ -385,7 +392,7 @@ async def _run_search_pass(  # noqa: C901
                     if is_cutoff
                     else f"on cooldown ({cooldown_days}d)"
                 )
-                logger.debug("[%s] %s%s — %s", instance.name, log_prefix, candidate.item_id, reason)
+                logger.debug("[%s] %s%s: %s", instance.name, log_prefix, candidate.item_id, reason)
                 await _write_log(
                     instance.id,
                     candidate.item_id,
@@ -458,6 +465,227 @@ async def _run_search_pass(  # noqa: C901
 
 
 # ---------------------------------------------------------------------------
+# Upgrade pass (dedicated, does NOT reuse _run_search_pass)
+# ---------------------------------------------------------------------------
+
+
+async def _run_upgrade_pass(
+    instance: Instance,
+    adapter: AppAdapter,
+    master_key: bytes,
+    *,
+    cycle_id: str,
+    cycle_trigger: CycleTrigger,
+) -> int:
+    """Execute the upgrade search pass for *instance*.
+
+    Fetches the library via the adapter, applies offset-based rotation,
+    cooldown checks, and dispatches searches for upgrade-eligible items.
+
+    Args:
+        instance: Fully-populated (decrypted) instance.
+        adapter: The :class:`AppAdapter` for this instance type.
+        master_key: Fernet key for persisting offset updates.
+        cycle_id: Shared cycle identifier for all log rows.
+        cycle_trigger: How this cycle was initiated.
+
+    Returns:
+        Count of items searched in this upgrade pass.
+    """
+    batch_size = min(max(0, instance.upgrade_batch_size), _UPGRADE_BATCH_HARD_CAP)
+    hourly_cap = min(max(0, instance.upgrade_hourly_cap), _UPGRADE_HOURLY_CAP_HARD_CAP)
+    cooldown_days = max(instance.upgrade_cooldown_days, _UPGRADE_MIN_COOLDOWN_DAYS)
+    scan_budget = _clamp(batch_size * 8, _UPGRADE_SCAN_BUDGET_MIN, _UPGRADE_SCAN_BUDGET_MAX)
+
+    if batch_size == 0:
+        return 0
+
+    # Fetch upgrade-eligible pool via the adapter
+    try:
+        async with adapter.make_client(instance) as client:
+            pool = await adapter.fetch_upgrade_pool(client, instance)
+    except Exception as exc:  # noqa: BLE001
+        msg = str(exc)
+        logger.warning("[%s] upgrade pool fetch failed: %s", instance.name, msg)
+        await _write_log(
+            instance.id,
+            None,
+            None,
+            "error",
+            search_kind="upgrade",
+            cycle_id=cycle_id,
+            cycle_trigger=cycle_trigger,
+            message=f"upgrade pool fetch failed: {msg}",
+        )
+        return 0
+
+    # Advance series offset for series-based apps (Sonarr/Whisparr)
+    if instance.type in (InstanceType.sonarr, InstanceType.whisparr):
+        new_series_offset = instance.upgrade_series_offset + 5
+        try:
+            await update_instance(
+                instance.id,
+                master_key=master_key,
+                upgrade_series_offset=new_series_offset,
+            )
+        except Exception:  # noqa: BLE001
+            logger.warning("[%s] failed to persist upgrade_series_offset", instance.name)
+
+    if not pool:
+        logger.info("[%s] upgrade pool empty, nothing to upgrade", instance.name)
+        await _write_log(
+            instance.id,
+            None,
+            None,
+            "info",
+            search_kind="upgrade",
+            cycle_id=cycle_id,
+            cycle_trigger=cycle_trigger,
+            message="upgrade pool empty",
+        )
+        return 0
+
+    # Sort by item ID for stable ordering
+    def _item_sort_key(item: object) -> int:
+        return (
+            getattr(item, "movie_id", None)
+            or getattr(item, "episode_id", None)
+            or getattr(item, "album_id", None)
+            or getattr(item, "book_id", None)
+            or 0
+        )
+
+    pool.sort(key=_item_sort_key)
+
+    # Apply offset-based rotation
+    offset = instance.upgrade_item_offset % len(pool) if pool else 0
+    rotated = pool[offset:] + pool[:offset]
+
+    searches_this_hour = await _count_searches_last_hour(instance.id, "upgrade")
+    searched = 0
+    scanned = 0
+    seen_item_ids: set[int] = set()
+    seen_group_keys: set[tuple[int, int]] = set()
+    new_offset = offset
+
+    for item in rotated:
+        if searched >= batch_size or scanned >= scan_budget:
+            break
+
+        candidate = adapter.adapt_upgrade(item, instance)
+
+        # Dedup
+        if candidate.group_key is None:
+            if candidate.item_id in seen_item_ids:
+                continue
+            seen_item_ids.add(candidate.item_id)
+        else:
+            if candidate.group_key in seen_group_keys:
+                continue
+            seen_group_keys.add(candidate.group_key)
+            if candidate.item_id in seen_item_ids:
+                continue
+            seen_item_ids.add(candidate.item_id)
+
+        # Hourly cap
+        if hourly_cap > 0 and searches_this_hour >= hourly_cap:
+            reason = f"upgrade hourly cap reached ({hourly_cap})"
+            logger.info("[%s] upgrade %s: %s", instance.name, candidate.item_id, reason)
+            await _write_log(
+                instance.id,
+                candidate.item_id,
+                candidate.item_type,
+                "skipped",
+                search_kind="upgrade",
+                cycle_id=cycle_id,
+                cycle_trigger=cycle_trigger,
+                item_label=candidate.label,
+                reason=reason,
+            )
+            break
+
+        # Cooldown
+        if await is_on_cooldown(instance.id, candidate.item_id, candidate.item_type, cooldown_days):
+            reason = f"on upgrade cooldown ({cooldown_days}d)"
+            logger.debug("[%s] upgrade %s: %s", instance.name, candidate.item_id, reason)
+            await _write_log(
+                instance.id,
+                candidate.item_id,
+                candidate.item_type,
+                "skipped",
+                search_kind="upgrade",
+                cycle_id=cycle_id,
+                cycle_trigger=cycle_trigger,
+                item_label=candidate.label,
+                reason=reason,
+            )
+            new_offset = (offset + scanned + 1) % len(pool)
+            scanned += 1
+            continue
+
+        scanned += 1
+
+        # Dispatch search
+        try:
+            async with adapter.make_client(instance) as dispatch_client:
+                await adapter.dispatch_search(dispatch_client, candidate)
+        except Exception as exc:  # noqa: BLE001
+            msg = str(exc)
+            logger.warning(
+                "[%s] upgrade search failed for %s: %s",
+                instance.name,
+                candidate.item_id,
+                msg,
+            )
+            await _write_log(
+                instance.id,
+                candidate.item_id,
+                candidate.item_type,
+                "error",
+                search_kind="upgrade",
+                cycle_id=cycle_id,
+                cycle_trigger=cycle_trigger,
+                item_label=candidate.label,
+                message=msg,
+            )
+            new_offset = (offset + scanned) % len(pool)
+            continue
+
+        await record_search(instance.id, candidate.item_id, candidate.item_type)
+        await _write_log(
+            instance.id,
+            candidate.item_id,
+            candidate.item_type,
+            "searched",
+            search_kind="upgrade",
+            cycle_id=cycle_id,
+            cycle_trigger=cycle_trigger,
+            item_label=candidate.label,
+        )
+        searched += 1
+        searches_this_hour += 1
+        new_offset = (offset + scanned) % len(pool)
+        logger.info(
+            "[%s] upgrade searched %s %s",
+            instance.name,
+            candidate.item_type,
+            candidate.item_id,
+        )
+
+    # Persist new offset
+    try:
+        await update_instance(
+            instance.id,
+            master_key=master_key,
+            upgrade_item_offset=new_offset,
+        )
+    except Exception:  # noqa: BLE001
+        logger.warning("[%s] failed to persist upgrade_item_offset", instance.name)
+
+    return searched
+
+
+# ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
 
@@ -504,7 +732,7 @@ async def run_instance_search(
             total_queued = int(queue_status.get("totalCount", 0))
             if total_queued >= instance.queue_limit:
                 reason = f"queue backpressure ({total_queued}/{instance.queue_limit})"
-                logger.info("[%s] skipping cycle — %s", instance.name, reason)
+                logger.info("[%s] skipping cycle: %s", instance.name, reason)
                 await _write_log(
                     instance.id,
                     None,
@@ -526,10 +754,10 @@ async def run_instance_search(
             )
         except (httpx.HTTPError, httpx.InvalidURL, KeyError, ValueError):
             # If the queue check fails, log a warning and continue with the
-            # search cycle — failing open avoids blocking searches when the
+            # search cycle; failing open avoids blocking searches when the
             # queue endpoint is temporarily unavailable.
             logger.warning(
-                "[%s] queue status check failed — proceeding with search",
+                "[%s] queue status check failed; proceeding with search",
                 instance.name,
                 exc_info=True,
             )
@@ -554,7 +782,7 @@ async def run_instance_search(
                 cycle_trigger=cycle_trigger,
             )
 
-    logger.info("[%s] cycle complete — %d searched", instance.name, searched)
+    logger.info("[%s] cycle complete: %d searched", instance.name, searched)
 
     # --- Cutoff-unmet pass ---
     if instance.cutoff_enabled:
@@ -582,7 +810,33 @@ async def run_instance_search(
                     cycle_id=cycle_id_value,
                     cycle_trigger=cycle_trigger,
                 )
-            logger.info("[%s] cutoff pass complete — %d searched", instance.name, cutoff_searched)
+            logger.info("[%s] cutoff pass complete: %d searched", instance.name, cutoff_searched)
             searched += cutoff_searched
+
+    # --- Upgrade pass ---
+    if instance.upgrade_enabled:
+        upgrade_target = min(
+            max(0, instance.upgrade_batch_size),
+            _UPGRADE_BATCH_HARD_CAP,
+        )
+        if upgrade_target > 0:
+            logger.info(
+                "[%s] starting upgrade pass (upgrade_batch_size=%d)",
+                instance.name,
+                upgrade_target,
+            )
+            upgrade_searched = await _run_upgrade_pass(
+                instance,
+                adapter,
+                master_key,
+                cycle_id=cycle_id_value,
+                cycle_trigger=cycle_trigger,
+            )
+            logger.info(
+                "[%s] upgrade pass complete: %d searched",
+                instance.name,
+                upgrade_searched,
+            )
+            searched += upgrade_searched
 
     return searched

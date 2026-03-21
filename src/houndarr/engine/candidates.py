@@ -21,7 +21,7 @@ class SearchCandidate:
     """A normalized item ready for the search pipeline.
 
     Adapter functions convert app-specific models into this common shape.
-    The engine sees only ``SearchCandidate`` — it never inspects the
+    The engine sees only ``SearchCandidate``; it never inspects the
     original app-specific model.
 
     Attributes:

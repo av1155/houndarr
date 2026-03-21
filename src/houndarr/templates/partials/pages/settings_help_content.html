@@ -1,7 +1,7 @@
 <div
   class="sr-only"
   data-page-key="settings-help"
-  data-page-title="Settings Help — Houndarr"
+  data-page-title="Settings Help | Houndarr"
   aria-hidden="true"
 ></div>
 
@@ -198,6 +198,73 @@
   </section>
 
   <section class="help-reveal rounded-xl border border-[#1e2638] bg-[#0e1117] p-5">
+    <h2 class="text-lg font-semibold text-slate-100 mb-1">Library Upgrade Controls</h2>
+    <p class="text-xs text-slate-400 mb-4">
+      Lowest priority. Re-searches items that already meet cutoff for better releases. Keep off unless missing and cutoff backlogs are stable.
+    </p>
+    <div class="space-y-3">
+      <div class="rounded-lg border border-[#1e2638] bg-[#07080f]/50 p-3">
+        <div class="flex items-center justify-between gap-3">
+          <h3 class="text-sm font-semibold text-slate-200">Upgrade search</h3>
+          <span class="text-[11px] px-2 py-0.5 rounded-full bg-[#1e2638] text-slate-400 border border-[#2a3448] font-mono"
+            >Default: Off</span
+          >
+        </div>
+        <p class="mt-1 text-sm text-slate-300">
+          Enables upgrade pass for library items that already have files and meet your quality cutoff.
+        </p>
+      </div>
+      <div class="rounded-lg border border-[#1e2638] bg-[#07080f]/50 p-3">
+        <div class="flex items-center justify-between gap-3">
+          <h3 class="text-sm font-semibold text-slate-200">Upgrade Batch</h3>
+          <span
+            class="text-[11px] px-2 py-0.5 rounded-full bg-brand-900/40 text-brand-200 border border-brand-800/40"
+            >Default: 1</span
+          >
+        </div>
+        <p class="mt-1 text-sm text-slate-300">Maximum upgrade items considered per cycle. Hard cap: 5.</p>
+      </div>
+      <div class="rounded-lg border border-[#1e2638] bg-[#07080f]/50 p-3">
+        <div class="flex items-center justify-between gap-3">
+          <h3 class="text-sm font-semibold text-slate-200">Upgrade Cooldown (days)</h3>
+          <span
+            class="text-[11px] px-2 py-0.5 rounded-full bg-brand-900/40 text-brand-200 border border-brand-800/40"
+            >Default: 90</span
+          >
+        </div>
+        <p class="mt-1 text-sm text-slate-300">Minimum delay before retrying the same upgrade item. Minimum: 7 days.</p>
+      </div>
+      <div class="rounded-lg border border-[#1e2638] bg-[#07080f]/50 p-3">
+        <div class="flex items-center justify-between gap-3">
+          <h3 class="text-sm font-semibold text-slate-200">Upgrade Cap</h3>
+          <span
+            class="text-[11px] px-2 py-0.5 rounded-full bg-brand-900/40 text-brand-200 border border-brand-800/40"
+            >Default: 1</span
+          >
+        </div>
+        <p class="mt-1 text-sm text-slate-300">
+          Maximum successful upgrade searches per hour (<code>0</code> = unlimited). Hard cap: 5.
+        </p>
+      </div>
+      <div class="rounded-lg border border-[#1e2638] bg-[#07080f]/50 p-3">
+        <div class="flex items-center justify-between gap-3">
+          <h3 class="text-sm font-semibold text-slate-200">Upgrade Search Mode</h3>
+          <span class="text-[11px] px-2 py-0.5 rounded-full bg-[#1e2638] text-slate-400 border border-[#2a3448] font-mono"
+            >Per-app setting</span
+          >
+        </div>
+        <p class="mt-1 text-sm text-slate-300">
+          Sonarr, Lidarr, Readarr, and Whisparr each offer an advanced search mode for the upgrade pass,
+          independent of the missing search mode. Radarr always uses movie-level search.
+        </p>
+      </div>
+    </div>
+    <p class="mt-4 text-xs text-slate-400">
+      Upgrade has its own budget, cooldown, and offset rotation so it does not compete with missing or cutoff searches.
+    </p>
+  </section>
+
+  <section class="help-reveal rounded-xl border border-[#1e2638] bg-[#0e1117] p-5">
     <h2 class="text-lg font-semibold text-slate-100 mb-3">Safe Starting Preset</h2>
     <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
       <div class="rounded border border-[#1e2638] bg-[#07080f]/50 px-3 py-2 text-slate-300 font-sans">
@@ -230,6 +297,18 @@
       <div class="rounded border border-[#1e2638] bg-[#07080f]/50 px-3 py-2 text-slate-300 font-sans">
         Cutoff Cap: <strong class="text-slate-100">1</strong>
       </div>
+      <div class="rounded border border-[#1e2638] bg-[#07080f]/50 px-3 py-2 text-slate-300 font-sans">
+        Upgrade Search: <strong class="text-slate-100">Off</strong>
+      </div>
+      <div class="rounded border border-[#1e2638] bg-[#07080f]/50 px-3 py-2 text-slate-300 font-sans">
+        Upgrade Batch: <strong class="text-slate-100">1</strong>
+      </div>
+      <div class="rounded border border-[#1e2638] bg-[#07080f]/50 px-3 py-2 text-slate-300 font-sans">
+        Upgrade Cooldown: <strong class="text-slate-100">90 days</strong>
+      </div>
+      <div class="rounded border border-[#1e2638] bg-[#07080f]/50 px-3 py-2 text-slate-300 font-sans">
+        Upgrade Cap: <strong class="text-slate-100">1</strong>
+      </div>
     </div>
   </section>
 
@@ -239,7 +318,8 @@
       <li>Increase Batch Size slightly.</li>
       <li>Lower Sleep slightly.</li>
       <li>Increase Hourly Cap only if indexers remain healthy.</li>
-      <li>Enable Cutoff search last.</li>
+      <li>Enable Cutoff search after missing backlog is under control.</li>
+      <li>Enable Upgrade search last, only after both missing and cutoff are stable.</li>
     </ol>
     <p class="mt-3 text-xs text-slate-400">
       Change one control at a time and observe logs for at least 24 hours.

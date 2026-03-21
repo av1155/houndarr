@@ -1,4 +1,4 @@
-"""Whisparr v3 API client — missing episodes and automatic search.
+"""Whisparr v3 API client: missing episodes and automatic search.
 
 Whisparr is a Sonarr fork with the same v3 API structure.  Key differences:
 episodes use a ``DateOnly`` release date object instead of an ISO-8601
@@ -15,7 +15,22 @@ import httpx
 
 from houndarr.clients.base import ArrClient
 
-__all__ = ["MissingWhisparrEpisode", "WhisparrClient"]
+__all__ = ["LibraryWhisparrEpisode", "MissingWhisparrEpisode", "WhisparrClient"]
+
+
+@dataclass(frozen=True)
+class LibraryWhisparrEpisode:
+    """An episode from Whisparr's full library with file and cutoff metadata."""
+
+    episode_id: int
+    series_id: int
+    series_title: str
+    episode_title: str
+    season_number: int
+    absolute_episode_number: int | None
+    monitored: bool
+    has_file: bool
+    cutoff_met: bool
 
 
 @dataclass(frozen=True)
@@ -118,10 +133,60 @@ class WhisparrClient(ArrClient):
         records: list[dict[str, Any]] = data.get("records", [])
         return [_parse_episode(r) for r in records]
 
+    async def get_series(self) -> list[dict[str, Any]]:
+        """Return the full series list.
+
+        Calls ``GET /api/v3/series``.  Returns raw dicts; only ``id`` and
+        ``monitored`` are needed by the upgrade-pass adapter.
+
+        Returns:
+            List of series dicts from Whisparr.
+        """
+        result: list[dict[str, Any]] = await self._get("/api/v3/series")
+        return result
+
+    async def get_episodes(self, series_id: int) -> list[LibraryWhisparrEpisode]:
+        """Return all episodes for a series with file and cutoff metadata.
+
+        Calls ``GET /api/v3/episode`` with ``seriesId``,
+        ``includeEpisodeFile=true``, and ``includeSeries=true``.
+
+        Args:
+            series_id: Whisparr series ID.
+
+        Returns:
+            List of :class:`LibraryWhisparrEpisode` dataclasses.
+        """
+        records: list[dict[str, Any]] = await self._get(
+            "/api/v3/episode",
+            seriesId=series_id,
+            includeEpisodeFile="true",
+            includeSeries="true",
+        )
+        return [_parse_library_episode(r) for r in records]
+
 
 # ---------------------------------------------------------------------------
 # Parsing helpers
 # ---------------------------------------------------------------------------
+
+
+def _parse_library_episode(record: dict[str, Any]) -> LibraryWhisparrEpisode:
+    series: dict[str, Any] = record.get("series") or {}
+    has_file = bool(record.get("hasFile", False))
+    ep_file: dict[str, Any] = record.get("episodeFile") or {}
+    cutoff_not_met = ep_file.get("qualityCutoffNotMet", True)
+    return LibraryWhisparrEpisode(
+        episode_id=record["id"],
+        series_id=record.get("seriesId") or series.get("id") or 0,
+        series_title=series.get("title") or "",
+        episode_title=record.get("title") or "",
+        season_number=record.get("seasonNumber", 0),
+        absolute_episode_number=record.get("absoluteEpisodeNumber"),
+        monitored=bool(record.get("monitored", False)),
+        has_file=has_file,
+        cutoff_met=not cutoff_not_met if has_file else False,
+    )
 
 
 def _parse_date_only(obj: dict[str, Any] | None) -> datetime | None:

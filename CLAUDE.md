@@ -54,7 +54,7 @@ Run **all five** before every commit. CI enforces the same checks.
 ## Running Tests
 
 ```bash
-# Full suite (571 tests, async — count includes parametrised expansions)
+# Full suite (600 tests, async — count includes parametrised expansions)
 .venv/bin/pytest
 
 # Single file

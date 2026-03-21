@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.0] - 2026-03-21
+
+### Added
+
+- Opt-in upgrade search pass that periodically re-searches library items which already have a file and meet the quality cutoff, giving each `*arr` instance a chance to find better releases; each instance has independent batch size, cooldown, and hourly cap controls (#266).
+
+### Fixed
+
+- Navigating to the settings help page via the "What do these settings mean?" link inside the instance modal no longer leaves the page scroll-locked until refresh (#268).
+- Instance modal on mobile no longer briefly appears compact before expanding; the dialog now animates in fully populated (#268).
+- Dashboard instance cards now enter with a smooth container-level fade that matches the shell animation instead of a per-card flash (#268).
+
+---
+
 ## [1.5.0] - 2026-03-21
 
 ### Added

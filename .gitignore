@@ -87,9 +87,6 @@ website/.docusaurus/
 # Research artifacts
 .opencode/
 
-# Claude session brief (local only — never commit)
-CLAUDE.md
-
 # Claude Code project state (local only — never commit)
 .claude/
 

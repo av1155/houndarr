@@ -50,10 +50,7 @@ If cutoff searches aren't happening, check whether the item actually appears in 
 Houndarr works best when your *arr instances are already configured with
 quality profiles you trust. It does not manage quality profiles or custom formats.
 
-If you manage multiple instances or want help keeping quality settings consistent,
-community tools such as [Profilarr](https://github.com/Dictionarry-Hub/profilarr)
-can sync profiles and custom formats across instances. These tools are optional and
-fully independent of Houndarr.
+If you want to build, test, and deploy quality profiles and custom formats across your stack, [Profilarr](https://github.com/Dictionarry-Hub/profilarr) is a community tool built for that. It connects to curated databases like TRaSH Guides, lets you test custom format conditions before deploying, and pushes configurations to any number of instances. It is optional and fully independent of Houndarr.
 :::
 
 ## Why only a few items get searched each cycle

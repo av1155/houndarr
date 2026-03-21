@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.0] - 2026-03-21
+
+### Added
+
+- `HOUNDARR_TRUSTED_PROXIES` now accepts CIDR subnets (e.g. `172.18.0.0/16`) in addition to individual IP addresses (#245, #248)
+- Kubernetes deployment guide with StatefulSet, headless Service, and Ingress examples (#255)
+- FAQ entry explaining why Houndarr exists alongside built-in *arr search (#253)
+
+---
+
 ## [1.3.2] - 2026-03-20
 
 ### Fixed

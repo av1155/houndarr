@@ -177,7 +177,7 @@ Login error messages are generic ("Invalid credentials") and do not reveal
 whether the username or password was incorrect.
 
 `X-Forwarded-For` is only honored when the connecting IP is listed in
-`HOUNDARR_TRUSTED_PROXIES`. When no trusted proxies are configured (the
+`HOUNDARR_TRUSTED_PROXIES` (individual IPs or CIDR subnets). When no trusted proxies are configured (the
 default), the header is ignored entirely, preventing IP spoofing.
 
 ### Unauthenticated routes
@@ -238,8 +238,8 @@ See [Reverse Proxy](/docs/configuration/reverse-proxy) for configuration example
 When running behind a reverse proxy with HTTPS:
 
 1. Set `HOUNDARR_SECURE_COOKIES=true` so cookies are only sent over HTTPS.
-2. Set `HOUNDARR_TRUSTED_PROXIES` to your proxy's IP so the rate limiter sees
-   real client IPs via `X-Forwarded-For`.
+2. Set `HOUNDARR_TRUSTED_PROXIES` to your proxy's IP or subnet so the rate
+   limiter sees real client IPs via `X-Forwarded-For`.
 
 ### Instance URL validation (SSRF protection)
 
@@ -278,7 +278,7 @@ The persistent data directory (default `/data` in Docker) contains:
 
 - [ ] Run behind a reverse proxy with TLS termination
 - [ ] Set `HOUNDARR_SECURE_COOKIES=true`
-- [ ] Set `HOUNDARR_TRUSTED_PROXIES` to your proxy IP(s)
+- [ ] Set `HOUNDARR_TRUSTED_PROXIES` to your proxy IP(s) or subnet(s)
 - [ ] Do not expose port 8877 directly to the internet without a proxy
 - [ ] Do not run with `HOUNDARR_DEV=true` in production (it exposes Swagger UI
       at `/api/docs`)

@@ -333,6 +333,51 @@ The persistent data directory (default `/data` in Docker) contains:
 - [ ] Verify your proxy strips/overwrites the auth header from client requests
       before forwarding (all major SSO proxies do this by default)
 
+## Huntarr vulnerability audit
+
+Houndarr includes 63 integration tests in `tests/test_huntarr_vulns.py` that
+verify immunity to every vulnerability from the
+[Huntarr v9.4.2 security review](https://github.com/rfsbraz/huntarr-security-review).
+These tests run in CI on every push and pull request as part of the standard
+pytest suite.
+
+A live security smoke test (`scripts/security_smoke_test.sh`) runs curl-based
+checks against a real Docker container in CI on every PR and weekly. Anyone
+can run it against their own instance:
+
+```bash
+bash scripts/security_smoke_test.sh http://localhost:8877
+```
+
+The tests and smoke script together cover:
+
+- Unauthenticated access: all 16 protected routes return 302 without a session
+- Secret leakage: `/api/health`, `/login`, and `/setup` responses contain no
+  API keys, Fernet tokens, or internal secrets
+- Setup lockout: `/setup` is inaccessible after initial account creation; no
+  body field can bypass the middleware auth check
+- Absent features: paths from the Huntarr attack chain (2FA enrollment,
+  setup clear, backup upload, Plex unlink) return 404
+- Path traversal: traversal attempts in URL paths never produce 200 responses
+- X-Forwarded-For spoofing: XFF header is ignored without trusted proxies
+- API key exposure: no HTTP response includes an `api_key` field or a
+  Fernet-encoded token (`gAAAAA` prefix)
+- Cookie flags: session cookie is `HttpOnly`; CSRF cookie is not `HttpOnly`
+  (needed for HTMX); both use `SameSite=Strict` and 24-hour expiry
+- CSRF enforcement: all mutating authenticated routes return 403 without a
+  valid token; `hmac.compare_digest()` is verified in the source
+- Rate limiting: 7 rapid failed login attempts trigger HTTP 429
+
+### Auth middleware whitelist note
+
+The auth middleware uses `startswith()` matching for public paths, which means
+any future route whose path begins with `/setup`, `/login`, `/api/health`, or
+`/static` would inherit public access without any auth check. No such routes
+exist today, but this is a known property of the implementation. A tripwire
+test (`TestCSRFImplementation.test_public_paths_is_exact_expected_set`) fails
+immediately if the `_PUBLIC_PATHS` set changes, alerting developers to audit
+the security implications before merging.
+
 ## Known limitations
 
 **Stateless sessions.** Sessions are signed tokens with no server-side session

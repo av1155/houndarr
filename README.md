@@ -198,6 +198,7 @@ network:
 - **Authentication** uses bcrypt password hashing, signed session tokens, CSRF
   protection, and login rate limiting.
 - **The container runs as a non-root user** after PUID/PGID remapping.
+- **Huntarr vulnerability audit** — 63 integration tests prove immunity to every finding from the Huntarr.io security review; a live smoke test runs in CI on every PR.
 
 For a detailed explanation of how Houndarr handles credentials,
 network behavior, and trust boundaries, see

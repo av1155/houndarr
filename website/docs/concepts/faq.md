@@ -60,8 +60,16 @@ See [Troubleshooting](/docs/concepts/troubleshooting) for a step-by-step guide.
 
 ## "What is upgrade search? How is it different from cutoff?"
 
-Cutoff search targets items your *arr instance flags as *below* your quality cutoff (they don't meet your minimum standard). Upgrade search targets items that *already meet* cutoff but might have better releases available based on quality profiles and custom format scoring. Upgrade search reads the full library rather than the `wanted/cutoff` list, and uses much more conservative defaults (batch 1, cooldown 90 days, hourly cap 1, hard caps enforced). Enable it only after missing and cutoff backlogs are stable.
+Cutoff search targets items your *arr instance flags as *below* your quality cutoff (they don't meet your minimum standard). Upgrade search targets items that *already meet* cutoff but might have better releases available based on quality profiles and custom format scoring. Upgrade search reads the full library rather than the `wanted/cutoff` list, and uses much more conservative defaults (batch 1, cooldown 90 days, hourly cap 1, hard caps enforced). Enable it only after missing and cutoff backlogs are stable. When upgrade search triggers a search, your *arr instance evaluates the results against your quality profile and custom format scores; Houndarr does not influence that decision.
 
 ## "Can Houndarr search for things that aren't in my *arr instance yet?"
 
 No. Houndarr only triggers searches within your *arr instances for items already tracked there. For request workflows, use Overseerr or Jellyseerr alongside your *arr stack.
+
+## "I deleted files to free up space — will Houndarr re-download them?"
+
+If the items are still monitored in your *arr instance, yes: they will appear in the wanted/missing list and Houndarr will eventually search for them. To prevent re-downloads, unmonitor the items in your *arr instance before or after deleting the files. Houndarr only acts on what your *arr instance reports as wanted.
+
+## "Does Houndarr respect custom format scores?"
+
+Houndarr does not evaluate quality, custom formats, or release attributes. It only triggers search commands. Your *arr instance handles all quality evaluation, custom format scoring, and download decisions. If your quality profile and custom formats are configured correctly, Houndarr's searches will automatically produce results that satisfy them.

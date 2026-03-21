@@ -57,7 +57,7 @@ security and container checks.
 ## Running Tests
 
 ```bash
-# Full suite (647 tests, async; count includes parametrised expansions)
+# Full suite (710 tests, async; count includes parametrised expansions)
 .venv/bin/pytest
 
 # Single file
@@ -119,6 +119,7 @@ identical check names so branch protection is satisfied.
 | `pages.yml` | Pushes to `main` touching `website/**` | Deploys docs site to GitHub Pages |
 | `test-deploy.yml` | PRs touching `website/**` | Tests Docusaurus build without deploying |
 | `cleanup-actions-cache.yml` | Daily (05:00 UTC) + manual | Prunes stale GitHub Actions caches |
+| `security-smoke-test.yml` | Push to `main`, all PRs (informational) | Builds image, spins up container, runs live curl security checks + container-level audit (file perms, DB encryption, process UID, capabilities) |
 
 ### Branch protection on `main`
 

@@ -338,12 +338,12 @@ The persistent data directory (default `/data` in Docker) contains:
 Houndarr includes 63 integration tests in `tests/test_huntarr_vulns.py` that
 verify immunity to every vulnerability from the
 [Huntarr v9.4.2 security review](https://github.com/rfsbraz/huntarr-security-review).
-These tests run in CI on every push and pull request as part of the standard
-pytest suite.
+These tests run in CI on every pull request as part of the standard pytest
+suite.
 
 A live security smoke test (`scripts/security_smoke_test.sh`) runs curl-based
-checks against a real Docker container in CI on every PR and weekly. Anyone
-can run it against their own instance:
+checks against a real Docker container in CI on every pull request. Anyone can
+run it against their own instance:
 
 ```bash
 bash scripts/security_smoke_test.sh http://localhost:8877
@@ -406,15 +406,17 @@ reachable host on your private network.
 
 ## CI security pipeline
 
-Every pull request runs automated security checks before merge:
+Houndarr enforces required CI checks on pull requests before merge. Security
+coverage in the required set includes:
 
-| Tool | Purpose |
+| Check | Purpose |
 |------|---------|
-| [Bandit](https://bandit.readthedocs.io/) | Static application security testing (SAST) for Python |
-| [pip-audit](https://pypi.org/project/pip-audit/) | Known vulnerability scanning for Python dependencies |
-| [Trivy](https://github.com/aquasecurity/trivy) | Vulnerability scanning for the filesystem and Docker image (CRITICAL/HIGH, fixable only) |
-| [Dependency Review](https://github.com/actions/dependency-review-action) | PR-time check of new dependencies against the GitHub Advisory Database |
-| [Hadolint](https://github.com/hadolint/hadolint) | Dockerfile best-practice linting |
-| [actionlint](https://github.com/rhysd/actionlint) | GitHub Actions workflow linting |
+| [Dependency audit (pip-audit)](https://pypi.org/project/pip-audit/) | Known vulnerability scanning for Python dependencies |
+| [SAST (Bandit)](https://bandit.readthedocs.io/) | Static application security testing for Python |
+| [Trivy filesystem scan](https://github.com/aquasecurity/trivy) | Vulnerability scan of the repository filesystem (CRITICAL/HIGH with known fixes) |
+| [Dependency review](https://github.com/actions/dependency-review-action) | Pull request dependency diff check against GitHub Advisory Database |
+| [Trivy image scan](https://github.com/aquasecurity/trivy) | Vulnerability scan of the built Docker image (CRITICAL/HIGH with known fixes) |
+| Security smoke test | Live-container security checks via `scripts/security_smoke_test.sh` |
 
-These checks are required to pass before any code is merged to `main`.
+Additional workflows run conditionally when relevant files are touched, such as
+Dockerfile linting (`hadolint`) and workflow linting (`actionlint`).

@@ -43,6 +43,22 @@ containers), set `PUID=0` and `PGID=0`. Houndarr will skip the privilege-drop
 and run directly as root, matching the security posture of the rest of your
 stack. A warning will be printed to stdout at startup as a reminder.
 
+### Explicit non-root mode (`user:` / `runAsUser`)
+
+If you start the container as a non-root user — via `user:` in Docker Compose
+or `securityContext.runAsUser` in Kubernetes — `PUID` and `PGID` are
+**ignored**. The entrypoint cannot remap file ownership without root, so it
+skips remapping and runs the application directly as the specified UID/GID.
+
+In this mode, `/data` must already be writable by the runtime user. For bind
+mounts, pre-create and `chown` the host directory before starting the
+container. If migrating from the default mode, `chown -R` all files in the
+data directory (including `houndarr.db-wal` and `houndarr.db-shm`) to the
+new UID/GID.
+
+See [Trust & Security](/docs/security/trust-and-security#explicit-non-root-mode)
+for details.
+
 ### Development mode
 
 Setting `HOUNDARR_DEV=true` enables:

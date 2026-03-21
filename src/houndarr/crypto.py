@@ -39,9 +39,11 @@ def ensure_master_key(data_dir: str | Path) -> bytes:
         raise PermissionError(
             f"Cannot write master key to '{key_path}'. "
             "The /data directory is not writable by the current user. "
-            "If running via Docker, ensure PUID/PGID match the ownership of your host "
-            "data directory, or set PUID=0/PGID=0 to run as root "
-            "(e.g. in LXC/Proxmox environments)."
+            "If using Docker with PUID/PGID, ensure they match the ownership "
+            "of your host data directory. "
+            "If using 'user:' or 'runAsUser', ensure /data is pre-owned by "
+            "that UID/GID. "
+            "For Proxmox/LXC, set PUID=0/PGID=0."
         ) from exc
     try:
         os.write(fd, key)

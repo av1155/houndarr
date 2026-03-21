@@ -214,6 +214,35 @@ The container supports `PUID` and `PGID` environment variables (defaulting to
 `1000`) to remap file ownership, following the same pattern used by
 Linuxserver.io and similar self-hosted container images.
 
+### Explicit non-root mode
+
+If your container runtime starts the process as a non-root user — via `user:`
+in Docker Compose or `securityContext.runAsUser` in Kubernetes — the
+entrypoint detects this and skips all PUID/PGID remapping. The application
+runs directly as the specified UID/GID.
+
+In this mode:
+
+- `PUID` and `PGID` are **ignored** (a warning is logged if they differ from
+  the defaults).
+- `/data` must already be writable by the runtime UID/GID. For bind mounts,
+  pre-create and `chown` the host directory. For Kubernetes, use `fsGroup`.
+- `cap_drop: [ALL]` is safe because no privileged operations are performed.
+- Existing files (`houndarr.db`, `houndarr.db-wal`, `houndarr.db-shm`,
+  `houndarr.masterkey`) must be owned by the runtime UID/GID. If migrating
+  from the default compat mode, `chown -R` the data directory first.
+
+The entrypoint validates `/data` permissions at startup and exits with an
+actionable error message if the directory is not writable or existing files
+are not accessible.
+
+:::note
+This mode supports running the container process as non-root. It does not
+guarantee compatibility with every rootless container engine or storage
+backend combination. If you use rootless Podman, the default compat mode
+(with PUID/PGID) already works via user namespace mapping.
+:::
+
 ### Health check
 
 The Docker `HEALTHCHECK` polls `http://localhost:8877/api/health` inside the

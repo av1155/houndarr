@@ -106,6 +106,99 @@ The `/data` volume contains the encryption master key and database. Back it up.
 If the master key is lost, all stored API keys become unrecoverable.
 :::
 
+### Non-root alternative with `securityContext`
+
+If your cluster enforces Pod Security Standards or you need `runAsNonRoot:
+true`, replace the PUID/PGID env vars with a `securityContext` block. Do not
+combine both approaches — use one or the other.
+
+```yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: houndarr
+  namespace: houndarr
+spec:
+  serviceName: "houndarr"
+  replicas: 1 # SQLite — do not increase
+  selector:
+    matchLabels:
+      app: houndarr
+  template:
+    metadata:
+      labels:
+        app: houndarr
+    spec:
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        runAsNonRoot: true
+      containers:
+        - name: houndarr
+          image: ghcr.io/av1155/houndarr:latest
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          ports:
+            - containerPort: 8877
+              name: http
+          env:
+            - name: TZ
+              value: "America/New_York"
+            # No PUID/PGID — securityContext handles user identity
+            # Uncomment when using an Ingress with TLS:
+            # - name: HOUNDARR_SECURE_COOKIES
+            #   value: "true"
+            # - name: HOUNDARR_TRUSTED_PROXIES
+            #   value: "10.244.0.0/16"
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "100m"
+            limits:
+              memory: "256Mi"
+              cpu: "500m"
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 1Gi
+```
+
+`fsGroup: 1000` tells the kubelet to set group ownership on the PVC contents,
+so the volume is writable on first run without manual `chown`.
+
+:::tip Migrating from PUID/PGID
+If you have an existing deployment using PUID/PGID and want to switch, the
+PVC contents may be owned by the old UID/GID. Run a one-time pod to fix
+ownership before switching:
+
+```bash
+kubectl run fix-perms -n houndarr --rm -it --image=busybox \
+  --overrides='{"spec":{"containers":[{"name":"fix","image":"busybox","command":["chown","-R","1000:1000","/data"],"volumeMounts":[{"name":"data","mountPath":"/data"}]}],"volumes":[{"name":"data","persistentVolumeClaim":{"claimName":"data-houndarr-0"}}]}}'
+```
+:::
+
 ### Services
 
 A StatefulSet requires a headless Service for pod DNS. A second ClusterIP

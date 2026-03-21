@@ -73,3 +73,44 @@ docker run -d \
 
 Replace `/path/to/data` with an absolute path on your host where Houndarr
 should store its database and master key.
+
+## Running as a non-root user
+
+If you want to run the container process as a non-root user with all
+capabilities dropped, use `user:` and `cap_drop` instead of `PUID`/`PGID`:
+
+```yaml
+services:
+  houndarr:
+    image: ghcr.io/av1155/houndarr:latest
+    container_name: houndarr
+    restart: unless-stopped
+    user: "1000:1000"
+    cap_drop:
+      - ALL
+    ports:
+      - "8877:8877"
+    volumes:
+      - ./data:/data
+    environment:
+      - TZ=America/New_York
+```
+
+The bind-mount directory must already be owned by the target UID/GID:
+
+```bash
+mkdir -p ./data && chown 1000:1000 ./data
+docker compose up -d
+```
+
+In this mode, `PUID` and `PGID` are ignored. The entrypoint validates that
+`/data` is writable at startup and exits with clear instructions if it is not.
+
+:::tip When to use which mode
+Most users — especially on Docker Compose, Unraid, or Proxmox — should use
+the default mode with `PUID`/`PGID`. The non-root mode is primarily useful
+for Kubernetes with `runAsNonRoot: true` or hardened environments that
+disallow root-starting containers. See
+[Trust & Security](/docs/security/trust-and-security#explicit-non-root-mode)
+for details.
+:::

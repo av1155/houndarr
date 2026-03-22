@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.2] - 2026-03-22
+
+### Fixed
+
+- Instance URLs with Docker container names containing underscores (e.g. `radarr_hd`) no longer fail validation with "host is invalid"; the hostname pattern now accepts underscores inside label segments while keeping all SSRF protections intact (#285).
+- Whisparr orphan records returned by `wanted/missing` with no series linkage now log `skipped` with reason `no series linked` instead of dispatching a search that Whisparr rejects and logging `error`; season-0 specials with a valid series ID are unaffected (#286).
+
+---
+
 ## [1.6.1] - 2026-03-21
 
 ### Changed

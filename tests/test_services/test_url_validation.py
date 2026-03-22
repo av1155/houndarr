@@ -194,14 +194,76 @@ def test_unspecified_ipv6_rejected() -> None:
 
 
 def test_malformed_hostname_rejected() -> None:
-    """Hostnames that fail the RFC-1123 pattern check must be rejected with a safe message."""
-    # Underscore characters are not valid in hostnames per RFC 1123
-    result = validate_instance_url("http://invalid_host:8989")
+    """Hostnames with leading/trailing separators must be rejected with a safe message."""
+    # Leading underscore is not valid; the start must be alphanumeric.
+    result = validate_instance_url("http://_invalid:8989")
     assert result is not None
     assert "invalid" in result.lower()
     # Must not expose exception details - message must be a plain controlled string
     assert "traceback" not in result.lower()
     assert "valueerror" not in result.lower()
+
+
+# ---------------------------------------------------------------------------
+# Docker-style hostnames (underscores in container / service names)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        # Standard combinations
+        "http://radarr_hd:7878",
+        "http://sonarr_1:8989",
+        # Consecutive identical separators
+        "http://my__app:8989",  # consecutive underscores
+        "http://my--app:8989",  # consecutive hyphens
+        # Mixed consecutive separators
+        "http://radarr_-app:8989",  # underscore then hyphen
+        "http://radarr-_app:8989",  # hyphen then underscore
+        # Multiple labels (DNS structure)
+        "http://radarr_hd.local:7878",
+        "http://docker_1.my_network.local:80",
+        "http://a.b.c.d:80",  # shortest possible labels
+        # Extreme length boundaries (63 characters per label is the max)
+        f"http://a{'b' * 61}c:80",  # exactly 63 alphanumeric chars
+        f"http://a{'_' * 61}c:80",  # exactly 63 chars with max internal underscores
+    ],
+)
+def test_docker_and_edge_hostnames_pass(url: str) -> None:
+    """Valid container names, consecutive separators, and boundary lengths must be accepted."""
+    assert validate_instance_url(url) is None
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        # Leading/trailing string separators
+        "http://_radarr:7878",
+        "http://radarr_:7878",
+        "http://-radarr:7878",
+        "http://radarr-:7878",
+        "http://.radarr:7878",
+        "http://radarr.:7878",
+        # Consecutive dots (empty DNS labels)
+        "http://radarr..local:7878",
+        # Separators touching dots (DNS label boundaries must be alphanumeric)
+        "http://radarr_.local:7878",  # underscore before dot
+        "http://radarr.-local:7878",  # hyphen after dot
+        "http://_sub.domain:7878",  # underscore starting a sub-label
+        # Length boundary (64 characters is too long for a single label)
+        f"http://a{'_' * 62}c:80",  # 64 characters (fails the {{0,61}} quantifier)
+        # Invalid characters completely outside the regex
+        # Note: radarr@hd is NOT listed here because urlparse treats @ as a
+        # userinfo separator and extracts "hd" as the host (which is valid).
+        "http://radarr+hd:7878",
+    ],
+)
+def test_malformed_hostnames_and_boundaries_rejected(url: str) -> None:
+    """Hostnames violating DNS label boundaries, lengths, or characters must be rejected."""
+    result = validate_instance_url(url)
+    assert result is not None
+    assert "invalid" in result.lower() or "not allowed" in result.lower()
 
 
 def test_hostname_resolving_to_unspecified_rejected(monkeypatch: pytest.MonkeyPatch) -> None:

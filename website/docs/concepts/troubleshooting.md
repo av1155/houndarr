@@ -97,7 +97,7 @@ See [Instance Settings](/docs/configuration/instance-settings#increasing-through
 **Checks:**
 1. Verify the instance URL is reachable from the Houndarr container. Try `curl <url>/api/v3/system/status?apikey=<key>` from inside the container (use `/api/v1/` for Lidarr and Readarr instead of `/api/v3/`).
 2. Confirm the API key is correct in Houndarr's Settings page.
-3. If your *arr instance is in the same Docker Compose stack, use the container service name as the hostname (e.g., `http://sonarr:8989`, `http://lidarr:8686`), not `localhost`.
+3. If your *arr instance is in the same Docker Compose stack, use the container service name as the hostname (e.g., `http://sonarr:8989`, `http://radarr_hd:7878`), not `localhost`. Container names with underscores are supported.
 4. Check that the URL does not have a trailing slash.
 
 ### An instance is enabled but nothing is happening

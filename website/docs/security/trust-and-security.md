@@ -288,6 +288,9 @@ When adding or editing an instance URL, Houndarr validates the target:
 - **Allowed:** RFC-1918 private ranges (`10.0.0.0/8`, `172.16.0.0/12`,
   `192.168.0.0/16`) because *arr instances typically run on the same LAN or
   Docker network
+- **Hostname format:** standard DNS labels with letters, digits, hyphens, and
+  underscores inside label segments (e.g. `radarr_hd`, `sonarr-4k`); must start
+  and end with a letter or digit
 
 Hostnames are resolved via DNS and each resolved IP is checked against the
 blocked ranges to prevent DNS rebinding to loopback addresses.

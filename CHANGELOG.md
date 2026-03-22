@@ -9,8 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- Instance URLs with Docker container names containing underscores (e.g. `radarr_hd`) no longer fail validation with "host is invalid"; the hostname pattern now accepts underscores inside label segments while keeping all SSRF protections intact (#285).
-- Whisparr orphan records returned by `wanted/missing` with no series linkage now log `skipped` with reason `no series linked` instead of dispatching a search that Whisparr rejects and logging `error`; season-0 specials with a valid series ID are unaffected (#286).
+- Instance URLs now accept hostnames containing underscores (e.g. `http://radarr_hd:7878`); hyphens and dots were already supported, but underscores were previously rejected as invalid (#285).
+- Whisparr records with no series linkage, which previously caused repeated search errors labeled `Unknown Series - S00` in the logs, are now skipped cleanly with reason `no series linked` (#286).
 
 ---
 

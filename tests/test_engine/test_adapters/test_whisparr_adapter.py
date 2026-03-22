@@ -181,6 +181,33 @@ class TestWhisparrUnreleasedReason:
 class TestAdaptMissingEpisodeMode:
     """Verify adapt_missing in episode mode."""
 
+    def test_null_series_id_skipped_in_episode_mode(self):
+        """Orphan records (series_id=None) are skipped even in episode mode."""
+        instance = _make_instance()
+        item = _make_episode(series_id=None)
+        candidate = adapt_missing(item, instance)
+
+        assert candidate.item_id == 501
+        assert candidate.unreleased_reason == "no series linked"
+
+    def test_season_zero_with_valid_series_id_dispatched(self):
+        """Season-0 specials with a valid series_id must not be skipped."""
+        instance = _make_instance()
+        item = _make_episode(series_id=70, season_number=0)
+        candidate = adapt_missing(item, instance)
+
+        assert candidate.unreleased_reason is None
+        assert candidate.search_payload["command"] == "EpisodeSearch"
+
+    def test_null_series_id_already_unreleased_preserves_original_reason(self):
+        """When an orphan record is also unreleased, the release-timing reason wins."""
+        instance = _make_instance(post_release_grace_hrs=24)
+        recent = _OLD_RELEASE.replace(year=2099)  # far future
+        item = _make_episode(series_id=None, release_date=recent)
+        candidate = adapt_missing(item, instance)
+
+        assert candidate.unreleased_reason == "not yet released"
+
     def test_basic_fields(self):
         instance = _make_instance()
         item = _make_episode()
@@ -243,15 +270,18 @@ class TestAdaptMissingSeasonContext:
             "season_number": 3,
         }
 
-    def test_null_series_id_falls_back(self):
-        """When series_id is None, falls back to episode-mode behavior."""
+    def test_null_series_id_skipped(self):
+        """When series_id is None, the candidate is marked as non-searchable."""
         instance = _make_instance(whisparr_search_mode=WhisparrSearchMode.season_context)
         item = _make_episode(series_id=None)
         candidate = adapt_missing(item, instance)
 
+        # Falls back to episode mode (no season-context without series_id)
         assert candidate.item_id == 501  # episode_id
         assert candidate.group_key is None
         assert candidate.search_payload["command"] == "EpisodeSearch"
+        # Orphan guard: search loop will skip this instead of dispatching
+        assert candidate.unreleased_reason == "no series linked"
 
     def test_season_zero_falls_back(self):
         """Season 0 falls back to episode-mode behavior."""
@@ -313,6 +343,25 @@ class TestAdaptCutoff:
         item = _make_episode(release_date=recent)
         candidate = adapt_cutoff(item, instance)
         assert candidate.unreleased_reason == "post-release grace (24h)"
+
+    def test_null_series_id_skipped(self):
+        """Orphan cutoff records (series_id=None) must be marked as non-searchable."""
+        instance = _make_instance()
+        item = _make_episode(series_id=None)
+        candidate = adapt_cutoff(item, instance)
+
+        assert candidate.item_id == 501
+        assert candidate.search_payload["command"] == "EpisodeSearch"
+        assert candidate.unreleased_reason == "no series linked"
+
+    def test_season_zero_with_valid_series_id_dispatched(self):
+        """Cutoff pass: season-0 specials with valid series_id must not be skipped."""
+        instance = _make_instance()
+        item = _make_episode(series_id=70, season_number=0)
+        candidate = adapt_cutoff(item, instance)
+
+        assert candidate.unreleased_reason is None
+        assert candidate.search_payload["command"] == "EpisodeSearch"
 
 
 # ---------------------------------------------------------------------------

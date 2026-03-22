@@ -116,6 +116,14 @@ def adapt_missing(item: MissingWhisparrEpisode, instance: Instance) -> SearchCan
         item.release_date, instance.post_release_grace_hrs
     )
 
+    # Episodes without any series linkage (series_id is None means both
+    # seriesId and series.id were absent from the API response) are orphan
+    # records that Whisparr cannot reliably search. Skip them so the pipeline
+    # logs a clean "skipped" row instead of a dispatch-then-fail "error" row.
+    # Season-0 specials with a valid series_id are unaffected.
+    if item.series_id is None and unreleased_reason is None:
+        unreleased_reason = "no series linked"
+
     return SearchCandidate(
         item_id=item_id,
         item_type="whisparr_episode",
@@ -141,6 +149,10 @@ def adapt_cutoff(item: MissingWhisparrEpisode, instance: Instance) -> SearchCand
     unreleased_reason = _whisparr_unreleased_reason(
         item.release_date, instance.post_release_grace_hrs
     )
+
+    # Same orphan guard as adapt_missing: skip records with no series linkage.
+    if item.series_id is None and unreleased_reason is None:
+        unreleased_reason = "no series linked"
 
     return SearchCandidate(
         item_id=item.episode_id,

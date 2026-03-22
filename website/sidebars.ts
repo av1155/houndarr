@@ -32,6 +32,7 @@ const sidebars: SidebarsConfig = {
         'concepts/how-houndarr-works',
         'concepts/troubleshooting',
         'concepts/faq',
+        'concepts/test-coverage',
       ],
     },
     {

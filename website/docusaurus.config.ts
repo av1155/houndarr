@@ -102,6 +102,10 @@ const config: Config = {
               label: 'How Houndarr Works',
               to: '/docs/concepts/how-houndarr-works',
             },
+            {
+              label: 'Test Coverage',
+              to: '/docs/concepts/test-coverage',
+            },
           ],
         },
         {

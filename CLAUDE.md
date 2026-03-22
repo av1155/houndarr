@@ -57,7 +57,7 @@ security and container checks.
 ## Running Tests
 
 ```bash
-# Full suite (710 tests, async; count includes parametrised expansions)
+# Full suite (949 tests, async; count includes parametrised expansions)
 .venv/bin/pytest
 
 # Single file

@@ -9,8 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- Instance URLs now accept hostnames containing underscores (e.g. `http://radarr_hd:7878`); hyphens and dots were already supported, but underscores were previously rejected as invalid (#285).
-- Whisparr records with no series linkage, which previously caused repeated search errors labeled `Unknown Series - S00` in the logs, are now skipped cleanly with reason `no series linked` (#286).
+- Instance URLs now accept underscores in hostnames alongside hyphens and dots (e.g. `http://radarr_hd:7878`); underscore-named containers were previously rejected as invalid (#285).
+- Whisparr records with no series linkage, which previously caused repeated search errors labeled `Unknown Series - S00` in the logs, are now skipped instead of producing a failed search entry (#286).
 
 ---
 

@@ -33,10 +33,15 @@ _ALLOWED_SCHEMES = frozenset(["http", "https"])
 # names or FQDNs instead.
 _BLOCKED_HOSTNAMES: frozenset[str] = frozenset(["localhost"])
 
-# Valid hostname pattern (RFC 1123 relaxed)
+# Valid hostname pattern: RFC 1123 relaxed to allow underscores in label
+# interiors so that Docker container names (e.g. radarr_hd) work without
+# relaxing the start/end alphanumeric anchors or the SSRF IP checks.
+# Consecutive separators (e.g. radarr__hd) are permitted; Docker itself
+# allows them (Moby: ^[a-zA-Z0-9][a-zA-Z0-9_.-]+$). Dots are treated as
+# DNS label separators, not ordinary name characters.
 _HOSTNAME_PATTERN = re.compile(
-    r"^(?:[a-zA-Z0-9](?:[a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?\.)*"
-    r"[a-zA-Z0-9](?:[a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?$"
+    r"^(?:[a-zA-Z0-9](?:[a-zA-Z0-9_\-]{0,61}[a-zA-Z0-9])?\.)*"
+    r"[a-zA-Z0-9](?:[a-zA-Z0-9_\-]{0,61}[a-zA-Z0-9])?$"
 )
 
 

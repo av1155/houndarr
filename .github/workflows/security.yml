@@ -43,7 +43,19 @@ jobs:
           pip install pip-audit
 
       - name: Run dependency audit
-        run: pip-audit -r requirements.txt -r requirements-dev.txt
+        env:
+          # Space-separated CVE IDs with no upstream fix available yet.
+          # Remove entries as fix versions are released.
+          # Leave blank when no ignores are needed.
+          # CVE-2026-4539: pygments (transitive via pytest/rich), no fix version
+          PIP_AUDIT_IGNORE: "CVE-2026-4539"
+        shell: bash
+        run: |
+          args=(pip-audit -r requirements.txt -r requirements-dev.txt)
+          for cve in $PIP_AUDIT_IGNORE; do
+            args+=(--ignore-vuln "$cve")
+          done
+          "${args[@]}"
 
   sast:
     name: SAST (bandit)

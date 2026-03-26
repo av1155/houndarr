@@ -86,19 +86,26 @@ header is ignored entirely, preventing IP spoofing.
 
 ## SSO proxy authentication
 
-If you run Houndarr behind an SSO reverse proxy (Authelia, Authentik,
-oauth2-proxy, Traefik ForwardAuth), you can configure Houndarr to accept
-the authenticated username from a proxy-supplied HTTP header instead of
-managing its own login sessions. This eliminates the double-login that would
-otherwise occur.
+If you use an identity provider like Authentik, Authelia, or oauth2-proxy,
+you can configure Houndarr to accept the authenticated username from a
+proxy-supplied HTTP header instead of managing its own login sessions. This
+eliminates the double-login that would otherwise occur.
+
+Your identity provider does **not** need to act as the reverse proxy itself.
+Most IdPs support a **forward auth** mode: your existing reverse proxy
+(Traefik, Nginx, Caddy) stays in place and checks each request with the
+IdP before forwarding it to Houndarr. The IdP handles the OIDC/SSO login
+flow and injects a header with the authenticated username.
 
 ### How it works
 
-In proxy auth mode, Houndarr does not show a login page. The proxy
-authenticates the user and sets a header with the username before forwarding
-the request. Houndarr reads the username from that header, but only after
-verifying the request originates from a trusted proxy IP. Requests that
-bypass the proxy get `403 Forbidden`.
+1. A request arrives at your reverse proxy (e.g. Traefik).
+2. The proxy asks your IdP (e.g. Authentik) whether the user is authenticated.
+3. If not, the IdP redirects the user to its login page (OIDC, SAML, etc.).
+4. Once authenticated, the IdP tells the proxy to forward the request with
+   a header containing the username (e.g. `X-authentik-username`).
+5. Houndarr reads that header, but only after verifying the request comes
+   from a trusted proxy IP. Requests that bypass the proxy get `403 Forbidden`.
 
 ### Required configuration
 
@@ -136,14 +143,54 @@ services:
       - HOUNDARR_SECURE_COOKIES=true
 ```
 
-### Example: Authentik
+### Example: Authentik with Traefik (forward auth)
 
-Authentik's proxy provider sets `X-authentik-username`.
+This is the most common setup for users who run Traefik as their reverse
+proxy and Authentik as their identity provider. Authentik does not need to
+be the reverse proxy; Traefik stays in front and delegates authentication
+to Authentik via forward auth.
+
+**Step 1: Create a Proxy Provider in Authentik.**
+In the Authentik admin panel, go to **Applications > Providers > Create**
+and choose **Proxy Provider**. Set the mode to **Forward auth (single
+application)**. Set the **External host** to `https://houndarr.example.com`
+(your Houndarr URL). Create an **Application** and assign this provider to it.
+
+**Step 2: Configure the Traefik ForwardAuth middleware.**
+This middleware tells Traefik to check each request with the Authentik
+outpost before forwarding it. Replace `authentik-proxy` with your Authentik
+outpost container name, and `houndarr.example.com` with your domain.
+
+**Step 3: Apply the middleware to Houndarr and configure Houndarr's env vars.**
 
 ```yaml
 services:
+  authentik-proxy:
+    image: ghcr.io/goauthentik/proxy
+    environment:
+      AUTHENTIK_HOST: https://authentik.example.com
+      AUTHENTIK_TOKEN: <token-generated-by-authentik>
+    labels:
+      traefik.enable: "true"
+      traefik.port: 9000
+      traefik.http.routers.authentik.rule: >-
+        Host(`houndarr.example.com`) && PathPrefix(`/outpost.goauthentik.io/`)
+      traefik.http.middlewares.authentik.forwardauth.address: >-
+        http://authentik-proxy:9000/outpost.goauthentik.io/auth/traefik
+      traefik.http.middlewares.authentik.forwardauth.trustForwardHeader: "true"
+      traefik.http.middlewares.authentik.forwardauth.authResponseHeaders: >-
+        X-authentik-username,X-authentik-groups,X-authentik-email
+    restart: unless-stopped
+
   houndarr:
     image: ghcr.io/av1155/houndarr:latest
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.houndarr.rule: Host(`houndarr.example.com`)
+      traefik.http.routers.houndarr.entrypoints: websecure
+      traefik.http.routers.houndarr.tls.certresolver: letsencrypt
+      traefik.http.routers.houndarr.middlewares: authentik@docker
+      traefik.http.services.houndarr.loadbalancer.server.port: 8877
     environment:
       - HOUNDARR_AUTH_MODE=proxy
       - HOUNDARR_AUTH_PROXY_HEADER=X-authentik-username
@@ -151,9 +198,41 @@ services:
       - HOUNDARR_SECURE_COOKIES=true
 ```
 
+The `authentik@docker` middleware reference on the Houndarr router tells
+Traefik to run the forward auth check before forwarding each request.
+Authentik handles the OIDC login flow; once authenticated, it injects
+`X-authentik-username` into the forwarded request, and Houndarr reads it.
+
+For more details on Authentik's forward auth configuration, see the
+[Authentik Traefik docs](https://docs.goauthentik.io/add-secure-apps/providers/proxy/server_traefik/).
+
+### Example: Authelia with Traefik
+
+Authelia uses `Remote-User` as its default header. The forward auth
+middleware pattern is similar to Authentik. See the
+[Authelia Traefik integration docs](https://www.authelia.com/integration/proxies/traefik/)
+for the middleware configuration.
+
+```yaml
+services:
+  houndarr:
+    image: ghcr.io/av1155/houndarr:latest
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.houndarr.rule: Host(`houndarr.example.com`)
+      traefik.http.routers.houndarr.middlewares: authelia@docker
+      traefik.http.services.houndarr.loadbalancer.server.port: 8877
+    environment:
+      - HOUNDARR_AUTH_MODE=proxy
+      - HOUNDARR_AUTH_PROXY_HEADER=Remote-User
+      - HOUNDARR_TRUSTED_PROXIES=172.18.0.0/16
+      - HOUNDARR_SECURE_COOKIES=true
+```
+
 ### Example: oauth2-proxy
 
-oauth2-proxy sets `X-Auth-Request-User`.
+oauth2-proxy sets `X-Auth-Request-User`. Configure it as a Traefik
+ForwardAuth middleware the same way, pointing at your oauth2-proxy instance.
 
 ```yaml
 services:
@@ -166,9 +245,11 @@ services:
       - HOUNDARR_SECURE_COOKIES=true
 ```
 
-### Example: Traefik ForwardAuth
+### Example: Nginx with any IdP
 
-Traefik ForwardAuth typically sets `X-Forwarded-User`.
+If you use Nginx instead of Traefik, configure `auth_request` to call your
+IdP's forward auth endpoint and pass the authenticated header to Houndarr.
+Set `HOUNDARR_AUTH_PROXY_HEADER` to whichever header your IdP injects.
 
 ```yaml
 services:

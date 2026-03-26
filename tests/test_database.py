@@ -575,6 +575,108 @@ async def test_init_db_migrates_v6_schema_to_v7(tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio()
+async def test_init_db_self_heals_v9_columns_when_version_already_current(
+    tmp_path: Path,
+) -> None:
+    """init_db should add missing v9 columns even when schema_version is already 9.
+
+    Regression test for a scenario where the version was bumped to 9 but the
+    ALTER TABLE statements did not persist (e.g. interrupted WAL checkpoint
+    or hot-reload race during development).
+    """
+    db_path = tmp_path / "corrupted-v9.db"
+
+    # Build a schema-8-shaped table but stamp version as 9 to simulate
+    # the corrupted state.
+    async with aiosqlite.connect(str(db_path)) as conn:
+        await conn.executescript(
+            """
+            CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+            INSERT INTO settings (key, value) VALUES ('schema_version', '9');
+
+            CREATE TABLE instances (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                type TEXT NOT NULL CHECK(type IN (
+                    'sonarr','radarr','lidarr','readarr','whisparr'
+                )),
+                url TEXT NOT NULL,
+                encrypted_api_key TEXT NOT NULL DEFAULT '',
+                batch_size INTEGER NOT NULL DEFAULT 2,
+                sleep_interval_mins INTEGER NOT NULL DEFAULT 30,
+                hourly_cap INTEGER NOT NULL DEFAULT 4,
+                cooldown_days INTEGER NOT NULL DEFAULT 14,
+                post_release_grace_hrs INTEGER NOT NULL DEFAULT 6,
+                queue_limit INTEGER NOT NULL DEFAULT 0,
+                cutoff_enabled INTEGER NOT NULL DEFAULT 0,
+                cutoff_batch_size INTEGER NOT NULL DEFAULT 1,
+                cutoff_cooldown_days INTEGER NOT NULL DEFAULT 21,
+                cutoff_hourly_cap INTEGER NOT NULL DEFAULT 1,
+                sonarr_search_mode TEXT NOT NULL DEFAULT 'episode',
+                lidarr_search_mode TEXT NOT NULL DEFAULT 'album',
+                readarr_search_mode TEXT NOT NULL DEFAULT 'book',
+                whisparr_search_mode TEXT NOT NULL DEFAULT 'episode',
+                upgrade_enabled INTEGER NOT NULL DEFAULT 0,
+                upgrade_batch_size INTEGER NOT NULL DEFAULT 5,
+                upgrade_cooldown_days INTEGER NOT NULL DEFAULT 30,
+                upgrade_hourly_cap INTEGER NOT NULL DEFAULT 2,
+                upgrade_sonarr_search_mode TEXT NOT NULL DEFAULT 'episode',
+                upgrade_lidarr_search_mode TEXT NOT NULL DEFAULT 'album',
+                upgrade_readarr_search_mode TEXT NOT NULL DEFAULT 'book',
+                upgrade_whisparr_search_mode TEXT NOT NULL DEFAULT 'episode',
+                upgrade_item_offset INTEGER NOT NULL DEFAULT 0,
+                upgrade_series_offset INTEGER NOT NULL DEFAULT 0,
+                enabled INTEGER NOT NULL DEFAULT 1,
+                created_at TEXT NOT NULL DEFAULT '2024-01-01T00:00:00.000Z',
+                updated_at TEXT NOT NULL DEFAULT '2024-01-01T00:00:00.000Z'
+            );
+
+            CREATE TABLE cooldowns (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                instance_id INTEGER NOT NULL
+                    REFERENCES instances(id) ON DELETE CASCADE,
+                item_id INTEGER NOT NULL,
+                item_type TEXT NOT NULL CHECK(item_type IN (
+                    'episode','movie','album','book','whisparr_episode'
+                )),
+                searched_at TEXT NOT NULL,
+                UNIQUE(instance_id, item_id, item_type)
+            );
+
+            CREATE TABLE search_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                instance_id INTEGER
+                    REFERENCES instances(id) ON DELETE SET NULL,
+                item_id INTEGER,
+                item_type TEXT CHECK(item_type IN (
+                    'episode','movie','album','book','whisparr_episode'
+                )),
+                search_kind TEXT,
+                cycle_id TEXT,
+                cycle_trigger TEXT,
+                item_label TEXT,
+                action TEXT NOT NULL,
+                reason TEXT,
+                message TEXT,
+                timestamp TEXT NOT NULL DEFAULT '2024-01-01T00:00:00.000Z'
+            );
+            """
+        )
+        await conn.commit()
+
+    set_db_path(str(db_path))
+    await init_db()
+
+    assert await get_setting("schema_version") == "9"
+
+    async with get_db() as conn:
+        async with conn.execute("PRAGMA table_info(instances)") as cur:
+            instance_columns = {row[1] async for row in cur}
+        assert "missing_page_offset" in instance_columns
+        assert "cutoff_page_offset" in instance_columns
+
+
+@pytest.mark.asyncio()
 async def test_set_and_get_setting(db: None) -> None:
     """set_setting / get_setting round-trip."""
     await set_setting("test_key", "hello")

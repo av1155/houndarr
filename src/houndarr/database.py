@@ -161,6 +161,12 @@ async def init_db() -> None:
             current = int(row["value"])
             if current < SCHEMA_VERSION:
                 await _run_migrations(db, current)
+            # Self-heal: re-apply the latest idempotent migration so that
+            # a corrupted state (version bumped but columns missing) is
+            # repaired automatically.  Each guard inside the migration
+            # checks _column_exists first, so this is a no-op on a
+            # healthy database.
+            await _migrate_to_v9(db)
             await _ensure_v3_indexes(db)
             await db.commit()
 

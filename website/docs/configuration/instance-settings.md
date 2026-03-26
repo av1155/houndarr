@@ -206,6 +206,8 @@ Per-app strategy for upgrade-pass search commands. Each app type (Sonarr, Lidarr
 
 The upgrade pass uses a persistent offset to rotate through your library over time rather than always starting from the beginning. This ensures fair coverage across your entire library. Offsets reset to zero when upgrade search is toggled off.
 
+The missing and cutoff passes also use page-based rotation. Each pass remembers which API page it reached and starts from there on the next cycle. This prevents items further down the list from being starved when earlier items are all on cooldown. Offsets reset to page 1 when you save instance settings.
+
 ## Queue backpressure
 
 When `Queue Limit` is set above zero, Houndarr checks the instance's download

@@ -207,7 +207,8 @@ async def _run_search_pass(  # noqa: C901
     scan_budget: int,
     cycle_id: str,
     cycle_trigger: CycleTrigger,
-) -> int:
+    start_page: int = 1,
+) -> tuple[int, int]:
     """Execute a single search pass (missing or cutoff) using the adapter.
 
     This is the unified pipeline that replaces the previously duplicated
@@ -232,13 +233,15 @@ async def _run_search_pass(  # noqa: C901
         scan_budget: Maximum candidates to evaluate before stopping.
         cycle_id: Shared cycle identifier for all log rows.
         cycle_trigger: How this cycle was initiated.
+        start_page: 1-based page number to begin fetching from (for
+            offset rotation across cycles).
 
     Returns:
-        Count of items searched in this pass.
+        Tuple of (items_searched, next_start_page).
     """
     target = max(0, batch_size)
     if target == 0:
-        return 0
+        return 0, start_page
 
     is_cutoff = search_kind == "cutoff"
     log_prefix = "cutoff " if is_cutoff else ""
@@ -248,7 +251,8 @@ async def _run_search_pass(  # noqa: C901
     seen_group_keys: set[tuple[int, int]] = set()
     searched = 0
     scanned = 0
-    page = 1
+    page = max(1, start_page)
+    wrapped = False
 
     for _ in range(_MAX_LIST_PAGES_PER_PASS):
         if searched >= target or scanned >= scan_budget:
@@ -263,11 +267,20 @@ async def _run_search_pass(  # noqa: C901
             page,
         )
         if not items:
+            # Paged past available data; wrap to page 1 once per pass so
+            # items at the start of the list (which may have come off
+            # cooldown) still get evaluated.
+            if start_page > 1 and not wrapped:
+                page = 1
+                wrapped = True
+                continue
             break
 
         stop_pass = False
+        page_fully_consumed = True
         for item in items:
             if searched >= target or scanned >= scan_budget:
+                page_fully_consumed = False
                 break
 
             candidate = adapt_fn(item, instance)
@@ -469,9 +482,13 @@ async def _run_search_pass(  # noqa: C901
         if stop_pass:
             break
 
-        page += 1
+        # Only advance to the next page if the current one was fully
+        # consumed.  When the batch fills or scan budget is reached
+        # mid-page, the remaining items should be re-evaluated next cycle.
+        if page_fully_consumed:
+            page += 1
 
-    return searched
+    return searched, page
 
 
 # ---------------------------------------------------------------------------
@@ -777,7 +794,7 @@ async def run_instance_search(
     missing_target = max(0, instance.batch_size)
     if missing_target > 0:
         async with client:
-            searched += await _run_search_pass(
+            missing_searched, next_missing_page = await _run_search_pass(
                 instance,
                 adapter,
                 adapt_fn=adapter.adapt_missing,
@@ -791,7 +808,17 @@ async def run_instance_search(
                 scan_budget=_missing_scan_budget(missing_target),
                 cycle_id=cycle_id_value,
                 cycle_trigger=cycle_trigger,
+                start_page=instance.missing_page_offset,
             )
+        searched += missing_searched
+        try:
+            await update_instance(
+                instance.id,
+                master_key=master_key,
+                missing_page_offset=next_missing_page,
+            )
+        except Exception:  # noqa: BLE001
+            logger.warning("[%s] failed to persist missing_page_offset", instance.name)
 
     logger.info("[%s] cycle complete: %d searched", instance.name, searched)
 
@@ -806,7 +833,7 @@ async def run_instance_search(
             )
             cutoff_client = adapter.make_client(instance)
             async with cutoff_client:
-                cutoff_searched = await _run_search_pass(
+                cutoff_searched, next_cutoff_page = await _run_search_pass(
                     instance,
                     adapter,
                     adapt_fn=adapter.adapt_cutoff,
@@ -820,8 +847,17 @@ async def run_instance_search(
                     scan_budget=_cutoff_scan_budget(cutoff_target),
                     cycle_id=cycle_id_value,
                     cycle_trigger=cycle_trigger,
+                    start_page=instance.cutoff_page_offset,
                 )
             logger.info("[%s] cutoff pass complete: %d searched", instance.name, cutoff_searched)
+            try:
+                await update_instance(
+                    instance.id,
+                    master_key=master_key,
+                    cutoff_page_offset=next_cutoff_page,
+                )
+            except Exception:  # noqa: BLE001
+                logger.warning("[%s] failed to persist cutoff_page_offset", instance.name)
             searched += cutoff_searched
 
     # --- Upgrade pass ---

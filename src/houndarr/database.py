@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Schema version: bump when adding new migrations
 # ---------------------------------------------------------------------------
-SCHEMA_VERSION = 8
+SCHEMA_VERSION = 9
 
 # ---------------------------------------------------------------------------
 # DDL
@@ -66,6 +66,8 @@ CREATE TABLE IF NOT EXISTS instances (
                                       IN ('episode', 'season_context')),
     upgrade_item_offset  INTEGER NOT NULL DEFAULT 0,
     upgrade_series_offset INTEGER NOT NULL DEFAULT 0,
+    missing_page_offset  INTEGER NOT NULL DEFAULT 1,
+    cutoff_page_offset   INTEGER NOT NULL DEFAULT 1,
     enabled              INTEGER NOT NULL DEFAULT 1,
     created_at           TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     updated_at           TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
@@ -179,6 +181,8 @@ async def _run_migrations(db: aiosqlite.Connection, from_version: int) -> None:
         await _migrate_to_v7(db)
     if from_version < 8:
         await _migrate_to_v8(db)
+    if from_version < 9:
+        await _migrate_to_v9(db)
 
     logger.info("Migrated database from schema version %d to %d", from_version, SCHEMA_VERSION)
     await db.execute(
@@ -472,6 +476,18 @@ async def _migrate_to_v8(db: aiosqlite.Connection) -> None:
     if not await _column_exists(db, "instances", "upgrade_series_offset"):
         await db.execute(
             "ALTER TABLE instances ADD COLUMN upgrade_series_offset INTEGER NOT NULL DEFAULT 0"
+        )
+
+
+async def _migrate_to_v9(db: aiosqlite.Connection) -> None:
+    """Add page-offset tracking for missing and cutoff passes."""
+    if not await _column_exists(db, "instances", "missing_page_offset"):
+        await db.execute(
+            "ALTER TABLE instances ADD COLUMN missing_page_offset INTEGER NOT NULL DEFAULT 1"
+        )
+    if not await _column_exists(db, "instances", "cutoff_page_offset"):
+        await db.execute(
+            "ALTER TABLE instances ADD COLUMN cutoff_page_offset INTEGER NOT NULL DEFAULT 1"
         )
 
 

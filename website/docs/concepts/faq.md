@@ -42,7 +42,7 @@ If you set a **Queue Limit** on an instance, Houndarr checks the download queue 
 
 ## "Does Houndarr search my whole library?"
 
-It searches items from `wanted/missing` and `wanted/cutoff`. If upgrade search is enabled, it also re-searches library items that already meet cutoff, rotating through your library over time. Everything else is untouched.
+It searches items from `wanted/missing` and `wanted/cutoff`, rotating through the list over time so every item gets evaluated even if the first pages are on cooldown. If upgrade search is enabled, it also re-searches library items that already meet cutoff, rotating through your library with a separate offset. Everything else is untouched.
 
 ## "Why is Houndarr searching so slowly?"
 

@@ -114,6 +114,8 @@ class Instance:
     upgrade_whisparr_search_mode: WhisparrSearchMode = WhisparrSearchMode.episode
     upgrade_item_offset: int = 0
     upgrade_series_offset: int = 0
+    missing_page_offset: int = 1
+    cutoff_page_offset: int = 1
 
 
 # ---------------------------------------------------------------------------
@@ -156,6 +158,8 @@ def _row_to_instance(row: Any, master_key: bytes) -> Instance:
         upgrade_whisparr_search_mode=WhisparrSearchMode(row["upgrade_whisparr_search_mode"]),
         upgrade_item_offset=row["upgrade_item_offset"],
         upgrade_series_offset=row["upgrade_series_offset"],
+        missing_page_offset=row["missing_page_offset"],
+        cutoff_page_offset=row["cutoff_page_offset"],
     )
 
 
@@ -358,7 +362,8 @@ async def update_instance(
             ``upgrade_cooldown_days``, ``upgrade_hourly_cap``,
             ``upgrade_sonarr_search_mode``, ``upgrade_lidarr_search_mode``,
             ``upgrade_readarr_search_mode``, ``upgrade_whisparr_search_mode``,
-            ``upgrade_item_offset``, ``upgrade_series_offset``.
+            ``upgrade_item_offset``, ``upgrade_series_offset``,
+            ``missing_page_offset``, ``cutoff_page_offset``.
 
     Returns:
         Updated :class:`Instance`, or ``None`` if *id* does not exist.
@@ -394,6 +399,8 @@ async def update_instance(
         "upgrade_whisparr_search_mode": "upgrade_whisparr_search_mode",
         "upgrade_item_offset": "upgrade_item_offset",
         "upgrade_series_offset": "upgrade_series_offset",
+        "missing_page_offset": "missing_page_offset",
+        "cutoff_page_offset": "cutoff_page_offset",
     }
 
     _search_mode_fields = {

@@ -156,6 +156,8 @@ def make_instance(
     upgrade_whisparr_search_mode: WhisparrSearchMode = WhisparrSearchMode.episode,
     upgrade_item_offset: int = 0,
     upgrade_series_offset: int = 0,
+    missing_page_offset: int = 1,
+    cutoff_page_offset: int = 1,
 ) -> Instance:
     """Build an Instance with sensible defaults for testing."""
     resolved_url = url or URL_FOR_TYPE.get(itype, SONARR_URL)
@@ -192,6 +194,8 @@ def make_instance(
         upgrade_whisparr_search_mode=upgrade_whisparr_search_mode,
         upgrade_item_offset=upgrade_item_offset,
         upgrade_series_offset=upgrade_series_offset,
+        missing_page_offset=missing_page_offset,
+        cutoff_page_offset=cutoff_page_offset,
     )
 
 

@@ -714,6 +714,8 @@ async def instance_update(
         lidarr_search_mode=search_modes.lidarr,
         readarr_search_mode=search_modes.readarr,
         whisparr_search_mode=search_modes.whisparr,
+        missing_page_offset=1,
+        cutoff_page_offset=1,
         **upgrade_fields,
     )
     if updated is None:

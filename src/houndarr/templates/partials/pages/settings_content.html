@@ -389,7 +389,7 @@
   </div>
 
   {% if auth_mode != "proxy" %}
-  <section class="mt-8 rounded-xl border border-[#1e2638] bg-[#0e1117] p-4 sm:p-5">
+  <section id="account-section" class="mt-8 rounded-xl border border-[#1e2638] bg-[#0e1117] p-4 sm:p-5">
     <details id="account-settings" {% if account_error or account_success %}open{% endif %}>
       <summary
         class="cursor-pointer list-none flex items-center justify-between rounded-lg px-2 py-2 text-slate-200 hover:bg-[#151b27] focus:outline-none focus:ring-2 focus:ring-brand-400/30"
@@ -421,11 +421,12 @@
           </div>
 
           <form
-            action="/settings/account/password"
-            method="post"
+            hx-post="/settings/account/password"
+            hx-target="#account-section"
+            hx-select="#account-section"
+            hx-swap="outerHTML"
             class="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4"
           >
-            <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
             <div>
               <label class="block text-xs font-medium text-slate-400 mb-1.5" for="current-password"
                 >Current Password</label

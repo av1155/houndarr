@@ -495,3 +495,19 @@ def test_password_change_requires_matching_confirmation(app: TestClient) -> None
     assert resp.status_code == 422
     assert b"New passwords do not match" in resp.content
     assert b'id="account-settings" open' in resp.content
+
+
+def test_password_change_htmx(app: TestClient) -> None:
+    """Password change via HTMX returns success message."""
+    _login(app)
+    resp = app.post(
+        "/settings/account/password",
+        data={
+            "current_password": "ValidPass1!",
+            "new_password": "BetterPass2!",
+            "new_password_confirm": "BetterPass2!",
+        },
+        headers={**csrf_headers(app), "HX-Request": "true"},
+    )
+    assert resp.status_code == 200
+    assert b"Password updated successfully" in resp.content

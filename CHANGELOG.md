@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.4] - 2026-03-31
+
+### Fixed
+
+- Password change form no longer returns a raw 422 error; the form now submits via HTMX, matching every other mutation in the app (#311).
+
+### Changed
+
+- Idle CPU usage reduced significantly by replacing the Python subprocess Docker HEALTHCHECK with `curl`, consolidating `/api/status` from 13 database connections per poll down to 1, caching the setup-complete check and Fernet encryption object, and increasing the dashboard poll interval from 15s to 30s (#312).
+
+---
+
 ## [1.6.3] - 2026-03-26
 
 ### Fixed

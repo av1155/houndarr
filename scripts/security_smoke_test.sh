@@ -275,7 +275,7 @@ if [ -z "$CONTAINER" ]; then
     _warn "CONTAINER is empty; skipping docker exec checks"
 elif ! command -v docker &>/dev/null; then
     _warn "docker not found; skipping container checks"
-elif ! docker inspect "$CONTAINER" &>/dev/null; then
+elif ! docker ps --format '{{.Names}}' 2>/dev/null | grep -qx "$CONTAINER"; then
     _warn "Container '$CONTAINER' not running; skipping container checks"
 else
     # masterkey file permissions must be 600

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import stat
+from functools import lru_cache
 from pathlib import Path
 
 from cryptography.fernet import Fernet, InvalidToken
@@ -56,6 +57,12 @@ def ensure_master_key(data_dir: str | Path) -> bytes:
     return key
 
 
+@lru_cache(maxsize=4)
+def _get_fernet(key: bytes) -> Fernet:
+    """Return a cached Fernet instance for the given *key*."""
+    return Fernet(key)
+
+
 def encrypt(plaintext: str, key: bytes) -> str:
     """Encrypt *plaintext* with the given Fernet *key*.
 
@@ -66,8 +73,7 @@ def encrypt(plaintext: str, key: bytes) -> str:
     Returns:
         A URL-safe base64-encoded ciphertext token (str).
     """
-    f = Fernet(key)
-    return f.encrypt(plaintext.encode()).decode()
+    return _get_fernet(key).encrypt(plaintext.encode()).decode()
 
 
 def decrypt(token: str, key: bytes) -> str:
@@ -85,5 +91,4 @@ def decrypt(token: str, key: bytes) -> str:
         cryptography.fernet.InvalidToken: If the key is wrong or the token
             has been tampered with / expired.
     """
-    f = Fernet(key)
-    return f.decrypt(token.encode()).decode()
+    return _get_fernet(key).decrypt(token.encode()).decode()

@@ -77,6 +77,7 @@ def verify_password(password: str, hashed: str) -> bool:
 # ---------------------------------------------------------------------------
 
 _serializer: URLSafeTimedSerializer | None = None
+_setup_complete: bool | None = None
 
 
 async def _get_serializer() -> URLSafeTimedSerializer:
@@ -221,13 +222,25 @@ async def validate_csrf(request: Request) -> bool:
 
 
 async def is_setup_complete() -> bool:
-    """Return True if the initial password has been set."""
-    return (await get_setting("password_hash")) is not None
+    """Return True if the initial password has been set.
+
+    The result is cached once True because the password_hash setting is
+    monotonic: it transitions from absent to present and is never deleted.
+    """
+    global _setup_complete  # noqa: PLW0603
+    if _setup_complete is True:
+        return True
+    result = (await get_setting("password_hash")) is not None
+    if result:
+        _setup_complete = True
+    return result
 
 
 async def set_password(password: str) -> None:
     """Hash and persist the application password."""
+    global _setup_complete  # noqa: PLW0603
     await set_setting("password_hash", hash_password(password))
+    _setup_complete = True
 
 
 def normalize_username(username: str) -> str:

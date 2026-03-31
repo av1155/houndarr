@@ -220,7 +220,7 @@ No alternative logging libraries (structlog, loguru) are used.
 | `SIM117` | Nested `async with` required by aiosqlite pattern |
 | `S104` | Intentional bind to `0.0.0.0` for self-hosted server |
 | `B008` | FastAPI `Depends()` in function defaults |
-| `S608` + `nosec B608` | Dynamic SQL with explicit column allowlist (3 files) |
+| `S608` + `nosec B608` | Dynamic SQL with explicit column allowlist (4 files) |
 | `BLE001` | Broad exception in background loops (always with logging) |
 | `A002` | Parameter names `type`/`id` shadowing builtins (FastAPI form/function signature convention) |
 | `SLF001` | Test fixtures and `__main__.py` accessing private module state |
@@ -275,7 +275,8 @@ src/houndarr/
 ### Key patterns
 
 - **Database:** SQLite via aiosqlite; schema version 9; `get_db()` async
-  context manager opens a fresh connection per call (WAL mode, FKs enabled)
+  context manager opens a fresh connection per call (FKs enabled per
+  connection; WAL mode set once in `init_db()`)
 - **Config:** `AppSettings` is a plain dataclass (not Pydantic); `get_settings()`
   is a lazy singleton
 - **Encryption:** Master key in `request.app.state.master_key`; passed
@@ -396,8 +397,9 @@ resp = client.delete("/settings/instances/1", headers=csrf_headers(client))
 
 Current CSRF exemptions: `POST /logout`, `/login`, `/setup`.
 
-The `test_settings` fixture resets `_auth._serializer` and
-`_auth._login_attempts` so auth state does not bleed between tests.
+The `test_settings` fixture resets `_auth._serializer`,
+`_auth._setup_complete`, and `_auth._login_attempts` so auth state does
+not bleed between tests.
 
 ---
 
@@ -405,8 +407,9 @@ The `test_settings` fixture resets `_auth._serializer` and
 
 ### Issue-first (required)
 
-Every PR must link a pre-existing issue (`Closes #N`). Create the issue
-first, then the branch and PR.
+Every PR must link a pre-existing issue (`Closes #N`). If an issue already
+exists for the problem being solved (e.g. a user-reported bug), use that
+issue. Only create a new issue when one does not already exist.
 
 **Issue title convention:**
 `type: short imperative description` (lowercase, no period)
@@ -548,7 +551,7 @@ and after). Do not use `## [Unreleased]`.
 ### Scope discipline
 
 1. Investigate and define a tight scope before editing code.
-2. Create a GitHub issue first with clear acceptance criteria.
+2. Link an existing issue, or create one if none exists.
 3. Apply mandatory labels on the issue before starting work.
 4. Create a scoped branch (`type/short-slug`) from `main`.
 5. Implement only issue-scoped changes; avoid mixed concerns.

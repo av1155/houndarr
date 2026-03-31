@@ -61,6 +61,7 @@ def test_settings(tmp_data_dir: str) -> AppSettings:
     import houndarr.auth as _auth
 
     _auth._serializer = None  # noqa: SLF001
+    _auth._setup_complete = None  # noqa: SLF001
     _auth._login_attempts.clear()  # noqa: SLF001
     return settings
 

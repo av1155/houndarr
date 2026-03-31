@@ -126,10 +126,9 @@ def get_db_path() -> str:
 
 @asynccontextmanager
 async def get_db() -> AsyncGenerator[aiosqlite.Connection, None]:
-    """Yield a database connection with WAL mode and foreign keys enabled."""
+    """Yield a database connection with foreign keys enabled."""
     async with aiosqlite.connect(_db_path) as db:
         db.row_factory = aiosqlite.Row
-        await db.execute("PRAGMA journal_mode=WAL")
         await db.execute("PRAGMA foreign_keys=ON")
         yield db
 
@@ -142,6 +141,10 @@ async def get_db() -> AsyncGenerator[aiosqlite.Connection, None]:
 async def init_db() -> None:
     """Create tables and run migrations if needed."""
     async with get_db() as db:
+        # WAL mode is a database-level setting that persists on the file.
+        # Set it once here rather than on every connection.
+        await db.execute("PRAGMA journal_mode=WAL")
+
         # Create all tables
         await db.executescript(_SCHEMA_SQL)
 

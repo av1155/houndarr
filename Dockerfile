@@ -28,7 +28,7 @@ WORKDIR /app
 # hadolint ignore=DL3008,DL3009
 RUN apt-get update \
     && apt-get upgrade -y \
-    && apt-get install -y --no-install-recommends gosu \
+    && apt-get install -y --no-install-recommends gosu curl \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Python dependencies before copying source (better layer caching)
@@ -58,8 +58,8 @@ EXPOSE 8877
 VOLUME ["/data"]
 
 # Health check: poll the unauthenticated /api/health endpoint
-HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
-    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8877/api/health')" || exit 1
+HEALTHCHECK --interval=60s --timeout=10s --start-period=10s --retries=3 \
+    CMD curl --fail --silent http://localhost:8877/api/health || exit 1
 
 ENTRYPOINT ["/entrypoint.sh"]
 CMD ["python", "-m", "houndarr", "--data-dir", "/data"]

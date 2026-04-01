@@ -57,37 +57,30 @@ which category this falls into:
 
 **B. Not a Houndarr bug** (upstream *arr issue, user misconfiguration,
 environment problem, Docker/OS issue):
-- Draft a reply explaining what you found, with evidence (code traces,
+- Reply explaining what you found, with evidence (code traces,
   payload verification, upstream source references).
 - Include actionable steps the reporter can take (curl test, version
   upgrade, upstream issue link, config change).
-- Recommend one of these actions and present them as options:
-  1. Reply with findings and add `waiting-for-reporter` label
-  2. Reply and close as not-a-bug
-  3. Reply and redirect to the upstream project's issue tracker
-- Wait for my choice before taking action.
+- Add the `waiting-for-reporter` label.
 
 **C. Out of scope** (feature request for download clients, indexer
 management, multi-user, media file manipulation, or anything outside
 Houndarr's single-purpose scope):
-- Explain why it is out of scope, referencing the scope guard.
-- Recommend: close with explanation, or suggest an alternative tool.
-- Wait for my choice.
+- Reply explaining why it is out of scope, referencing the scope guard.
+- Close the issue.
 
 **D. Insufficient information** (cannot reproduce, missing logs,
 unclear steps):
-- Draft a reply asking for specific information needed.
-- Recommend: reply and add `waiting-for-reporter` label.
-- Wait for my choice.
+- Reply asking for the specific information needed.
+- Add the `waiting-for-reporter` label.
 
 **E. Duplicate** (same root cause as an existing open issue):
-- Identify the original issue.
-- Recommend: close as duplicate linking the original, or merge context.
-- Wait for my choice.
+- Reply linking the original issue.
+- Close as duplicate.
 
-If the triage result is B, C, D, or E: stop here. Do not create a
-branch or write code. Execute the chosen action (reply, label, close)
-and you are done.
+If the triage result is B, C, D, or E: execute the actions above
+immediately. Do not create a branch or write code. Stop after
+completing the triage action.
 
 If the triage result is A: continue.
 
@@ -198,44 +191,11 @@ Push and create the PR:
 
 ```
 git push -u origin HEAD
-gh pr create --title "type(scope): description" --body "$(cat <<'EOF'
-## Summary
-
-Brief description of what changed and why.
-
-Closes #N
-
-## Changes
-
-- First change
-- Second change
-
-## Testing
-
-All checks pass.
-
-## Type of Change
-
-- [ ] Bug fix (`fix:`)
-- [ ] New feature (`feat:`)
-- [ ] Refactoring (`refactor:`)
-- [ ] Documentation (`docs:`)
-- [ ] CI/CD (`ci:`)
-- [ ] Chore (`chore:`)
-
-## Checklist
-
-- [ ] Issue exists and is linked above
-- [ ] Linked issue has type:* and priority:* labels
-- [ ] Branch name matches issue scope
-- [ ] Tests added/updated
-- [ ] Type check passes
-- [ ] Lint passes
-- [ ] Format passes
-- [ ] No secrets committed
-- [ ] Scope check: helps search for missing or cutoff-unmet media
-EOF
-)"
+gh pr create --title "type(scope): description" --body "<filled-in template>"
 ```
 
-Check the applicable items. Leave inapplicable items unchecked.
+Use the PR template at `.github/pull_request_template.md` as the
+structure for the body. Fill in each section, replace HTML comments
+with actual content, link the issue with `Closes #N`, check the
+correct Type of Change box, and check only the Checklist items that
+actually apply.

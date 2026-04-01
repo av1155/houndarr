@@ -48,15 +48,56 @@ Enter plan mode. Do not write code yet.
 - If the problem involves an upstream *arr API: check the vendored
   OpenAPI specs in `docs/api/` first.
 
-### 2b. Assess scope
+### 2b. Triage: is this ours to fix?
 
-- Is this fix within Houndarr's scope? (Search for missing/cutoff/
-  upgrade media in a controlled way.) If not, stop and say so.
+Not every issue needs a code change. After investigating, determine
+which category this falls into:
+
+**A. Bug in Houndarr** — proceed to 2c.
+
+**B. Not a Houndarr bug** (upstream *arr issue, user misconfiguration,
+environment problem, Docker/OS issue):
+- Draft a reply explaining what you found, with evidence (code traces,
+  payload verification, upstream source references).
+- Include actionable steps the reporter can take (curl test, version
+  upgrade, upstream issue link, config change).
+- Recommend one of these actions and present them as options:
+  1. Reply with findings and add `waiting-for-reporter` label
+  2. Reply and close as not-a-bug
+  3. Reply and redirect to the upstream project's issue tracker
+- Wait for my choice before taking action.
+
+**C. Out of scope** (feature request for download clients, indexer
+management, multi-user, media file manipulation, or anything outside
+Houndarr's single-purpose scope):
+- Explain why it is out of scope, referencing the scope guard.
+- Recommend: close with explanation, or suggest an alternative tool.
+- Wait for my choice.
+
+**D. Insufficient information** (cannot reproduce, missing logs,
+unclear steps):
+- Draft a reply asking for specific information needed.
+- Recommend: reply and add `waiting-for-reporter` label.
+- Wait for my choice.
+
+**E. Duplicate** (same root cause as an existing open issue):
+- Identify the original issue.
+- Recommend: close as duplicate linking the original, or merge context.
+- Wait for my choice.
+
+If the triage result is B, C, D, or E: stop here. Do not create a
+branch or write code. Execute the chosen action (reply, label, close)
+and you are done.
+
+If the triage result is A: continue.
+
+### 2c. Assess scope
+
 - What is the minimal change needed?
 - What files will be touched?
 - Are there related areas that could be affected?
 
-### 2c. Identify edge cases and breaking changes
+### 2e. Identify edge cases and breaking changes
 
 Think through every scenario where the fix could go wrong:
 
@@ -72,7 +113,7 @@ Think through every scenario where the fix could go wrong:
 - If touching auth, crypto, or SSRF validation: stop and flag for
   extra review before proceeding.
 
-### 2d. Present the plan
+### 2f. Present the plan
 
 Summarize:
 - What the problem is

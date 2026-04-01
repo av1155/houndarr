@@ -1,70 +1,105 @@
 ---
-description: End-to-end workflow for fixing a GitHub issue
-argument-hint: "<issue-number>"
+description: Turn any input into a shipped PR
+argument-hint: "<issue-number | URL | description>"
 allowed-tools: Read, Write, Edit, MultiEdit, Bash(*), Grep, Glob
 ---
 
-# Fix GitHub Issue
+# Fix: Any Input → Shipped PR
 
-Work through a GitHub issue from start to finish.
+Take any input (issue, URL, alert, plain text) and produce a
+disciplined PR. Adaptive about input, strict about output.
 
-## 1. Read the Issue
+## 1. Parse Input
 
+Detect what `$ARGUMENTS` is:
+
+- **GitHub issue number** (e.g. `322`):
+  ```
+  gh issue view $ARGUMENTS --json title,body,labels,assignees,url
+  ```
+
+- **GitHub issue URL** (contains `/issues/`):
+  Extract the number, then `gh issue view`.
+
+- **GitHub PR URL** (contains `/pull/`):
+  Read the PR as a problem description, not as code to merge.
+  ```
+  gh pr view <number> --json title,body,url
+  ```
+
+- **GitHub discussion URL** (contains `/discussions/`):
+  ```
+  gh api repos/{owner}/{repo}/discussions/<number>
+  ```
+
+- **CodeQL / Dependabot / security alert URL**:
+  Parse the alert type and number from the URL.
+  ```
+  gh api repos/{owner}/{repo}/code-scanning/alerts/<number>
+  gh api repos/{owner}/{repo}/dependabot/alerts/<number>
+  ```
+
+- **Plain text description**: use as-is.
+
+## 2. Summarize and Confirm Scope
+
+Present a concise summary of the problem:
+- What is broken or missing
+- Where the likely code paths are
+- Proposed scope of the fix
+
+Wait for my confirmation before proceeding. Do not start implementation
+until I approve the scope.
+
+## 3. Check for Tracking Issue
+
+If the input was NOT a GitHub issue (discussion, PR, alert, or plain
+text), ask whether to:
+
+- Create a new tracking issue, or
+- Proceed without one
+
+If creating an issue, use the standard format:
 ```
-gh issue view $ARGUMENTS --json title,body,labels,assignees
+gh issue create --title "type: description" \
+  --body "..." \
+  --label "type: bug" --label "priority: medium"
 ```
 
-Understand the problem. Note the issue title prefix (fix:, feat:, etc.)
-to determine the branch type.
-
-## 2. Verify Labels
-
-Confirm the issue has:
-- Exactly one `type:*` label
-- Exactly one `priority:*` label
-
-If labels are missing, add them:
-
-```
-gh issue edit $ARGUMENTS --add-label "type: bug,priority: medium"
-```
-
-## 3. Create Branch
-
-Determine the branch type from the issue title or labels.
-Create a scoped branch from latest main:
+## 4. Create Branch
 
 ```
 git fetch origin
 git checkout -b type/short-slug origin/main
 ```
 
-Use the type from the issue title (fix/, feat/, chore/, docs/, etc.)
-and a short descriptive slug.
+Determine the branch type from the problem:
+- Bug fix → `fix/`
+- New feature → `feat/`
+- Security alert → `fix/` or `security/`
+- Dependency update → `chore/`
 
-## 4. Investigate
+## 5. Investigate
 
-Read the relevant source files to understand the problem.
-Trace the code path from entry point to the issue location.
-Check for existing tests covering the affected area.
+Read the relevant source files. Trace the code path from entry point
+to the affected area. Check for existing tests covering the behavior.
 
-## 5. Implement
+## 6. Implement
 
-Make the minimum change needed. Follow the conventions in AGENTS.md:
+Make the minimum change needed. Follow AGENTS.md conventions:
 - `from __future__ import annotations` as first line
 - Type annotations on all public functions
 - Google-style docstrings
 - Module-level `logger = logging.getLogger(__name__)`
 
-## 6. Add or Update Tests
+## 7. Add or Update Tests
 
-- Bug fix: add a regression test that fails without the fix
+- Bug fix: regression test that fails without the fix
 - New route: auth, CSRF, and happy-path tests at minimum
 - New service function: success, error, and edge case tests
+- Security fix: test that the vulnerability is no longer exploitable
 
-## 7. Run Quality Gates
-
-Run all five gates and fix any failures:
+## 8. Run Quality Gates
 
 ```
 .venv/bin/python -m ruff check src/ tests/
@@ -74,26 +109,31 @@ Run all five gates and fix any failures:
 .venv/bin/pytest
 ```
 
-## 8. Commit
+Fix any failures before proceeding.
 
-Use Conventional Commits format. Reference the issue:
+## 9. Commit
+
+Use Conventional Commits format. Reference the source:
 
 ```
 git add <specific files>
 git commit -m "type(scope): description
 
-Closes #$ARGUMENTS"
+Closes #N"
 ```
+
+If the input was a PR, discussion, or alert (not an issue), reference
+it in the commit body: `Ref: <URL>`.
 
 Subject line max 50 characters. Body wrapped at 72.
 
-## 9. Push and Create PR
+## 10. Push and Create PR
 
 ```
 git push -u origin HEAD
 ```
 
-Then create the PR using the repo's template structure:
+Create the PR linking the original source:
 
 ```
 gh pr create --title "type(scope): description" --body "$(cat <<'EOF'
@@ -101,7 +141,7 @@ gh pr create --title "type(scope): description" --body "$(cat <<'EOF'
 
 Brief description of what changed and why.
 
-Closes #$ARGUMENTS
+Closes #N
 
 ## Changes
 
@@ -114,21 +154,26 @@ All checks pass.
 
 ## Type of Change
 
-- [x] Bug fix (`fix:`)
+- [ ] Bug fix (`fix:`)
+- [ ] New feature (`feat:`)
+- [ ] Refactoring (`refactor:`)
+- [ ] Documentation (`docs:`)
+- [ ] CI/CD (`ci:`)
+- [ ] Chore (`chore:`)
 
 ## Checklist
 
-- [x] Issue exists and is linked above
-- [x] Linked issue has type:* and priority:* labels
-- [x] Branch name matches issue scope
-- [x] Tests added/updated
-- [x] Type check passes
-- [x] Lint passes
-- [x] Format passes
-- [x] No secrets committed
-- [x] Scope check: helps search for missing or cutoff-unmet media
+- [ ] Issue exists and is linked above
+- [ ] Linked issue has type:* and priority:* labels
+- [ ] Branch name matches issue scope
+- [ ] Tests added/updated
+- [ ] Type check passes
+- [ ] Lint passes
+- [ ] Format passes
+- [ ] No secrets committed
+- [ ] Scope check: helps search for missing or cutoff-unmet media
 EOF
 )"
 ```
 
-Adjust the type of change and checklist items to match the actual work.
+Check the applicable items. Leave inapplicable items unchecked.

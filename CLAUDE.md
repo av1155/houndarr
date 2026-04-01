@@ -559,6 +559,15 @@ and after). Do not use `## [Unreleased]`.
 7. Open a scoped PR linking the issue (`Closes #N`).
 8. Merge only after all required checks pass.
 
+### Issue triage labels
+
+When replying to an issue with a question or a request for more information
+(logs, reproduction steps, curl output, etc.), add the `waiting-for-reporter`
+label. A daily workflow (`stale.yml`) marks these issues stale after 4 days
+and closes them after 3 more days of silence. The `unstale.yml` companion
+workflow automatically removes both `stale` and `waiting-for-reporter` when
+someone comments, so reporters get immediate feedback.
+
 ### What not to change casually
 
 - `VERSION` and `CHANGELOG.md`: only in dedicated version bump PRs

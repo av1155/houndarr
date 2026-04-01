@@ -118,7 +118,7 @@ async def create_session(response: Response) -> str:
     cookie_kwargs: dict[str, Any] = {
         "max_age": SESSION_MAX_AGE_SECONDS,
         "httponly": True,
-        "samesite": "strict",
+        "samesite": "lax",
         "secure": settings.secure_cookies,
     }
 

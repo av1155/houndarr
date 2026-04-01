@@ -1,0 +1,155 @@
+{
+    "$schema": "https://json.schemastore.org/claude-code-settings.json",
+    "permissions": {
+        "allow": [
+            "Read",
+            "Write",
+            "Edit",
+            "MultiEdit",
+            "Grep",
+            "Glob",
+            "Bash(.venv/bin/python -m ruff *)",
+            "Bash(.venv/bin/python -m mypy *)",
+            "Bash(.venv/bin/python -m bandit *)",
+            "Bash(.venv/bin/python -m pytest *)",
+            "Bash(.venv/bin/pytest *)",
+            "Bash(git status*)",
+            "Bash(git diff*)",
+            "Bash(git log*)",
+            "Bash(git branch*)",
+            "Bash(git add*)",
+            "Bash(git commit *)",
+            "Bash(git checkout*)",
+            "Bash(git fetch*)",
+            "Bash(gh *)",
+            "Bash(ls *)",
+            "Bash(cat *)",
+            "Bash(head *)",
+            "Bash(tail *)",
+            "Bash(wc *)",
+            "Bash(find *)",
+            "Bash(mkdir *)",
+            "Bash(cp *)",
+            "Bash(mv *)",
+            "Bash(echo *)",
+            "Bash(which *)",
+            "Bash(curl *)",
+            "Bash(grep *)",
+            "Bash(date *)"
+        ],
+        "deny": [
+            "Read(./.env)",
+            "Read(./.env.local)",
+            "Read(./.env.*.local)",
+            "Read(**/.env.local)",
+            "Read(**/.env.*.local)",
+            "Read(./secrets/**)",
+            "Read(**/credentials*)",
+            "Read(**/*.pem)",
+            "Read(~/.ssh/**)",
+            "Read(~/.aws/**)",
+            "Read(~/.gnupg/**)",
+            "Read(~/.docker/config.json)",
+            "Read(~/.npmrc)",
+            "Read(~/.config/gh/**)",
+            "Write(./.env)",
+            "Write(./.env.*)",
+            "Write(./.env.local)",
+            "Bash(sudo *)",
+            "Bash(chmod 777 *)",
+            "Bash(dd *)",
+            "Bash(mkfs *)",
+            "Bash(git push --force*)",
+            "Bash(git push -f*)",
+            "Bash(git push origin main*)",
+            "Bash(git push origin master*)",
+            "Bash(git push origin :*)",
+            "Bash(git reset --hard*)",
+            "Bash(curl *| sh)",
+            "Bash(wget *| sh)",
+            "Bash(twine upload *)",
+            "Bash(pip upload *)"
+        ],
+        "ask": [
+            "Bash(git push *)",
+            "Bash(git merge *)",
+            "Bash(.venv/bin/pip install *)",
+            "Bash(.venv/bin/pip uninstall *)"
+        ]
+    },
+    "hooks": {
+        "PostToolUse": [
+            {
+                "matcher": "Write|Edit|MultiEdit",
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": "FILE_PATHS=\"$CLAUDE_FILE_PATHS\"; for f in $FILE_PATHS; do if [[ \"$f\" =~ \\.py$ ]]; then .venv/bin/python -m ruff format \"$f\" 2>/dev/null; .venv/bin/python -m ruff check --fix \"$f\" 2>/dev/null; fi; done; exit 0"
+                    }
+                ]
+            },
+            {
+                "matcher": "Write|Edit|MultiEdit",
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": "FILE_PATHS=\"$CLAUDE_FILE_PATHS\"; HAS_SRC=false; for f in $FILE_PATHS; do if [[ \"$f\" =~ src/.*\\.py$ ]]; then HAS_SRC=true; break; fi; done; if [ \"$HAS_SRC\" = true ]; then .venv/bin/python -m mypy src/ --no-error-summary 2>&1 | tail -20 || true; fi; exit 0"
+                    }
+                ]
+            }
+        ],
+        "PreToolUse": [
+            {
+                "matcher": "Bash",
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": "CMD=$(cat | jq -r '.tool_input.command // empty'); if echo \"$CMD\" | grep -qE 'rm\\s+-(rf|fr)\\s+/(\\s|\\*|$|;)|rm\\s+-(rf|fr)\\s+\\*|rm\\s+-(rf|fr)\\s+\\.|rm\\s+-(rf|fr)\\s+~'; then echo '❌ BLOCKED: rm -rf with dangerous target. Specify exact paths.' >&2; exit 2; fi; exit 0"
+                    }
+                ]
+            },
+            {
+                "matcher": "Bash",
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": "CMD=$(cat | jq -r '.tool_input.command // empty'); if echo \"$CMD\" | grep -qE 'git\\s+push\\s+(--force|-f)|git\\s+push\\s+origin\\s+(main|master)'; then echo '❌ BLOCKED: Direct push to main or force push. Create a feature branch and PR.' >&2; exit 2; fi; exit 0"
+                    }
+                ]
+            },
+            {
+                "matcher": "Write|Edit|MultiEdit",
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": "[ \"$(git branch --show-current 2>/dev/null)\" != \"main\" ] && exit 0; REPO=\"$(git rev-parse --show-toplevel 2>/dev/null)\"; for f in $CLAUDE_FILE_PATHS; do case \"$f\" in \"$REPO\"/AGENTS.md|\"$REPO\"/CLAUDE.md) continue ;; \"$REPO\"/*) echo '❌ BLOCKED: Cannot edit repo files on main. Allowed: AGENTS.md, CLAUDE.md. Create a feature branch.' >&2; exit 2 ;; esac; done; exit 0",
+                        "timeout": 5
+                    }
+                ]
+            },
+            {
+                "matcher": "Bash",
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": "CMD=$(cat | jq -r '.tool_input.command // empty'); if echo \"$CMD\" | grep -qE '^git commit'; then .venv/bin/python -m ruff format --check src/ tests/ >/dev/null 2>&1 || { echo '❌ BLOCKED: Unformatted files. Run ruff format first.' >&2; exit 2; }; fi; exit 0",
+                        "timeout": 30
+                    }
+                ]
+            }
+        ],
+        "Stop": [
+            {
+                "matcher": "",
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": "STOP_ACTIVE=$(cat | jq -r '.stop_hook_active // false'); if [ \"$STOP_ACTIVE\" = \"true\" ]; then exit 0; fi; RESPONSE=$(cat | jq -r '.assistant_response // empty' | tail -200); if echo \"$RESPONSE\" | grep -qiE 'TODO|FIXME|will implement later|placeholder|stub'; then echo '⚠️ Response contains incomplete markers (TODO/FIXME/placeholder). Consider finishing before stopping.' >&2; exit 2; fi; exit 0"
+                    }
+                ]
+            }
+        ]
+    },
+    "alwaysThinkingEnabled": true,
+    "cleanupPeriodDays": 365
+}

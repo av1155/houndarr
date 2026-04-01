@@ -87,8 +87,10 @@ website/.docusaurus/
 # Research artifacts
 .opencode/
 
-# Claude Code project state (local only — never commit)
-.claude/
+# Claude Code (local state ignored; settings.json and commands/ are tracked)
+.claude/settings.local.json
+.claude/worktrees/
+.claude/.DS_Store
 
 # uv lock file (project uses requirements.txt — uv is a local dev runner)
 uv.lock

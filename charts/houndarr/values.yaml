@@ -25,6 +25,10 @@ pgid: 1000
 env:
   # -- Set HOUNDARR_SECURE_COOKIES=true. Required when serving over HTTPS.
   secureCookies: false
+  # -- SameSite attribute for session and CSRF cookies.
+  # "lax" (default) allows cookies on navigations from dashboard apps.
+  # "strict" withholds cookies on all cross-site requests.
+  cookieSamesite: lax
   # -- Comma-separated list of trusted proxy IPs or CIDR subnets.
   # Sets HOUNDARR_TRUSTED_PROXIES. Required when behind a reverse proxy or Ingress.
   trustedProxies: ""

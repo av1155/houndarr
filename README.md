@@ -118,6 +118,7 @@ should store its database and master key.
 | `HOUNDARR_DEV` | `false` | Enable development mode (auto-reload, API docs) |
 | `HOUNDARR_LOG_LEVEL` | `info` | Log level: `debug`, `info`, `warning`, `error` |
 | `HOUNDARR_SECURE_COOKIES` | `false` | Set `Secure` flag on cookies (enable when behind HTTPS) |
+| `HOUNDARR_COOKIE_SAMESITE` | `lax` | `SameSite` attribute for cookies: `lax` (allows dashboard links) or `strict` |
 | `HOUNDARR_TRUSTED_PROXIES` | _(empty)_ | Comma-separated trusted proxy IPs or CIDR subnets for `X-Forwarded-For` and proxy auth |
 | `HOUNDARR_AUTH_MODE` | `builtin` | Authentication method: `builtin` (default) or `proxy` (delegate to SSO reverse proxy) |
 | `HOUNDARR_AUTH_PROXY_HEADER` | _(empty)_ | Header carrying the authenticated username in proxy mode (e.g. `Remote-User`) |

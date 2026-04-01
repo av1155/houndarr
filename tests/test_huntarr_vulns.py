@@ -450,7 +450,11 @@ class TestCookieSecurityFlags:
     """Session and CSRF cookies must carry the correct security attributes.
 
     HttpOnly prevents JS from reading the session token (XSS mitigation).
-    SameSite=strict blocks cross-origin form submissions (CSRF mitigation).
+    SameSite blocks cross-origin requests (CSRF mitigation layer).  The
+    default is ``lax``, which allows top-level GET navigations from external
+    links (dashboard apps, bookmarks) while blocking cross-site form
+    submissions.  Users may override to ``strict`` via
+    ``HOUNDARR_COOKIE_SAMESITE``.
     The CSRF cookie must NOT be HttpOnly because HTMX reads it from JS to
     include in the X-CSRF-Token request header.
     """
@@ -472,12 +476,12 @@ class TestCookieSecurityFlags:
         assert session is not None, "houndarr_session not found in login Set-Cookie headers"
         assert "httponly" in session.lower()
 
-    def test_session_cookie_has_samesite_strict(self, app: TestClient) -> None:
-        """houndarr_session cookie must have SameSite=strict."""
+    def test_session_cookie_has_samesite_lax(self, app: TestClient) -> None:
+        """houndarr_session cookie must have SameSite=lax (default)."""
         cookies = self._login_response_cookies(app)
         session = next((c for c in cookies if SESSION_COOKIE_NAME in c), None)
         assert session is not None
-        assert "samesite=strict" in session.lower()
+        assert "samesite=lax" in session.lower()
 
     def test_session_cookie_has_24h_max_age(self, app: TestClient) -> None:
         """houndarr_session cookie must expire after SESSION_MAX_AGE_SECONDS (86400 = 24h)."""
@@ -493,12 +497,12 @@ class TestCookieSecurityFlags:
         assert csrf is not None, "houndarr_csrf not found in login Set-Cookie headers"
         assert "httponly" not in csrf.lower()
 
-    def test_csrf_cookie_has_samesite_strict(self, app: TestClient) -> None:
-        """houndarr_csrf cookie must have SameSite=strict."""
+    def test_csrf_cookie_has_samesite_lax(self, app: TestClient) -> None:
+        """houndarr_csrf cookie must have SameSite=lax (default)."""
         cookies = self._login_response_cookies(app)
         csrf = next((c for c in cookies if CSRF_COOKIE_NAME in c), None)
         assert csrf is not None
-        assert "samesite=strict" in csrf.lower()
+        assert "samesite=lax" in csrf.lower()
 
 
 # ---------------------------------------------------------------------------

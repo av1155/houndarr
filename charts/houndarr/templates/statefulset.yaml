@@ -55,6 +55,10 @@ spec:
             - name: HOUNDARR_SECURE_COOKIES
               value: "true"
             {{- end }}
+            {{- if ne .Values.env.cookieSamesite "lax" }}
+            - name: HOUNDARR_COOKIE_SAMESITE
+              value: {{ .Values.env.cookieSamesite | quote }}
+            {{- end }}
             {{- if .Values.env.trustedProxies }}
             - name: HOUNDARR_TRUSTED_PROXIES
               value: {{ .Values.env.trustedProxies | quote }}

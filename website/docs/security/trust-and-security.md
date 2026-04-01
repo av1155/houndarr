@@ -165,11 +165,18 @@ for setup instructions.
 
 | Cookie | HttpOnly | SameSite | Secure | Purpose |
 |--------|----------|----------|--------|---------|
-| `houndarr_session` | Yes | Strict | Configurable | Session authentication (built-in mode only) |
-| `houndarr_csrf` | No | Strict | Configurable | CSRF token for HTMX/JS (both modes) |
+| `houndarr_session` | Yes | Lax (configurable) | Configurable | Session authentication (built-in mode only) |
+| `houndarr_csrf` | No | Lax (configurable) | Configurable | CSRF token for HTMX/JS (both modes) |
 
 The CSRF cookie is intentionally not `HttpOnly` because HTMX needs to read it
 to include the token in request headers.
+
+The `SameSite` attribute defaults to `Lax`, which allows cookies on top-level
+navigations from external links (dashboard apps, bookmarks) while blocking
+cross-site form submissions. This matches the default used by Django, Rails,
+Flask, Laravel, and ASP.NET Core. Set `HOUNDARR_COOKIE_SAMESITE=strict` to
+withhold cookies on all cross-site requests; note that this prevents access
+via links from dashboard apps like Homepage or Homarr.
 
 The `Secure` flag on both cookies is controlled by `HOUNDARR_SECURE_COOKIES`.
 It defaults to `false` because Houndarr serves plain HTTP and expects HTTPS to
@@ -181,8 +188,9 @@ All state-changing requests (POST, PUT, PATCH, DELETE) require a valid CSRF
 token in both auth modes. In built-in mode, the expected token is embedded in
 the HMAC-signed session cookie and cannot be forged without the signing secret.
 In proxy mode, the double-submit cookie pattern is used: a `houndarr_csrf`
-cookie with `SameSite=Strict` is set on authenticated responses and must be
-echoed back in the `X-CSRF-Token` header or `csrf_token` form field.
+cookie with `SameSite=Lax` (configurable) is set on authenticated responses
+and must be echoed back in the `X-CSRF-Token` header or `csrf_token` form
+field.
 
 Token comparison uses `hmac.compare_digest()` in both modes to prevent timing
 attacks.
@@ -366,7 +374,8 @@ The tests and smoke script together cover:
 - API key exposure: no HTTP response includes an `api_key` field or a
   Fernet-encoded token (`gAAAAA` prefix)
 - Cookie flags: session cookie is `HttpOnly`; CSRF cookie is not `HttpOnly`
-  (needed for HTMX); both use `SameSite=Strict` and 24-hour expiry
+  (needed for HTMX); both use `SameSite=Lax` (default, configurable) and
+  24-hour expiry
 - CSRF enforcement: all mutating authenticated routes return 403 without a
   valid token; `hmac.compare_digest()` is verified in the source
 - Rate limiting: 7 rapid failed login attempts trigger HTTP 429

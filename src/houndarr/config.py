@@ -8,6 +8,7 @@ import os
 from dataclasses import dataclass, field
 from ipaddress import IPv4Address, IPv4Network, IPv6Address, IPv6Network
 from pathlib import Path
+from typing import Literal
 
 logger = logging.getLogger(__name__)
 
@@ -93,6 +94,19 @@ def _parse_trusted_proxies(raw: str) -> TrustedProxies:
 _runtime_settings: AppSettings | None = None
 
 
+SameSitePolicy = Literal["lax", "strict"]
+
+_VALID_SAMESITE: frozenset[str] = frozenset({"lax", "strict"})
+
+
+def _parse_samesite(raw: str) -> SameSitePolicy:
+    """Normalise a SameSite env/CLI value, defaulting to ``lax``."""
+    value = raw.strip().lower()
+    if value in _VALID_SAMESITE:
+        return value  # type: ignore[return-value]
+    return "lax"
+
+
 def _parse_bool_env(name: str, default: bool = False) -> bool:
     """Parse a boolean environment variable."""
     raw = os.environ.get(name, "").lower()
@@ -114,6 +128,7 @@ def get_settings() -> AppSettings:
         dev=_parse_bool_env("HOUNDARR_DEV"),
         log_level=os.environ.get("HOUNDARR_LOG_LEVEL", "info").lower(),
         secure_cookies=_parse_bool_env("HOUNDARR_SECURE_COOKIES"),
+        cookie_samesite=_parse_samesite(os.environ.get("HOUNDARR_COOKIE_SAMESITE", "lax")),
         trusted_proxies=os.environ.get("HOUNDARR_TRUSTED_PROXIES", ""),
         auth_mode=os.environ.get("HOUNDARR_AUTH_MODE", "builtin").lower(),
         auth_proxy_header=os.environ.get("HOUNDARR_AUTH_PROXY_HEADER", ""),
@@ -133,6 +148,13 @@ class AppSettings:
         secure_cookies: Set the ``Secure`` flag on session cookies.
             Enable when Houndarr is served over HTTPS via a reverse proxy.
             Corresponds to ``HOUNDARR_SECURE_COOKIES`` env var.
+        cookie_samesite: ``SameSite`` attribute for session and CSRF cookies.
+            ``lax`` (default) allows cookies on top-level navigations from
+            external links (e.g. dashboard apps) while blocking cross-site
+            form submissions.  ``strict`` withholds cookies on all
+            cross-site requests, which prevents access via external links
+            but provides an extra layer of isolation.
+            Corresponds to ``HOUNDARR_COOKIE_SAMESITE`` env var.
         trusted_proxies: Comma-separated list of trusted reverse-proxy IP
             addresses or CIDR subnets (e.g. ``10.1.1.0/24``).  When set,
             ``X-Forwarded-For`` is honoured for client-IP detection (rate
@@ -154,6 +176,7 @@ class AppSettings:
     dev: bool = False
     log_level: str = "info"
     secure_cookies: bool = False
+    cookie_samesite: Literal["lax", "strict"] = "lax"
     trusted_proxies: str = ""
     auth_mode: str = "builtin"
     auth_proxy_header: str = ""
@@ -182,6 +205,10 @@ class AppSettings:
             List of error messages.  Empty means the configuration is valid.
         """
         errors: list[str] = []
+        if self.cookie_samesite not in ("lax", "strict"):
+            errors.append(
+                f"HOUNDARR_COOKIE_SAMESITE must be 'lax' or 'strict', got '{self.cookie_samesite}'"
+            )
         if self.auth_mode not in ("builtin", "proxy"):
             errors.append(
                 f"HOUNDARR_AUTH_MODE must be 'builtin' or 'proxy', got '{self.auth_mode}'"

@@ -123,6 +123,7 @@ The `chartRef` field (instead of `chart.spec.sourceRef`) is what connects a `Hel
 | `puid` | `1000` | UID for compat mode |
 | `pgid` | `1000` | GID for compat mode |
 | `env.secureCookies` | `false` | Set `HOUNDARR_SECURE_COOKIES=true`. Required for HTTPS |
+| `env.cookieSamesite` | `lax` | `HOUNDARR_COOKIE_SAMESITE`: `lax` (allows dashboard links) or `strict` |
 | `env.trustedProxies` | `""` | Comma-separated CIDRs for `HOUNDARR_TRUSTED_PROXIES` |
 | `env.authMode` | `builtin` | `HOUNDARR_AUTH_MODE`: `builtin` or `proxy` |
 | `env.authProxyHeader` | `""` | `HOUNDARR_AUTH_PROXY_HEADER` (e.g., `Remote-User`) |

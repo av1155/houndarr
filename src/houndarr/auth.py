@@ -118,7 +118,7 @@ async def create_session(response: Response) -> str:
     cookie_kwargs: dict[str, Any] = {
         "max_age": SESSION_MAX_AGE_SECONDS,
         "httponly": True,
-        "samesite": "strict",
+        "samesite": settings.cookie_samesite,
         "secure": settings.secure_cookies,
     }
 
@@ -130,7 +130,7 @@ async def create_session(response: Response) -> str:
         value=csrf_token,
         max_age=SESSION_MAX_AGE_SECONDS,
         httponly=False,
-        samesite="strict",
+        samesite=settings.cookie_samesite,
         secure=settings.secure_cookies,
     )
 
@@ -438,7 +438,7 @@ def _ensure_proxy_csrf_cookie(request: Request, response: Response) -> None:
         value=secrets.token_hex(32),
         max_age=SESSION_MAX_AGE_SECONDS,
         httponly=False,
-        samesite="strict",
+        samesite=settings.cookie_samesite,
         secure=settings.secure_cookies,
     )
 

@@ -24,6 +24,7 @@ Houndarr is configured primarily through environment variables set in your
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `HOUNDARR_SECURE_COOKIES` | `false` | Set `Secure` flag on cookies (enable when behind HTTPS) |
+| `HOUNDARR_COOKIE_SAMESITE` | `lax` | `SameSite` attribute for cookies: `lax` (allows dashboard links) or `strict` (blocks all cross-site requests) |
 | `HOUNDARR_TRUSTED_PROXIES` | _(empty)_ | Comma-separated trusted proxy IPs or CIDR subnets (e.g. `10.0.0.1,172.18.0.0/16`); used for `X-Forwarded-For` and proxy auth |
 | `HOUNDARR_AUTH_MODE` | `builtin` | Authentication method: `builtin` (default) or `proxy` (delegate to SSO reverse proxy) |
 | `HOUNDARR_AUTH_PROXY_HEADER` | _(empty)_ | Header carrying the authenticated username in proxy mode (e.g. `Remote-User`, `X-authentik-username`); required when `AUTH_MODE=proxy` |
@@ -80,6 +81,18 @@ HTTPS termination. Without this, session cookies and login credentials are
 transmitted in cleartext on the network.
 
 See [Reverse Proxy](reverse-proxy.md) for the full configuration.
+
+### Cookie SameSite policy
+
+The default `HOUNDARR_COOKIE_SAMESITE=lax` allows session cookies to be sent
+when you click a link to Houndarr from a dashboard app (Homepage, Homarr,
+Organizr) or any external page. Without this, you would be redirected to the
+login page despite having a valid session.
+
+Set `HOUNDARR_COOKIE_SAMESITE=strict` if you prefer the most restrictive
+cookie policy and do not access Houndarr via external links. State-changing
+requests (POST, PUT, PATCH, DELETE) are protected by CSRF token validation
+regardless of this setting.
 
 ### Proxy authentication mode
 

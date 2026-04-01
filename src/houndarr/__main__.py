@@ -56,6 +56,19 @@ from houndarr import __version__
     ),
 )
 @click.option(
+    "--cookie-samesite",
+    default="lax",
+    show_default=True,
+    type=click.Choice(["lax", "strict"], case_sensitive=False),
+    envvar="HOUNDARR_COOKIE_SAMESITE",
+    help=(
+        "SameSite attribute for session and CSRF cookies. "
+        "'lax' (default) allows cookies on top-level navigations from "
+        "external links (e.g. dashboard apps). 'strict' withholds cookies "
+        "on all cross-site requests."
+    ),
+)
+@click.option(
     "--trusted-proxies",
     default="",
     show_default=False,
@@ -98,6 +111,7 @@ def cli(
     dev: bool,
     log_level: str,
     secure_cookies: bool,
+    cookie_samesite: str,
     trusted_proxies: str,
     auth_mode: str,
     auth_proxy_header: str,
@@ -112,7 +126,7 @@ def cli(
 
     import uvicorn
 
-    from houndarr.config import AppSettings
+    from houndarr.config import AppSettings, _parse_samesite
 
     # Configure the root logger so that application loggers (houndarr.*)
     # respect --log-level.  Without this, only uvicorn's own loggers are
@@ -130,6 +144,7 @@ def cli(
         dev=dev,
         log_level=log_level.lower(),
         secure_cookies=secure_cookies,
+        cookie_samesite=_parse_samesite(cookie_samesite),
         trusted_proxies=trusted_proxies,
         auth_mode=auth_mode.lower(),
         auth_proxy_header=auth_proxy_header,

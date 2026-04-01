@@ -103,7 +103,7 @@ security and container checks.
 | Security smoke test | `security-smoke-test.yml` | Live container: unauthenticated sweep, CSRF, XFF, rate limiting, API key exposure, container security |
 
 The six main workflows (`quality`, `tests`, `security`, `dependency-review`,
-`docker`, `security-smoke-test`) use `paths-ignore: ["docs/**", "*.md", "website/**"]`. When a PR
+`docker`, `security-smoke-test`) use `paths-ignore: ["docs/**", "**/*.md", "website/**", ".claude/**"]`. When a PR
 touches only those paths, `ci-skip.yml` provides passing no-op jobs with
 identical check names so branch protection is satisfied.
 
@@ -601,7 +601,7 @@ someone comments, so reporters get immediate feedback.
   extracts content between `## [X.Y.Z]` headings
 - Do not change `ci-skip.yml` job names without updating branch protection
 - If mypy CI fails with "merge ref not found": push an empty commit to retrigger
-- Keep `paths-ignore` patterns in sync across the five main workflows
+- Keep `paths-ignore` patterns in sync across the six main workflows
 
 ### Handling conflicts between docs and practice
 

@@ -5,13 +5,15 @@ on:
     branches: ["main"]
     paths-ignore:
       - "docs/**"
-      - "*.md"
+      - "**/*.md"
       - "website/**"
+      - ".claude/**"
   pull_request:
     paths-ignore:
       - "docs/**"
-      - "*.md"
+      - "**/*.md"
       - "website/**"
+      - ".claude/**"
 
 permissions:
   contents: read

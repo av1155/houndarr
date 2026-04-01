@@ -6,13 +6,15 @@ on:
     tags: ["v*"]
     paths-ignore:
       - "docs/**"
-      - "*.md"
+      - "**/*.md"
       - "website/**"
+      - ".claude/**"
   pull_request:
     paths-ignore:
       - "docs/**"
-      - "*.md"
+      - "**/*.md"
       - "website/**"
+      - ".claude/**"
 
 # Permissions set at job level for least-privilege.
 permissions: {}

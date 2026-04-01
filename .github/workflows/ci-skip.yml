@@ -1,16 +1,18 @@
 name: CI Skip (docs-only)
 
 # Provide passing required-check statuses when a PR touches only
-# documentation files.  Every other workflow uses paths-ignore to skip
-# docs/** and *.md, so without this shim those required checks would
-# never report and the PR would stay blocked by branch protection.
+# documentation or agent-config files.  Every other workflow uses
+# paths-ignore to skip these paths, so without this shim those required
+# checks would never report and the PR would stay blocked by branch
+# protection.
 
 on:
   pull_request:
     paths:
       - "docs/**"
-      - "*.md"
+      - "**/*.md"
       - "website/**"
+      - ".claude/**"
 
 permissions:
   contents: read

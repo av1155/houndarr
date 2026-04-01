@@ -20,15 +20,15 @@ jobs:
           # General backlog issues are never auto-closed.
           only-labels: "waiting-for-reporter"
 
-          # 14 days without a response -> mark stale.
-          # 7 more days -> close.
-          days-before-issue-stale: 14
-          days-before-issue-close: 7
+          # 4 days without a response -> mark stale.
+          # 3 more days -> close.
+          days-before-issue-stale: 4
+          days-before-issue-close: 3
 
           stale-issue-label: "stale"
           stale-issue-message: >
-            This issue has been waiting for a response for 14 days.
-            It will be closed in 7 days if there is no further activity.
+            This issue has been waiting for a response for 4 days.
+            It will be closed in 3 days if there is no further activity.
             If this is still relevant, please reply with the requested
             information and the stale label will be removed automatically.
           close-issue-message: >

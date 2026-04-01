@@ -1,7 +1,7 @@
 ---
 description: Investigate a problem thoroughly and ship a well-tested fix
 argument-hint: "<issue-number | URL | description>"
-allowed-tools: Read, Write, Edit, MultiEdit, Bash(*), Grep, Glob, Agent, WebSearch, WebFetch
+allowed-tools: Read, Write, Edit, MultiEdit, Bash(*), Grep, Glob, Agent, WebSearch, WebFetch, mcp__plugin_context7_context7__*, mcp__plugin_github_github__*, mcp__plugin_playwright_playwright__*, Skill(firecrawl:*)
 ---
 
 # Fix: Thorough Investigation → Tested PR
@@ -90,7 +90,7 @@ If the triage result is A: continue.
 - What files will be touched?
 - Are there related areas that could be affected?
 
-### 2e. Identify edge cases and breaking changes
+### 2d. Identify edge cases and breaking changes
 
 Think through every scenario where the fix could go wrong:
 
@@ -106,7 +106,7 @@ Think through every scenario where the fix could go wrong:
 - If touching auth, crypto, or SSRF validation: stop and flag for
   extra review before proceeding.
 
-### 2f. Present the plan
+### 2e. Present the plan
 
 Summarize:
 - What the problem is

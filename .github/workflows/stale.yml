@@ -1,0 +1,50 @@
+name: Close stale issues
+
+on:
+  schedule:
+    # Daily at 03:37 UTC (off-peak to avoid GitHub Actions queue delays)
+    - cron: "37 3 * * *"
+
+permissions:
+  issues: write
+
+jobs:
+  stale:
+    name: Close stale issues
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/stale@v10
+        with:
+          # Only process issues where the maintainer asked for info.
+          # General backlog issues are never auto-closed.
+          only-labels: "waiting-for-reporter"
+
+          # 14 days without a response -> mark stale.
+          # 7 more days -> close.
+          days-before-issue-stale: 14
+          days-before-issue-close: 7
+
+          stale-issue-label: "stale"
+          stale-issue-message: >
+            This issue has been waiting for a response for 14 days.
+            It will be closed in 7 days if there is no further activity.
+            If this is still relevant, please reply with the requested
+            information and the stale label will be removed automatically.
+          close-issue-message: >
+            Closing due to inactivity. If this is still an issue,
+            feel free to reopen with the requested details.
+          close-issue-reason: "not_planned"
+
+          # Never auto-close PRs.
+          days-before-pr-stale: -1
+          days-before-pr-close: -1
+
+          # Safety nets: never touch confirmed bugs, accepted features,
+          # high-priority items, milestoned issues, or assigned issues.
+          exempt-issue-labels: "type: bug,type: feature,priority: high"
+          exempt-all-milestones: true
+          exempt-all-assignees: true
+
+          remove-stale-when-updated: true
+          operations-per-run: 50

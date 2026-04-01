@@ -1,0 +1,28 @@
+name: Remove stale label on activity
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  issues: write
+
+jobs:
+  remove-stale-label:
+    name: Remove stale label
+    # Only run when the commented issue is still open.
+    if: github.event.issue.state == 'open'
+    runs-on: ubuntu-latest
+
+    steps:
+      # github.event.issue.number is a GitHub-controlled integer,
+      # not user-supplied text; safe from injection.
+      - name: Remove stale label if present
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+        run: |
+          gh issue edit "$ISSUE_NUMBER" \
+            --remove-label "stale" \
+            --remove-label "waiting-for-reporter" \
+            -R "${{ github.repository }}" 2>/dev/null || true

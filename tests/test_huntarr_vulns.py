@@ -10,6 +10,7 @@ assertions live together.
 from __future__ import annotations
 
 import inspect
+from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
@@ -246,10 +247,11 @@ class TestNoDangerousEndpoints:
     def _mock_ping(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Prevent real network calls during instance creation in this class."""
 
-        async def _always_true(self: ArrClient) -> bool:
-            return True
+        async def _always_ok(self: ArrClient) -> dict[str, Any] | None:
+            name = type(self).__name__.replace("Client", "")
+            return {"appName": name, "version": "4.0.0"}
 
-        monkeypatch.setattr(ArrClient, "ping", _always_true)
+        monkeypatch.setattr(ArrClient, "ping", _always_ok)
 
     @pytest.mark.parametrize("path", _HUNTARR_POST_PATHS)
     def test_huntarr_post_paths_return_404(
@@ -391,10 +393,11 @@ class TestAPIKeyNeverExposed:
     def _mock_ping(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Prevent real network calls for instance creation in this class."""
 
-        async def _always_true(self: ArrClient) -> bool:
-            return True
+        async def _always_ok(self: ArrClient) -> dict[str, Any] | None:
+            name = type(self).__name__.replace("Client", "")
+            return {"appName": name, "version": "4.0.0"}
 
-        monkeypatch.setattr(ArrClient, "ping", _always_true)
+        monkeypatch.setattr(ArrClient, "ping", _always_ok)
 
     def test_api_status_has_no_api_key_field(self, app: TestClient) -> None:
         """/api/status JSON must not include an api_key field for any instance."""

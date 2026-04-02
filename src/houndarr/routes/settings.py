@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import html
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated
 
@@ -146,10 +147,51 @@ def _build_client(instance_type: InstanceType, url: str, api_key: str) -> ArrCli
     return client_cls(url=url, api_key=api_key)
 
 
-async def _connection_ok(instance_type: InstanceType, url: str, api_key: str) -> bool:
+@dataclass(frozen=True, slots=True)
+class _ConnectionCheck:
+    """Result of a connection test against an *arr instance."""
+
+    reachable: bool
+    app_name: str | None = None
+    version: str | None = None
+
+
+_APP_NAME_TO_TYPE: dict[str, InstanceType] = {
+    "radarr": InstanceType.radarr,
+    "sonarr": InstanceType.sonarr,
+    "lidarr": InstanceType.lidarr,
+    "readarr": InstanceType.readarr,
+    "whisparr": InstanceType.whisparr,
+}
+
+
+async def _check_connection(
+    instance_type: InstanceType,
+    url: str,
+    api_key: str,
+) -> _ConnectionCheck:
+    """Test connectivity and identify the remote *arr application."""
     client = _build_client(instance_type, url, api_key)
     async with client:
-        return await client.ping()
+        status = await client.ping()
+    if status is None:
+        return _ConnectionCheck(reachable=False)
+    app_name: str | None = status.get("appName") if isinstance(status, dict) else None
+    version: str | None = status.get("version") if isinstance(status, dict) else None
+    return _ConnectionCheck(reachable=True, app_name=app_name, version=version)
+
+
+def _type_mismatch_message(check: _ConnectionCheck, selected: InstanceType) -> str | None:
+    """Return a mismatch error string, or ``None`` if the type is valid."""
+    if check.app_name is None:
+        return None
+    detected = _APP_NAME_TO_TYPE.get(check.app_name.lower())
+    if detected is None:
+        # Unknown app name (e.g. a Readarr fork); allow through.
+        return None
+    if detected != selected:
+        return f"Type mismatch: this URL is running {check.app_name}, not {selected.value.title()}."
+    return None
 
 
 def _connection_status_response(message: str, ok: bool, status_code: int) -> HTMLResponse:
@@ -417,18 +459,26 @@ async def instance_test_connection(
             )
         resolved_api_key = existing.api_key
 
-    ok = await _connection_ok(instance_type, url.rstrip("/"), resolved_api_key)
-    if ok:
+    check = await _check_connection(instance_type, url.rstrip("/"), resolved_api_key)
+    if not check.reachable:
         return _connection_status_response(
-            "Connection successful.",
-            ok=True,
-            status_code=200,
+            "Connection failed. Check URL/API key and try again.",
+            ok=False,
+            status_code=422,
         )
-    return _connection_status_response(
-        "Connection failed. Check URL/API key and try again.",
-        ok=False,
-        status_code=422,
-    )
+
+    mismatch = _type_mismatch_message(check, instance_type)
+    if mismatch is not None:
+        return _connection_status_response(mismatch, ok=False, status_code=422)
+
+    action = "save changes" if instance_id else "add this instance"
+    if check.app_name and check.version:
+        msg = f"Connected to {check.app_name} v{check.version}. You can now {action}."
+    elif check.app_name:
+        msg = f"Connected to {check.app_name}. You can now {action}."
+    else:
+        msg = f"Connection successful. You can now {action}."
+    return _connection_status_response(msg, ok=True, status_code=200)
 
 
 # ---------------------------------------------------------------------------
@@ -496,8 +546,12 @@ async def instance_create(
     if connection_verified != "true":
         return _connection_guard_response("Test connection successfully before adding.")
 
-    if not await _connection_ok(instance_type, url.rstrip("/"), api_key):
+    create_check = await _check_connection(instance_type, url.rstrip("/"), api_key)
+    if not create_check.reachable:
         return _connection_guard_response("Connection test failed. Re-test before adding.")
+    create_mismatch = _type_mismatch_message(create_check, instance_type)
+    if create_mismatch is not None:
+        return _connection_guard_response(create_mismatch)
 
     search_modes = _resolve_search_modes(
         instance_type,
@@ -653,8 +707,12 @@ async def instance_update(
     if connection_verified != "true":
         return _connection_guard_response("Test connection successfully before saving changes.")
 
-    if not await _connection_ok(instance_type, url.rstrip("/"), resolved_api_key):
+    update_check = await _check_connection(instance_type, url.rstrip("/"), resolved_api_key)
+    if not update_check.reachable:
         return _connection_guard_response("Connection test failed. Re-test before saving changes.")
+    update_mismatch = _type_mismatch_message(update_check, instance_type)
+    if update_mismatch is not None:
+        return _connection_guard_response(update_mismatch)
 
     search_modes = _resolve_search_modes(
         instance_type,

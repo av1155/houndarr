@@ -32,23 +32,25 @@ def client() -> LidarrClient:
 @respx.mock
 async def test_ping_success(client: LidarrClient) -> None:
     respx.get(f"{BASE}/api/v1/system/status").mock(
-        return_value=httpx.Response(200, json={"version": "3.1.0"})
+        return_value=httpx.Response(200, json={"appName": "Lidarr", "version": "3.1.0"})
     )
-    assert await client.ping() is True
+    result = await client.ping()
+    assert result is not None
+    assert result["appName"] == "Lidarr"
 
 
 @pytest.mark.asyncio()
 @respx.mock
-async def test_ping_non_2xx_returns_false(client: LidarrClient) -> None:
+async def test_ping_non_2xx_returns_none(client: LidarrClient) -> None:
     respx.get(f"{BASE}/api/v1/system/status").mock(return_value=httpx.Response(401))
-    assert await client.ping() is False
+    assert await client.ping() is None
 
 
 @pytest.mark.asyncio()
 @respx.mock
-async def test_ping_network_error_returns_false(client: LidarrClient) -> None:
+async def test_ping_network_error_returns_none(client: LidarrClient) -> None:
     respx.get(f"{BASE}/api/v1/system/status").mock(side_effect=httpx.ConnectError("refused"))
-    assert await client.ping() is False
+    assert await client.ping() is None
 
 
 # ---------------------------------------------------------------------------
@@ -275,4 +277,4 @@ async def test_context_manager() -> None:
     respx.get(f"{BASE}/api/v1/system/status").mock(return_value=httpx.Response(200, json={}))
     async with LidarrClient(url=BASE, api_key=API_KEY) as c:
         result = await c.ping()
-    assert result is True
+    assert result is not None

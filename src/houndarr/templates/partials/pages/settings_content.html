@@ -942,13 +942,12 @@
     document.body.addEventListener(
       'houndarr-connection-test-success',
       function () {
-        const mode = getModalFormMode();
-        if (!isConnectionGuardedFormLoaded() || mode === null) {
+        if (!isConnectionGuardedFormLoaded() || getModalFormMode() === null) {
           return;
         }
-
-        const actionLabel = mode === 'edit' ? 'save changes' : 'add this instance';
-        setConnectionState(true, `Connection successful. You can now ${actionLabel}.`, 'success');
+        // Server response already contains the full message via HTMX swap;
+        // only update form state (verified flag + submit button).
+        setConnectionState(true, null, 'success');
         setConnectionTestButtonState('success');
       },
       { signal },
@@ -960,7 +959,9 @@
         if (!isConnectionGuardedFormLoaded()) {
           return;
         }
-        setConnectionState(false, 'Connection failed. Fix details and test again.', 'error');
+        // Server response already contains the specific error via HTMX swap;
+        // only update form state.
+        setConnectionState(false, null, 'error');
         setConnectionTestButtonState('error');
       },
       { signal },

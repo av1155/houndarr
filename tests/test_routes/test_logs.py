@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import AsyncGenerator
+from typing import Any
 
 import pytest
 import pytest_asyncio
@@ -28,10 +29,11 @@ _VALID_FORM = {
 
 @pytest.fixture(autouse=True)
 def _mock_connection_ping(monkeypatch: pytest.MonkeyPatch) -> None:
-    async def _always_true(self: ArrClient) -> bool:
-        return True
+    async def _always_ok(self: ArrClient) -> dict[str, Any] | None:
+        name = type(self).__name__.replace("Client", "")
+        return {"appName": name, "version": "4.0.0"}
 
-    monkeypatch.setattr(ArrClient, "ping", _always_true)
+    monkeypatch.setattr(ArrClient, "ping", _always_ok)
 
 
 def _login(client: TestClient) -> None:

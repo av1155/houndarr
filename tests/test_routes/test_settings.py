@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -24,10 +26,11 @@ _VALID_FORM = {
 
 @pytest.fixture(autouse=True)
 def _mock_connection_ping(monkeypatch: pytest.MonkeyPatch) -> None:
-    async def _always_true(self: ArrClient) -> bool:
-        return True
+    async def _always_ok(self: ArrClient) -> dict[str, Any] | None:
+        name = type(self).__name__.replace("Client", "")
+        return {"appName": name, "version": "4.0.0"}
 
-    monkeypatch.setattr(ArrClient, "ping", _always_true)
+    monkeypatch.setattr(ArrClient, "ping", _always_ok)
 
 
 def _login(client: TestClient) -> None:
@@ -298,6 +301,22 @@ def test_update_instance_requires_successful_test(app: TestClient) -> None:
     assert b"Test connection successfully before saving changes" in resp.content
 
 
+def test_update_rejects_type_mismatch(app: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Instance update should be blocked if the remote app type mismatches."""
+    _login(app)
+    # Create the instance first with the default mock (appName matches).
+    app.post("/settings/instances", data=_VALID_FORM, headers=csrf_headers(app))
+
+    # Now switch the mock to return a different appName.
+    async def _radarr_response(self: ArrClient) -> dict[str, Any] | None:
+        return {"appName": "Radarr", "version": "6.0.0"}
+
+    monkeypatch.setattr(ArrClient, "ping", _radarr_response)
+    resp = app.post("/settings/instances/1", data=_VALID_FORM, headers=csrf_headers(app))
+    assert resp.status_code == 422
+    assert b"Type mismatch" in resp.content
+
+
 def test_update_instance_not_found(app: TestClient) -> None:
     _login(app)
     resp = app.post("/settings/instances/9999", data=_VALID_FORM, headers=csrf_headers(app))
@@ -419,7 +438,73 @@ def test_connection_check_endpoint_success(app: TestClient) -> None:
         headers=csrf_headers(app),
     )
     assert resp.status_code == 200
+    assert b"Connected to Sonarr v4.0.0" in resp.content
+
+
+def test_connection_check_type_mismatch(app: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Selecting Radarr for a Sonarr URL should report the mismatch."""
+
+    async def _sonarr_response(self: ArrClient) -> dict[str, Any] | None:
+        return {"appName": "Sonarr", "version": "4.0.0"}
+
+    monkeypatch.setattr(ArrClient, "ping", _sonarr_response)
+    _login(app)
+    resp = app.post(
+        "/settings/instances/test-connection",
+        data={"type": "radarr", "url": "http://sonarr:8989", "api_key": "abc"},
+        headers=csrf_headers(app),
+    )
+    assert resp.status_code == 422
+    assert b"Type mismatch" in resp.content
+    assert b"Sonarr" in resp.content
+
+
+def test_connection_check_appname_null(app: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Missing appName in system/status response should still succeed."""
+
+    async def _no_appname(self: ArrClient) -> dict[str, Any] | None:
+        return {"version": "4.0.0"}
+
+    monkeypatch.setattr(ArrClient, "ping", _no_appname)
+    _login(app)
+    resp = app.post(
+        "/settings/instances/test-connection",
+        data={"type": "sonarr", "url": "http://sonarr:8989", "api_key": "abc"},
+        headers=csrf_headers(app),
+    )
+    assert resp.status_code == 200
     assert b"Connection successful" in resp.content
+
+
+def test_connection_check_appname_unknown(app: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Unrecognized appName (e.g. a Readarr fork) should still succeed."""
+
+    async def _fork_response(self: ArrClient) -> dict[str, Any] | None:
+        return {"appName": "Bookshelf", "version": "1.0.0"}
+
+    monkeypatch.setattr(ArrClient, "ping", _fork_response)
+    _login(app)
+    resp = app.post(
+        "/settings/instances/test-connection",
+        data={"type": "readarr", "url": "http://readarr:8787", "api_key": "abc"},
+        headers=csrf_headers(app),
+    )
+    assert resp.status_code == 200
+    assert b"Connected to Bookshelf" in resp.content
+
+
+def test_create_rejects_type_mismatch(app: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Instance creation should be blocked if the remote app type mismatches."""
+
+    async def _radarr_response(self: ArrClient) -> dict[str, Any] | None:
+        return {"appName": "Radarr", "version": "6.0.0"}
+
+    monkeypatch.setattr(ArrClient, "ping", _radarr_response)
+    _login(app)
+    form = {**_VALID_FORM, "type": "sonarr"}
+    resp = app.post("/settings/instances", data=form, headers=csrf_headers(app))
+    assert resp.status_code == 422
+    assert b"Type mismatch" in resp.content
 
 
 def test_connection_check_endpoint_invalid_type(app: TestClient) -> None:

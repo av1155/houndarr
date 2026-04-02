@@ -83,18 +83,21 @@ class ArrClient(ABC):
     # Health check
     # ------------------------------------------------------------------
 
-    async def ping(self) -> bool:
-        """Return ``True`` if the instance is reachable and healthy.
+    async def ping(self) -> dict[str, Any] | None:
+        """Return the system status dict if reachable, or ``None``.
 
         Uses the system/status endpoint at :attr:`_SYSTEM_STATUS_PATH`.
         Defaults to ``/api/v3/system/status`` (Radarr, Sonarr, Whisparr);
         Lidarr and Readarr override to ``/api/v1/system/status``.
+
+        The returned dict includes ``appName`` (str) identifying the *arr
+        application and ``version`` (str) with the running version.
         """
         try:
-            await self._get(self._SYSTEM_STATUS_PATH)
-            return True
-        except (httpx.HTTPError, httpx.InvalidURL):
-            return False
+            result: dict[str, Any] = await self._get(self._SYSTEM_STATUS_PATH)
+            return result
+        except (httpx.HTTPError, httpx.InvalidURL, ValueError):
+            return None
 
     # ------------------------------------------------------------------
     # Queue status

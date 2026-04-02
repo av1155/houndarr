@@ -92,11 +92,19 @@ Do not create a branch, do not touch VERSION or CHANGELOG.
 Show me the draft CHANGELOG block before writing it. Wait for my
 approval or edits. Do not proceed until I confirm.
 
-## 5. Create Branch
+## 5. Create Branch and Tracking Issue
 
 ```
 git fetch origin
-git checkout -b release/vX.Y.Z origin/main
+git checkout -b chore/bump-X.Y.Z origin/main
+```
+
+Create a tracking issue (every PR must link one):
+
+```
+gh issue create --title "chore: bump version to X.Y.Z" \
+  --label "type: chore" --label "priority: medium" \
+  --body "Release X.Y.Z with <brief summary of user-facing changes>."
 ```
 
 ## 6. Update VERSION File
@@ -132,24 +140,25 @@ Only VERSION and CHANGELOG.md should be in this commit. No other files.
 
 ## 10. Create PR
 
+Title must match: `chore: bump version to X.Y.Z`
+
 ```
-gh pr create --title "release: vX.Y.Z" --body "$(cat <<'PREOF'
-## Summary
+gh pr create --title "chore: bump version to X.Y.Z" --body "$(cat <<'PREOF'
+Closes #N
 
-Bump version to X.Y.Z.
+## What changed
 
-Closes #N (if a tracking issue exists, otherwise omit)
+Version bump to X.Y.Z. Only VERSION and CHANGELOG.md are modified.
 
-## Changes
+## Release notes (from CHANGELOG)
 
-- Update VERSION to X.Y.Z
-- Add CHANGELOG.md entries for this release
+<paste the CHANGELOG entries here>
 
 ## Checklist
 
-- [x] VERSION and CHANGELOG.md are the only changed files
-- [x] CHANGELOG heading matches VERSION
-- [x] All quality gates pass
+- [x] Linked issue has `type:*` and `priority:*` labels
+- [x] Only VERSION and CHANGELOG.md changed
+- [x] CHANGELOG entry follows existing format
 PREOF
 )"
 ```

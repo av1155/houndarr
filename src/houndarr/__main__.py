@@ -123,6 +123,7 @@ def cli(
     indexers happy.
     """
     import logging
+    import os
 
     import uvicorn
 
@@ -162,10 +163,22 @@ def cli(
     else:
         logging.info("Auth mode: builtin")
 
-    # Store settings so the app factory can pick them up
+    # Store settings so the app factory can pick them up.
     import houndarr.config as _cfg
 
     _cfg._runtime_settings = settings  # noqa: SLF001
+
+    # Propagate resolved CLI values to env vars so that uvicorn's reload
+    # child process (which reimports modules fresh, losing _runtime_settings)
+    # gets the correct values from get_settings()'s env-var fallback.
+    os.environ["HOUNDARR_DATA_DIR"] = data_dir
+    os.environ["HOUNDARR_DEV"] = "1" if dev else ""
+    os.environ["HOUNDARR_LOG_LEVEL"] = log_level.lower()
+    os.environ["HOUNDARR_SECURE_COOKIES"] = "1" if secure_cookies else ""
+    os.environ["HOUNDARR_COOKIE_SAMESITE"] = cookie_samesite.lower()
+    os.environ["HOUNDARR_TRUSTED_PROXIES"] = trusted_proxies
+    os.environ["HOUNDARR_AUTH_MODE"] = auth_mode.lower()
+    os.environ["HOUNDARR_AUTH_PROXY_HEADER"] = auth_proxy_header
 
     uvicorn.run(
         "houndarr.app:create_app",

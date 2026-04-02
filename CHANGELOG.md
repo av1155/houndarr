@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.6] - 2026-04-02
+
+### Added
+
+- Connection testing now verifies the remote application type matches the selected instance type, preventing misconfiguration (e.g. a Sonarr URL saved as Radarr). (#333)
+- Compatibility table in the installation docs listing tested *arr versions and Readarr fork support. (#333)
+
+### Fixed
+
+- CLI flags like `--data-dir` are now correctly propagated when running in dev mode with auto-reload. (#333)
+- Connection test success and error messages are no longer overwritten by generic text after 80ms. (#333)
+
+---
+
 ## [1.6.5] - 2026-04-01
 
 ### Fixed

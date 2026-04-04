@@ -44,15 +44,15 @@ class TestAdapterRegistry:
         assert callable(adapter.make_client)
 
     def test_has_whisparr(self):
-        adapter = ADAPTERS[InstanceType.whisparr]
+        adapter = ADAPTERS[InstanceType.whisparr_v2]
         assert isinstance(adapter, AppAdapter)
         assert callable(adapter.adapt_missing)
         assert callable(adapter.adapt_cutoff)
         assert callable(adapter.dispatch_search)
         assert callable(adapter.make_client)
 
-    def test_exactly_five_entries(self):
-        assert len(ADAPTERS) == 5
+    def test_exactly_six_entries(self):
+        assert len(ADAPTERS) == 6
 
     def test_get_adapter_sonarr(self):
         adapter = get_adapter(InstanceType.sonarr)
@@ -70,9 +70,13 @@ class TestAdapterRegistry:
         adapter = get_adapter(InstanceType.readarr)
         assert adapter is ADAPTERS[InstanceType.readarr]
 
-    def test_get_adapter_whisparr(self):
-        adapter = get_adapter(InstanceType.whisparr)
-        assert adapter is ADAPTERS[InstanceType.whisparr]
+    def test_get_adapter_whisparr_v2(self):
+        adapter = get_adapter(InstanceType.whisparr_v2)
+        assert adapter is ADAPTERS[InstanceType.whisparr_v2]
+
+    def test_get_adapter_whisparr_v3(self):
+        adapter = get_adapter(InstanceType.whisparr_v3)
+        assert adapter is ADAPTERS[InstanceType.whisparr_v3]
 
     def test_get_adapter_unknown_raises(self):
         with pytest.raises(ValueError, match="No adapter registered"):

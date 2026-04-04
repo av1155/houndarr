@@ -70,7 +70,7 @@ def _sonarr_instance(**overrides: Any) -> Any:
 def _whisparr_instance(**overrides: Any) -> Any:
     defaults: dict[str, Any] = {
         "instance_id": 5,
-        "itype": InstanceType.whisparr,
+        "itype": InstanceType.whisparr_v2,
         "batch_size": 0,
         "hourly_cap": 0,
         "cooldown_days": 7,

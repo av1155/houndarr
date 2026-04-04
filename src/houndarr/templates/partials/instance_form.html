@@ -48,7 +48,8 @@
                  data-radarr-placeholder="My Radarr"
                  data-lidarr-placeholder="My Lidarr"
                  data-readarr-placeholder="My Readarr"
-                 data-whisparr-placeholder="My Whisparr"
+                 data-whisparr_v2-placeholder="My Whisparr v2"
+                 data-whisparr_v3-placeholder="My Whisparr v3"
                  value="{{ instance.name if is_edit else '' }}"
                  placeholder="My Sonarr"
                  class="{{ input_cls }}" />
@@ -62,8 +63,15 @@
             <option value="sonarr"   {% if is_edit and instance.type.value == 'sonarr'   %}selected{% endif %}>Sonarr</option>
             <option value="lidarr"   {% if is_edit and instance.type.value == 'lidarr'   %}selected{% endif %}>Lidarr</option>
             <option value="readarr"  {% if is_edit and instance.type.value == 'readarr'  %}selected{% endif %}>Readarr</option>
-            <option value="whisparr" {% if is_edit and instance.type.value == 'whisparr' %}selected{% endif %}>Whisparr</option>
+            <option value="whisparr_v2" {% if is_edit and instance.type.value == 'whisparr_v2' %}selected{% endif %}>Whisparr v2</option>
+            <option value="whisparr_v3" {% if is_edit and instance.type.value == 'whisparr_v3' %}selected{% endif %}>Whisparr v3</option>
           </select>
+          <p class="mt-1 text-xs text-slate-500"
+             data-whisparr_v2-only="true"
+             {% if not is_edit or instance.type.value != 'whisparr_v2' %}style="display:none;"{% endif %}>Sonarr-based, focuses on studios.<br>Docker: <code class="text-slate-400">hotio/whisparr:latest</code></p>
+          <p class="mt-1 text-xs text-slate-500"
+             data-whisparr_v3-only="true"
+             {% if not is_edit or instance.type.value != 'whisparr_v3' %}style="display:none;"{% endif %}>Radarr-based, focuses on scenes.<br>Docker: <code class="text-slate-400">hotio/whisparr:v3</code></p>
         </div>
         <div>
           <label class="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide" for="{{ form_id }}-url">URL</label>
@@ -73,7 +81,8 @@
                  data-radarr-placeholder="http://radarr:7878"
                  data-lidarr-placeholder="http://lidarr:8686"
                  data-readarr-placeholder="http://readarr:8787"
-                 data-whisparr-placeholder="http://whisparr:6969"
+                 data-whisparr_v2-placeholder="http://whisparr:6969"
+                 data-whisparr_v3-placeholder="http://whisparr:6969"
                  value="{{ instance.url if is_edit else '' }}"
                  placeholder="http://radarr:7878"
                  class="{{ mono_input_cls }}" />
@@ -166,10 +175,10 @@
           </select>
           <p class="mt-1.5 text-xs text-amber-400/80">Advanced mode: searches all missing books by author in one request.</p>
         </div>
-        <div class="sm:col-span-2" data-whisparr-only="true"
-             {% if instance.type.value != 'whisparr' %}style="display:none;"{% endif %}>
+        <div class="sm:col-span-2" data-whisparr_v2-only="true"
+             {% if instance.type.value != 'whisparr_v2' %}style="display:none;"{% endif %}>
           <label class="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide" for="{{ form_id }}-whisparr-mode">
-            Whisparr Missing Search Mode
+            Whisparr v2 Missing Search Mode
           </label>
           <select id="{{ form_id }}-whisparr-mode" name="whisparr_search_mode" class="{{ input_cls }}">
             <option value="episode"        {% if instance.whisparr_search_mode.value == 'episode'        %}selected{% endif %}>Episode search (default)</option>
@@ -284,10 +293,10 @@
           <option value="author_context" {% if instance.upgrade_readarr_search_mode.value == 'author_context' %}selected{% endif %}>Author-context search</option>
         </select>
       </div>
-      <div data-whisparr-only="true"
-           {% if instance.type.value != 'whisparr' %}style="display:none;"{% endif %}>
+      <div data-whisparr_v2-only="true"
+           {% if instance.type.value != 'whisparr_v2' %}style="display:none;"{% endif %}>
         <label class="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide" for="{{ form_id }}-upgrade-whisparr-mode">
-          Whisparr Upgrade Search Mode
+          Whisparr v2 Upgrade Search Mode
         </label>
         <select id="{{ form_id }}-upgrade-whisparr-mode" name="upgrade_whisparr_search_mode" class="{{ input_cls }}">
           <option value="episode"        {% if instance.upgrade_whisparr_search_mode.value == 'episode'        %}selected{% endif %}>Episode search (default)</option>

@@ -498,7 +498,7 @@ async def whisparr_instance(db: None, master_key: bytes) -> Instance:
     return await create_instance(
         master_key=master_key,
         name="E2E Whisparr",
-        type=InstanceType.whisparr,
+        type=InstanceType.whisparr_v2,
         url=WHISPARR_URL,
         api_key="whisparr-key",
         batch_size=5,

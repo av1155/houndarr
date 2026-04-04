@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from houndarr.clients.base import ArrClient
-from houndarr.engine.adapters import lidarr, radarr, readarr, sonarr, whisparr
+from houndarr.engine.adapters import lidarr, radarr, readarr, sonarr, whisparr_v2, whisparr_v3
 from houndarr.engine.candidates import SearchCandidate
 from houndarr.services.instances import Instance, InstanceType
 
@@ -75,13 +75,21 @@ ADAPTERS: dict[InstanceType, AppAdapter] = {
         dispatch_search=readarr.dispatch_search,
         make_client=readarr.make_client,
     ),
-    InstanceType.whisparr: AppAdapter(
-        adapt_missing=whisparr.adapt_missing,
-        adapt_cutoff=whisparr.adapt_cutoff,
-        adapt_upgrade=whisparr.adapt_upgrade,
-        fetch_upgrade_pool=whisparr.fetch_upgrade_pool,
-        dispatch_search=whisparr.dispatch_search,
-        make_client=whisparr.make_client,
+    InstanceType.whisparr_v2: AppAdapter(
+        adapt_missing=whisparr_v2.adapt_missing,
+        adapt_cutoff=whisparr_v2.adapt_cutoff,
+        adapt_upgrade=whisparr_v2.adapt_upgrade,
+        fetch_upgrade_pool=whisparr_v2.fetch_upgrade_pool,
+        dispatch_search=whisparr_v2.dispatch_search,
+        make_client=whisparr_v2.make_client,
+    ),
+    InstanceType.whisparr_v3: AppAdapter(
+        adapt_missing=whisparr_v3.adapt_missing,
+        adapt_cutoff=whisparr_v3.adapt_cutoff,
+        adapt_upgrade=whisparr_v3.adapt_upgrade,
+        fetch_upgrade_pool=whisparr_v3.fetch_upgrade_pool,
+        dispatch_search=whisparr_v3.dispatch_search,
+        make_client=whisparr_v3.make_client,
     ),
 }
 

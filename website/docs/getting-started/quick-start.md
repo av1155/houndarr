@@ -11,7 +11,7 @@ Get Houndarr running in under five minutes.
 ## Prerequisites
 
 - Docker and Docker Compose installed on your host
-- At least one running Radarr, Sonarr, Lidarr, Readarr, or Whisparr instance with an API key
+- At least one running Radarr, Sonarr, Lidarr, Readarr, or Whisparr (v2 or v3) instance with an API key
 
 ## Docker Compose
 

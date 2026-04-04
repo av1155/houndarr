@@ -18,7 +18,8 @@ from houndarr.clients.lidarr import LidarrClient
 from houndarr.clients.radarr import RadarrClient
 from houndarr.clients.readarr import ReadarrClient
 from houndarr.clients.sonarr import SonarrClient
-from houndarr.clients.whisparr import WhisparrClient
+from houndarr.clients.whisparr_v2 import WhisparrClient
+from houndarr.clients.whisparr_v3 import WhisparrV3Client
 from houndarr.config import (
     DEFAULT_BATCH_SIZE,
     DEFAULT_COOLDOWN_DAYS,
@@ -135,7 +136,8 @@ _CLIENT_CONSTRUCTORS: dict[InstanceType, type[ArrClient]] = {
     InstanceType.sonarr: SonarrClient,
     InstanceType.lidarr: LidarrClient,
     InstanceType.readarr: ReadarrClient,
-    InstanceType.whisparr: WhisparrClient,
+    InstanceType.whisparr_v2: WhisparrClient,
+    InstanceType.whisparr_v3: WhisparrV3Client,
 }
 
 
@@ -161,7 +163,9 @@ _APP_NAME_TO_TYPE: dict[str, InstanceType] = {
     "sonarr": InstanceType.sonarr,
     "lidarr": InstanceType.lidarr,
     "readarr": InstanceType.readarr,
-    "whisparr": InstanceType.whisparr,
+    # Whisparr v2 and v3 both report appName "Whisparr"; version-based
+    # disambiguation is handled in _type_mismatch_message.
+    "whisparr": InstanceType.whisparr_v2,
 }
 
 
@@ -181,11 +185,41 @@ async def _check_connection(
     return _ConnectionCheck(reachable=True, app_name=app_name, version=version)
 
 
+def _whisparr_version_major(version: str | None) -> int | None:
+    """Extract the major version number from a Whisparr version string."""
+    if not version:
+        return None
+    try:
+        return int(version.split(".")[0])
+    except (ValueError, IndexError):
+        return None
+
+
 def _type_mismatch_message(check: _ConnectionCheck, selected: InstanceType) -> str | None:
     """Return a mismatch error string, or ``None`` if the type is valid."""
     if check.app_name is None:
         return None
-    detected = _APP_NAME_TO_TYPE.get(check.app_name.lower())
+
+    app_lower = check.app_name.lower()
+    detected = _APP_NAME_TO_TYPE.get(app_lower)
+
+    # Whisparr v2 and v3 both report appName "Whisparr". Use version to
+    # detect v3 (major version >= 3) and check against the selected type.
+    if app_lower == "whisparr":
+        major = _whisparr_version_major(check.version)
+        if major is not None and major >= 3 and selected == InstanceType.whisparr_v2:
+            return (
+                f"Version mismatch: this URL runs Whisparr v3 ({check.version})."
+                " Select 'Whisparr v3' as the instance type."
+            )
+        if major is not None and major < 3 and selected == InstanceType.whisparr_v3:
+            return (
+                f"Version mismatch: this URL runs Whisparr v2 ({check.version})."
+                " Select 'Whisparr v2' as the instance type."
+            )
+        # Correct pairing; skip the generic app-name check.
+        return None
+
     if detected is None:
         # Unknown app name (e.g. a Readarr fork); allow through.
         return None
@@ -307,7 +341,7 @@ def _resolve_search_modes(
     try:
         whisparr_mode = (
             WhisparrSearchMode(whisparr_raw)
-            if instance_type == InstanceType.whisparr
+            if instance_type == InstanceType.whisparr_v2
             else WhisparrSearchMode.episode
         )
     except ValueError:

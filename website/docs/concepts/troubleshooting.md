@@ -12,8 +12,8 @@ If you are unsure whether Houndarr is actually doing anything, follow these step
 
 ### Step 1: Open your *arr instance's own wanted pages
 
-In Sonarr/Whisparr: **Wanted → Missing** and **Wanted → Cutoff Unmet**  
-In Radarr: **Wanted → Missing** and **Wanted → Cutoff Unmet**  
+In Sonarr/Whisparr v2: **Wanted → Missing** and **Wanted → Cutoff Unmet**  
+In Radarr/Whisparr v3: check the movie library for missing or cutoff-unmet items  
 In Lidarr: **Wanted → Missing** and **Wanted → Cutoff Unmet**  
 In Readarr: **Wanted → Missing** and **Wanted → Cutoff Unmet**
 

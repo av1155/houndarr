@@ -162,7 +162,7 @@ async def seeded_instances(db: None) -> AsyncGenerator[None, None]:
                 (2, "Radarr Test", "radarr", RADARR_URL, encrypted),
                 (3, "Lidarr Test", "lidarr", LIDARR_URL, encrypted),
                 (4, "Readarr Test", "readarr", READARR_URL, encrypted),
-                (5, "Whisparr Test", "whisparr", WHISPARR_URL, encrypted),
+                (5, "Whisparr Test", "whisparr_v2", WHISPARR_URL, encrypted),
             ],
         )
         await conn.commit()
@@ -769,7 +769,7 @@ async def test_golden_whisparr_episode_missing(seeded_instances: None) -> None:
 
     instance = _make_instance(
         instance_id=5,
-        itype=InstanceType.whisparr,
+        itype=InstanceType.whisparr_v2,
         url=WHISPARR_URL,
     )
     count = await run_instance_search(instance, MASTER_KEY, cycle_id="golden-g7")

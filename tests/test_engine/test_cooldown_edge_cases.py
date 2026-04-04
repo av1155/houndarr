@@ -12,7 +12,7 @@ from houndarr.database import get_db
 from houndarr.engine.adapters.lidarr import _artist_item_id
 from houndarr.engine.adapters.readarr import _author_item_id
 from houndarr.engine.adapters.sonarr import _season_item_id
-from houndarr.engine.adapters.whisparr import (
+from houndarr.engine.adapters.whisparr_v2 import (
     _season_item_id as whisparr_season_item_id,
 )
 from houndarr.services.cooldown import (

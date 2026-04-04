@@ -8,12 +8,12 @@ from houndarr.clients.lidarr import LibraryAlbum, MissingAlbum
 from houndarr.clients.radarr import LibraryMovie, MissingMovie
 from houndarr.clients.readarr import LibraryBook, MissingBook
 from houndarr.clients.sonarr import LibraryEpisode, MissingEpisode
-from houndarr.clients.whisparr import LibraryWhisparrEpisode, MissingWhisparrEpisode
+from houndarr.clients.whisparr_v2 import LibraryWhisparrEpisode, MissingWhisparrEpisode
 from houndarr.engine.adapters import lidarr as lidarr_adapter
 from houndarr.engine.adapters import radarr as radarr_adapter
 from houndarr.engine.adapters import readarr as readarr_adapter
 from houndarr.engine.adapters import sonarr as sonarr_adapter
-from houndarr.engine.adapters import whisparr as whisparr_adapter
+from houndarr.engine.adapters import whisparr_v2 as whisparr_adapter
 from houndarr.engine.adapters.lidarr import _artist_item_id
 from houndarr.engine.adapters.readarr import _author_item_id
 from houndarr.engine.adapters.sonarr import _season_item_id
@@ -485,7 +485,7 @@ def test_readarr_adapt_upgrade_author_context() -> None:
 def test_whisparr_adapt_missing_episode_mode() -> None:
     """Episode mode: item_type=whisparr_episode, group_key=None."""
     inst = make_instance(
-        itype=InstanceType.whisparr,
+        itype=InstanceType.whisparr_v2,
         whisparr_search_mode=WhisparrSearchMode.episode,
     )
     item = _missing_whisparr_episode()
@@ -500,7 +500,7 @@ def test_whisparr_adapt_missing_episode_mode() -> None:
 def test_whisparr_adapt_missing_season_context() -> None:
     """Season-context: synthetic item_id, group_key=(series_id, season)."""
     inst = make_instance(
-        itype=InstanceType.whisparr,
+        itype=InstanceType.whisparr_v2,
         whisparr_search_mode=WhisparrSearchMode.season_context,
     )
     item = _missing_whisparr_episode(series_id=70, season_number=2)
@@ -515,7 +515,7 @@ def test_whisparr_adapt_missing_season_context() -> None:
 def test_whisparr_adapt_cutoff_always_episode_mode() -> None:
     """Cutoff always uses episode mode for Whisparr."""
     inst = make_instance(
-        itype=InstanceType.whisparr,
+        itype=InstanceType.whisparr_v2,
         whisparr_search_mode=WhisparrSearchMode.season_context,
     )
     item = _missing_whisparr_episode(series_id=70, season_number=2)
@@ -529,7 +529,7 @@ def test_whisparr_adapt_cutoff_always_episode_mode() -> None:
 def test_whisparr_adapt_upgrade_season_context() -> None:
     """Upgrade with upgrade_whisparr_search_mode=season_context."""
     inst = make_instance(
-        itype=InstanceType.whisparr,
+        itype=InstanceType.whisparr_v2,
         upgrade_whisparr_search_mode=WhisparrSearchMode.season_context,
     )
     item = _library_whisparr_episode(series_id=70, season_number=2)
@@ -544,7 +544,7 @@ def test_whisparr_adapt_upgrade_season_context() -> None:
 def test_whisparr_unreleased_with_future_datetime() -> None:
     """A future datetime produces unreleased_reason='not yet released'."""
     inst = make_instance(
-        itype=InstanceType.whisparr,
+        itype=InstanceType.whisparr_v2,
         whisparr_search_mode=WhisparrSearchMode.episode,
     )
     future_dt = datetime.now(UTC) + timedelta(days=30)
@@ -557,7 +557,7 @@ def test_whisparr_unreleased_with_future_datetime() -> None:
 def test_whisparr_unreleased_with_none_release_date() -> None:
     """release_date=None means the item is eligible (unreleased_reason=None)."""
     inst = make_instance(
-        itype=InstanceType.whisparr,
+        itype=InstanceType.whisparr_v2,
         whisparr_search_mode=WhisparrSearchMode.episode,
     )
     item = _missing_whisparr_episode(release_date=None)

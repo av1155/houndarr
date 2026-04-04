@@ -32,8 +32,11 @@ jobs:
             "https://raw.githubusercontent.com/Radarr/Radarr/develop/src/Radarr.Api.V3/openapi.json" \
             --output docs/api/radarr_openapi.json.new
           curl --fail --silent --show-error --location \
-            "https://raw.githubusercontent.com/Whisparr/Whisparr/develop/src/Whisparr.Api.V3/openapi.json" \
-            --output docs/api/whisparr_openapi.json.new
+            "https://raw.githubusercontent.com/Whisparr/Whisparr/v2-develop/src/Whisparr.Api.V3/openapi.json" \
+            --output docs/api/whisparr_v2_openapi.json.new
+          curl --fail --silent --show-error --location \
+            "https://raw.githubusercontent.com/Whisparr/Whisparr/movies/src/Whisparr.Api.V3/openapi.json" \
+            --output docs/api/whisparr_v3_openapi.json.new
           curl --fail --silent --show-error --location \
             "https://raw.githubusercontent.com/lidarr/Lidarr/develop/src/Lidarr.Api.V1/openapi.json" \
             --output docs/api/lidarr_openapi.json.new
@@ -54,7 +57,7 @@ jobs:
           api_dir = repo / "docs" / "api"
           tests_file = repo / "tests" / "test_docs_api.py"
 
-          SPECS = ["radarr", "sonarr", "lidarr", "readarr", "whisparr"]
+          SPECS = ["radarr", "sonarr", "lidarr", "readarr", "whisparr_v2", "whisparr_v3"]
 
           changed = False
 
@@ -113,7 +116,8 @@ jobs:
             ## Summary
             - Refresh `docs/api/sonarr_openapi.json` from Sonarr upstream OpenAPI source.
             - Refresh `docs/api/radarr_openapi.json` from Radarr upstream OpenAPI source.
-            - Refresh `docs/api/whisparr_openapi.json` from Whisparr upstream OpenAPI source.
+            - Refresh `docs/api/whisparr_v2_openapi.json` from Whisparr v2 upstream OpenAPI source.
+            - Refresh `docs/api/whisparr_v3_openapi.json` from Whisparr v3 upstream OpenAPI source.
             - Refresh `docs/api/lidarr_openapi.json` from Lidarr upstream OpenAPI source.
             - Refresh `docs/api/readarr_openapi.json` from Readarr upstream OpenAPI source.
             - Sync snapshot SHA constants in `tests/test_docs_api.py` so required CI checks run and snapshot integrity stays explicit.

@@ -4,7 +4,8 @@ The files in this directory are the API reference when working on *arr integrati
 
 - `sonarr_openapi.json`
 - `radarr_openapi.json`
-- `whisparr_openapi.json`
+- `whisparr_v2_openapi.json` (Sonarr-based, series/episode model)
+- `whisparr_v3_openapi.json` (Radarr-based, movie/scene model)
 - `lidarr_openapi.json`
 - `readarr_openapi.json`
 
@@ -19,7 +20,8 @@ Guidelines:
 
 https://raw.githubusercontent.com/Sonarr/Sonarr/develop/src/Sonarr.Api.V3/openapi.json
 https://raw.githubusercontent.com/Radarr/Radarr/develop/src/Radarr.Api.V3/openapi.json
-https://raw.githubusercontent.com/Whisparr/Whisparr/develop/src/Whisparr.Api.V3/openapi.json
+https://raw.githubusercontent.com/Whisparr/Whisparr/v2-develop/src/Whisparr.Api.V3/openapi.json
+https://raw.githubusercontent.com/Whisparr/Whisparr/movies/src/Whisparr.Api.V3/openapi.json
 https://raw.githubusercontent.com/lidarr/Lidarr/develop/src/Lidarr.Api.V1/openapi.json
 https://raw.githubusercontent.com/Readarr/Readarr/develop/src/Readarr.Api.V1/openapi.json
 

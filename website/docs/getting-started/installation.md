@@ -77,9 +77,12 @@ Houndarr communicates with *arr instances through their REST APIs. The table bel
 | Sonarr | v3 | 4.0.17.2952 |
 | Lidarr | v1 | 3.1.0.4875 |
 | Readarr | v1 | 0.4.20.129 |
-| Whisparr | v3 | 2.2.0.108 |
+| Whisparr v2 | v3 | 2.2.0.108 |
+| Whisparr v3 | v3 | 3.3.2.604 |
 
-Any version that exposes the same API (v3 or v1 depending on the app) should work. When you test a connection, Houndarr reads the `appName` from the instance's system/status endpoint and verifies it matches the type you selected. If there is a mismatch, the test will tell you what the URL is actually running.
+Whisparr v2 and v3 are separate applications with different APIs. v2 is Sonarr-based (studio/episode model, Docker: `hotio/whisparr:latest`). v3 is Radarr-based (scene/movie model, Docker: `hotio/whisparr:v3`). Select the matching instance type in Houndarr.
+
+Any version that exposes the same API (v3 or v1 depending on the app) should work. When you test a connection, Houndarr reads the `appName` and `version` from the instance's system/status endpoint and verifies it matches the type you selected. For Whisparr, it also detects v2/v3 version mismatches.
 
 ### Readarr forks
 

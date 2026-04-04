@@ -8,7 +8,8 @@
       'radarr':   {'bg': 'bg-amber-950/60',   'text': 'text-amber-300',   'border': 'border-amber-900/50',   'accent': 'border-l-amber-400', 'label': 'Radarr'},
       'lidarr':   {'bg': 'bg-emerald-950/60', 'text': 'text-emerald-300', 'border': 'border-emerald-900/50', 'accent': 'border-l-emerald-400','label': 'Lidarr'},
       'readarr':  {'bg': 'bg-rose-950/60',    'text': 'text-rose-300',    'border': 'border-rose-900/50',    'accent': 'border-l-rose-400',  'label': 'Readarr'},
-      'whisparr': {'bg': 'bg-pink-950/60',    'text': 'text-pink-300',    'border': 'border-pink-900/50',    'accent': 'border-l-pink-400',  'label': 'Whisparr'},
+      'whisparr_v2': {'bg': 'bg-pink-950/60',    'text': 'text-pink-300',    'border': 'border-pink-900/50',    'accent': 'border-l-pink-400',  'label': 'Whisparr v2'},
+      'whisparr_v3': {'bg': 'bg-fuchsia-950/60', 'text': 'text-fuchsia-300', 'border': 'border-fuchsia-900/50', 'accent': 'border-l-fuchsia-400','label': 'Whisparr v3'},
     } -%}
     {%- set b = badge_map.get(instance.type.value, badge_map['sonarr']) -%}
     <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-mono {{ b.bg }} {{ b.text }} border {{ b.border }}">

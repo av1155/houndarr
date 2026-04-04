@@ -16,7 +16,7 @@ Houndarr has a comprehensive test suite that runs automatically on every change 
 
 **Supervisor.** Graceful shutdown, connection loss and recovery, staggered startup, and idempotent task management. Connection errors produce exactly one log entry per failure sequence; recovery produces exactly one.
 
-**Clients.** All five client types (Sonarr, Radarr, Lidarr, Readarr, Whisparr) are tested for correct API paths, request payloads, queue status checks, and error propagation.
+**Clients.** All six client types (Sonarr, Radarr, Lidarr, Readarr, Whisparr v2, Whisparr v3) are tested for correct API paths, request payloads, queue status checks, and error propagation.
 
 **Database.** Log purge, settings, and cooldown tracking are verified at their boundaries, including concurrent access.
 

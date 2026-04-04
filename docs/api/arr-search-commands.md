@@ -294,8 +294,9 @@ from upstream Readarr.
             }
         }
     },
-    "whisparr": {
+    "whisparr_v2": {
         "version_tested": "2.2.0.108",
+        "note": "Sonarr-based (series/episode model)",
         "command_endpoint": "/api/v3/command",
         "commands": {
             "EpisodeSearch": {
@@ -311,6 +312,20 @@ from upstream Readarr.
                     "name": "SeasonSearch",
                     "seriesId": 45,
                     "seasonNumber": 2
+                }
+            }
+        }
+    },
+    "whisparr_v3": {
+        "version_tested": "3.3.2.604",
+        "note": "Radarr-based (movie/scene model)",
+        "command_endpoint": "/api/v3/command",
+        "commands": {
+            "MoviesSearch": {
+                "command_class": "MoviesSearchCommand",
+                "request_body": {
+                    "name": "MoviesSearch",
+                    "movieIds": [123]
                 }
             }
         }
@@ -336,7 +351,8 @@ from upstream Readarr.
 - Radarr: `/api/v3/command`
 - Lidarr: `/api/v1/command`
 - Bookshelf: `/api/v1/command`
-- Whisparr: `/api/v3/command`
+- Whisparr v2: `/api/v3/command`
+- Whisparr v3: `/api/v3/command`
 
 ## Notes for Houndarr client code
 

@@ -1,8 +1,8 @@
-"""Whisparr v3 API client: missing episodes and automatic search.
+"""Whisparr v2 API client: missing episodes and automatic search.
 
-Whisparr is a Sonarr fork with the same v3 API structure.  Key differences:
-episodes use a ``DateOnly`` release date object instead of an ISO-8601
-``airDateUtc`` string, and there is no ``episodeNumber`` field.
+Whisparr v2 is a Sonarr fork with the same v3 API structure.  Key differences:
+episodes use a date string (ISO ``YYYY-MM-DD``) in the ``releaseDate`` field
+instead of Sonarr's ``airDateUtc``, and there is no ``episodeNumber`` field.
 """
 
 from __future__ import annotations
@@ -189,13 +189,23 @@ def _parse_library_episode(record: dict[str, Any]) -> LibraryWhisparrEpisode:
     )
 
 
-def _parse_date_only(obj: dict[str, Any] | None) -> datetime | None:
-    """Convert a Whisparr ``DateOnly`` object ``{year, month, day}`` to a UTC datetime.
+def _parse_date_only(obj: dict[str, Any] | str | None) -> datetime | None:
+    """Convert a Whisparr release date to a UTC datetime.
+
+    The v2 API serialises .NET's ``System.DateOnly`` as a plain ISO date
+    string (``"2026-04-03"``), not as the ``{year, month, day}`` object
+    that the OpenAPI spec generator describes.  This function handles both
+    formats for safety.
 
     Returns ``None`` if the input is missing, empty, or has invalid values.
     """
     if not obj:
         return None
+    if isinstance(obj, str):
+        try:
+            return datetime.fromisoformat(obj).replace(tzinfo=UTC)
+        except ValueError:
+            return None
     try:
         return datetime(obj["year"], obj["month"], obj["day"], tzinfo=UTC)
     except (KeyError, TypeError, ValueError):

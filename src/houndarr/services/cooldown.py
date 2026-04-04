@@ -17,7 +17,7 @@ from typing import Literal
 
 from houndarr.database import get_db
 
-ItemType = Literal["episode", "movie", "album", "book", "whisparr_episode"]
+ItemType = Literal["episode", "movie", "album", "book", "whisparr_episode", "whisparr_v3_movie"]
 
 
 def _now_utc() -> datetime:

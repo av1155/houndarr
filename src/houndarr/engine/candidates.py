@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any, Literal
 
-ItemType = Literal["episode", "movie", "album", "book", "whisparr_episode"]
+ItemType = Literal["episode", "movie", "album", "book", "whisparr_episode", "whisparr_v3_movie"]
 
 
 @dataclass(frozen=True)

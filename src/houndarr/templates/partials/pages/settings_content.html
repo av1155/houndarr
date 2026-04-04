@@ -713,7 +713,7 @@
       }
 
       const t = typeSelect.value;
-      const appOnlyAttrs = ['data-sonarr-only', 'data-lidarr-only', 'data-readarr-only', 'data-whisparr-only'];
+      const appOnlyAttrs = ['data-sonarr-only', 'data-lidarr-only', 'data-readarr-only', 'data-whisparr_v2-only', 'data-whisparr_v3-only'];
       appOnlyAttrs.forEach(function (attr) {
         const appType = attr.replace('data-', '').replace('-only', '');
         addInstanceModalContent.querySelectorAll('[' + attr + '="true"]').forEach(function (el) {

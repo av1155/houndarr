@@ -12,7 +12,7 @@ from houndarr.clients.lidarr import LidarrClient
 from houndarr.clients.radarr import RadarrClient
 from houndarr.clients.readarr import ReadarrClient
 from houndarr.clients.sonarr import SonarrClient
-from houndarr.clients.whisparr import WhisparrClient
+from houndarr.clients.whisparr_v2 import WhisparrClient
 
 # ---------------------------------------------------------------------------
 # Queue status: per-app path verification

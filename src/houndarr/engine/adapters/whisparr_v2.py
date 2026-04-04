@@ -15,7 +15,11 @@ import logging
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from houndarr.clients.whisparr import LibraryWhisparrEpisode, MissingWhisparrEpisode, WhisparrClient
+from houndarr.clients.whisparr_v2 import (
+    LibraryWhisparrEpisode,
+    MissingWhisparrEpisode,
+    WhisparrClient,
+)
 from houndarr.engine.candidates import SearchCandidate
 from houndarr.services.instances import Instance, WhisparrSearchMode
 

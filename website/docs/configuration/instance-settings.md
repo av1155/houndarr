@@ -24,9 +24,10 @@ indexer/API pressure and avoid bans.
 - **Readarr (default):** Sends book-level commands (`BookSearch` with `bookIds`).
 - **Readarr (advanced):** Missing pass can use author-context commands
   (`AuthorSearch` with `authorId`) when enabled per instance.
-- **Whisparr (default):** Sends episode-level commands (`EpisodeSearch` with `episodeIds`).
-- **Whisparr (advanced):** Missing pass can use season-context commands
+- **Whisparr v2 (default):** Sends episode-level commands (`EpisodeSearch` with `episodeIds`).
+- **Whisparr v2 (advanced):** Missing pass can use season-context commands
   (`SeasonSearch` with `seriesId` + `seasonNumber`) when enabled per instance.
+- **Whisparr v3:** Sends movie-level commands (`MoviesSearch` with `movieIds`). No search mode options (always movie-level, like Radarr).
 - Wanted-list reads are restricted to monitored items (`monitored=true`) for both
   missing and cutoff passes across all app types.
 - **Upgrade pass:** Re-uses the same search commands as above but targets library
@@ -81,7 +82,8 @@ Hours to wait after an item's release date before searching.
 Release date evaluation varies by app type:
 
 - **Radarr:** Fallback anchors in order: `digitalRelease` → `physicalRelease` → `releaseDate` → `inCinemas`. Unavailable or pre-release titles may also be skipped using availability signals (`isAvailable` / `status`).
-- **Sonarr / Whisparr:** Uses `airDateUtc` (Sonarr) or the `DateOnly` year/month/day object (Whisparr).
+- **Sonarr / Whisparr v2:** Uses `airDateUtc` (Sonarr) or the `releaseDate` field (Whisparr v2).
+- **Whisparr v3:** Same fallback chain as Radarr (`digitalRelease` -> `physicalRelease` -> `inCinemas`).
 - **Lidarr:** Uses the album `releaseDate` field.
 - **Readarr:** Uses the book `releaseDate` field.
 
@@ -119,9 +121,9 @@ Strategy for Readarr missing-pass commands.
 
 Author-context mode sends at most one `AuthorSearch` per author per pass.
 
-### Whisparr Missing Search Mode
+### Whisparr v2 Missing Search Mode
 
-Strategy for Whisparr missing-pass commands.
+Strategy for Whisparr v2 missing-pass commands (v3 has no search mode; it always searches at the movie level, like Radarr).
 
 - **Default:** `Episode search (default)`
 - **Advanced:** `Season-context search (advanced)`
@@ -198,9 +200,10 @@ Maximum successful upgrade searches per hour.
 
 Per-app strategy for upgrade-pass search commands. Each app type (Sonarr, Lidarr, Readarr, Whisparr) has its own upgrade search mode, independent of the missing search mode. Radarr always searches at the movie level.
 
-- **Sonarr/Whisparr:** Episode (default) or Season-context
+- **Sonarr/Whisparr v2:** Episode (default) or Season-context
 - **Lidarr:** Album (default) or Artist-context
 - **Readarr:** Book (default) or Author-context
+- **Radarr/Whisparr v3:** Always movie-level (no mode selection)
 
 ### Offset-based rotation
 

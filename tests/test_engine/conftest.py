@@ -118,7 +118,7 @@ URL_FOR_TYPE: dict[InstanceType, str] = {
     InstanceType.radarr: RADARR_URL,
     InstanceType.lidarr: LIDARR_URL,
     InstanceType.readarr: READARR_URL,
-    InstanceType.whisparr: WHISPARR_URL,
+    InstanceType.whisparr_v2: WHISPARR_URL,
 }
 
 
@@ -218,7 +218,7 @@ async def seeded_instances(db: None) -> AsyncGenerator[None, None]:
                 (2, "Radarr Test", "radarr", RADARR_URL, encrypted),
                 (3, "Lidarr Test", "lidarr", LIDARR_URL, encrypted),
                 (4, "Readarr Test", "readarr", READARR_URL, encrypted),
-                (5, "Whisparr Test", "whisparr", WHISPARR_URL, encrypted),
+                (5, "Whisparr Test", "whisparr_v2", WHISPARR_URL, encrypted),
             ],
         )
         await conn.commit()

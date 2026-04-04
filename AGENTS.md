@@ -189,7 +189,7 @@ from houndarr.database import get_db
 | Constants | UPPER_SNAKE_CASE | `SESSION_MAX_AGE_SECONDS`, `SCHEMA_VERSION` |
 | Module-level state | `_leading_underscore` | `_db_path`, `_runtime_settings` |
 | Enums | `StrEnum`, lowercase values | `InstanceType.sonarr` |
-| Type aliases | PascalCase or Literal | `ItemType = Literal["episode", "movie", "album", "book", "whisparr_episode"]` |
+| Type aliases | PascalCase or Literal | `ItemType = Literal["episode", "movie", "album", "book", "whisparr_episode", "whisparr_v3_movie"]` |
 
 ### Docstrings
 
@@ -247,7 +247,8 @@ src/houndarr/
     radarr.py          # RadarrClient (movie search, v3 API)
     lidarr.py          # LidarrClient (album/artist search, v1 API)
     readarr.py         # ReadarrClient (book/author search, v1 API)
-    whisparr.py        # WhisparrClient (episode/season search, v3 API)
+    whisparr_v2.py     # WhisparrClient (v2, Sonarr-based, episode/season search)
+    whisparr_v3.py     # WhisparrV3Client (v3, Radarr-based, movie/scene search)
   engine/
     candidates.py      # SearchCandidate dataclass, ItemType, date helpers
     search_loop.py     # run_instance_search(): unified search pipeline (missing/cutoff/upgrade passes, queue-backpressure gate)
@@ -258,7 +259,8 @@ src/houndarr/
       radarr.py        # Radarr adapter: candidate conversion + dispatch
       lidarr.py        # Lidarr adapter: candidate conversion + dispatch
       readarr.py       # Readarr adapter: candidate conversion + dispatch
-      whisparr.py      # Whisparr adapter: candidate conversion + dispatch
+      whisparr_v2.py   # Whisparr v2 adapter: candidate conversion + dispatch
+      whisparr_v3.py   # Whisparr v3 adapter: movie/scene candidate conversion + dispatch
   routes/
     pages.py           # Setup, Login, Dashboard, Logs, Settings page routes
     settings.py        # Settings CRUD (instance add/edit/delete/toggle)
@@ -296,7 +298,7 @@ src/houndarr/
 | Table | Purpose | Key constraints |
 |-------|---------|-----------------|
 | `settings` | Key-value config store | `key TEXT PK` |
-| `instances` | *arr instance configs | `type CHECK IN ('radarr','sonarr','lidarr','readarr','whisparr')`; per-type `*_search_mode` columns with CHECK constraints; `post_release_grace_hrs` (default 6); `queue_limit` (default 0); `upgrade_enabled` (default 0) with per-type `upgrade_*_search_mode`, `upgrade_batch_size`, `upgrade_cooldown_days`, `upgrade_hourly_cap`, `upgrade_item_offset`, `upgrade_series_offset` columns; `missing_page_offset` (default 1), `cutoff_page_offset` (default 1) for page-rotation across cycles |
+| `instances` | *arr instance configs | `type CHECK IN ('radarr','sonarr','lidarr','readarr','whisparr_v2','whisparr_v3')`; per-type `*_search_mode` columns with CHECK constraints; `post_release_grace_hrs` (default 6); `queue_limit` (default 0); `upgrade_enabled` (default 0) with per-type `upgrade_*_search_mode`, `upgrade_batch_size`, `upgrade_cooldown_days`, `upgrade_hourly_cap`, `upgrade_item_offset`, `upgrade_series_offset` columns; `missing_page_offset` (default 1), `cutoff_page_offset` (default 1) for page-rotation across cycles |
 | `cooldowns` | Per-item search cooldown tracking | `instance_id FK→instances ON DELETE CASCADE`; `UNIQUE(instance_id, item_id, item_type)` |
 | `search_log` | Audit trail for every search cycle | `instance_id FK→instances ON DELETE SET NULL`; `action CHECK IN ('searched','skipped','error','info')` |
 
@@ -310,7 +312,8 @@ Full upstream OpenAPI specs are vendored locally and kept current:
 
 - `docs/api/sonarr_openapi.json`: Sonarr v3 API (OpenAPI 3.0.1)
 - `docs/api/radarr_openapi.json`: Radarr v3 API (OpenAPI 3.0.4)
-- `docs/api/whisparr_openapi.json`: Whisparr v3 API (OpenAPI 3.0.1)
+- `docs/api/whisparr_v2_openapi.json`: Whisparr v2 API (Sonarr-based, OpenAPI 3.0.1)
+- `docs/api/whisparr_v3_openapi.json`: Whisparr v3 API (Radarr-based, OpenAPI 3.0.0)
 - `docs/api/lidarr_openapi.json`: Lidarr v1 API (OpenAPI 3.0.4)
 - `docs/api/readarr_openapi.json`: Readarr v1 API (OpenAPI 3.0.1)
 
@@ -318,9 +321,9 @@ Full upstream OpenAPI specs are vendored locally and kept current:
 code. They document every endpoint, parameter, request body, and response
 schema. See `docs/api/README.md` for usage guidelines.
 
-All five specs are actively used by their respective clients in `clients/`.
+All six specs are actively used by their respective clients in `clients/`.
 
-**Freshness:** `api-snapshot-refresh.yml` auto-fetches all five upstream
+**Freshness:** `api-snapshot-refresh.yml` auto-fetches all six upstream
 specs weekly (Monday 10:00 UTC) and opens a PR if changed; local specs
 are never more than one week stale.
 

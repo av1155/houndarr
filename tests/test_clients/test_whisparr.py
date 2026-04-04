@@ -9,7 +9,7 @@ import httpx
 import pytest
 import respx
 
-from houndarr.clients.whisparr import MissingWhisparrEpisode, WhisparrClient
+from houndarr.clients.whisparr_v2 import MissingWhisparrEpisode, WhisparrClient
 
 BASE = "http://whisparr:6969"
 API_KEY = "test-api-key"
@@ -64,7 +64,7 @@ _WHISPARR_EPISODE_RECORD = {
     "title": "Scene Title",
     "seasonNumber": 1,
     "absoluteEpisodeNumber": 5,
-    "releaseDate": {"year": 2023, "month": 9, "day": 1},
+    "releaseDate": "2023-09-01",
     "series": {"id": 70, "title": "My Whisparr Show"},
 }
 
@@ -126,6 +126,18 @@ async def test_get_missing_null_release_date(client: WhisparrClient) -> None:
 
 @pytest.mark.asyncio()
 @respx.mock
+async def test_get_missing_dict_release_date(client: WhisparrClient) -> None:
+    """Legacy DateOnly dict format is still accepted."""
+    record = {**_WHISPARR_EPISODE_RECORD, "releaseDate": {"year": 2023, "month": 9, "day": 1}}
+    respx.get(f"{BASE}/api/v3/wanted/missing").mock(
+        return_value=httpx.Response(200, json={"records": [record]})
+    )
+    results = await client.get_missing()
+    assert results[0].release_date == datetime(2023, 9, 1, tzinfo=UTC)
+
+
+@pytest.mark.asyncio()
+@respx.mock
 async def test_get_missing_empty_release_date_object(client: WhisparrClient) -> None:
     """Empty DateOnly object {} results in release_date=None."""
     record = {**_WHISPARR_EPISODE_RECORD, "releaseDate": {}}
@@ -141,6 +153,18 @@ async def test_get_missing_empty_release_date_object(client: WhisparrClient) -> 
 async def test_get_missing_invalid_release_date_object(client: WhisparrClient) -> None:
     """Invalid DateOnly values (e.g., month=13) result in release_date=None."""
     record = {**_WHISPARR_EPISODE_RECORD, "releaseDate": {"year": 2023, "month": 13, "day": 1}}
+    respx.get(f"{BASE}/api/v3/wanted/missing").mock(
+        return_value=httpx.Response(200, json={"records": [record]})
+    )
+    results = await client.get_missing()
+    assert results[0].release_date is None
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_get_missing_invalid_release_date_string(client: WhisparrClient) -> None:
+    """Unparseable date strings result in release_date=None."""
+    record = {**_WHISPARR_EPISODE_RECORD, "releaseDate": "not-a-date"}
     respx.get(f"{BASE}/api/v3/wanted/missing").mock(
         return_value=httpx.Response(200, json={"records": [record]})
     )

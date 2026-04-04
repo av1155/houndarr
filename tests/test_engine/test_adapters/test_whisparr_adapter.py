@@ -7,8 +7,8 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from houndarr.clients.whisparr import MissingWhisparrEpisode, WhisparrClient
-from houndarr.engine.adapters.whisparr import (
+from houndarr.clients.whisparr_v2 import MissingWhisparrEpisode, WhisparrClient
+from houndarr.engine.adapters.whisparr_v2 import (
     _episode_label,
     _season_context_label,
     _season_item_id,
@@ -36,7 +36,7 @@ def _make_instance(
     return Instance(
         id=5,
         name="Whisparr Test",
-        type=InstanceType.whisparr,
+        type=InstanceType.whisparr_v2,
         url="http://whisparr:6969",
         api_key="test-key",
         enabled=True,

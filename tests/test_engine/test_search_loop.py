@@ -164,7 +164,7 @@ async def seeded_instances(db: None) -> AsyncGenerator[None, None]:
                 (2, "Radarr Test", "radarr", RADARR_URL, encrypted),
                 (3, "Lidarr Test", "lidarr", LIDARR_URL, encrypted),
                 (4, "Readarr Test", "readarr", READARR_URL, encrypted),
-                (5, "Whisparr Test", "whisparr", WHISPARR_URL, encrypted),
+                (5, "Whisparr Test", "whisparr_v2", WHISPARR_URL, encrypted),
             ],
         )
         await conn.commit()
@@ -1056,7 +1056,7 @@ async def test_whisparr_release_timing_skip_allows_one_retry_while_on_cooldown(
         return_value=httpx.Response(201, json={"id": 5})
     )
 
-    instance = _make_instance(instance_id=5, itype=InstanceType.whisparr, url=WHISPARR_URL)
+    instance = _make_instance(instance_id=5, itype=InstanceType.whisparr_v2, url=WHISPARR_URL)
     count = await run_instance_search(instance, MASTER_KEY)
 
     assert count == 1
@@ -1072,7 +1072,7 @@ async def test_whisparr_season_context_release_timing_skip_allows_one_retry_whil
     seeded_instances: None,
 ) -> None:
     """Whisparr season-context mode may override season cooldown after a release-timing skip."""
-    from houndarr.engine.adapters.whisparr import _season_item_id
+    from houndarr.engine.adapters.whisparr_v2 import _season_item_id
 
     await _seed_release_timing_retry(
         instance_id=5,
@@ -1089,7 +1089,7 @@ async def test_whisparr_season_context_release_timing_skip_allows_one_retry_whil
 
     instance = _make_instance(
         instance_id=5,
-        itype=InstanceType.whisparr,
+        itype=InstanceType.whisparr_v2,
         url=WHISPARR_URL,
         whisparr_search_mode=WhisparrSearchMode.season_context,
     )
@@ -1457,7 +1457,7 @@ async def test_whisparr_item_is_searched(seeded_instances: None) -> None:
         return_value=httpx.Response(201, json={"id": 5})
     )
 
-    instance = _make_instance(instance_id=5, itype=InstanceType.whisparr, url=WHISPARR_URL)
+    instance = _make_instance(instance_id=5, itype=InstanceType.whisparr_v2, url=WHISPARR_URL)
     count = await run_instance_search(instance, MASTER_KEY)
 
     assert count == 1
@@ -1504,7 +1504,7 @@ async def test_whisparr_season_context_mode(seeded_instances: None) -> None:
 
     instance = _make_instance(
         instance_id=5,
-        itype=InstanceType.whisparr,
+        itype=InstanceType.whisparr_v2,
         url=WHISPARR_URL,
         whisparr_search_mode=WhisparrSearchMode.season_context,
     )

@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.0] - 2026-04-04
+
+### Added
+
+- Whisparr v3 instance type for the Radarr-based Whisparr application, with client-side library filtering and `MoviesSearch` dispatch. (#338)
+- Version-based mismatch detection in the connection test warns when the selected Whisparr version does not match the remote instance. (#338)
+- Schema migration v10 automatically renames existing `whisparr` instances to `whisparr_v2` on upgrade. (#338)
+
+### Fixed
+
+- Whisparr v2 `releaseDate` parsing now handles the ISO date string format returned by the real API, restoring post-release grace period checks. (#339)
+
+---
+
 ## [1.6.6] - 2026-04-02
 
 ### Added

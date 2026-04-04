@@ -511,7 +511,20 @@ async def _migrate_to_v10(db: aiosqlite.Connection) -> None:
     ``whisparr_v3`` type is added alongside it.
 
     SQLite cannot ALTER CHECK constraints, so affected tables are recreated.
+    On a healthy database where the CHECK already includes ``whisparr_v3``,
+    this is a no-op (detected via the DDL stored in ``sqlite_master``).
     """
+    # Guard: skip the expensive table recreation if the migration was already
+    # applied.  Querying sqlite_master for the CREATE TABLE DDL is the
+    # cheapest reliable way to detect whether the CHECK constraint has been
+    # expanded, because SQLite stores the original DDL verbatim.
+    async with db.execute(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='instances'"
+    ) as cur:
+        row = await cur.fetchone()
+    if row and "whisparr_v3" in (row[0] or ""):
+        return
+
     await db.execute("PRAGMA foreign_keys=OFF")
 
     # Guard: clean up any leftover temp tables from a partial previous run.

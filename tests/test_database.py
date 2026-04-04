@@ -575,14 +575,16 @@ async def test_init_db_migrates_v6_schema_to_v7(tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio()
-async def test_init_db_self_heals_v9_columns_when_version_already_current(
+async def test_init_db_self_heals_v9_and_v10_when_version_already_current(
     tmp_path: Path,
 ) -> None:
-    """init_db should add missing v9 columns even when schema_version is current.
+    """init_db should add missing v9 columns and expand v10 CHECK constraints.
 
     Regression test for a scenario where the version was bumped but the
     ALTER TABLE statements did not persist (e.g. interrupted WAL checkpoint
-    or hot-reload race during development).
+    or hot-reload race during development).  Also verifies the v10 self-heal:
+    ``whisparr`` rows become ``whisparr_v2``, and ``whisparr_v3`` /
+    ``whisparr_v3_movie`` are accepted by the updated CHECK constraints.
     """
     db_path = tmp_path / "corrupted-v9.db"
 
@@ -631,6 +633,10 @@ async def test_init_db_self_heals_v9_columns_when_version_already_current(
                 updated_at TEXT NOT NULL DEFAULT '2024-01-01T00:00:00.000Z'
             );
 
+            -- Seed a row with the old 'whisparr' type to verify v10 rename.
+            INSERT INTO instances (name, type, url)
+            VALUES ('Old Whisparr', 'whisparr', 'http://whisparr:6969');
+
             CREATE TABLE cooldowns (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 instance_id INTEGER NOT NULL
@@ -674,6 +680,27 @@ async def test_init_db_self_heals_v9_columns_when_version_already_current(
             instance_columns = {row[1] async for row in cur}
         assert "missing_page_offset" in instance_columns
         assert "cutoff_page_offset" in instance_columns
+
+        # v10 self-heal: old 'whisparr' row should be renamed to 'whisparr_v2'.
+        async with conn.execute("SELECT type FROM instances WHERE name = 'Old Whisparr'") as cur:
+            row = await cur.fetchone()
+        assert row is not None
+        assert row[0] == "whisparr_v2"
+
+        # v10 self-heal: new 'whisparr_v3' type accepted by CHECK constraint.
+        await conn.execute(
+            "INSERT INTO instances (name, type, url)"
+            " VALUES ('v10 guard', 'whisparr_v3', 'http://test')"
+        )
+
+        # v10 self-heal: 'whisparr_v3_movie' accepted in cooldowns CHECK.
+        v3_id_row = await conn.execute("SELECT id FROM instances WHERE name = 'v10 guard'")
+        v3_id = (await v3_id_row.fetchone())[0]
+        await conn.execute(
+            "INSERT INTO cooldowns (instance_id, item_id, item_type, searched_at)"
+            " VALUES (?, 1, 'whisparr_v3_movie', '2024-01-01T00:00:00Z')",
+            (v3_id,),
+        )
 
 
 @pytest.mark.asyncio()

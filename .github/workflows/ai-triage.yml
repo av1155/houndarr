@@ -42,6 +42,23 @@ jobs:
 
             // ── 2. Collect issue data ────────────────────────────────
             const issue = context.payload.issue;
+            const title = issue.title.toLowerCase();
+
+            // Skip recurring maintenance tasks that follow a repeating
+            // pattern. These are inherently sequential (each version or
+            // dependency is a distinct task) and LLMs reliably misclassify
+            // them as duplicates of their predecessors.
+            const skipPatterns = [
+              /^chore:\s*bump\s+version/,
+              /^chore\(.+\):\s*bump\s+version/,
+              /^chore:\s*update\s+depend/,
+              /^chore:\s*merge\s+dependabot/,
+            ];
+            if (skipPatterns.some(p => p.test(title))) {
+              core.info(`Skipping triage for maintenance issue: ${issue.title}`);
+              return;
+            }
+
             const issueBody = (issue.body || '').slice(0, 3000);
 
             // ── 3. Fetch existing issues for comparison ──────────────

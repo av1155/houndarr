@@ -11,7 +11,11 @@ jobs:
   remove-stale-label:
     name: Remove stale label
     # Only run when the commented issue is still open.
-    if: github.event.issue.state == 'open'
+    # Skip bot comments so triage automation labels are not removed
+    # immediately after being applied.
+    if: >-
+      github.event.issue.state == 'open'
+      && github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
 
     steps:

@@ -1,0 +1,217 @@
+name: AI Issue Triage
+
+on:
+  issues:
+    types: [opened]
+
+permissions:
+  issues: write
+  models: read
+  contents: read
+
+jobs:
+  triage:
+    name: AI triage
+    runs-on: ubuntu-latest
+    # Skip bot-created issues to prevent loops and unnecessary API calls.
+    if: >-
+      github.actor != 'github-actions[bot]'
+      && github.actor != 'dependabot[bot]'
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: .github/prompts
+          sparse-checkout-cone-mode: false
+
+      # All issue data is accessed via context.payload (JavaScript), never
+      # interpolated into shell commands. No injection risk.
+      - name: Triage issue
+        uses: actions/github-script@v7
+        env:
+          GH_TOKEN: ${{ github.token }}
+        with:
+          script: |
+            const fs = require('fs');
+
+            // ── 1. Read system prompt ────────────────────────────────
+            const systemPrompt = fs.readFileSync(
+              '.github/prompts/triage-system.md',
+              'utf8',
+            );
+
+            // ── 2. Collect issue data ────────────────────────────────
+            const issue = context.payload.issue;
+            const issueBody = (issue.body || '').slice(0, 3000);
+
+            // ── 3. Fetch existing issues for comparison ──────────────
+            const [closed, open] = await Promise.all([
+              github.rest.issues.listForRepo({
+                ...context.repo,
+                state: 'closed',
+                per_page: 100,
+                sort: 'updated',
+                direction: 'desc',
+              }),
+              github.rest.issues.listForRepo({
+                ...context.repo,
+                state: 'open',
+                per_page: 100,
+                sort: 'updated',
+                direction: 'desc',
+              }),
+            ]);
+
+            const existing = [...closed.data, ...open.data]
+              .filter(i => i.number !== issue.number && !i.pull_request)
+              .map(i => {
+                const labels = i.labels.map(l => l.name).join(', ');
+                const tag = labels ? ` (${labels})` : '';
+                return `#${i.number} [${i.state}]${tag}: ${i.title}`;
+              })
+              .join('\n');
+
+            // ── 4. Build prompt ──────────────────────────────────────
+            const userMessage = [
+              `NEW ISSUE #${issue.number}:`,
+              `Title: ${issue.title}`,
+              'Body:',
+              issueBody,
+              '',
+              'EXISTING ISSUES:',
+              existing,
+            ].join('\n');
+
+            // ── 5. Call GitHub Models ─────────────────────────────────
+            let response;
+            try {
+              response = await fetch(
+                'https://models.github.ai/inference/chat/completions',
+                {
+                  method: 'POST',
+                  headers: {
+                    Authorization: `Bearer ${process.env.GH_TOKEN}`,
+                    'Content-Type': 'application/json',
+                  },
+                  body: JSON.stringify({
+                    model: 'openai/gpt-4o-mini',
+                    messages: [
+                      { role: 'system', content: systemPrompt },
+                      { role: 'user', content: userMessage },
+                    ],
+                    max_tokens: 500,
+                    temperature: 0.1,
+                  }),
+                },
+              );
+            } catch (err) {
+              core.warning(`GitHub Models request failed: ${err.message}`);
+              return;
+            }
+
+            if (!response.ok) {
+              const text = await response.text().catch(() => '');
+              core.warning(
+                `GitHub Models returned ${response.status}: ${text.slice(0, 200)}`,
+              );
+              return;
+            }
+
+            const result = await response.json();
+            const content = result.choices?.[0]?.message?.content;
+            if (!content) {
+              core.warning('Empty response from GitHub Models');
+              return;
+            }
+
+            // ── 6. Parse structured response ─────────────────────────
+            let assessment;
+            try {
+              const jsonMatch = content.match(/\{[\s\S]*\}/);
+              assessment = JSON.parse(jsonMatch ? jsonMatch[0] : content);
+            } catch {
+              core.warning(
+                `Failed to parse AI response: ${content.slice(0, 300)}`,
+              );
+              return;
+            }
+
+            const {
+              duplicate_of: dupOf,
+              confidence,
+              similar_issues: similar,
+              quality,
+              missing_info: missing,
+            } = assessment;
+
+            core.info(`AI assessment: ${JSON.stringify(assessment)}`);
+
+            // ── 7. Act on assessment ─────────────────────────────────
+
+            // High-confidence duplicate: label and comment.
+            if (dupOf && confidence === 'high') {
+              await github.rest.issues.addLabels({
+                ...context.repo,
+                issue_number: issue.number,
+                labels: ['duplicate'],
+              });
+              await github.rest.issues.createComment({
+                ...context.repo,
+                issue_number: issue.number,
+                body: [
+                  `This issue appears to be a duplicate of #${dupOf}.`,
+                  '',
+                  'Please check the linked issue for context and any',
+                  'existing resolution. If your problem is different,',
+                  'please reopen with details explaining the difference.',
+                ].join('\n'),
+              });
+              return;
+            }
+
+            // Medium-confidence: informational comment only.
+            if (
+              confidence === 'medium'
+              && Array.isArray(similar)
+              && similar.length > 0
+            ) {
+              const refs = similar.map(n => `#${n}`).join(', ');
+              await github.rest.issues.createComment({
+                ...context.repo,
+                issue_number: issue.number,
+                body: [
+                  `This issue may be related to ${refs}.`,
+                  'Please check those issues for context that might',
+                  'help with diagnosis.',
+                ].join('\n'),
+              });
+            }
+
+            // Incomplete bug report: request missing info.
+            // Only for bug reports (title starts with "fix:").
+            if (
+              quality === 'incomplete'
+              && Array.isArray(missing)
+              && missing.length > 0
+              && issue.title.toLowerCase().startsWith('fix:')
+            ) {
+              const missingList = missing.map(m => `- ${m}`).join('\n');
+              await github.rest.issues.addLabels({
+                ...context.repo,
+                issue_number: issue.number,
+                labels: ['waiting-for-reporter'],
+              });
+              await github.rest.issues.createComment({
+                ...context.repo,
+                issue_number: issue.number,
+                body: [
+                  'Thanks for opening this issue. To help with diagnosis,',
+                  'could you provide the following:',
+                  '',
+                  missingList,
+                  '',
+                  'This issue will be closed automatically if there is no',
+                  'response within 7 days.',
+                ].join('\n'),
+              });
+            }

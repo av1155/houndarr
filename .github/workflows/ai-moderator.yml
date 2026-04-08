@@ -1,0 +1,38 @@
+name: AI Spam Moderator
+
+on:
+  issues:
+    types: [opened]
+  issue_comment:
+    types: [created]
+
+permissions:
+  issues: write
+  models: read
+  contents: read
+
+jobs:
+  moderate:
+    name: Moderate content
+    runs-on: ubuntu-latest
+    # Skip bot-created events to avoid unnecessary API calls.
+    if: >-
+      github.actor != 'github-actions[bot]'
+      && github.actor != 'dependabot[bot]'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # continue-on-error so forks without GitHub Models access
+      # do not see hard failures on every issue or comment.
+      - uses: github/ai-moderator@v1
+        continue-on-error: true
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          spam-label: "spam"
+          minimize-detected-comments: true
+          enable-spam-detection: true
+          enable-link-spam-detection: true
+          # Legitimate users may use AI to write clear bug reports.
+          # Flagging AI-generated content would be counterproductive.
+          enable-ai-detection: false

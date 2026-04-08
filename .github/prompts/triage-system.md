@@ -18,6 +18,12 @@ Analyze the new issue below and compare it against the list of existing issues.
   feature area. The specific problem or request must match.
 - Closed issues count as duplicates. If the problem was already reported and
   resolved (or closed as out of scope), the new issue is still a duplicate.
+- Recurring maintenance tasks are NOT duplicates of each other. Version bumps
+  ("chore: bump version to X.Y.Z"), dependency updates, changelog entries,
+  and similar routine tasks are distinct work items even when titles follow
+  the same pattern. Each version number, dependency name, or date represents
+  a separate task. Only mark these as duplicates if the EXACT same version or
+  change is already tracked in an open issue.
 - Prefer false negatives over false positives. Only mark "high" confidence
   when the root cause or feature request is clearly the same.
 

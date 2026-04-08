@@ -30,6 +30,7 @@ jobs:
         uses: actions/github-script@v7
         env:
           GH_TOKEN: ${{ github.token }}
+          AI_MODEL: ${{ vars.AI_TRIAGE_MODEL || 'openai/gpt-4.1-mini' }}
         with:
           script: |
             const fs = require('fs');
@@ -111,7 +112,7 @@ jobs:
                     'Content-Type': 'application/json',
                   },
                   body: JSON.stringify({
-                    model: 'openai/gpt-4o-mini',
+                    model: process.env.AI_MODEL,
                     messages: [
                       { role: 'system', content: systemPrompt },
                       { role: 'user', content: userMessage },

@@ -30,7 +30,7 @@ For each instance you need:
 
 - **Name**: a friendly label (e.g., "Radarr Movies", "Sonarr 4K", "Lidarr Music")
 - **Type**: Radarr, Sonarr, Lidarr, Readarr, Whisparr v2, or Whisparr v3
-- **URL**: the base URL of the instance (e.g., `http://sonarr:8989`)
+- **URL**: the base URL of the instance (e.g., `http://sonarr:8989`). For Docker Compose, this must be the *arr's internal container port, not the host port you published. See [Troubleshooting](/docs/concepts/troubleshooting) if the connection test fails.
 - **API Key**: found in your *arr instance under Settings > General
 
 :::tip

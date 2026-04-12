@@ -42,7 +42,7 @@ jobs:
         run: |
           helm package charts/houndarr \
             --version "$CHART_VERSION" \
-            --app-version "$CHART_VERSION" \
+            --app-version "v${CHART_VERSION}" \
             --destination /tmp/helm-output
 
       - name: Push chart to GHCR

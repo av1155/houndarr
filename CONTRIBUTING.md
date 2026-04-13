@@ -1,6 +1,6 @@
 # Contributing to Houndarr
 
-Thanks for your interest in improving Houndarr.
+Thanks for your interest in improving Houndarr!
 
 ## Scope
 

@@ -20,7 +20,7 @@ jobs:
       && github.actor != 'dependabot[bot]'
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           sparse-checkout: .github/prompts
           sparse-checkout-cone-mode: false
@@ -28,7 +28,7 @@ jobs:
       # All issue data is accessed via context.payload (JavaScript), never
       # interpolated into shell commands. No injection risk.
       - name: Triage issue
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         env:
           GH_TOKEN: ${{ github.token }}
           AI_MODEL: ${{ vars.AI_TRIAGE_MODEL || 'openai/gpt-4.1-mini' }}

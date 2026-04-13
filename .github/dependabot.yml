@@ -26,6 +26,8 @@ updates:
           - "mypy"
           - "pytest*"
           - "anyio"
+          - "respx"
+          - "setuptools"
 
   # npm (Docusaurus docs site)
   - package-ecosystem: "npm"

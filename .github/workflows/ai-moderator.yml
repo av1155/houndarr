@@ -22,7 +22,7 @@ jobs:
       && github.actor != 'dependabot[bot]'
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       # continue-on-error so forks without GitHub Models access
       # do not see hard failures on every issue or comment.

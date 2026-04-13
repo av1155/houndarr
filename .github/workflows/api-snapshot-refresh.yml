@@ -17,6 +17,7 @@ jobs:
   refresh:
     name: Refresh *arr OpenAPI snapshots
     runs-on: ubuntu-latest
+    timeout-minutes: 10
 
     steps:
       - name: Checkout

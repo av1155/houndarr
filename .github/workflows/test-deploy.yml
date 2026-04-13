@@ -16,6 +16,7 @@ jobs:
   build:
     name: Test docs build
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Checkout
         uses: actions/checkout@v6

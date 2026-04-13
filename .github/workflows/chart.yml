@@ -11,6 +11,7 @@ jobs:
   publish:
     name: Package and push Helm chart
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: read
       packages: write

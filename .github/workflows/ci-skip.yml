@@ -15,88 +15,58 @@ on:
       - ".claude/**"
 
 permissions:
-  contents: read
+  checks: write
 
 concurrency:
   group: ci-skip-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
-  # ---------- Quality (quality.yml) ----------
-  lint:
-    name: Lint (ruff)
+  skip-checks:
+    name: CI Skip (docs-only)
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
-      - run: echo "Docs-only change — lint not required"
-
-  format:
-    name: Format (ruff)
-    runs-on: ubuntu-latest
-    steps:
-      - run: echo "Docs-only change — format check not required"
-
-  typecheck:
-    name: Type check (mypy)
-    runs-on: ubuntu-latest
-    steps:
-      - run: echo "Docs-only change — type check not required"
-
-  # ---------- Tests (tests.yml) ----------
-  test:
-    name: Test (Python 3.12)
-    runs-on: ubuntu-latest
-    steps:
-      - run: echo "Docs-only change — tests not required"
-
-  # ---------- Security (security.yml) ----------
-  dependency-audit:
-    name: Dependency audit (pip-audit)
-    runs-on: ubuntu-latest
-    steps:
-      - run: echo "Docs-only change — dependency audit not required"
-
-  sast:
-    name: SAST (bandit)
-    runs-on: ubuntu-latest
-    steps:
-      - run: echo "Docs-only change — SAST not required"
-
-  trivy-fs:
-    name: Trivy filesystem scan
-    runs-on: ubuntu-latest
-    steps:
-      - run: echo "Docs-only change — Trivy filesystem scan not required"
-
-  # ---------- Dependency Review (dependency-review.yml) ----------
-  dependency-review:
-    name: Dependency review
-    runs-on: ubuntu-latest
-    steps:
-      - run: echo "Docs-only change — dependency review not required"
-
-  # ---------- Docker (docker.yml) ----------
-  docker:
-    name: Build (no push)
-    runs-on: ubuntu-latest
-    steps:
-      - run: echo "Docs-only change — Docker build not required"
-
-  trivy-image:
-    name: Trivy image scan
-    runs-on: ubuntu-latest
-    steps:
-      - run: echo "Docs-only change — Trivy image scan not required"
-
-  # ---------- Version Check (version-check.yml) ----------
-  version-check:
-    name: Version consistency
-    runs-on: ubuntu-latest
-    steps:
-      - run: echo "Docs-only change — version check not required"
-
-  # ---------- Security Smoke Test (security-smoke-test.yml) ----------
-  smoke-test:
-    name: Security smoke test
-    runs-on: ubuntu-latest
-    steps:
-      - run: echo "Docs-only change — security smoke test not required"
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const checks = [
+              'Lint (ruff)',
+              'Format (ruff)',
+              'Type check (mypy)',
+              'Test (Python 3.12)',
+              'Dependency audit (pip-audit)',
+              'SAST (bandit)',
+              'Trivy filesystem scan',
+              'Dependency review',
+              'Build (no push)',
+              'Trivy image scan',
+              'Security smoke test',
+              'Version consistency',
+            ];
+            const sha = context.payload.pull_request.head.sha;
+            const now = new Date().toISOString();
+            for (const name of checks) {
+              try {
+                await github.rest.checks.create({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  head_sha: sha,
+                  name,
+                  status: 'completed',
+                  conclusion: 'success',
+                  completed_at: now,
+                  output: {
+                    title: 'Skipped (docs-only)',
+                    summary: 'Docs-only change; CI check not required.',
+                  },
+                });
+                core.info(`Created check run: ${name}`);
+              } catch (error) {
+                core.setFailed(
+                  `Failed to create check run "${name}": ${error.message}`
+                );
+                throw error;
+              }
+            }
+            core.info(`All ${checks.length} check runs created`);

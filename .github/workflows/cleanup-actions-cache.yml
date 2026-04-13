@@ -20,8 +20,8 @@ name: Cleanup Actions Cache
 
 on:
   schedule:
-    # Every day at 05:00 UTC (low-traffic window).
-    - cron: "0 5 * * *"
+    # Every Monday at 05:00 UTC.
+    - cron: "0 5 * * 1"
   workflow_dispatch:
     inputs:
       dry_run:
@@ -45,6 +45,7 @@ jobs:
   cleanup:
     name: Prune stale caches
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Prune caches
         env:

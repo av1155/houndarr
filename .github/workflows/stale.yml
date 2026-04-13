@@ -12,6 +12,7 @@ jobs:
   stale:
     name: Close stale issues
     runs-on: ubuntu-latest
+    timeout-minutes: 5
 
     steps:
       - uses: actions/stale@v10

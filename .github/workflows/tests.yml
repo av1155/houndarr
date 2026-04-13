@@ -1,13 +1,6 @@
 name: Tests
 
 on:
-  push:
-    branches: ["main"]
-    paths-ignore:
-      - "docs/**"
-      - "**/*.md"
-      - "website/**"
-      - ".claude/**"
   pull_request:
     paths-ignore:
       - "docs/**"
@@ -26,6 +19,7 @@ jobs:
   test:
     name: Test (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:

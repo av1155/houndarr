@@ -1,13 +1,6 @@
 name: Security Smoke Test
 
 on:
-  push:
-    branches: ["main"]
-    paths-ignore:
-      - "docs/**"
-      - "**/*.md"
-      - "website/**"
-      - ".claude/**"
   pull_request:
     paths-ignore:
       - "docs/**"
@@ -26,6 +19,7 @@ jobs:
   smoke-test:
     name: Security smoke test
     runs-on: ubuntu-latest
+    timeout-minutes: 20
 
     steps:
       - name: Checkout

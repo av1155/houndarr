@@ -20,6 +20,7 @@ jobs:
   actionlint:
     name: Lint GitHub Actions workflows (actionlint)
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - name: Checkout
         uses: actions/checkout@v6

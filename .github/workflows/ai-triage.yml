@@ -13,6 +13,7 @@ jobs:
   triage:
     name: AI triage
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     # Skip bot-created issues to prevent loops and unnecessary API calls.
     if: >-
       github.actor != 'github-actions[bot]'

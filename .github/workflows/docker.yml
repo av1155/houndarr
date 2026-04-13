@@ -2,13 +2,7 @@ name: Docker
 
 on:
   push:
-    branches: ["main"]
     tags: ["v*"]
-    paths-ignore:
-      - "docs/**"
-      - "**/*.md"
-      - "website/**"
-      - ".claude/**"
   pull_request:
     paths-ignore:
       - "docs/**"
@@ -30,6 +24,7 @@ jobs:
   build:
     name: Build ${{ startsWith(github.ref, 'refs/tags/v') && '+ Push' || '(no push)' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     permissions:
       contents: read
       packages: write
@@ -80,6 +75,7 @@ jobs:
   scan:
     name: Trivy image scan
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     needs: build
     permissions:
       contents: read

@@ -15,6 +15,7 @@ jobs:
   moderate:
     name: Moderate content
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     # Skip bot-created events to avoid unnecessary API calls.
     if: >-
       github.actor != 'github-actions[bot]'

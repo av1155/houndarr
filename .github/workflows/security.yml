@@ -1,13 +1,6 @@
 name: Security
 
 on:
-  push:
-    branches: ["main"]
-    paths-ignore:
-      - "docs/**"
-      - "**/*.md"
-      - "website/**"
-      - ".claude/**"
   pull_request:
     paths-ignore:
       - "docs/**"
@@ -29,6 +22,7 @@ jobs:
   dependency-audit:
     name: Dependency audit (pip-audit)
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -62,6 +56,7 @@ jobs:
   sast:
     name: SAST (bandit)
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -83,6 +78,7 @@ jobs:
   trivy-fs:
     name: Trivy filesystem scan
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: read
       security-events: write

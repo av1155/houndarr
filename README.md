@@ -68,6 +68,7 @@ Houndarr fixes this by searching slowly, politely, and automatically. It works t
 - Per-instance hourly API cap keeps indexer usage in check
 - Download-queue backpressure gate skips cycles when the queue is full
 - Bounded multi-page scanning so deep backlog items are not starved
+- Optional per-instance time windows so scheduled searches only run during configured hours
 
 **Web UI**
 

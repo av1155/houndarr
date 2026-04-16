@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Schema version: bump when adding new migrations
 # ---------------------------------------------------------------------------
-SCHEMA_VERSION = 10
+SCHEMA_VERSION = 11
 
 # ---------------------------------------------------------------------------
 # DDL
@@ -68,6 +68,7 @@ CREATE TABLE IF NOT EXISTS instances (
     upgrade_series_offset INTEGER NOT NULL DEFAULT 0,
     missing_page_offset  INTEGER NOT NULL DEFAULT 1,
     cutoff_page_offset   INTEGER NOT NULL DEFAULT 1,
+    allowed_time_window  TEXT    NOT NULL DEFAULT '',
     enabled              INTEGER NOT NULL DEFAULT 1,
     created_at           TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     updated_at           TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
@@ -171,6 +172,7 @@ async def init_db() -> None:
             # healthy database.
             await _migrate_to_v9(db)
             await _migrate_to_v10(db)
+            await _migrate_to_v11(db)
             await _ensure_v3_indexes(db)
             await db.commit()
 
@@ -195,6 +197,8 @@ async def _run_migrations(db: aiosqlite.Connection, from_version: int) -> None:
         await _migrate_to_v9(db)
     if from_version < 10:
         await _migrate_to_v10(db)
+    if from_version < 11:
+        await _migrate_to_v11(db)
 
     logger.info("Migrated database from schema version %d to %d", from_version, SCHEMA_VERSION)
     await db.execute(
@@ -684,6 +688,19 @@ async def _migrate_to_v10(db: aiosqlite.Connection) -> None:
     )
 
     await db.execute("PRAGMA foreign_keys=ON")
+
+
+async def _migrate_to_v11(db: aiosqlite.Connection) -> None:
+    """Add ``allowed_time_window`` column for per-instance search schedules.
+
+    Default is the empty string (always allowed; no gate).  When set to a
+    non-empty spec like ``"09:00-23:00"`` or ``"09:00-12:00,18:00-22:00"``,
+    the search loop skips scheduled cycles that fall outside the window.
+    """
+    if not await _column_exists(db, "instances", "allowed_time_window"):
+        await db.execute(
+            "ALTER TABLE instances ADD COLUMN allowed_time_window TEXT NOT NULL DEFAULT ''"
+        )
 
 
 async def _ensure_v3_indexes(db: aiosqlite.Connection) -> None:

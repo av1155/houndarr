@@ -25,6 +25,11 @@ from houndarr.services.cooldown import (
     record_search,
 )
 from houndarr.services.instances import Instance, InstanceType, update_instance
+from houndarr.services.time_window import (
+    format_ranges,
+    is_within_window,
+    parse_time_window,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -751,6 +756,46 @@ async def run_instance_search(
     client = adapter.make_client(instance)
     cycle_id_value = cycle_id or str(uuid4())
     searched = 0
+
+    # --- Allowed-time-window gate (scheduled cycles only) ---
+    # Manual "Run Now" clicks (cycle_trigger == "run_now") bypass this gate
+    # on purpose: the time window is an operator-preference schedule, not a
+    # safety gate.  Queue backpressure and hourly caps still apply to manual
+    # runs below.
+    if cycle_trigger == "scheduled" and instance.allowed_time_window:
+        try:
+            ranges = parse_time_window(instance.allowed_time_window)
+        except ValueError:
+            # Malformed spec should have been rejected at save time; if it
+            # slipped through (e.g. manual DB edit), fail open rather than
+            # silently skipping every cycle forever.
+            logger.warning(
+                "[%s] malformed allowed_time_window %r; ignoring gate",
+                instance.name,
+                instance.allowed_time_window,
+            )
+            ranges = []
+        if ranges:
+            now_local = datetime.now(UTC).astimezone().time()
+            if not is_within_window(now_local, ranges):
+                reason = "outside allowed time window"
+                configured = format_ranges(ranges)
+                message = (
+                    f"Local time {now_local.strftime('%H:%M')} is outside "
+                    f"configured window {configured}"
+                )
+                logger.info("[%s] skipping cycle: %s (%s)", instance.name, reason, message)
+                await _write_log(
+                    instance.id,
+                    None,
+                    None,
+                    "info",
+                    cycle_id=cycle_id_value,
+                    cycle_trigger=cycle_trigger,
+                    reason=reason,
+                    message=message,
+                )
+                return 0
 
     # --- Queue backpressure gate ---
     if instance.queue_limit > 0:

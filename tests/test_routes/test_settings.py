@@ -596,3 +596,67 @@ def test_password_change_htmx(app: TestClient) -> None:
     )
     assert resp.status_code == 200
     assert b"Password updated successfully" in resp.content
+
+
+# ---------------------------------------------------------------------------
+# allowed_time_window validation on create + update
+# ---------------------------------------------------------------------------
+
+
+def test_create_accepts_valid_time_window(app: TestClient) -> None:
+    _login(app)
+    form = {**_VALID_FORM, "allowed_time_window": "09:00-23:00"}
+    resp = app.post("/settings/instances", data=form, headers=csrf_headers(app))
+    assert resp.status_code == 200
+
+
+def test_create_rejects_malformed_time_window(app: TestClient) -> None:
+    _login(app)
+    form = {**_VALID_FORM, "allowed_time_window": "9:00-bogus"}
+    resp = app.post("/settings/instances", data=form, headers=csrf_headers(app))
+    assert resp.status_code == 422
+    assert b"Invalid time range" in resp.content
+
+
+def test_create_rejects_out_of_range_hour(app: TestClient) -> None:
+    _login(app)
+    form = {**_VALID_FORM, "allowed_time_window": "25:00-26:00"}
+    resp = app.post("/settings/instances", data=form, headers=csrf_headers(app))
+    assert resp.status_code == 422
+    assert b"Out-of-range" in resp.content
+
+
+def test_create_persists_time_window_through_round_trip(app: TestClient) -> None:
+    """A valid window should survive round-trip to the DB and reappear in the edit form."""
+    _login(app)
+    form = {**_VALID_FORM, "allowed_time_window": "22:00-06:00"}
+    create_resp = app.post("/settings/instances", data=form, headers=csrf_headers(app))
+    assert create_resp.status_code == 200
+
+    # The first (and only) instance in this test DB has id=1.
+    edit_resp = app.get("/settings/instances/1/edit")
+    assert edit_resp.status_code == 200
+    # The form must pre-fill the value.
+    assert b'value="22:00-06:00"' in edit_resp.content
+
+
+def test_update_rejects_malformed_time_window(app: TestClient) -> None:
+    """Updating with an invalid window is a 422 and leaves the old value intact."""
+    _login(app)
+    # First create a valid instance.
+    create_resp = app.post(
+        "/settings/instances",
+        data={**_VALID_FORM, "allowed_time_window": "09:00-18:00"},
+        headers=csrf_headers(app),
+    )
+    assert create_resp.status_code == 200
+
+    # Now try to update with a bogus spec.
+    bad_form = {**_VALID_FORM, "allowed_time_window": "not-a-window"}
+    update_resp = app.post("/settings/instances/1", data=bad_form, headers=csrf_headers(app))
+    assert update_resp.status_code == 422
+    assert b"Invalid time range" in update_resp.content
+
+    # The stored value must still be the original.
+    edit_resp = app.get("/settings/instances/1/edit")
+    assert b'value="09:00-18:00"' in edit_resp.content

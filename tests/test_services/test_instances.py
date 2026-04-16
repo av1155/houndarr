@@ -80,6 +80,7 @@ async def test_create_applies_defaults(db: None, master_key: bytes) -> None:
     assert inst.cutoff_cooldown_days == 21
     assert inst.cutoff_hourly_cap == 1
     assert inst.sonarr_search_mode == SonarrSearchMode.episode
+    assert inst.allowed_time_window == ""
 
 
 @pytest.mark.asyncio()
@@ -269,3 +270,41 @@ async def test_delete_removes_from_list(db: None, master_key: bytes) -> None:
     remaining = await list_instances(master_key=master_key)
     assert len(remaining) == 1
     assert remaining[0].id == a.id
+
+
+# ---------------------------------------------------------------------------
+# allowed_time_window round-trip
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio()
+async def test_create_persists_allowed_time_window(db: None, master_key: bytes) -> None:
+    inst = await _make(master_key, allowed_time_window="09:00-23:00")
+    fetched = await get_instance(inst.id, master_key=master_key)
+    assert fetched is not None
+    assert fetched.allowed_time_window == "09:00-23:00"
+
+
+@pytest.mark.asyncio()
+async def test_update_allowed_time_window(db: None, master_key: bytes) -> None:
+    from houndarr.services.instances import update_instance
+
+    inst = await _make(master_key)
+    assert inst.allowed_time_window == ""
+
+    updated = await update_instance(
+        inst.id,
+        master_key=master_key,
+        allowed_time_window="22:00-06:00",
+    )
+    assert updated is not None
+    assert updated.allowed_time_window == "22:00-06:00"
+
+    # Clearing works too.
+    cleared = await update_instance(
+        inst.id,
+        master_key=master_key,
+        allowed_time_window="",
+    )
+    assert cleared is not None
+    assert cleared.allowed_time_window == ""

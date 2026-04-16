@@ -11,6 +11,7 @@ from enum import StrEnum
 from typing import Any
 
 from houndarr.config import (
+    DEFAULT_ALLOWED_TIME_WINDOW,
     DEFAULT_BATCH_SIZE,
     DEFAULT_COOLDOWN_DAYS,
     DEFAULT_CUTOFF_BATCH_SIZE,
@@ -117,6 +118,7 @@ class Instance:
     upgrade_series_offset: int = 0
     missing_page_offset: int = 1
     cutoff_page_offset: int = 1
+    allowed_time_window: str = ""
 
 
 # ---------------------------------------------------------------------------
@@ -161,6 +163,7 @@ def _row_to_instance(row: Any, master_key: bytes) -> Instance:
         upgrade_series_offset=row["upgrade_series_offset"],
         missing_page_offset=row["missing_page_offset"],
         cutoff_page_offset=row["cutoff_page_offset"],
+        allowed_time_window=row["allowed_time_window"],
     )
 
 
@@ -207,6 +210,7 @@ async def create_instance(
     upgrade_whisparr_search_mode: WhisparrSearchMode = WhisparrSearchMode(
         DEFAULT_UPGRADE_WHISPARR_SEARCH_MODE
     ),
+    allowed_time_window: str = DEFAULT_ALLOWED_TIME_WINDOW,
 ) -> Instance:
     """Insert a new instance row and return the populated :class:`Instance`.
 
@@ -240,6 +244,9 @@ async def create_instance(
         upgrade_lidarr_search_mode: Lidarr upgrade-search strategy mode.
         upgrade_readarr_search_mode: Readarr upgrade-search strategy mode.
         upgrade_whisparr_search_mode: Whisparr upgrade-search strategy mode.
+        allowed_time_window: Optional schedule spec (e.g. ``"09:00-23:00"``)
+            restricting scheduled cycles to configured windows.  Empty
+            string disables the gate (24/7 operation).
 
     Returns:
         The newly created :class:`Instance` with its database-assigned *id*.
@@ -258,10 +265,11 @@ async def create_instance(
                 upgrade_enabled, upgrade_batch_size, upgrade_cooldown_days,
                 upgrade_hourly_cap,
                 upgrade_sonarr_search_mode, upgrade_lidarr_search_mode,
-                upgrade_readarr_search_mode, upgrade_whisparr_search_mode
+                upgrade_readarr_search_mode, upgrade_whisparr_search_mode,
+                allowed_time_window
             ) VALUES (
                 ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                ?, ?, ?, ?, ?, ?, ?, ?
+                ?, ?, ?, ?, ?, ?, ?, ?, ?
             )
             """,
             (
@@ -292,6 +300,7 @@ async def create_instance(
                 upgrade_lidarr_search_mode.value,
                 upgrade_readarr_search_mode.value,
                 upgrade_whisparr_search_mode.value,
+                allowed_time_window,
             ),
         )
         await db.commit()
@@ -364,7 +373,8 @@ async def update_instance(
             ``upgrade_sonarr_search_mode``, ``upgrade_lidarr_search_mode``,
             ``upgrade_readarr_search_mode``, ``upgrade_whisparr_search_mode``,
             ``upgrade_item_offset``, ``upgrade_series_offset``,
-            ``missing_page_offset``, ``cutoff_page_offset``.
+            ``missing_page_offset``, ``cutoff_page_offset``,
+            ``allowed_time_window``.
 
     Returns:
         Updated :class:`Instance`, or ``None`` if *id* does not exist.
@@ -402,6 +412,7 @@ async def update_instance(
         "upgrade_series_offset": "upgrade_series_offset",
         "missing_page_offset": "missing_page_offset",
         "cutoff_page_offset": "cutoff_page_offset",
+        "allowed_time_window": "allowed_time_window",
     }
 
     _search_mode_fields = {

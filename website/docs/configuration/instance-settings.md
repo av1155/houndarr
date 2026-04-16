@@ -221,6 +221,38 @@ the entire cycle is skipped and logged as `queue backpressure (N/M)`.
 - If the queue endpoint is unreachable, the search proceeds normally (fails open).
 - This prevents Houndarr from piling up work when the download client is already busy.
 
+## Allowed search window
+
+The `Allowed Search Window` field restricts scheduled cycles to one or more
+time-of-day windows. Use it when your NAS or host puts disks to sleep during
+off-hours and you do not want Houndarr waking them up.
+
+**Format:** `HH:MM-HH:MM` per window, comma-separated for multiple windows.
+
+- `09:00-23:00`: allow searches from 9 AM up to (but not including) 11 PM.
+- `09:00-12:00,18:00-22:00`: two separate windows in one day.
+- `22:00-06:00`: wrap-around window covering late night through early morning.
+- Leave blank for 24/7 operation.
+
+**Timezone:** Windows are interpreted in the container's local time, which
+follows the `TZ` environment variable (e.g. `TZ=America/New_York`). If `TZ`
+is unset, Houndarr falls back to UTC.
+
+**Boundary semantics:** Start is inclusive, end is exclusive. `09:00-12:00`
+allows searches at 09:00:00 but blocks them at 12:00:00.
+
+**Run Now bypass:** Manual `Run Now` clicks always run, even outside the
+window. The window is an operator-preference schedule, not a safety gate;
+queue backpressure and hourly caps still apply to manual runs.
+
+**When skipped:** The cycle writes a single `info` row to the search log with
+reason `outside allowed time window` and a message showing the current local
+time next to the configured window. The supervisor sleeps normally and
+re-checks on the next cycle, so operators who want faster re-entry can
+lower `Sleep (minutes)`.
+
+- **Default:** empty (24/7, no gate)
+
 ## Fair backlog scanning
 
 Houndarr does not stop at the first wanted page. During each cycle, it can scan
@@ -247,6 +279,7 @@ Skips are normal. See [How Houndarr Works](/docs/concepts/how-houndarr-works#wha
 | Cooldown (days) | `14` |
 | Post-Release Grace (hrs) | `6` |
 | Queue Limit | `0` (disabled) |
+| Allowed Search Window | (blank, 24/7) |
 | Cutoff search | Off |
 | Cutoff Batch | `1` |
 | Cutoff Cooldown | `21` |

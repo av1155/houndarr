@@ -251,6 +251,7 @@ DEFAULT_LIDARR_SEARCH_MODE: str = "album"
 DEFAULT_READARR_SEARCH_MODE: str = "book"
 DEFAULT_WHISPARR_SEARCH_MODE: str = "episode"
 DEFAULT_QUEUE_LIMIT: int = 0
+DEFAULT_ALLOWED_TIME_WINDOW: str = ""
 DEFAULT_LOG_RETENTION_DAYS: int = 30
 
 # Upgrade search defaults (third, opt-in pass; very conservative)

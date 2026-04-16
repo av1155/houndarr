@@ -21,6 +21,7 @@ from houndarr.clients.sonarr import SonarrClient
 from houndarr.clients.whisparr_v2 import WhisparrClient
 from houndarr.clients.whisparr_v3 import WhisparrV3Client
 from houndarr.config import (
+    DEFAULT_ALLOWED_TIME_WINDOW,
     DEFAULT_BATCH_SIZE,
     DEFAULT_COOLDOWN_DAYS,
     DEFAULT_CUTOFF_BATCH_SIZE,
@@ -57,6 +58,7 @@ from houndarr.services.instances import (
     list_instances,
     update_instance,
 )
+from houndarr.services.time_window import parse_time_window
 from houndarr.services.url_validation import validate_instance_url
 
 router = APIRouter()
@@ -128,6 +130,7 @@ def _blank_instance() -> Instance:
         whisparr_search_mode=WhisparrSearchMode(DEFAULT_WHISPARR_SEARCH_MODE),
         created_at="",
         updated_at="",
+        allowed_time_window=DEFAULT_ALLOWED_TIME_WINDOW,
     )
 
 
@@ -549,6 +552,7 @@ async def instance_create(
     upgrade_lidarr_search_mode: Annotated[str, Form()] = DEFAULT_UPGRADE_LIDARR_SEARCH_MODE,
     upgrade_readarr_search_mode: Annotated[str, Form()] = DEFAULT_UPGRADE_READARR_SEARCH_MODE,
     upgrade_whisparr_search_mode: Annotated[str, Form()] = DEFAULT_UPGRADE_WHISPARR_SEARCH_MODE,
+    allowed_time_window: Annotated[str, Form()] = DEFAULT_ALLOWED_TIME_WINDOW,
     connection_verified: Annotated[str, Form()] = "false",
 ) -> HTMLResponse:
     """Create a new instance and return the updated instance table body."""
@@ -560,6 +564,11 @@ async def instance_create(
     url_error = validate_instance_url(url)
     if url_error is not None:
         return _connection_guard_response(url_error)
+
+    try:
+        parse_time_window(allowed_time_window)
+    except ValueError as exc:
+        return _connection_guard_response(str(exc))
 
     validation_error = _validate_cutoff_controls(
         cutoff_batch_size,
@@ -636,6 +645,7 @@ async def instance_create(
         upgrade_lidarr_search_mode=upgrade_modes.lidarr,
         upgrade_readarr_search_mode=upgrade_modes.readarr,
         upgrade_whisparr_search_mode=upgrade_modes.whisparr,
+        allowed_time_window=allowed_time_window.strip(),
     )
 
     supervisor = getattr(request.app.state, "supervisor", None)
@@ -696,6 +706,7 @@ async def instance_update(
     upgrade_lidarr_search_mode: Annotated[str, Form()] = DEFAULT_UPGRADE_LIDARR_SEARCH_MODE,
     upgrade_readarr_search_mode: Annotated[str, Form()] = DEFAULT_UPGRADE_READARR_SEARCH_MODE,
     upgrade_whisparr_search_mode: Annotated[str, Form()] = DEFAULT_UPGRADE_WHISPARR_SEARCH_MODE,
+    allowed_time_window: Annotated[str, Form()] = DEFAULT_ALLOWED_TIME_WINDOW,
     connection_verified: Annotated[str, Form()] = "false",
 ) -> HTMLResponse:
     """Update an existing instance and return the refreshed row partial.
@@ -713,6 +724,11 @@ async def instance_update(
     url_error = validate_instance_url(url)
     if url_error is not None:
         return _connection_guard_response(url_error)
+
+    try:
+        parse_time_window(allowed_time_window)
+    except ValueError as exc:
+        return _connection_guard_response(str(exc))
 
     validation_error = _validate_cutoff_controls(
         cutoff_batch_size,
@@ -808,6 +824,7 @@ async def instance_update(
         whisparr_search_mode=search_modes.whisparr,
         missing_page_offset=1,
         cutoff_page_offset=1,
+        allowed_time_window=allowed_time_window.strip(),
         **upgrade_fields,
     )
     if updated is None:

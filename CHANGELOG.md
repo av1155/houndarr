@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.8.0] - 2026-04-16
+
+### Added
+
+- Per-instance `Allowed Search Window` setting restricts scheduled cycles to one or more `HH:MM-HH:MM` time-of-day windows using container local time; blank preserves 24/7 behaviour and `Run Now` bypasses the gate. (#388)
+
+### Fixed
+
+- Instance URLs using `host.docker.internal` and `host.containers.internal` (the Docker/Podman container-to-host aliases) are now accepted by the SSRF guard. (#387)
+- Helm chart `appVersion` is now prefixed with `v` so it matches the published Docker image tags. (#364)
+
+---
+
 ## [1.7.0] - 2026-04-04
 
 ### Added

@@ -12,6 +12,13 @@ private network ranges needed for Docker / LAN setups.
 
 Both literal IPs and resolved hostname addresses are checked against blocked
 targets, so aliases that resolve to loopback/link-local ranges are rejected.
+
+Exemption: the container-to-host bridge hostnames ``host.docker.internal``
+and ``host.containers.internal`` are accepted despite resolving to
+link-local addresses.  Docker and Podman inject these names into the
+container's ``/etc/hosts`` as the documented way to reach services running
+on the container host; external DNS cannot forge them, and they do not
+match any cloud metadata service name or IP.
 """
 
 from __future__ import annotations
@@ -32,6 +39,16 @@ _ALLOWED_SCHEMES = frozenset(["http", "https"])
 # Hostnames that should never be used directly; operators must use container
 # names or FQDNs instead.
 _BLOCKED_HOSTNAMES: frozenset[str] = frozenset(["localhost"])
+
+# Container-to-host bridge hostnames provided by Docker and Podman.  These
+# names are injected into the container's /etc/hosts by the runtime and
+# commonly resolve to link-local addresses (e.g. 169.254.1.2 on Podman).
+# They are the documented way to reach services running on the container
+# host, so they must bypass the generic link-local block that otherwise
+# exists to defend against cloud metadata SSRF.
+_TRUSTED_CONTAINER_HOST_ALIASES: frozenset[str] = frozenset(
+    ["host.docker.internal", "host.containers.internal"]
+)
 
 # Valid hostname pattern: RFC 1123 relaxed to allow underscores in label
 # interiors so that Docker container names (e.g. radarr_hd) work without
@@ -95,7 +112,10 @@ def validate_instance_url(url: str) -> str | None:
       (loopback, link-local, unspecified)
 
     Private IP ranges (RFC-1918) are intentionally allowed so that Docker /
-    LAN deployments work without restriction.
+    LAN deployments work without restriction.  The hostnames
+    ``host.docker.internal`` and ``host.containers.internal`` are accepted
+    even though they resolve to link-local addresses; see the module
+    docstring for rationale.
 
     Args:
         url: The URL to validate (e.g. ``http://sonarr:8989``).
@@ -127,6 +147,11 @@ def validate_instance_url(url: str) -> str | None:
             f"Instance URL host '{host}' is not allowed. "
             "Use the container name or network hostname instead of 'localhost'."
         )
+
+    # Container-to-host bridge aliases are exempt from the IP-range check.
+    # They resolve to link-local addresses that would otherwise be blocked.
+    if host.lower() in _TRUSTED_CONTAINER_HOST_ALIASES:
+        return None
 
     # IP address range check (literal IP host)
     try:

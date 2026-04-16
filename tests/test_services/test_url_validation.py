@@ -279,3 +279,107 @@ def test_hostname_resolving_to_unspecified_rejected(monkeypatch: pytest.MonkeyPa
     result = validate_instance_url("http://bind-target.internal")
     assert result is not None
     assert "blocked" in result.lower()
+
+
+# ---------------------------------------------------------------------------
+# Container-to-host bridge aliases (Docker / Podman)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "http://host.docker.internal:7878",
+        "http://host.docker.internal:8989",
+        "https://host.docker.internal:443",
+        "http://host.docker.internal",  # no port
+        "http://host.docker.internal/api/v3/system/status",  # with path
+        "http://host.containers.internal:7878",
+        "http://host.containers.internal:8989",
+        "https://host.containers.internal:443",
+        "http://host.containers.internal",
+    ],
+)
+def test_container_host_aliases_allowed(url: str) -> None:
+    """Docker / Podman container-to-host bridge hostnames must be accepted."""
+    assert validate_instance_url(url) is None
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "http://HOST.DOCKER.INTERNAL:7878",
+        "http://Host.Docker.Internal:7878",
+        "http://HOST.Containers.INTERNAL:8989",
+    ],
+)
+def test_container_host_aliases_case_insensitive(url: str) -> None:
+    """Alias matching must be case-insensitive, matching DNS semantics."""
+    assert validate_instance_url(url) is None
+
+
+def test_host_docker_internal_bypasses_link_local_resolution(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The alias must be accepted even when it resolves to a link-local IP."""
+
+    def _fake_getaddrinfo(host: str, port: object, type: int) -> list[tuple[object, ...]]:
+        # If the exemption is missing, this resolution would trigger the
+        # link-local block path.  The exemption must short-circuit before
+        # getaddrinfo is consulted; asserting here guards against a future
+        # refactor that moves the check after DNS.
+        raise AssertionError("getaddrinfo must not be called for a trusted container-host alias")
+
+    monkeypatch.setattr(socket, "getaddrinfo", _fake_getaddrinfo)
+
+    assert validate_instance_url("http://host.docker.internal:7878") is None
+
+
+def test_host_containers_internal_bypasses_link_local_resolution(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Podman's alias must also short-circuit before DNS resolution."""
+
+    def _fake_getaddrinfo(host: str, port: object, type: int) -> list[tuple[object, ...]]:
+        raise AssertionError("getaddrinfo must not be called for a trusted container-host alias")
+
+    monkeypatch.setattr(socket, "getaddrinfo", _fake_getaddrinfo)
+
+    assert validate_instance_url("http://host.containers.internal:7878") is None
+
+
+def test_cloud_metadata_literal_ip_still_rejected_after_exemption() -> None:
+    """Regression guard: the exemption must not unblock cloud metadata."""
+    result = validate_instance_url("http://169.254.169.254")
+    assert result is not None
+    assert "blocked" in result.lower()
+
+
+def test_lookalike_container_alias_not_exempt(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A hostname that merely contains the alias as a subdomain is not exempt."""
+
+    def _fake_getaddrinfo(host: str, port: object, type: int) -> list[tuple[object, ...]]:
+        assert host == "host.docker.internal.evil.com"
+        assert type == socket.SOCK_STREAM
+        return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("169.254.169.254", 80))]
+
+    monkeypatch.setattr(socket, "getaddrinfo", _fake_getaddrinfo)
+
+    result = validate_instance_url("http://host.docker.internal.evil.com")
+    assert result is not None
+    assert "blocked" in result.lower()
+
+
+def test_prefix_only_container_alias_not_exempt(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A leading lookalike label ('host.docker.internal-fake') is not exempt."""
+
+    def _fake_getaddrinfo(host: str, port: object, type: int) -> list[tuple[object, ...]]:
+        assert host == "host.docker.internal-fake"
+        assert type == socket.SOCK_STREAM
+        return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("169.254.169.254", 80))]
+
+    monkeypatch.setattr(socket, "getaddrinfo", _fake_getaddrinfo)
+
+    result = validate_instance_url("http://host.docker.internal-fake")
+    assert result is not None
+    assert "blocked" in result.lower()

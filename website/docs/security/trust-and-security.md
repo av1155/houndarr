@@ -303,6 +303,12 @@ When adding or editing an instance URL, Houndarr validates the target:
 Hostnames are resolved via DNS and each resolved IP is checked against the
 blocked ranges to prevent DNS rebinding to loopback addresses.
 
+The container-to-host bridge hostnames `host.docker.internal` and
+`host.containers.internal` are exempt from the link-local check. Docker and
+Podman inject these names into the container's `/etc/hosts` as the documented
+way to reach services running on the host; they do not overlap with cloud
+metadata service names or IPs.
+
 ## Protecting your data directory
 
 The persistent data directory (default `/data` in Docker) contains:

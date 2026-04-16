@@ -236,7 +236,10 @@ off-hours and you do not want Houndarr waking them up.
 
 **Timezone:** Windows are interpreted in the container's local time, which
 follows the `TZ` environment variable (e.g. `TZ=America/New_York`). If `TZ`
-is unset, Houndarr falls back to UTC.
+is unset, Houndarr falls back to UTC. In zones with daylight-saving
+transitions, avoid windows that overlap the spring-forward gap (02:00-03:00
+does not exist that day) or the fall-back repeat (01:00-02:00 occurs twice);
+configure windows outside those hours if predictability matters.
 
 **Boundary semantics:** Start is inclusive, end is exclusive. `09:00-12:00`
 allows searches at 09:00:00 but blocks them at 12:00:00.

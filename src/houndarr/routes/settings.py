@@ -58,7 +58,7 @@ from houndarr.services.instances import (
     list_instances,
     update_instance,
 )
-from houndarr.services.time_window import parse_time_window
+from houndarr.services.time_window import format_ranges, parse_time_window
 from houndarr.services.url_validation import validate_instance_url
 
 router = APIRouter()
@@ -566,7 +566,7 @@ async def instance_create(
         return _connection_guard_response(url_error)
 
     try:
-        parse_time_window(allowed_time_window)
+        canonical_window = format_ranges(parse_time_window(allowed_time_window))
     except ValueError as exc:
         return _connection_guard_response(str(exc))
 
@@ -645,7 +645,7 @@ async def instance_create(
         upgrade_lidarr_search_mode=upgrade_modes.lidarr,
         upgrade_readarr_search_mode=upgrade_modes.readarr,
         upgrade_whisparr_search_mode=upgrade_modes.whisparr,
-        allowed_time_window=allowed_time_window.strip(),
+        allowed_time_window=canonical_window,
     )
 
     supervisor = getattr(request.app.state, "supervisor", None)
@@ -726,7 +726,7 @@ async def instance_update(
         return _connection_guard_response(url_error)
 
     try:
-        parse_time_window(allowed_time_window)
+        canonical_window = format_ranges(parse_time_window(allowed_time_window))
     except ValueError as exc:
         return _connection_guard_response(str(exc))
 
@@ -824,7 +824,7 @@ async def instance_update(
         whisparr_search_mode=search_modes.whisparr,
         missing_page_offset=1,
         cutoff_page_offset=1,
-        allowed_time_window=allowed_time_window.strip(),
+        allowed_time_window=canonical_window,
         **upgrade_fields,
     )
     if updated is None:

@@ -753,7 +753,6 @@ async def run_instance_search(
     )
 
     adapter = get_adapter(instance.type)
-    client = adapter.make_client(instance)
     cycle_id_value = cycle_id or str(uuid4())
     searched = 0
 
@@ -838,6 +837,7 @@ async def run_instance_search(
     # --- Missing pass ---
     missing_target = max(0, instance.batch_size)
     if missing_target > 0:
+        client = adapter.make_client(instance)
         async with client:
             missing_searched, next_missing_page = await _run_search_pass(
                 instance,

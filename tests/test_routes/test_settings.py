@@ -640,6 +640,22 @@ def test_create_persists_time_window_through_round_trip(app: TestClient) -> None
     assert b'value="22:00-06:00"' in edit_resp.content
 
 
+def test_create_canonicalizes_whitespace_and_stores_normalized_form(
+    app: TestClient,
+) -> None:
+    """Inner whitespace around the comma should be normalized out on save."""
+    _login(app)
+    form = {
+        **_VALID_FORM,
+        "allowed_time_window": "  09:00-12:00 , 14:00-22:00  ",
+    }
+    create_resp = app.post("/settings/instances", data=form, headers=csrf_headers(app))
+    assert create_resp.status_code == 200
+
+    edit_resp = app.get("/settings/instances/1/edit")
+    assert b'value="09:00-12:00,14:00-22:00"' in edit_resp.content
+
+
 def test_update_rejects_malformed_time_window(app: TestClient) -> None:
     """Updating with an invalid window is a 422 and leaves the old value intact."""
     _login(app)

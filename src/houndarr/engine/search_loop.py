@@ -737,15 +737,18 @@ async def _run_upgrade_pass(
         )
         await asyncio.sleep(_INTER_SEARCH_DELAY_SECONDS)
 
-    # Persist new offset
-    try:
-        await update_instance(
-            instance.id,
-            master_key=master_key,
-            upgrade_item_offset=new_offset,
-        )
-    except Exception:  # noqa: BLE001
-        logger.warning("[%s] failed to persist upgrade_item_offset", instance.name)
+    # Persist new offset.  In random mode the offset concept does not apply
+    # (the pool was shuffled, not rotated), so skip the write entirely to
+    # keep the column meaningful and avoid per-cycle row churn.
+    if instance.search_order == SearchOrder.chronological:
+        try:
+            await update_instance(
+                instance.id,
+                master_key=master_key,
+                upgrade_item_offset=new_offset,
+            )
+        except Exception:  # noqa: BLE001
+            logger.warning("[%s] failed to persist upgrade_item_offset", instance.name)
 
     return searched
 
@@ -889,14 +892,19 @@ async def run_instance_search(
                 total_fn=lambda: client.get_wanted_total("missing"),
             )
         searched += missing_searched
-        try:
-            await update_instance(
-                instance.id,
-                master_key=master_key,
-                missing_page_offset=next_missing_page,
-            )
-        except Exception:  # noqa: BLE001
-            logger.warning("[%s] failed to persist missing_page_offset", instance.name)
+        # In random mode the "next page" returned by the pass is derived from
+        # a random pick, not a rotation offset, so persisting it would write
+        # a misleading value to the column and churn the row every cycle.
+        # Only advance the offset in chronological mode.
+        if instance.search_order == SearchOrder.chronological:
+            try:
+                await update_instance(
+                    instance.id,
+                    master_key=master_key,
+                    missing_page_offset=next_missing_page,
+                )
+            except Exception:  # noqa: BLE001
+                logger.warning("[%s] failed to persist missing_page_offset", instance.name)
 
     logger.info("[%s] cycle complete: %d searched", instance.name, searched)
 
@@ -929,14 +937,17 @@ async def run_instance_search(
                     total_fn=lambda: cutoff_client.get_wanted_total("cutoff"),
                 )
             logger.info("[%s] cutoff pass complete: %d searched", instance.name, cutoff_searched)
-            try:
-                await update_instance(
-                    instance.id,
-                    master_key=master_key,
-                    cutoff_page_offset=next_cutoff_page,
-                )
-            except Exception:  # noqa: BLE001
-                logger.warning("[%s] failed to persist cutoff_page_offset", instance.name)
+            # Mirror the missing-pass gate: only advance the offset in
+            # chronological mode.  See the missing pass for rationale.
+            if instance.search_order == SearchOrder.chronological:
+                try:
+                    await update_instance(
+                        instance.id,
+                        master_key=master_key,
+                        cutoff_page_offset=next_cutoff_page,
+                    )
+                except Exception:  # noqa: BLE001
+                    logger.warning("[%s] failed to persist cutoff_page_offset", instance.name)
             searched += cutoff_searched
 
     # --- Upgrade pass ---

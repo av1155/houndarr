@@ -133,6 +133,7 @@ def _blank_instance() -> Instance:
         created_at="",
         updated_at="",
         allowed_time_window=DEFAULT_ALLOWED_TIME_WINDOW,
+        search_order=SearchOrder(DEFAULT_SEARCH_ORDER),
     )
 
 

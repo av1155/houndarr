@@ -1,0 +1,163 @@
+name: Browser E2E
+
+on:
+  pull_request:
+    paths-ignore:
+      - "docs/**"
+      - "**/*.md"
+      - "website/**"
+      - ".claude/**"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  browser-e2e:
+    name: Browser E2E (${{ matrix.browser }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chromium, firefox, webkit]
+
+    env:
+      BROWSER: ${{ matrix.browser }}
+      WORKSPACE: ${{ github.workspace }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install browser test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest pytest-playwright playwright fastapi 'uvicorn[standard]' httpx
+          playwright install --with-deps "$BROWSER"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Build Houndarr image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          platforms: linux/amd64
+          load: true
+          tags: houndarr:e2e
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Create docker network
+        run: docker network create arr-net
+
+      - name: Start mock *arr services
+        run: |
+          docker run -d --name mock-sonarr --network arr-net \
+            -v "${WORKSPACE}/tests/e2e_browser/mock_arr.py:/app/mock_arr.py:ro" \
+            python:3.12-slim \
+            bash -c "pip install --quiet fastapi 'uvicorn[standard]' && python /app/mock_arr.py --app Sonarr --port 8989"
+          docker run -d --name mock-radarr --network arr-net \
+            -v "${WORKSPACE}/tests/e2e_browser/mock_arr.py:/app/mock_arr.py:ro" \
+            python:3.12-slim \
+            bash -c "pip install --quiet fastapi 'uvicorn[standard]' && python /app/mock_arr.py --app Radarr --port 7878"
+
+      - name: Wait for mock services
+        run: |
+          for target in mock-sonarr:8989 mock-radarr:7878; do
+            name="${target%:*}"
+            port="${target#*:}"
+            for i in $(seq 1 60); do
+              if docker exec "$name" python -c "import httpx; httpx.get('http://localhost:${port}/api/v3/system/status').raise_for_status()" 2>/dev/null; then
+                echo "$name is ready"
+                break
+              fi
+              if [ "$i" -eq 60 ]; then
+                docker logs "$name"
+                echo "$name did not come up"
+                exit 1
+              fi
+              sleep 1
+            done
+          done
+
+      - name: Start Houndarr container
+        run: |
+          mkdir -p /tmp/houndarr-e2e-data
+          docker run -d --name houndarr-e2e --network arr-net \
+            -p 8877:8877 \
+            -v /tmp/houndarr-e2e-data:/data \
+            -e TZ=UTC \
+            houndarr:e2e
+
+      - name: Wait for Houndarr health
+        run: |
+          for i in $(seq 1 60); do
+            if curl -sf http://localhost:8877/api/health | grep -q '"status":"ok"'; then
+              echo "Houndarr healthy"
+              exit 0
+            fi
+            sleep 2
+          done
+          docker logs houndarr-e2e
+          exit 1
+
+      - name: Create test admin account
+        run: |
+          curl -sf -X POST http://localhost:8877/setup \
+            -d 'username=admin&password=CITestPass1!&password_confirm=CITestPass1!' \
+            -o /dev/null
+
+      - name: Run browser e2e suite
+        env:
+          HOUNDARR_URL: http://localhost:8877
+          MOCK_SONARR_URL: http://mock-sonarr:8989
+          MOCK_RADARR_URL: http://mock-radarr:7878
+          HOUNDARR_E2E_USER: admin
+          HOUNDARR_E2E_PASS: CITestPass1!
+        run: |
+          pytest tests/e2e_browser/ \
+            --browser "$BROWSER" \
+            --tracing retain-on-failure \
+            --screenshot only-on-failure \
+            --full-page-screenshot \
+            --video retain-on-failure \
+            --output test-results/e2e \
+            -v
+
+      - name: Dump container logs on failure
+        if: failure()
+        run: |
+          echo "::group::houndarr-e2e"
+          docker logs houndarr-e2e
+          echo "::endgroup::"
+          echo "::group::mock-sonarr"
+          docker logs mock-sonarr
+          echo "::endgroup::"
+          echo "::group::mock-radarr"
+          docker logs mock-radarr
+          echo "::endgroup::"
+
+      - name: Upload playwright artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-${{ matrix.browser }}
+          path: test-results/e2e
+          retention-days: 7
+
+      - name: Cleanup
+        if: always()
+        run: |
+          docker rm -f houndarr-e2e mock-sonarr mock-radarr || true
+          docker network rm arr-net || true

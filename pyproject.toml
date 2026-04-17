@@ -131,6 +131,10 @@ skips = [
 # ---------------------------------------------------------------------------
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# Browser e2e suite boots a live container and needs playwright installed;
+# skip it during the default pytest run and invoke explicitly with
+# ``pytest tests/e2e_browser/ --browser ...`` from the dedicated CI job.
+norecursedirs = ["e2e_browser"]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 addopts = "-q --tb=short"

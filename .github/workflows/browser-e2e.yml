@@ -65,12 +65,14 @@ jobs:
         run: |
           docker run -d --name mock-sonarr --network arr-net \
             -v "${WORKSPACE}/tests/e2e_browser/mock_arr.py:/app/mock_arr.py:ro" \
-            python:3.12-slim \
-            bash -c "pip install --quiet fastapi 'uvicorn[standard]' && python /app/mock_arr.py --app Sonarr --port 8989"
+            --entrypoint python \
+            houndarr:e2e \
+            /app/mock_arr.py --app Sonarr --port 8989
           docker run -d --name mock-radarr --network arr-net \
             -v "${WORKSPACE}/tests/e2e_browser/mock_arr.py:/app/mock_arr.py:ro" \
-            python:3.12-slim \
-            bash -c "pip install --quiet fastapi 'uvicorn[standard]' && python /app/mock_arr.py --app Radarr --port 7878"
+            --entrypoint python \
+            houndarr:e2e \
+            /app/mock_arr.py --app Radarr --port 7878
 
       - name: Wait for mock services
         run: |
@@ -78,7 +80,7 @@ jobs:
             name="${target%:*}"
             port="${target#*:}"
             for i in $(seq 1 60); do
-              if docker exec "$name" python -c "import httpx; httpx.get('http://localhost:${port}/api/v3/system/status').raise_for_status()" 2>/dev/null; then
+              if docker exec "$name" python -c "from urllib.request import urlopen; urlopen('http://localhost:${port}/api/v3/system/status').read()" 2>/dev/null; then
                 echo "$name is ready"
                 break
               fi

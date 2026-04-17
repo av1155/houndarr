@@ -1090,3 +1090,49 @@ async def test_upgrade_scan_budget_limits(
     ]
     # scan_budget=8: 7 on cooldown consume 7, then item 207 consumes 8th
     assert len(upgrade_searched) == 1
+
+
+# ---------------------------------------------------------------------------
+# Random search order for upgrade pass (#394)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio()
+@respx.mock
+@patch(
+    "houndarr.engine.search_loop.update_instance",
+    new_callable=AsyncMock,
+)
+async def test_upgrade_random_shuffles_pool(
+    mock_update: AsyncMock,
+    seeded_instances: None,
+) -> None:
+    """Random mode bypasses id-sort + rotation; the pool is shuffled."""
+    import json
+    import random as _random
+
+    from houndarr.services.instances import SearchOrder
+
+    movies = [_library_movie(200 + i) for i in range(8)]
+    _mock_radarr_empty_missing()
+    _mock_radarr_library(movies)
+    search_route = respx.post(f"{RADARR_URL}/api/v3/command").mock(
+        return_value=httpx.Response(201, json=_COMMAND_RESP),
+    )
+
+    _random.seed(7)
+    inst = _radarr_instance(
+        upgrade_batch_size=5,
+        upgrade_hourly_cap=5,
+        search_order=SearchOrder.random,
+    )
+    with patch("houndarr.engine.search_loop._INTER_SEARCH_DELAY_SECONDS", 0):
+        await run_instance_search(inst, MASTER_KEY)
+
+    searched_ids = [json.loads(call.request.content)["movieIds"][0] for call in search_route.calls]
+    chronological_first_five = [200, 201, 202, 203, 204]
+    assert len(searched_ids) == 5
+    assert set(searched_ids).issubset({200 + i for i in range(8)})
+    assert searched_ids != chronological_first_five, (
+        "random order should differ from sorted-by-id chronological order"
+    )

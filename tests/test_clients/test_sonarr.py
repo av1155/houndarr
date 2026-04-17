@@ -249,3 +249,42 @@ async def test_context_manager() -> None:
     async with SonarrClient(url=BASE, api_key=API_KEY) as c:
         result = await c.ping()
     assert result is not None
+
+
+# ---------------------------------------------------------------------------
+# get_wanted_total (#394)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_get_wanted_total_missing(client: SonarrClient) -> None:
+    route = respx.get(f"{BASE}/api/v3/wanted/missing").mock(
+        return_value=httpx.Response(
+            200,
+            json={"page": 1, "pageSize": 1, "totalRecords": 437, "records": []},
+        )
+    )
+    assert await client.get_wanted_total("missing") == 437
+    assert route.calls[0].request.url.params["pageSize"] == "1"
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_get_wanted_total_cutoff(client: SonarrClient) -> None:
+    respx.get(f"{BASE}/api/v3/wanted/cutoff").mock(
+        return_value=httpx.Response(
+            200,
+            json={"page": 1, "pageSize": 1, "totalRecords": 12, "records": []},
+        )
+    )
+    assert await client.get_wanted_total("cutoff") == 12
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_get_wanted_total_defaults_to_zero(client: SonarrClient) -> None:
+    respx.get(f"{BASE}/api/v3/wanted/missing").mock(
+        return_value=httpx.Response(200, json={"records": []})
+    )
+    assert await client.get_wanted_total("missing") == 0

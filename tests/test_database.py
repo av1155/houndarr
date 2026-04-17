@@ -29,7 +29,7 @@ async def test_schema_created(db: None) -> None:
 async def test_schema_version_set(db: None) -> None:
     """Schema version should be set after init."""
     version = await get_setting("schema_version")
-    assert version == "11"
+    assert version == "12"
 
 
 @pytest.mark.asyncio()
@@ -110,7 +110,7 @@ async def test_init_db_migrates_v1_schema_to_v3(tmp_path: Path) -> None:
         search_log_columns = {row[1] async for row in search_log_cur}
         instance_columns = {row[1] async for row in instances_cur}
 
-    assert await get_setting("schema_version") == "11"
+    assert await get_setting("schema_version") == "12"
     assert "item_label" in search_log_columns
     assert "search_kind" in search_log_columns
     assert "cycle_id" in search_log_columns
@@ -179,7 +179,7 @@ async def test_init_db_migrates_v2_schema_to_v4(tmp_path: Path) -> None:
         async with conn.execute("PRAGMA table_info(search_log)") as cur:
             search_log_columns = {row[1] async for row in cur}
 
-    assert await get_setting("schema_version") == "11"
+    assert await get_setting("schema_version") == "12"
     assert "cycle_id" in search_log_columns
     assert "cycle_trigger" in search_log_columns
 
@@ -246,7 +246,7 @@ async def test_init_db_migrates_v3_schema_to_v4(tmp_path: Path) -> None:
     set_db_path(str(db_path))
     await init_db()
 
-    assert await get_setting("schema_version") == "11"
+    assert await get_setting("schema_version") == "12"
     async with get_db() as conn:
         async with conn.execute("PRAGMA table_info(instances)") as cur:
             instance_columns = {row[1] async for row in cur}
@@ -329,7 +329,7 @@ async def test_init_db_migrates_v4_schema_to_v6(tmp_path: Path) -> None:
     set_db_path(str(db_path))
     await init_db()
 
-    assert await get_setting("schema_version") == "11"
+    assert await get_setting("schema_version") == "12"
 
     async with get_db() as conn:
         # Verify new columns exist
@@ -463,7 +463,7 @@ async def test_init_db_migrates_v5_schema_to_v6(tmp_path: Path) -> None:
     set_db_path(str(db_path))
     await init_db()
 
-    assert await get_setting("schema_version") == "11"
+    assert await get_setting("schema_version") == "12"
 
     async with get_db() as conn:
         async with conn.execute("PRAGMA table_info(instances)") as cur:
@@ -560,7 +560,7 @@ async def test_init_db_migrates_v6_schema_to_v7(tmp_path: Path) -> None:
     set_db_path(str(db_path))
     await init_db()
 
-    assert await get_setting("schema_version") == "11"
+    assert await get_setting("schema_version") == "12"
 
     async with get_db() as conn:
         async with conn.execute("PRAGMA table_info(instances)") as cur:
@@ -673,7 +673,7 @@ async def test_init_db_self_heals_v9_and_v10_when_version_already_current(
     set_db_path(str(db_path))
     await init_db()
 
-    assert await get_setting("schema_version") == "11"
+    assert await get_setting("schema_version") == "12"
 
     async with get_db() as conn:
         async with conn.execute("PRAGMA table_info(instances)") as cur:
@@ -701,6 +701,227 @@ async def test_init_db_self_heals_v9_and_v10_when_version_already_current(
             " VALUES (?, 1, 'whisparr_v3_movie', '2024-01-01T00:00:00Z')",
             (v3_id,),
         )
+
+
+@pytest.mark.asyncio()
+async def test_init_db_self_heals_v12_when_column_missing(tmp_path: Path) -> None:
+    """init_db must add ``search_order`` when the version is stamped at 12 but
+    the column is missing (simulates a partially-applied migration from an
+    interrupted hot-reload or WAL checkpoint).
+    """
+    db_path = tmp_path / "corrupt-v12.db"
+
+    async with aiosqlite.connect(str(db_path)) as conn:
+        await conn.executescript(
+            """
+            CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+            INSERT INTO settings (key, value) VALUES ('schema_version', '12');
+
+            CREATE TABLE instances (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                type TEXT NOT NULL CHECK(type IN (
+                    'radarr','sonarr','lidarr','readarr','whisparr_v2','whisparr_v3'
+                )),
+                url TEXT NOT NULL,
+                encrypted_api_key TEXT NOT NULL DEFAULT '',
+                batch_size INTEGER NOT NULL DEFAULT 2,
+                sleep_interval_mins INTEGER NOT NULL DEFAULT 30,
+                hourly_cap INTEGER NOT NULL DEFAULT 4,
+                cooldown_days INTEGER NOT NULL DEFAULT 14,
+                post_release_grace_hrs INTEGER NOT NULL DEFAULT 6,
+                queue_limit INTEGER NOT NULL DEFAULT 0,
+                cutoff_enabled INTEGER NOT NULL DEFAULT 0,
+                cutoff_batch_size INTEGER NOT NULL DEFAULT 1,
+                cutoff_cooldown_days INTEGER NOT NULL DEFAULT 21,
+                cutoff_hourly_cap INTEGER NOT NULL DEFAULT 1,
+                sonarr_search_mode TEXT NOT NULL DEFAULT 'episode',
+                lidarr_search_mode TEXT NOT NULL DEFAULT 'album',
+                readarr_search_mode TEXT NOT NULL DEFAULT 'book',
+                whisparr_search_mode TEXT NOT NULL DEFAULT 'episode',
+                upgrade_enabled INTEGER NOT NULL DEFAULT 0,
+                upgrade_batch_size INTEGER NOT NULL DEFAULT 1,
+                upgrade_cooldown_days INTEGER NOT NULL DEFAULT 90,
+                upgrade_hourly_cap INTEGER NOT NULL DEFAULT 1,
+                upgrade_sonarr_search_mode TEXT NOT NULL DEFAULT 'episode',
+                upgrade_lidarr_search_mode TEXT NOT NULL DEFAULT 'album',
+                upgrade_readarr_search_mode TEXT NOT NULL DEFAULT 'book',
+                upgrade_whisparr_search_mode TEXT NOT NULL DEFAULT 'episode',
+                upgrade_item_offset INTEGER NOT NULL DEFAULT 0,
+                upgrade_series_offset INTEGER NOT NULL DEFAULT 0,
+                missing_page_offset INTEGER NOT NULL DEFAULT 1,
+                cutoff_page_offset INTEGER NOT NULL DEFAULT 1,
+                allowed_time_window TEXT NOT NULL DEFAULT '',
+                enabled INTEGER NOT NULL DEFAULT 1,
+                created_at TEXT NOT NULL DEFAULT '2024-01-01T00:00:00.000Z',
+                updated_at TEXT NOT NULL DEFAULT '2024-01-01T00:00:00.000Z'
+            );
+
+            INSERT INTO instances (name, type, url)
+            VALUES ('Ghost Sonarr', 'sonarr', 'http://sonarr:8989');
+
+            CREATE TABLE cooldowns (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                instance_id INTEGER NOT NULL REFERENCES instances(id) ON DELETE CASCADE,
+                item_id INTEGER NOT NULL,
+                item_type TEXT NOT NULL,
+                searched_at TEXT NOT NULL,
+                UNIQUE(instance_id, item_id, item_type)
+            );
+
+            CREATE TABLE search_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                instance_id INTEGER,
+                item_id INTEGER,
+                item_type TEXT,
+                search_kind TEXT,
+                cycle_id TEXT,
+                cycle_trigger TEXT,
+                item_label TEXT,
+                action TEXT NOT NULL,
+                reason TEXT,
+                message TEXT,
+                timestamp TEXT NOT NULL DEFAULT '2024-01-01T00:00:00.000Z'
+            );
+            """
+        )
+        await conn.commit()
+
+    set_db_path(str(db_path))
+    await init_db()
+
+    async with get_db() as conn:
+        async with conn.execute("PRAGMA table_info(instances)") as cur:
+            columns = {row[1] async for row in cur}
+        assert "search_order" in columns
+
+        async with conn.execute(
+            "SELECT search_order FROM instances WHERE name = 'Ghost Sonarr'"
+        ) as cur:
+            row = await cur.fetchone()
+        assert row is not None
+        assert row[0] == "chronological"
+
+
+@pytest.mark.asyncio()
+async def test_init_db_is_idempotent_on_healthy_v12(tmp_path: Path) -> None:
+    """Running init_db twice on a healthy v12 database must not error or drift."""
+    db_path = tmp_path / "healthy-v12.db"
+
+    set_db_path(str(db_path))
+    await init_db()  # fresh install
+    first_version = await get_setting("schema_version")
+
+    # Second call: should be a no-op through the self-heal branch.
+    await init_db()
+    assert await get_setting("schema_version") == first_version == "12"
+
+    async with get_db() as conn:
+        async with conn.execute("PRAGMA table_info(instances)") as cur:
+            columns = {row[1] async for row in cur}
+    # Spot-check a few expected columns to ensure nothing was dropped.
+    for col in ("search_order", "allowed_time_window", "missing_page_offset"):
+        assert col in columns
+
+
+@pytest.mark.asyncio()
+async def test_migrate_to_v12_adds_search_order_column(tmp_path: Path) -> None:
+    """init_db on a v11-shaped DB should add ``search_order`` with default ``chronological``."""
+    db_path = tmp_path / "migrate-v11-to-v12.db"
+
+    async with aiosqlite.connect(str(db_path)) as conn:
+        await conn.executescript(
+            """
+            CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+            INSERT INTO settings (key, value) VALUES ('schema_version', '11');
+
+            CREATE TABLE instances (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                type TEXT NOT NULL CHECK(type IN (
+                    'radarr','sonarr','lidarr','readarr','whisparr_v2','whisparr_v3'
+                )),
+                url TEXT NOT NULL,
+                encrypted_api_key TEXT NOT NULL DEFAULT '',
+                batch_size INTEGER NOT NULL DEFAULT 2,
+                sleep_interval_mins INTEGER NOT NULL DEFAULT 30,
+                hourly_cap INTEGER NOT NULL DEFAULT 4,
+                cooldown_days INTEGER NOT NULL DEFAULT 14,
+                post_release_grace_hrs INTEGER NOT NULL DEFAULT 6,
+                queue_limit INTEGER NOT NULL DEFAULT 0,
+                cutoff_enabled INTEGER NOT NULL DEFAULT 0,
+                cutoff_batch_size INTEGER NOT NULL DEFAULT 1,
+                cutoff_cooldown_days INTEGER NOT NULL DEFAULT 21,
+                cutoff_hourly_cap INTEGER NOT NULL DEFAULT 1,
+                sonarr_search_mode TEXT NOT NULL DEFAULT 'episode',
+                lidarr_search_mode TEXT NOT NULL DEFAULT 'album',
+                readarr_search_mode TEXT NOT NULL DEFAULT 'book',
+                whisparr_search_mode TEXT NOT NULL DEFAULT 'episode',
+                upgrade_enabled INTEGER NOT NULL DEFAULT 0,
+                upgrade_batch_size INTEGER NOT NULL DEFAULT 1,
+                upgrade_cooldown_days INTEGER NOT NULL DEFAULT 90,
+                upgrade_hourly_cap INTEGER NOT NULL DEFAULT 1,
+                upgrade_sonarr_search_mode TEXT NOT NULL DEFAULT 'episode',
+                upgrade_lidarr_search_mode TEXT NOT NULL DEFAULT 'album',
+                upgrade_readarr_search_mode TEXT NOT NULL DEFAULT 'book',
+                upgrade_whisparr_search_mode TEXT NOT NULL DEFAULT 'episode',
+                upgrade_item_offset INTEGER NOT NULL DEFAULT 0,
+                upgrade_series_offset INTEGER NOT NULL DEFAULT 0,
+                missing_page_offset INTEGER NOT NULL DEFAULT 1,
+                cutoff_page_offset INTEGER NOT NULL DEFAULT 1,
+                allowed_time_window TEXT NOT NULL DEFAULT '',
+                enabled INTEGER NOT NULL DEFAULT 1,
+                created_at TEXT NOT NULL DEFAULT '2024-01-01T00:00:00.000Z',
+                updated_at TEXT NOT NULL DEFAULT '2024-01-01T00:00:00.000Z'
+            );
+
+            INSERT INTO instances (name, type, url)
+            VALUES ('Pre-v12 Sonarr', 'sonarr', 'http://sonarr:8989');
+
+            CREATE TABLE cooldowns (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                instance_id INTEGER NOT NULL
+                    REFERENCES instances(id) ON DELETE CASCADE,
+                item_id INTEGER NOT NULL,
+                item_type TEXT NOT NULL,
+                searched_at TEXT NOT NULL,
+                UNIQUE(instance_id, item_id, item_type)
+            );
+
+            CREATE TABLE search_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                instance_id INTEGER,
+                item_id INTEGER,
+                item_type TEXT,
+                search_kind TEXT,
+                cycle_id TEXT,
+                cycle_trigger TEXT,
+                item_label TEXT,
+                action TEXT NOT NULL,
+                reason TEXT,
+                message TEXT,
+                timestamp TEXT NOT NULL DEFAULT '2024-01-01T00:00:00.000Z'
+            );
+            """
+        )
+        await conn.commit()
+
+    set_db_path(str(db_path))
+    await init_db()
+
+    assert await get_setting("schema_version") == "12"
+
+    async with get_db() as conn:
+        async with conn.execute("PRAGMA table_info(instances)") as cur:
+            columns = {row[1] async for row in cur}
+        assert "search_order" in columns
+
+        async with conn.execute(
+            "SELECT search_order FROM instances WHERE name = 'Pre-v12 Sonarr'"
+        ) as cur:
+            row = await cur.fetchone()
+        assert row is not None
+        assert row[0] == "chronological"
 
 
 @pytest.mark.asyncio()

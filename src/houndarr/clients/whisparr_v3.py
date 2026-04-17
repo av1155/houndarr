@@ -10,7 +10,7 @@ full library via ``GET /api/v3/movie`` and filtering client-side.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Literal
 
 import httpx
 
@@ -148,6 +148,26 @@ class WhisparrV3Client(ArrClient):
         cutoff.sort(key=lambda m: m.in_cinemas or "")
         start = (page - 1) * page_size
         return cutoff[start : start + page_size]
+
+    async def get_wanted_total(self, kind: Literal["missing", "cutoff"]) -> int:
+        """Return the count of wanted items for *kind* from the cached library.
+
+        Reuses :meth:`_get_all_movies` (one fetch per client lifetime) so the
+        probe does not trigger an extra network call during a pass.
+        """
+        movies = await self._get_all_movies()
+        if kind == "missing":
+            return sum(
+                1 for r in movies if r.get("monitored", False) and not r.get("hasFile", False)
+            )
+        count = 0
+        for r in movies:
+            if not r.get("monitored", False) or not r.get("hasFile", False):
+                continue
+            movie_file: dict[str, Any] = r.get("movieFile") or {}
+            if movie_file.get("qualityCutoffNotMet", True):
+                count += 1
+        return count
 
     async def get_library(self) -> list[LibraryWhisparrV3Movie]:
         """Return the full movie/scene library.

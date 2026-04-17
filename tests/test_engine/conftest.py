@@ -15,6 +15,7 @@ from houndarr.services.instances import (
     InstanceType,
     LidarrSearchMode,
     ReadarrSearchMode,
+    SearchOrder,
     SonarrSearchMode,
     WhisparrSearchMode,
 )
@@ -159,6 +160,7 @@ def make_instance(
     missing_page_offset: int = 1,
     cutoff_page_offset: int = 1,
     allowed_time_window: str = "",
+    search_order: SearchOrder = SearchOrder.chronological,
 ) -> Instance:
     """Build an Instance with sensible defaults for testing."""
     resolved_url = url or URL_FOR_TYPE.get(itype, SONARR_URL)
@@ -198,6 +200,7 @@ def make_instance(
         missing_page_offset=missing_page_offset,
         cutoff_page_offset=cutoff_page_offset,
         allowed_time_window=allowed_time_window,
+        search_order=search_order,
     )
 
 

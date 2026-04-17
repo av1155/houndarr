@@ -130,6 +130,59 @@ Strategy for Whisparr v2 missing-pass commands (v3 has no search mode; it always
 
 Season-context mode sends at most one `SeasonSearch` per `(series, season)` per pass, same as Sonarr's season-context mode.
 
+## Search Order
+
+Controls how items are picked from the wanted list each cycle. Applies to all
+three passes (missing, cutoff, and upgrade) for the instance.
+
+- **Default:** `Random`
+- **Alternative:** `Chronological`
+
+### Random (default)
+
+Each cycle, Houndarr probes the wanted-list total, picks a random page in that
+range, fetches it, and shuffles the items before evaluation. Over many cycles
+the search distribution spreads evenly across the catalogue instead of moving
+one shelf at a time.
+
+Recommended for most users, especially anyone whose library has long
+alphabetical runs of similarly-dated items (e.g. a full series binge-added
+the same day, or a back catalogue imported in one go). Without shuffling,
+those items tend to appear as a clustered wall in the logs.
+
+For the upgrade pass, random replaces the id-sort-plus-offset rotation with a
+plain shuffle of the upgrade pool. The persisted offset is still maintained so
+switching back to chronological resumes from a sane position.
+
+### Chronological
+
+Walks the wanted list oldest-first, paged against the persisted offset
+(`missing_page_offset` / `cutoff_page_offset`). Deterministic and easy to
+reason about: you can predict which items will come up next. The trade-off is
+that same-day releases cluster visibly because the *arr API falls back to
+title order within equal dates.
+
+Pick this mode if you value predictable coverage for debugging, or if you
+rotate through a relatively small wanted list where chronological order
+already gives reasonable spread.
+
+### What random mode does not change
+
+- Cooldowns, hourly caps, post-release grace, queue backpressure and the
+  allowed time window all apply identically in both modes.
+- Shuffling happens after the page is fetched from your *arr instance, so no
+  extra indexer pressure is introduced.
+- Random mode adds one lightweight probe call per pass (a `pageSize=1` request
+  to read `totalRecords`); Whisparr v3 reuses its cached movie list for this
+  count at no extra cost.
+
+:::info Existing instances keep their setting after upgrade
+Only fresh installs default to `Random`. If you upgraded from an earlier
+Houndarr version, existing instances keep whatever search order you had
+before (originally `Chronological`). Toggle to `Random` from the Edit
+Instance form when you want to switch.
+:::
+
 ## Cutoff upgrade controls
 
 ### Cutoff search
@@ -207,9 +260,13 @@ Per-app strategy for upgrade-pass search commands. Each app type (Sonarr, Lidarr
 
 ### Offset-based rotation
 
+Applies only when `Search Order` is set to `Chronological` for an instance.
+
 The upgrade pass uses a persistent offset to rotate through your library over time rather than always starting from the beginning. This ensures fair coverage across your entire library. Offsets reset to zero when upgrade search is toggled off.
 
 The missing and cutoff passes also use page-based rotation. Each pass remembers which API page it reached and starts from there on the next cycle. This prevents items further down the list from being starved when earlier items are all on cooldown. Offsets reset to page 1 when you save instance settings.
+
+When `Search Order` is `Random`, Houndarr picks a fresh random page each cycle rather than advancing the offset. The offset columns are still written but go unused until you switch the instance back to chronological mode.
 
 ## Queue backpressure
 
@@ -283,6 +340,7 @@ Skips are normal. See [How Houndarr Works](/docs/concepts/how-houndarr-works#wha
 | Post-Release Grace (hrs) | `6` |
 | Queue Limit | `0` (disabled) |
 | Allowed Search Window | (blank, 24/7) |
+| Search Order | `Random` |
 | Cutoff search | Off |
 | Cutoff Batch | `1` |
 | Cutoff Cooldown | `21` |

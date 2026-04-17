@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import math
+import random
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime, timedelta
 from typing import Any, Literal
@@ -24,7 +26,7 @@ from houndarr.services.cooldown import (
     is_on_cooldown,
     record_search,
 )
-from houndarr.services.instances import Instance, InstanceType, update_instance
+from houndarr.services.instances import Instance, InstanceType, SearchOrder, update_instance
 from houndarr.services.time_window import (
     format_ranges,
     is_within_window,
@@ -213,6 +215,7 @@ async def _run_search_pass(  # noqa: C901
     cycle_id: str,
     cycle_trigger: CycleTrigger,
     start_page: int = 1,
+    total_fn: Callable[[], Awaitable[int]] | None = None,
 ) -> tuple[int, int]:
     """Execute a single search pass (missing or cutoff) using the adapter.
 
@@ -240,6 +243,11 @@ async def _run_search_pass(  # noqa: C901
         cycle_trigger: How this cycle was initiated.
         start_page: 1-based page number to begin fetching from (for
             offset rotation across cycles).
+        total_fn: Optional probe returning the total record count for this
+            pass.  When ``instance.search_order == SearchOrder.random`` the
+            probe is used to pick a random start page each cycle; the
+            persisted offset is then ignored.  Probe failure falls back to
+            *start_page* with a warning.
 
     Returns:
         Tuple of (items_searched, next_start_page).
@@ -259,11 +267,29 @@ async def _run_search_pass(  # noqa: C901
     page = max(1, start_page)
     wrapped = False
 
+    if instance.search_order == SearchOrder.random and total_fn is not None:
+        try:
+            total = await total_fn()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "[%s] %stotal probe failed (%s); falling back to page %d",
+                instance.name,
+                log_prefix,
+                exc,
+                page,
+            )
+        else:
+            if total > 0:
+                max_page = max(1, math.ceil(total / page_size))
+                page = random.randint(1, max_page)  # noqa: S311  # nosec B311
+
     for _ in range(_MAX_LIST_PAGES_PER_PASS):
         if searched >= target or scanned >= scan_budget:
             break
 
         items = await fetch_fn(page=page, page_size=page_size)
+        if instance.search_order == SearchOrder.random and items:
+            random.shuffle(items)  # noqa: S311  # nosec B311
         logger.debug(
             "[%s] fetched %d %sitem(s) from page %d",
             instance.name,
@@ -577,21 +603,27 @@ async def _run_upgrade_pass(
         )
         return 0
 
-    # Sort by item ID for stable ordering
-    def _item_sort_key(item: object) -> int:
-        return (
-            getattr(item, "movie_id", None)
-            or getattr(item, "episode_id", None)
-            or getattr(item, "album_id", None)
-            or getattr(item, "book_id", None)
-            or 0
-        )
+    # Random mode shuffles the pool and bypasses id-sort + offset-rotation.
+    # Chronological mode keeps the deterministic rotation so coverage is
+    # guaranteed over time.
+    if instance.search_order == SearchOrder.random:
+        random.shuffle(pool)  # noqa: S311  # nosec B311
+        offset = 0
+        rotated = pool
+    else:
 
-    pool.sort(key=_item_sort_key)
+        def _item_sort_key(item: object) -> int:
+            return (
+                getattr(item, "movie_id", None)
+                or getattr(item, "episode_id", None)
+                or getattr(item, "album_id", None)
+                or getattr(item, "book_id", None)
+                or 0
+            )
 
-    # Apply offset-based rotation
-    offset = instance.upgrade_item_offset % len(pool) if pool else 0
-    rotated = pool[offset:] + pool[:offset]
+        pool.sort(key=_item_sort_key)
+        offset = instance.upgrade_item_offset % len(pool) if pool else 0
+        rotated = pool[offset:] + pool[:offset]
 
     searches_this_hour = await _count_searches_last_hour(instance.id, "upgrade")
     searched = 0
@@ -854,6 +886,7 @@ async def run_instance_search(
                 cycle_id=cycle_id_value,
                 cycle_trigger=cycle_trigger,
                 start_page=instance.missing_page_offset,
+                total_fn=lambda: client.get_wanted_total("missing"),
             )
         searched += missing_searched
         try:
@@ -893,6 +926,7 @@ async def run_instance_search(
                     cycle_id=cycle_id_value,
                     cycle_trigger=cycle_trigger,
                     start_page=instance.cutoff_page_offset,
+                    total_fn=lambda: cutoff_client.get_wanted_total("cutoff"),
                 )
             logger.info("[%s] cutoff pass complete: %d searched", instance.name, cutoff_searched)
             try:

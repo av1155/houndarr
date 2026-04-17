@@ -23,7 +23,7 @@ from houndarr.engine import supervisor as _supervisor_mod
 from houndarr.engine.search_loop import run_instance_search
 from houndarr.engine.supervisor import Supervisor
 from houndarr.services.cooldown import record_search
-from houndarr.services.instances import Instance, InstanceType, create_instance
+from houndarr.services.instances import Instance, InstanceType, SearchOrder, create_instance
 
 # ---------------------------------------------------------------------------
 # Shared test data
@@ -447,6 +447,10 @@ async def test_missing_list_calls_are_bounded_per_cycle(
         return_value=httpx.Response(201, json=_CMD_OK)
     )
 
+    # This test measures the ``_MAX_LIST_PAGES_PER_PASS`` page-fetch bound.
+    # Random mode adds one probe call which would muddy the assertion, so
+    # pin the instance to chronological for this specific check.
+    sonarr_instance.search_order = SearchOrder.chronological
     sonarr_instance.batch_size = 2
     count = await run_instance_search(sonarr_instance, master_key)
 

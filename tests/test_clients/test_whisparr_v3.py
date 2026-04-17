@@ -265,3 +265,33 @@ async def test_context_manager() -> None:
     async with WhisparrV3Client(url=BASE, api_key=API_KEY) as c:
         result = await c.ping()
     assert result is not None
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_get_wanted_total_counts_from_cache(client: WhisparrV3Client) -> None:
+    movies = [
+        {"id": 1, "monitored": True, "hasFile": False, "title": "A", "year": 2020},
+        {"id": 2, "monitored": True, "hasFile": False, "title": "B", "year": 2020},
+        {"id": 3, "monitored": False, "hasFile": False, "title": "C", "year": 2020},
+        {
+            "id": 4,
+            "monitored": True,
+            "hasFile": True,
+            "title": "D",
+            "year": 2020,
+            "movieFile": {"qualityCutoffNotMet": True},
+        },
+        {
+            "id": 5,
+            "monitored": True,
+            "hasFile": True,
+            "title": "E",
+            "year": 2020,
+            "movieFile": {"qualityCutoffNotMet": False},
+        },
+    ]
+    respx.get(f"{BASE}/api/v3/movie").mock(return_value=httpx.Response(200, json=movies))
+
+    assert await client.get_wanted_total("missing") == 2
+    assert await client.get_wanted_total("cutoff") == 1

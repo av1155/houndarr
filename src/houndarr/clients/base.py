@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from abc import ABC, abstractmethod
-from typing import Any
+from typing import Any, Literal
 
 import httpx
 
@@ -135,3 +135,12 @@ class ArrClient(ABC):
     @abstractmethod
     async def search(self, item_id: int) -> None:
         """Trigger an automatic search for the item identified by *item_id*."""
+
+    @abstractmethod
+    async def get_wanted_total(self, kind: Literal["missing", "cutoff"]) -> int:
+        """Return the total number of records in the wanted/*kind* list.
+
+        Used by the engine's random-start-page computation to size the
+        random page range.  Implementations should use the cheapest available
+        probe (``pageSize=1`` for paged APIs; cached counts for Whisparr v3).
+        """

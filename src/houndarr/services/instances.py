@@ -22,6 +22,7 @@ from houndarr.config import (
     DEFAULT_POST_RELEASE_GRACE_HOURS,
     DEFAULT_QUEUE_LIMIT,
     DEFAULT_READARR_SEARCH_MODE,
+    DEFAULT_SEARCH_ORDER,
     DEFAULT_SLEEP_INTERVAL_MINUTES,
     DEFAULT_SONARR_SEARCH_MODE,
     DEFAULT_UPGRADE_BATCH_SIZE,
@@ -76,6 +77,13 @@ class WhisparrSearchMode(StrEnum):
     season_context = "season_context"
 
 
+class SearchOrder(StrEnum):
+    """Order in which the engine iterates items within a search pass."""
+
+    chronological = "chronological"
+    random = "random"
+
+
 @dataclass
 class Instance:
     """In-memory representation of a configured *arr instance.
@@ -119,6 +127,7 @@ class Instance:
     missing_page_offset: int = 1
     cutoff_page_offset: int = 1
     allowed_time_window: str = ""
+    search_order: SearchOrder = SearchOrder.chronological
 
 
 # ---------------------------------------------------------------------------
@@ -164,6 +173,7 @@ def _row_to_instance(row: Any, master_key: bytes) -> Instance:
         missing_page_offset=row["missing_page_offset"],
         cutoff_page_offset=row["cutoff_page_offset"],
         allowed_time_window=row["allowed_time_window"],
+        search_order=SearchOrder(row["search_order"]),
     )
 
 
@@ -211,6 +221,7 @@ async def create_instance(
         DEFAULT_UPGRADE_WHISPARR_SEARCH_MODE
     ),
     allowed_time_window: str = DEFAULT_ALLOWED_TIME_WINDOW,
+    search_order: SearchOrder = SearchOrder(DEFAULT_SEARCH_ORDER),
 ) -> Instance:
     """Insert a new instance row and return the populated :class:`Instance`.
 
@@ -247,6 +258,11 @@ async def create_instance(
         allowed_time_window: Optional schedule spec (e.g. ``"09:00-23:00"``)
             restricting scheduled cycles to configured windows.  Empty
             string disables the gate (24/7 operation).
+        search_order: Order in which the engine iterates items within a
+            pass.  ``chronological`` (default) preserves the legacy oldest
+            first behaviour; ``random`` picks a random start page and
+            shuffles items within each fetched page, and replaces the
+            upgrade-pool offset rotation with a shuffle.
 
     Returns:
         The newly created :class:`Instance` with its database-assigned *id*.
@@ -266,10 +282,10 @@ async def create_instance(
                 upgrade_hourly_cap,
                 upgrade_sonarr_search_mode, upgrade_lidarr_search_mode,
                 upgrade_readarr_search_mode, upgrade_whisparr_search_mode,
-                allowed_time_window
+                allowed_time_window, search_order
             ) VALUES (
                 ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                ?, ?, ?, ?, ?, ?, ?, ?, ?
+                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
             )
             """,
             (
@@ -301,6 +317,7 @@ async def create_instance(
                 upgrade_readarr_search_mode.value,
                 upgrade_whisparr_search_mode.value,
                 allowed_time_window,
+                search_order.value,
             ),
         )
         await db.commit()
@@ -374,7 +391,7 @@ async def update_instance(
             ``upgrade_readarr_search_mode``, ``upgrade_whisparr_search_mode``,
             ``upgrade_item_offset``, ``upgrade_series_offset``,
             ``missing_page_offset``, ``cutoff_page_offset``,
-            ``allowed_time_window``.
+            ``allowed_time_window``, ``search_order``.
 
     Returns:
         Updated :class:`Instance`, or ``None`` if *id* does not exist.
@@ -413,6 +430,7 @@ async def update_instance(
         "missing_page_offset": "missing_page_offset",
         "cutoff_page_offset": "cutoff_page_offset",
         "allowed_time_window": "allowed_time_window",
+        "search_order": "search_order",
     }
 
     _search_mode_fields = {
@@ -424,6 +442,7 @@ async def update_instance(
         "upgrade_lidarr_search_mode",
         "upgrade_readarr_search_mode",
         "upgrade_whisparr_search_mode",
+        "search_order",
     }
 
     assignments: list[str] = []

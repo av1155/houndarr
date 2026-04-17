@@ -20,6 +20,7 @@ from houndarr.services.instances import (
     InstanceType,
     LidarrSearchMode,
     ReadarrSearchMode,
+    SearchOrder,
     SonarrSearchMode,
     WhisparrSearchMode,
 )
@@ -119,6 +120,7 @@ def _make_instance(
     lidarr_search_mode: LidarrSearchMode = LidarrSearchMode.album,
     readarr_search_mode: ReadarrSearchMode = ReadarrSearchMode.book,
     whisparr_search_mode: WhisparrSearchMode = WhisparrSearchMode.episode,
+    search_order: SearchOrder = SearchOrder.chronological,
 ) -> Instance:
     return Instance(
         id=instance_id,
@@ -143,6 +145,7 @@ def _make_instance(
         lidarr_search_mode=lidarr_search_mode,
         readarr_search_mode=readarr_search_mode,
         whisparr_search_mode=whisparr_search_mode,
+        search_order=search_order,
     )
 
 
@@ -2656,3 +2659,143 @@ async def test_cutoff_hourly_cap_stops_additional_page_fetches(seeded_instances:
     assert count == 0
     assert cutoff_route.call_count == 1
     assert not search_route.called
+
+
+# ---------------------------------------------------------------------------
+# Random search order (#394)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_missing_random_shuffles_page_items(seeded_instances: None) -> None:
+    """Random order shuffles items within a fetched page before dispatch."""
+    import json
+    import random as _random
+
+    records = [{**_EPISODE_RECORD, "id": 2500 + i, "episodeNumber": i + 1} for i in range(6)]
+    page_response = {
+        "page": 1,
+        "pageSize": 50,
+        "totalRecords": len(records),
+        "records": records,
+    }
+    respx.get(f"{SONARR_URL}/api/v3/wanted/missing").mock(
+        return_value=httpx.Response(200, json=page_response)
+    )
+    search_route = respx.post(f"{SONARR_URL}/api/v3/command").mock(
+        return_value=httpx.Response(201, json=_COMMAND_RESP)
+    )
+
+    _random.seed(42)
+    instance = _make_instance(
+        batch_size=len(records),
+        hourly_cap=len(records),
+        search_order=SearchOrder.random,
+    )
+    with patch("houndarr.engine.search_loop._INTER_SEARCH_DELAY_SECONDS", 0):
+        await run_instance_search(instance, MASTER_KEY)
+
+    searched_ids = [
+        json.loads(call.request.content)["episodeIds"][0] for call in search_route.calls
+    ]
+    original_ids = [r["id"] for r in records]
+    assert sorted(searched_ids) == sorted(original_ids)
+    assert searched_ids != original_ids, "random order should differ from fetched order"
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_missing_chronological_preserves_order(seeded_instances: None) -> None:
+    """Chronological mode (default) dispatches items in fetched order."""
+    import json
+
+    records = [{**_EPISODE_RECORD, "id": 2600 + i, "episodeNumber": i + 1} for i in range(4)]
+    page_response = {
+        "page": 1,
+        "pageSize": 50,
+        "totalRecords": len(records),
+        "records": records,
+    }
+    respx.get(f"{SONARR_URL}/api/v3/wanted/missing").mock(
+        return_value=httpx.Response(200, json=page_response)
+    )
+    search_route = respx.post(f"{SONARR_URL}/api/v3/command").mock(
+        return_value=httpx.Response(201, json=_COMMAND_RESP)
+    )
+
+    instance = _make_instance(batch_size=len(records), hourly_cap=len(records))
+    with patch("houndarr.engine.search_loop._INTER_SEARCH_DELAY_SECONDS", 0):
+        await run_instance_search(instance, MASTER_KEY)
+
+    searched_ids = [
+        json.loads(call.request.content)["episodeIds"][0] for call in search_route.calls
+    ]
+    assert searched_ids == [2600, 2601, 2602, 2603]
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_missing_random_picks_random_start_page(seeded_instances: None) -> None:
+    """Random mode probes total records and starts at a random page."""
+    import random as _random
+
+    # Probe returns totalRecords=1000.  With batch_size=1 the engine uses
+    # page_size=10 (_MISSING_PAGE_SIZE_MIN), so max_page = ceil(1000/10) = 100.
+    probe_response = {"page": 1, "pageSize": 1, "totalRecords": 1000, "records": []}
+    page_response = {
+        "page": 1,
+        "pageSize": 10,
+        "totalRecords": 1000,
+        "records": [_EPISODE_RECORD],
+    }
+    missing_route = respx.get(f"{SONARR_URL}/api/v3/wanted/missing").mock(
+        side_effect=[
+            httpx.Response(200, json=probe_response),
+            httpx.Response(200, json=page_response),
+            httpx.Response(200, json={"records": []}),
+        ]
+    )
+    respx.post(f"{SONARR_URL}/api/v3/command").mock(
+        return_value=httpx.Response(201, json=_COMMAND_RESP)
+    )
+
+    _random.seed(0)
+    expected_page = _random.randint(1, 100)
+    _random.seed(0)
+
+    instance = _make_instance(batch_size=1, hourly_cap=1, search_order=SearchOrder.random)
+    with patch("houndarr.engine.search_loop._INTER_SEARCH_DELAY_SECONDS", 0):
+        await run_instance_search(instance, MASTER_KEY)
+
+    # Second call is the real fetch (after the probe). Its page param is the
+    # random start page, not the persisted offset of 1.
+    fetch_call = missing_route.calls[1]
+    assert fetch_call.request.url.params["page"] == str(expected_page)
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_missing_random_falls_back_when_probe_fails(seeded_instances: None) -> None:
+    """Probe failure in random mode falls back to the persisted page offset."""
+    # First call (probe) fails; subsequent calls succeed.
+    missing_route = respx.get(f"{SONARR_URL}/api/v3/wanted/missing").mock(
+        side_effect=[
+            httpx.Response(500),
+            httpx.Response(
+                200,
+                json={"page": 1, "pageSize": 50, "totalRecords": 1, "records": [_EPISODE_RECORD]},
+            ),
+        ]
+    )
+    respx.post(f"{SONARR_URL}/api/v3/command").mock(
+        return_value=httpx.Response(201, json=_COMMAND_RESP)
+    )
+
+    instance = _make_instance(batch_size=1, hourly_cap=1, search_order=SearchOrder.random)
+    with patch("houndarr.engine.search_loop._INTER_SEARCH_DELAY_SECONDS", 0):
+        count = await run_instance_search(instance, MASTER_KEY)
+
+    assert count == 1
+    # Probe was attempted and the fetch still happened (second call).
+    assert missing_route.call_count >= 2

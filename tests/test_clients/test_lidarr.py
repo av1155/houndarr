@@ -278,3 +278,12 @@ async def test_context_manager() -> None:
     async with LidarrClient(url=BASE, api_key=API_KEY) as c:
         result = await c.ping()
     assert result is not None
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_get_wanted_total_missing(client: LidarrClient) -> None:
+    respx.get(f"{BASE}/api/v1/wanted/missing").mock(
+        return_value=httpx.Response(200, json={"totalRecords": 21, "records": []})
+    )
+    assert await client.get_wanted_total("missing") == 21

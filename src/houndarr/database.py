@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Schema version: bump when adding new migrations
 # ---------------------------------------------------------------------------
-SCHEMA_VERSION = 11
+SCHEMA_VERSION = 12
 
 # ---------------------------------------------------------------------------
 # DDL
@@ -69,6 +69,8 @@ CREATE TABLE IF NOT EXISTS instances (
     missing_page_offset  INTEGER NOT NULL DEFAULT 1,
     cutoff_page_offset   INTEGER NOT NULL DEFAULT 1,
     allowed_time_window  TEXT    NOT NULL DEFAULT '',
+    search_order         TEXT    NOT NULL DEFAULT 'random'
+                                CHECK(search_order IN ('chronological', 'random')),
     enabled              INTEGER NOT NULL DEFAULT 1,
     created_at           TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     updated_at           TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
@@ -173,6 +175,7 @@ async def init_db() -> None:
             await _migrate_to_v9(db)
             await _migrate_to_v10(db)
             await _migrate_to_v11(db)
+            await _migrate_to_v12(db)
             await _ensure_v3_indexes(db)
             await db.commit()
 
@@ -199,6 +202,8 @@ async def _run_migrations(db: aiosqlite.Connection, from_version: int) -> None:
         await _migrate_to_v10(db)
     if from_version < 11:
         await _migrate_to_v11(db)
+    if from_version < 12:
+        await _migrate_to_v12(db)
 
     logger.info("Migrated database from schema version %d to %d", from_version, SCHEMA_VERSION)
     await db.execute(
@@ -700,6 +705,24 @@ async def _migrate_to_v11(db: aiosqlite.Connection) -> None:
     if not await _column_exists(db, "instances", "allowed_time_window"):
         await db.execute(
             "ALTER TABLE instances ADD COLUMN allowed_time_window TEXT NOT NULL DEFAULT ''"
+        )
+
+
+async def _migrate_to_v12(db: aiosqlite.Connection) -> None:
+    """Add ``search_order`` column for per-instance random search ordering.
+
+    Fresh installs default to ``'random'`` (see ``_SCHEMA_SQL``); the
+    migration keeps existing rows on ``'chronological'`` so upgrades do not
+    silently change behaviour for instances that have been running for
+    months.  New instances added via the UI always get the ``config.py``
+    default (currently ``'random'``).  The CHECK constraint lives in
+    ``_SCHEMA_SQL``; SQLite's ``ALTER TABLE ADD COLUMN`` cannot add a CHECK,
+    so migrated rows rely on the service layer (which only accepts
+    ``SearchOrder`` enum values) for validation.
+    """
+    if not await _column_exists(db, "instances", "search_order"):
+        await db.execute(
+            "ALTER TABLE instances ADD COLUMN search_order TEXT NOT NULL DEFAULT 'chronological'"
         )
 
 

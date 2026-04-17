@@ -308,3 +308,42 @@ async def test_update_allowed_time_window(db: None, master_key: bytes) -> None:
     )
     assert cleared is not None
     assert cleared.allowed_time_window == ""
+
+
+# ---------------------------------------------------------------------------
+# search_order (#394)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio()
+async def test_create_applies_search_order_default(db: None, master_key: bytes) -> None:
+    from houndarr.services.instances import SearchOrder
+
+    inst = await _make(master_key)
+    assert inst.search_order == SearchOrder.random
+
+
+@pytest.mark.asyncio()
+async def test_update_search_order_to_random(db: None, master_key: bytes) -> None:
+    from houndarr.services.instances import SearchOrder
+
+    inst = await _make(master_key)
+    updated = await update_instance(
+        inst.id,
+        master_key=master_key,
+        search_order=SearchOrder.random,
+    )
+    assert updated is not None
+    assert updated.search_order == SearchOrder.random
+
+    refetched = await get_instance(inst.id, master_key=master_key)
+    assert refetched is not None
+    assert refetched.search_order == SearchOrder.random
+
+    reverted = await update_instance(
+        inst.id,
+        master_key=master_key,
+        search_order=SearchOrder.chronological,
+    )
+    assert reverted is not None
+    assert reverted.search_order == SearchOrder.chronological

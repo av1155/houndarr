@@ -28,6 +28,18 @@ html {
   background: #3d4f6b; /* border-strong */
 }
 
+/* ── Instance form select chevron ───────────────────────────────────────── */
+/* Native <select> chevrons sit flush against the right border and render at
+   subtly different positions across browsers.  On the settings instance
+   form the custom SVG keeps every dropdown aligned with consistent
+   padding-right.  The class is applied via ``select_cls`` in
+   templates/partials/instance_form.html. */
+.hd-select-chevron {
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20' stroke='%2394a3b8' stroke-width='1.75'><polyline points='6 8 10 12 14 8' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+  background-position: right 0.75rem center;
+  background-size: 1rem 1rem;
+}
+
 /* ── Mobile nav backdrop ────────────────────────────────────────────────── */
 .mobile-nav-backdrop {
   background: rgba(2, 6, 23, 0);

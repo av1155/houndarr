@@ -13,6 +13,11 @@
 {# Shared input class: Station style #}
 {% set input_cls = "w-full h-11 bg-[#0e1117] border border-[#2a3448] rounded-lg px-3 text-base text-white placeholder:text-slate-600 font-sans focus:outline-none focus:border-brand-400/70 focus:ring-2 focus:ring-brand-500/25 transition-colors" %}
 {% set mono_input_cls = "w-full h-11 bg-[#0e1117] border border-[#2a3448] rounded-lg px-3 text-base text-white placeholder:text-slate-600 font-mono focus:outline-none focus:border-brand-400/70 focus:ring-2 focus:ring-brand-500/25 transition-colors" %}
+{# Select variant: strip the native chevron so every dropdown in this form
+   gets the same inset SVG chevron and padding-right.  Native chevron
+   positions diverge across browsers and option widths, so a custom chevron
+   keeps the form visually consistent. #}
+{% set select_cls = input_cls + " hd-select-chevron appearance-none pr-10 bg-no-repeat" %}
 
 <div id="{{ 'edit-instance-form-shell-' ~ instance.id if is_edit else 'add-instance-form-shell' }}">
   {% if error is defined and error %}
@@ -58,7 +63,7 @@
           <label class="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide" for="{{ form_id }}-type">Type</label>
           <select id="{{ form_id }}-type" name="type" required
                   data-instance-field="type"
-                  class="{{ input_cls }}">
+                  class="{{ select_cls }}">
             <option value="radarr"   {% if is_edit and instance.type.value == 'radarr'   %}selected{% endif %}>Radarr</option>
             <option value="sonarr"   {% if is_edit and instance.type.value == 'sonarr'   %}selected{% endif %}>Sonarr</option>
             <option value="lidarr"   {% if is_edit and instance.type.value == 'lidarr'   %}selected{% endif %}>Lidarr</option>
@@ -150,12 +155,23 @@
                  class="{{ mono_input_cls }}" />
           <p class="mt-1.5 text-xs text-slate-600">Restrict scheduled cycles to one or more <code>HH:MM-HH:MM</code> windows (container local time via <code>TZ</code>). Blank = always allowed. Run Now bypasses the window.</p>
         </div>
+        <div class="sm:col-span-2">
+          <label class="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide" for="{{ form_id }}-order">
+            Search Order
+          </label>
+          <select id="{{ form_id }}-order" name="search_order"
+                  class="{{ select_cls }}">
+            <option value="chronological" {% if instance.search_order.value == 'chronological' %}selected{% endif %}>Chronological</option>
+            <option value="random"        {% if instance.search_order.value == 'random'        %}selected{% endif %}>Random (default)</option>
+          </select>
+          <p class="mt-1.5 text-xs text-slate-600">Chronological walks the library oldest-first in small rotations. Random picks a different slice of the library each cycle, so searches feel spread across the catalogue instead of clustered by release date.</p>
+        </div>
         <div class="sm:col-span-2" data-sonarr-only="true"
              {% if instance.type.value != 'sonarr' %}style="display:none;"{% endif %}>
           <label class="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide" for="{{ form_id }}-sonarr-mode">
             Sonarr Missing Search Mode
           </label>
-          <select id="{{ form_id }}-sonarr-mode" name="sonarr_search_mode" class="{{ input_cls }}">
+          <select id="{{ form_id }}-sonarr-mode" name="sonarr_search_mode" class="{{ select_cls }}">
             <option value="episode"        {% if instance.sonarr_search_mode.value == 'episode'        %}selected{% endif %}>Episode search (default)</option>
             <option value="season_context" {% if instance.sonarr_search_mode.value == 'season_context' %}selected{% endif %}>Season-context search (advanced)</option>
           </select>
@@ -166,7 +182,7 @@
           <label class="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide" for="{{ form_id }}-lidarr-mode">
             Lidarr Missing Search Mode
           </label>
-          <select id="{{ form_id }}-lidarr-mode" name="lidarr_search_mode" class="{{ input_cls }}">
+          <select id="{{ form_id }}-lidarr-mode" name="lidarr_search_mode" class="{{ select_cls }}">
             <option value="album"          {% if instance.lidarr_search_mode.value == 'album'          %}selected{% endif %}>Album search (default)</option>
             <option value="artist_context" {% if instance.lidarr_search_mode.value == 'artist_context' %}selected{% endif %}>Artist-context search (advanced)</option>
           </select>
@@ -177,7 +193,7 @@
           <label class="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide" for="{{ form_id }}-readarr-mode">
             Readarr Missing Search Mode
           </label>
-          <select id="{{ form_id }}-readarr-mode" name="readarr_search_mode" class="{{ input_cls }}">
+          <select id="{{ form_id }}-readarr-mode" name="readarr_search_mode" class="{{ select_cls }}">
             <option value="book"           {% if instance.readarr_search_mode.value == 'book'           %}selected{% endif %}>Book search (default)</option>
             <option value="author_context" {% if instance.readarr_search_mode.value == 'author_context' %}selected{% endif %}>Author-context search (advanced)</option>
           </select>
@@ -188,7 +204,7 @@
           <label class="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide" for="{{ form_id }}-whisparr-mode">
             Whisparr v2 Missing Search Mode
           </label>
-          <select id="{{ form_id }}-whisparr-mode" name="whisparr_search_mode" class="{{ input_cls }}">
+          <select id="{{ form_id }}-whisparr-mode" name="whisparr_search_mode" class="{{ select_cls }}">
             <option value="episode"        {% if instance.whisparr_search_mode.value == 'episode'        %}selected{% endif %}>Episode search (default)</option>
             <option value="season_context" {% if instance.whisparr_search_mode.value == 'season_context' %}selected{% endif %}>Season-context search (advanced)</option>
           </select>
@@ -276,7 +292,7 @@
         <label class="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide" for="{{ form_id }}-upgrade-sonarr-mode">
           Sonarr Upgrade Search Mode
         </label>
-        <select id="{{ form_id }}-upgrade-sonarr-mode" name="upgrade_sonarr_search_mode" class="{{ input_cls }}">
+        <select id="{{ form_id }}-upgrade-sonarr-mode" name="upgrade_sonarr_search_mode" class="{{ select_cls }}">
           <option value="episode"        {% if instance.upgrade_sonarr_search_mode.value == 'episode'        %}selected{% endif %}>Episode search (default)</option>
           <option value="season_context" {% if instance.upgrade_sonarr_search_mode.value == 'season_context' %}selected{% endif %}>Season-context search</option>
         </select>
@@ -286,7 +302,7 @@
         <label class="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide" for="{{ form_id }}-upgrade-lidarr-mode">
           Lidarr Upgrade Search Mode
         </label>
-        <select id="{{ form_id }}-upgrade-lidarr-mode" name="upgrade_lidarr_search_mode" class="{{ input_cls }}">
+        <select id="{{ form_id }}-upgrade-lidarr-mode" name="upgrade_lidarr_search_mode" class="{{ select_cls }}">
           <option value="album"          {% if instance.upgrade_lidarr_search_mode.value == 'album'          %}selected{% endif %}>Album search (default)</option>
           <option value="artist_context" {% if instance.upgrade_lidarr_search_mode.value == 'artist_context' %}selected{% endif %}>Artist-context search</option>
         </select>
@@ -296,7 +312,7 @@
         <label class="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide" for="{{ form_id }}-upgrade-readarr-mode">
           Readarr Upgrade Search Mode
         </label>
-        <select id="{{ form_id }}-upgrade-readarr-mode" name="upgrade_readarr_search_mode" class="{{ input_cls }}">
+        <select id="{{ form_id }}-upgrade-readarr-mode" name="upgrade_readarr_search_mode" class="{{ select_cls }}">
           <option value="book"           {% if instance.upgrade_readarr_search_mode.value == 'book'           %}selected{% endif %}>Book search (default)</option>
           <option value="author_context" {% if instance.upgrade_readarr_search_mode.value == 'author_context' %}selected{% endif %}>Author-context search</option>
         </select>
@@ -306,7 +322,7 @@
         <label class="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide" for="{{ form_id }}-upgrade-whisparr-mode">
           Whisparr v2 Upgrade Search Mode
         </label>
-        <select id="{{ form_id }}-upgrade-whisparr-mode" name="upgrade_whisparr_search_mode" class="{{ input_cls }}">
+        <select id="{{ form_id }}-upgrade-whisparr-mode" name="upgrade_whisparr_search_mode" class="{{ select_cls }}">
           <option value="episode"        {% if instance.upgrade_whisparr_search_mode.value == 'episode'        %}selected{% endif %}>Episode search (default)</option>
           <option value="season_context" {% if instance.upgrade_whisparr_search_mode.value == 'season_context' %}selected{% endif %}>Season-context search</option>
         </select>

@@ -44,6 +44,8 @@ If you set a **Queue Limit** on an instance, Houndarr checks the download queue 
 
 It searches items from `wanted/missing` and `wanted/cutoff`, rotating through the list over time so every item gets evaluated even if the first pages are on cooldown. If upgrade search is enabled, it also re-searches library items that already meet cutoff, rotating through your library with a separate offset. Everything else is untouched.
 
+The default `Search Order` is `Random`, which picks a random page each cycle and shuffles the items on it. Switch to `Chronological` if you prefer deterministic oldest-first rotation. See [Search Order](/docs/configuration/instance-settings#search-order) for the trade-off.
+
 ## "Why is Houndarr searching so slowly?"
 
 The defaults are conservative on purpose (batch size 2, hourly cap 4, 14-day cooldown). With a large backlog, clearing it takes weeks. You can increase throughput gradually; see [Increasing throughput](/docs/configuration/instance-settings#increasing-throughput).
@@ -69,6 +71,10 @@ No. Houndarr only triggers searches within your *arr instances for items already
 ## "I deleted files to free up space. Will Houndarr re-download them?"
 
 If the items are still monitored in your *arr instance, yes: they will appear in the wanted/missing list and Houndarr will eventually search for them. To prevent re-downloads, unmonitor the items in your *arr instance before or after deleting the files. Houndarr only acts on what your *arr instance reports as wanted.
+
+## "Why are the same few series or movies showing up over and over in the logs?"
+
+That pattern used to be common with chronological search order: same-day releases cluster together in the *arr wanted list (it falls back to title order within equal dates), so the logs looked like long alphabetical runs of the same show or studio. The default is now `Random`, which picks a random page of your wanted list each cycle and shuffles items on it before searching. If you still prefer the old deterministic behaviour, switch `Search Order` to `Chronological` in the Edit Instance form.
 
 ## "Does Houndarr respect custom format scores?"
 

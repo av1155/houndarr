@@ -676,3 +676,60 @@ def test_update_rejects_malformed_time_window(app: TestClient) -> None:
     # The stored value must still be the original.
     edit_resp = app.get("/settings/instances/1/edit")
     assert b'value="09:00-18:00"' in edit_resp.content
+
+
+# ---------------------------------------------------------------------------
+# search_order (#394)
+# ---------------------------------------------------------------------------
+
+
+def test_create_instance_accepts_random_search_order(app: TestClient) -> None:
+    _login(app)
+    form = {**_VALID_FORM, "search_order": "random"}
+    resp = app.post("/settings/instances", data=form, headers=csrf_headers(app))
+    assert resp.status_code == 200
+    edit = app.get("/settings/instances/1/edit")
+    assert b'name="search_order"' in edit.content
+    assert b'value="random"        selected' in edit.content or (
+        b'<option value="random"' in edit.content and b"selected" in edit.content
+    )
+
+
+def test_create_instance_defaults_to_random(app: TestClient) -> None:
+    _login(app)
+    resp = app.post("/settings/instances", data=_VALID_FORM, headers=csrf_headers(app))
+    assert resp.status_code == 200
+    edit = app.get("/settings/instances/1/edit")
+    # Random option should be preselected when no override was sent.
+    assert b'value="random"        selected' in edit.content or (
+        b'<option value="random"' in edit.content and b"selected" in edit.content
+    )
+
+
+def test_create_instance_rejects_invalid_search_order(app: TestClient) -> None:
+    _login(app)
+    form = {**_VALID_FORM, "search_order": "backwards"}
+    resp = app.post("/settings/instances", data=form, headers=csrf_headers(app))
+    assert resp.status_code == 422
+    assert b"Invalid search order" in resp.content
+
+
+def test_update_instance_toggles_search_order(app: TestClient) -> None:
+    _login(app)
+    app.post("/settings/instances", data=_VALID_FORM, headers=csrf_headers(app))
+
+    update_form = {**_VALID_FORM, "search_order": "random"}
+    resp = app.post("/settings/instances/1", data=update_form, headers=csrf_headers(app))
+    assert resp.status_code == 200
+
+    edit = app.get("/settings/instances/1/edit")
+    assert b'<option value="random"' in edit.content
+    # Round-trip to chronological.
+    revert = app.post(
+        "/settings/instances/1",
+        data={**_VALID_FORM, "search_order": "chronological"},
+        headers=csrf_headers(app),
+    )
+    assert revert.status_code == 200
+    edit_after = app.get("/settings/instances/1/edit")
+    assert b'<option value="chronological"' in edit_after.content

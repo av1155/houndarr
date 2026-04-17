@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Literal
 
 import httpx
 
@@ -115,6 +115,18 @@ class RadarrClient(ArrClient):
         )
         records: list[dict[str, Any]] = data.get("records", [])
         return [_parse_movie(r) for r in records]
+
+    async def get_wanted_total(self, kind: Literal["missing", "cutoff"]) -> int:
+        """Return the totalRecords count for ``wanted/{kind}`` via a size-1 probe."""
+        data: dict[str, Any] = await self._get(
+            f"/api/v3/wanted/{kind}",
+            page=1,
+            pageSize=1,
+            sortKey="inCinemas",
+            sortDirection="ascending",
+            monitored="true",
+        )
+        return int(data.get("totalRecords", 0) or 0)
 
     async def get_library(self) -> list[LibraryMovie]:
         """Return the full movie library.

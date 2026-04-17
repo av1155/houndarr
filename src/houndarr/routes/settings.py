@@ -32,6 +32,7 @@ from houndarr.config import (
     DEFAULT_POST_RELEASE_GRACE_HOURS,
     DEFAULT_QUEUE_LIMIT,
     DEFAULT_READARR_SEARCH_MODE,
+    DEFAULT_SEARCH_ORDER,
     DEFAULT_SLEEP_INTERVAL_MINUTES,
     DEFAULT_SONARR_SEARCH_MODE,
     DEFAULT_UPGRADE_BATCH_SIZE,
@@ -50,6 +51,7 @@ from houndarr.services.instances import (
     InstanceType,
     LidarrSearchMode,
     ReadarrSearchMode,
+    SearchOrder,
     SonarrSearchMode,
     WhisparrSearchMode,
     create_instance,
@@ -553,6 +555,7 @@ async def instance_create(
     upgrade_readarr_search_mode: Annotated[str, Form()] = DEFAULT_UPGRADE_READARR_SEARCH_MODE,
     upgrade_whisparr_search_mode: Annotated[str, Form()] = DEFAULT_UPGRADE_WHISPARR_SEARCH_MODE,
     allowed_time_window: Annotated[str, Form()] = DEFAULT_ALLOWED_TIME_WINDOW,
+    search_order: Annotated[str, Form()] = DEFAULT_SEARCH_ORDER,
     connection_verified: Annotated[str, Form()] = "false",
 ) -> HTMLResponse:
     """Create a new instance and return the updated instance table body."""
@@ -616,6 +619,11 @@ async def instance_create(
     if isinstance(upgrade_modes, str):
         return _connection_guard_response(upgrade_modes)
 
+    try:
+        parsed_search_order = SearchOrder(search_order)
+    except ValueError:
+        return _connection_guard_response("Invalid search order.")
+
     instance = await create_instance(
         master_key=_master_key(request),
         name=name,
@@ -646,6 +654,7 @@ async def instance_create(
         upgrade_readarr_search_mode=upgrade_modes.readarr,
         upgrade_whisparr_search_mode=upgrade_modes.whisparr,
         allowed_time_window=canonical_window,
+        search_order=parsed_search_order,
     )
 
     supervisor = getattr(request.app.state, "supervisor", None)
@@ -707,6 +716,7 @@ async def instance_update(
     upgrade_readarr_search_mode: Annotated[str, Form()] = DEFAULT_UPGRADE_READARR_SEARCH_MODE,
     upgrade_whisparr_search_mode: Annotated[str, Form()] = DEFAULT_UPGRADE_WHISPARR_SEARCH_MODE,
     allowed_time_window: Annotated[str, Form()] = DEFAULT_ALLOWED_TIME_WINDOW,
+    search_order: Annotated[str, Form()] = DEFAULT_SEARCH_ORDER,
     connection_verified: Annotated[str, Form()] = "false",
 ) -> HTMLResponse:
     """Update an existing instance and return the refreshed row partial.
@@ -784,6 +794,11 @@ async def instance_update(
     if isinstance(upgrade_modes, str):
         return _connection_guard_response(upgrade_modes)
 
+    try:
+        parsed_search_order = SearchOrder(search_order)
+    except ValueError:
+        return _connection_guard_response("Invalid search order.")
+
     # Reset offsets when upgrade is toggled off
     new_upgrade_enabled = upgrade_enabled == "on"
     upgrade_fields: dict[str, object] = {
@@ -825,6 +840,7 @@ async def instance_update(
         missing_page_offset=1,
         cutoff_page_offset=1,
         allowed_time_window=canonical_window,
+        search_order=parsed_search_order,
         **upgrade_fields,
     )
     if updated is None:

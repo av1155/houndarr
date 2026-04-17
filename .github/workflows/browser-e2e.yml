@@ -42,8 +42,26 @@ jobs:
       - name: Install browser test dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install pytest pytest-playwright playwright fastapi 'uvicorn[standard]' httpx
-          playwright install --with-deps "$BROWSER"
+          pip install pytest pytest-playwright pytest-rerunfailures playwright fastapi 'uvicorn[standard]' httpx
+
+      - name: Resolve Playwright version
+        id: pw
+        run: echo "version=$(pip show playwright | awk '/^Version:/ {print $2}')" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Playwright browser binaries
+        id: pw-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ steps.pw.outputs.version }}-${{ matrix.browser }}
+
+      - name: Install Playwright browser (cache miss)
+        if: steps.pw-cache.outputs.cache-hit != 'true'
+        run: playwright install --with-deps "$BROWSER"
+
+      - name: Install Playwright system deps (cache hit)
+        if: steps.pw-cache.outputs.cache-hit == 'true'
+        run: playwright install-deps "$BROWSER"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
@@ -128,13 +146,17 @@ jobs:
           HOUNDARR_E2E_USER: admin
           HOUNDARR_E2E_PASS: CITestPass1!
         run: |
+          mkdir -p test-results
           pytest tests/e2e_browser/ \
+            --confcutdir tests/e2e_browser \
             --browser "$BROWSER" \
             --tracing retain-on-failure \
             --screenshot only-on-failure \
             --full-page-screenshot \
             --video retain-on-failure \
             --output test-results/e2e \
+            --junitxml=test-results/junit.xml \
+            --reruns 2 \
             -v
 
       - name: Dump container logs on failure
@@ -155,7 +177,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: playwright-${{ matrix.browser }}
-          path: test-results/e2e
+          path: test-results
           retention-days: 7
 
       - name: Cleanup

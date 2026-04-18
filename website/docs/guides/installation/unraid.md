@@ -129,7 +129,7 @@ existing grabs depend on, and the indexers hand out rate limits and
 bans fast. Tune up one knob at a time, watch the Logs page for a
 full day, and only push further when indexer health stays clean. The
 full tuning order is in
-[Instance Settings](/docs/configuration/instance-settings#increasing-throughput).
+[Increase Throughput](/docs/guides/increase-throughput).
 
 ## Adding env vars that are not in the template
 

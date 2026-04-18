@@ -21,7 +21,6 @@ const sidebars: SidebarsConfig = {
       collapsed: false,
       items: [
         'configuration/environment-variables',
-        'configuration/instance-settings',
         'configuration/reverse-proxy',
       ],
     },
@@ -30,6 +29,8 @@ const sidebars: SidebarsConfig = {
       label: 'Reference',
       collapsed: false,
       items: [
+        'reference/instance-settings',
+        'reference/search-commands',
         'reference/skip-reasons',
       ],
     },
@@ -39,6 +40,7 @@ const sidebars: SidebarsConfig = {
       collapsed: false,
       items: [
         'concepts/how-houndarr-works',
+        'concepts/search-order',
         'concepts/troubleshooting',
         'concepts/faq',
       ],
@@ -59,6 +61,7 @@ const sidebars: SidebarsConfig = {
       label: 'Guides',
       collapsed: false,
       items: [
+        'guides/increase-throughput',
         'guides/backup-and-restore',
       ],
     },

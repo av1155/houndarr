@@ -56,11 +56,11 @@ was skipped. Full behavior:
 
 It searches items from `wanted/missing` and `wanted/cutoff`, rotating through the list over time so every item gets evaluated even if the first pages are on cooldown. If upgrade search is enabled, it also re-searches library items that already meet cutoff, rotating through your library with a separate offset. Everything else is untouched.
 
-The default `Search Order` is `Random`, which picks a random page each cycle and shuffles the items on it. Switch to `Chronological` if you prefer deterministic oldest-first rotation. See [Search Order](/docs/configuration/instance-settings#search-order) for the trade-off.
+The default `Search Order` is `Random`, which picks a random page each cycle and shuffles the items on it. Switch to `Chronological` if you prefer deterministic oldest-first rotation. See [Search Order](/docs/concepts/search-order) for the trade-off.
 
 ## "Why is Houndarr searching so slowly?"
 
-The defaults are conservative on purpose (batch size 2, hourly cap 4, 14-day cooldown). With a large backlog, clearing it takes weeks. You can increase throughput gradually; see [Increasing throughput](/docs/configuration/instance-settings#increasing-throughput).
+The defaults ship with batch size 2, hourly cap 4, and a 14-day cooldown. With a large backlog, clearing it takes weeks. You can raise throughput gradually; see [Increase Throughput](/docs/guides/increase-throughput).
 
 ## "My *arr instance shows many cutoff-unmet items. Why is Houndarr only searching a few per day?"
 

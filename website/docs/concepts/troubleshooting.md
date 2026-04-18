@@ -72,7 +72,7 @@ The default settings are intentionally conservative:
 
 With these defaults, Houndarr might search 4–8 items in a day. If your backlog has hundreds of items, clearing it takes weeks. You can increase throughput by raising the batch size or hourly cap, but do so gradually and monitor your indexer health.
 
-See [Instance Settings](/docs/configuration/instance-settings#increasing-throughput) for the recommended order of adjustments.
+See [Increase Throughput](/docs/guides/increase-throughput) for the recommended order of adjustments.
 
 ---
 

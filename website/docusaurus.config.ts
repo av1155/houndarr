@@ -96,7 +96,7 @@ const config: Config = {
             },
             {
               label: 'Instance Settings',
-              to: '/docs/configuration/instance-settings',
+              to: '/docs/reference/instance-settings',
             },
             {
               label: 'How Houndarr Works',

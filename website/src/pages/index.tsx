@@ -15,7 +15,7 @@ type ScreenshotItem = {
 };
 
 const DASHBOARD_SCREENSHOT: ScreenshotItem = {
-  src: require('@site/static/img/screenshots/Dashboard_Houndarr.jpeg').default,
+  src: require('@site/static/img/screenshots/houndarr-dashboard.png').default,
   alt: 'Houndarr Dashboard: instance cards with search metrics and activity',
   caption: 'Dashboard: live search metrics, instance status, and on-demand triggers',
 };
@@ -27,12 +27,12 @@ const SUPPORTING_SCREENSHOTS: ScreenshotItem[] = [
     caption: 'Logs',
   },
   {
-    src: require('@site/static/img/screenshots/Settings_Houndarr.jpeg').default,
+    src: require('@site/static/img/screenshots/houndarr-settings-instances.png').default,
     alt: 'Houndarr Settings: instance list with enable toggles',
     caption: 'Settings',
   },
   {
-    src: require('@site/static/img/screenshots/Settings_Houndarr_Add_Instance_Settings.jpeg').default,
+    src: require('@site/static/img/screenshots/houndarr-add-instance-form.png').default,
     alt: 'Houndarr Add Instance: search, cutoff, and upgrade configuration',
     caption: 'Instance config',
   },

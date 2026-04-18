@@ -30,6 +30,9 @@ tests/
 # Documentation
 docs/
 *.md
+# CHANGELOG.md is bundled into the image so the "What's new" modal can
+# render release notes at runtime; re-include it after the *.md exclusion.
+!CHANGELOG.md
 
 # Dev compose and data
 docker-compose.dev.yml

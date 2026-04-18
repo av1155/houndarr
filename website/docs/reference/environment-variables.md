@@ -100,5 +100,5 @@ regardless of this setting.
 `HOUNDARR_AUTH_MODE=proxy` delegates authentication to an SSO reverse proxy
 (Authelia, Authentik, oauth2-proxy, etc.). Requires both
 `HOUNDARR_AUTH_PROXY_HEADER` and `HOUNDARR_TRUSTED_PROXIES`; the app refuses
-to start without them. See [SSO proxy authentication](/docs/guides/reverse-proxy#sso-proxy-authentication)
+to start without them. See [SSO Proxy Auth](/docs/guides/sso-proxy-auth)
 for setup instructions and examples.

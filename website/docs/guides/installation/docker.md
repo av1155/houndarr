@@ -1,10 +1,10 @@
 ---
 sidebar_position: 2
-title: Installation
-description: How to install Houndarr via Docker or from source.
+title: Docker
+description: Pull the Houndarr Docker image and run it with docker run or Docker Compose.
 ---
 
-# Installation
+# Install with Docker
 
 The Docker image lives on GitHub Container Registry (GHCR) at
 `ghcr.io/av1155/houndarr`.
@@ -25,35 +25,10 @@ docker pull ghcr.io/av1155/houndarr:v1.0.8
 
 Available architectures: `linux/amd64` and `linux/arm64`.
 
-See [Install with Docker Compose](/docs/guides/installation/docker-compose) for a complete Compose example.
-
-## Building from source
-
-If you want to run Houndarr outside Docker or contribute to development:
-
-```bash
-# Clone the repository
-git clone https://github.com/av1155/houndarr.git
-cd houndarr
-
-# Create a virtual environment
-python3 -m venv .venv
-.venv/bin/pip install --upgrade pip
-.venv/bin/pip install -r requirements-dev.txt
-.venv/bin/pip install -e .
-
-# Run in development mode
-.venv/bin/python -m houndarr --data-dir ./data-dev --dev
-```
-
-The dev server will be available at `http://localhost:8877`.
-
-### Requirements
-
-- Python 3.12 or later
-- pip
-
-Development mode enables auto-reload and exposes the FastAPI Swagger UI at `/api/docs`.
+See [Install with Docker Compose](/docs/guides/installation/docker-compose)
+for a complete Compose example, or
+[Install from source](/docs/guides/installation/from-source) for the
+Python development path.
 
 ## Container details
 
@@ -65,32 +40,14 @@ Development mode enables auto-reload and exposes the FastAPI Swagger UI at `/api
 | Health check | `GET /api/health` |
 | User | Non-root (`appuser`) after PUID/PGID remapping |
 
-The container starts as root only to perform PUID/PGID file ownership remapping,
-then drops to a non-root user via `gosu` before starting the application.
+The container starts as root only to perform PUID/PGID file
+ownership remapping, then drops to a non-root user via `gosu` before
+starting the application. See
+[Security Overview: Container security posture](/docs/security/overview#container-security-posture)
+for the full trust model.
 
-## Compatibility
+## Which *arr versions work?
 
-Houndarr communicates with *arr instances through their REST APIs. The table below lists the versions tested against.
-
-| Application | API version | Tested with |
-|-------------|-------------|-------------|
-| Radarr | v3 | 6.0.4.10291 |
-| Sonarr | v3 | 4.0.17.2952 |
-| Lidarr | v1 | 3.1.0.4875 |
-| Readarr | v1 | 0.4.20.129 |
-| Whisparr v2 | v3 | 2.2.0.108 |
-| Whisparr v3 | v3 | 3.3.2.604 |
-
-Whisparr v2 and v3 are separate applications with different APIs. v2 is Sonarr-based (studio/episode model, Docker: `hotio/whisparr:latest`). v3 is Radarr-based (scene/movie model, Docker: `hotio/whisparr:v3`). Select the matching instance type in Houndarr.
-
-Any version that exposes the same API (v3 or v1 depending on the app) should work. When you test a connection, Houndarr reads the `appName` and `version` from the instance's system/status endpoint and verifies it matches the type you selected. For Whisparr, it also detects v2/v3 version mismatches.
-
-### Readarr forks
-
-The original Readarr project was discontinued in June 2025. Community forks that use the same v1 API are expected to work when configured as type "Readarr":
-
-- [Bookshelf](https://github.com/pennydreadful/bookshelf)
-- [Reading Glasses](https://github.com/blampe/rreading-glasses)
-- [Faustvii's Readarr](https://github.com/Faustvii/Readarr)
-
-Forks that return an unrecognized `appName` in their system/status response will still connect; the type check only rejects known mismatches (e.g. pointing a "Radarr" config at a Sonarr URL).
+Houndarr talks to your *arr instances through their REST APIs. For
+the tested version matrix and Readarr-fork compatibility, see
+[Compatibility](/docs/reference/compatibility).

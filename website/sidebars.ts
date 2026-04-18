@@ -20,6 +20,7 @@ const sidebars: SidebarsConfig = {
         'guides/installation/unraid',
         'guides/installation/kubernetes',
         'guides/installation/helm',
+        'guides/installation/from-source',
         'guides/first-run-setup',
       ],
     },
@@ -33,6 +34,7 @@ const sidebars: SidebarsConfig = {
         'guides/increase-throughput',
         'guides/backup-and-restore',
         'guides/reverse-proxy',
+        'guides/sso-proxy-auth',
       ],
     },
     {
@@ -44,6 +46,7 @@ const sidebars: SidebarsConfig = {
         'reference/instance-settings',
         'reference/search-commands',
         'reference/skip-reasons',
+        'reference/compatibility',
       ],
     },
     {

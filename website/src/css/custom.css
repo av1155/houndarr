@@ -8,21 +8,81 @@
 
 @import './tokens.css';
 
-/* ── Infima overrides — Light mode ────────────────────────────────────────── */
+/* ── Light mode — Technical Paper variables on :root ──────────────────── */
+/* Warm cream base with ink-dark text and cyan accents shifted darker for
+   paper contrast. All concrete element styles are scoped under
+   [data-theme='light'] below so they cannot leak into dark mode. */
 :root {
-  --ifm-color-primary: #0891b2;
-  --ifm-color-primary-dark: #0e7490;
-  --ifm-color-primary-darker: #155e75;
-  --ifm-color-primary-darkest: #164e63;
-  --ifm-color-primary-light: #06b6d4;
-  --ifm-color-primary-lighter: #22d3ee;
-  --ifm-color-primary-lightest: #67e8f9;
+  /* Paper surfaces */
+  --paper-base:      #fbfaf7;
+  --paper-surface-1: #f5f2ea;
+  --paper-surface-2: #f0ede4;
+  --paper-surface-3: #e8e2d4;
 
-  --ifm-font-family-base: var(--font-sans);
+  /* Ink */
+  --ink-primary:   #15131a;
+  --ink-secondary: #4a4751;
+  --ink-muted:     #75717b;
+  --ink-faint:     #9a95a1;
+
+  /* Borders (warm) */
+  --paper-border-subtle:  #ebe5d5;
+  --paper-border-default: #d6cfbd;
+  --paper-border-strong:  #b8ad93;
+
+  /* Accent — cyan shifted darker for paper */
+  --paper-accent:         #0e7490;
+  --paper-accent-strong:  #155e75;
+  --paper-accent-soft:    rgba(14, 116, 144, 0.10);
+
+  /* Infima primary scale (light defaults) */
+  --ifm-color-primary:         var(--paper-accent);
+  --ifm-color-primary-dark:    #0a6379;
+  --ifm-color-primary-darker:  #085364;
+  --ifm-color-primary-darkest: var(--paper-accent-strong);
+  --ifm-color-primary-light:   #0891b2;
+  --ifm-color-primary-lighter: #06b6d4;
+  --ifm-color-primary-lightest:#22d3ee;
+
+  /* Typography (shared both themes) */
+  --ifm-font-family-base:      var(--font-sans);
   --ifm-font-family-monospace: var(--font-mono);
-  --ifm-code-font-size: 90%;
-  --ifm-border-radius: var(--radius-md);
-  --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.08);
+  --ifm-code-font-size:        90%;
+  --ifm-border-radius:         var(--radius-md);
+
+  /* Highlighted code line (light default) — warm amber */
+  --docusaurus-highlighted-code-line-bg: rgba(180, 83, 9, 0.10);
+}
+
+/* Explicit light-theme variable overrides. Dark overrides follow in its
+   own block and win by specificity when data-theme=dark. */
+[data-theme='light'] {
+  --ifm-background-color:         var(--paper-base);
+  --ifm-background-surface-color: var(--paper-surface-1);
+  --ifm-navbar-background-color:  var(--paper-surface-1);
+  --ifm-footer-background-color:  var(--paper-surface-1);
+
+  --ifm-font-color-base:          var(--ink-primary);
+  --ifm-color-content:            var(--ink-primary);
+  --ifm-color-content-secondary:  var(--ink-secondary);
+  --ifm-heading-color:            var(--ink-primary);
+  --ifm-link-color:               var(--paper-accent);
+  --ifm-link-hover-color:         var(--paper-accent-strong);
+
+  --ifm-color-emphasis-100: var(--paper-surface-1);
+  --ifm-color-emphasis-200: var(--paper-border-subtle);
+  --ifm-color-emphasis-300: var(--paper-border-default);
+  --ifm-color-emphasis-400: var(--paper-border-strong);
+
+  --ifm-border-color:       var(--paper-border-subtle);
+  --ifm-table-border-color: var(--paper-border-subtle);
+  --ifm-hr-border-color:    var(--paper-border-subtle);
+  --ifm-toc-border-color:   var(--paper-border-subtle);
+
+  --ifm-code-background: var(--paper-surface-2);
+  --ifm-pre-background:  var(--paper-surface-2);
+
+  --ifm-menu-color-active: var(--paper-accent);
 }
 
 /* ── Infima overrides — Dark mode (Station) ───────────────────────────────── */
@@ -68,7 +128,22 @@
   --docusaurus-highlighted-code-line-bg: rgba(34, 211, 238, 0.08);
 }
 
-/* ── Body atmosphere — desktop ambient depth ────────────────────────────── */
+/* ── Light body atmosphere — warm paper grain ───────────────────────────── */
+[data-theme='light'] body {
+  background-color: var(--paper-base);
+  background-image:
+    radial-gradient(ellipse 55% 40% at 0% 0%,    rgba(180, 83, 9, 0.025)  0%, transparent 60%),
+    radial-gradient(ellipse 40% 30% at 100% 100%, rgba(14, 116, 144, 0.020) 0%, transparent 55%),
+    repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 31px,
+      rgba(21, 19, 26, 0.013) 31px,
+      rgba(21, 19, 26, 0.013) 32px
+    );
+}
+
+/* ── Dark body atmosphere — desktop ambient depth ──────────────────────── */
 [data-theme='dark'] body {
   background-image:
     radial-gradient(ellipse 55% 40% at 0% 0%,    rgba(6, 182, 212, 0.055) 0%, transparent 60%),
@@ -82,11 +157,45 @@
     );
 }
 
+/* ── Navbar — light ──────────────────────────────────────────────────── */
+[data-theme='light'] .navbar {
+  border-bottom: 1px solid var(--paper-border-subtle);
+  box-shadow:
+    0 1px 0 var(--paper-border-subtle),
+    0 2px 16px rgba(14, 116, 144, 0.045);
+}
+
 /* ── Nav atmospheric glow (dark mode) ──────────────────────────────────── */
 [data-theme='dark'] .navbar {
   box-shadow:
     0 1px 0 var(--color-border-subtle),
     0 2px 20px rgba(6, 182, 212, 0.060);
+}
+
+/* ── Color-mode toggle — padding + hover (shared geometry) ─────────────── */
+/* Docusaurus ships the toggle as an unpadded clean-btn with no margin. It
+   ends up flush against the left neighbor while the search bar's own
+   padding creates a visible gap on the right. Balance both sides. */
+.navbar [class*='colorModeToggle_'] {
+  margin: 0 0.5rem;
+}
+
+.navbar button[class*='toggleButton_'] {
+  padding: 0.375rem 0.5rem;
+  border-radius: var(--radius-sm);
+  transition:
+    background-color var(--dur-fast, 120ms) var(--ease-station, ease),
+    color var(--dur-fast, 120ms) var(--ease-station, ease);
+}
+
+[data-theme='light'] .navbar button[class*='toggleButton_']:hover {
+  background-color: var(--paper-surface-2);
+  color: var(--paper-accent-strong);
+}
+
+[data-theme='dark'] .navbar button[class*='toggleButton_']:hover {
+  background-color: rgba(34, 211, 238, 0.07);
+  color: var(--color-brand-300);
 }
 
 /* ── Hero — Station midnight + radial glow ────────────────────────────────── */
@@ -114,7 +223,17 @@
   display: none;
 }
 
-/* ── Inline code — Station tinted ─────────────────────────────────────────── */
+/* ── Inline code — light (paper tinted) ──────────────────────────────── */
+[data-theme='light'] :not(pre) > code {
+  background-color: rgba(14, 116, 144, 0.055);
+  border: 1px solid rgba(14, 116, 144, 0.16);
+  color: var(--paper-accent-strong);
+  border-radius: var(--radius-sm);
+  padding: 0.1em 0.4em;
+  font-weight: 500;
+}
+
+/* ── Inline code — Station tinted (dark) ─────────────────────────────── */
 [data-theme='dark'] :not(pre) > code {
   background-color: rgba(34, 211, 238, 0.07);
   border: 1px solid rgba(34, 211, 238, 0.14);
@@ -123,20 +242,56 @@
   padding: 0.1em 0.4em;
 }
 
-/* ── Code blocks ─────────────────────────────────────────────────────────── */
+/* ── Code blocks — light (paper) ─────────────────────────────────────── */
+[data-theme='light'] pre {
+  background: var(--paper-surface-2);
+  border: 1px solid var(--paper-border-subtle);
+  border-radius: var(--radius-md);
+}
+
+/* ── Code blocks — dark ──────────────────────────────────────────────── */
 [data-theme='dark'] pre {
   background: #0d0d14;
   border: 1px solid var(--color-border-subtle);
   border-radius: var(--radius-md);
 }
 
-/* ── Sidebar — left-border active indicator ───────────────────────────────── */
+/* ── Sidebar — left-border active indicator (light) ────────────────────── */
+[data-theme='light'] .menu__link--active:not(.menu__link--sublist) {
+  border-left: 2px solid var(--paper-accent);
+  padding-left: calc(var(--ifm-menu-link-padding-horizontal) - 2px);
+  color: var(--paper-accent-strong);
+}
+
+/* ── Sidebar — left-border active indicator (dark) ─────────────────────── */
 [data-theme='dark'] .menu__link--active:not(.menu__link--sublist) {
   border-left: 2px solid var(--color-brand-400);
   padding-left: calc(var(--ifm-menu-link-padding-horizontal) - 2px);
 }
 
-/* ── Admonitions — left-border Station style ──────────────────────────────── */
+/* ── Admonitions — light paper style ──────────────────────────────────── */
+[data-theme='light'] .admonition {
+  background-color: var(--paper-surface-1);
+  border-left-width: 4px;
+  border-top: none;
+  border-right: none;
+  border-bottom: none;
+  color: var(--ink-primary);
+}
+
+[data-theme='light'] .admonition-note    { border-left-color: var(--paper-accent); }
+[data-theme='light'] .admonition-tip     { border-left-color: #16a34a; }
+[data-theme='light'] .admonition-warning { border-left-color: #d97706; }
+[data-theme='light'] .admonition-danger  { border-left-color: #dc2626; }
+[data-theme='light'] .admonition-info    { border-left-color: var(--paper-accent); }
+
+[data-theme='light'] .admonition .admonition-heading,
+[data-theme='light'] .admonition .alert__heading {
+  color: var(--ink-primary);
+  font-weight: 600;
+}
+
+/* ── Admonitions — Station dark style ─────────────────────────────────── */
 [data-theme='dark'] .admonition {
   background-color: var(--color-surface-1);
   border-left-width: 4px;
@@ -165,7 +320,19 @@
   border-left-color: var(--color-info);
 }
 
-/* ── Tables ──────────────────────────────────────────────────────────────── */
+/* ── Tables — light ─────────────────────────────────────────────────── */
+[data-theme='light'] table { border-color: var(--paper-border-subtle); }
+[data-theme='light'] tr    { border-color: var(--paper-border-subtle); }
+
+[data-theme='light'] tr:nth-child(2n) {
+  background-color: rgba(21, 19, 26, 0.020);
+}
+
+[data-theme='light'] thead tr {
+  background-color: var(--paper-surface-1);
+}
+
+/* ── Tables — dark ──────────────────────────────────────────────────── */
 [data-theme='dark'] table {
   border-color: var(--color-border-subtle);
 }
@@ -178,7 +345,32 @@
   background-color: rgba(255, 255, 255, 0.02);
 }
 
-/* ── Footer ──────────────────────────────────────────────────────────────── */
+/* ── Footer — light ─────────────────────────────────────────────────── */
+[data-theme='light'] .footer {
+  border-top: 1px solid var(--paper-border-subtle);
+  background-color: var(--paper-surface-1);
+  color: var(--ink-secondary);
+}
+
+[data-theme='light'] .footer__link-item {
+  color: var(--ink-secondary);
+}
+
+[data-theme='light'] .footer__link-item:hover {
+  color: var(--paper-accent);
+}
+
+[data-theme='light'] .footer__title {
+  color: var(--ink-primary);
+}
+
+[data-theme='light'] .footer__copyright {
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  color: var(--ink-muted);
+}
+
+/* ── Footer — dark ──────────────────────────────────────────────────── */
 [data-theme='dark'] .footer {
   border-top: 1px solid var(--color-border-subtle);
 }
@@ -189,7 +381,18 @@
   color: #475569;
 }
 
-/* ── TOC — refined link styles ───────────────────────────────────────────── */
+/* ── TOC — light ────────────────────────────────────────────────────── */
+[data-theme='light'] .table-of-contents__link {
+  color: var(--ink-muted);
+  font-size: 0.8125rem;
+}
+
+[data-theme='light'] .table-of-contents__link:hover,
+[data-theme='light'] .table-of-contents__link--active {
+  color: var(--paper-accent);
+}
+
+/* ── TOC — dark ─────────────────────────────────────────────────────── */
 [data-theme='dark'] .table-of-contents__link {
   color: #475569;
   font-size: 0.8125rem;
@@ -200,7 +403,28 @@
   color: var(--color-brand-400);
 }
 
-/* ── Pagination / doc nav cards ──────────────────────────────────────────── */
+/* ── Pagination — light ─────────────────────────────────────────────── */
+[data-theme='light'] .pagination-nav__link {
+  border-color: var(--paper-border-subtle);
+  background: var(--paper-surface-1);
+  transition: border-color var(--dur-base, 180ms) var(--ease-station, ease),
+              background-color var(--dur-base, 180ms) var(--ease-station, ease);
+}
+
+[data-theme='light'] .pagination-nav__link:hover {
+  border-color: var(--paper-accent);
+  background: var(--paper-surface-2);
+}
+
+[data-theme='light'] .pagination-nav__sublabel {
+  color: var(--ink-muted);
+}
+
+[data-theme='light'] .pagination-nav__label {
+  color: var(--ink-primary);
+}
+
+/* ── Pagination — dark ─────────────────────────────────────────────── */
 [data-theme='dark'] .pagination-nav__link {
   border-color: var(--color-border-subtle);
   background: var(--color-surface-1);
@@ -211,9 +435,68 @@
   background: var(--color-surface-2);
 }
 
-/* ── Breadcrumbs ─────────────────────────────────────────────────────────── */
+/* ── Breadcrumbs — light ────────────────────────────────────────────── */
+[data-theme='light'] .breadcrumbs__link {
+  color: var(--ink-muted);
+}
+
+[data-theme='light'] .breadcrumbs__item--active .breadcrumbs__link {
+  color: var(--ink-secondary);
+  background-color: var(--paper-surface-1);
+}
+
+/* ── Breadcrumbs — dark ────────────────────────────────────────────── */
 [data-theme='dark'] .breadcrumbs__item--active .breadcrumbs__link {
   color: #94a3b8;
+}
+
+/* ── Blockquote — light ──────────────────────────────────────────────── */
+[data-theme='light'] blockquote {
+  border-left: 4px solid var(--paper-border-default);
+  background: var(--paper-surface-1);
+  color: var(--ink-secondary);
+  padding: 0.75rem 1rem;
+  margin-left: 0;
+  margin-right: 0;
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+}
+
+/* ── Headings — light (warm ink, tight tracking) ──────────────────────── */
+[data-theme='light'] h1,
+[data-theme='light'] h2,
+[data-theme='light'] h3,
+[data-theme='light'] h4 {
+  color: var(--ink-primary);
+  letter-spacing: -0.01em;
+}
+
+[data-theme='light'] h1 {
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+/* ── Markdown body text — light ──────────────────────────────────────── */
+[data-theme='light'] .markdown {
+  color: var(--ink-primary);
+}
+
+[data-theme='light'] .markdown p,
+[data-theme='light'] .markdown li {
+  color: var(--ink-primary);
+}
+
+[data-theme='light'] .markdown a {
+  color: var(--paper-accent);
+  text-decoration-color: rgba(14, 116, 144, 0.35);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+  transition: color var(--dur-fast, 120ms) var(--ease-station, ease),
+              text-decoration-color var(--dur-fast, 120ms) var(--ease-station, ease);
+}
+
+[data-theme='light'] .markdown a:hover {
+  color: var(--paper-accent-strong);
+  text-decoration-color: var(--paper-accent-strong);
 }
 
 /* ── Portrait screenshot figures ─────────────────────────────────────────── */

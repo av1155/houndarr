@@ -60,7 +60,11 @@ from houndarr.services.instances import (
     list_instances,
     update_instance,
 )
-from houndarr.services.time_window import format_ranges, parse_time_window
+from houndarr.services.time_window import (
+    format_ranges,
+    parse_time_window,
+    validate_allowed_time_window,
+)
 from houndarr.services.url_validation import validate_instance_url
 
 router = APIRouter()
@@ -574,10 +578,10 @@ async def instance_create(
     if url_error is not None:
         return _connection_guard_response(url_error)
 
-    try:
-        canonical_window = format_ranges(parse_time_window(allowed_time_window))
-    except ValueError as exc:
-        return _connection_guard_response(str(exc))
+    window_error = validate_allowed_time_window(allowed_time_window)
+    if window_error is not None:
+        return _connection_guard_response(window_error)
+    canonical_window = format_ranges(parse_time_window(allowed_time_window))
 
     validation_error = _validate_cutoff_controls(
         cutoff_batch_size,
@@ -747,10 +751,10 @@ async def instance_update(
     if url_error is not None:
         return _connection_guard_response(url_error)
 
-    try:
-        canonical_window = format_ranges(parse_time_window(allowed_time_window))
-    except ValueError as exc:
-        return _connection_guard_response(str(exc))
+    window_error = validate_allowed_time_window(allowed_time_window)
+    if window_error is not None:
+        return _connection_guard_response(window_error)
+    canonical_window = format_ranges(parse_time_window(allowed_time_window))
 
     validation_error = _validate_cutoff_controls(
         cutoff_batch_size,

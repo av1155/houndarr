@@ -10,6 +10,7 @@ from houndarr.services.time_window import (
     format_ranges,
     is_within_window,
     parse_time_window,
+    validate_allowed_time_window,
 )
 
 # ---------------------------------------------------------------------------
@@ -233,3 +234,99 @@ def test_format_ranges_multiple() -> None:
 
 def test_format_ranges_empty() -> None:
     assert format_ranges([]) == ""
+
+
+# ---------------------------------------------------------------------------
+# validate_allowed_time_window
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "spec",
+    [
+        "",
+        "   ",
+        "09:00-23:00",
+        "09:00-12:00,14:00-22:00",
+        "22:00-06:00",
+        "00:00-06:00",
+        "22:00-00:00",
+    ],
+)
+def test_validate_accepts_valid_specs(spec: str) -> None:
+    assert validate_allowed_time_window(spec) is None
+
+
+def test_validate_rejects_too_many_ranges() -> None:
+    spec = ",".join(["09:00-10:00"] * 25)
+    msg = validate_allowed_time_window(spec)
+    assert msg is not None
+    assert "Too many" in msg
+
+
+@pytest.mark.parametrize("spec", ["09:00-12:00,,14:00-22:00", "09:00-12:00,"])
+def test_validate_rejects_empty_piece(spec: str) -> None:
+    msg = validate_allowed_time_window(spec)
+    assert msg is not None
+    assert "Empty time range" in msg
+
+
+@pytest.mark.parametrize(
+    "spec",
+    ["9:00-17:00", "09:0-17:00", "09:00", "abc", "09:00-17:00-20:00", "09.00-17.00"],
+)
+def test_validate_rejects_malformed_format(spec: str) -> None:
+    msg = validate_allowed_time_window(spec)
+    assert msg is not None
+    assert "Invalid time range format" in msg
+
+
+@pytest.mark.parametrize("spec", ["25:00-30:00", "09:60-10:00", "09:00-10:99"])
+def test_validate_rejects_out_of_range(spec: str) -> None:
+    msg = validate_allowed_time_window(spec)
+    assert msg is not None
+    assert "Out-of-range" in msg
+
+
+@pytest.mark.parametrize("spec", ["09:00-09:00", "00:00-00:00"])
+def test_validate_rejects_zero_duration(spec: str) -> None:
+    msg = validate_allowed_time_window(spec)
+    assert msg is not None
+    assert "no duration" in msg
+
+
+def test_validate_messages_do_not_echo_user_input() -> None:
+    """Error strings must be constants, so nothing from the raw spec flows
+    into HTTP responses. Regression guard for CodeQL py/stack-trace-exposure."""
+    suspicious_token = "<script>EVIL</script>"  # noqa: S105 - literal marker
+    probe = f"09:00-12:00,{suspicious_token}"
+    msg = validate_allowed_time_window(probe)
+    assert msg is not None
+    assert suspicious_token not in msg
+
+
+@pytest.mark.parametrize(
+    "spec",
+    [
+        "",
+        "   ",
+        "09:00-23:00",
+        "09:00-12:00,14:00-22:00",
+        "22:00-06:00",
+        "00:00-06:00",
+        "not-a-range",
+        "25:00-30:00",
+        "09:00-09:00",
+        "09:00-12:00,,14:00-22:00",
+        ",".join(["09:00-10:00"] * 25),
+    ],
+)
+def test_validator_agrees_with_parser(spec: str) -> None:
+    """validate_* returns None iff parse_time_window does not raise."""
+    validator_ok = validate_allowed_time_window(spec) is None
+    try:
+        parse_time_window(spec)
+        parser_ok = True
+    except ValueError:
+        parser_ok = False
+    assert validator_ok is parser_ok

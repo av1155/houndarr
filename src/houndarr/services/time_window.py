@@ -32,6 +32,47 @@ def _to_minutes(t: time) -> int:
     return t.hour * 60 + t.minute
 
 
+def validate_allowed_time_window(spec: str) -> str | None:
+    """Validate an allowed-time-window *spec* supplied by an operator.
+
+    Returns ``None`` if the spec is valid (including empty or whitespace-only,
+    which means "always allowed"). Otherwise returns a user-facing error
+    message chosen from a finite set of constant strings, so no exception
+    state can flow into HTTP responses.
+
+    Kept in sync with :func:`parse_time_window`'s rules: a spec that passes
+    this validator is safe to pass to ``parse_time_window`` without catching
+    ``ValueError``.
+    """
+    if spec is None:
+        return None
+
+    stripped = spec.strip()
+    if not stripped:
+        return None
+
+    pieces = [p.strip() for p in stripped.split(",")]
+    if len(pieces) > _MAX_RANGES:
+        return f"Too many time ranges (max {_MAX_RANGES})."
+
+    for piece in pieces:
+        if not piece:
+            return "Empty time range in allowed-window spec."
+
+        match = _RANGE_RE.fullmatch(piece)
+        if match is None:
+            return "Invalid time range format. Use HH:MM-HH:MM (e.g. 09:00-23:00)."
+
+        sh, sm, eh, em = (int(x) for x in match.groups())
+        if not (0 <= sh <= 23 and 0 <= eh <= 23 and 0 <= sm <= 59 and 0 <= em <= 59):
+            return "Out-of-range hour or minute. Hours 00-23, minutes 00-59."
+
+        if sh * 60 + sm == eh * 60 + em:
+            return "Time range has no duration (start equals end)."
+
+    return None
+
+
 def parse_time_window(spec: str) -> list[tuple[time, time]]:
     """Parse an allowed-time-window *spec* into a list of ``(start, end)`` tuples.
 

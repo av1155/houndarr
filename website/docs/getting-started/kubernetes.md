@@ -6,11 +6,13 @@ description: How to deploy Houndarr on Kubernetes using a StatefulSet.
 
 # Kubernetes
 
-Houndarr can run on Kubernetes using a StatefulSet with persistent storage.
+Run Houndarr on Kubernetes with a StatefulSet plus persistent
+storage. Both a plain compat mode (PUID/PGID remapping) and an
+explicit non-root mode (pod `securityContext`) are covered below.
 
-:::warning
-Houndarr uses SQLite. Only one replica is supported; do not scale beyond 1.
-:::
+Only one replica is supported. SQLite is the database engine; a
+second replica writing to the same volume corrupts it. Do not
+scale beyond 1.
 
 Prefer Helm or Flux? See the [Helm guide](./helm) for chart-based installation.
 
@@ -103,10 +105,10 @@ The `volumeClaimTemplates` block creates a PVC automatically. The StatefulSet
 manages its lifecycle; the PVC persists even if the pod is deleted or
 rescheduled.
 
-:::danger
-The `/data` volume contains the encryption master key and database. Back it up.
-If the master key is lost, all stored API keys become unrecoverable.
-:::
+The `/data` PVC contains the encryption master key and the
+database. Back it up; losing the master key makes every stored
+API key unrecoverable. Full guidance in
+[Backup and Restore](/docs/guides/backup-and-restore).
 
 ### Non-root alternative with `securityContext`
 

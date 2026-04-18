@@ -6,7 +6,8 @@ description: How to install Houndarr via Docker or from source.
 
 # Installation
 
-Houndarr is distributed as a Docker image published to GitHub Container Registry (GHCR).
+The Docker image lives on GitHub Container Registry (GHCR) at
+`ghcr.io/av1155/houndarr`.
 
 ## Docker (recommended)
 

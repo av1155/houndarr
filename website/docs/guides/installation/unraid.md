@@ -6,9 +6,9 @@ description: Install Houndarr on Unraid via the Community Applications store, wa
 
 # Install on Unraid
 
-Houndarr has been in the Unraid Community Applications (CA) store
-since 2026-03-30. On Unraid, the CA plugin is the fastest install
-path. You do not need to write Docker Compose by hand.
+Since 2026-03-30, Houndarr has lived in the Unraid Community
+Applications (CA) store. On Unraid, the CA plugin is the fastest
+install path. You do not need to write Docker Compose by hand.
 
 ## Prerequisites
 

@@ -8,9 +8,9 @@ description: Install Houndarr with Helm or manage it via Flux using the official
 
 The official Houndarr Helm chart is published to GHCR as an OCI artifact and works with both plain `helm` and Flux.
 
-:::warning
-Houndarr uses SQLite. Only one replica is supported; do not scale beyond 1.
-:::
+Only one replica is supported. SQLite is the database engine; a
+second replica writing to the same volume corrupts it. Do not
+scale beyond 1.
 
 ## Prerequisites
 

@@ -6,9 +6,9 @@ description: How to run Houndarr behind Nginx, Caddy, Traefik, or other reverse 
 
 # Reverse Proxy
 
-Houndarr serves plain HTTP and does not terminate TLS. If you access Houndarr
-over a network (rather than localhost), you should run it behind a reverse proxy
-that terminates HTTPS.
+Plain HTTP only: TLS termination is the reverse proxy's job. For any
+network access beyond localhost, run Houndarr behind a proxy that
+handles HTTPS.
 
 ## Required settings
 
@@ -20,10 +20,9 @@ When running behind a reverse proxy with HTTPS:
    `X-Forwarded-For`.
 3. Proxy all traffic to `http://houndarr:8877`.
 
-:::warning
-Without `HOUNDARR_SECURE_COOKIES=true`, session cookies and login credentials are
-transmitted in cleartext on the network.
-:::
+Without `HOUNDARR_SECURE_COOKIES=true`, session cookies and login
+credentials travel in cleartext on the wire. Full details in
+[Credential Handling](/docs/security/credential-handling#cookies).
 
 ## Example: Nginx
 

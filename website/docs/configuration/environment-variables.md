@@ -6,8 +6,9 @@ description: All environment variables supported by Houndarr.
 
 # Environment Variables
 
-Houndarr is configured primarily through environment variables set in your
-`docker-compose.yml` or `docker run` command.
+Every environment variable Houndarr reads, grouped by area. Set
+them in your `docker-compose.yml`, `docker run` flags, Kubernetes
+manifests, or the Unraid CA template.
 
 ## Application settings
 

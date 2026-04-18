@@ -51,9 +51,11 @@ prompted to create an admin username and password.
 
 For more details, see [First-Run Setup](first-run-setup.md).
 
-:::tip Good to know
-Houndarr does not search your entire library at once. It works through missing and cutoff-unmet items in small batches. An optional upgrade pass can also re-search items that already meet cutoff. See [How Houndarr Works](/docs/concepts/how-houndarr-works) for details.
-:::
+Houndarr does not search your entire library at once. It works
+through `wanted/missing` and `wanted/cutoff` in small batches, plus
+an optional upgrade pass over items that already meet cutoff. See
+[How Houndarr Works](/docs/concepts/how-houndarr-works) for the
+full funnel.
 
 ## Using `docker run`
 

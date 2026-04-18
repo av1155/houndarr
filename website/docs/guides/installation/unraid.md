@@ -26,11 +26,15 @@ install path. You do not need to write Docker Compose by hand.
 2. Search for **Houndarr**.
 3. Click the Houndarr tile to see its details.
 
-<Image
-  img={require('@site/static/img/screenshots/unraid-community-apps-houndarr.png')}
-  alt="Houndarr in the Unraid Community Applications store, showing the Overview text, Categories row, Template / Support / Registry / Project links, and container repository details including first-seen date"
-  style={{maxWidth: 480, display: 'block', margin: '0 auto'}}
-/>
+<figure className="docs-screenshot-portrait">
+  <Image
+    img={require('@site/static/img/screenshots/unraid-community-apps-houndarr.png')}
+    alt="Houndarr in the Unraid Community Applications store, showing the Overview text, Categories row, Template / Support / Registry / Project links, and container repository details including first-seen date"
+  />
+  <figcaption>
+    The CA detail popup you see after clicking the Houndarr tile. Click <strong>Install</strong> to open the template editor.
+  </figcaption>
+</figure>
 
 4. Click **Install**. The template editor opens with nine fields;
    they are covered below.

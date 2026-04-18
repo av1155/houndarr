@@ -1,7 +1,7 @@
 ---
 sidebar_position: 3
 title: Kubernetes
-description: How to deploy Houndarr on Kubernetes using a StatefulSet.
+description: Deploy Houndarr on Kubernetes with a StatefulSet and persistent volume, in either PUID/PGID compat mode or explicit non-root securityContext.
 ---
 
 # Kubernetes

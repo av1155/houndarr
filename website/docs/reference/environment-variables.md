@@ -1,7 +1,7 @@
 ---
 sidebar_position: 1
 title: Environment Variables
-description: All environment variables supported by Houndarr.
+description: Every environment variable Houndarr reads, grouped by application, security, and container settings (PUID/PGID, TZ, secure cookies, trusted proxies, auth mode).
 ---
 
 # Environment Variables

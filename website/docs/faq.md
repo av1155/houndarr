@@ -1,7 +1,7 @@
 ---
 sidebar_position: 10
 title: FAQ
-description: Short answers to the questions that come up most often about Houndarr.
+description: Short answers to the most common Houndarr questions, covering monitored vs wanted, why skips are normal, default pacing, and upgrade vs cutoff.
 ---
 
 # FAQ

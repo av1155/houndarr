@@ -56,7 +56,7 @@ instance configs, and search history pick up where they left off.
 
 ## What happens when the master key is lost
 
-:::danger Master key loss
+:::danger[Master key loss]
 
 Without `houndarr.masterkey`, every stored *arr API key becomes
 unrecoverable ciphertext. The file cannot be regenerated from the

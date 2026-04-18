@@ -192,7 +192,7 @@ spec:
 `fsGroup: 1000` tells the kubelet to set group ownership on the PVC contents,
 so the volume is writable on first run without manual `chown`.
 
-:::tip Migrating from PUID/PGID
+:::tip[Migrating from PUID/PGID]
 If you have an existing deployment using PUID/PGID and want to switch, the
 PVC contents may be owned by the old UID/GID. Run a one-time pod to fix
 ownership before switching:

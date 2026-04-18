@@ -104,7 +104,7 @@ The entrypoint validates `/data` permissions at startup and exits
 with an actionable error message when the directory is not writable
 or existing files are not accessible.
 
-:::note Rootless container engines
+:::note[Rootless container engines]
 
 This mode supports running the container process as non-root. It
 does not guarantee compatibility with every rootless container

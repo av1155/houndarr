@@ -62,7 +62,7 @@ holds two files:
 - `houndarr.masterkey`: the Fernet key that decrypts your stored *arr
   API keys
 
-:::warning Back up this directory
+:::warning[Back up this directory]
 
 Lose `houndarr.masterkey` and every stored *arr API key becomes
 unrecoverable. You will have to re-enter each key by hand. Back up

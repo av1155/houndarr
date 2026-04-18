@@ -141,7 +141,7 @@ function HomepageHeader() {
         </div>
 
         {/* Right column: dashboard preview */}
-        <div className={styles.heroRight}>
+        <div className={clsx(styles.heroRight, 'landing-zoomable')}>
           <Image
             img={DASHBOARD_SCREENSHOT.img}
             alt={DASHBOARD_SCREENSHOT.alt}
@@ -156,7 +156,7 @@ function HomepageHeader() {
 
 function Screenshots() {
   return (
-    <section className={styles.screenshots}>
+    <section className={clsx(styles.screenshots, 'landing-zoomable')}>
       <div className="container">
         <Heading as="h2" className="text--center margin-bottom--lg">
           See It in Action

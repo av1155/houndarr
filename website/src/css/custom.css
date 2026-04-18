@@ -8,21 +8,87 @@
 
 @import './tokens.css';
 
-/* ── Infima overrides — Light mode ────────────────────────────────────────── */
+/* ── Light mode — Technical paper palette ────────────────────────────────── */
+/* Warm cream base with ink-dark text and cyan accents shifted darker
+   for contrast on paper. Distinct-yet-cohesive sibling of the dark
+   Station palette. */
 :root {
-  --ifm-color-primary: #0891b2;
-  --ifm-color-primary-dark: #0e7490;
-  --ifm-color-primary-darker: #155e75;
-  --ifm-color-primary-darkest: #164e63;
-  --ifm-color-primary-light: #06b6d4;
-  --ifm-color-primary-lighter: #22d3ee;
-  --ifm-color-primary-lightest: #67e8f9;
+  /* Paper surfaces */
+  --paper-base:      #fbfaf7;   /* body bg — warm off-white */
+  --paper-surface-1: #f5f2ea;   /* navbar, card bg */
+  --paper-surface-2: #f0ede4;   /* code block bg */
+  --paper-surface-3: #e8e2d4;   /* borders, separators */
 
-  --ifm-font-family-base: var(--font-sans);
-  --ifm-font-family-monospace: var(--font-mono);
-  --ifm-code-font-size: 90%;
-  --ifm-border-radius: var(--radius-md);
-  --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.08);
+  /* Ink */
+  --ink-primary:   #15131a;     /* headings, body — warm near-black */
+  --ink-secondary: #4a4751;     /* secondary text — warm slate */
+  --ink-muted:     #75717b;     /* meta, captions */
+  --ink-faint:     #9a95a1;     /* placeholder, disabled */
+
+  /* Borders (warm) */
+  --paper-border-subtle:  #ebe5d5;
+  --paper-border-default: #d6cfbd;
+  --paper-border-strong:  #b8ad93;
+
+  /* Accent — cyan shifted darker for paper contrast */
+  --paper-accent:         #0e7490;  /* cyan-700 */
+  --paper-accent-strong:  #155e75;  /* cyan-800 */
+  --paper-accent-soft:    rgba(14, 116, 144, 0.10);
+
+  /* Infima primary scale */
+  --ifm-color-primary:         var(--paper-accent);
+  --ifm-color-primary-dark:    #0a6379;
+  --ifm-color-primary-darker:  #085364;
+  --ifm-color-primary-darkest: var(--paper-accent-strong);
+  --ifm-color-primary-light:   #0891b2;
+  --ifm-color-primary-lighter: #06b6d4;
+  --ifm-color-primary-lightest:#22d3ee;
+
+  /* Infima surface mapping */
+  --ifm-background-color:         var(--paper-base);
+  --ifm-background-surface-color: var(--paper-surface-1);
+  --ifm-navbar-background-color:  var(--paper-surface-1);
+  --ifm-footer-background-color:  var(--paper-surface-1);
+
+  /* Infima text mapping */
+  --ifm-font-color-base:          var(--ink-primary);
+  --ifm-color-content:            var(--ink-primary);
+  --ifm-color-content-secondary:  var(--ink-secondary);
+  --ifm-heading-color:            var(--ink-primary);
+  --ifm-link-color:               var(--paper-accent);
+  --ifm-link-hover-color:         var(--paper-accent-strong);
+
+  /* Infima borders */
+  --ifm-color-emphasis-0:   #ffffff;
+  --ifm-color-emphasis-100: var(--paper-surface-1);
+  --ifm-color-emphasis-200: var(--paper-border-subtle);
+  --ifm-color-emphasis-300: var(--paper-border-default);
+  --ifm-color-emphasis-400: var(--paper-border-strong);
+  --ifm-color-emphasis-500: var(--ink-muted);
+  --ifm-color-emphasis-600: var(--ink-secondary);
+  --ifm-color-emphasis-700: var(--ink-secondary);
+  --ifm-color-emphasis-800: var(--ink-primary);
+  --ifm-color-emphasis-900: var(--ink-primary);
+  --ifm-border-color:       var(--paper-border-subtle);
+  --ifm-table-border-color: var(--paper-border-subtle);
+  --ifm-hr-border-color:    var(--paper-border-subtle);
+  --ifm-toc-border-color:   var(--paper-border-subtle);
+
+  /* Code */
+  --ifm-code-background:    var(--paper-surface-2);
+  --ifm-pre-background:     var(--paper-surface-2);
+
+  /* Sidebar */
+  --ifm-menu-color-active:  var(--paper-accent);
+
+  /* Typography */
+  --ifm-font-family-base:       var(--font-sans);
+  --ifm-font-family-monospace:  var(--font-mono);
+  --ifm-code-font-size:         90%;
+  --ifm-border-radius:          var(--radius-md);
+
+  /* Highlighted code line (light) — warm amber */
+  --docusaurus-highlighted-code-line-bg: rgba(180, 83, 9, 0.10);
 }
 
 /* ── Infima overrides — Dark mode (Station) ───────────────────────────────── */
@@ -68,7 +134,24 @@
   --docusaurus-highlighted-code-line-bg: rgba(34, 211, 238, 0.08);
 }
 
-/* ── Body atmosphere — desktop ambient depth ────────────────────────────── */
+/* ── Light body atmosphere — warm paper grain ───────────────────────────── */
+/* Restrained: warm amber radial top-left, cooler soft glow bottom-right,
+   ultra-subtle horizontal rule lines to hint at ruled paper. */
+:root body {
+  background-color: var(--paper-base);
+  background-image:
+    radial-gradient(ellipse 55% 40% at 0% 0%,    rgba(180, 83, 9, 0.025)  0%, transparent 60%),
+    radial-gradient(ellipse 40% 30% at 100% 100%, rgba(14, 116, 144, 0.020) 0%, transparent 55%),
+    repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 31px,
+      rgba(21, 19, 26, 0.013) 31px,
+      rgba(21, 19, 26, 0.013) 32px
+    );
+}
+
+/* ── Dark body atmosphere — existing ────────────────────────────────────── */
 [data-theme='dark'] body {
   background-image:
     radial-gradient(ellipse 55% 40% at 0% 0%,    rgba(6, 182, 212, 0.055) 0%, transparent 60%),
@@ -80,6 +163,14 @@
       rgba(34, 211, 238, 0.018) 31px,
       rgba(34, 211, 238, 0.018) 32px
     );
+}
+
+/* ── Navbar — light ──────────────────────────────────────────────────── */
+:root .navbar {
+  border-bottom: 1px solid var(--paper-border-subtle);
+  box-shadow:
+    0 1px 0 var(--paper-border-subtle),
+    0 2px 16px rgba(14, 116, 144, 0.045);
 }
 
 /* ── Nav atmospheric glow (dark mode) ──────────────────────────────────── */
@@ -114,6 +205,16 @@
   display: none;
 }
 
+/* ── Inline code — light (paper tinted) ──────────────────────────────── */
+:root :not(pre) > code {
+  background-color: rgba(14, 116, 144, 0.055);
+  border: 1px solid rgba(14, 116, 144, 0.16);
+  color: var(--paper-accent-strong);
+  border-radius: var(--radius-sm);
+  padding: 0.1em 0.4em;
+  font-weight: 500;
+}
+
 /* ── Inline code — Station tinted ─────────────────────────────────────────── */
 [data-theme='dark'] :not(pre) > code {
   background-color: rgba(34, 211, 238, 0.07);
@@ -121,22 +222,59 @@
   color: var(--color-brand-300);
   border-radius: var(--radius-sm);
   padding: 0.1em 0.4em;
+  font-weight: 400;
 }
 
-/* ── Code blocks ─────────────────────────────────────────────────────────── */
+/* ── Code blocks — light (paper) ─────────────────────────────────────── */
+:root pre {
+  background: var(--paper-surface-2);
+  border: 1px solid var(--paper-border-subtle);
+  border-radius: var(--radius-md);
+}
+
+/* ── Code blocks — dark ──────────────────────────────────────────────── */
 [data-theme='dark'] pre {
   background: #0d0d14;
   border: 1px solid var(--color-border-subtle);
   border-radius: var(--radius-md);
 }
 
-/* ── Sidebar — left-border active indicator ───────────────────────────────── */
+/* ── Sidebar — left-border active indicator (both modes) ──────────────── */
+:root .menu__link--active:not(.menu__link--sublist) {
+  border-left: 2px solid var(--paper-accent);
+  padding-left: calc(var(--ifm-menu-link-padding-horizontal) - 2px);
+  color: var(--paper-accent-strong);
+}
+
 [data-theme='dark'] .menu__link--active:not(.menu__link--sublist) {
   border-left: 2px solid var(--color-brand-400);
   padding-left: calc(var(--ifm-menu-link-padding-horizontal) - 2px);
 }
 
-/* ── Admonitions — left-border Station style ──────────────────────────────── */
+/* ── Admonitions — left-border, paper surface (light) ─────────────────── */
+:root .admonition {
+  background-color: var(--paper-surface-1);
+  border-left-width: 4px;
+  border-top: none;
+  border-right: none;
+  border-bottom: none;
+  color: var(--ink-primary);
+}
+
+:root .admonition-note    { border-left-color: var(--paper-accent); }
+:root .admonition-tip     { border-left-color: #16a34a; }  /* green-600 */
+:root .admonition-warning { border-left-color: #d97706; }  /* amber-600 */
+:root .admonition-danger  { border-left-color: #dc2626; }  /* red-600 */
+:root .admonition-info    { border-left-color: var(--paper-accent); }
+
+/* Admonition heading — warm ink, matched to body */
+:root .admonition .admonition-heading,
+:root .admonition .alert__heading {
+  color: var(--ink-primary);
+  font-weight: 600;
+}
+
+/* ── Admonitions — Station dark style ─────────────────────────────────── */
 [data-theme='dark'] .admonition {
   background-color: var(--color-surface-1);
   border-left-width: 4px;
@@ -165,7 +303,24 @@
   border-left-color: var(--color-info);
 }
 
-/* ── Tables ──────────────────────────────────────────────────────────────── */
+/* ── Tables — light (warm paper alternation) ─────────────────────────── */
+:root table {
+  border-color: var(--paper-border-subtle);
+}
+
+:root tr {
+  border-color: var(--paper-border-subtle);
+}
+
+:root tr:nth-child(2n) {
+  background-color: rgba(21, 19, 26, 0.020);
+}
+
+:root thead tr {
+  background-color: var(--paper-surface-1);
+}
+
+/* ── Tables — dark ──────────────────────────────────────────────────── */
 [data-theme='dark'] table {
   border-color: var(--color-border-subtle);
 }
@@ -178,7 +333,32 @@
   background-color: rgba(255, 255, 255, 0.02);
 }
 
-/* ── Footer ──────────────────────────────────────────────────────────────── */
+/* ── Footer — light ─────────────────────────────────────────────────── */
+:root .footer {
+  border-top: 1px solid var(--paper-border-subtle);
+  background-color: var(--paper-surface-1);
+  color: var(--ink-secondary);
+}
+
+:root .footer__link-item {
+  color: var(--ink-secondary);
+}
+
+:root .footer__link-item:hover {
+  color: var(--paper-accent);
+}
+
+:root .footer__title {
+  color: var(--ink-primary);
+}
+
+:root .footer__copyright {
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  color: var(--ink-muted);
+}
+
+/* ── Footer — dark ──────────────────────────────────────────────────── */
 [data-theme='dark'] .footer {
   border-top: 1px solid var(--color-border-subtle);
 }
@@ -189,7 +369,18 @@
   color: #475569;
 }
 
-/* ── TOC — refined link styles ───────────────────────────────────────────── */
+/* ── TOC — light ────────────────────────────────────────────────────── */
+:root .table-of-contents__link {
+  color: var(--ink-muted);
+  font-size: 0.8125rem;
+}
+
+:root .table-of-contents__link:hover,
+:root .table-of-contents__link--active {
+  color: var(--paper-accent);
+}
+
+/* ── TOC — dark ─────────────────────────────────────────────────────── */
 [data-theme='dark'] .table-of-contents__link {
   color: #475569;
   font-size: 0.8125rem;
@@ -200,7 +391,28 @@
   color: var(--color-brand-400);
 }
 
-/* ── Pagination / doc nav cards ──────────────────────────────────────────── */
+/* ── Pagination — light ─────────────────────────────────────────────── */
+:root .pagination-nav__link {
+  border-color: var(--paper-border-subtle);
+  background: var(--paper-surface-1);
+  transition: border-color var(--dur-base) var(--ease-station),
+              background-color var(--dur-base) var(--ease-station);
+}
+
+:root .pagination-nav__link:hover {
+  border-color: var(--paper-accent);
+  background: var(--paper-surface-2);
+}
+
+:root .pagination-nav__sublabel {
+  color: var(--ink-muted);
+}
+
+:root .pagination-nav__label {
+  color: var(--ink-primary);
+}
+
+/* ── Pagination — dark ─────────────────────────────────────────────── */
 [data-theme='dark'] .pagination-nav__link {
   border-color: var(--color-border-subtle);
   background: var(--color-surface-1);
@@ -211,9 +423,65 @@
   background: var(--color-surface-2);
 }
 
-/* ── Breadcrumbs ─────────────────────────────────────────────────────────── */
+/* ── Breadcrumbs — light ────────────────────────────────────────────── */
+:root .breadcrumbs__link {
+  color: var(--ink-muted);
+}
+
+:root .breadcrumbs__item--active .breadcrumbs__link {
+  color: var(--ink-secondary);
+  background-color: var(--paper-surface-1);
+}
+
+/* ── Breadcrumbs — dark ────────────────────────────────────────────── */
 [data-theme='dark'] .breadcrumbs__item--active .breadcrumbs__link {
   color: #94a3b8;
+}
+
+/* ── Blockquote — light (paper) ──────────────────────────────────────── */
+:root blockquote {
+  border-left: 4px solid var(--paper-border-default);
+  background: var(--paper-surface-1);
+  color: var(--ink-secondary);
+  padding: 0.75rem 1rem;
+  margin-left: 0;
+  margin-right: 0;
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+}
+
+/* ── Headings — warm ink, subtle weight adjustments ──────────────────── */
+:root h1, :root h2, :root h3, :root h4 {
+  color: var(--ink-primary);
+  letter-spacing: -0.01em;
+}
+
+:root h1 {
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+/* ── Markdown body text — warm ink, slightly relaxed ─────────────────── */
+:root .markdown {
+  color: var(--ink-primary);
+}
+
+:root .markdown p,
+:root .markdown li {
+  color: var(--ink-primary);
+}
+
+:root .markdown a {
+  color: var(--paper-accent);
+  text-decoration-color: rgba(14, 116, 144, 0.35);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+  transition: color var(--dur-fast) var(--ease-station),
+              text-decoration-color var(--dur-fast) var(--ease-station);
+}
+
+:root .markdown a:hover {
+  color: var(--paper-accent-strong);
+  text-decoration-color: var(--paper-accent-strong);
 }
 
 /* ── Portrait screenshot figures ─────────────────────────────────────────── */

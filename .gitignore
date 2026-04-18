@@ -60,8 +60,9 @@ Thumbs.db
 *.manifest
 *.spec
 
-# Data directory (runtime state — never commit)
+# Data directories (runtime state — never commit)
 data/
+data-*/
 *.db
 *.masterkey
 
@@ -86,6 +87,14 @@ website/.docusaurus/
 
 # Research artifacts
 .opencode/
+.firecrawl/
+
+# Browser-automation artifacts (Playwright MCP, screenshots from local QA)
+.playwright-mcp/
+/*.png
+/*.jpg
+/*.jpeg
+/*.gif
 
 # Claude Code (local state ignored; settings.json and commands/ are tracked)
 .claude/settings.local.json

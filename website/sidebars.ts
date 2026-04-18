@@ -4,6 +4,14 @@ const sidebars: SidebarsConfig = {
   docsSidebar: [
     {
       type: 'category',
+      label: 'Tutorial',
+      collapsed: false,
+      items: [
+        'tutorial/your-first-cycle',
+      ],
+    },
+    {
+      type: 'category',
       label: 'Getting Started',
       collapsed: false,
       items: [

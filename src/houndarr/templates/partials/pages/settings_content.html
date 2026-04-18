@@ -388,6 +388,8 @@
     </table>
   </div>
 
+  {% include "partials/changelog_settings_section.html" %}
+
   {% if auth_mode != "proxy" %}
   <section id="account-section" class="mt-8 rounded-xl border border-[#1e2638] bg-[#0e1117] p-4 sm:p-5">
     <details id="account-settings" {% if account_error or account_success %}open{% endif %}>

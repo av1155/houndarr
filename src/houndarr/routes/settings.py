@@ -384,8 +384,11 @@ async def _render_settings_page(
     account_success: str | None = None,
 ) -> HTMLResponse:
     """Render settings page with common account and instance context."""
+    from houndarr.database import get_setting
+
     instances = await list_instances(master_key=_master_key(request))
     username = await get_username()
+    changelog_popups_enabled = (await get_setting("changelog_popups_disabled")) != "1"
     template_name = (
         "partials/pages/settings_content.html" if _is_hx_request(request) else "settings.html"
     )
@@ -398,6 +401,7 @@ async def _render_settings_page(
         auth_mode=get_settings().auth_mode,
         account_error=account_error,
         account_success=account_success,
+        changelog_popups_enabled=changelog_popups_enabled,
     )
 
 

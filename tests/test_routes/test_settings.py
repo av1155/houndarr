@@ -117,6 +117,32 @@ def test_settings_page_renders(app: TestClient) -> None:
     assert b"Account" in resp.content
     assert b"Update Password" in resp.content
     assert b"Signed in as" in resp.content
+
+
+def test_settings_page_includes_changelog_section(app: TestClient) -> None:
+    _login(app)
+    resp = app.get("/settings")
+    assert resp.status_code == 200
+    assert b'id="changelog-section"' in resp.content
+    assert b"Changelog notifications" in resp.content
+    assert b"Show last changelog" in resp.content
+    # Fresh install defaults to enabled → checkbox checked.
+    assert b"checked" in resp.content
+
+
+async def test_settings_page_reflects_disabled_changelog(app: TestClient) -> None:
+    from houndarr.database import set_setting
+
+    _login(app)
+    await set_setting("changelog_popups_disabled", "1")
+    resp = app.get("/settings")
+    assert resp.status_code == 200
+    # Locate the changelog toggle input specifically and verify it is NOT checked.
+    import re
+
+    input_match = re.search(rb'<input[^>]*name="enabled"[^>]*>', resp.content)
+    assert input_match is not None
+    assert b"checked" not in input_match.group(0)
     assert b'id="account-settings"' in resp.content
     assert b'id="account-settings" open' not in resp.content
     assert b"What do these settings mean?" in resp.content

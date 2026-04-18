@@ -40,6 +40,7 @@ RUN pip install --no-cache-dir --upgrade pip \
 # Copy application source
 COPY src/ ./src/
 COPY VERSION ./
+COPY CHANGELOG.md ./
 
 # Create non-root runtime user and data directory
 RUN groupadd -g 1000 appgroup \

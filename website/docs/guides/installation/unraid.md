@@ -113,7 +113,7 @@ username (for example `Remote-User` for Authelia,
 Apply the template. The container pulls and starts. Then:
 
 1. Open `http://<your-unraid-ip>:8877` in a browser.
-2. Follow [First-Run Setup](/docs/getting-started/first-run-setup) to
+2. Follow [First-Run Setup](/docs/guides/first-run-setup) to
    create your admin account and add instances.
 
 ## Defaults are conservative on purpose

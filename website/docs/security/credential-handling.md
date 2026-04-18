@@ -128,7 +128,7 @@ fallback to a login form.
 
 Both `HOUNDARR_AUTH_PROXY_HEADER` and `HOUNDARR_TRUSTED_PROXIES`
 must be set; the app refuses to start without them. See
-[Reverse Proxy: SSO proxy authentication](/docs/configuration/reverse-proxy#sso-proxy-authentication)
+[Reverse Proxy: SSO proxy authentication](/docs/guides/reverse-proxy#sso-proxy-authentication)
 for setup.
 
 ## Cookies

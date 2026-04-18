@@ -25,7 +25,7 @@ docker pull ghcr.io/av1155/houndarr:v1.0.8
 
 Available architectures: `linux/amd64` and `linux/arm64`.
 
-See the [Quick Start](quick-start.md) for a complete Docker Compose example.
+See [Install with Docker Compose](/docs/guides/installation/docker-compose) for a complete Compose example.
 
 ## Building from source
 

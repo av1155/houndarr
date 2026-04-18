@@ -126,7 +126,7 @@ function HomepageHeader() {
           <div className={styles.heroCta}>
             <Link
               className="button button--primary button--lg"
-              to="/docs/getting-started/quick-start">
+              to="/docs/guides/installation/docker-compose">
               Get Started →
             </Link>
             <Link

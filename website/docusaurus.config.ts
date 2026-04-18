@@ -55,8 +55,40 @@ const config: Config = {
       {
         redirects: [
           {
+            from: '/docs/getting-started/quick-start',
+            to: '/docs/guides/installation/docker-compose',
+          },
+          {
+            from: '/docs/getting-started/installation',
+            to: '/docs/guides/installation/docker',
+          },
+          {
+            from: '/docs/getting-started/first-run-setup',
+            to: '/docs/guides/first-run-setup',
+          },
+          {
+            from: '/docs/getting-started/kubernetes',
+            to: '/docs/guides/installation/kubernetes',
+          },
+          {
+            from: '/docs/getting-started/helm',
+            to: '/docs/guides/installation/helm',
+          },
+          {
+            from: '/docs/configuration/environment-variables',
+            to: '/docs/reference/environment-variables',
+          },
+          {
             from: '/docs/configuration/instance-settings',
             to: '/docs/reference/instance-settings',
+          },
+          {
+            from: '/docs/configuration/reverse-proxy',
+            to: '/docs/guides/reverse-proxy',
+          },
+          {
+            from: '/docs/concepts/how-houndarr-works',
+            to: '/docs/concepts/how-scheduling-works',
           },
           {
             from: '/docs/concepts/faq',
@@ -119,11 +151,11 @@ const config: Config = {
           items: [
             {
               label: 'Quick Start',
-              to: '/docs/getting-started/quick-start',
+              to: '/docs/guides/installation/docker-compose',
             },
             {
               label: 'Installation',
-              to: '/docs/getting-started/installation',
+              to: '/docs/guides/installation/docker',
             },
             {
               label: 'Instance Settings',
@@ -131,7 +163,7 @@ const config: Config = {
             },
             {
               label: 'How Houndarr Works',
-              to: '/docs/concepts/how-houndarr-works',
+              to: '/docs/concepts/how-scheduling-works',
             },
             {
               label: 'Audit',

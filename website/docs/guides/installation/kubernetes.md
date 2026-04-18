@@ -279,7 +279,7 @@ When using TLS, uncomment the security env vars in the StatefulSet:
 - `HOUNDARR_TRUSTED_PROXIES`: set to your ingress controller's pod CIDR so
   the rate limiter sees real client IPs
 
-See [Environment Variables](/docs/configuration/environment-variables) and
+See [Environment Variables](/docs/reference/environment-variables) and
 [Security Overview](/docs/security/overview) for details.
 
 ## Verifying the deployment

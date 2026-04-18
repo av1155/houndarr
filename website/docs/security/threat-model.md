@@ -34,7 +34,7 @@ a reverse proxy that handles HTTPS.
 Without HTTPS, session cookies and login credentials travel in
 cleartext on the wire.
 
-See [Reverse Proxy](/docs/configuration/reverse-proxy) for
+See [Reverse Proxy](/docs/guides/reverse-proxy) for
 configuration examples.
 
 ### Reverse proxy configuration

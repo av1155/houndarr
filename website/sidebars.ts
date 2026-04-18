@@ -12,55 +12,15 @@ const sidebars: SidebarsConfig = {
     },
     {
       type: 'category',
-      label: 'Getting Started',
+      label: 'Install',
       collapsed: false,
       items: [
-        'getting-started/quick-start',
-        'getting-started/installation',
+        'guides/installation/docker-compose',
+        'guides/installation/docker',
         'guides/installation/unraid',
-        'getting-started/kubernetes',
-        'getting-started/helm',
-        'getting-started/first-run-setup',
-      ],
-    },
-    {
-      type: 'category',
-      label: 'Configuration',
-      collapsed: false,
-      items: [
-        'configuration/environment-variables',
-        'configuration/reverse-proxy',
-      ],
-    },
-    {
-      type: 'category',
-      label: 'Reference',
-      collapsed: false,
-      items: [
-        'reference/instance-settings',
-        'reference/search-commands',
-        'reference/skip-reasons',
-      ],
-    },
-    {
-      type: 'category',
-      label: 'Concepts',
-      collapsed: false,
-      items: [
-        'concepts/how-houndarr-works',
-        'concepts/search-order',
-      ],
-    },
-    'faq',
-    {
-      type: 'category',
-      label: 'Security',
-      collapsed: false,
-      items: [
-        'security/overview',
-        'security/credential-handling',
-        'security/threat-model',
-        'security/audit',
+        'guides/installation/kubernetes',
+        'guides/installation/helm',
+        'guides/first-run-setup',
       ],
     },
     {
@@ -72,8 +32,41 @@ const sidebars: SidebarsConfig = {
         'guides/troubleshoot-connection',
         'guides/increase-throughput',
         'guides/backup-and-restore',
+        'guides/reverse-proxy',
       ],
     },
+    {
+      type: 'category',
+      label: 'Reference',
+      collapsed: false,
+      items: [
+        'reference/environment-variables',
+        'reference/instance-settings',
+        'reference/search-commands',
+        'reference/skip-reasons',
+      ],
+    },
+    {
+      type: 'category',
+      label: 'Concepts',
+      collapsed: false,
+      items: [
+        'concepts/how-scheduling-works',
+        'concepts/search-order',
+      ],
+    },
+    {
+      type: 'category',
+      label: 'Security',
+      collapsed: false,
+      items: [
+        'security/overview',
+        'security/credential-handling',
+        'security/threat-model',
+        'security/audit',
+      ],
+    },
+    'faq',
   ],
 };
 

@@ -16,7 +16,7 @@ to see one cycle happen and learn what the log rows mean.
 Before you start, confirm:
 
 - Houndarr is running. Follow
-  [Quick Start](/docs/getting-started/quick-start) or
+  [Quick Start](/docs/guides/installation/docker-compose) or
   [Install on Unraid](/docs/guides/installation/unraid) if not.
 - You have at least one *arr instance reachable from the Houndarr
   host. Sonarr and Radarr are the most common; any of the six
@@ -28,7 +28,7 @@ Before you start, confirm:
   walks you through getting Sonarr running with one series. Budget
   15 to 30 minutes for that detour.
 - An admin account is created on Houndarr. See
-  [First-Run Setup](/docs/getting-started/first-run-setup) if the
+  [First-Run Setup](/docs/guides/first-run-setup) if the
   browser still shows the setup screen.
 
 ## Step 1: add your *arr instance
@@ -124,5 +124,5 @@ The first cycle is the boring part. The more useful parts:
 3. When you hit a plateau (cooldowns filling up, nothing new to
    search), tune throughput deliberately. The order of adjustments
    is in [Increase Throughput](/docs/guides/increase-throughput).
-4. Read [How Houndarr Works](/docs/concepts/how-houndarr-works)
+4. Read [How Houndarr Works](/docs/concepts/how-scheduling-works)
    for the mental model of the whole search cycle.

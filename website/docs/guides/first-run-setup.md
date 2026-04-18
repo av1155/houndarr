@@ -41,7 +41,8 @@ for details.
 
 ## 4. Configure search settings
 
-Each instance has its own search settings. The defaults are conservative and safe:
+Each instance has its own search settings. The defaults are tuned
+to stay well under typical indexer limits:
 
 | Setting | Default | Purpose |
 |---------|---------|---------|

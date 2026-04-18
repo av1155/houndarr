@@ -38,7 +38,7 @@ post-release grace windows, and hourly caps filter out most of the
 rest.
 
 See
-[How Houndarr Works](/docs/concepts/how-houndarr-works#why-only-a-few-items-get-searched-each-cycle)
+[How Houndarr Works](/docs/concepts/how-scheduling-works#why-only-a-few-items-get-searched-each-cycle)
 for the full funnel.
 
 ## Why is Houndarr skipping so much?

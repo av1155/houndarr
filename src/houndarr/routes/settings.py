@@ -448,8 +448,13 @@ async def account_password_update(
 @router.get("/settings/instances/add-form", response_class=HTMLResponse)
 async def instance_add_form(request: Request) -> HTMLResponse:
     """Return the blank add-instance form partial for HTMX modal injection."""
+    blank = _blank_instance()
     return _render(
-        request, "partials/instance_form.html", instance=_blank_instance(), editing=False
+        request,
+        "partials/instance_form.html",
+        instance=blank,
+        defaults=blank,
+        editing=False,
     )
 
 
@@ -678,7 +683,13 @@ async def instance_edit_get(request: Request, instance_id: int) -> HTMLResponse:
     instance = await get_instance(instance_id, master_key=_master_key(request))
     if instance is None:
         return HTMLResponse(content="Not found", status_code=404)
-    return _render(request, "partials/instance_form.html", instance=instance, editing=True)
+    return _render(
+        request,
+        "partials/instance_form.html",
+        instance=instance,
+        defaults=_blank_instance(),
+        editing=True,
+    )
 
 
 # ---------------------------------------------------------------------------

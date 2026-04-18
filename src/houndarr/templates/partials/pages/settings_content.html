@@ -831,6 +831,30 @@
       setConnectionTestButtonState('neutral');
     }
 
+    function resetInstanceFormToDefaults() {
+      if (!addInstanceModalContent) {
+        return;
+      }
+
+      addInstanceModalContent.querySelectorAll('[data-default-value]').forEach(function (el) {
+        if (!(el instanceof HTMLInputElement) && !(el instanceof HTMLSelectElement)) {
+          return;
+        }
+        el.value = el.dataset.defaultValue || '';
+        el.dispatchEvent(new Event('change', { bubbles: true }));
+      });
+
+      addInstanceModalContent.querySelectorAll('[data-default-checked]').forEach(function (el) {
+        if (!(el instanceof HTMLInputElement)) {
+          return;
+        }
+        el.checked = el.dataset.defaultChecked === '1';
+        el.dispatchEvent(new Event('change', { bubbles: true }));
+      });
+
+      syncAppOnlyControls();
+    }
+
     window.houndarrOpenAddInstanceModal = function () {
       addInstanceModal.classList.remove('is-closing');
       isClosingAddInstanceModal = false;
@@ -923,6 +947,23 @@
       'input',
       function (event) {
         resetConnectionStateOnFieldChange(event.target);
+      },
+      { signal },
+    );
+
+    addInstanceModalContent.addEventListener(
+      'click',
+      function (event) {
+        const target = event.target;
+        if (!(target instanceof Element)) {
+          return;
+        }
+        const resetBtn = target.closest('[data-reset-instance-form="true"]');
+        if (!resetBtn) {
+          return;
+        }
+        event.preventDefault();
+        resetInstanceFormToDefaults();
       },
       { signal },
     );

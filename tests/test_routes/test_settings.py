@@ -431,6 +431,48 @@ def test_add_form_partial_renders(app: TestClient) -> None:
     assert b'target="_blank"' not in resp.content
 
 
+def test_add_form_exposes_reset_button_and_default_attrs(app: TestClient) -> None:
+    _login(app)
+    resp = app.get("/settings/instances/add-form")
+    assert resp.status_code == 200
+    # Reset button is present in the footer.
+    assert b'id="instance-reset-btn"' in resp.content
+    assert b'data-reset-instance-form="true"' in resp.content
+    assert b"Reset to Defaults" in resp.content
+    # Policy inputs expose their defaults via data-default-* attributes.
+    assert b'data-default-value="2"' in resp.content  # batch_size default
+    assert b'data-default-value="30"' in resp.content  # sleep_interval_mins default
+    assert b'data-default-value="14"' in resp.content  # cooldown_days default
+    assert b'data-default-checked="0"' in resp.content  # cutoff/upgrade defaults
+    # Connection fields must NOT carry default attributes.
+    assert b'name="name"' in resp.content
+    assert b'name="url"' in resp.content
+    name_segment_idx = resp.content.find(b'name="name"')
+    name_tag_end = resp.content.find(b"/>", name_segment_idx)
+    assert b"data-default-value" not in resp.content[name_segment_idx:name_tag_end]
+
+
+def test_edit_form_default_and_live_value_are_independent(app: TestClient) -> None:
+    _login(app)
+    created = app.post(
+        "/settings/instances",
+        data={**_VALID_FORM, "batch_size": "50", "cooldown_days": "99"},
+        headers=csrf_headers(app),
+    )
+    assert created.status_code == 200
+
+    resp = app.get("/settings/instances/1/edit")
+    assert resp.status_code == 200
+    # Live value reflects the saved configuration.
+    assert b'value="50"' in resp.content
+    assert b'value="99"' in resp.content
+    # Default attributes continue to expose the Houndarr defaults.
+    assert b'data-default-value="2"' in resp.content
+    assert b'data-default-value="14"' in resp.content
+    # Reset button is available in edit mode too.
+    assert b'id="instance-reset-btn"' in resp.content
+
+
 def test_create_instance_stores_sonarr_search_mode(app: TestClient) -> None:
     _login(app)
     form = {**_VALID_FORM, "sonarr_search_mode": "season_context"}

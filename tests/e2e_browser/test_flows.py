@@ -152,3 +152,129 @@ def test_full_instance_lifecycle(
     reopened = page.locator('form[data-form-mode="edit"]')
     expect(reopened).to_be_visible()
     expect(reopened.locator('select[name="search_order"]')).to_have_value("chronological")
+
+
+# ---------------------------------------------------------------------------
+# 4xx error surface regression guards
+#
+# HTMX 2.x defaults ``responseHandling`` to ``swap: false`` for 4xx/5xx.
+# Houndarr's routes return 422 with ``HX-Retarget`` / ``HX-Reswap`` /
+# ``HX-Trigger`` headers and a rendered error body; those headers are
+# no-ops unless the client config says 4xx should swap.  ``base.html``
+# overrides ``htmx.config.responseHandling`` via a meta tag so the
+# server-emitted retargets actually land.  Each test below triggers a
+# different 4xx surface and asserts the error body is visible, so a
+# future meta-tag edit can't silently regress the whole app to silent
+# failure again.
+# ---------------------------------------------------------------------------
+
+
+_EXPECTED_422_CONSOLE_NOISE = [
+    r"Failed to load resource: the server responded with a status of 422",
+    r"Response Status Error Code 422",
+]
+
+
+def test_save_instance_4xx_renders_error(
+    logged_in_page: Page,
+    houndarr_url: str,
+    mock_sonarr_url: str,
+    console_guard,
+) -> None:
+    """Saving the add form without a verified connection should render the
+    server-provided error text in ``#instance-connection-status``."""
+    for p in _EXPECTED_422_CONSOLE_NOISE:
+        console_guard.allow(p)
+    page = logged_in_page
+    page.goto(f"{houndarr_url}/settings")
+    page.get_by_role("button", name=re.compile(r"add\s*instance", re.I)).first.click()
+    add_form = page.locator('form[data-form-mode="add"]')
+    expect(add_form).to_be_visible()
+
+    add_form.locator('input[name="name"]').fill(f"E2E Guard {uuid.uuid4().hex[:8]}")
+    add_form.locator('select[name="type"]').select_option("sonarr")
+    add_form.locator('input[name="url"]').fill(mock_sonarr_url)
+    add_form.locator('input[name="api_key"]').fill("guard-key")
+    _wait_for_connection_ui_idle(page)
+
+    # requestSubmit with ``connection_verified=false`` in the hidden input
+    # triggers the 422 guard path at routes/settings.py:594.
+    with page.expect_response(
+        lambda r: r.url.endswith("/settings/instances") and r.request.method == "POST"
+    ) as resp_info:
+        _submit_form(add_form)
+    assert resp_info.value.status == 422, resp_info.value.status
+    _wait_for_htmx_idle(page)
+
+    expect(page.locator("#instance-connection-status")).to_contain_text(
+        "Test connection successfully before adding.",
+        timeout=5_000,
+    )
+
+
+def test_test_connection_4xx_renders_error(
+    logged_in_page: Page, houndarr_url: str, console_guard
+) -> None:
+    """Test Connection against an SSRF-blocked URL (loopback) should render
+    the server-provided error text in ``#instance-connection-status``."""
+    for p in _EXPECTED_422_CONSOLE_NOISE:
+        console_guard.allow(p)
+    page = logged_in_page
+    page.goto(f"{houndarr_url}/settings")
+    page.get_by_role("button", name=re.compile(r"add\s*instance", re.I)).first.click()
+    add_form = page.locator('form[data-form-mode="add"]')
+    expect(add_form).to_be_visible()
+
+    add_form.locator('input[name="name"]').fill(f"E2E SSRF {uuid.uuid4().hex[:8]}")
+    add_form.locator('select[name="type"]').select_option("sonarr")
+    add_form.locator('input[name="url"]').fill("http://127.0.0.1")
+    add_form.locator('input[name="api_key"]').fill("guard-key")
+    _wait_for_connection_ui_idle(page)
+
+    with page.expect_response(
+        lambda r: "/settings/instances/test-connection" in r.url
+    ) as resp_info:
+        add_form.locator("button[data-test-connection-btn]").dispatch_event("click")
+    assert resp_info.value.status == 422, resp_info.value.status
+    _wait_for_connection_ui_idle(page)
+    _wait_for_htmx_idle(page)
+
+    expect(page.locator("#instance-connection-status")).to_contain_text(
+        "blocked address range",
+        timeout=5_000,
+    )
+
+
+def test_password_change_4xx_renders_error(
+    logged_in_page: Page, houndarr_url: str, console_guard
+) -> None:
+    """Submitting the password form with the wrong current password should
+    render the account-section error in-place."""
+    for p in _EXPECTED_422_CONSOLE_NOISE:
+        console_guard.allow(p)
+    page = logged_in_page
+    page.goto(f"{houndarr_url}/settings")
+    section = page.locator("#account-section")
+    expect(section).to_be_visible()
+
+    # The password form lives inside a collapsed <details>; expand it
+    # via the .open property rather than a click-on-summary so we do
+    # not depend on the summary's exact accessible name.
+    section.locator("#account-settings").evaluate("el => { el.open = true; }")
+
+    pw_form = section.locator('form[hx-post="/settings/account/password"]')
+    pw_form.locator('input[name="current_password"]').fill("WrongOldPass1!")
+    pw_form.locator('input[name="new_password"]').fill("NewValidPass1!")
+    pw_form.locator('input[name="new_password_confirm"]').fill("NewValidPass1!")
+
+    with page.expect_response(
+        lambda r: "/settings/account/password" in r.url and r.request.method == "POST"
+    ) as resp_info:
+        pw_form.evaluate("f => f.requestSubmit()")
+    assert resp_info.value.status == 422, resp_info.value.status
+    _wait_for_htmx_idle(page)
+
+    expect(page.locator("#account-section")).to_contain_text(
+        "Current password is incorrect.",
+        timeout=5_000,
+    )

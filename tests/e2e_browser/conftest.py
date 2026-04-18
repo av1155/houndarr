@@ -13,6 +13,7 @@ from __future__ import annotations
 import os
 import re
 from collections.abc import Generator
+from dataclasses import dataclass, field
 
 import pytest
 from playwright.sync_api import ConsoleMessage, Page
@@ -53,15 +54,34 @@ def mock_radarr_url() -> str:
     return MOCK_RADARR_URL
 
 
+@dataclass
+class _ConsoleGuard:
+    """Per-test control over the console-error allow list.
+
+    Tests that intentionally trigger 4xx/5xx responses (HTMX logs the
+    status code to ``console.error`` when ``error: true`` in the config)
+    call ``allow(pattern)`` to whitelist the expected noise.  Everything
+    else still fails the teardown assertion.
+    """
+
+    extra_patterns: list[re.Pattern[str]] = field(default_factory=list)
+
+    def allow(self, pattern: str) -> None:
+        self.extra_patterns.append(re.compile(pattern))
+
+
 @pytest.fixture(autouse=True)
-def _fail_on_console_errors(page: Page) -> Generator[None, None, None]:
+def console_guard(page: Page) -> Generator[_ConsoleGuard, None, None]:
     """Every browser test fails on console errors or uncaught JS exceptions.
 
     Applied via ``autouse`` so individual tests do not need to wire up the
     listener manually.  Filtered against ``_ALLOWED_ERROR_PATTERNS`` so
-    pre-existing third-party noise does not flake the suite.
+    pre-existing third-party noise does not flake the suite.  Tests that
+    deliberately provoke error responses can request this fixture by
+    name and call ``console_guard.allow(<pattern>)`` to whitelist them.
     """
     collected: list[str] = []
+    guard = _ConsoleGuard()
 
     def on_console(msg: ConsoleMessage) -> None:
         if msg.type == "error":
@@ -70,9 +90,10 @@ def _fail_on_console_errors(page: Page) -> Generator[None, None, None]:
     page.on("console", on_console)
     page.on("pageerror", lambda err: collected.append(f"pageerror: {err.message}"))
 
-    yield
+    yield guard
 
-    leftover = [e for e in collected if not any(p.search(e) for p in _ALLOWED_ERROR_PATTERNS)]
+    allowed = _ALLOWED_ERROR_PATTERNS + guard.extra_patterns
+    leftover = [e for e in collected if not any(p.search(e) for p in allowed)]
     assert not leftover, f"Unexpected console / page errors: {leftover}"
 
 

@@ -95,11 +95,12 @@
     { signal },
   );
 
-  // Native <dialog> Escape key fires a `cancel` event.  We preventDefault
-  // so the close animation runs, then dispatch the dismiss POST through
-  // HTMX by clicking the primary button (keeps persistence logic in one
-  // place).
-  document.body.addEventListener(
+  // Native <dialog> Escape key fires a `cancel` event that does NOT bubble,
+  // so we listen in the capture phase (which still reaches non-bubbling
+  // events on descendants) on document.  preventDefault so the close
+  // animation runs, then dispatch the dismiss POST through HTMX by
+  // clicking the primary button (keeps persistence logic in one place).
+  document.addEventListener(
     'cancel',
     function (event) {
       const target = event.target;
@@ -114,7 +115,7 @@
         closeDialog();
       }
     },
-    { signal },
+    { signal, capture: true },
   );
 
   // Backdrop click (the <dialog> itself is the click target when the
@@ -168,6 +169,107 @@
       ) {
         closeDialog();
       }
+    },
+    { signal },
+  );
+
+  // Animated <details> accordion for older releases.  Native <details> has
+  // no open/close animation, so we intercept the summary click, handle the
+  // open attribute ourselves, and animate the body's height + opacity.
+  // The Station ease (heavy ease-out) makes the motion feel snappy at
+  // small distances; for the full older-releases panel (often 1500+ px)
+  // it reads as "instant" because 75% of the height change happens in
+  // the first 100ms.  A balanced standard easing at 480ms gives the
+  // expand a deliberate, controlled feel without being sluggish.
+  const accordionAnimationMs = 480;
+  const accordionEase = 'cubic-bezier(0.4, 0, 0.2, 1)';
+
+  function animateAccordion(details, body, shouldOpen) {
+    if (prefersReducedMotion) {
+      details.open = shouldOpen;
+      body.style.height = '';
+      body.style.opacity = '';
+      body.style.transition = '';
+      return;
+    }
+
+    if (body.dataset.animating === '1') {
+      return;
+    }
+    body.dataset.animating = '1';
+
+    const transitionValue =
+      `height ${accordionAnimationMs}ms ${accordionEase}, ` +
+      `opacity ${accordionAnimationMs}ms ${accordionEase}`;
+
+    if (shouldOpen) {
+      // Lock the collapsed state INLINE before flipping details.open so
+      // the browser never paints a frame of the natural-height content.
+      body.style.transition = 'none';
+      body.style.height = '0px';
+      body.style.opacity = '0';
+      details.open = true;
+      // Two RAFs: first lets the browser commit the display:block + 0px
+      // inline height.  Second starts the transition from that committed
+      // state to the natural height.  A single RAF is not enough because
+      // the display change from `<details>` toggling needs a style recalc
+      // that the browser may defer.
+      window.requestAnimationFrame(() => {
+        window.requestAnimationFrame(() => {
+          const targetHeight = body.scrollHeight;
+          body.style.transition = transitionValue;
+          body.style.height = `${targetHeight}px`;
+          body.style.opacity = '1';
+          window.setTimeout(() => {
+            body.style.transition = '';
+            body.style.height = 'auto';
+            body.style.opacity = '';
+            body.dataset.animating = '0';
+          }, accordionAnimationMs);
+        });
+      });
+      return;
+    }
+
+    // Closing: lock current height, reflow, transition to 0.
+    const startHeight = body.getBoundingClientRect().height;
+    body.style.transition = 'none';
+    body.style.height = `${startHeight}px`;
+    body.style.opacity = '1';
+    void body.offsetHeight;
+    body.style.transition = transitionValue;
+    body.style.height = '0px';
+    body.style.opacity = '0';
+    window.setTimeout(() => {
+      details.open = false;
+      body.style.transition = '';
+      body.style.height = '';
+      body.style.opacity = '';
+      body.dataset.animating = '0';
+    }, accordionAnimationMs);
+  }
+
+  document.addEventListener(
+    'click',
+    function (event) {
+      const target = event.target;
+      if (!(target instanceof Element)) {
+        return;
+      }
+      const summary = target.closest('.changelog-accordion > summary');
+      if (!(summary instanceof HTMLElement)) {
+        return;
+      }
+      const details = summary.parentElement;
+      if (!(details instanceof HTMLDetailsElement)) {
+        return;
+      }
+      const body = details.querySelector('.changelog-accordion-body');
+      if (!(body instanceof HTMLElement)) {
+        return;
+      }
+      event.preventDefault();
+      animateAccordion(details, body, !details.open);
     },
     { signal },
   );

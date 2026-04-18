@@ -147,7 +147,7 @@ async def test_upgrade_popup_renders_modal(app: TestClient, sample_changelog: Pa
     assert resp.status_code == 200
     assert 'id="changelog-modal"' in resp.text
     assert "<dialog" in resp.text
-    assert resp.headers.get("HX-Trigger") == "houndarr-show-changelog"
+    assert resp.headers.get("HX-Trigger-After-Swap") == "houndarr-show-changelog"
     # Newest and one older release should both appear.
     assert f"v{__version__}" in resp.text
     assert "v1.7.0" in resp.text
@@ -187,7 +187,7 @@ async def test_force_popup_renders_current_version_only(
     assert resp.status_code == 200
     assert 'id="changelog-modal"' in resp.text
     assert "<dialog" in resp.text
-    assert resp.headers.get("HX-Trigger") == "houndarr-show-changelog"
+    assert resp.headers.get("HX-Trigger-After-Swap") == "houndarr-show-changelog"
     # Only the current version renders in force mode.
     assert f"v{__version__}" in resp.text
     assert "v1.6.0" not in resp.text

@@ -87,11 +87,19 @@
       }
     }
 
+    /* Accordion body: smooth open/close via JS-controlled height + opacity. */
+    #changelog-modal .changelog-accordion-body {
+      overflow: hidden;
+      will-change: height, opacity;
+    }
+
     @media (prefers-reduced-motion: reduce) {
       #changelog-modal,
       #changelog-modal[open],
       #changelog-modal::backdrop,
-      #changelog-modal[open]::backdrop {
+      #changelog-modal[open]::backdrop,
+      #changelog-modal .changelog-accordion-body,
+      #changelog-modal svg.transition-transform {
         animation: none;
         transition: none;
         transform: none;
@@ -100,7 +108,7 @@
     }
   </style>
 
-  <div class="flex items-start justify-between border-b border-[#1e2638] px-6 py-5">
+  <div class="flex items-center justify-between border-b border-[#1e2638] px-6 py-4">
     <div class="min-w-0">
       <h2
         id="changelog-modal-title"
@@ -118,7 +126,7 @@
       type="button"
       aria-label="Close changelog"
       data-close-changelog-modal="true"
-      class="ml-4 flex-shrink-0 rounded-lg border border-[#2a3448] bg-[#151b27] p-3 text-slate-400 hover:bg-[#1e2638] hover:text-slate-200 transition-colors focus:outline-none focus:ring-2 focus:ring-brand-400/30"
+      class="ml-4 flex-shrink-0 rounded-lg border border-[#2a3448] bg-[#151b27] p-2 text-slate-400 hover:bg-[#1e2638] hover:text-slate-200 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400/30"
     >
       <span aria-hidden="true" class="block leading-none text-xl">&times;</span>
     </button>
@@ -135,7 +143,7 @@
       href="https://github.com/av1155/houndarr/blob/main/CHANGELOG.md"
       target="_blank"
       rel="noopener noreferrer"
-      class="text-xs font-medium text-brand-300 hover:text-brand-200 underline underline-offset-4 transition-colors focus:outline-none focus:ring-2 focus:ring-brand-400/30 rounded-sm"
+      class="text-xs font-medium text-brand-300 hover:text-brand-200 underline underline-offset-4 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400/30 rounded-sm"
     >
       Full changelog on GitHub
     </a>
@@ -146,7 +154,7 @@
         data-changelog-disable="true"
         hx-post="/settings/changelog/disable"
         hx-swap="none"
-        class="px-3 py-2 rounded-lg text-sm text-slate-300 hover:text-white hover:bg-surface-2 transition-colors focus:outline-none focus:ring-2 focus:ring-brand-400/30"
+        class="px-3 py-2 rounded-lg text-sm text-slate-300 hover:text-white hover:bg-surface-2 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400/30"
       >
         Don't show again
       </button>
@@ -157,7 +165,7 @@
         data-changelog-dismiss="true"
         hx-post="/settings/changelog/dismiss"
         hx-swap="none"
-        class="px-4 py-2 rounded-lg bg-brand-500 hover:bg-brand-400 text-white text-sm font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-brand-400/35"
+        class="px-4 py-2 rounded-lg bg-brand-500 hover:bg-brand-400 text-white text-sm font-semibold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400/35"
       >
         Got it
       </button>

@@ -97,17 +97,17 @@ def _empty_slot_response() -> HTMLResponse:
 
 
 def _range_label(releases: list[ReleaseEntry], *, manual: bool, last_seen: str | None) -> str:
-    """Build the modal's subtitle."""
-    if not releases:
+    """Build the modal's subtitle.
+
+    Only returns a non-empty label when it adds information beyond what the
+    first release heading already shows.  Single-release renders (manual
+    re-open, pre-feature catch-up) suppress the subtitle entirely.
+    """
+    if manual or len(releases) < 2:
         return ""
-    newest = releases[0]
-    if manual:
-        return f"v{newest.version} · Released {newest.date}"
-    if last_seen and len(releases) > 1:
-        return f"v{last_seen} → v{newest.version} · Released {newest.date}"
-    if last_seen is None:
-        return f"Up to v{newest.version} · Released {newest.date}"
-    return f"v{newest.version} · Released {newest.date}"
+    if last_seen:
+        return f"Since v{last_seen}"
+    return ""
 
 
 @router.get("/popup", response_class=HTMLResponse)
@@ -154,7 +154,9 @@ async def popup(request: Request, force: int = 0) -> HTMLResponse:
             "manual": is_manual,
         },
     )
-    response.headers["HX-Trigger"] = "houndarr-show-changelog"
+    # After-Swap fires once the <dialog> is actually in the DOM; plain
+    # HX-Trigger fires before the swap, so getElementById would return null.
+    response.headers["HX-Trigger-After-Swap"] = "houndarr-show-changelog"
     return response
 
 

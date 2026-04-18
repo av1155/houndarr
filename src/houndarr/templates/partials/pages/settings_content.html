@@ -999,6 +999,22 @@
           window.houndarrCloseAddInstanceModal();
         }
 
+        if (evt.detail.target.id === 'account-section') {
+          // When the password form re-renders (success or validation
+          // error), the submit button the user just clicked is
+          // replaced, so focus falls to <body>.  Keep the <details>
+          // expanded and return focus to the first password field so
+          // keyboard users do not lose their place.
+          const details = document.querySelector('#account-settings');
+          if (details) {
+            details.open = true;
+          }
+          const firstPwInput = document.querySelector('#current-password');
+          if (firstPwInput) {
+            firstPwInput.focus();
+          }
+        }
+
         if (evt.detail.target.id === 'add-instance-modal-content') {
           if (pendingModalShow) {
             pendingModalShow = false;

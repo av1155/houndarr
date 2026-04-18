@@ -8,7 +8,9 @@ from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager, suppress
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from houndarr import __version__
@@ -117,6 +119,41 @@ def create_app() -> FastAPI:
     # -----------------------------------------------------------------------
     static_dir = Path(__file__).parent / "static"
     app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
+
+    # -----------------------------------------------------------------------
+    # Exception handlers
+    # -----------------------------------------------------------------------
+    @app.exception_handler(RequestValidationError)
+    async def _validation_error_handler(
+        request: Request, exc: RequestValidationError
+    ) -> HTMLResponse | JSONResponse:
+        """Return a harmless HTML body (never JSON) for HTMX-initiated
+        validation errors.
+
+        Base.html opts 422 into the HTMX swap so server-emitted error
+        snippets actually render.  FastAPI's default 422 body is JSON
+        (``{"detail": [...]}``), which would render as literal text
+        inside whatever slot the form targets.  For HTMX requests we
+        ship an empty body with ``HX-Reswap: none`` so the swap is
+        suppressed (same visible behaviour as before the config flip)
+        and log the validation detail server-side for the operator.
+
+        Non-HTMX clients keep FastAPI's default JSON response so API
+        consumers and tests are unaffected.
+        """
+        if request.headers.get("HX-Request") == "true":
+            logger.warning(
+                "HTMX validation error on %s %s: %s",
+                request.method,
+                request.url.path,
+                exc.errors(),
+            )
+            return HTMLResponse(
+                content="",
+                status_code=422,
+                headers={"HX-Reswap": "none"},
+            )
+        return JSONResponse(status_code=422, content={"detail": exc.errors()})
 
     # -----------------------------------------------------------------------
     # Middleware (order matters: outermost = first to receive request)

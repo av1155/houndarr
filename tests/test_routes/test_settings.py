@@ -221,6 +221,36 @@ def test_create_instance_missing_name_returns_422(app: TestClient) -> None:
     assert resp.status_code == 422
 
 
+def test_htmx_validation_error_returns_empty_html_with_reswap_none(app: TestClient) -> None:
+    """FastAPI's default 422 body is JSON; with the base-template config
+    opting 422 into HTMX swaps, that JSON would render as raw text in a
+    UI slot.  The app-level ``RequestValidationError`` handler returns
+    an empty HTML body with ``HX-Reswap: none`` for HTMX requests so
+    the swap is suppressed and no JSON leaks into the DOM.
+    """
+    _login(app)
+    form = {**_VALID_FORM}
+    form.pop("name")  # trigger FastAPI's automatic 422 on missing Form()
+    headers = {**csrf_headers(app), "HX-Request": "true"}
+    resp = app.post("/settings/instances", data=form, headers=headers)
+    assert resp.status_code == 422
+    assert resp.headers.get("content-type", "").startswith("text/html"), resp.headers
+    assert resp.headers.get("hx-reswap") == "none", resp.headers
+    assert resp.content == b""
+
+
+def test_non_htmx_validation_error_still_returns_json(app: TestClient) -> None:
+    """Non-HTMX API consumers must keep getting FastAPI's JSON 422."""
+    _login(app)
+    form = {**_VALID_FORM}
+    form.pop("name")
+    resp = app.post("/settings/instances", data=form, headers=csrf_headers(app))
+    assert resp.status_code == 422
+    assert resp.headers.get("content-type", "").startswith("application/json"), resp.headers
+    payload = resp.json()
+    assert "detail" in payload
+
+
 def test_create_instance_missing_api_key_returns_422(app: TestClient) -> None:
     _login(app)
     form = {k: v for k, v in _VALID_FORM.items() if k != "api_key"}

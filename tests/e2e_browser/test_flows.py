@@ -278,3 +278,6 @@ def test_password_change_4xx_renders_error(
         "Current password is incorrect.",
         timeout=5_000,
     )
+    # Focus is restored to the first password input so keyboard users do
+    # not land on document.body after the submit button is replaced.
+    expect(page.locator("#current-password")).to_be_focused(timeout=5_000)

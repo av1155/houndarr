@@ -59,7 +59,7 @@ container. If migrating from the default mode, `chown -R` all files in the
 data directory (including `houndarr.db-wal` and `houndarr.db-shm`) to the
 new UID/GID.
 
-See [Trust & Security](/docs/security/trust-and-security#explicit-non-root-mode)
+See [Security Overview](/docs/security/overview#explicit-non-root-mode)
 for details.
 
 ### Development mode

@@ -111,6 +111,6 @@ Most users (especially on Docker Compose, Unraid, or Proxmox) should use
 the default mode with `PUID`/`PGID`. The non-root mode is primarily useful
 for Kubernetes with `runAsNonRoot: true` or hardened environments that
 disallow root-starting containers. See
-[Trust & Security](/docs/security/trust-and-security#explicit-non-root-mode)
+[Security Overview](/docs/security/overview#explicit-non-root-mode)
 for details.
 :::

@@ -41,7 +41,6 @@ const sidebars: SidebarsConfig = {
         'concepts/how-houndarr-works',
         'concepts/troubleshooting',
         'concepts/faq',
-        'concepts/test-coverage',
       ],
     },
     {
@@ -49,7 +48,18 @@ const sidebars: SidebarsConfig = {
       label: 'Security',
       collapsed: false,
       items: [
-        'security/trust-and-security',
+        'security/overview',
+        'security/credential-handling',
+        'security/threat-model',
+        'security/audit',
+      ],
+    },
+    {
+      type: 'category',
+      label: 'Guides',
+      collapsed: false,
+      items: [
+        'guides/backup-and-restore',
       ],
     },
   ],

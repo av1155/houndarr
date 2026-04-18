@@ -35,7 +35,7 @@ For each instance you need:
 
 :::tip
 API keys are encrypted at rest using Fernet symmetric encryption and are never
-sent back to the browser. See [Trust & Security](/docs/security/trust-and-security)
+sent back to the browser. See [Credential Handling](/docs/security/credential-handling)
 for details.
 :::
 

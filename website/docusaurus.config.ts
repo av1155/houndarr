@@ -103,8 +103,8 @@ const config: Config = {
               to: '/docs/concepts/how-houndarr-works',
             },
             {
-              label: 'Test Coverage',
-              to: '/docs/concepts/test-coverage',
+              label: 'Audit',
+              to: '/docs/security/audit',
             },
           ],
         },
@@ -112,8 +112,8 @@ const config: Config = {
           title: 'Security',
           items: [
             {
-              label: 'Trust & Security',
-              to: '/docs/security/trust-and-security',
+              label: 'Security Overview',
+              to: '/docs/security/overview',
             },
             {
               label: 'Report a Vulnerability',

@@ -278,7 +278,7 @@ When using TLS, uncomment the security env vars in the StatefulSet:
   the rate limiter sees real client IPs
 
 See [Environment Variables](/docs/configuration/environment-variables) and
-[Trust & Security](/docs/security/trust-and-security) for details.
+[Security Overview](/docs/security/overview) for details.
 
 ## Verifying the deployment
 

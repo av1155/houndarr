@@ -200,7 +200,16 @@
 
   {% block scripts %}{% endblock %}
 
+  {% if show_nav is not defined or show_nav %}
+  <div id="changelog-slot"
+       hx-get="/settings/changelog/popup"
+       hx-trigger="load once delay:800ms"
+       hx-swap="outerHTML"
+       hx-target="this"></div>
+  {% endif %}
+
   <script src="/static/js/app.js"></script>
+  <script src="/static/js/changelog.js"></script>
 
 </body>
 </html>

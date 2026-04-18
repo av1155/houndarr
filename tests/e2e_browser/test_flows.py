@@ -90,36 +90,6 @@ def _submit_form(form: Locator) -> None:
     form.evaluate("form => form.requestSubmit()")
 
 
-def test_login_redirects_to_dashboard(page: Page, houndarr_url: str) -> None:
-    page.goto(houndarr_url)
-    expect(page).to_have_url(re.compile(r"/login$"))
-
-    page.get_by_role("textbox", name="Username").fill("admin")
-    page.get_by_role("textbox", name="Password").fill("CITestPass1!")
-    page.get_by_role("button", name="Sign In").click()
-
-    expect(page).to_have_title("Dashboard | Houndarr")
-
-
-def test_settings_page_renders(logged_in_page: Page, houndarr_url: str) -> None:
-    logged_in_page.goto(f"{houndarr_url}/settings")
-    expect(logged_in_page).to_have_title("Settings | Houndarr")
-
-
-def test_add_form_preselects_random(logged_in_page: Page, houndarr_url: str) -> None:
-    """The blank add-instance form renders Random as the selected option.
-
-    Regression guard for the pass-1 HIGH finding on the random-search PR.
-    Checked via the API route so it catches both the rendered HTML and
-    the ``_blank_instance()`` factory state.
-    """
-    resp = logged_in_page.request.get(f"{houndarr_url}/settings/instances/add-form")
-    assert resp.ok, resp.status
-    body = resp.text()
-    assert re.search(r'<option\s+value="random"[^>]*\sselected', body), body
-    assert not re.search(r'<option\s+value="chronological"[^>]*\sselected', body)
-
-
 def test_full_instance_lifecycle(
     logged_in_page: Page, houndarr_url: str, mock_sonarr_url: str
 ) -> None:

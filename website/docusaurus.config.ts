@@ -9,6 +9,7 @@ const config: Config = {
 
   future: {
     v4: true,
+    faster: true,
   },
 
   url: 'https://av1155.github.io',
@@ -45,6 +46,36 @@ const config: Config = {
           customCss: './src/css/custom.css',
         },
       } satisfies Preset.Options,
+    ],
+  ],
+
+  plugins: [
+    [
+      '@docusaurus/plugin-client-redirects',
+      {
+        redirects: [
+          {
+            from: '/docs/configuration/instance-settings',
+            to: '/docs/reference/instance-settings',
+          },
+          {
+            from: '/docs/concepts/faq',
+            to: '/docs/faq',
+          },
+          {
+            from: '/docs/concepts/troubleshooting',
+            to: '/docs/guides/troubleshoot-connection',
+          },
+          {
+            from: '/docs/concepts/test-coverage',
+            to: '/docs/security/audit',
+          },
+          {
+            from: '/docs/security/trust-and-security',
+            to: '/docs/security/overview',
+          },
+        ],
+      },
     ],
   ],
 

@@ -3,46 +3,47 @@ import clsx from 'clsx';
 import Link from '@docusaurus/Link';
 import useDocusaurusContext from '@docusaurus/useDocusaurusContext';
 import Layout from '@theme/Layout';
+import Image from '@theme/IdealImage';
 import HomepageFeatures from '@site/src/components/HomepageFeatures';
 import Heading from '@theme/Heading';
 
 import styles from './index.module.css';
 
 type ScreenshotItem = {
-  src: string;
+  img: string;
   alt: string;
   caption: string;
 };
 
 const DASHBOARD_SCREENSHOT: ScreenshotItem = {
-  src: require('@site/static/img/screenshots/houndarr-dashboard.png').default,
+  img: require('@site/static/img/screenshots/houndarr-dashboard.png'),
   alt: 'Houndarr Dashboard: instance cards with search metrics and activity',
   caption: 'Dashboard: live search metrics, instance status, and on-demand triggers',
 };
 
 const SUPPORTING_SCREENSHOTS: ScreenshotItem[] = [
   {
-    src: require('@site/static/img/screenshots/houndarr-logs.png').default,
+    img: require('@site/static/img/screenshots/houndarr-logs.png'),
     alt: 'Houndarr Logs: filterable search activity log',
     caption: 'Logs',
   },
   {
-    src: require('@site/static/img/screenshots/houndarr-settings-instances.png').default,
+    img: require('@site/static/img/screenshots/houndarr-settings-instances.png'),
     alt: 'Houndarr Settings: instance list with enable toggles',
     caption: 'Settings',
   },
   {
-    src: require('@site/static/img/screenshots/houndarr-add-instance-form.png').default,
+    img: require('@site/static/img/screenshots/houndarr-add-instance-form.png'),
     alt: 'Houndarr Add Instance: search, cutoff, and upgrade configuration',
     caption: 'Instance config',
   },
   {
-    src: require('@site/static/img/screenshots/houndarr-settings-account.png').default,
+    img: require('@site/static/img/screenshots/houndarr-settings-account.png'),
     alt: 'Houndarr Account settings: password and session management',
     caption: 'Account',
   },
   {
-    src: require('@site/static/img/screenshots/houndarr-settings-help.png').default,
+    img: require('@site/static/img/screenshots/houndarr-settings-help.png'),
     alt: 'Houndarr Help: in-app settings reference',
     caption: 'Help',
   },
@@ -139,8 +140,8 @@ function HomepageHeader() {
 
         {/* Right column: dashboard preview */}
         <div className={styles.heroRight}>
-          <img
-            src={DASHBOARD_SCREENSHOT.src}
+          <Image
+            img={DASHBOARD_SCREENSHOT.img}
             alt={DASHBOARD_SCREENSHOT.alt}
             className={styles.heroScreenshot}
           />
@@ -161,7 +162,7 @@ function Screenshots() {
 
         {/* Hero: Dashboard takes full width */}
         <div className={styles.screenshotHero}>
-          <img src={DASHBOARD_SCREENSHOT.src} alt={DASHBOARD_SCREENSHOT.alt} />
+          <Image img={DASHBOARD_SCREENSHOT.img} alt={DASHBOARD_SCREENSHOT.alt} />
           <p className={styles.screenshotCaption}>
             <strong>Dashboard</strong>: live search metrics, instance status, and on-demand triggers
           </p>
@@ -171,7 +172,7 @@ function Screenshots() {
         <div className={styles.screenshotGallery}>
           {SUPPORTING_SCREENSHOTS.map((item) => (
             <div key={item.caption}>
-              <img src={item.src} alt={item.alt} />
+              <Image img={item.img} alt={item.alt} />
               <p className={styles.screenshotCaption}>
                 <strong>{item.caption}</strong>
               </p>

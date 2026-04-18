@@ -30,7 +30,7 @@ flowchart TD
     C --> E
 ```
 
-Your *arr instances do all the actual searching. Houndarr controls the pacing.
+Each cycle asks the *arr instance for missing, cutoff-unmet, or upgrade-eligible items, reads back the wanted list of monitored items, applies scheduling rules (cooldown, hourly cap, post-release grace, batch size), sends a search command for each eligible item, and logs the rest as skipped for retry next cycle. Your *arr instances do all the actual searching. Houndarr controls the pacing.
 
 ## Monitored vs. wanted
 
@@ -58,7 +58,7 @@ If you want to build, test, and deploy quality profiles and custom formats acros
 
 ## Why only a few items get searched each cycle
 
-Think of it as a funnel:
+Think of it as a funnel: your monitored library narrows to the wanted list (the *arr filter keeps only missing, cutoff-unmet, or upgrade-eligible items), then narrows again to what's eligible this cycle (the Houndarr filter applies cooldown, post-release grace, and hourly cap), and finally to what's actually searched (capped by batch size, often just 1 to 3 items).
 
 ```mermaid
 flowchart TD

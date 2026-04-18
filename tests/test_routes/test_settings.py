@@ -142,7 +142,7 @@ def test_settings_help_page_renders(app: TestClient) -> None:
     resp = app.get("/settings/help")
     assert resp.status_code == 200
     assert b"Instance Settings Help" in resp.content
-    assert b"https://av1155.github.io/houndarr/docs/configuration/instance-settings" in resp.content
+    assert b"https://av1155.github.io/houndarr/docs/reference/instance-settings" in resp.content
 
 
 def test_settings_page_hx_request_returns_content_fragment(app: TestClient) -> None:

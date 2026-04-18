@@ -108,7 +108,10 @@ def _parse_search_kind(raw: str | None) -> str | None:
     if raw is None or raw == "":
         return None
     if raw not in _SEARCH_KINDS:
-        raise HTTPException(status_code=422, detail="search_kind must be 'missing' or 'cutoff'")
+        raise HTTPException(
+            status_code=422,
+            detail="search_kind must be 'missing', 'cutoff', or 'upgrade'",
+        )
     return raw
 
 

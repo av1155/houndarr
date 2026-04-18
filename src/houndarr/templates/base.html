@@ -15,7 +15,7 @@
      false`` for 404 / 401 / 429 / 5xx so a stray ``HTMLResponse("Not found")``
      or a Starlette 500 page does not land in a UI slot.  ``error: true``
      stays so ``htmx:responseError`` listeners still fire. #}
-  <meta name="htmx-config" content='{"responseHandling":[{"code":"204","swap":false},{"code":"[23]..","swap":true},{"code":"422","swap":true,"error":true},{"code":"[45]..","swap":false,"error":true},{"code":"...","swap":false,"error":true}]}' />
+  <meta name="htmx-config" content='{"responseHandling":[{"code":"^204$","swap":false},{"code":"^[23]..$","swap":true},{"code":"^422$","swap":true,"error":true},{"code":"^[45]..$","swap":false,"error":true},{"code":"...","swap":false,"error":true}]}' />
   <link rel="icon" type="image/png" href="/static/img/houndarr-logo-dark.png" />
   <link rel="shortcut icon" href="/static/img/houndarr-logo-dark.png" />
   <link rel="apple-touch-icon" href="/static/img/houndarr-logo-dark.png" />

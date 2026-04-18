@@ -8,12 +8,14 @@
   <meta name="apple-mobile-web-app-title" content="Houndarr" />
   <meta name="theme-color" content="#07080f" />
   <meta name="color-scheme" content="dark" />
-  {# HTMX 2.x defaults skip the swap on 4xx/5xx, which silently drops every
-     validation error the server sends with HX-Retarget + HX-Reswap headers
-     (Save instance, test-connection, password change).  Override so 4xx/5xx
-     swap too; the server's existing retarget headers then render the error
-     in the right slot.  Without this, 4xx responses fail silently. #}
-  <meta name="htmx-config" content='{"responseHandling":[{"code":"204","swap":false},{"code":"[23]..","swap":true},{"code":"[45]..","swap":true,"error":true},{"code":"...","swap":false,"error":true}]}' />
+  {# HTMX 2.x defaults skip the swap on 4xx/5xx, which silently drops the
+     validation errors the server sends with HX-Retarget + HX-Reswap
+     (Save instance, test-connection, password change).  Opt 422 into
+     swapping so those errors actually render; keep the default ``swap:
+     false`` for 404 / 401 / 429 / 5xx so a stray ``HTMLResponse("Not found")``
+     or a Starlette 500 page does not land in a UI slot.  ``error: true``
+     stays so ``htmx:responseError`` listeners still fire. #}
+  <meta name="htmx-config" content='{"responseHandling":[{"code":"204","swap":false},{"code":"[23]..","swap":true},{"code":"422","swap":true,"error":true},{"code":"[45]..","swap":false,"error":true},{"code":"...","swap":false,"error":true}]}' />
   <link rel="icon" type="image/png" href="/static/img/houndarr-logo-dark.png" />
   <link rel="shortcut icon" href="/static/img/houndarr-logo-dark.png" />
   <link rel="apple-touch-icon" href="/static/img/houndarr-logo-dark.png" />

@@ -67,9 +67,13 @@
       document.body.style.overflow = '';
       isClosing = false;
       restoreFocus();
-      // Remove the dialog from the DOM so a subsequent auto-open cycle
-      // can HTMX-inject a fresh one without stale listeners.
-      dialog.remove();
+      // Replace the dialog with a fresh empty #changelog-slot so future
+      // force-opens from Settings (or another auto-trigger after full
+      // reload) still have an HTMX target to swap into.
+      const slot = document.createElement('div');
+      slot.id = 'changelog-slot';
+      slot.setAttribute('aria-hidden', 'true');
+      dialog.replaceWith(slot);
     };
 
     if (prefersReducedMotion) {

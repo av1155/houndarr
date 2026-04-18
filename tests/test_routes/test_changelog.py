@@ -336,3 +336,60 @@ async def test_force_popup_when_changelog_missing(
     resp = app.get("/settings/changelog/popup?force=1")
     assert resp.status_code == 200
     assert "<dialog" not in resp.text
+
+
+# ---------------------------------------------------------------------------
+# Bullet renderer: scheme allowlist + balanced parens
+# ---------------------------------------------------------------------------
+
+
+def test_link_substitution_blocks_javascript_scheme() -> None:
+    from houndarr.routes.changelog import _render_changelog_bullet
+
+    rendered = str(_render_changelog_bullet("[click](javascript:alert(1))"))
+    # No <a href="javascript:..."> emitted; original markdown text remains
+    # visible (escape() already neutralised the < > < etc).
+    assert 'href="javascript:' not in rendered
+    assert "<a" not in rendered
+    assert "[click]" in rendered
+
+
+def test_link_substitution_blocks_data_scheme() -> None:
+    from houndarr.routes.changelog import _render_changelog_bullet
+
+    rendered = str(_render_changelog_bullet("[x](data:text/html,<script>alert(1)</script>)"))
+    assert 'href="data:' not in rendered
+    assert "<a" not in rendered
+
+
+def test_link_substitution_allows_https() -> None:
+    from houndarr.routes.changelog import _render_changelog_bullet
+
+    rendered = str(_render_changelog_bullet("[ok](https://example.com/path)"))
+    assert '<a href="https://example.com/path"' in rendered
+
+
+def test_link_substitution_allows_mailto() -> None:
+    from houndarr.routes.changelog import _render_changelog_bullet
+
+    rendered = str(_render_changelog_bullet("[ping](mailto:dev@example.com)"))
+    assert '<a href="mailto:dev@example.com"' in rendered
+
+
+def test_link_substitution_allows_relative_and_fragment() -> None:
+    from houndarr.routes.changelog import _render_changelog_bullet
+
+    rendered = str(_render_changelog_bullet("[home](/) and [section](#anchor)"))
+    assert '<a href="/"' in rendered
+    assert '<a href="#anchor"' in rendered
+
+
+def test_link_substitution_supports_balanced_parens_in_url() -> None:
+    """URLs containing one level of nested parens (e.g. Wikipedia) render whole."""
+    from houndarr.routes.changelog import _render_changelog_bullet
+
+    raw = "see [Foo](https://en.wikipedia.org/wiki/Foo_(bar)) for details"
+    rendered = str(_render_changelog_bullet(raw))
+    assert '<a href="https://en.wikipedia.org/wiki/Foo_(bar)"' in rendered
+    # No truncated link followed by literal "(bar))"
+    assert "_bar)" not in rendered.replace('href="https://en.wikipedia.org/wiki/Foo_(bar)"', "")

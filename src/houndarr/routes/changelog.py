@@ -45,8 +45,44 @@ _GITHUB_ISSUES_URL = "https://github.com/av1155/houndarr/issues"
 # markdown library for a closed set of patterns.
 _INLINE_CODE_RE = re.compile(r"`([^`]+)`")
 _BOLD_RE = re.compile(r"\*\*([^*]+)\*\*")
-_LINK_RE = re.compile(r"\[([^\]]+)\]\(([^)]+)\)")
+# URL pattern allows one level of nested parentheses so links like
+# https://en.wikipedia.org/wiki/Foo_(bar) render correctly.
+_LINK_RE = re.compile(r"\[([^\]]+)\]\(((?:[^()]|\([^)]*\))+)\)")
 _ISSUE_REF_RE = re.compile(r"\(#(\d+)\)")
+
+# Defense-in-depth: only accept these URL schemes inside [text](url).
+# CHANGELOG.md is maintainer-authored and bundled into the image so the
+# trust boundary covers this, but the allowlist prevents javascript:,
+# data:, vbscript: from ever reaching an href even if a future entry
+# contains an unsafe link.  Schemeless / fragment / relative URLs are
+# allowed (no colon → no scheme).
+_ALLOWED_URL_SCHEMES = ("http://", "https://", "mailto:", "/", "#")
+
+
+def _is_safe_url(url: str) -> bool:
+    """Return True if *url* is safe to put in an href."""
+    lowered = url.strip().lower()
+    if any(lowered.startswith(s) for s in _ALLOWED_URL_SCHEMES):
+        return True
+    # Schemeless URLs (no colon before the first slash/hash/end) are safe.
+    colon = lowered.find(":")
+    if colon == -1:
+        return True
+    slash = lowered.find("/")
+    return slash != -1 and slash < colon
+
+
+def _link_substitution(match: re.Match[str]) -> str:
+    """Return either an <a> tag or the original text if the URL is unsafe."""
+    text, url = match.group(1), match.group(2)
+    if not _is_safe_url(url):
+        # Re-emit the original markdown so the raw text is visible but
+        # not clickable.  The captures came from already-escape()d text.
+        return f"[{text}]({url})"
+    return (
+        f'<a href="{url}" target="_blank" rel="noopener noreferrer" '
+        f'class="text-brand-300 hover:text-brand-200 underline underline-offset-2">{text}</a>'
+    )
 
 
 def _render_changelog_bullet(raw: str) -> Markup:
@@ -60,12 +96,10 @@ def _render_changelog_bullet(raw: str) -> Markup:
     safe = _INLINE_CODE_RE.sub(r'<code class="text-brand-300">\1</code>', safe)
     safe = _BOLD_RE.sub(r"<strong>\1</strong>", safe)
     # Link targets are HTML-escaped by the preceding escape() pass, so the
-    # URL is already safe for insertion into an href attribute.
-    safe = _LINK_RE.sub(
-        r'<a href="\2" target="_blank" rel="noopener noreferrer" '
-        r'class="text-brand-300 hover:text-brand-200 underline underline-offset-2">\1</a>',
-        safe,
-    )
+    # URL is already safe for insertion into an href attribute.  The
+    # callback also gates on a scheme allowlist so javascript:/data:
+    # URLs never reach an href even if CHANGELOG.md contains them.
+    safe = _LINK_RE.sub(_link_substitution, safe)
     safe = _ISSUE_REF_RE.sub(
         (
             r'(<a href="' + _GITHUB_ISSUES_URL + r'/\1" target="_blank" rel="noopener noreferrer" '

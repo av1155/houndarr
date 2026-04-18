@@ -9,7 +9,77 @@ from __future__ import annotations
 
 import re
 
-from playwright.sync_api import Page, expect
+from playwright.sync_api import Locator, Page, expect
+
+
+def _wait_for_connection_ui_idle(page: Page) -> None:
+    """Drain the 80 ms setTimeout scheduled by the field-change handler.
+
+    The settings JS reacts to ``input``/``change`` events on the
+    type/url/api_key fields by adding ``is-updating`` to
+    ``#instance-connection-status`` and scheduling a ~80 ms text reset.
+    Two places trigger it in this flow: ``locator.fill()`` (synchronous
+    input events) and the blur that happens when clicking Test Connection
+    (which fires ``change`` on the previously focused input).  When the
+    mock *arr runs on the same Docker network the HTMX round-trip is
+    faster than 80 ms, so the stale timer wipes out the success message
+    if we don't drain it on both sides of the click.
+    """
+    page.wait_for_function(
+        "() => !document.querySelector('#instance-connection-status')"
+        "?.classList.contains('is-updating')"
+    )
+
+
+def _wait_for_htmx_idle(page: Page) -> None:
+    """Wait until all HTMX request/swap/settle classes are gone.
+
+    Follows the maintainer-suggested pattern from bigskysoftware/htmx
+    discussion #2360 for reliable Playwright assertions after HTMX.
+    """
+    expect(
+        page.locator(".htmx-request, .htmx-settling, .htmx-swapping, .htmx-added")
+    ).to_have_count(0)
+
+
+def _test_connection_and_wait_for_success(page: Page, form: Locator, button: Locator) -> None:
+    """Trigger Test Connection and wait for the success signal.
+
+    Two races would otherwise make this flaky against a fast mock:
+
+    1. ``locator.fill()`` fires ``input`` events that schedule an 80 ms
+       ``setTimeout`` which resets ``#instance-connection-status``.
+       A real button click then fires a ``change`` event on the
+       previously focused input, scheduling another reset that races
+       with the HTMX response.  We dispatch the click synthetically so
+       no blur/change happens, and drain any residual timer afterwards.
+    2. The HTMX ``HX-Trigger`` + DOM swap + any pending reset timer must
+       all settle before we assert.  The submit button's enabled state
+       is the authoritative success signal: the JS handler for
+       ``houndarr-connection-test-success`` sets ``connection_verified``
+       and enables submit regardless of text-swap timing.
+    """
+    with page.expect_response(
+        lambda r: "/settings/instances/test-connection" in r.url and r.status == 200
+    ):
+        button.dispatch_event("click")
+    _wait_for_connection_ui_idle(page)
+    _wait_for_htmx_idle(page)
+    expect(form.locator("#instance-submit-btn")).to_be_enabled(timeout=10_000)
+
+
+def _submit_form(form: Locator) -> None:
+    """Submit the form via ``HTMLFormElement.requestSubmit``.
+
+    Clicking the submit button fires a blur/change event on the
+    previously focused field, which the settings JS interprets as
+    ``connection details changed`` and disables the submit button
+    before the native browser can forward the click to the form's
+    submit handler.  ``requestSubmit`` bypasses the click chain and
+    dispatches a real ``submit`` event that HTMX intercepts, without
+    the blur side effect.
+    """
+    form.evaluate("form => form.requestSubmit()")
 
 
 def test_login_redirects_to_dashboard(page: Page, houndarr_url: str) -> None:
@@ -63,16 +133,15 @@ def test_full_instance_lifecycle(
     add_form.locator('select[name="type"]').select_option("sonarr")
     add_form.locator('input[name="url"]').fill(mock_sonarr_url)
     add_form.locator('input[name="api_key"]').fill("e2e-sonarr-key")
+    _wait_for_connection_ui_idle(page)
 
     # Test Connection must succeed before Save is enabled.
-    add_form.locator("button[data-test-connection-btn]").click()
-    expect(page.locator("#instance-connection-status")).to_contain_text(
-        "Connected to Sonarr",
-        timeout=10_000,
+    _test_connection_and_wait_for_success(
+        page, add_form, add_form.locator("button[data-test-connection-btn]")
     )
 
     # Save.
-    add_form.locator("#instance-submit-btn").click()
+    _submit_form(add_form)
     expect(page.locator("#instance-tbody")).to_contain_text("E2E Sonarr", timeout=10_000)
 
     # Re-open to verify the default persisted as Random.
@@ -84,12 +153,11 @@ def test_full_instance_lifecycle(
     # Flip to Chronological.  The edit form always starts with
     # connection_verified=false, so re-run the connection test first.
     edit_form.locator('select[name="search_order"]').select_option("chronological")
-    edit_form.locator("button[data-test-connection-btn]").click()
-    expect(page.locator("#instance-connection-status")).to_contain_text(
-        "Connected to Sonarr",
-        timeout=10_000,
+    _wait_for_connection_ui_idle(page)
+    _test_connection_and_wait_for_success(
+        page, edit_form, edit_form.locator("button[data-test-connection-btn]")
     )
-    edit_form.locator("#instance-submit-btn").click()
+    _submit_form(edit_form)
     expect(edit_form).to_be_hidden(timeout=10_000)
 
     # Re-open and verify persistence.

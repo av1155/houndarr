@@ -24,11 +24,16 @@ ADMIN_USER = os.environ.get("HOUNDARR_E2E_USER", "admin")
 ADMIN_PASS = os.environ.get("HOUNDARR_E2E_PASS", "CITestPass1!")
 
 # Console noise that predates this workflow and is unrelated to any
-# behaviour the suite verifies.  Firefox promotes the login template's
-# HTML5 ``pattern`` attribute regex to an error and aborts headless
-# Google Fonts fetches; both are accepted.
+# behaviour the suite verifies.  Every evergreen browser rejects the
+# login template's HTML5 ``pattern`` attribute for using a character
+# class that only validates under the ``v`` flag.  Chromium reports
+# ``Pattern attribute value ... is not a valid regular expression``;
+# Firefox reports ``Unable to check <input pattern=...> ... is not a
+# valid regexp``; WebKit wraps the same message differently.  The
+# shared substring is ``[-A-Za-z0-9_.]+`` with ``not a valid reg``.
+# Google Fonts fetches also abort in headless mode.
 _ALLOWED_ERROR_PATTERNS = [
-    re.compile(r"\[-A-Za-z0-9_\.\]\+ is not a valid regular expression"),
+    re.compile(r"\[-A-Za-z0-9_\.\]\+.*not a valid reg"),
     re.compile(r"downloadable font: download failed"),
 ]
 

@@ -18,9 +18,13 @@
     "@docusaurus/core": "3.10.0",
     "@docusaurus/faster": "3.10.0",
     "@docusaurus/plugin-client-redirects": "^3.10.0",
+    "@docusaurus/plugin-ideal-image": "3.10.0",
     "@docusaurus/preset-classic": "3.10.0",
+    "@docusaurus/theme-mermaid": "3.10.0",
+    "@easyops-cn/docusaurus-search-local": "0.55.1",
     "@mdx-js/react": "^3.0.0",
     "clsx": "^2.0.0",
+    "docusaurus-plugin-image-zoom": "3.0.1",
     "prism-react-renderer": "^2.3.0",
     "react": "^19.2.5",
     "react-dom": "^19.2.5"
@@ -52,7 +56,8 @@
     },
     "onlyBuiltDependencies": [
       "@swc/core",
-      "core-js"
+      "core-js",
+      "sharp"
     ]
   },
   "packageManager": "pnpm@10.33.0"

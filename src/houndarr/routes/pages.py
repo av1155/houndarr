@@ -20,6 +20,7 @@ from houndarr.auth import (
     set_username,
     validate_username,
 )
+from houndarr.database import set_setting
 from houndarr.services.instances import list_instances
 
 router = APIRouter()
@@ -119,6 +120,10 @@ async def setup_post(
 
     await set_username(normalize_username(username))
     await set_password(password)
+    # Silently seed the changelog last-seen marker so fresh installs never
+    # see the "What's new" modal on their first dashboard load.  Upgraders
+    # (no stored value yet) fall through to the pre-feature catch-up path.
+    await set_setting("changelog_last_seen_version", __version__)
     return RedirectResponse(url="/login", status_code=303)  # type: ignore[return-value]
 
 

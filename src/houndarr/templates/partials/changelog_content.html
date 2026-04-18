@@ -1,0 +1,71 @@
+<article class="space-y-6">
+  {# Newest release: always expanded, visible without scrolling #}
+  <section class="space-y-3" data-changelog-release="{{ newest.version }}">
+    <header class="flex items-baseline gap-3">
+      <h3 class="text-lg font-semibold text-white">v{{ newest.version }}</h3>
+      <time class="text-xs text-slate-500 font-mono">{{ newest.date }}</time>
+    </header>
+    {% for section in newest.sections %}
+    <div>
+      <h4
+        class="text-xs uppercase tracking-widest text-brand-300 font-medium mb-1.5"
+      >
+        {{ section.heading }}
+      </h4>
+      <ul class="space-y-1.5 text-sm text-slate-300 list-disc pl-5">
+        {% for bullet in section.bullets %}
+        <li>{{ bullet | changelog_bullet }}</li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endfor %}
+  </section>
+
+  {% if older %}
+  {# Accordion for older releases when span is 2+ extra entries #}
+  <details class="border-t border-[#1e2638] pt-4 group">
+    <summary
+      class="cursor-pointer list-none text-sm font-medium text-slate-300 hover:text-white transition-colors focus:outline-none focus:ring-2 focus:ring-brand-400/30 rounded-sm flex items-center gap-2"
+    >
+      <svg
+        class="w-3.5 h-3.5 transition-transform group-open:rotate-90"
+        viewBox="0 0 20 20"
+        fill="currentColor"
+        aria-hidden="true"
+      >
+        <path
+          fill-rule="evenodd"
+          d="M7.21 5.23a.75.75 0 0 1 1.06-.02l4.46 4.25a.75.75 0 0 1 0 1.08l-4.46 4.25a.75.75 0 1 1-1.04-1.08L11.118 10 7.23 6.29a.75.75 0 0 1-.02-1.06Z"
+          clip-rule="evenodd"
+        />
+      </svg>
+      Show older releases ({{ older | length }})
+    </summary>
+
+    <div class="mt-4 space-y-6">
+      {% for release in older %}
+      <section class="space-y-3" data-changelog-release="{{ release.version }}">
+        <header class="flex items-baseline gap-3">
+          <h3 class="text-base font-semibold text-slate-200">v{{ release.version }}</h3>
+          <time class="text-xs text-slate-500 font-mono">{{ release.date }}</time>
+        </header>
+        {% for section in release.sections %}
+        <div>
+          <h4
+            class="text-xs uppercase tracking-widest text-brand-300 font-medium mb-1.5"
+          >
+            {{ section.heading }}
+          </h4>
+          <ul class="space-y-1.5 text-sm text-slate-300 list-disc pl-5">
+            {% for bullet in section.bullets %}
+            <li>{{ bullet | changelog_bullet }}</li>
+            {% endfor %}
+          </ul>
+        </div>
+        {% endfor %}
+      </section>
+      {% endfor %}
+    </div>
+  </details>
+  {% endif %}
+</article>

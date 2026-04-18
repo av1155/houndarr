@@ -1,0 +1,192 @@
+"""Changelog modal routes: auto-open popup, dismiss, disable, preferences toggle.
+
+Four endpoints, all authenticated (handled by ``AuthMiddleware``):
+
+- ``GET  /settings/changelog/popup`` — returns the modal HTML partial if the
+  running version is newer than ``changelog_last_seen_version`` and popups
+  are not disabled; otherwise returns an empty placeholder div.  Supports
+  ``?force=1`` to bypass the decision and always render (used by the
+  Settings page "Show last changelog" button).
+- ``POST /settings/changelog/dismiss`` — writes ``changelog_last_seen_version``
+  to the running version.  Idempotent.
+- ``POST /settings/changelog/disable`` — writes the last-seen marker AND
+  ``changelog_popups_disabled = "1"``.
+- ``POST /settings/changelog/preferences`` — toggles
+  ``changelog_popups_disabled`` from the Settings page; re-renders the
+  Settings section partial.
+"""
+
+from __future__ import annotations
+
+import re
+from html import escape
+from pathlib import Path
+from typing import Annotated
+
+from fastapi import APIRouter, Form, Request
+from fastapi.responses import HTMLResponse, Response
+from fastapi.templating import Jinja2Templates
+from markupsafe import Markup
+
+from houndarr import __version__
+from houndarr.database import get_setting, set_setting
+from houndarr.services.changelog import ReleaseEntry, releases_between, should_show
+
+router = APIRouter(prefix="/settings/changelog", tags=["changelog"])
+
+_templates: Jinja2Templates | None = None
+
+_GITHUB_ISSUES_URL = "https://github.com/av1155/houndarr/issues"
+
+# Order: matches newline lookups that would otherwise be eaten by the
+# escaping pass.  We escape the whole bullet first, then re-introduce the
+# known-safe subset of markdown back in (inline code, bold, links, issue
+# refs).  This keeps the vocabulary bounded and avoids pulling in a full
+# markdown library for a closed set of patterns.
+_INLINE_CODE_RE = re.compile(r"`([^`]+)`")
+_BOLD_RE = re.compile(r"\*\*([^*]+)\*\*")
+_LINK_RE = re.compile(r"\[([^\]]+)\]\(([^)]+)\)")
+_ISSUE_REF_RE = re.compile(r"\(#(\d+)\)")
+
+
+def _render_changelog_bullet(raw: str) -> Markup:
+    """Return a safe HTML fragment for a single CHANGELOG bullet.
+
+    Escapes the input, then re-applies the small vocabulary actually used
+    in ``CHANGELOG.md``: `` `inline code` ``, ``**bold**``, ``[text](url)``,
+    and ``(#123)`` issue references (linked to GitHub).
+    """
+    safe = escape(raw)
+    safe = _INLINE_CODE_RE.sub(r'<code class="text-brand-300">\1</code>', safe)
+    safe = _BOLD_RE.sub(r"<strong>\1</strong>", safe)
+    # Link targets are HTML-escaped by the preceding escape() pass, so the
+    # URL is already safe for insertion into an href attribute.
+    safe = _LINK_RE.sub(
+        r'<a href="\2" target="_blank" rel="noopener noreferrer" '
+        r'class="text-brand-300 hover:text-brand-200 underline underline-offset-2">\1</a>',
+        safe,
+    )
+    safe = _ISSUE_REF_RE.sub(
+        (
+            r'(<a href="' + _GITHUB_ISSUES_URL + r'/\1" target="_blank" rel="noopener noreferrer" '
+            r'class="text-brand-300 hover:text-brand-200 underline underline-offset-2">#\1</a>)'
+        ),
+        safe,
+    )
+    # Input was escape()d first, then a closed vocabulary of markdown patterns
+    # (code, bold, links, issue refs) was re-applied with escaped capture groups.
+    # No user-authored raw HTML reaches the template context.
+    return Markup(safe)  # noqa: S704  # nosec B704
+
+
+def _get_templates() -> Jinja2Templates:
+    """Lazy Jinja2Templates singleton, matches ``routes/pages.py:get_templates``."""
+    global _templates  # noqa: PLW0603
+    if _templates is None:
+        _templates = Jinja2Templates(directory=str(Path(__file__).parent.parent / "templates"))
+        _templates.env.filters["changelog_bullet"] = _render_changelog_bullet
+    return _templates
+
+
+def _empty_slot_response() -> HTMLResponse:
+    """Return a no-op placeholder that replaces ``#changelog-slot`` without a trigger."""
+    return HTMLResponse(
+        content='<div id="changelog-slot" aria-hidden="true"></div>',
+        status_code=200,
+    )
+
+
+def _range_label(releases: list[ReleaseEntry], *, manual: bool, last_seen: str | None) -> str:
+    """Build the modal's subtitle."""
+    if not releases:
+        return ""
+    newest = releases[0]
+    if manual:
+        return f"v{newest.version} · Released {newest.date}"
+    if last_seen and len(releases) > 1:
+        return f"v{last_seen} → v{newest.version} · Released {newest.date}"
+    if last_seen is None:
+        return f"Up to v{newest.version} · Released {newest.date}"
+    return f"v{newest.version} · Released {newest.date}"
+
+
+@router.get("/popup", response_class=HTMLResponse)
+async def popup(request: Request, force: int = 0) -> HTMLResponse:
+    """Return the modal partial or an empty placeholder div.
+
+    When ``force=0`` (auto-open flow), the decision respects
+    ``changelog_popups_disabled`` and the ``last_seen``/``running``
+    comparison.  When ``force=1`` (manual re-open from Settings), always
+    renders the modal with only the current running version's block.  In
+    either case, persistence is never mutated by this endpoint.
+    """
+    last_seen = await get_setting("changelog_last_seen_version")
+    disabled = (await get_setting("changelog_popups_disabled")) == "1"
+    is_manual = force == 1
+
+    if not is_manual and not should_show(
+        last_seen=last_seen, running=__version__, disabled=disabled
+    ):
+        return _empty_slot_response()
+
+    if is_manual:
+        releases = releases_between(last_seen=None, running=__version__)
+    else:
+        releases = releases_between(last_seen=last_seen, running=__version__)
+
+    if not releases:
+        # Running version has no CHANGELOG entry (dev build, missing block).
+        # Auto-open suppresses silently; manual open still returns empty so
+        # the caller does not see a broken modal.
+        return _empty_slot_response()
+
+    newest = releases[0]
+    older = releases[1:]
+
+    response = _get_templates().TemplateResponse(
+        request=request,
+        name="partials/changelog_modal.html",
+        context={
+            "releases": releases,
+            "newest": newest,
+            "older": older,
+            "range_label": _range_label(releases, manual=is_manual, last_seen=last_seen),
+            "manual": is_manual,
+        },
+    )
+    response.headers["HX-Trigger"] = "houndarr-show-changelog"
+    return response
+
+
+@router.post("/dismiss", response_class=Response)
+async def dismiss(request: Request) -> Response:
+    """Persist ``changelog_last_seen_version = __version__``.  Returns 204."""
+    await set_setting("changelog_last_seen_version", __version__)
+    return Response(status_code=204)
+
+
+@router.post("/disable", response_class=Response)
+async def disable(request: Request) -> Response:
+    """Persist both last-seen and disabled=1.  Returns 204."""
+    await set_setting("changelog_last_seen_version", __version__)
+    await set_setting("changelog_popups_disabled", "1")
+    return Response(status_code=204)
+
+
+@router.post("/preferences", response_class=HTMLResponse)
+async def preferences(
+    request: Request,
+    enabled: Annotated[str, Form()] = "",
+) -> HTMLResponse:
+    """Toggle ``changelog_popups_disabled`` from the Settings page checkbox.
+
+    Checkbox sends ``enabled=on`` when checked, omits the field when
+    unchecked.  Re-renders the Settings section partial for outerHTML swap.
+    """
+    new_disabled = "0" if enabled == "on" else "1"
+    await set_setting("changelog_popups_disabled", new_disabled)
+    return _get_templates().TemplateResponse(
+        request=request,
+        name="partials/changelog_settings_section.html",
+        context={"changelog_popups_enabled": new_disabled == "0"},
+    )

@@ -17,19 +17,17 @@ search and **how many** items per batch.
 
 ## The search cycle
 
-```
-1. Houndarr asks your *arr instance: "What items are missing or cutoff-unmet?"
-   (and optionally: "What items already meet cutoff but could be upgraded?")
-       ↓
-2. The instance responds with its wanted list
-   (only monitored items that are missing, below quality cutoff, or upgrade-eligible)
-       ↓
-3. Houndarr applies its scheduling rules to each candidate
-   (cooldown, hourly cap, post-release grace, batch size)
-       ↓
-4. Eligible items → search command sent to the instance
-       ↓
-5. Ineligible items → logged as "skipped", retried next cycle
+```mermaid
+flowchart TD
+    A["1. Ask the *arr instance:<br/>what's missing, cutoff-unmet, or upgrade-eligible?"]
+    B["2. Instance returns its wanted list<br/>monitored items only"]
+    C["3. Apply scheduling rules:<br/>cooldown, hourly cap, post-release grace, batch size"]
+    D["4. Eligible: send search command<br/>to the instance"]
+    E["5. Ineligible: log as skipped,<br/>retry next cycle"]
+    A --> B
+    B --> C
+    C --> D
+    C --> E
 ```
 
 Your *arr instances do all the actual searching. Houndarr controls the pacing.
@@ -62,20 +60,15 @@ If you want to build, test, and deploy quality profiles and custom formats acros
 
 Think of it as a funnel:
 
-```
-Your monitored library
-        │
-        │  *arr instance filter: missing, cutoff-unmet, or upgrade-eligible items
-        ▼
-  Wanted list (much smaller)
-        │
-        │  Houndarr filter: cooldown, post-release grace, hourly cap
-        ▼
-  Eligible this cycle (smaller still)
-        │
-        │  Batch size limit
-        ▼
-  Actually searched (often just 1–3 items)
+```mermaid
+flowchart TD
+    A["Your monitored library"]
+    B["Wanted list<br/>(much smaller)"]
+    C["Eligible this cycle<br/>(smaller still)"]
+    D["Actually searched<br/>(often just 1-3 items)"]
+    A -->|"*arr filter:<br/>missing, cutoff-unmet, upgrade-eligible"| B
+    B -->|"Houndarr filter:<br/>cooldown, grace, hourly cap"| C
+    C -->|"Batch size limit"| D
 ```
 
 For example, if you have 500 monitored movies in Radarr but only 50 are cutoff-unmet, and 35 of those are on cooldown, 8 are still in their post-release grace window, and your batch is 1, Houndarr searches 1 movie that cycle. The rest wait for cooldowns to expire or grace windows to pass, and Houndarr works through them over days and weeks. Missing items that were blocked only by release timing can get one early retry once they become eligible.

@@ -23,10 +23,26 @@ const config: Config = {
   onBrokenLinks: 'throw',
 
   markdown: {
+    mermaid: true,
     hooks: {
       onBrokenMarkdownLinks: 'throw',
     },
   },
+
+  themes: [
+    '@docusaurus/theme-mermaid',
+    [
+      require.resolve('@easyops-cn/docusaurus-search-local'),
+      {
+        hashed: true,
+        language: ['en'],
+        docsRouteBasePath: '/docs',
+        indexBlog: false,
+        indexPages: true,
+        highlightSearchTermsOnTargetPage: true,
+      },
+    ],
+  ],
 
   i18n: {
     defaultLocale: 'en',
@@ -40,6 +56,8 @@ const config: Config = {
         docs: {
           sidebarPath: './sidebars.ts',
           editUrl: 'https://github.com/av1155/houndarr/edit/main/website/',
+          showLastUpdateTime: true,
+          showLastUpdateAuthor: true,
         },
         blog: false,
         theme: {
@@ -50,6 +68,17 @@ const config: Config = {
   ],
 
   plugins: [
+    [
+      '@docusaurus/plugin-ideal-image',
+      {
+        quality: 85,
+        max: 1920,
+        min: 640,
+        steps: 3,
+        disableInDev: false,
+      },
+    ],
+    'docusaurus-plugin-image-zoom',
     [
       '@docusaurus/plugin-client-redirects',
       {
@@ -208,6 +237,19 @@ const config: Config = {
       theme: prismThemes.github,
       darkTheme: prismThemes.dracula,
       additionalLanguages: ['bash', 'yaml', 'docker'],
+    },
+    mermaid: {
+      theme: {light: 'default', dark: 'dark'},
+    },
+    zoom: {
+      selector: '.markdown :not(em) > img',
+      background: {
+        light: 'rgb(255, 255, 255)',
+        dark: 'rgb(30, 41, 59)',
+      },
+      config: {
+        margin: 24,
+      },
     },
   } satisfies Preset.ThemeConfig,
 };

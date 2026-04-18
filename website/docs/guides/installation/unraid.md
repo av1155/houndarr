@@ -4,6 +4,8 @@ title: Unraid
 description: Install Houndarr on Unraid via the Community Applications store, walking every template field.
 ---
 
+import Image from '@theme/IdealImage';
+
 # Install on Unraid
 
 Since 2026-03-30, Houndarr has lived in the Unraid Community
@@ -24,7 +26,10 @@ install path. You do not need to write Docker Compose by hand.
 2. Search for **Houndarr**.
 3. Click the Houndarr tile to see its details.
 
-![Houndarr in the Unraid Community Applications store, showing the Overview text, Categories row, Template / Support / Registry / Project links, and container repository details including first-seen date](../../../static/img/screenshots/unraid-community-apps-houndarr.png)
+<Image
+  img={require('@site/static/img/screenshots/unraid-community-apps-houndarr.png')}
+  alt="Houndarr in the Unraid Community Applications store, showing the Overview text, Categories row, Template / Support / Registry / Project links, and container repository details including first-seen date"
+/>
 
 4. Click **Install**. The template editor opens with nine fields;
    they are covered below.

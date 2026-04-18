@@ -4,6 +4,8 @@ title: Your First Search Cycle
 description: A guided walkthrough of adding an *arr instance, triggering a search on demand, and reading what happens in the first log cycle.
 ---
 
+import Image from '@theme/IdealImage';
+
 # Your First Search Cycle
 
 This tutorial walks through the first 30 minutes with Houndarr: add
@@ -35,7 +37,10 @@ Before you start, confirm:
 
 In the Houndarr top navigation, click **Settings**.
 
-![The Houndarr Settings page showing an Instances table with an Add Instance button in the top right](../../static/img/screenshots/houndarr-settings-instances.png)
+<Image
+  img={require('@site/static/img/screenshots/houndarr-settings-instances.png')}
+  alt="The Houndarr Settings page showing an Instances table with an Add Instance button in the top right"
+/>
 
 Click **+ Add Instance** in the top right. Fill in the form:
 
@@ -50,7 +55,10 @@ Click **+ Add Instance** in the top right. Fill in the form:
 - **API Key**: copy from your *arr instance. In Sonarr or Radarr,
   go to **Settings > General** and find the **API Key** field.
 
-![The Houndarr Add Instance modal with Connection fields (Name, Type, URL, API Key) and Search Policy fields (Batch Size, Sleep, Hourly Cap, Cooldown, Post-Release Grace, Queue Limit)](../../static/img/screenshots/houndarr-add-instance-form.png)
+<Image
+  img={require('@site/static/img/screenshots/houndarr-add-instance-form.png')}
+  alt="The Houndarr Add Instance modal with Connection fields (Name, Type, URL, API Key) and Search Policy fields (Batch Size, Sleep, Hourly Cap, Cooldown, Post-Release Grace, Queue Limit)"
+/>
 
 Leave every Search Policy field at its default for now. This is a
 first cycle, not a tuning run.
@@ -63,7 +71,10 @@ green **Active** dot.
 
 Click **Dashboard** in the top navigation.
 
-![The Houndarr Dashboard page with top-level searched / skipped / error counts and per-instance cards with Run Now buttons](../../static/img/screenshots/houndarr-dashboard.png)
+<Image
+  img={require('@site/static/img/screenshots/houndarr-dashboard.png')}
+  alt="The Houndarr Dashboard page with top-level searched / skipped / error counts and per-instance cards with Run Now buttons"
+/>
 
 Find the card for the instance you just added and click **Run
 Now**. This bypasses the `Sleep (minutes)` schedule and starts a
@@ -76,7 +87,10 @@ and decides who to search.
 Click **Logs** in the top navigation. The first-cycle rows appear
 at the top of the table.
 
-![The Houndarr Logs page showing filter controls, cycle summary stats, and a table of skipped and searched rows from Sonarr and Radarr cycles](../../static/img/screenshots/houndarr-logs.png)
+<Image
+  img={require('@site/static/img/screenshots/houndarr-logs.png')}
+  alt="The Houndarr Logs page showing filter controls, cycle summary stats, and a table of skipped and searched rows from Sonarr and Radarr cycles"
+/>
 
 Look for the cycle group header for your instance. It shows an
 **outcome** label:

@@ -4,6 +4,8 @@ title: Verify It's Working
 description: Steps to confirm Houndarr is running correctly when you're unsure.
 ---
 
+import Image from '@theme/IdealImage';
+
 # Verify It's Working
 
 Walk through these steps before assuming something is broken.
@@ -34,7 +36,10 @@ shows:
 Searched rows for items that also appear in your *arr instance's
 wanted views mean Houndarr is working correctly.
 
-![The Houndarr Logs page showing filter controls, cycle summary stats, and a table of skipped and searched rows from Sonarr and Radarr cycles](../../static/img/screenshots/houndarr-logs.png)
+<Image
+  img={require('@site/static/img/screenshots/houndarr-logs.png')}
+  alt="The Houndarr Logs page showing filter controls, cycle summary stats, and a table of skipped and searched rows from Sonarr and Radarr cycles"
+/>
 
 ### Log context fields
 

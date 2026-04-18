@@ -9,6 +9,7 @@ const sidebars: SidebarsConfig = {
       items: [
         'getting-started/quick-start',
         'getting-started/installation',
+        'guides/installation/unraid',
         'getting-started/kubernetes',
         'getting-started/helm',
         'getting-started/first-run-setup',

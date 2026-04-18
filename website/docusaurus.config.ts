@@ -112,7 +112,7 @@ const config: Config = {
   ],
 
   themeConfig: {
-    image: 'img/social_preview.jpg',
+    image: 'img/houndarr-social-preview.png',
     colorMode: {
       defaultMode: 'dark',
       respectPrefersColorScheme: true,

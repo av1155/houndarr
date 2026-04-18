@@ -37,12 +37,12 @@ const SUPPORTING_SCREENSHOTS: ScreenshotItem[] = [
     caption: 'Instance config',
   },
   {
-    src: require('@site/static/img/screenshots/Settings_Account_Houndarr.jpeg').default,
+    src: require('@site/static/img/screenshots/houndarr-settings-account.png').default,
     alt: 'Houndarr Account settings: password and session management',
     caption: 'Account',
   },
   {
-    src: require('@site/static/img/screenshots/Settings_Help_Houndarr.jpeg').default,
+    src: require('@site/static/img/screenshots/houndarr-settings-help.png').default,
     alt: 'Houndarr Help: in-app settings reference',
     caption: 'Help',
   },

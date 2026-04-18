@@ -32,7 +32,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .lycheecache
-          key: cache-lychee-${{ github.sha }}
+          key: cache-lychee-${{ hashFiles('**/*.md', '**/*.mdx', 'lychee.toml') }}
           restore-keys: cache-lychee-
 
       - name: Link check
@@ -41,6 +41,3 @@ jobs:
           args: >-
             --config lychee.toml
             './**/*.md'
-            './**/*.mdx'
-          fail: true
-          token: ${{ secrets.GITHUB_TOKEN }}

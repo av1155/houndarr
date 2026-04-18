@@ -49,7 +49,7 @@ Your *arr instance, not Houndarr. It populates the `wanted/cutoff` API list base
 
 If cutoff searches aren't happening, check whether the item actually appears in your instance's own "Wanted > Cutoff Unmet" view first.
 
-:::tip Quality profiles are managed in your *arr instance, not Houndarr
+:::tip[Quality profiles are managed in your *arr instance, not Houndarr]
 Houndarr works best when your *arr instances are already configured with
 quality profiles you trust. It does not manage quality profiles or custom formats.
 

@@ -46,7 +46,7 @@ The master key is loaded into memory once at application startup and
 passed explicitly to service functions. It is never written to logs,
 HTTP responses, or template output.
 
-:::danger Master key is critical
+:::danger[Master key is critical]
 
 Anyone with access to both `houndarr.masterkey` and `houndarr.db`
 can decrypt all stored API keys. See

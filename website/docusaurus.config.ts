@@ -242,7 +242,7 @@ const config: Config = {
       theme: {light: 'default', dark: 'dark'},
     },
     zoom: {
-      selector: '.markdown :not(em) > img',
+      selector: '.markdown :not(em) > img, .landing-zoomable img',
       background: {
         light: 'rgb(255, 255, 255)',
         dark: 'rgb(30, 41, 59)',

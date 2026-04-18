@@ -51,7 +51,7 @@ of the other two variables. The auth header name cannot be a
 reserved HTTP header (`Cookie`, `Authorization`, `Host`, and so
 on).
 
-:::warning Expose only the port your proxy sits in front of
+:::warning[Expose only the port your proxy sits in front of]
 
 In proxy mode, Houndarr trusts that the proxy has already
 authenticated the user. Any client that reaches port 8877 directly

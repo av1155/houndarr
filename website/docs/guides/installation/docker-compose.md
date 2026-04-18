@@ -108,7 +108,7 @@ docker compose up -d
 In this mode, `PUID` and `PGID` are ignored. The entrypoint validates that
 `/data` is writable at startup and exits with clear instructions if it is not.
 
-:::tip When to use which mode
+:::tip[When to use which mode]
 Most users (especially on Docker Compose, Unraid, or Proxmox) should use
 the default mode with `PUID`/`PGID`. The non-root mode is primarily useful
 for Kubernetes with `runAsNonRoot: true` or hardened environments that

@@ -22,7 +22,7 @@ const DASHBOARD_SCREENSHOT: ScreenshotItem = {
 
 const SUPPORTING_SCREENSHOTS: ScreenshotItem[] = [
   {
-    src: require('@site/static/img/screenshots/Logs_Houndarr.jpeg').default,
+    src: require('@site/static/img/screenshots/houndarr-logs.png').default,
     alt: 'Houndarr Logs: filterable search activity log',
     caption: 'Logs',
   },

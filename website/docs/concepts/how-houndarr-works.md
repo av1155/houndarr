@@ -96,26 +96,19 @@ normal cooldown behavior.
 
 ## What "skipped" means in the logs
 
-Every item Houndarr considers but does not search is logged as `skipped` with a reason:
+Every item Houndarr considers but does not search gets an
+`action=skipped` log row with a reason string. The canonical list of
+reasons and their meanings lives in
+[Skip Reasons](/docs/reference/skip-reasons).
 
-| Reason in logs | What it means |
-|----------------|---------------|
-| `on cooldown (Nd)` | Item was searched recently; waiting to retry |
-| `on cutoff cooldown (Nd)` | Cutoff item was searched recently; waiting to retry |
-| `on upgrade cooldown (Nd)` | Upgrade item was searched recently; waiting to retry |
-| `not yet released` | Item has no release date or release date is in the future |
-| `post-release grace (Nh)` | Release date has passed but the grace window hasn't elapsed yet |
-| `hourly cap reached (N)` | This instance has hit its missing-pass hourly search limit of `N` |
-| `cutoff hourly cap reached (N)` | This instance has hit its cutoff hourly search limit of `N` |
-| `upgrade hourly cap reached (N)` | This instance has hit its upgrade hourly search limit of `N` |
-| `queue backpressure (N/M)` | Download queue has N items, at or above the configured limit of M (cycle-level skip) |
+A high skip count with zero errors is pacing working as designed: the
+engine examines candidates, finds most ineligible under your rules,
+and waits for the next cycle.
 
-A high skip count with zero errors means Houndarr is pacing itself correctly: examining candidates, finding most ineligible under your rules, and waiting patiently.
-
-![Logs page](../../static/img/screenshots/Logs_Houndarr.jpeg)
+![The Houndarr Logs page showing filter controls, cycle summary stats, and a table of skipped and searched rows](../../static/img/screenshots/houndarr-logs.png)
 
 On mobile, log entries are presented as stacked cards; each card corresponds to one cycle group or individual row:
 
-![Logs page on mobile](../../static/img/screenshots/Logs_Houndarr_Smartphone.jpeg)
+![The Houndarr Logs page on mobile with each entry as a stacked card showing cycle summaries and individual skip or search rows](../../static/img/screenshots/houndarr-logs-mobile.png)
 
 See [FAQ](/docs/concepts/faq) for answers to specific questions, and [Troubleshooting](/docs/concepts/troubleshooting) if you want to verify everything is connected and running.

@@ -26,6 +26,14 @@ const sidebars: SidebarsConfig = {
     },
     {
       type: 'category',
+      label: 'Reference',
+      collapsed: false,
+      items: [
+        'reference/skip-reasons',
+      ],
+    },
+    {
+      type: 'category',
       label: 'Concepts',
       collapsed: false,
       items: [

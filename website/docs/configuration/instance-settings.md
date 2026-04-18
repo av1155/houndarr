@@ -63,10 +63,9 @@ Minimum days before retrying the same missing item.
 
 - **Default:** `14`
 - Larger values reduce repeat search noise.
-- Missing only: if the latest missing-pass skip for an item was `not yet released`
-  or `post-release grace (Nh)`, Houndarr allows one retry as soon as the item
-  becomes eligible, even if the normal missing cooldown has not fully elapsed.
-- After that retry, normal missing cooldown resumes.
+- Release-aware retry applies to the missing pass only. See
+  [Skip Reasons](/docs/reference/skip-reasons#release-aware-retry) for
+  the exact behavior.
 
 ### Post-Release Grace (hours)
 
@@ -270,13 +269,13 @@ When `Search Order` is `Random`, Houndarr picks a fresh random page each cycle r
 
 ## Queue backpressure
 
-When `Queue Limit` is set above zero, Houndarr checks the instance's download
-queue before each cycle. If the total queue count meets or exceeds the limit,
-the entire cycle is skipped and logged as `queue backpressure (N/M)`.
-
-- **Default:** `0` (disabled)
-- If the queue endpoint is unreachable, the search proceeds normally (fails open).
-- This prevents Houndarr from piling up work when the download client is already busy.
+- **Default:** `0` (disabled).
+- When set above zero, the cycle is skipped with reason
+  `queue backpressure (N/M)` if the download queue count is at or above
+  the limit. Fail-open behavior: unreachable queue endpoint lets the
+  cycle proceed. See
+  [Skip Reasons: queue backpressure](/docs/reference/skip-reasons#queue-backpressure)
+  for full behavior.
 
 ## Allowed search window
 
@@ -326,7 +325,9 @@ grace, or caps), but it stays bounded:
 This improves backlog rotation while preserving polite API behavior.
 
 :::tip Why am I seeing mostly skips?
-Skips are normal. See [How Houndarr Works](/docs/concepts/how-houndarr-works#what-skipped-means-in-the-logs) and the [FAQ](/docs/concepts/faq) for details.
+Skips are normal scheduling. See
+[Skip Reasons](/docs/reference/skip-reasons) for what each reason
+string means.
 :::
 
 ## Recommended starting profile

@@ -32,7 +32,7 @@ Open Houndarr's **Logs** page and look at recent activity. Each row shows:
 
 If you see `searched` entries for items that also appear in your *arr instance's wanted views, Houndarr is working correctly.
 
-![Logs page](../../static/img/screenshots/Logs_Houndarr.jpeg)
+![The Houndarr Logs page showing filter controls, cycle summary stats, and a table of skipped and searched rows](../../static/img/screenshots/houndarr-logs.png)
 
 #### Log context fields
 
@@ -52,23 +52,11 @@ In your instance's cutoff-unmet view, each item shows when it was last searched.
 
 ### Step 4: Expect skips for cooldown, grace, and queue items
 
-If most of your log entries say `skipped`, check the reasons:
-
-- **`on cooldown (Nd)`**: the item was searched recently; Houndarr is waiting before trying again. This is intentional.
-- **`on cutoff cooldown (Nd)`**: a cutoff item was searched recently; cutoff keeps its own separate cooldown.
-- **`on upgrade cooldown (Nd)`**: an upgrade item was searched recently; upgrade keeps its own separate cooldown.
-- **`not yet released`**: the item has no release date or the release date is in the future.
-- **`post-release grace (Nh)`**: the release date has passed but the grace window hasn't elapsed yet. Houndarr will search once it clears.
-- **`hourly cap reached (N)`**: your missing-pass hourly search limit of `N` has been hit for this cycle.
-- **`cutoff hourly cap reached (N)`**: your cutoff hourly search limit of `N` has been hit for this cycle.
-- **`upgrade hourly cap reached (N)`**: your upgrade hourly search limit of `N` has been hit for this cycle.
-- **`queue backpressure (N/M)`**: the download queue has N items, at or above your configured limit of M. The entire cycle was skipped.
-
-These are all normal scheduling behavior.
-
-For missing items only, a prior `not yet released` or `post-release grace (Nh)`
-skip can be followed by one immediate retry on a later cycle once the item
-becomes eligible, even if the normal missing cooldown has not fully elapsed.
+If most of your log rows say `skipped`, read the reason string
+against the [Skip Reasons reference](/docs/reference/skip-reasons).
+Cooldown, post-release grace, hourly caps, and queue backpressure are
+all normal scheduling behavior. Errors are the signal that something
+is wrong; skips are not.
 
 ### Step 5: Check the error count
 

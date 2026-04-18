@@ -22,7 +22,11 @@ See [How Houndarr Works](/docs/concepts/how-houndarr-works#why-only-a-few-items-
 
 ## "Why is Houndarr skipping so much?"
 
-Each skip has a reason logged alongside it: `on cooldown (Nd)`, `post-release grace (Nh)`, hourly cap, or queue backpressure. A high skip count with zero errors means Houndarr is pacing itself correctly. See [How Houndarr Works](/docs/concepts/how-houndarr-works#what-skipped-means-in-the-logs) for what each reason means.
+Each skipped row logs a reason string that tells you why. A high skip
+count with zero errors is the engine pacing itself. Errors are the
+signal that something is wrong; skips are not. See
+[Skip Reasons](/docs/reference/skip-reasons) for what each reason
+string means.
 
 ## "Does Houndarr decide whether my file meets cutoff?"
 
@@ -30,15 +34,23 @@ No. Your *arr instance maintains the "Wanted > Cutoff Unmet" list based on your 
 
 ## "Why are future or recently-released titles being skipped?"
 
-Items with no release date or a release date in the future are always skipped (`not yet released`). Items that have been released but are still within the **post-release grace** window (default: 6 hours) are also skipped until the window clears. This avoids hammering indexers for content that may not be available yet.
+Items with no release date or a release date in the future log as
+`not yet released`. Items released within the last 6 hours (the
+default grace window) log as `post-release grace (Nh)`. Both are
+intentional: searching before a release is typically available wastes
+indexer budget.
 
-When that release-timing block clears, the missing pass can retry the item once right away instead of waiting for the full missing cooldown. Cutoff searches do not use that early retry.
-
-For Radarr, release timing uses a priority chain: `digitalRelease` → `physicalRelease` → `releaseDate` → `inCinemas`. If none of those dates are set, or the title is marked as unavailable, it will be skipped.
+Missing-pass items skipped on either of those reasons get one early
+retry after the gate clears, without waiting for the full missing
+cooldown. Details and the Radarr date-priority chain are in
+[Skip Reasons](/docs/reference/skip-reasons).
 
 ## "What does 'queue backpressure' mean in the logs?"
 
-If you set a **Queue Limit** on an instance, Houndarr checks the download queue before each cycle. When the queue count meets or exceeds the limit, the entire cycle is skipped and logged as `queue backpressure (N/M)`. This prevents Houndarr from adding searches when the download client is already busy. If the queue endpoint is unreachable, the search proceeds normally.
+`queue backpressure (N/M)` means the download queue has `N` items, at
+or above your configured `Queue Limit` of `M`, so the entire cycle
+was skipped. Full behavior:
+[Skip Reasons: queue backpressure](/docs/reference/skip-reasons#queue-backpressure).
 
 ## "Does Houndarr search my whole library?"
 

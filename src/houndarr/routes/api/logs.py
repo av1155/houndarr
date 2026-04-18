@@ -6,6 +6,7 @@ GET /api/logs/partial → server-rendered <tbody> HTMX partial (used by the /log
 
 from __future__ import annotations
 
+import html
 import logging
 from pathlib import Path
 from typing import Any
@@ -133,6 +134,26 @@ def _parse_hide_system(raw: str | None) -> bool:
     if normalized in {"0", "false", "no", "off"}:
         return False
     raise HTTPException(status_code=422, detail="hide_system must be a boolean")
+
+
+def _partial_validation_error(detail: str) -> HTMLResponse:
+    """Render a tbody-shaped 422 error for ``/api/logs/partial``.
+
+    ``#log-tbody`` is the HTMX target; swapping FastAPI's default JSON
+    error body into a ``<tbody>`` would render as raw ``{"detail":...}``
+    text.  Shape the response as a single ``<tr>`` that matches the
+    existing empty-state row (``colspan="10"``) so the swap preserves
+    table structure.
+    """
+    safe = html.escape(detail)
+    content = (
+        '<tr id="log-error-row">'
+        '<td colspan="10" class="px-3 py-14 text-center">'
+        '<p class="text-sm font-medium text-red-300 font-sans">Invalid filter value.</p>'
+        f'<p class="mt-1 text-xs text-red-400/80 font-sans">{safe}</p>'
+        "</td></tr>"
+    )
+    return HTMLResponse(content=content, status_code=422)
 
 
 # ---------------------------------------------------------------------------
@@ -378,13 +399,20 @@ async def get_logs_partial(
         limit: Max rows.
 
     Returns:
-        HTML fragment containing ``<tbody>`` rows.
+        HTML fragment containing ``<tbody>`` rows.  On a validation
+        failure, returns a ``<tr>`` error row with status 422 instead
+        of FastAPI's default JSON ``{"detail": ...}`` body so the HTMX
+        swap preserves the table structure.
     """
-    parsed_instance_id = _parse_instance_id(instance_id)
+    try:
+        parsed_instance_id = _parse_instance_id(instance_id)
+        parsed_search_kind = _parse_search_kind(search_kind)
+        parsed_cycle_trigger = _parse_cycle_trigger(cycle_trigger)
+        parsed_hide_system = _parse_hide_system(hide_system)
+    except HTTPException as exc:
+        return _partial_validation_error(str(exc.detail))
+
     parsed_action = action or None
-    parsed_search_kind = _parse_search_kind(search_kind)
-    parsed_cycle_trigger = _parse_cycle_trigger(cycle_trigger)
-    parsed_hide_system = _parse_hide_system(hide_system)
     load_more_limit = _compute_load_more_limit(limit)
     rows = await _query_logs(
         parsed_instance_id,

@@ -864,6 +864,38 @@ async def test_logs_limit_above_max_rejected(seeded_log: None, async_client: obj
     assert resp.status_code == 422
 
 
+@pytest.mark.asyncio()
+async def test_logs_partial_returns_html_422_on_bad_filter(
+    seeded_log: None, async_client: object
+) -> None:
+    """``/api/logs/partial`` must return an HTML ``<tr>`` error row on
+    validation failure, not FastAPI's default JSON body.
+
+    Rationale: the partial is swapped into ``#log-tbody`` via HTMX.
+    With the ``422 -> swap`` config override in ``base.html``, a JSON
+    response would render as raw ``{"detail": ...}`` inside the
+    ``<tbody>``.  The endpoint shapes the error as a ``<tr>`` instead.
+    """
+    from httpx import AsyncClient
+
+    assert isinstance(async_client, AsyncClient)
+
+    await async_client.post(
+        "/setup",
+        data={"username": "admin", "password": "ValidPass1!", "password_confirm": "ValidPass1!"},
+    )
+    await async_client.post("/login", data={"username": "admin", "password": "ValidPass1!"})
+
+    resp = await async_client.get("/api/logs/partial?search_kind=totally_invalid")
+    assert resp.status_code == 422
+    assert resp.headers["content-type"].startswith("text/html"), resp.headers
+    body = resp.text
+    assert "<tr" in body and 'colspan="10"' in body, body
+    assert "Invalid filter value" in body, body
+    # The specific detail string is surfaced so operators can see what failed.
+    assert "search_kind" in body, body
+
+
 def test_logs_page_renders_all_limit_options(app: TestClient) -> None:
     """The /logs page must include the 1000 and All (5000) options in the Rows selector."""
     _login(app)

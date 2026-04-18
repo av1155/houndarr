@@ -113,6 +113,7 @@ On mobile, log entries are presented as stacked cards; each card corresponds to 
 <Image
   img={require('@site/static/img/screenshots/houndarr-logs-mobile.png')}
   alt="The Houndarr Logs page on mobile with each entry as a stacked card showing cycle summaries and individual skip or search rows"
+  style={{maxWidth: 360, display: 'block', margin: '0 auto'}}
 />
 
 See [FAQ](/docs/faq) for answers to specific questions, and [Verify It's Working](/docs/guides/verify-its-working) to confirm everything is connected and running.

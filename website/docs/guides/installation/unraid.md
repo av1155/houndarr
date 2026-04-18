@@ -29,6 +29,7 @@ install path. You do not need to write Docker Compose by hand.
 <Image
   img={require('@site/static/img/screenshots/unraid-community-apps-houndarr.png')}
   alt="Houndarr in the Unraid Community Applications store, showing the Overview text, Categories row, Template / Support / Registry / Project links, and container repository details including first-seen date"
+  style={{maxWidth: 480, display: 'block', margin: '0 auto'}}
 />
 
 4. Click **Install**. The template editor opens with nine fields;

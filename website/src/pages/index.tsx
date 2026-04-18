@@ -1,6 +1,7 @@
 import type {ReactNode} from 'react';
 import clsx from 'clsx';
 import Link from '@docusaurus/Link';
+import useBaseUrl from '@docusaurus/useBaseUrl';
 import useDocusaurusContext from '@docusaurus/useDocusaurusContext';
 import Layout from '@theme/Layout';
 import Image from '@theme/IdealImage';
@@ -108,6 +109,7 @@ function TypeBadgeStrip() {
 
 function HomepageHeader() {
   const {siteConfig} = useDocusaurusContext();
+  const logoSrc = useBaseUrl('/img/houndarr-logo-dark.png');
   return (
     <header className={clsx('hero hero--primary', styles.heroBanner)}>
       <div className={clsx('container', styles.heroInner)}>
@@ -115,7 +117,7 @@ function HomepageHeader() {
         {/* Left column: text content */}
         <div className={styles.heroLeft}>
           <img
-            src={require('@site/static/img/houndarr-logo-dark.png').default}
+            src={logoSrc}
             alt="Houndarr logo"
             className={styles.heroLogo}
           />

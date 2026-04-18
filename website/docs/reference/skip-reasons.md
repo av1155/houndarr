@@ -68,4 +68,5 @@ close.
 
 Errors (HTTP 401, connection refused) are the real signal that
 something is wrong. See
-[Troubleshooting](/docs/concepts/troubleshooting) when errors appear.
+[Troubleshoot Connection](/docs/guides/troubleshoot-connection)
+when errors appear.

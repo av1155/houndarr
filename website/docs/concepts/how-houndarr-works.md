@@ -111,4 +111,4 @@ On mobile, log entries are presented as stacked cards; each card corresponds to 
 
 ![The Houndarr Logs page on mobile with each entry as a stacked card showing cycle summaries and individual skip or search rows](../../static/img/screenshots/houndarr-logs-mobile.png)
 
-See [FAQ](/docs/concepts/faq) for answers to specific questions, and [Troubleshooting](/docs/concepts/troubleshooting) if you want to verify everything is connected and running.
+See [FAQ](/docs/faq) for answers to specific questions, and [Verify It's Working](/docs/guides/verify-its-working) to confirm everything is connected and running.

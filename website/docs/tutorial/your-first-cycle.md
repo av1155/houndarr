@@ -101,9 +101,9 @@ Each individual row inside the cycle shows one evaluated item:
 
 If you see any `action=error` rows, the connection is the usual
 culprit. See
-[Troubleshooting](/docs/concepts/troubleshooting) for common
-fixes: wrong API key, unreachable URL, published-vs-internal port
-confusion.
+[Troubleshoot Connection](/docs/guides/troubleshoot-connection)
+for common fixes: wrong API key, unreachable URL, published vs
+internal port confusion.
 
 ## What you have now
 

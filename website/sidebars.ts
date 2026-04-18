@@ -49,10 +49,9 @@ const sidebars: SidebarsConfig = {
       items: [
         'concepts/how-houndarr-works',
         'concepts/search-order',
-        'concepts/troubleshooting',
-        'concepts/faq',
       ],
     },
+    'faq',
     {
       type: 'category',
       label: 'Security',
@@ -69,6 +68,8 @@ const sidebars: SidebarsConfig = {
       label: 'Guides',
       collapsed: false,
       items: [
+        'guides/verify-its-working',
+        'guides/troubleshoot-connection',
         'guides/increase-throughput',
         'guides/backup-and-restore',
       ],

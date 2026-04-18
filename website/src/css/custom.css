@@ -475,6 +475,16 @@
   letter-spacing: -0.02em;
 }
 
+/* Hero headings inherit the hero's own light color; the dark-navy gradient
+   sets `color: #f8fafc` on .hero--primary and descendants should honor it
+   rather than the warm-ink heading rule above. */
+[data-theme='light'] .hero--primary h1,
+[data-theme='light'] .hero--primary h2,
+[data-theme='light'] .hero--primary h3,
+[data-theme='light'] .hero--primary h4 {
+  color: inherit;
+}
+
 /* ── Markdown body text — light ──────────────────────────────────────── */
 [data-theme='light'] .markdown {
   color: var(--ink-primary);

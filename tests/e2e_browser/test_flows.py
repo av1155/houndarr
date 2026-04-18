@@ -8,6 +8,7 @@ errors are caught by an autouse fixture in ``conftest.py``.
 from __future__ import annotations
 
 import re
+import uuid
 
 from playwright.sync_api import Locator, Page, expect
 
@@ -58,11 +59,18 @@ def _test_connection_and_wait_for_success(page: Page, form: Locator, button: Loc
        is the authoritative success signal: the JS handler for
        ``houndarr-connection-test-success`` sets ``connection_verified``
        and enables submit regardless of text-swap timing.
+
+    The response filter matches any status for the test-connection URL.
+    Filtering on ``status == 200`` would hang for the full Playwright
+    timeout on a 422 (connection failure) and surface as an opaque
+    wait-timeout instead of a legible status code.
     """
     with page.expect_response(
-        lambda r: "/settings/instances/test-connection" in r.url and r.status == 200
-    ):
+        lambda r: "/settings/instances/test-connection" in r.url
+    ) as resp_info:
         button.dispatch_event("click")
+    resp = resp_info.value
+    assert resp.status == 200, f"test-connection returned {resp.status}: {resp.text()}"
     _wait_for_connection_ui_idle(page)
     _wait_for_htmx_idle(page)
     expect(form.locator("#instance-submit-btn")).to_be_enabled(timeout=10_000)
@@ -119,8 +127,15 @@ def test_full_instance_lifecycle(
 
     Combines add and edit into one linear user story so the test does
     not depend on any sibling test's state.
+
+    The instance name is randomised per invocation so that a
+    ``pytest-rerunfailures`` retry (the CI job runs ``--reruns 2``) does
+    not collide with the row the previous attempt left behind.  The
+    edit-flow row lookup then targets the row by this unique name
+    instead of ``.first``, so retries remain idempotent.
     """
     page = logged_in_page
+    instance_name = f"E2E Sonarr {uuid.uuid4().hex[:8]}"
     page.goto(f"{houndarr_url}/settings")
 
     # Open the add modal.
@@ -129,7 +144,7 @@ def test_full_instance_lifecycle(
     expect(add_form).to_be_visible()
 
     # Fill in the form against the mock Sonarr.
-    add_form.locator('input[name="name"]').fill("E2E Sonarr")
+    add_form.locator('input[name="name"]').fill(instance_name)
     add_form.locator('select[name="type"]').select_option("sonarr")
     add_form.locator('input[name="url"]').fill(mock_sonarr_url)
     add_form.locator('input[name="api_key"]').fill("e2e-sonarr-key")
@@ -142,10 +157,12 @@ def test_full_instance_lifecycle(
 
     # Save.
     _submit_form(add_form)
-    expect(page.locator("#instance-tbody")).to_contain_text("E2E Sonarr", timeout=10_000)
+    expect(page.locator("#instance-tbody")).to_contain_text(instance_name, timeout=10_000)
 
-    # Re-open to verify the default persisted as Random.
-    page.locator('#instance-tbody button[hx-get^="/settings/instances/"]').first.click()
+    # Re-open to verify the default persisted as Random.  Scope the
+    # row lookup by the unique name so retries cannot open the wrong row.
+    row = page.locator("#instance-tbody tr").filter(has_text=instance_name)
+    row.locator('button[hx-get^="/settings/instances/"]').click()
     edit_form = page.locator('form[data-form-mode="edit"]')
     expect(edit_form).to_be_visible()
     expect(edit_form.locator('select[name="search_order"]')).to_have_value("random")
@@ -160,8 +177,8 @@ def test_full_instance_lifecycle(
     _submit_form(edit_form)
     expect(edit_form).to_be_hidden(timeout=10_000)
 
-    # Re-open and verify persistence.
-    page.locator('#instance-tbody button[hx-get^="/settings/instances/"]').first.click()
+    # Re-open the same row and verify persistence.
+    row.locator('button[hx-get^="/settings/instances/"]').click()
     reopened = page.locator('form[data-form-mode="edit"]')
     expect(reopened).to_be_visible()
     expect(reopened.locator('select[name="search_order"]')).to_have_value("chronological")

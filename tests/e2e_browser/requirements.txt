@@ -1,0 +1,17 @@
+# Pinned dependencies for the browser end-to-end suite.
+#
+# Kept separate from requirements-dev.txt because these are only needed
+# on the GitHub Actions runner that executes the Browser E2E workflow,
+# not on contributor machines running the default pytest suite.
+#
+# Pins protect CI results from mid-PR upstream releases that silently
+# change matcher semantics, browser-binary versions, or CLI flags.
+
+pytest==9.0.3
+pytest-asyncio==1.3.0
+pytest-playwright==0.7.2
+pytest-rerunfailures==16.1
+playwright==1.58.0
+fastapi==0.136.0
+uvicorn[standard]==0.44.0
+httpx==0.28.1

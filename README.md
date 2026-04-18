@@ -15,11 +15,11 @@ Small batches. Polite intervals. Zero indexer abuse.
 
 [Documentation](https://av1155.github.io/houndarr/)
 &ensp;&bull;&ensp;
-[Quick Start](https://av1155.github.io/houndarr/docs/getting-started/quick-start)
+[Quick Start](https://av1155.github.io/houndarr/docs/guides/installation/docker-compose)
 &ensp;&bull;&ensp;
 [Docker](https://github.com/av1155/houndarr/pkgs/container/houndarr)
 &ensp;&bull;&ensp;
-[Helm Chart](https://av1155.github.io/houndarr/docs/getting-started/helm)
+[Helm Chart](https://av1155.github.io/houndarr/docs/guides/installation/helm)
 &ensp;&bull;&ensp;
 [Report Bug](https://github.com/av1155/houndarr/issues/new/choose)
 
@@ -124,7 +124,7 @@ Replace `/path/to/data` with an absolute path on your host where Houndarr should
 
 </details>
 
-For environment variables, reverse proxy setup, Kubernetes, Helm, and building from source, see the [full documentation](https://av1155.github.io/houndarr/docs/getting-started/installation).
+For environment variables, reverse proxy setup, Kubernetes, Helm, and building from source, see the [full documentation](https://av1155.github.io/houndarr/docs/guides/installation/docker).
 
 <details>
 <summary><strong>What Houndarr Does NOT Do</strong></summary>
@@ -147,7 +147,7 @@ For environment variables, reverse proxy setup, Kubernetes, Helm, and building f
 - The container runs as a non-root user after PUID/PGID remapping.
 - 63 integration tests validate immunity to every finding from the Huntarr.io security review; a live smoke test runs in CI on every PR.
 
-For details on how Houndarr handles credentials, network behavior, and trust boundaries, see [Trust and Security](https://av1155.github.io/houndarr/docs/security/trust-and-security). To report a vulnerability, see [SECURITY.md](SECURITY.md).
+For details on how Houndarr handles credentials, network behavior, and trust boundaries, see [Security Overview](https://av1155.github.io/houndarr/docs/security/overview). To report a vulnerability, see [SECURITY.md](SECURITY.md).
 
 ## Contributing and Community
 

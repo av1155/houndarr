@@ -1,4 +1,4 @@
-import type {ReactNode} from 'react';
+import type {ComponentProps, ReactNode} from 'react';
 import clsx from 'clsx';
 import Link from '@docusaurus/Link';
 import useBaseUrl from '@docusaurus/useBaseUrl';
@@ -11,7 +11,7 @@ import Heading from '@theme/Heading';
 import styles from './index.module.css';
 
 type ScreenshotItem = {
-  img: string;
+  img: ComponentProps<typeof Image>['img'];
   alt: string;
   caption: string;
 };

@@ -248,6 +248,26 @@ async def test_disable_then_popup_returns_empty(app: TestClient, sample_changelo
     assert "<dialog" not in resp.text
 
 
+async def test_disabled_popup_silently_advances_last_seen(
+    app: TestClient, sample_changelog: Path
+) -> None:
+    """While popups are disabled, every popup poll advances last_seen so
+    that re-enabling later does not surface a backlog of releases the
+    admin already chose to skip.
+    """
+    _login(app)
+    # Simulate: admin was on 1.6.0, disabled popups (which writes 1.6.0
+    # as last_seen via the Settings toggle path which leaves last_seen
+    # untouched), then upgraded to current.
+    await set_setting("changelog_last_seen_version", "1.6.0")
+    await set_setting("changelog_popups_disabled", "1")
+    resp = app.get("/settings/changelog/popup")
+    assert resp.status_code == 200
+    assert "<dialog" not in resp.text
+    # Silent advance happened: last_seen now matches running.
+    assert await get_setting("changelog_last_seen_version") == __version__
+
+
 # ---------------------------------------------------------------------------
 # Preferences toggle
 # ---------------------------------------------------------------------------

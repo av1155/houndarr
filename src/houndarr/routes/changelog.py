@@ -117,12 +117,21 @@ async def popup(request: Request, force: int = 0) -> HTMLResponse:
     When ``force=0`` (auto-open flow), the decision respects
     ``changelog_popups_disabled`` and the ``last_seen``/``running``
     comparison.  When ``force=1`` (manual re-open from Settings), always
-    renders the modal with only the current running version's block.  In
-    either case, persistence is never mutated by this endpoint.
+    renders the modal with only the current running version's block.
+
+    Silent tracking: when popups are disabled, the endpoint silently
+    advances ``changelog_last_seen_version`` to the running version on
+    every poll so that re-enabling popups later does not surface a
+    backlog of releases the admin chose to skip.
     """
     last_seen = await get_setting("changelog_last_seen_version")
     disabled = (await get_setting("changelog_popups_disabled")) == "1"
     is_manual = force == 1
+
+    if not is_manual and disabled:
+        if last_seen != __version__:
+            await set_setting("changelog_last_seen_version", __version__)
+        return _empty_slot_response()
 
     if not is_manual and not should_show(
         last_seen=last_seen, running=__version__, disabled=disabled

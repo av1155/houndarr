@@ -4,6 +4,8 @@ title: How Houndarr Works
 description: What Houndarr does, how it decides what to search, and why most items get skipped each cycle.
 ---
 
+import Image from '@theme/IdealImage';
+
 # How Houndarr Works
 
 Houndarr is a search scheduler for Radarr, Sonarr, Lidarr, Readarr, and Whisparr (v2 and v3). It triggers search commands in small, rate-limited batches so you don't have to hit "Search All Missing" and overwhelm your indexers.
@@ -108,10 +110,16 @@ A high skip count with zero errors is pacing working as designed: the
 engine examines candidates, finds most ineligible under your rules,
 and waits for the next cycle.
 
-![The Houndarr Logs page showing filter controls, cycle summary stats, and a table of skipped and searched rows](../../static/img/screenshots/houndarr-logs.png)
+<Image
+  img={require('@site/static/img/screenshots/houndarr-logs.png')}
+  alt="The Houndarr Logs page showing filter controls, cycle summary stats, and a table of skipped and searched rows"
+/>
 
 On mobile, log entries are presented as stacked cards; each card corresponds to one cycle group or individual row:
 
-![The Houndarr Logs page on mobile with each entry as a stacked card showing cycle summaries and individual skip or search rows](../../static/img/screenshots/houndarr-logs-mobile.png)
+<Image
+  img={require('@site/static/img/screenshots/houndarr-logs-mobile.png')}
+  alt="The Houndarr Logs page on mobile with each entry as a stacked card showing cycle summaries and individual skip or search rows"
+/>
 
 See [FAQ](/docs/faq) for answers to specific questions, and [Verify It's Working](/docs/guides/verify-its-working) to confirm everything is connected and running.

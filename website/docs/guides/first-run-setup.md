@@ -4,6 +4,8 @@ title: First-Run Setup
 description: Walk through the initial setup after starting Houndarr for the first time.
 ---
 
+import Image from '@theme/IdealImage';
+
 # First-Run Setup
 
 After starting Houndarr for the first time, follow these steps to get it configured.
@@ -24,7 +26,10 @@ After creating your account, log in with your new credentials.
 
 Go to **Settings** and click **Add Instance** to connect your *arr instances.
 
-![The Houndarr Settings page showing a two-row Instances table with active Radarr and Sonarr rows, each with Disable / Edit / Delete actions](../../static/img/screenshots/houndarr-settings-instances.png)
+<Image
+  img={require('@site/static/img/screenshots/houndarr-settings-instances.png')}
+  alt="The Houndarr Settings page showing a two-row Instances table with active Radarr and Sonarr rows, each with Disable / Edit / Delete actions"
+/>
 
 For each instance you need:
 
@@ -55,7 +60,10 @@ to stay well under typical indexer limits:
 
 For detailed explanations of all settings, see [Instance Settings](/docs/reference/instance-settings).
 
-![The Houndarr Add Instance modal with Connection fields (Name, Type, URL, API Key) and Search Policy fields (Batch Size, Sleep, Hourly Cap, Cooldown, Post-Release Grace, Queue Limit)](../../static/img/screenshots/houndarr-add-instance-form.png)
+<Image
+  img={require('@site/static/img/screenshots/houndarr-add-instance-form.png')}
+  alt="The Houndarr Add Instance modal with Connection fields (Name, Type, URL, API Key) and Search Policy fields (Batch Size, Sleep, Hourly Cap, Cooldown, Post-Release Grace, Queue Limit)"
+/>
 
 ## 5. Enable the instance
 
@@ -70,4 +78,7 @@ Once instances are enabled, the Dashboard shows:
 - **Run Now** buttons for on-demand search triggers
 - **Recent activity** from the search log
 
-![The Houndarr Dashboard with top-level searched / skipped / error counts and per-instance cards showing live metrics and Run Now buttons](../../static/img/screenshots/houndarr-dashboard.png)
+<Image
+  img={require('@site/static/img/screenshots/houndarr-dashboard.png')}
+  alt="The Houndarr Dashboard with top-level searched / skipped / error counts and per-instance cards showing live metrics and Run Now buttons"
+/>

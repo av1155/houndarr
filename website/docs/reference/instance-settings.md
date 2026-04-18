@@ -4,6 +4,8 @@ title: Instance Settings
 description: Reference for every per-instance search setting in Houndarr.
 ---
 
+import Image from '@theme/IdealImage';
+
 # Instance Settings
 
 Per-instance configuration for the search engine. Each field is
@@ -15,7 +17,10 @@ see [Increase Throughput](/docs/guides/increase-throughput). For
 the per-app API command Houndarr sends see
 [Search Commands](/docs/reference/search-commands).
 
-![The Houndarr Add Instance form showing search, cutoff, and upgrade configuration fields](../../static/img/screenshots/houndarr-add-instance-form.png)
+<Image
+  img={require('@site/static/img/screenshots/houndarr-add-instance-form.png')}
+  alt="The Houndarr Add Instance form showing search, cutoff, and upgrade configuration fields"
+/>
 
 ## Missing search controls
 
@@ -258,4 +263,7 @@ Restricts scheduled cycles to one or more time-of-day windows.
 Instance enabled / disabled state is controlled from the row toggle
 in Settings. New instances are created as enabled by default.
 
-![The Houndarr Settings page showing the instance list with per-row enable toggles](../../static/img/screenshots/houndarr-settings-instances.png)
+<Image
+  img={require('@site/static/img/screenshots/houndarr-settings-instances.png')}
+  alt="The Houndarr Settings page showing the instance list with per-row enable toggles"
+/>

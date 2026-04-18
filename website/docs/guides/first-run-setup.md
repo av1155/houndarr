@@ -1,7 +1,7 @@
 ---
 sidebar_position: 4
 title: First-Run Setup
-description: Walk through the initial setup after starting Houndarr for the first time.
+description: Create the admin account, add your first *arr instance, and confirm the connection test passes after a fresh Houndarr install.
 ---
 
 import Image from '@theme/IdealImage';

@@ -215,3 +215,70 @@
 [data-theme='dark'] .breadcrumbs__item--active .breadcrumbs__link {
   color: #94a3b8;
 }
+
+/* ── Portrait screenshot figures ─────────────────────────────────────────── */
+/* For tall screenshots (mobile UIs, modal dialogs). Renders as a framed
+   card with a caption strip, centered, responsive. Avoids the "tiny image
+   floating in a wide column" problem when maxWidth is used alone. */
+.docs-screenshot-portrait {
+  display: block;
+  margin: 2.5rem auto;
+  padding: 0;
+  max-width: clamp(280px, 90%, 420px);
+  border-radius: var(--radius-md, 10px);
+  overflow: hidden;
+  border: 1px solid var(--color-border-subtle, rgba(148, 163, 184, 0.12));
+  background: var(--color-surface-1, #0c0d13);
+  box-shadow:
+    0 1px 0 0 rgba(255, 255, 255, 0.04) inset,
+    0 20px 40px -20px rgba(0, 0, 0, 0.55),
+    0 8px 16px -8px rgba(0, 0, 0, 0.35);
+}
+
+[data-theme='light'] .docs-screenshot-portrait {
+  background: #ffffff;
+  border-color: rgba(15, 23, 42, 0.1);
+  box-shadow:
+    0 12px 28px -12px rgba(15, 23, 42, 0.18),
+    0 6px 12px -6px rgba(15, 23, 42, 0.08);
+}
+
+.docs-screenshot-portrait img,
+.docs-screenshot-portrait picture,
+.docs-screenshot-portrait picture img {
+  display: block;
+  width: 100%;
+  height: auto;
+  margin: 0;
+  border-radius: 0;
+}
+
+.docs-screenshot-portrait figcaption {
+  padding: 0.625rem 1rem 0.75rem;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: var(--color-text-muted, rgba(148, 163, 184, 0.85));
+  border-top: 1px solid var(--color-border-subtle, rgba(148, 163, 184, 0.1));
+  text-align: center;
+  letter-spacing: 0.01em;
+}
+
+[data-theme='light'] .docs-screenshot-portrait figcaption {
+  color: rgba(71, 85, 105, 0.9);
+  border-top-color: rgba(15, 23, 42, 0.08);
+  background: rgba(15, 23, 42, 0.015);
+}
+
+.docs-screenshot-portrait figcaption strong {
+  color: var(--ifm-color-primary);
+  font-weight: 600;
+}
+
+/* Narrow viewports: full-bleed within content column, subtler shadow */
+@media (max-width: 480px) {
+  .docs-screenshot-portrait {
+    margin: 1.75rem auto;
+    max-width: 100%;
+    border-radius: var(--radius-sm, 8px);
+  }
+}

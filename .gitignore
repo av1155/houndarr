@@ -97,3 +97,6 @@ uv.lock
 
 # Git worktrees (local development only)
 .worktrees/
+
+# Lychee link-check cache
+.lycheecache

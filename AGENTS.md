@@ -119,6 +119,7 @@ identical check names so branch protection is satisfied.
 | `api-snapshot-refresh.yml` | Weekly (Monday 10:00 UTC) + manual | Fetches upstream Radarr/Sonarr/Whisparr/Lidarr/Readarr OpenAPI specs, updates `docs/api/` snapshots and `tests/test_docs_api.py` hashes, opens a PR if changed |
 | `pages.yml` | Pushes to `main` touching `website/**` | Deploys docs site to GitHub Pages |
 | `test-deploy.yml` | PRs touching `website/**` | Tests Docusaurus build without deploying |
+| `link-check.yml` | PRs touching `**/*.md`, `**/*.mdx`, `lychee.toml` + weekly (Monday 08:00 UTC) + manual | Runs `lychee` against every Markdown file to catch broken external links; rules live in `lychee.toml` |
 | `cleanup-actions-cache.yml` | Daily (05:00 UTC) + manual | Prunes stale GitHub Actions caches |
 
 ### Branch protection on `main`

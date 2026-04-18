@@ -1,0 +1,39 @@
+# Lychee link-checker configuration.
+# https://lychee.cli.rs/configuration/
+
+max_retries = 2
+retry_wait_time = 2
+timeout = 20
+no_progress = true
+
+# 2xx is fine; 403 and 429 usually mean the host rate-limited an
+# unauthenticated HEAD, not a broken link.
+accept = ["200..=299", "403", "429"]
+
+cache = true
+max_cache_age = "1d"
+
+# Sentinel base under the reserved `.invalid` TLD (RFC 6761).
+# Root-relative links (Docusaurus internal routes like `/docs/...`
+# and static assets like `/img/...`) resolve against this host so
+# URL construction succeeds, and the host is then excluded below.
+# Internal routes are validated by `onBrokenLinks: 'throw'` at build.
+base_url = "https://houndarr-internal.invalid"
+
+exclude_path = [
+  "node_modules",
+  "website/.docusaurus",
+  ".venv",
+]
+
+# Placeholder hosts shown in configuration examples, local-dev URLs,
+# and the sentinel base above.
+exclude = [
+  "^https?://houndarr-internal\\.invalid(/|$)",
+  "^https?://(localhost|127\\.0\\.0\\.1|0\\.0\\.0\\.0)",
+  "^https?://(mock-)?(sonarr|radarr|lidarr|readarr|whisparr|houndarr)([:./]|$)",
+  "^https?://host\\.(docker|containers)\\.internal",
+  "^https?://authentik-proxy([:./]|$)",
+  "^https?://[^/]*\\.example\\.com",
+  "^https?://your-host",
+]

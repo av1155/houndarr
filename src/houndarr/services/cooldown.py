@@ -8,16 +8,35 @@ searched.  This module provides the four operations the search engine needs:
 * :func:`count_searches_last_hour` - how many searches has this instance done
   in the past 60 minutes?
 * :func:`clear_cooldowns` - admin reset for a single instance.
+
+It also owns an in-memory LRU sentinel, :func:`should_log_skip`, that lets the
+engine throttle duplicate cooldown-reason skip rows in ``search_log`` to at
+most one per ``(instance_id, item_id, search_kind, reason_bucket)`` per 24 h.
+Single-process only (the cache is module-level; multi-worker deploys would
+reintroduce noise proportionally).
 """
 
 from __future__ import annotations
 
+import asyncio
+from collections import OrderedDict
 from datetime import UTC, datetime, timedelta
 from typing import Literal
 
 from houndarr.database import get_db
 
 ItemType = Literal["episode", "movie", "album", "book", "whisparr_episode", "whisparr_v3_movie"]
+
+# ---------------------------------------------------------------------------
+# Skip-log throttle sentinel (single-process LRU with TTL)
+# ---------------------------------------------------------------------------
+
+SkipLogKey = tuple[int, int, str, str]
+
+_SKIP_LOG_CACHE: OrderedDict[SkipLogKey, datetime] = OrderedDict()
+_SKIP_LOG_MAX_ENTRIES = 1024
+_SKIP_LOG_TTL = timedelta(hours=24)
+_SKIP_LOG_LOCK = asyncio.Lock()
 
 
 def _now_utc() -> datetime:
@@ -139,3 +158,44 @@ async def clear_cooldowns(instance_id: int) -> int:
         )
         await db.commit()
         return cur.rowcount or 0
+
+
+async def should_log_skip(key: SkipLogKey) -> bool:
+    """Gate duplicate skip-log writes for cooldown-reason skips.
+
+    Engine passes write a ``search_log`` row every time an item is skipped
+    for the same reason on every cycle.  On a healthy install that produces
+    hundreds of identical rows per item per cooldown window.  This sentinel
+    caps writes to at most one per key per 24 h.
+
+    The check-and-write is serialized under an :class:`asyncio.Lock` so two
+    concurrent passes racing on the same item cannot both bypass the cache.
+    The cache is bounded at ``_SKIP_LOG_MAX_ENTRIES`` entries with LRU
+    eviction, and TTL is enforced on read.
+
+    Args:
+        key: ``(instance_id, item_id, search_kind, reason_bucket)``.
+            ``reason_bucket`` is a coarse category string, e.g.
+            ``"cooldown"``, ``"cutoff_cd"``, ``"upgrade_cd"``.
+
+    Returns:
+        ``True`` if the caller should write the skip row (cache miss or
+        expired entry).  ``False`` if a row for the same key was recorded
+        within the last 24 h.
+    """
+    now = datetime.now(UTC)
+    async with _SKIP_LOG_LOCK:
+        entry = _SKIP_LOG_CACHE.get(key)
+        if entry is not None and now - entry < _SKIP_LOG_TTL:
+            _SKIP_LOG_CACHE.move_to_end(key)
+            return False
+        _SKIP_LOG_CACHE[key] = now
+        _SKIP_LOG_CACHE.move_to_end(key)
+        while len(_SKIP_LOG_CACHE) > _SKIP_LOG_MAX_ENTRIES:
+            _SKIP_LOG_CACHE.popitem(last=False)
+        return True
+
+
+def _reset_skip_log_cache() -> None:
+    """Clear the sentinel cache.  Test-only helper."""
+    _SKIP_LOG_CACHE.clear()

@@ -2,18 +2,22 @@
 
 from __future__ import annotations
 
-from collections.abc import AsyncGenerator
+import asyncio
+from collections.abc import AsyncGenerator, Iterator
 from datetime import UTC, datetime, timedelta
 
 import pytest
 import pytest_asyncio
 
 from houndarr.database import get_db
+from houndarr.services import cooldown as cooldown_module
 from houndarr.services.cooldown import (
+    _reset_skip_log_cache,
     clear_cooldowns,
     count_searches_last_hour,
     is_on_cooldown,
     record_search,
+    should_log_skip,
 )
 
 
@@ -213,3 +217,94 @@ async def test_clear_cooldowns_only_affects_given_instance(seeded_instances: Non
 async def test_clear_cooldowns_nonexistent_instance(seeded_instances: None) -> None:
     deleted = await clear_cooldowns(9999)
     assert deleted == 0
+
+
+# ---------------------------------------------------------------------------
+# should_log_skip sentinel
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture(autouse=True)
+def _reset_sentinel() -> Iterator[None]:
+    """Clear the module-level skip-log cache between tests."""
+    _reset_skip_log_cache()
+    yield
+    _reset_skip_log_cache()
+
+
+@pytest.mark.asyncio()
+async def test_should_log_skip_first_call_returns_true() -> None:
+    key = (1, 101, "missing", "cooldown")
+    assert await should_log_skip(key) is True
+
+
+@pytest.mark.asyncio()
+async def test_should_log_skip_within_ttl_returns_false() -> None:
+    key = (1, 101, "missing", "cooldown")
+    assert await should_log_skip(key) is True
+    assert await should_log_skip(key) is False
+    assert await should_log_skip(key) is False
+
+
+@pytest.mark.asyncio()
+async def test_should_log_skip_after_ttl_returns_true(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    key = (1, 101, "missing", "cooldown")
+    assert await should_log_skip(key) is True
+
+    # Rewind the stored timestamp by 25 hours to simulate TTL expiry.
+    stale = datetime.now(UTC) - timedelta(hours=25)
+    cooldown_module._SKIP_LOG_CACHE[key] = stale
+
+    assert await should_log_skip(key) is True
+
+
+@pytest.mark.asyncio()
+async def test_should_log_skip_distinct_keys_independent() -> None:
+    k_missing = (1, 101, "missing", "cooldown")
+    k_cutoff = (1, 101, "cutoff", "cutoff_cd")
+    k_upgrade = (1, 101, "upgrade", "upgrade_cd")
+    k_other_item = (1, 102, "missing", "cooldown")
+    k_other_instance = (2, 101, "missing", "cooldown")
+
+    assert await should_log_skip(k_missing) is True
+    assert await should_log_skip(k_cutoff) is True
+    assert await should_log_skip(k_upgrade) is True
+    assert await should_log_skip(k_other_item) is True
+    assert await should_log_skip(k_other_instance) is True
+
+    # Repeats of each key are suppressed independently.
+    assert await should_log_skip(k_missing) is False
+    assert await should_log_skip(k_cutoff) is False
+    assert await should_log_skip(k_upgrade) is False
+
+
+@pytest.mark.asyncio()
+async def test_should_log_skip_lru_evicts_oldest(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """When the cache hits its hard cap, the oldest entry is evicted."""
+    monkeypatch.setattr(cooldown_module, "_SKIP_LOG_MAX_ENTRIES", 3)
+
+    keys = [(1, i, "missing", "cooldown") for i in range(4)]
+    for key in keys[:3]:
+        assert await should_log_skip(key) is True
+
+    # Fourth insert evicts the oldest (first) entry.
+    assert await should_log_skip(keys[3]) is True
+    assert len(cooldown_module._SKIP_LOG_CACHE) == 3
+    assert keys[0] not in cooldown_module._SKIP_LOG_CACHE
+    # Remaining three stay cached, so should_log_skip returns False for them.
+    assert await should_log_skip(keys[1]) is False
+    assert await should_log_skip(keys[2]) is False
+    assert await should_log_skip(keys[3]) is False
+
+
+@pytest.mark.asyncio()
+async def test_should_log_skip_concurrent_calls_serialize() -> None:
+    """Ten concurrent callers with the same key produce exactly one True."""
+    key = (1, 101, "missing", "cooldown")
+    results = await asyncio.gather(*(should_log_skip(key) for _ in range(10)))
+    assert sum(results) == 1
+    assert results.count(False) == 9

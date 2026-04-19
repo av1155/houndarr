@@ -2,14 +2,16 @@
 
 from __future__ import annotations
 
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Iterator
 from typing import Any
 
+import pytest
 import pytest_asyncio
 from cryptography.fernet import Fernet
 
 from houndarr.database import get_db
 from houndarr.engine.candidates import ItemType
+from houndarr.services.cooldown import _reset_skip_log_cache
 from houndarr.services.instances import (
     Instance,
     InstanceType,
@@ -19,6 +21,20 @@ from houndarr.services.instances import (
     SonarrSearchMode,
     WhisparrSearchMode,
 )
+
+
+@pytest.fixture(autouse=True)
+def _reset_skip_log_sentinel() -> Iterator[None]:
+    """Clear the in-memory cooldown-skip sentinel between engine tests.
+
+    Without this, a test that triggers ``should_log_skip`` leaves cache
+    entries that suppress skip writes in the next test, producing
+    order-dependent test failures.
+    """
+    _reset_skip_log_cache()
+    yield
+    _reset_skip_log_cache()
+
 
 # ---------------------------------------------------------------------------
 # Shared constants

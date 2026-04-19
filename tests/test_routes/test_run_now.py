@@ -65,8 +65,7 @@ def test_run_now_503_when_supervisor_missing(app: TestClient) -> None:
     """Returns 503 when app.state has no supervisor attribute."""
     _login(app)
     app.post("/settings/instances", data=_VALID_FORM, headers=csrf_headers(app))
-    status = app.get("/api/status").json()
-    inst_id = status[0]["id"]
+    inst_id = app.get("/api/status").json()["instances"][0]["id"]
 
     # Remove the supervisor from app state
     original = getattr(app.app.state, "supervisor", None)  # type: ignore[union-attr]
@@ -83,8 +82,7 @@ def test_run_now_503_when_supervisor_wrong_type(app: TestClient) -> None:
     """Returns 503 when supervisor is set but not a Supervisor instance."""
     _login(app)
     app.post("/settings/instances", data=_VALID_FORM, headers=csrf_headers(app))
-    status = app.get("/api/status").json()
-    inst_id = status[0]["id"]
+    inst_id = app.get("/api/status").json()["instances"][0]["id"]
 
     original = getattr(app.app.state, "supervisor", None)  # type: ignore[union-attr]
     try:
@@ -104,8 +102,7 @@ def test_run_now_requires_csrf_token(app: TestClient) -> None:
     """POST /api/instances/{id}/run-now without CSRF token is rejected."""
     _login(app)
     app.post("/settings/instances", data=_VALID_FORM, headers=csrf_headers(app))
-    status = app.get("/api/status").json()
-    inst_id = status[0]["id"]
+    inst_id = app.get("/api/status").json()["instances"][0]["id"]
 
     # POST without CSRF headers
     resp = app.post(f"/api/instances/{inst_id}/run-now")
@@ -122,8 +119,7 @@ def test_run_now_202_response_body_shape(app: TestClient) -> None:
     """202 response body contains exactly 'status' and 'instance_id' keys."""
     _login(app)
     app.post("/settings/instances", data=_VALID_FORM, headers=csrf_headers(app))
-    status = app.get("/api/status").json()
-    inst_id = status[0]["id"]
+    inst_id = app.get("/api/status").json()["instances"][0]["id"]
 
     respx.get("http://sonarr:8989/api/v3/wanted/missing").mock(
         return_value=httpx.Response(200, json={"records": []})
@@ -152,8 +148,7 @@ def test_run_now_409_response_body(app: TestClient) -> None:
     """409 response includes a descriptive detail field."""
     _login(app)
     app.post("/settings/instances", data=_VALID_FORM, headers=csrf_headers(app))
-    status = app.get("/api/status").json()
-    inst_id = status[0]["id"]
+    inst_id = app.get("/api/status").json()["instances"][0]["id"]
 
     # Disable the instance
     app.post(f"/settings/instances/{inst_id}/toggle-enabled", headers=csrf_headers(app))

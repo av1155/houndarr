@@ -18,7 +18,6 @@ from houndarr.engine.adapters.whisparr_v2 import (
 from houndarr.repositories.cooldowns import _iso
 from houndarr.services.cooldown import (
     clear_cooldowns,
-    count_searches_last_hour,
     is_on_cooldown,
     record_search,
 )
@@ -254,61 +253,6 @@ async def test_cooldown_per_instance_isolation(
     await record_search(1, 101, "episode")
     on_cd = await is_on_cooldown(2, 101, "episode", cooldown_days=7)
     assert on_cd is False
-
-
-# ---------------------------------------------------------------------------
-# count_searches_last_hour
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.asyncio()
-async def test_count_searches_last_hour_excludes_old(
-    seeded_instances: None,
-) -> None:
-    """A cooldown record from 2 hours ago is not counted."""
-    two_hours_ago = datetime.now(UTC) - timedelta(hours=2)
-    async with get_db() as conn:
-        await conn.execute(
-            "INSERT INTO cooldowns (instance_id, item_id, item_type, searched_at)"
-            " VALUES (?, ?, ?, ?)",
-            (1, 101, "episode", _iso(two_hours_ago)),
-        )
-        await conn.commit()
-
-    count = await count_searches_last_hour(1)
-    assert count == 0
-
-
-@pytest.mark.asyncio()
-async def test_count_searches_last_hour_includes_recent(
-    seeded_instances: None,
-) -> None:
-    """A cooldown record from 30 minutes ago is counted."""
-    thirty_min_ago = datetime.now(UTC) - timedelta(minutes=30)
-    async with get_db() as conn:
-        await conn.execute(
-            "INSERT INTO cooldowns (instance_id, item_id, item_type, searched_at)"
-            " VALUES (?, ?, ?, ?)",
-            (1, 101, "episode", _iso(thirty_min_ago)),
-        )
-        await conn.commit()
-
-    count = await count_searches_last_hour(1)
-    assert count == 1
-
-
-@pytest.mark.asyncio()
-async def test_count_searches_per_instance_independent(
-    seeded_instances: None,
-) -> None:
-    """Searches on instance 1 do not affect count for instance 2."""
-    await record_search(1, 101, "episode")
-    await record_search(1, 102, "episode")
-
-    count_1 = await count_searches_last_hour(1)
-    count_2 = await count_searches_last_hour(2)
-    assert count_1 == 2
-    assert count_2 == 0
 
 
 # ---------------------------------------------------------------------------

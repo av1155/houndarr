@@ -15,12 +15,22 @@ from houndarr.services.cooldown import (
     _reset_info_log_cache,
     _reset_skip_log_cache,
     clear_cooldowns,
-    count_searches_last_hour,
     is_on_cooldown,
     record_search,
     should_log_info,
     should_log_skip,
 )
+
+
+async def _count_cooldowns(instance_id: int) -> int:
+    """Count cooldown rows for *instance_id* directly."""
+    async with get_db() as conn:
+        async with conn.execute(
+            "SELECT COUNT(*) FROM cooldowns WHERE instance_id = ?",
+            (instance_id,),
+        ) as cur:
+            row = await cur.fetchone()
+    return int(row[0]) if row else 0
 
 
 @pytest_asyncio.fixture()
@@ -146,53 +156,6 @@ async def test_record_search_updates_timestamp(seeded_instances: None) -> None:
 
 
 # ---------------------------------------------------------------------------
-# count_searches_last_hour
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.asyncio()
-async def test_count_searches_zero_initially(seeded_instances: None) -> None:
-    count = await count_searches_last_hour(1)
-    assert count == 0
-
-
-@pytest.mark.asyncio()
-async def test_count_searches_after_records(seeded_instances: None) -> None:
-    await record_search(1, 101, "episode")
-    await record_search(1, 102, "episode")
-    await record_search(1, 103, "episode")
-    count = await count_searches_last_hour(1)
-    assert count == 3
-
-
-@pytest.mark.asyncio()
-async def test_count_searches_excludes_old_records(seeded_instances: None) -> None:
-    """Records older than 1 hour should not be counted."""
-    old_time = datetime.now(UTC) - timedelta(hours=2)
-    old_iso = old_time.strftime("%Y-%m-%dT%H:%M:%S.%f") + "Z"
-
-    async with get_db() as conn:
-        await conn.execute(
-            "INSERT INTO cooldowns (instance_id, item_id, item_type, searched_at) VALUES (?,?,?,?)",
-            (1, 999, "episode", old_iso),
-        )
-        await conn.commit()
-
-    count = await count_searches_last_hour(1)
-    assert count == 0
-
-
-@pytest.mark.asyncio()
-async def test_count_searches_per_instance(seeded_instances: None) -> None:
-    """Counts for instance 1 and 2 are independent."""
-    await record_search(1, 101, "episode")
-    await record_search(1, 102, "episode")
-    await record_search(2, 201, "movie")
-    assert await count_searches_last_hour(1) == 2
-    assert await count_searches_last_hour(2) == 1
-
-
-# ---------------------------------------------------------------------------
 # clear_cooldowns
 # ---------------------------------------------------------------------------
 
@@ -203,7 +166,7 @@ async def test_clear_cooldowns_removes_all(seeded_instances: None) -> None:
     await record_search(1, 102, "episode")
     deleted = await clear_cooldowns(1)
     assert deleted == 2
-    assert await count_searches_last_hour(1) == 0
+    assert await _count_cooldowns(1) == 0
 
 
 @pytest.mark.asyncio()
@@ -211,8 +174,8 @@ async def test_clear_cooldowns_only_affects_given_instance(seeded_instances: Non
     await record_search(1, 101, "episode")
     await record_search(2, 201, "movie")
     await clear_cooldowns(1)
-    assert await count_searches_last_hour(1) == 0
-    assert await count_searches_last_hour(2) == 1
+    assert await _count_cooldowns(1) == 0
+    assert await _count_cooldowns(2) == 1
 
 
 @pytest.mark.asyncio()

@@ -147,41 +147,6 @@ async def record_search(
     )
 
 
-async def count_searches_last_hour(instance_id: int) -> int:
-    """Return how many cooldown rows *instance_id* has from the past 60 minutes.
-
-    Counts ``cooldowns`` rows whose ``searched_at`` falls inside the
-    rolling one-hour window.  Used by the engine's per-instance hourly
-    cap.  Lives here as inline SQL alongside the
-    :func:`record_search` / :func:`is_on_cooldown` positional shims;
-    the cooldowns reads it shares with them keep the inline helpers
-    grouped on one module so the engine has a single import path.
-    """
-    from houndarr.database import get_db
-
-    cutoff = _iso(_now_utc() - timedelta(hours=1))
-    async with get_db() as db:
-        async with db.execute(
-            """
-            SELECT COUNT(*) FROM cooldowns
-            WHERE instance_id = ?
-              AND searched_at > ?
-            """,
-            (instance_id, cutoff),
-        ) as cur:
-            row = await cur.fetchone()
-    return int(row[0]) if row else 0
-
-
-def _now_utc() -> datetime:
-    return datetime.now(UTC)
-
-
-def _iso(dt: datetime) -> str:
-    """ISO-8601 with millisecond precision and trailing Z, matching SQL writes."""
-    return dt.strftime("%Y-%m-%dT%H:%M:%S.%f") + "Z"
-
-
 async def clear_cooldowns(instance_id: int) -> int:
     """Delete all cooldown records for *instance_id*.
 

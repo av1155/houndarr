@@ -481,7 +481,6 @@ async def _run_search_pass(  # noqa: C901
     cycle_trigger: CycleTrigger | str,
     start_page: int = 1,
     total_fn: Callable[[], Awaitable[int]] | None = None,
-    instance_snapshots: dict[int, dict[str, Any]] | None = None,
 ) -> tuple[int, int]:
     """Execute a single search pass (missing or cutoff) using the adapter.
 
@@ -536,17 +535,9 @@ async def _run_search_pass(  # noqa: C901
     random_max_page = 0
     use_random_deck = False
 
-    # Always probe total_fn when provided AND a snapshot sink is wired, so
-    # the dashboard's monitored_total stays fresh even in chronological
-    # mode.  Failure is non-fatal: we log once and continue with the
-    # persisted start_page.
-    should_probe = total_fn is not None and (
-        instance.search_order == SearchOrder.random or instance_snapshots is not None
-    )
-    total_records: int | None = None
-    if should_probe and total_fn is not None:
+    if instance.search_order == SearchOrder.random and total_fn is not None:
         try:
-            total_records = await total_fn()
+            total = await total_fn()
         except Exception as exc:  # noqa: BLE001
             logger.warning(
                 "[%s] %stotal probe failed (%s); falling back to page %d",
@@ -555,20 +546,11 @@ async def _run_search_pass(  # noqa: C901
                 exc,
                 page,
             )
-
-    if total_records is not None and instance_snapshots is not None:
-        snap_bucket = instance_snapshots.setdefault(instance.id, {})
-        snap_bucket["cutoff_count" if is_cutoff else "missing_count"] = int(total_records)
-        snap_bucket["last_probed_at"] = datetime.now(UTC).isoformat(timespec="seconds")
-
-    if (
-        instance.search_order == SearchOrder.random
-        and total_records is not None
-        and total_records > 0
-    ):
-        random_max_page = max(1, math.ceil(total_records / page_size))
-        use_random_deck = True
-        page = _draw_next_random_page(instance.core.id, search_kind, random_max_page)
+        else:
+            if total > 0:
+                random_max_page = max(1, math.ceil(total / page_size))
+                use_random_deck = True
+                page = _draw_next_random_page(instance.core.id, search_kind, random_max_page)
 
     for _ in range(_MAX_LIST_PAGES_PER_PASS):
         if searched >= target or scanned >= scan_budget:
@@ -1104,7 +1086,6 @@ async def run_instance_search(
     *,
     cycle_id: str | None = None,
     cycle_trigger: CycleTrigger | str = CycleTrigger.scheduled,
-    instance_snapshots: dict[int, dict[str, Any]] | None = None,
 ) -> int:
     """Execute one search cycle for *instance*.
 
@@ -1138,7 +1119,6 @@ async def run_instance_search(
             master_key,
             cycle_id=cycle_id,
             cycle_trigger=cycle_trigger,
-            instance_snapshots=instance_snapshots,
         )
     except httpx.TransportError:
         raise
@@ -1154,7 +1134,6 @@ async def _run_instance_search_impl(
     *,
     cycle_id: str | None = None,
     cycle_trigger: CycleTrigger | str = CycleTrigger.scheduled,
-    instance_snapshots: dict[int, dict[str, Any]] | None = None,
 ) -> int:
     """Cycle body; wrapped by :func:`run_instance_search` for typed errors.
 
@@ -1272,7 +1251,6 @@ async def _run_instance_search_impl(
                 cycle_trigger=cycle_trigger,
                 start_page=instance.missing_page_offset,
                 total_fn=lambda: client.get_wanted_total("missing"),
-                instance_snapshots=instance_snapshots,
             )
         searched += missing_searched
         # In random mode the "next page" returned by the pass is derived from
@@ -1318,7 +1296,6 @@ async def _run_instance_search_impl(
                     cycle_trigger=cycle_trigger,
                     start_page=instance.cutoff_page_offset,
                     total_fn=lambda: cutoff_client.get_wanted_total("cutoff"),
-                    instance_snapshots=instance_snapshots,
                 )
             logger.info("[%s] cutoff pass complete: %d searched", instance.name, cutoff_searched)
             # Mirror the missing-pass gate: only advance the offset in

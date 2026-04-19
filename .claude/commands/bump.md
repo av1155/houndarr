@@ -28,16 +28,47 @@ Validate the new version is greater than the current one.
 
 ## 3. Draft CHANGELOG Entries
 
-Read the git log since the last tag:
+### 3a. Gather commits since the last tag
 
 ```
 git log $(git describe --tags --abbrev=0)..HEAD --oneline
 ```
 
-From these commits, build CHANGELOG entries following the exact rules
-from AGENTS.md (Versioning, Changelog & Releases section):
+### 3b. Verify every claim before you write the bullet
 
-**Include only user-facing changes:**
+**This step is mandatory. Skipping it is how inaccurate release
+notes ship.** The v1.9.0 release went out with two factually wrong
+bullets (#409 said "the CHANGELOG block for the current version"
+when the code returns every block since `last_seen`; #395 said
+"spreads picks across the whole backlog each cycle" when the code
+picks one random page per cycle) because the draft was built from
+PR titles and memory. Fixing it required a CHANGELOG-correction PR,
+a GitHub Release delete, a tag re-cut, and a Docker image rebuild.
+
+For every PR you plan to reference in the CHANGELOG:
+
+```bash
+gh pr view N --repo <owner>/<repo> --json title,body
+gh pr diff N --repo <owner>/<repo> | head -400
+```
+
+For any bullet that claims behavior (a default, a UI element, an
+error string, an API response shape), also read the relevant source
+file and pin the claim to a specific `file:line`.
+
+**Adopt the PR author's vocabulary for nuance.** If the PR body
+says "new default for fresh installs; existing instances keep their
+prior behaviour," the bullet says "new default for newly added
+instances," not "new default." The distinction is load-bearing for
+upgraders.
+
+**Rule of thumb:** every bullet must be defensible with a concrete
+reference: a PR-body sentence, a diff fragment, or a source
+`file:line`. If you cannot cite one, rewrite the bullet or drop it.
+
+### 3c. Filter to user-facing changes
+
+**Include:**
 - Features (Added)
 - Bug fixes (Fixed)
 - Behavioral changes, UI changes, config changes (Changed)
@@ -76,6 +107,9 @@ Do not create a branch, do not touch VERSION or CHANGELOG.
 ```
 
 **Rules:**
+- Every bullet must be justified by a PR-body sentence, a diff
+  fragment, or a source `file:line`. Do not draft from PR titles,
+  commit messages, or memory alone. See §3b.
 - Allowed `###` headers: `Added`, `Fixed`, `Changed`, `Removed` only.
   Omit any section that has no entries.
 - One sentence per bullet; no multi-line prose.

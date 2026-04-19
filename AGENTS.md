@@ -779,6 +779,15 @@ Level-4 `####` subheadings may group items within `###` sections for major
 releases.
 
 **Bullet rules:**
+- Every bullet must be justified by a PR-body sentence, a diff fragment,
+  or a source `file:line`. Do not draft from PR titles, commit messages,
+  or memory alone. The verification protocol lives in
+  `.claude/commands/bump.md` §3b; skipping it is what shipped the
+  inaccurate v1.9.0 bullets that had to be corrected in #420.
+- Adopt the PR author's vocabulary for nuance. If the PR body says
+  "new default for fresh installs; existing instances keep their prior
+  behaviour," the bullet says "new default for newly added instances,"
+  not "new default."
 - One sentence per bullet; no multi-line prose
 - Lead with user-facing impact, not implementation details
 - End with `(#N)` issue/PR reference

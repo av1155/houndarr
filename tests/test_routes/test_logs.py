@@ -11,6 +11,7 @@ from fastapi.testclient import TestClient
 from houndarr.clients._wire_models import SystemStatus
 from houndarr.clients.base import ArrClient
 from houndarr.database import get_db
+from tests.conftest import csrf_headers
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -919,3 +920,29 @@ def test_logs_summary_no_unknown_cycles_in_html(app: TestClient) -> None:
     resp = app.get("/logs")
     assert resp.status_code == 200
     assert b"unknown cycles" not in resp.content
+
+
+# ---------------------------------------------------------------------------
+# PR 4: /logs query-param pre-filtering (dashboard error-banner / pill links)
+# ---------------------------------------------------------------------------
+
+
+def test_logs_page_accepts_instance_id_query_param(app: TestClient) -> None:
+    """Following /logs?instance_id=1 keeps the filter selected on the page."""
+    _login(app)
+    app.post("/settings/instances", data=_VALID_FORM, headers=csrf_headers(app))
+
+    resp = app.get("/logs?instance_id=1&action=error")
+    assert resp.status_code == 200
+    body = resp.content
+    # Form's instance-filter select should mark option value="1" as selected.
+    assert b'value="1" selected' in body
+    # The action filter dropdown should surface the requested action.
+    assert b'value="error" selected' in body
+
+
+def test_logs_page_unknown_filter_falls_back_to_unfiltered(app: TestClient) -> None:
+    """Malformed query strings should not 422 the page; fall back cleanly."""
+    _login(app)
+    resp = app.get("/logs?instance_id=not-a-number")
+    assert resp.status_code == 200

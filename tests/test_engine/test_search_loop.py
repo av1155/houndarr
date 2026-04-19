@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import AsyncGenerator
+from dataclasses import replace
 from typing import Any
 from unittest.mock import AsyncMock, patch
 
@@ -2804,3 +2805,89 @@ async def test_missing_random_falls_back_when_probe_fails(seeded_instances: None
     assert count == 1
     # Probe was attempted and the fetch still happened (second call).
     assert missing_route.call_count >= 2
+
+
+# ---------------------------------------------------------------------------
+# PR 1: engine writes into instance_snapshots for dashboard monitored_total
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_snapshot_write_chronological_mode(seeded_instances: None) -> None:
+    """Chronological-mode run should still probe total_fn when a sink is
+    provided, writing missing/cutoff counts into the shared dict."""
+    respx.get(f"{SONARR_URL}/api/v3/wanted/missing").mock(
+        return_value=httpx.Response(
+            200,
+            json={"page": 1, "pageSize": 10, "totalRecords": 123, "records": []},
+        )
+    )
+    respx.get(f"{SONARR_URL}/api/v3/wanted/cutoff").mock(
+        return_value=httpx.Response(
+            200,
+            json={"page": 1, "pageSize": 10, "totalRecords": 45, "records": []},
+        )
+    )
+
+    snapshots: dict[int, dict[str, Any]] = {}
+    instance = _make_instance(batch_size=1, hourly_cap=0)
+    # Enable cutoff pass so the cutoff probe fires and populates cutoff_count.
+    instance.cutoff = replace(instance.cutoff, cutoff_enabled=True, cutoff_batch_size=1)
+
+    with patch("houndarr.engine.search_loop._INTER_SEARCH_DELAY_SECONDS", 0):
+        await run_instance_search(instance, MASTER_KEY, instance_snapshots=snapshots)
+
+    assert 1 in snapshots
+    bucket = snapshots[1]
+    assert bucket["missing_count"] == 123
+    assert bucket["cutoff_count"] == 45
+    assert "last_probed_at" in bucket
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_snapshot_write_skipped_when_sink_is_none(seeded_instances: None) -> None:
+    """With no snapshot sink and chronological mode, total_fn is not probed."""
+    probe_route = respx.get(f"{SONARR_URL}/api/v3/wanted/missing").mock(
+        return_value=httpx.Response(
+            200,
+            json={"page": 1, "pageSize": 10, "totalRecords": 1, "records": [_EPISODE_RECORD]},
+        )
+    )
+    respx.post(f"{SONARR_URL}/api/v3/command").mock(
+        return_value=httpx.Response(201, json=_COMMAND_RESP)
+    )
+
+    instance = _make_instance(batch_size=1, hourly_cap=1)
+    with patch("houndarr.engine.search_loop._INTER_SEARCH_DELAY_SECONDS", 0):
+        await run_instance_search(instance, MASTER_KEY, instance_snapshots=None)
+
+    # Chronological mode with no sink: exactly one fetch (no probe round trip).
+    assert probe_route.call_count == 1
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_snapshot_write_survives_probe_failure(seeded_instances: None) -> None:
+    """Probe failure is non-fatal: snapshot stays empty but the cycle runs."""
+    respx.get(f"{SONARR_URL}/api/v3/wanted/missing").mock(
+        side_effect=[
+            httpx.Response(500),
+            httpx.Response(
+                200,
+                json={"page": 1, "pageSize": 10, "totalRecords": 1, "records": [_EPISODE_RECORD]},
+            ),
+        ]
+    )
+    respx.post(f"{SONARR_URL}/api/v3/command").mock(
+        return_value=httpx.Response(201, json=_COMMAND_RESP)
+    )
+
+    snapshots: dict[int, dict[str, Any]] = {}
+    instance = _make_instance(batch_size=1, hourly_cap=1)
+    with patch("houndarr.engine.search_loop._INTER_SEARCH_DELAY_SECONDS", 0):
+        count = await run_instance_search(instance, MASTER_KEY, instance_snapshots=snapshots)
+
+    assert count == 1
+    assert snapshots.get(1, {}).get("missing_count") is None

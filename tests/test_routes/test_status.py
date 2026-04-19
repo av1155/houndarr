@@ -395,3 +395,395 @@ def test_run_now_409_for_disabled_instance(app: TestClient) -> None:
 
     resp = app.post(f"/api/instances/{inst_id}/run-now", headers=csrf_headers(app))
     assert resp.status_code == 409
+
+
+# ---------------------------------------------------------------------------
+# GET /api/status?v=2 envelope + redesigned per-instance fields
+# ---------------------------------------------------------------------------
+
+
+def _create_instance(app: TestClient, name: str = "My Sonarr") -> int:
+    """Create one instance via the settings route and return its id."""
+    form = {**_VALID_FORM, "name": name}
+    app.post("/settings/instances", data=form, headers=csrf_headers(app))
+    return int(app.get("/api/status").json()[0]["id"])
+
+
+async def _seed_search_log(rows: list[tuple[Any, ...]]) -> None:
+    """Insert raw search_log rows for the redesign fixtures.
+
+    Each tuple: (instance_id, item_id, item_type, search_kind, action,
+    reason_or_none, item_label_or_none, message_or_none, timestamp).
+    """
+    async with get_db() as conn:
+        await conn.executemany(
+            """
+            INSERT INTO search_log (
+                instance_id, item_id, item_type, search_kind, action,
+                reason, item_label, message, timestamp
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            rows,
+        )
+        await conn.commit()
+
+
+async def _seed_cooldown(instance_id: int, item_id: int, item_type: str, days_ago: float) -> None:
+    when = datetime.now(UTC) - timedelta(days=days_ago)
+    iso = when.strftime("%Y-%m-%dT%H:%M:%S.000Z")
+    async with get_db() as conn:
+        await conn.execute(
+            "INSERT INTO cooldowns (instance_id, item_id, item_type, searched_at)"
+            " VALUES (?, ?, ?, ?)",
+            (instance_id, item_id, item_type, iso),
+        )
+        await conn.commit()
+
+
+def test_status_v1_unchanged_returns_array(app: TestClient) -> None:
+    """Legacy v=1 response stays a plain JSON array."""
+    _login(app)
+    _create_instance(app)
+    body = app.get("/api/status").json()
+    assert isinstance(body, list)
+    assert len(body) == 1
+    assert "instances" not in body[0]
+
+
+def test_status_v2_envelope_shape(app: TestClient) -> None:
+    _login(app)
+    _create_instance(app)
+    body = app.get("/api/status?v=2").json()
+    assert isinstance(body, dict)
+    assert set(body.keys()) == {"instances", "recent_searches"}
+    assert len(body["instances"]) == 1
+    assert isinstance(body["recent_searches"], list)
+
+
+def test_status_v2_empty_dashboard(app: TestClient) -> None:
+    _login(app)
+    body = app.get("/api/status?v=2").json()
+    assert body == {"instances": [], "recent_searches": []}
+
+
+def test_status_v2_includes_redesign_fields(app: TestClient) -> None:
+    _login(app)
+    iid = _create_instance(app)
+    inst = app.get("/api/status?v=2").json()["instances"][0]
+    expected_keys = {
+        "lifetime_searched",
+        "last_dispatch_at",
+        "active_error",
+        "cooldown_breakdown",
+        "unlocking_next",
+        "cooldown_total",
+        "monitored_total",
+        "unreleased_count",
+        "upgrade_enabled",
+        "upgrade_cooldown_days",
+    }
+    assert expected_keys.issubset(inst.keys())
+    assert inst["id"] == iid
+    assert inst["unreleased_count"] == 0  # PR 1 interim; PR 5 populates real
+
+
+def test_status_v2_lifetime_searched_counts_all_time(app: TestClient) -> None:
+    _login(app)
+    iid = _create_instance(app)
+    now = datetime.now(UTC)
+    asyncio.run(
+        _seed_search_log(
+            [
+                (
+                    iid,
+                    101,
+                    "episode",
+                    "missing",
+                    "searched",
+                    None,
+                    "S01E01",
+                    None,
+                    (now - timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M:%S.000Z"),
+                ),
+                (
+                    iid,
+                    102,
+                    "episode",
+                    "missing",
+                    "searched",
+                    None,
+                    "S01E02",
+                    None,
+                    (now - timedelta(days=45)).strftime("%Y-%m-%dT%H:%M:%S.000Z"),
+                ),
+                (
+                    iid,
+                    103,
+                    "episode",
+                    "missing",
+                    "skipped",
+                    "on cooldown (14d)",
+                    "S01E03",
+                    None,
+                    (now - timedelta(hours=2)).strftime("%Y-%m-%dT%H:%M:%S.000Z"),
+                ),
+            ]
+        )
+    )
+    inst = app.get("/api/status?v=2").json()["instances"][0]
+    assert inst["lifetime_searched"] == 2
+    assert inst["last_dispatch_at"] is not None
+
+
+def test_status_v2_active_error_when_latest_row_is_error(app: TestClient) -> None:
+    _login(app)
+    iid = _create_instance(app)
+    now = datetime.now(UTC)
+    asyncio.run(
+        _seed_search_log(
+            [
+                (
+                    iid,
+                    None,
+                    None,
+                    None,
+                    "info",
+                    None,
+                    None,
+                    "cycle complete",
+                    (now - timedelta(minutes=30)).strftime("%Y-%m-%dT%H:%M:%S.000Z"),
+                ),
+                (
+                    iid,
+                    None,
+                    None,
+                    None,
+                    "error",
+                    None,
+                    None,
+                    "Could not reach http://sonarr:8989",
+                    (now - timedelta(minutes=10)).strftime("%Y-%m-%dT%H:%M:%S.000Z"),
+                ),
+                (
+                    iid,
+                    None,
+                    None,
+                    None,
+                    "error",
+                    None,
+                    None,
+                    "Could not reach http://sonarr:8989",
+                    (now - timedelta(minutes=5)).strftime("%Y-%m-%dT%H:%M:%S.000Z"),
+                ),
+            ]
+        )
+    )
+    inst = app.get("/api/status?v=2").json()["instances"][0]
+    assert inst["active_error"] is not None
+    assert inst["active_error"]["failures_count"] == 2
+    assert "http://sonarr:8989" in inst["active_error"]["message"]
+
+
+def test_status_v2_active_error_none_when_latest_row_non_error(app: TestClient) -> None:
+    """Banner self-clears as soon as a non-error row lands."""
+    _login(app)
+    iid = _create_instance(app)
+    now = datetime.now(UTC)
+    asyncio.run(
+        _seed_search_log(
+            [
+                (
+                    iid,
+                    None,
+                    None,
+                    None,
+                    "error",
+                    None,
+                    None,
+                    "transient",
+                    (now - timedelta(minutes=20)).strftime("%Y-%m-%dT%H:%M:%S.000Z"),
+                ),
+                (
+                    iid,
+                    101,
+                    "episode",
+                    "missing",
+                    "skipped",
+                    "on cooldown (14d)",
+                    "S01E01",
+                    None,
+                    (now - timedelta(minutes=1)).strftime("%Y-%m-%dT%H:%M:%S.000Z"),
+                ),
+            ]
+        )
+    )
+    inst = app.get("/api/status?v=2").json()["instances"][0]
+    assert inst["active_error"] is None
+
+
+def test_status_v2_recent_searches_last_7_days(app: TestClient) -> None:
+    _login(app)
+    iid = _create_instance(app)
+    now = datetime.now(UTC)
+    asyncio.run(
+        _seed_search_log(
+            [
+                (
+                    iid,
+                    101,
+                    "episode",
+                    "missing",
+                    "searched",
+                    None,
+                    "Fresh Show",
+                    None,
+                    (now - timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M:%S.000Z"),
+                ),
+                (
+                    iid,
+                    102,
+                    "episode",
+                    "missing",
+                    "searched",
+                    None,
+                    "Older Show",
+                    None,
+                    (now - timedelta(days=3)).strftime("%Y-%m-%dT%H:%M:%S.000Z"),
+                ),
+                (
+                    iid,
+                    103,
+                    "episode",
+                    "missing",
+                    "searched",
+                    None,
+                    "Too Old Show",
+                    None,
+                    (now - timedelta(days=10)).strftime("%Y-%m-%dT%H:%M:%S.000Z"),
+                ),
+            ]
+        )
+    )
+    body = app.get("/api/status?v=2").json()
+    labels = [row["item_label"] for row in body["recent_searches"]]
+    assert labels == ["Fresh Show", "Older Show"]
+
+
+def test_status_v2_recent_searches_limit_5(app: TestClient) -> None:
+    _login(app)
+    iid = _create_instance(app)
+    now = datetime.now(UTC)
+    rows = [
+        (
+            iid,
+            100 + i,
+            "episode",
+            "missing",
+            "searched",
+            None,
+            f"Show {i}",
+            None,
+            (now - timedelta(minutes=i)).strftime("%Y-%m-%dT%H:%M:%S.000Z"),
+        )
+        for i in range(10)
+    ]
+    asyncio.run(_seed_search_log(rows))
+    body = app.get("/api/status?v=2").json()
+    assert len(body["recent_searches"]) == 5
+    # newest first -> item_label "Show 0"
+    assert body["recent_searches"][0]["item_label"] == "Show 0"
+
+
+def test_status_v2_unlocking_next_sorted_by_earliest_unlock(app: TestClient) -> None:
+    _login(app)
+    iid = _create_instance(app)
+    # cooldown_days default is 14 for sonarr instance created via /settings
+    # earliest unlock = most recently searched (smallest days_ago)
+    asyncio.run(_seed_cooldown(iid, 201, "episode", days_ago=13.5))  # unlocks in ~12h
+    asyncio.run(_seed_cooldown(iid, 202, "episode", days_ago=10.0))  # unlocks in 4d
+    asyncio.run(_seed_cooldown(iid, 203, "episode", days_ago=5.0))  # unlocks in 9d
+    asyncio.run(_seed_cooldown(iid, 204, "episode", days_ago=1.0))  # unlocks in 13d
+    body = app.get("/api/status?v=2").json()["instances"][0]
+    ids = [r["item_id"] for r in body["unlocking_next"]]
+    assert ids == [201, 202, 203]
+    assert body["cooldown_total"] == 4
+
+
+def test_status_v2_cooldown_breakdown_splits_by_kind(app: TestClient) -> None:
+    _login(app)
+    iid = _create_instance(app)
+    # seed a searched row of each kind per item, then cooldown rows for each
+    now = datetime.now(UTC)
+    asyncio.run(
+        _seed_search_log(
+            [
+                (
+                    iid,
+                    301,
+                    "episode",
+                    "missing",
+                    "searched",
+                    None,
+                    "M1",
+                    None,
+                    (now - timedelta(days=1)).strftime("%Y-%m-%dT%H:%M:%S.000Z"),
+                ),
+                (
+                    iid,
+                    302,
+                    "episode",
+                    "cutoff",
+                    "searched",
+                    None,
+                    "C1",
+                    None,
+                    (now - timedelta(days=1)).strftime("%Y-%m-%dT%H:%M:%S.000Z"),
+                ),
+                (
+                    iid,
+                    303,
+                    "episode",
+                    "upgrade",
+                    "searched",
+                    None,
+                    "U1",
+                    None,
+                    (now - timedelta(days=1)).strftime("%Y-%m-%dT%H:%M:%S.000Z"),
+                ),
+                (
+                    iid,
+                    304,
+                    "episode",
+                    "missing",
+                    "searched",
+                    None,
+                    "M2",
+                    None,
+                    (now - timedelta(days=1)).strftime("%Y-%m-%dT%H:%M:%S.000Z"),
+                ),
+            ]
+        )
+    )
+    asyncio.run(_seed_cooldown(iid, 301, "episode", days_ago=1.0))
+    asyncio.run(_seed_cooldown(iid, 302, "episode", days_ago=1.0))
+    asyncio.run(_seed_cooldown(iid, 303, "episode", days_ago=1.0))
+    asyncio.run(_seed_cooldown(iid, 304, "episode", days_ago=1.0))
+    body = app.get("/api/status?v=2").json()["instances"][0]
+    assert body["cooldown_breakdown"] == {"missing": 2, "cutoff": 1, "upgrade": 1}
+
+
+def test_status_v2_monitored_total_reads_app_state(app: TestClient) -> None:
+    _login(app)
+    iid = _create_instance(app)
+    snapshots = app.app.state.instance_snapshots
+    snapshots[iid] = {"missing_count": 42, "cutoff_count": 8}
+    body = app.get("/api/status?v=2").json()["instances"][0]
+    assert body["monitored_total"] == 50
+    assert body["unreleased_count"] == 0  # PR 1 interim
+
+
+def test_status_v2_monitored_total_zero_when_no_snapshot(app: TestClient) -> None:
+    _login(app)
+    _create_instance(app)
+    body = app.get("/api/status?v=2").json()["instances"][0]
+    assert body["monitored_total"] == 0

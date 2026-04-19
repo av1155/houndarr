@@ -67,6 +67,13 @@ async def _lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     app.state.master_key = ensure_master_key(settings.data_dir)
     logger.info("Master key loaded from %s", settings.master_key_path)
 
+    # Per-instance in-memory snapshot bucket used by the dashboard for
+    # monitored_total and (from PR 5) unreleased_count.  Populated by the
+    # engine during each search cycle's /wanted/* probe; read by
+    # /api/status at poll time.  Lost on process restart; repopulates
+    # within one cycle per instance.
+    app.state.instance_snapshots = {}
+
     # Configure and initialize the database
     set_db_path(str(settings.db_path))
     await init_db()
@@ -85,7 +92,10 @@ async def _lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         logger.warning("No instances configured. Visit the Settings page to add an instance.")
 
     # Start the background search supervisor
-    supervisor = Supervisor(master_key=app.state.master_key)
+    supervisor = Supervisor(
+        master_key=app.state.master_key,
+        instance_snapshots=app.state.instance_snapshots,
+    )
     await supervisor.start()
     app.state.supervisor = supervisor
 

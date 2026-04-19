@@ -11,7 +11,7 @@ Small batches. Polite intervals. Zero indexer abuse.
 [![License: AGPL-3.0](https://img.shields.io/github/license/av1155/houndarr?style=flat)](LICENSE)
 [![Last commit](https://img.shields.io/github/last-commit/av1155/houndarr?style=flat)](https://github.com/av1155/houndarr/commits/main)
 [![GitHub release](https://img.shields.io/github/v/release/av1155/houndarr?style=flat)](https://github.com/av1155/houndarr/releases/latest)
-[![GHCR pulls](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fhoundarr-ghcr-badge.andrea-venti12.workers.dev%2Fapi%2Fav1155%2Fhoundarr&query=downloadCount&label=ghcr%20pulls&color=2496ed&logo=docker&logoColor=white&style=flat)](https://github.com/av1155/houndarr/pkgs/container/houndarr)
+[![GHCR pulls](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fghcr-badge.andrea-venti12.workers.dev%2Fapi%2Fav1155%2Fhoundarr&query=downloadCount&label=ghcr%20pulls&color=2496ed&logo=docker&logoColor=white&style=flat)](https://github.com/av1155/houndarr/pkgs/container/houndarr)
 [![Contributors](https://img.shields.io/github/contributors/av1155/houndarr?style=flat)](https://github.com/av1155/houndarr/graphs/contributors)
 [![Discord](https://img.shields.io/discord/1495186820806213743?style=flat&logo=discord&logoColor=white&label=discord&color=5865F2)](https://discord.gg/t29AhAarYk)
 

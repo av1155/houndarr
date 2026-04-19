@@ -345,6 +345,370 @@
     .dash-lh__stat-value { font-size: 26px; }
     .dash-lh__legend { gap: 10px; font-size: 10px; }
   }
+
+  /* ── Instance card (PR 3 redesign) ────────────────────────────────── */
+  .dash-grid {
+    display: grid;
+    gap: 16px;
+    grid-template-columns: 1fr;
+  }
+  @media (min-width: 640px) {
+    .dash-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  }
+
+  .dash-card {
+    --type-color: var(--color-brand-400);
+    background: var(--color-surface-1);
+    border: 1px solid var(--color-border-subtle);
+    border-top: 3px solid var(--type-color);
+    border-radius: var(--radius-container);
+    padding: 22px 24px 20px;
+    max-width: 640px;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    box-shadow: var(--shadow-2);
+  }
+  .dash-card[data-type="sonarr"]      { --type-color: var(--color-sonarr); }
+  .dash-card[data-type="radarr"]      { --type-color: var(--color-radarr); }
+  .dash-card[data-type="lidarr"]      { --type-color: var(--color-lidarr); }
+  .dash-card[data-type="readarr"]     { --type-color: var(--color-readarr); }
+  .dash-card[data-type="whisparr_v2"] { --type-color: var(--color-whisparr); }
+  .dash-card[data-type="whisparr_v3"] { --type-color: var(--color-whisparr-v3); }
+
+  .dash-card[data-disabled="true"]               { --type-color: #475569; }
+  .dash-card[data-disabled="true"] .dash-card__name    { color: #94a3b8; }
+  .dash-card[data-disabled="true"] .dash-card__eyebrow { opacity: 0.6; }
+  .dash-card[data-disabled="true"] .dash-policy        { opacity: 0.55; }
+
+  .dash-card__head {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 10px;
+    align-items: start;
+  }
+  .dash-card__eyebrow {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.24em;
+    text-transform: uppercase;
+    color: var(--type-color);
+    font-weight: 600;
+    margin: 0;
+  }
+  .dash-card__name {
+    font-family: var(--font-sans);
+    font-size: 22px;
+    font-weight: 600;
+    color: #ffffff;
+    margin: 4px 0 0;
+    letter-spacing: -0.02em;
+    line-height: 1.15;
+  }
+
+  .dash-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    font-weight: 500;
+    padding: 3px 10px;
+    border-radius: var(--radius-full);
+    font-family: var(--font-sans);
+    white-space: nowrap;
+    align-self: start;
+    margin-top: 2px;
+    text-decoration: none;
+  }
+  .dash-pill--active {
+    background: rgba(22, 101, 52, 0.28);
+    border: 1px solid rgba(74, 222, 128, 0.28);
+    color: #86efac;
+  }
+  .dash-pill--error {
+    background: rgba(153, 27, 27, 0.25);
+    border: 1px solid rgba(248, 113, 113, 0.42);
+    color: #fca5a5;
+    cursor: pointer;
+  }
+  .dash-pill--error::before { content: "⚠"; font-size: 10px; }
+  .dash-pill--error:hover { background: rgba(153, 27, 27, 0.40); }
+  .dash-pill--disabled {
+    background: var(--color-surface-2);
+    border: 1px solid var(--color-border-default);
+    color: #64748b;
+  }
+  .dash-pill--disabled .dash-pill__dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #475569;
+  }
+
+  .dash-card__stats {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+  }
+  .dash-card__stats > div {
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 0;
+    position: relative;
+  }
+  .dash-card__stats > div + div::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 20%;
+    bottom: 20%;
+    width: 1px;
+    background: var(--color-border-subtle);
+  }
+  .dash-card__stat-label {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: #64748b;
+    font-weight: 600;
+    margin: 0;
+  }
+  .dash-card__stat-value {
+    font-family: var(--font-mono);
+    font-size: 26px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    color: #ffffff;
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+    margin: 0;
+  }
+  .dash-card__stat-value--eligible { color: var(--seg-eligible); }
+  .dash-card__stat-value--searched { color: var(--color-brand-300); }
+  .dash-card__stat-value--muted    { color: #64748b; }
+
+  .dash-unlocks {
+    background: #0b0e14;
+    border: 1px solid var(--color-border-subtle);
+    border-radius: var(--radius-inset);
+    padding: 14px 16px;
+  }
+  .dash-unlocks__head {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    letter-spacing: 0.24em;
+    text-transform: uppercase;
+    color: #64748b;
+    font-weight: 600;
+    margin: 0 0 10px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 10px;
+  }
+  .dash-unlocks__head .tally {
+    color: #64748b;
+    font-weight: 500;
+    margin-left: auto;
+    text-align: right;
+  }
+  .dash-unlocks__list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .dash-unlocks__row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 14px;
+    align-items: baseline;
+    font-size: 13px;
+    color: #cbd5e1;
+  }
+  .dash-unlocks__title {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .dash-unlocks__time {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--type-color);
+    font-weight: 500;
+    white-space: nowrap;
+  }
+  .dash-unlocks--empty {
+    font-size: 12px;
+    color: #64748b;
+    font-style: italic;
+    text-align: center;
+    padding: 18px 8px;
+    margin: 0;
+  }
+
+  .dash-policy {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 5px;
+    font-family: var(--font-mono);
+    margin: 0;
+    padding: 0;
+  }
+  .dash-policy__chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 8px;
+    background: rgba(11, 14, 20, 0.8);
+    border: 1px solid var(--color-border-subtle);
+    border-radius: var(--radius-chip);
+    cursor: help;
+    transition: border-color var(--dur-base) var(--ease-station);
+  }
+  .dash-policy__chip:hover { border-color: var(--color-border-default); }
+  .dash-policy__label {
+    font-size: 9px;
+    color: #64748b;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    font-weight: 500;
+    line-height: 1;
+  }
+  .dash-policy__value {
+    font-size: 11.5px;
+    color: #cbd5e1;
+    font-weight: 500;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+  }
+  .dash-policy__value[data-state="on"]  { color: var(--seg-eligible); }
+  .dash-policy__value[data-state="off"] { color: #64748b; }
+
+  .dash-card__foot {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    padding-top: 14px;
+    border-top: 1px solid var(--color-border-subtle);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: #64748b;
+    flex-wrap: wrap;
+  }
+  .dash-card__foot-text { line-height: 1.4; }
+  .dash-card__foot-text .sep { color: #334155; margin: 0 5px; }
+
+  .dash-run-now {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    border: 1px solid color-mix(in srgb, var(--type-color) 50%, transparent);
+    color: var(--type-color);
+    background: transparent;
+    border-radius: var(--radius-inset);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    cursor: pointer;
+    transition:
+      background var(--dur-base) var(--ease-station),
+      border-color var(--dur-base) var(--ease-station),
+      transform var(--dur-base) var(--ease-station);
+  }
+  .dash-run-now:hover {
+    background: color-mix(in srgb, var(--type-color) 14%, transparent);
+    border-color: var(--type-color);
+  }
+  .dash-run-now:active { transform: translateY(1px); }
+  .dash-run-now:disabled { opacity: 0.4; cursor: not-allowed; }
+  .dash-run-now__arrow { font-size: 9px; }
+
+  /* Run-now state machine overrides (reuse existing data-run-now-btn hook). */
+  .dash-run-now.is-running {
+    background: color-mix(in srgb, var(--type-color) 18%, transparent);
+    border-color: var(--type-color);
+  }
+  .dash-run-now.is-success {
+    background: color-mix(in srgb, var(--seg-eligible) 22%, transparent);
+    border-color: var(--seg-eligible);
+    color: var(--seg-eligible);
+  }
+  .dash-run-now.is-error {
+    background: color-mix(in srgb, var(--color-danger) 22%, transparent);
+    border-color: var(--color-danger);
+    color: var(--color-danger);
+    animation: run-now-shake 280ms var(--ease-station);
+  }
+
+  /* Empty-dashboard panel (State C in the preview). */
+  .dash-empty-state {
+    background: var(--color-surface-1);
+    border: 1px solid var(--color-border-subtle);
+    border-radius: var(--radius-container);
+    padding: 56px 24px;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+  }
+  .dash-empty-state__icon {
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    border: 1px dashed var(--color-border-default);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #475569;
+    font-family: var(--font-mono);
+    font-size: 20px;
+    margin-bottom: 4px;
+  }
+  .dash-empty-state__title {
+    font-size: 18px;
+    font-weight: 600;
+    color: #cbd5e1;
+    margin: 0;
+    letter-spacing: -0.01em;
+  }
+  .dash-empty-state__body {
+    font-size: 13.5px;
+    color: #94a3b8;
+    margin: 0;
+    max-width: 440px;
+    line-height: 1.55;
+  }
+  .dash-empty-state__cta {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 10px;
+    padding: 10px 20px;
+    background: var(--color-brand-600);
+    color: #ffffff;
+    border: 1px solid var(--color-brand-500);
+    border-radius: var(--radius-inset);
+    font-size: 13px;
+    font-weight: 500;
+    text-decoration: none;
+    transition: background var(--dur-base) var(--ease-station);
+  }
+  .dash-empty-state__cta:hover { background: var(--color-brand-500); }
+
+  @media (max-width: 640px) {
+    .dash-card { padding: 18px 18px 16px; }
+    .dash-card__name { font-size: 19px; }
+    .dash-card__stat-value { font-size: 22px; }
+    .dash-card__foot { font-size: 10.5px; }
+  }
 </style>
 
 <main class="dash-main">
@@ -647,6 +1011,247 @@
       ].join('');
     }
 
+    // ── Instance card renderer (PR 3) ──────────────────────────────────
+
+    function formatTimeUntil(iso) {
+      if (!iso) return '';
+      const ts = Date.parse(iso);
+      if (Number.isNaN(ts)) return '';
+      const delta = Math.max(0, ts - Date.now());
+      const total = Math.floor(delta / 1000);
+      if (total <= 0) return 'now';
+      const d = Math.floor(total / 86400);
+      const h = Math.floor((total % 86400) / 3600);
+      const m = Math.floor((total % 3600) / 60);
+      if (d > 0 && h > 0) return `${d}d ${h}h`;
+      if (d > 0)          return `${d}d`;
+      if (h > 0 && m > 0) return `${h}h ${m}m`;
+      if (h > 0)          return `${h}h`;
+      return `${m}m`;
+    }
+
+    function typeEyebrowLabel(typeName) {
+      if (!typeName) return 'INSTANCE';
+      return String(typeName).toUpperCase();
+    }
+
+    function renderStatusPill(inst) {
+      if (!inst.enabled) {
+        return `<span class="dash-pill dash-pill--disabled"><span class="dash-pill__dot"></span>Disabled</span>`;
+      }
+      if (inst.active_error) {
+        const count = toNumber(inst.active_error.failures_count) || 1;
+        const href = `/logs?instance_id=${encodeURIComponent(inst.id)}&action=error`;
+        return `<a class="dash-pill dash-pill--error" href="${href}"
+                  hx-get="${href}" hx-target="#app-content" hx-swap="innerHTML" hx-push-url="true"
+                  aria-label="${count} error${count === 1 ? '' : 's'}; view logs">${count} error${count === 1 ? '' : 's'}</a>`;
+      }
+      return `<span class="dash-pill dash-pill--active"><span class="dash-pill__dot"></span>Active</span>`;
+    }
+
+    function renderUnlockPanel(inst) {
+      if (!inst.enabled) {
+        return `
+<div class="dash-unlocks">
+  <p class="dash-unlocks__head">Expected to unlock next</p>
+  <p class="dash-unlocks--empty">Instance disabled. No patrols running.</p>
+</div>`;
+      }
+      if (inst.active_error) {
+        return `
+<div class="dash-unlocks">
+  <p class="dash-unlocks__head">Expected to unlock next</p>
+  <p class="dash-unlocks--empty">Hound offline. Unable to compute unlocks.</p>
+</div>`;
+      }
+      const items = Array.isArray(inst.unlocking_next) ? inst.unlocking_next : [];
+      const totalCd = toNumber(inst.cooldown_total);
+      const shown = Math.min(items.length, 3);
+      const tally = totalCd === 0
+        ? '0 in cooldown'
+        : `${shown} of ${totalCd} in cooldown`;
+      if (items.length === 0) {
+        return `
+<div class="dash-unlocks">
+  <p class="dash-unlocks__head">Expected to unlock next <span class="tally">${tally}</span></p>
+  <p class="dash-unlocks--empty">Nothing queued. All caught up.</p>
+</div>`;
+      }
+      const rows = items.slice(0, 3).map(function (row) {
+        const title = row.item_label || `Item ${row.item_id}`;
+        return `
+      <div class="dash-unlocks__row">
+        <span class="dash-unlocks__title">${escHtml(title)}</span>
+        <span class="dash-unlocks__time">${escHtml(formatTimeUntil(row.unlock_at))}</span>
+      </div>`;
+      }).join('');
+      return `
+<div class="dash-unlocks">
+  <p class="dash-unlocks__head">Expected to unlock next <span class="tally">${tally}</span></p>
+  <div class="dash-unlocks__list">${rows}
+  </div>
+</div>`;
+    }
+
+    function renderPolicyChips(inst) {
+      const chips = [];
+      const sleep = toNumber(inst.sleep_interval_mins);
+      const batch = toNumber(inst.batch_size);
+      const cap   = toNumber(inst.hourly_cap);
+      const cd    = toNumber(inst.cooldown_days);
+      const grace = toNumber(inst.post_release_grace_hrs);
+      const queue = toNumber(inst.queue_limit);
+
+      chips.push({
+        label: 'Every',
+        value: `${sleep}m`,
+        tip:   `Cycle interval: runs every ${sleep} minutes`,
+      });
+      chips.push({
+        label: 'Batch',
+        value: String(batch),
+        tip:   `Batch size: up to ${batch} item${batch === 1 ? '' : 's'} dispatched per cycle`,
+      });
+      chips.push({
+        label: 'Cap/h',
+        value: String(cap),
+        tip:   `Hourly cap: at most ${cap} search${cap === 1 ? '' : 'es'} per hour`,
+      });
+      chips.push({
+        label: 'CD',
+        value: `${cd}d`,
+        tip:   `Missing cooldown: ${cd} days after a search before the same item can be re-searched`,
+      });
+      chips.push({
+        label: 'Grace',
+        value: `${grace}h`,
+        tip:   `Post-release grace: wait ${grace} hour${grace === 1 ? '' : 's'} after release before the first search`,
+      });
+      if (queue > 0) {
+        chips.push({
+          label: 'Queue',
+          value: `≤${queue}`,
+          tip:   `Queue backpressure: skip cycle when the arr download queue has ${queue}+ items`,
+        });
+      }
+      if (inst.upgrade_enabled) {
+        const upgDays = toNumber(inst.upgrade_cooldown_days) || 90;
+        chips.push({
+          label: 'Upgrade',
+          value: `${upgDays}d`,
+          state: 'on',
+          tip:   `Upgrade pass enabled: ${upgDays}-day cooldown on upgrade searches`,
+        });
+      }
+      chips.push({
+        label: 'Cutoff',
+        value: inst.cutoff_enabled ? 'on' : 'off',
+        state: inst.cutoff_enabled ? 'on' : 'off',
+        tip:   inst.cutoff_enabled
+          ? `Cutoff-unmet pass enabled (separate ${toNumber(inst.cooldown_days)}d+ cooldown window)`
+          : 'Cutoff-unmet pass disabled',
+      });
+
+      return chips.map(function (chip) {
+        const dataState = chip.state ? ` data-state="${chip.state}"` : '';
+        return `
+        <span class="dash-policy__chip" title="${escHtml(chip.tip)}">
+          <span class="dash-policy__label">${escHtml(chip.label)}</span><span class="dash-policy__value"${dataState}>${escHtml(chip.value)}</span>
+        </span>`;
+      }).join('');
+    }
+
+    function renderCardFooter(inst) {
+      const disabled = !inst.enabled;
+      const offline = !disabled && !!inst.active_error;
+      const runNowDisabled = disabled || offline ? ' disabled' : '';
+      const lastDispatch = inst.last_dispatch_at ? formatTimeAgo(inst.last_dispatch_at) : '';
+      let footText;
+      if (disabled) {
+        footText = `last dispatch ${escHtml(lastDispatch || 'never')} <span class="sep">·</span> paused`;
+      } else if (offline) {
+        const since = inst.active_error ? formatTimeAgo(inst.active_error.timestamp) : '';
+        footText = `offline since ${escHtml(since || 'just now')}`;
+      } else {
+        const sleep = toNumber(inst.sleep_interval_mins);
+        const nextPatrol = `${sleep}m`;
+        footText = `last dispatch ${escHtml(lastDispatch || 'never')} <span class="sep">·</span> next patrol ${escHtml(nextPatrol)}`;
+      }
+      return `
+<div class="dash-card__foot">
+  <span class="dash-card__foot-text">${footText}</span>
+  <button class="dash-run-now"
+          hx-post="/api/instances/${inst.id}/run-now"
+          hx-swap="none"
+          data-run-now-btn="true"
+          data-instance-id="${inst.id}"
+          title="Trigger search now"${runNowDisabled}>
+    <span class="dash-run-now__arrow" data-run-now-icon>▶</span>
+    <span data-run-now-label>Run now</span>
+  </button>
+</div>`;
+    }
+
+    function renderCard(inst) {
+      const disabled = !inst.enabled;
+      const offline = !disabled && !!inst.active_error;
+      const typeAttr = inst.type ? ` data-type="${escHtml(inst.type)}"` : '';
+      const disabledAttr = disabled ? ' data-disabled="true"' : '';
+      const watchingVal = toNumber(inst.monitored_total);
+      const bd = inst.cooldown_breakdown || { missing: 0, cutoff: 0, upgrade: 0 };
+      const gated = toNumber(bd.missing) + toNumber(bd.cutoff) + toNumber(bd.upgrade);
+      const unr = toNumber(inst.unreleased_count);
+      const eligibleVal = Math.max(0, watchingVal - gated - unr);
+      const searchedVal = toNumber(inst.lifetime_searched);
+
+      const watchingText = offline || disabled
+        ? `<dd class="dash-card__stat-value dash-card__stat-value--muted">${watchingVal || '-'}</dd>`
+        : `<dd class="dash-card__stat-value">${watchingVal}</dd>`;
+      const eligibleText = offline
+        ? `<dd class="dash-card__stat-value dash-card__stat-value--muted">-</dd>`
+        : disabled
+          ? `<dd class="dash-card__stat-value dash-card__stat-value--muted">-</dd>`
+          : `<dd class="dash-card__stat-value dash-card__stat-value--eligible">${eligibleVal}</dd>`;
+      const searchedText = offline || disabled
+        ? `<dd class="dash-card__stat-value dash-card__stat-value--muted">${searchedVal}</dd>`
+        : `<dd class="dash-card__stat-value dash-card__stat-value--searched">${searchedVal}</dd>`;
+
+      previousMetrics.set(inst.id, {
+        eligible: eligibleVal,
+        lifetime_searched: searchedVal,
+        last_dispatch_at: inst.last_dispatch_at || null,
+      });
+
+      return `
+<article class="dash-card"${typeAttr}${disabledAttr}>
+  <header class="dash-card__head">
+    <div>
+      <p class="dash-card__eyebrow">${escHtml(typeEyebrowLabel(inst.type))}</p>
+      <p class="dash-card__name">${escHtml(inst.name)}</p>
+    </div>
+    ${renderStatusPill(inst)}
+  </header>
+  <dl class="dash-card__stats">
+    <div>
+      <dt class="dash-card__stat-label">Watching</dt>
+      ${watchingText}
+    </div>
+    <div>
+      <dt class="dash-card__stat-label">Eligible</dt>
+      ${eligibleText}
+    </div>
+    <div>
+      <dt class="dash-card__stat-label">Searched</dt>
+      ${searchedText}
+    </div>
+  </dl>
+  ${renderUnlockPanel(inst)}
+  <p class="dash-policy">${renderPolicyChips(inst)}
+  </p>
+  ${renderCardFooter(inst)}
+</article>`;
+    }
+
     function mountTopSection(host, markup) {
       // Parse the rendered markup via a <template> then adopt the
       // resulting nodes.  Avoids Element.innerHTML assignment on the
@@ -684,172 +1289,30 @@
         const topHost = document.getElementById('dash-top');
         if (topHost) mountTopSection(topHost, renderTopSection(instances, recentSearches));
 
-        // ── Empty state ────────────────────────────────────────────────
+        // ── Empty-dashboard state (State C: no instances configured) ───
         if (instances.length === 0) {
           evt.detail.serverResponse = `
-<div class="text-center py-20 text-slate-500">
-  <svg class="w-14 h-14 mx-auto mb-5 opacity-20" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
-      d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-  </svg>
-  <p class="text-base font-semibold text-slate-400 tracking-tight">No instances configured yet</p>
-  <p class="mt-2 text-sm text-slate-500">
-    <a href="/settings" hx-get="/settings" hx-target="#app-content" hx-swap="innerHTML"
-       hx-push-url="true" class="text-brand-400 hover:text-brand-300 underline underline-offset-2">Add an instance</a>
-    in Settings to get started.
+<section class="dash-empty-state" aria-label="No instances">
+  <span class="dash-empty-state__icon" aria-hidden="true">◯</span>
+  <p class="dash-empty-state__title">No instances configured</p>
+  <p class="dash-empty-state__body">
+    Add a Sonarr, Radarr, Lidarr, Readarr, or Whisparr instance to start patrolling
+    your library for missing and cutoff-unmet media.
   </p>
-</div>`;
+  <a class="dash-empty-state__cta" href="/settings"
+     hx-get="/settings" hx-target="#app-content" hx-swap="innerHTML" hx-push-url="true">
+    + Add your first instance
+  </a>
+</section>`;
           return;
         }
 
         const isInitialHydration = evt.detail.target.dataset.hydrated !== 'true';
         gridInitialHydration = isInitialHydration;
 
-        const data = instances;
-
-        // ── Instance cards ─────────────────────────────────────────────
-        const cards = data
-          .map((inst, index) => {
-            const previous         = previousMetrics.get(inst.id);
-            const lastHourChanged  = previous && previous.searches_last_hour !== inst.searches_last_hour;
-            const todayChanged     = previous && previous.searches_today     !== inst.searches_today;
-            const totalChanged     = previous && previous.items_found_total  !== inst.items_found_total;
-            const searched24hChanged = previous && previous.searched_24h !== toNumber(inst.searched_24h);
-            const skipped24hChanged  = previous && previous.skipped_24h  !== toNumber(inst.skipped_24h);
-            const errors24hChanged   = previous && previous.errors_24h   !== toNumber(inst.errors_24h);
-
-            // Status badge: pulsing dot for active
-            const badge = inst.enabled
-              ? `<span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-950/50 text-emerald-300 border border-emerald-800/40">
-                   <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block station-pulse-dot"></span> Active
-                 </span>`
-              : `<span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium bg-[#151b27] text-slate-500 border border-[#2a3448]">
-                   <span class="w-1.5 h-1.5 rounded-full bg-slate-600 inline-block"></span> Disabled
-                 </span>`;
-
-            // Type badge
-            const typeBadgeMap = {
-              sonarr:   `<span class="text-xs font-mono bg-sky-950/60 text-sky-300 px-2 py-0.5 rounded border border-sky-900/50">Sonarr</span>`,
-              radarr:   `<span class="text-xs font-mono bg-amber-950/60 text-amber-300 px-2 py-0.5 rounded border border-amber-900/50">Radarr</span>`,
-              lidarr:   `<span class="text-xs font-mono bg-emerald-950/60 text-emerald-300 px-2 py-0.5 rounded border border-emerald-900/50">Lidarr</span>`,
-              readarr:  `<span class="text-xs font-mono bg-rose-950/60 text-rose-300 px-2 py-0.5 rounded border border-rose-900/50">Readarr</span>`,
-              whisparr_v2: `<span class="text-xs font-mono bg-pink-950/60 text-pink-300 px-2 py-0.5 rounded border border-pink-900/50">Whisparr v2</span>`,
-              whisparr_v3: `<span class="text-xs font-mono bg-fuchsia-950/60 text-fuchsia-300 px-2 py-0.5 rounded border border-fuchsia-900/50">Whisparr v3</span>`,
-            };
-            const typeBadge = typeBadgeMap[inst.type] || typeBadgeMap.sonarr;
-
-            // Left border color: signature Station type indicator
-            const typeColor = TYPE_COLOR_MAP[inst.type] || TYPE_COLOR_MAP.sonarr;
-
-            const lastSearch   = inst.last_search_at ? formatLocalTimestamp(inst.last_search_at) : 'Never';
-
-            const activityLabelMap = { searched: 'Searched', skipped: 'Skipped', error: 'Error' };
-            const lastActivity = inst.last_activity_at
-              ? `${activityLabelMap[inst.last_activity_action] || 'Activity'} at ${formatLocalTimestamp(inst.last_activity_at)}`
-              : 'No activity in recent history';
-
-            const queueLimit = toNumber(inst.queue_limit);
-            const policyChips = [
-              `Every ${toNumber(inst.sleep_interval_mins)}m`,
-              `Batch ${toNumber(inst.batch_size)}`,
-              `Cap/h ${toNumber(inst.hourly_cap)}`,
-              `Cooldown ${toNumber(inst.cooldown_days)}d`,
-              `Grace ${toNumber(inst.post_release_grace_hrs)}h`,
-              queueLimit > 0 ? `Queue ≤${queueLimit}` : null,
-              inst.cutoff_enabled ? `Cutoff (${toNumber(inst.cutoff_batch_size)})` : 'No cutoff',
-            ].filter(Boolean)
-              .map(function (label) {
-                return `<span class="rounded border border-[#2a3448] bg-[#151b27] px-2 py-0.5 text-[10px] font-mono text-slate-400">${label}</span>`;
-              })
-              .join('');
-
-            previousMetrics.set(inst.id, {
-              searches_last_hour: inst.searches_last_hour,
-              searches_today:     inst.searches_today,
-              items_found_total:  inst.items_found_total,
-              searched_24h: toNumber(inst.searched_24h),
-              skipped_24h:  toNumber(inst.skipped_24h),
-              errors_24h:   toNumber(inst.errors_24h),
-            });
-
-            return `
-<div class="instance-card bg-[#0e1117] border border-[#1e2638] rounded-xl p-5 flex flex-col gap-4"
-     style="border-left:3px solid ${typeColor}; box-shadow:var(--shadow-2);">
-
-  <!-- Header: name + type, status badge, run-now -->
-  <div class="flex items-start justify-between gap-3">
-    <div>
-      <div class="flex items-center gap-2 flex-wrap">
-        <h2 class="text-base font-semibold text-white tracking-tight">${escHtml(inst.name)}</h2>
-        ${typeBadge}
-      </div>
-      <div class="mt-1.5">${badge}</div>
-    </div>
-    <button
-      hx-post="/api/instances/${inst.id}/run-now"
-      hx-swap="none"
-      data-run-now-btn="true"
-      data-instance-id="${inst.id}"
-      title="Trigger search now"
-      class="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium
-             bg-brand-600 hover:bg-brand-500 text-white transition-colors disabled:opacity-50">
-      <svg data-run-now-icon class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-          d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/>
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-          d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
-      </svg>
-      <span data-run-now-label>Run now</span>
-    </button>
-  </div>
-
-  <!-- Search count grid -->
-  <dl class="grid grid-cols-3 gap-2 text-center">
-    <div class="bg-[#151b27] border border-[#1e2638] rounded-lg px-3 py-2 ${lastHourChanged ? 'metric-changed' : ''}">
-      <dt class="text-[10px] text-slate-500 uppercase tracking-widest font-sans">Last hour</dt>
-      <dd class="text-lg font-bold tabular-nums font-mono text-white mt-1">${inst.searches_last_hour}</dd>
-    </div>
-    <div class="bg-[#151b27] border border-[#1e2638] rounded-lg px-3 py-2 ${todayChanged ? 'metric-changed' : ''}">
-      <dt class="text-[10px] text-slate-500 uppercase tracking-widest font-sans">Today</dt>
-      <dd class="text-lg font-bold tabular-nums font-mono text-white mt-1">${inst.searches_today}</dd>
-    </div>
-    <div class="bg-[#151b27] border border-[#1e2638] rounded-lg px-3 py-2 ${totalChanged ? 'metric-changed' : ''}">
-      <dt class="text-[10px] text-slate-500 uppercase tracking-widest font-sans">Total</dt>
-      <dd class="text-lg font-bold tabular-nums font-mono text-white mt-1">${inst.items_found_total}</dd>
-    </div>
-  </dl>
-
-  <!-- 24h status grid -->
-  <dl class="grid grid-cols-3 gap-2 text-center">
-    <div class="bg-emerald-950/30 rounded-lg px-3 py-2 border border-emerald-900/35 ${searched24hChanged ? 'metric-changed' : ''}">
-      <dt class="text-[10px] text-emerald-400/75 uppercase tracking-widest font-sans">24h searched</dt>
-      <dd class="text-lg font-bold tabular-nums font-mono text-emerald-200 mt-1">${toNumber(inst.searched_24h)}</dd>
-    </div>
-    <div class="bg-amber-950/25 rounded-lg px-3 py-2 border border-amber-900/35 ${skipped24hChanged ? 'metric-changed' : ''}">
-      <dt class="text-[10px] text-amber-400/75 uppercase tracking-widest font-sans">24h skipped</dt>
-      <dd class="text-lg font-bold tabular-nums font-mono text-amber-200 mt-1">${toNumber(inst.skipped_24h)}</dd>
-    </div>
-    <div class="bg-rose-950/25 rounded-lg px-3 py-2 border border-rose-900/35 ${errors24hChanged ? 'metric-changed' : ''}">
-      <dt class="text-[10px] text-rose-400/75 uppercase tracking-widest font-sans">24h errors</dt>
-      <dd class="text-lg font-bold tabular-nums font-mono text-rose-200 mt-1">${toNumber(inst.errors_24h)}</dd>
-    </div>
-  </dl>
-
-  <!-- Activity timestamps -->
-  <div class="space-y-1 text-xs text-slate-500">
-    <p class="font-sans">Last activity: <span class="text-slate-300 font-mono">${lastActivity}</span></p>
-    <p class="font-sans">Last searched: <span class="text-slate-300 font-mono">${lastSearch}</span></p>
-  </div>
-
-  <!-- Policy chips -->
-  <div class="flex flex-wrap gap-1.5">
-    ${policyChips}
-  </div>
-</div>`;
-          })
-          .join('');
-
-        evt.detail.serverResponse = `<div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">${cards}</div>`;
+        // ── Instance cards (PR 3 redesign) ─────────────────────────────
+        const cards = instances.map(renderCard).join('');
+        evt.detail.serverResponse = `<div class="dash-grid">${cards}</div>`;
         evt.detail.target.dataset.hydrated = 'true';
       },
       { signal },

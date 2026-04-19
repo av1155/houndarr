@@ -14,6 +14,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `Reset to Defaults` button in the instance settings modal restores every search setting for an instance type. (#405)
 - Per-instance search order: `random` (new default for newly added instances) spreads picks across the whole backlog each cycle, `chronological` walks oldest-first. (#395)
 
+### Changed
+
+- Documentation site was rebuilt on the [Diataxis](https://diataxis.fr/) structure with a redesigned light mode, migrated images, and rendered diagrams. (#399, #401)
+
 ### Fixed
 
 - Invalid time-window strings now report a friendly error instead of surfacing the underlying `ValueError` message to the UI. (#407)

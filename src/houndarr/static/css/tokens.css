@@ -48,8 +48,17 @@
   --color-lidarr-bg:    rgba(6, 78, 59, 0.50);
   --color-readarr:      #fca5a5;  /* rose */
   --color-readarr-bg:   rgba(127, 29, 29, 0.50);
-  --color-whisparr:     #f9a8d4;  /* pink */
+  --color-whisparr:     #f9a8d4;  /* pink (v2) */
   --color-whisparr-bg:  rgba(80, 7, 36, 0.50);
+  --color-whisparr-v3:    #e879f9;  /* fuchsia */
+  --color-whisparr-v3-bg: rgba(86, 19, 88, 0.50);
+
+  /* ── Library-health bar segment colors ─────────────────────────────── */
+  --seg-eligible:      #4ade80;   /* emerald (ready to search) */
+  --seg-cutoff-cd:     #fcd34d;   /* amber (cutoff cooldown) */
+  --seg-cooldown:      #22d3ee;   /* cyan (missing cooldown) */
+  --seg-upgrade-cd:    #a78bfa;   /* violet (upgrade cooldown) */
+  --seg-unreleased:    #64748b;   /* slate (future release) */
 
   /* ── Typography ─────────────────────────────────────────────────────── */
   --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system,
@@ -73,6 +82,12 @@
   --radius-lg:   10px;    /* modals, panels, popovers */
   --radius-xl:   16px;    /* large panels */
   --radius-full: 9999px;  /* pill badges */
+
+  /* ── Redesign radius tiers (3-tier deliberate system, not cartoony) ── */
+  --radius-container: 6px;  /* cards, library-health, alert, empty-state */
+  --radius-inset:     4px;  /* inset panels, buttons, nav, outline pills */
+  --radius-bar:       2px;  /* bars, legend swatches, small chips */
+  --radius-chip:      3px;  /* policy chips (tight data-display tier) */
 
   /* ── Shadows (cool-toned, midnight-shifted) ──────────────────────────── */
   --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.50);

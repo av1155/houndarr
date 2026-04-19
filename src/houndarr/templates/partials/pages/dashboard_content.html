@@ -72,29 +72,299 @@
       animation: none;
     }
   }
+
+  /* ── Dashboard redesign: top section ─────────────────────────────── */
+  .dash-main {
+    display: flex;
+    flex-direction: column;
+    gap: 28px;
+  }
+
+  .dash-sub__eyebrow {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--color-brand-400);
+    margin: 0 0 8px;
+    font-weight: 500;
+  }
+  .dash-sub__sentence {
+    font-size: 30px;
+    font-weight: 600;
+    color: #e2e8f0;
+    margin: 0;
+    letter-spacing: -0.02em;
+    line-height: 1.25;
+  }
+  .dash-sub__sentence .attn  { color: var(--color-danger); }
+  .dash-sub__sentence .muted { color: #94a3b8; font-weight: 500; }
+
+  .dash-alert {
+    background: linear-gradient(135deg, rgba(248, 113, 113, 0.08), transparent 60%), var(--color-surface-1);
+    border: 1px solid var(--color-danger-border);
+    border-left: 3px solid var(--color-danger);
+    border-radius: var(--radius-container);
+    padding: 16px 20px;
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    grid-template-areas: "icon body link";
+    align-items: start;
+    gap: 14px 16px;
+  }
+  .dash-alert__icon { grid-area: icon; font-size: 18px; color: var(--color-danger); line-height: 1; margin-top: 1px; }
+  .dash-alert__body { grid-area: body; min-width: 0; }
+  .dash-alert__head {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: #fca5a5;
+    margin: 0 0 6px;
+    font-weight: 600;
+  }
+  .dash-alert__text { font-size: 13px; color: #e2e8f0; margin: 0; line-height: 1.5; }
+  .dash-alert__text .mono  { font-family: var(--font-mono); color: #fca5a5; }
+  .dash-alert__text .muted { color: #94a3b8; }
+  .dash-alert__link {
+    grid-area: link;
+    font-size: 12px;
+    color: #fca5a5;
+    text-decoration: none;
+    font-weight: 500;
+    padding: 6px 10px;
+    border: 1px solid rgba(252, 165, 165, 0.35);
+    border-radius: var(--radius-inset);
+    white-space: nowrap;
+    align-self: start;
+    transition: background var(--dur-base) var(--ease-station);
+  }
+  .dash-alert__link:hover { background: rgba(248, 113, 113, 0.12); }
+
+  .dash-lh {
+    background: var(--color-surface-1);
+    border: 1px solid var(--color-border-subtle);
+    border-radius: var(--radius-container);
+    padding: 22px 26px;
+    box-shadow: var(--shadow-1);
+  }
+  .dash-lh__eyebrow {
+    font-size: 10px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: #64748b;
+    font-weight: 600;
+    margin: 0 0 14px;
+  }
+  .dash-lh__headline {
+    display: flex;
+    gap: 40px;
+    flex-wrap: wrap;
+    align-items: baseline;
+    margin-bottom: 18px;
+  }
+  .dash-lh__stat { display: flex; align-items: baseline; gap: 10px; }
+  .dash-lh__stat-value {
+    font-family: var(--font-mono);
+    font-size: 36px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+  }
+  .dash-lh__stat-value--eligible { color: var(--seg-eligible); }
+  .dash-lh__stat-value--gated,
+  .dash-lh__stat-value--unrel    { color: #cbd5e1; }
+  .dash-lh__stat-label {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: #64748b;
+    font-weight: 500;
+  }
+  .dash-lh__stat-label--eligible { color: var(--seg-eligible); opacity: 0.9; }
+  .dash-lh__bar {
+    display: flex;
+    height: 14px;
+    width: 100%;
+    border-radius: var(--radius-bar);
+    overflow: hidden;
+    background: #0b0e14;
+  }
+  .dash-lh__segment { height: 100%; }
+  .dash-lh__segment--eligible   { background: var(--seg-eligible);   opacity: 0.88; }
+  .dash-lh__segment--cutoff-cd  { background: var(--seg-cutoff-cd);  opacity: 0.88; }
+  .dash-lh__segment--cooldown   { background: var(--seg-cooldown);   opacity: 0.85; }
+  .dash-lh__segment--upgrade-cd { background: var(--seg-upgrade-cd); opacity: 0.85; }
+  .dash-lh__segment--unreleased { background: var(--seg-unreleased); opacity: 0.85; }
+  .dash-lh__legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    margin-top: 14px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: #94a3b8;
+  }
+  .dash-lh__legend-item { display: inline-flex; align-items: center; gap: 8px; }
+  .dash-lh__legend-swatch { width: 10px; height: 10px; border-radius: var(--radius-bar); flex-shrink: 0; }
+  .dash-lh__legend-swatch--eligible   { background: var(--seg-eligible); }
+  .dash-lh__legend-swatch--cutoff-cd  { background: var(--seg-cutoff-cd); }
+  .dash-lh__legend-swatch--cooldown   { background: var(--seg-cooldown); }
+  .dash-lh__legend-swatch--upgrade-cd { background: var(--seg-upgrade-cd); }
+  .dash-lh__legend-swatch--unreleased { background: var(--seg-unreleased); }
+
+  .dash-trail {
+    background: var(--color-surface-1);
+    border: 1px solid var(--color-border-subtle);
+    border-radius: var(--radius-container);
+    padding: 20px 26px;
+  }
+  .dash-trail__head {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--seg-eligible);
+    margin: 0 0 14px;
+    font-weight: 600;
+  }
+  .dash-trail__list { display: flex; flex-direction: column; gap: 0; }
+  .dash-trail__row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    align-items: center;
+    gap: 14px;
+    padding: 11px 0;
+    border-top: 1px solid var(--color-border-subtle);
+  }
+  .dash-trail__row:last-child { padding-bottom: 2px; }
+  .dash-trail__title {
+    font-size: 13.5px;
+    color: #e2e8f0;
+    font-weight: 500;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .dash-trail__inst {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    font-weight: 600;
+  }
+  .dash-trail__when {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: #64748b;
+    min-width: 56px;
+    text-align: right;
+  }
+  .dash-trail__empty {
+    font-size: 13px;
+    color: #64748b;
+    font-style: italic;
+    padding: 10px 0 2px;
+    margin: 0;
+  }
+
+  .dash-section-head {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    padding: 8px 0 0;
+    flex-wrap: wrap;
+  }
+  .dash-section-head__title {
+    font-size: 28px;
+    font-weight: 600;
+    color: #e2e8f0;
+    margin: 0;
+    letter-spacing: -0.02em;
+    line-height: 1.2;
+    flex: 0 0 auto;
+  }
+  .dash-section-head__rule {
+    flex: 1 1 40px;
+    min-width: 40px;
+    height: 1px;
+    background: linear-gradient(
+      to right,
+      var(--color-border-default) 0%,
+      var(--color-border-subtle) 85%,
+      transparent 100%
+    );
+  }
+  .dash-section-head__add {
+    font-size: 13px;
+    color: var(--color-brand-400);
+    text-decoration: none;
+    font-weight: 500;
+    transition: color var(--dur-base) var(--ease-station);
+    flex: 0 0 auto;
+  }
+  .dash-section-head__add:hover { color: var(--color-brand-300); }
+
+  @media (max-width: 640px) {
+    .dash-section-head__rule { display: none; }
+    .dash-sub__sentence { font-size: 22px; }
+    .dash-section-head__title { font-size: 22px; }
+    .dash-lh { padding: 18px 18px; }
+    .dash-lh__headline { gap: 22px; }
+    .dash-lh__stat-value { font-size: 30px; }
+    .dash-trail { padding: 16px 18px; }
+    .dash-trail__row {
+      grid-template-columns: minmax(0, 1fr) auto;
+      row-gap: 4px;
+      column-gap: 12px;
+    }
+    .dash-trail__inst { grid-column: 1 / 2; grid-row: 2; }
+    .dash-trail__when { grid-column: 2 / 3; grid-row: 1 / 3; align-self: center; }
+    .dash-alert {
+      grid-template-columns: auto 1fr;
+      grid-template-areas:
+        "icon body"
+        "link link";
+      padding: 14px 16px;
+      gap: 12px 14px;
+    }
+    .dash-alert__link {
+      justify-self: stretch;
+      text-align: center;
+      padding: 10px 14px;
+      font-size: 13px;
+    }
+    .dash-alert__meta { display: block; margin-top: 4px; }
+    .dash-alert__meta-lead { display: none; }
+  }
+
+  @media (max-width: 420px) {
+    .dash-lh__headline { gap: 18px; }
+    .dash-lh__stat-value { font-size: 26px; }
+    .dash-lh__legend { gap: 10px; font-size: 10px; }
+  }
 </style>
 
-<div class="flex items-center justify-between mb-6">
-  <h1 class="text-xl font-bold text-white tracking-tight">Dashboard</h1>
-  <a
-    href="/settings"
-    hx-get="/settings"
-    hx-target="#app-content"
-    hx-swap="innerHTML"
-    hx-push-url="true"
-    class="text-sm text-brand-400 hover:text-brand-300 transition-colors font-medium"
-  >+ Add Instance</a>
-</div>
+<main class="dash-main">
+  <!-- Top section populated on each poll: subheader, alert, library-health,
+       recent hunts, section heading. -->
+  <section id="dash-top" aria-live="polite"></section>
 
-<!-- Instance grid: polled every 15 s via HTMX -->
-<div
-  id="instance-grid"
-  data-hydrated="false"
-  hx-get="/api/status"
-  hx-trigger="load, every 30s"
-  hx-swap="innerHTML"
-  hx-target="#instance-grid"
-></div>
+  <!-- Instance grid: polled every 30 s via HTMX against /api/status?v=2.
+       The beforeSwap listener below parses the envelope, writes the top
+       section into #dash-top as a side effect, and replaces this element
+       with the card grid markup. -->
+  <div
+    id="instance-grid"
+    data-hydrated="false"
+    hx-get="/api/status?v=2"
+    hx-trigger="load, every 30s"
+    hx-swap="innerHTML"
+    hx-target="#instance-grid"
+  ></div>
+</main>
 
 <script>
   (function () {
@@ -173,17 +443,249 @@
       whisparr_v3: '#e879f9',
     };
 
+    // ── Renderers: top-of-page sections (PR 2 redesign) ────────────────
+    //
+    // These take the /api/status?v=2 envelope and emit HTML strings for
+    // the four top-of-page widgets plus the section heading.  All
+    // dynamic values pass through escHtml so the result is safe to parse
+    // via a <template> and adopt into the live DOM.
+
+    function formatTimeAgo(iso) {
+      if (!iso) return '';
+      const ts = Date.parse(iso);
+      if (Number.isNaN(ts)) return '';
+      const delta = Math.max(0, Date.now() - ts);
+      const s = Math.floor(delta / 1000);
+      if (s < 60)     return `${s}s ago`;
+      const m = Math.floor(s / 60);
+      if (m < 60)     return `${m}m ago`;
+      const h = Math.floor(m / 60);
+      if (h < 24)     return `${h}h ago`;
+      const d = Math.floor(h / 24);
+      return `${d}d ago`;
+    }
+
+    function formatPatrolEyebrow() {
+      const now = new Date();
+      const monthNames = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+      const mo = monthNames[now.getMonth()];
+      const day = String(now.getDate()).padStart(2, '0');
+      const year = now.getFullYear();
+      const hh = String(now.getHours()).padStart(2, '0');
+      const mm = String(now.getMinutes()).padStart(2, '0');
+      const tz = now
+        .toLocaleTimeString(undefined, { timeZoneName: 'short' })
+        .split(' ')
+        .pop();
+      return `◉ Patrol · ${mo} ${day} ${year} · ${hh}:${mm} ${tz || ''}`.trim();
+    }
+
+    function renderSubheader(instances) {
+      const eyebrow = formatPatrolEyebrow();
+      if (instances.length === 0) {
+        return `
+<section class="dash-sub">
+  <p class="dash-sub__eyebrow">${escHtml(eyebrow)}</p>
+  <h1 class="dash-sub__sentence">No hounds on patrol yet.</h1>
+</section>`;
+      }
+      const total = instances.length;
+      const active = instances.filter(function (i) { return i.enabled; }).length;
+      const errored = instances.find(function (i) { return i.active_error; });
+      let sentence;
+      if (errored) {
+        const on = total - instances.filter(function (i) { return i.active_error; }).length;
+        sentence = `${on} of ${total} hounds on patrol. <span class="attn">${escHtml(errored.name)} needs attention.</span>`;
+      } else {
+        const recent = instances
+          .map(function (i) { return i.last_dispatch_at; })
+          .filter(Boolean)
+          .sort()
+          .pop();
+        const whenPart = recent
+          ? `Last dispatch ${escHtml(formatTimeAgo(recent))}.`
+          : 'No recent dispatches.';
+        sentence = `All ${active} hounds on patrol. <span class="muted">${whenPart}</span>`;
+      }
+      return `
+<section class="dash-sub">
+  <p class="dash-sub__eyebrow">${escHtml(eyebrow)}</p>
+  <h1 class="dash-sub__sentence">${sentence}</h1>
+</section>`;
+    }
+
+    function renderAlert(instances) {
+      const failing = instances.filter(function (i) { return i.active_error; });
+      if (failing.length === 0) return '';
+      const inst = failing[0];
+      const failures = toNumber(inst.active_error && inst.active_error.failures_count);
+      const failText = failures > 0 ? `${failures} failure${failures === 1 ? '' : 's'}` : 'Connection error';
+      const whenAgo = inst.active_error ? formatTimeAgo(inst.active_error.timestamp) : '';
+      const msg = (inst.active_error && inst.active_error.message) || '';
+      const logsHref = `/logs?instance_id=${encodeURIComponent(inst.id)}&action=error`;
+      return `
+<section class="dash-alert" role="alert">
+  <span class="dash-alert__icon" aria-hidden="true">⚠</span>
+  <div class="dash-alert__body">
+    <p class="dash-alert__head">Degraded · ${failing.length} hound${failing.length === 1 ? '' : 's'} offline</p>
+    <p class="dash-alert__text">
+      <strong>${escHtml(inst.name)}</strong><span class="muted">:</span>
+      ${escHtml(msg || 'Could not reach instance')}<span class="dash-alert__meta"><span class="muted dash-alert__meta-lead">&nbsp;·&nbsp;</span>${escHtml(failText)} <span class="muted">·</span> last ${escHtml(whenAgo || 'just now')}</span>
+    </p>
+  </div>
+  <a class="dash-alert__link" href="${logsHref}"
+     hx-get="${logsHref}" hx-target="#app-content" hx-swap="innerHTML" hx-push-url="true">View logs →</a>
+</section>`;
+    }
+
+    function renderLibraryHealth(instances) {
+      const totals = instances.reduce(function (acc, i) {
+        const bd = i.cooldown_breakdown || { missing: 0, cutoff: 0, upgrade: 0 };
+        acc.monitored += toNumber(i.monitored_total);
+        acc.cooldown  += toNumber(bd.missing);
+        acc.cutoffCd  += toNumber(bd.cutoff);
+        acc.upgradeCd += toNumber(bd.upgrade);
+        acc.unreleased += toNumber(i.unreleased_count);
+        return acc;
+      }, { monitored: 0, cooldown: 0, cutoffCd: 0, upgradeCd: 0, unreleased: 0 });
+      const gated = totals.cooldown + totals.cutoffCd + totals.upgradeCd;
+      const eligible = Math.max(0, totals.monitored - gated - totals.unreleased);
+      const ariaLabel = `${eligible} eligible, ${totals.cutoffCd} cutoff cooldown, ${totals.cooldown} cooldown, ${totals.upgradeCd} upgrade cooldown, ${totals.unreleased} unreleased`;
+      return `
+<section class="dash-lh" aria-label="Library health">
+  <p class="dash-lh__eyebrow">Library health · ${totals.monitored} monitored</p>
+  <div class="dash-lh__headline">
+    <span class="dash-lh__stat">
+      <span class="dash-lh__stat-value dash-lh__stat-value--eligible">${eligible}</span>
+      <span class="dash-lh__stat-label dash-lh__stat-label--eligible">Eligible</span>
+    </span>
+    <span class="dash-lh__stat">
+      <span class="dash-lh__stat-value dash-lh__stat-value--gated">${gated}</span>
+      <span class="dash-lh__stat-label">Gated</span>
+    </span>
+    <span class="dash-lh__stat">
+      <span class="dash-lh__stat-value dash-lh__stat-value--unrel">${totals.unreleased}</span>
+      <span class="dash-lh__stat-label">Unreleased</span>
+    </span>
+  </div>
+  <div class="dash-lh__bar" role="img" aria-label="${escHtml(ariaLabel)}">
+    <div class="dash-lh__segment dash-lh__segment--eligible"   style="flex: ${eligible};"></div>
+    <div class="dash-lh__segment dash-lh__segment--cutoff-cd"  style="flex: ${totals.cutoffCd};"></div>
+    <div class="dash-lh__segment dash-lh__segment--cooldown"   style="flex: ${totals.cooldown};"></div>
+    <div class="dash-lh__segment dash-lh__segment--upgrade-cd" style="flex: ${totals.upgradeCd};"></div>
+    <div class="dash-lh__segment dash-lh__segment--unreleased" style="flex: ${totals.unreleased};"></div>
+  </div>
+  <div class="dash-lh__legend">
+    <span class="dash-lh__legend-item"><span class="dash-lh__legend-swatch dash-lh__legend-swatch--eligible"></span>${eligible} eligible</span>
+    <span class="dash-lh__legend-item"><span class="dash-lh__legend-swatch dash-lh__legend-swatch--cutoff-cd"></span>${totals.cutoffCd} cutoff cooldown</span>
+    <span class="dash-lh__legend-item"><span class="dash-lh__legend-swatch dash-lh__legend-swatch--cooldown"></span>${totals.cooldown} cooldown</span>
+    <span class="dash-lh__legend-item"><span class="dash-lh__legend-swatch dash-lh__legend-swatch--upgrade-cd"></span>${totals.upgradeCd} upgrade cooldown</span>
+    <span class="dash-lh__legend-item"><span class="dash-lh__legend-swatch dash-lh__legend-swatch--unreleased"></span>${totals.unreleased} unreleased</span>
+  </div>
+</section>`;
+    }
+
+    function typeColorVar(typeName) {
+      if (typeName === 'sonarr')      return 'var(--color-sonarr)';
+      if (typeName === 'radarr')      return 'var(--color-radarr)';
+      if (typeName === 'lidarr')      return 'var(--color-lidarr)';
+      if (typeName === 'readarr')     return 'var(--color-readarr)';
+      if (typeName === 'whisparr_v2') return 'var(--color-whisparr)';
+      if (typeName === 'whisparr_v3') return 'var(--color-whisparr-v3)';
+      return 'var(--color-brand-400)';
+    }
+
+    function renderRecentHunts(recentSearches) {
+      if (!recentSearches || recentSearches.length === 0) {
+        return `
+<section class="dash-trail" aria-label="Recent searches">
+  <p class="dash-trail__head">Recent hunts</p>
+  <p class="dash-trail__empty">No dispatches in the last 7 days. Hounds are holding the line.</p>
+</section>`;
+      }
+      const rows = recentSearches
+        .slice(0, 5)
+        .map(function (r) {
+          const color = typeColorVar(r.instance_type);
+          const title = r.item_label || 'Untitled';
+          return `
+        <div class="dash-trail__row">
+          <span class="dash-trail__title">${escHtml(title)}</span>
+          <span class="dash-trail__inst" style="color: ${color};">${escHtml(r.instance_name)}</span>
+          <span class="dash-trail__when">${escHtml(formatTimeAgo(r.timestamp))}</span>
+        </div>`;
+        })
+        .join('');
+      return `
+<section class="dash-trail" aria-label="Recent searches">
+  <p class="dash-trail__head">Recent hunts</p>
+  <div class="dash-trail__list">${rows}
+  </div>
+</section>`;
+    }
+
+    function renderSectionHead() {
+      return `
+<header class="dash-section-head">
+  <h2 class="dash-section-head__title">The hounds on patrol</h2>
+  <span class="dash-section-head__rule" aria-hidden="true"></span>
+  <a class="dash-section-head__add" href="/settings"
+     hx-get="/settings" hx-target="#app-content" hx-swap="innerHTML" hx-push-url="true">+ Add Instance</a>
+</header>`;
+    }
+
+    function renderTopSection(instances, recentSearches) {
+      if (instances.length === 0) {
+        return renderSubheader(instances);
+      }
+      return [
+        renderSubheader(instances),
+        renderAlert(instances),
+        renderLibraryHealth(instances),
+        renderRecentHunts(recentSearches),
+        renderSectionHead(),
+      ].join('');
+    }
+
+    function mountTopSection(host, markup) {
+      // Parse the rendered markup via a <template> then adopt the
+      // resulting nodes.  Avoids Element.innerHTML assignment on the
+      // live DOM (all user-controlled values already pass through
+      // escHtml in the renderers above).
+      const tpl = document.createElement('template');
+      // eslint-disable-next-line no-unsanitized/property
+      tpl.innerHTML = markup;
+      host.replaceChildren(...tpl.content.childNodes);
+      // Register any hx-* attributes on the new nodes so HTMX handles
+      // clicks on the View-logs link and the + Add Instance link.
+      if (window.htmx && typeof window.htmx.process === 'function') {
+        window.htmx.process(host);
+      }
+    }
+
     document.body.addEventListener(
       'htmx:beforeSwap',
       function (evt) {
         if (evt.detail.target.id !== 'instance-grid') return;
 
-        let data;
-        try { data = JSON.parse(evt.detail.serverResponse); } catch { return; }
-        if (!Array.isArray(data)) return;
+        let payload;
+        try { payload = JSON.parse(evt.detail.serverResponse); } catch { return; }
+        // Accept both legacy array and v=2 envelope (the dashboard asks
+        // for ?v=2 so this is defensive against older servers replying
+        // with the array shape).
+        const instances = Array.isArray(payload)
+          ? payload
+          : (payload && Array.isArray(payload.instances) ? payload.instances : []);
+        const recentSearches = (payload && Array.isArray(payload.recent_searches))
+          ? payload.recent_searches
+          : [];
+
+        // Write the top section as a side effect regardless of grid state.
+        const topHost = document.getElementById('dash-top');
+        if (topHost) mountTopSection(topHost, renderTopSection(instances, recentSearches));
 
         // ── Empty state ────────────────────────────────────────────────
-        if (data.length === 0) {
+        if (instances.length === 0) {
           evt.detail.serverResponse = `
 <div class="text-center py-20 text-slate-500">
   <svg class="w-14 h-14 mx-auto mb-5 opacity-20" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
@@ -203,32 +705,7 @@
         const isInitialHydration = evt.detail.target.dataset.hydrated !== 'true';
         gridInitialHydration = isInitialHydration;
 
-        // ── Summary strip totals ───────────────────────────────────────
-        const totals24h = data.reduce(
-          function (acc, inst) {
-            acc.searched += toNumber(inst.searched_24h);
-            acc.skipped  += toNumber(inst.skipped_24h);
-            acc.errors   += toNumber(inst.errors_24h);
-            return acc;
-          },
-          { searched: 0, skipped: 0, errors: 0 },
-        );
-
-        const summaryStripMarkup = `
-<section class="mb-6 grid grid-cols-3 gap-3" aria-label="Search activity (24h)">
-  <div class="rounded-xl border border-[#1e2638] border-t-2 border-t-emerald-500/70 bg-[#0e1117] px-4 py-4 text-center" style="box-shadow:var(--shadow-1);">
-    <p class="text-[10px] leading-4 uppercase tracking-widest font-sans text-emerald-400/75">Searched</p>
-    <p class="mt-2 text-2xl font-bold tabular-nums font-mono text-emerald-200">${totals24h.searched}</p>
-  </div>
-  <div class="rounded-xl border border-[#1e2638] border-t-2 border-t-amber-500/60 bg-[#0e1117] px-4 py-4 text-center" style="box-shadow:var(--shadow-1);">
-    <p class="text-[10px] leading-4 uppercase tracking-widest font-sans text-amber-400/75">Skipped</p>
-    <p class="mt-2 text-2xl font-bold tabular-nums font-mono text-amber-200">${totals24h.skipped}</p>
-  </div>
-  <div class="rounded-xl border border-[#1e2638] border-t-2 border-t-rose-500/60 bg-[#0e1117] px-4 py-4 text-center" style="box-shadow:var(--shadow-1);">
-    <p class="text-[10px] leading-4 uppercase tracking-widest font-sans text-rose-400/75">Errors</p>
-    <p class="mt-2 text-2xl font-bold tabular-nums font-mono text-rose-200">${totals24h.errors}</p>
-  </div>
-</section>`;
+        const data = instances;
 
         // ── Instance cards ─────────────────────────────────────────────
         const cards = data
@@ -372,7 +849,7 @@
           })
           .join('');
 
-        evt.detail.serverResponse = `${summaryStripMarkup}<div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">${cards}</div>`;
+        evt.detail.serverResponse = `<div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">${cards}</div>`;
         evt.detail.target.dataset.hydrated = 'true';
       },
       { signal },

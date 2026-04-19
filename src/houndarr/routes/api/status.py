@@ -33,7 +33,8 @@ _INSTANCE_COLS = (
     " cooldown_days, cutoff_enabled, cutoff_batch_size,"
     " cutoff_cooldown_days,"
     " post_release_grace_hrs, queue_limit,"
-    " upgrade_enabled, upgrade_cooldown_days"
+    " upgrade_enabled, upgrade_cooldown_days,"
+    " monitored_total, unreleased_count, snapshot_refreshed_at"
 )
 
 _METRICS_SQL = """
@@ -469,17 +470,29 @@ async def get_status(request: Request) -> JSONResponse:
                     "cooldown_total": 0,
                 },
             )
-            snap = snapshots.get(int(iid), {})
-            missing_count = int(snap.get("missing_count", 0))
-            cutoff_count = int(snap.get("cutoff_count", 0))
+            # Prefer the authoritative snapshot columns written by the
+            # supervisor's refresh_instance_snapshots task (PR 5).  Fall
+            # back to the in-memory sum captured by the engine's total_fn
+            # probe (PR 1) while the first refresh is still pending; this
+            # smooths the first ~20 seconds after boot.
+            column_monitored = int(inst["monitored_total"])
+            column_unreleased = int(inst["unreleased_count"])
+            if column_monitored == 0:
+                snap = snapshots.get(int(iid), {})
+                column_monitored = int(snap.get("missing_count", 0)) + int(
+                    snap.get("cutoff_count", 0)
+                )
             entry["lifetime_searched"] = lifetime["lifetime_searched"]
             entry["last_dispatch_at"] = lifetime["last_dispatch_at"]
             entry["active_error"] = error_map.get(iid)
             entry["cooldown_breakdown"] = cooldown["cooldown_breakdown"]
             entry["unlocking_next"] = cooldown["unlocking_next"]
             entry["cooldown_total"] = cooldown["cooldown_total"]
-            entry["monitored_total"] = missing_count + cutoff_count
-            entry["unreleased_count"] = 0  # populated by PR 5's snapshot refresh
+            entry["monitored_total"] = column_monitored
+            entry["unreleased_count"] = column_unreleased
+            entry["snapshot_refreshed_at"] = (
+                str(inst["snapshot_refreshed_at"]) if inst["snapshot_refreshed_at"] else None
+            )
             entry["upgrade_enabled"] = bool(inst["upgrade_enabled"])
             entry["upgrade_cooldown_days"] = int(inst["upgrade_cooldown_days"])
         results.append(entry)

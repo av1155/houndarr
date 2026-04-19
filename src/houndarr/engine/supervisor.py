@@ -17,8 +17,14 @@ from uuid import uuid4
 
 import httpx
 
+from houndarr.engine.adapters import get_adapter
 from houndarr.engine.search_loop import CycleTrigger, _write_log, run_instance_search
-from houndarr.services.instances import Instance, get_instance, list_instances
+from houndarr.services.instances import (
+    Instance,
+    get_instance,
+    list_instances,
+    update_instance_snapshot,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +32,8 @@ _SHUTDOWN_TIMEOUT = 10  # seconds to wait for tasks to finish on stop()
 _CONNECT_RETRY_SECS = 30  # back-off interval when a connection error occurs
 _STARTUP_GRACE_SECS = 10  # one-time delay before the first cycle fires per instance
 _STARTUP_STAGGER_SECS = 30  # per-instance offset added to startup grace at initial start()
+_SNAPSHOT_REFRESH_INTERVAL_SECS = 600  # 10 minutes, matches the locked plan cadence
+_SNAPSHOT_INITIAL_DELAY_SECS = 20  # first run after startup, gives arr time to come up
 RunNowStatus = Literal["accepted", "not_found", "disabled"]
 
 
@@ -56,6 +64,9 @@ class Supervisor:
         # into this bucket each cycle; None means snapshots are disabled
         # (e.g. in isolated unit tests).
         self._instance_snapshots = instance_snapshots
+        # Global snapshot-refresh task handle.  Populated in ``start`` and
+        # cancelled in ``stop``.
+        self._snapshot_task: asyncio.Task[None] | None = None
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -70,6 +81,15 @@ class Supervisor:
             await self.start_instance_task(
                 instance.id, instance=instance, startup_offset=idx * _STARTUP_STAGGER_SECS
             )
+
+        # Snapshot refresh runs even when no search cycles are enabled, so a
+        # disabled instance's last-known snapshot columns still tick (useful
+        # for operators temporarily pausing search without losing the
+        # monitored-total reading).
+        self._snapshot_task = asyncio.create_task(
+            self._snapshot_refresh_loop(),
+            name="snapshot-refresh-loop",
+        )
 
         if not self._tasks:
             logger.warning("Supervisor: no enabled instances configured. Nothing to do.")
@@ -88,6 +108,13 @@ class Supervisor:
         """Cancel all running tasks and wait up to 10 s for clean exit."""
         self._prune_scheduled_tasks()
         self._prune_manual_tasks()
+
+        snapshot = self._snapshot_task
+        if snapshot is not None and not snapshot.done():
+            snapshot.cancel()
+            with suppress(asyncio.CancelledError):
+                await snapshot
+        self._snapshot_task = None
 
         if not self._tasks and not self._manual_runs:
             return
@@ -326,6 +353,63 @@ class Supervisor:
                     message=str(exc),
                 )
                 return False
+
+    async def _snapshot_refresh_loop(self) -> None:
+        """Background loop: refresh dashboard snapshot columns at 10-min cadence.
+
+        Keeps each enabled instance's ``monitored_total`` and
+        ``unreleased_count`` columns fresh so ``/api/status?v=2`` can
+        serve them without fanning out to arr on every poll.  Failures
+        are non-fatal: an unreachable arr keeps its last-known snapshot
+        and the loop moves on to the next instance.
+        """
+        try:
+            await asyncio.sleep(_SNAPSHOT_INITIAL_DELAY_SECS)
+        except asyncio.CancelledError:
+            raise
+
+        while True:
+            try:
+                await self._refresh_all_snapshots_once()
+            except asyncio.CancelledError:
+                raise
+            except Exception:  # noqa: BLE001
+                logger.exception("Supervisor: snapshot refresh iteration failed")
+
+            try:
+                await asyncio.sleep(_SNAPSHOT_REFRESH_INTERVAL_SECS)
+            except asyncio.CancelledError:
+                raise
+
+    async def _refresh_all_snapshots_once(self) -> None:
+        """Refresh the snapshot columns for every enabled instance once.
+
+        Runs sequentially; acquires the per-instance search lock before
+        writing so it cannot race an in-progress cycle.  Disabled
+        instances are skipped (their last-known snapshot stays on disk).
+        """
+        instances = await list_instances(master_key=self._master_key)
+        for inst in instances:
+            if not inst.enabled:
+                continue
+            lock = self._run_locks.setdefault(inst.id, asyncio.Lock())
+            async with lock:
+                try:
+                    adapter = get_adapter(inst.type)
+                    async with adapter.make_client(inst) as client:
+                        snap = await client.get_instance_snapshot()
+                    await update_instance_snapshot(
+                        inst.id,
+                        monitored_total=snap.monitored_total,
+                        unreleased_count=snap.unreleased_count,
+                    )
+                except httpx.TransportError:
+                    logger.debug(
+                        "Supervisor: snapshot refresh skipped for %r; instance unreachable",
+                        inst.name,
+                    )
+                except Exception:  # noqa: BLE001
+                    logger.exception("Supervisor: snapshot refresh failed for %r", inst.name)
 
     def _on_scheduled_task_done(self, instance_id: int, task: asyncio.Task[None]) -> None:
         """Remove finished scheduled task references."""

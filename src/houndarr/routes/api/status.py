@@ -1,12 +1,14 @@
 """Status API: per-instance search metrics and run-now trigger.
 
-GET  /api/status             → JSON list of InstanceStatus objects
-POST /api/instances/{id}/run-now → trigger an immediate search cycle (202)
+GET  /api/status             -> JSON list of InstanceStatus objects (v=1, legacy)
+GET  /api/status?v=2         -> JSON envelope with dashboard-redesign fields
+POST /api/instances/{id}/run-now -> trigger an immediate search cycle (202)
 """
 
 from __future__ import annotations
 
 import logging
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
@@ -29,7 +31,9 @@ router = APIRouter()
 _INSTANCE_COLS = (
     "id, name, type, enabled, batch_size, sleep_interval_mins, hourly_cap,"
     " cooldown_days, cutoff_enabled, cutoff_batch_size,"
-    " post_release_grace_hrs, queue_limit"
+    " cutoff_cooldown_days,"
+    " post_release_grace_hrs, queue_limit,"
+    " upgrade_enabled, upgrade_cooldown_days"
 )
 
 _METRICS_SQL = """
@@ -75,6 +79,91 @@ FROM (
       AND action IN ('searched', 'skipped', 'error')
 )
 WHERE rn = 1
+"""
+
+# Latest row per instance regardless of action.  Used for the error banner's
+# "latest-row" self-clearing trigger: when the newest row is action='error'
+# we render the banner; when the newest is any non-error row the banner
+# clears on the next poll.
+_LATEST_ROW_SQL = """
+SELECT instance_id, action, timestamp, reason, message
+FROM (
+    SELECT instance_id, action, timestamp, reason, message,
+           ROW_NUMBER() OVER (
+               PARTITION BY instance_id ORDER BY timestamp DESC
+           ) AS rn
+    FROM search_log
+    WHERE instance_id IN ({placeholders})
+)
+WHERE rn = 1
+"""
+
+# Error run-length since the last non-error row.  Count scoped per instance.
+_ERROR_STREAK_SQL = """
+SELECT COUNT(*) AS count
+FROM search_log
+WHERE instance_id = ?
+  AND action = 'error'
+  AND timestamp > COALESCE(
+      (SELECT MAX(timestamp) FROM search_log
+       WHERE instance_id = ? AND action != 'error'),
+      '1970-01-01T00:00:00Z'
+  )
+"""
+
+# Lifetime search count (all time, action='searched') and last dispatch
+# timestamp per instance.
+_LIFETIME_SQL = """
+SELECT
+    instance_id,
+    SUM(CASE WHEN action = 'searched' THEN 1 ELSE 0 END) AS lifetime_searched,
+    MAX(CASE WHEN action = 'searched' THEN timestamp END) AS last_dispatch_at
+FROM search_log
+WHERE instance_id IN ({placeholders})
+GROUP BY instance_id
+"""
+
+# Global recent-dispatches strip: last N rows across all instances within the
+# past 7 days.  Joined against instances for name+type so the client can
+# color each row in the owning instance's type color.
+_RECENT_SEARCHES_SQL = """
+SELECT
+    sl.instance_id,
+    i.name AS instance_name,
+    i.type AS instance_type,
+    sl.item_label,
+    sl.timestamp
+FROM search_log sl
+JOIN instances i ON i.id = sl.instance_id
+WHERE sl.action = 'searched'
+  AND julianday(sl.timestamp) >= julianday('now', '-7 days')
+ORDER BY sl.timestamp DESC
+LIMIT ?
+"""
+
+# Per-instance cooldown rows with the most recent searched kind attached.
+# Small correlated subqueries are fine here: cooldowns is typically <100 rows
+# per instance and each subquery uses the idx_search_log_instance index.
+_COOLDOWNS_SQL = """
+SELECT
+    c.instance_id,
+    c.item_id,
+    c.item_type,
+    c.searched_at,
+    (SELECT sl.item_label FROM search_log sl
+     WHERE sl.instance_id = c.instance_id
+       AND sl.item_id = c.item_id
+       AND sl.item_type = c.item_type
+       AND sl.action = 'searched'
+     ORDER BY sl.timestamp DESC LIMIT 1) AS item_label,
+    (SELECT sl.search_kind FROM search_log sl
+     WHERE sl.instance_id = c.instance_id
+       AND sl.item_id = c.item_id
+       AND sl.item_type = c.item_type
+       AND sl.action = 'searched'
+     ORDER BY sl.timestamp DESC LIMIT 1) AS last_search_kind
+FROM cooldowns c
+WHERE c.instance_id IN ({placeholders})
 """
 
 
@@ -129,58 +218,274 @@ _EMPTY_METRICS: dict[str, Any] = {
 }
 
 
+async def _lifetime_metrics(
+    db: Any,  # noqa: ANN401
+    instance_ids: list[int],
+) -> dict[int, dict[str, Any]]:
+    """Return per-instance lifetime_searched + last_dispatch_at."""
+    if not instance_ids:
+        return {}
+    placeholders = ",".join("?" * len(instance_ids))
+    out: dict[int, dict[str, Any]] = {}
+    async with db.execute(_LIFETIME_SQL.format(placeholders=placeholders), instance_ids) as cur:
+        async for row in cur:
+            out[row["instance_id"]] = {
+                "lifetime_searched": int(row["lifetime_searched"] or 0),
+                "last_dispatch_at": (
+                    str(row["last_dispatch_at"]) if row["last_dispatch_at"] else None
+                ),
+            }
+    return out
+
+
+async def _active_errors(
+    db: Any,  # noqa: ANN401
+    instance_ids: list[int],
+) -> dict[int, dict[str, Any]]:
+    """Return ``{instance_id: {timestamp, message, failures_count}}`` for
+    instances whose newest ``search_log`` row is ``action='error'``.
+
+    Self-clearing: when the supervisor's next cycle writes a non-error row
+    the instance drops out of the result on the next poll.
+    """
+    if not instance_ids:
+        return {}
+    placeholders = ",".join("?" * len(instance_ids))
+    out: dict[int, dict[str, Any]] = {}
+    async with db.execute(_LATEST_ROW_SQL.format(placeholders=placeholders), instance_ids) as cur:
+        async for row in cur:
+            if row["action"] != "error":
+                continue
+            iid = int(row["instance_id"])
+            out[iid] = {
+                "timestamp": str(row["timestamp"]) if row["timestamp"] else None,
+                "message": str(row["message"]) if row["message"] else None,
+                "reason": str(row["reason"]) if row["reason"] else None,
+                "failures_count": 0,
+            }
+    # Enrichment pass: failure count since the last non-error row.  One
+    # query per flagged instance keeps the common case (no errors) free.
+    for iid in out:
+        async with db.execute(_ERROR_STREAK_SQL, (iid, iid)) as cur:
+            row = await cur.fetchone()
+        out[iid]["failures_count"] = int(row["count"]) if row and row["count"] else 0
+    return out
+
+
+async def _recent_searches(db: Any, limit: int = 5) -> list[dict[str, Any]]:  # noqa: ANN401
+    """Return last *limit* dispatches across all instances within 7 days."""
+    out: list[dict[str, Any]] = []
+    async with db.execute(_RECENT_SEARCHES_SQL, (limit,)) as cur:
+        async for row in cur:
+            out.append(
+                {
+                    "instance_id": int(row["instance_id"]),
+                    "instance_name": str(row["instance_name"]),
+                    "instance_type": str(row["instance_type"]),
+                    "item_label": str(row["item_label"]) if row["item_label"] else None,
+                    "timestamp": str(row["timestamp"]),
+                }
+            )
+    return out
+
+
+async def _cooldown_data(
+    db: Any,  # noqa: ANN401
+    instances: list[Any],
+) -> dict[int, dict[str, Any]]:
+    """Return per-instance ``cooldown_breakdown`` and ``unlocking_next``.
+
+    ``cooldown_breakdown`` groups active cooldown rows by the most recent
+    ``search_kind`` that landed for that item.  Rows with no matching
+    search log entry fall back to ``"missing"``.
+
+    ``unlocking_next`` is the top 3 items soonest to exit any active
+    cooldown window, using the instance's enabled cooldown_days values
+    (missing, cutoff when ``cutoff_enabled``, upgrade when
+    ``upgrade_enabled``).  The earliest applicable unlock time wins.
+    """
+    if not instances:
+        return {}
+    instance_ids = [row["id"] for row in instances]
+    placeholders = ",".join("?" * len(instance_ids))
+
+    # Pull settings per instance for unlock-time computation.
+    config: dict[int, dict[str, Any]] = {}
+    for row in instances:
+        config[int(row["id"])] = {
+            "cooldown_days": int(row["cooldown_days"]),
+            "cutoff_cooldown_days": int(row["cutoff_cooldown_days"]),
+            "cutoff_enabled": bool(row["cutoff_enabled"]),
+            "upgrade_cooldown_days": int(row["upgrade_cooldown_days"]),
+            "upgrade_enabled": bool(row["upgrade_enabled"]),
+        }
+
+    out: dict[int, dict[str, Any]] = {
+        iid: {
+            "cooldown_breakdown": {"missing": 0, "cutoff": 0, "upgrade": 0},
+            "unlocking_next": [],
+            "cooldown_total": 0,
+        }
+        for iid in instance_ids
+    }
+
+    # Collect all cooldown rows; compute unlock time per row in Python.
+    per_instance_rows: dict[int, list[dict[str, Any]]] = {iid: [] for iid in instance_ids}
+    async with db.execute(_COOLDOWNS_SQL.format(placeholders=placeholders), instance_ids) as cur:
+        async for row in cur:
+            iid = int(row["instance_id"])
+            kind = str(row["last_search_kind"]) if row["last_search_kind"] else "missing"
+            bucket = kind if kind in ("missing", "cutoff", "upgrade") else "missing"
+            out[iid]["cooldown_breakdown"][bucket] += 1
+            out[iid]["cooldown_total"] += 1
+            per_instance_rows[iid].append(
+                {
+                    "item_id": int(row["item_id"]),
+                    "item_type": str(row["item_type"]),
+                    "searched_at": str(row["searched_at"]),
+                    "item_label": str(row["item_label"]) if row["item_label"] else None,
+                    "last_search_kind": bucket,
+                }
+            )
+
+    for iid, rows in per_instance_rows.items():
+        cfg = config[iid]
+        # Lowest cooldown_days across enabled windows for this instance.
+        candidate_windows = [cfg["cooldown_days"]]
+        if cfg["cutoff_enabled"]:
+            candidate_windows.append(cfg["cutoff_cooldown_days"])
+        if cfg["upgrade_enabled"]:
+            candidate_windows.append(cfg["upgrade_cooldown_days"])
+        min_days = min(candidate_windows) if candidate_windows else cfg["cooldown_days"]
+        enriched: list[dict[str, Any]] = []
+        for row in rows:
+            try:
+                parsed = datetime.fromisoformat(row["searched_at"].replace("Z", "+00:00"))
+            except ValueError:
+                continue
+            if parsed.tzinfo is None:
+                parsed = parsed.replace(tzinfo=UTC)
+            unlock = parsed + timedelta(days=min_days)
+            enriched.append({**row, "unlock_at": unlock})
+        enriched.sort(key=lambda r: r["unlock_at"])
+        # Drop past-unlock rows so the "next to unlock" list is actually
+        # future-looking; items whose unlock has already passed will be
+        # cleared the next time the engine runs.
+        now = datetime.now(UTC)
+        upcoming = [r for r in enriched if r["unlock_at"] > now]
+        out[iid]["unlocking_next"] = [
+            {
+                "item_id": r["item_id"],
+                "item_type": r["item_type"],
+                "item_label": r["item_label"],
+                "unlock_at": r["unlock_at"].isoformat(timespec="seconds"),
+                "last_search_kind": r["last_search_kind"],
+            }
+            for r in upcoming[:3]
+        ]
+    return out
+
+
 # ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
 
 
 @router.get("/api/status")
-async def get_status(request: Request) -> JSONResponse:  # noqa: ARG001
-    """Return per-instance status objects for the dashboard."""
+async def get_status(request: Request) -> JSONResponse:
+    """Return per-instance status objects for the dashboard.
+
+    ``?v=1`` (default, legacy) returns a plain JSON array.  ``?v=2`` wraps
+    the per-instance array in ``{"instances": [...], "recent_searches":
+    [...]}`` and enriches each instance with the dashboard-redesign fields
+    (``last_dispatch_at``, ``active_error``, ``unlocking_next``,
+    ``cooldown_breakdown``, ``monitored_total``, ``unreleased_count``,
+    ``lifetime_searched``).  The v=2 envelope ships behind a query flag so
+    the legacy dashboard keeps working until the front-end is rewritten.
+    """
+    version = request.query_params.get("v", "1")
+
     async with get_db() as db:
-        # Fetch instance metadata directly (skips Fernet API-key decryption).
         async with db.execute(
             f"SELECT {_INSTANCE_COLS} FROM instances ORDER BY id ASC"  # noqa: S608  # nosec B608
         ) as cur:
             instances = await cur.fetchall()
 
         if not instances:
+            if version == "2":
+                return JSONResponse({"instances": [], "recent_searches": []})
             return JSONResponse([])
 
         instance_ids = [row["id"] for row in instances]
         metrics_map, activity_map = await _all_instance_metrics(db, instance_ids)
+
+        lifetime_map: dict[int, dict[str, Any]] = {}
+        error_map: dict[int, dict[str, Any]] = {}
+        cooldown_map: dict[int, dict[str, Any]] = {}
+        recent: list[dict[str, Any]] = []
+        if version == "2":
+            lifetime_map = await _lifetime_metrics(db, instance_ids)
+            error_map = await _active_errors(db, instance_ids)
+            cooldown_map = await _cooldown_data(db, list(instances))
+            recent = await _recent_searches(db, limit=5)
+
+    snapshots: dict[int, dict[str, Any]] = getattr(request.app.state, "instance_snapshots", {})
 
     results: list[dict[str, Any]] = []
     for inst in instances:
         iid = inst["id"]
         m = metrics_map.get(iid, _EMPTY_METRICS)
         act_action, act_at = activity_map.get(iid, (None, None))
-        results.append(
-            {
-                "id": iid,
-                "name": inst["name"],
-                "type": inst["type"],
-                "enabled": bool(inst["enabled"]),
-                "last_search_at": m["last_search_at"],
-                "searches_last_hour": m["searches_last_hour"],
-                "searches_today": m["searches_today"],
-                "items_found_total": m["items_found_total"],
-                "searched_24h": m["searched_24h"],
-                "skipped_24h": m["skipped_24h"],
-                "errors_24h": m["errors_24h"],
-                "last_activity_action": act_action,
-                "last_activity_at": act_at,
-                "batch_size": inst["batch_size"],
-                "sleep_interval_mins": inst["sleep_interval_mins"],
-                "hourly_cap": inst["hourly_cap"],
-                "cooldown_days": inst["cooldown_days"],
-                "cutoff_enabled": bool(inst["cutoff_enabled"]),
-                "cutoff_batch_size": inst["cutoff_batch_size"],
-                "post_release_grace_hrs": inst["post_release_grace_hrs"],
-                "queue_limit": inst["queue_limit"],
-            }
-        )
+        entry: dict[str, Any] = {
+            "id": iid,
+            "name": inst["name"],
+            "type": inst["type"],
+            "enabled": bool(inst["enabled"]),
+            "last_search_at": m["last_search_at"],
+            "searches_last_hour": m["searches_last_hour"],
+            "searches_today": m["searches_today"],
+            "items_found_total": m["items_found_total"],
+            "searched_24h": m["searched_24h"],
+            "skipped_24h": m["skipped_24h"],
+            "errors_24h": m["errors_24h"],
+            "last_activity_action": act_action,
+            "last_activity_at": act_at,
+            "batch_size": inst["batch_size"],
+            "sleep_interval_mins": inst["sleep_interval_mins"],
+            "hourly_cap": inst["hourly_cap"],
+            "cooldown_days": inst["cooldown_days"],
+            "cutoff_enabled": bool(inst["cutoff_enabled"]),
+            "cutoff_batch_size": inst["cutoff_batch_size"],
+            "post_release_grace_hrs": inst["post_release_grace_hrs"],
+            "queue_limit": inst["queue_limit"],
+        }
+        if version == "2":
+            lifetime = lifetime_map.get(iid, {"lifetime_searched": 0, "last_dispatch_at": None})
+            cooldown = cooldown_map.get(
+                iid,
+                {
+                    "cooldown_breakdown": {"missing": 0, "cutoff": 0, "upgrade": 0},
+                    "unlocking_next": [],
+                    "cooldown_total": 0,
+                },
+            )
+            snap = snapshots.get(int(iid), {})
+            missing_count = int(snap.get("missing_count", 0))
+            cutoff_count = int(snap.get("cutoff_count", 0))
+            entry["lifetime_searched"] = lifetime["lifetime_searched"]
+            entry["last_dispatch_at"] = lifetime["last_dispatch_at"]
+            entry["active_error"] = error_map.get(iid)
+            entry["cooldown_breakdown"] = cooldown["cooldown_breakdown"]
+            entry["unlocking_next"] = cooldown["unlocking_next"]
+            entry["cooldown_total"] = cooldown["cooldown_total"]
+            entry["monitored_total"] = missing_count + cutoff_count
+            entry["unreleased_count"] = 0  # populated by PR 5's snapshot refresh
+            entry["upgrade_enabled"] = bool(inst["upgrade_enabled"])
+            entry["upgrade_cooldown_days"] = int(inst["upgrade_cooldown_days"])
+        results.append(entry)
 
+    if version == "2":
+        return JSONResponse({"instances": results, "recent_searches": recent})
     return JSONResponse(results)
 
 

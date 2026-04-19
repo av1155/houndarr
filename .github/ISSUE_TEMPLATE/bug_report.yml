@@ -6,6 +6,11 @@ body:
   - type: markdown
     attributes:
       value: |
+        > For questions and discussion, consider [Discord](https://discord.gg/t29AhAarYk) first. Open an issue here for confirmed bugs with reproduction steps.
+
+  - type: markdown
+    attributes:
+      value: |
         Thanks for taking the time to report a bug! Please fill out the form below.
 
   - type: textarea

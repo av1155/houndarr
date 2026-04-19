@@ -12,6 +12,7 @@ Small batches. Polite intervals. Zero indexer abuse.
 [![Last commit](https://img.shields.io/github/last-commit/av1155/houndarr?style=flat)](https://github.com/av1155/houndarr/commits/main)
 [![GitHub release](https://img.shields.io/github/v/release/av1155/houndarr?style=flat)](https://github.com/av1155/houndarr/releases/latest)
 [![Contributors](https://img.shields.io/github/contributors/av1155/houndarr?style=flat)](https://github.com/av1155/houndarr/graphs/contributors)
+[![Discord](https://img.shields.io/discord/1495186820806213743?style=flat&logo=discord&logoColor=white&label=discord&color=5865F2)](https://discord.gg/t29AhAarYk)
 
 [Documentation](https://av1155.github.io/houndarr/)
 &ensp;&bull;&ensp;
@@ -20,6 +21,8 @@ Small batches. Polite intervals. Zero indexer abuse.
 [Docker](https://github.com/av1155/houndarr/pkgs/container/houndarr)
 &ensp;&bull;&ensp;
 [Helm Chart](https://av1155.github.io/houndarr/docs/guides/installation/helm)
+&ensp;&bull;&ensp;
+[Discord](https://discord.gg/t29AhAarYk)
 &ensp;&bull;&ensp;
 [Report Bug](https://github.com/av1155/houndarr/issues/new/choose)
 
@@ -150,6 +153,8 @@ For environment variables, reverse proxy setup, Kubernetes, Helm, and building f
 For details on how Houndarr handles credentials, network behavior, and trust boundaries, see [Security Overview](https://av1155.github.io/houndarr/docs/security/overview). To report a vulnerability, see [SECURITY.md](SECURITY.md).
 
 ## Contributing and Community
+
+For questions, troubleshooting, or casual discussion, join the [Houndarr Discord](https://discord.gg/t29AhAarYk). For bug reports and feature requests, open a [GitHub issue](https://github.com/av1155/houndarr/issues/new/choose).
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for development workflow, coding standards, and quality gates.
 

@@ -6,6 +6,11 @@ body:
   - type: markdown
     attributes:
       value: |
+        > For questions and discussion, consider [Discord](https://discord.gg/t29AhAarYk) first.
+
+  - type: markdown
+    attributes:
+      value: |
         ## Scope Check
 
         Houndarr is a **single-purpose tool** that searches for missing and cutoff-unmet

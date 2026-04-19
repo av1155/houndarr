@@ -28,6 +28,7 @@ from houndarr.enums import CycleTrigger, SearchAction, SearchKind
 from houndarr.services.cooldown import (
     is_on_cooldown,
     record_search,
+    should_log_skip,
 )
 from houndarr.services.instances import Instance, InstanceType, SearchOrder, update_instance
 from houndarr.services.time_window import (
@@ -444,18 +445,27 @@ async def _run_search_pass(  # noqa: C901
                     if is_cutoff
                     else f"on cooldown ({cooldown_days}d)"
                 )
-                logger.debug("[%s] %s%s: %s", instance.name, log_prefix, candidate.item_id, reason)
-                await _write_log(
-                    instance.id,
-                    candidate.item_id,
-                    candidate.item_type,
-                    SearchAction.skipped.value,
-                    search_kind=search_kind,
-                    cycle_id=cycle_id,
-                    cycle_trigger=cycle_trigger,
-                    item_label=candidate.label,
-                    reason=reason,
-                )
+                bucket = "cutoff_cd" if is_cutoff else "cooldown"
+                skip_key = (instance.id, candidate.item_id, search_kind, bucket)
+                if await should_log_skip(skip_key):
+                    logger.debug(
+                        "[%s] %s%s: %s",
+                        instance.name,
+                        log_prefix,
+                        candidate.item_id,
+                        reason,
+                    )
+                    await _write_log(
+                        instance.id,
+                        candidate.item_id,
+                        candidate.item_type,
+                        SearchAction.skipped.value,
+                        search_kind=search_kind,
+                        cycle_id=cycle_id,
+                        cycle_trigger=cycle_trigger,
+                        item_label=candidate.label,
+                        reason=reason,
+                    )
                 continue
 
             # Count only eligible (non-skipped) candidates against scan budget.
@@ -681,18 +691,20 @@ async def _run_upgrade_pass(
         # Cooldown
         if await is_on_cooldown(instance.id, candidate.item_id, candidate.item_type, cooldown_days):
             reason = f"on upgrade cooldown ({cooldown_days}d)"
-            logger.debug("[%s] upgrade %s: %s", instance.name, candidate.item_id, reason)
-            await _write_log(
-                instance.id,
-                candidate.item_id,
-                candidate.item_type,
-                SearchAction.skipped.value,
-                search_kind="upgrade",
-                cycle_id=cycle_id,
-                cycle_trigger=cycle_trigger,
-                item_label=candidate.label,
-                reason=reason,
-            )
+            skip_key = (instance.id, candidate.item_id, "upgrade", "upgrade_cd")
+            if await should_log_skip(skip_key):
+                logger.debug("[%s] upgrade %s: %s", instance.name, candidate.item_id, reason)
+                await _write_log(
+                    instance.id,
+                    candidate.item_id,
+                    candidate.item_type,
+                    SearchAction.skipped.value,
+                    search_kind="upgrade",
+                    cycle_id=cycle_id,
+                    cycle_trigger=cycle_trigger,
+                    item_label=candidate.label,
+                    reason=reason,
+                )
             new_offset = (offset + scanned + 1) % len(pool)
             scanned += 1
             continue

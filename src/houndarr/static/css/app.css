@@ -257,6 +257,55 @@ body {
   box-shadow: 0 0 0 2px rgba(34, 211, 238, 0.38);
 }
 
+/* ── Global keyboard focus (dashboard redesign) ─────────────────────────── */
+:focus-visible {
+  outline: 2px solid var(--color-brand-400);
+  outline-offset: 2px;
+  border-radius: var(--radius-bar);
+}
+.dash-card:focus-visible {
+  outline-offset: 4px;
+}
+.dash-pill:focus-visible {
+  outline-offset: 3px;
+}
+a:focus-visible,
+button:focus-visible {
+  text-decoration: none;
+}
+
+/* ── Dashboard page-in stagger ──────────────────────────────────────────── */
+@keyframes dash-page-in {
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.dash-main > * {
+  opacity: 0;
+  transform: translateY(6px);
+  animation: dash-page-in var(--dur-slow) var(--ease-station) forwards;
+}
+.dash-main > *:nth-child(1) { animation-delay: 0ms; }
+.dash-main > *:nth-child(2) { animation-delay: 60ms; }
+.dash-main > *:nth-child(3) { animation-delay: 120ms; }
+.dash-main > *:nth-child(4) { animation-delay: 180ms; }
+.dash-main > *:nth-child(5) { animation-delay: 240ms; }
+.dash-main > *:nth-child(6) { animation-delay: 300ms; }
+
+/* ── Dashboard active-pill pulse (preview parity) ───────────────────────── */
+@keyframes dash-pulse-dot {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(74, 222, 128, 0); }
+  50%      { box-shadow: 0 0 0 4px rgba(74, 222, 128, 0.18); }
+}
+.dash-pill--active .dash-pill__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--seg-eligible);
+  animation: dash-pulse-dot 2.4s var(--ease-station) infinite;
+}
+
 /* ── Login/Setup background radial glow ─────────────────────────────────── */
 .auth-glow-bg {
   background:
@@ -528,8 +577,12 @@ body > nav {
     transform: none;
   }
   .status-dot--active,
-  .status-dot--error {
+  .status-dot--error,
+  .dash-main > *,
+  .dash-pill--active .dash-pill__dot {
     animation: none;
     box-shadow: none;
+    opacity: 1;
+    transform: none;
   }
 }

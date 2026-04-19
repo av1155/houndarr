@@ -533,6 +533,10 @@ releases.
 - Lead with user-facing impact, not implementation details
 - End with `(#N)` issue/PR reference
 - Use backticks for identifiers, file names, env vars, UI elements
+- Use markdown `[text](url)` syntax for links; bare URLs do not auto-link
+  in the in-app `What's New` modal (GitHub's CHANGELOG view autolinks both,
+  but the modal's `_render_changelog_bullet` filter only accepts the
+  `[text](url)` form)
 - Be specific: `Connection errors now log at WARNING with instance name`
   not `Improved error handling`
 

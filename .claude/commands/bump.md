@@ -82,6 +82,10 @@ Do not create a branch, do not touch VERSION or CHANGELOG.
 - Lead with user-facing impact, not implementation details.
 - End with `(#N)` issue/PR reference.
 - Use backticks for identifiers, file names, env vars, UI elements.
+- Use markdown `[text](url)` syntax for links; bare URLs do not auto-link
+  in the in-app `What's New` modal (the modal's `_render_changelog_bullet`
+  filter only accepts the `[text](url)` form). GitHub's CHANGELOG view
+  autolinks either form, so markdown links work in both places.
 - Be specific: `Connection errors now log at WARNING with instance name`
   not `Improved error handling`.
 - Each version block ends with a `---` line (blank line before and after).

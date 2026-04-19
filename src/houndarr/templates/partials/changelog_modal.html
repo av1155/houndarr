@@ -57,8 +57,11 @@
 
     /* Mobile: bottom sheet.  The native <dialog> UA stylesheet sets
        max-width: calc(100% - 38px) and centers via inset; we override
-       both so the sheet can span the full viewport width and pin to the
-       bottom edge. */
+       both so the sheet can pin to the bottom edge and span the full
+       containing-block width.  Use `width: 100%` (not 100vw) because
+       `scrollbar-gutter: stable both-edges` on <html> shrinks the
+       containing block for fixed-positioned elements; 100vw would
+       overshoot the right edge by the gutter width. */
     @media (max-width: 639px) {
       #changelog-modal {
         position: fixed;
@@ -68,8 +71,8 @@
         left: 0;
         margin: 0;
         max-height: 90dvh;
-        max-width: 100vw;
-        width: 100vw;
+        max-width: 100%;
+        width: 100%;
         border-radius: 16px 16px 0 0;
         transform: translateY(100%);
       }

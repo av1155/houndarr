@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.0] - 2026-04-18
+
+### Added
+
+- Houndarr now has a [Discord server](https://discord.gg/t29AhAarYk) for questions and discussion. (#411)
+- `What's New` modal surfaces the CHANGELOG block for the current version on first load after an update, and is dismissible. (#409)
+- `Reset to Defaults` button in the instance settings modal restores every search setting for an instance type. (#405)
+- Per-instance search order: `random` (new default for newly added instances) spreads picks across the whole backlog each cycle, `chronological` walks oldest-first. (#395)
+
+### Fixed
+
+- Invalid time-window strings now report a friendly error instead of surfacing the underlying `ValueError` message to the UI. (#407)
+
+---
+
 ## [1.8.0] - 2026-04-16
 
 ### Added

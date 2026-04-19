@@ -347,3 +347,45 @@ async def test_update_search_order_to_random(db: None, master_key: bytes) -> Non
     )
     assert reverted is not None
     assert reverted.search_order == SearchOrder.chronological
+
+
+# ---------------------------------------------------------------------------
+# PR 5: v13 snapshot columns + update_instance_snapshot helper
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio()
+async def test_v13_snapshot_columns_default_zero(db: None, master_key: bytes) -> None:
+    """Fresh v13 installs initialize snapshot columns to their defaults."""
+    inst = await _make(master_key)
+    assert inst.monitored_total == 0
+    assert inst.unreleased_count == 0
+    assert inst.snapshot_refreshed_at == ""
+
+
+@pytest.mark.asyncio()
+async def test_update_instance_snapshot_writes_all_columns(db: None, master_key: bytes) -> None:
+    from houndarr.services.instances import update_instance_snapshot
+
+    inst = await _make(master_key)
+    await update_instance_snapshot(inst.id, monitored_total=123, unreleased_count=7)
+    refreshed = await get_instance(inst.id, master_key=master_key)
+    assert refreshed is not None
+    assert refreshed.monitored_total == 123
+    assert refreshed.unreleased_count == 7
+    assert refreshed.snapshot_refreshed_at != ""
+
+
+@pytest.mark.asyncio()
+async def test_update_instance_snapshot_overwrites_prior_values(
+    db: None, master_key: bytes
+) -> None:
+    from houndarr.services.instances import update_instance_snapshot
+
+    inst = await _make(master_key)
+    await update_instance_snapshot(inst.id, monitored_total=50, unreleased_count=3)
+    await update_instance_snapshot(inst.id, monitored_total=60, unreleased_count=5)
+    refreshed = await get_instance(inst.id, master_key=master_key)
+    assert refreshed is not None
+    assert refreshed.monitored_total == 60
+    assert refreshed.unreleased_count == 5

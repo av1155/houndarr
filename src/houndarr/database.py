@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Schema version: bump when adding new migrations
 # ---------------------------------------------------------------------------
-SCHEMA_VERSION = 12
+SCHEMA_VERSION = 13
 
 # ---------------------------------------------------------------------------
 # DDL
@@ -71,6 +71,9 @@ CREATE TABLE IF NOT EXISTS instances (
     allowed_time_window  TEXT    NOT NULL DEFAULT '',
     search_order         TEXT    NOT NULL DEFAULT 'random'
                                 CHECK(search_order IN ('chronological', 'random')),
+    monitored_total      INTEGER NOT NULL DEFAULT 0,
+    unreleased_count     INTEGER NOT NULL DEFAULT 0,
+    snapshot_refreshed_at TEXT   NOT NULL DEFAULT '',
     enabled              INTEGER NOT NULL DEFAULT 1,
     created_at           TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     updated_at           TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
@@ -176,6 +179,7 @@ async def init_db() -> None:
             await _migrate_to_v10(db)
             await _migrate_to_v11(db)
             await _migrate_to_v12(db)
+            await _migrate_to_v13(db)
             await _ensure_v3_indexes(db)
             await db.commit()
 
@@ -204,6 +208,8 @@ async def _run_migrations(db: aiosqlite.Connection, from_version: int) -> None:
         await _migrate_to_v11(db)
     if from_version < 12:
         await _migrate_to_v12(db)
+    if from_version < 13:
+        await _migrate_to_v13(db)
 
     logger.info("Migrated database from schema version %d to %d", from_version, SCHEMA_VERSION)
     await db.execute(
@@ -723,6 +729,29 @@ async def _migrate_to_v12(db: aiosqlite.Connection) -> None:
     if not await _column_exists(db, "instances", "search_order"):
         await db.execute(
             "ALTER TABLE instances ADD COLUMN search_order TEXT NOT NULL DEFAULT 'chronological'"
+        )
+
+
+async def _migrate_to_v13(db: aiosqlite.Connection) -> None:
+    """Add per-instance snapshot columns used by the redesigned dashboard.
+
+    ``monitored_total`` and ``unreleased_count`` are populated by the
+    supervisor's ``refresh_instance_snapshots`` task via each arr's
+    ``/wanted/*?pageSize=1`` probes (or Whisparr v3's cached ``/movie``
+    filter).  ``snapshot_refreshed_at`` records when the values were
+    last written so stale snapshots are visible on the Settings page.
+    """
+    if not await _column_exists(db, "instances", "monitored_total"):
+        await db.execute(
+            "ALTER TABLE instances ADD COLUMN monitored_total INTEGER NOT NULL DEFAULT 0"
+        )
+    if not await _column_exists(db, "instances", "unreleased_count"):
+        await db.execute(
+            "ALTER TABLE instances ADD COLUMN unreleased_count INTEGER NOT NULL DEFAULT 0"
+        )
+    if not await _column_exists(db, "instances", "snapshot_refreshed_at"):
+        await db.execute(
+            "ALTER TABLE instances ADD COLUMN snapshot_refreshed_at TEXT NOT NULL DEFAULT ''"
         )
 
 

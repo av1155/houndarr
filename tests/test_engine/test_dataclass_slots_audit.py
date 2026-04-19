@@ -89,6 +89,7 @@ def test_audit_finds_at_least_the_known_frozen_set() -> None:
         "houndarr.value_objects.ItemRef",
         "houndarr.engine.config.search_pass.SearchPassConfig",
         "houndarr.engine.adapters._common.ContextOverride",
+        "houndarr.clients.base.InstanceSnapshot",
     }
     missing = expected_subset - names
     assert missing == set(), f"audit walker missed expected dataclasses: {sorted(missing)}"

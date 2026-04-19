@@ -32,11 +32,12 @@ each issuing their own ``/api/v3/movie`` request.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import UTC, datetime
 
 import httpx
 
 from houndarr.clients._wire_models import WhisparrV3LibraryMovie
-from houndarr.clients.base import ArrClient, WantedKind
+from houndarr.clients.base import ArrClient, InstanceSnapshot, WantedKind
 
 __all__ = ["LibraryWhisparrV3Movie", "MissingWhisparrV3Movie", "WhisparrV3Client"]
 
@@ -201,6 +202,37 @@ class WhisparrV3Client(ArrClient):
             if cutoff_not_met:
                 count += 1
         return count
+
+    async def get_instance_snapshot(self) -> InstanceSnapshot:
+        """Compute monitored + unreleased counts from the cached library.
+
+        Unlike the paginated /wanted endpoints the other arrs expose,
+        Whisparr v3 only publishes full-library ``/api/v3/movie``.  A
+        single fetch (cached across the pass) answers both the monitored
+        total and the count of monitored items with a future release
+        date.
+        """
+        movies = await self._get_all_movies()
+        now_iso = datetime.now(UTC).isoformat(timespec="seconds")
+        monitored_total = 0
+        unreleased_count = 0
+        for m in movies:
+            if not m.monitored:
+                continue
+            has_file = bool(m.has_file)
+            cutoff_unmet = True
+            if m.movie_file is not None and m.movie_file.quality_cutoff_not_met is not None:
+                cutoff_unmet = m.movie_file.quality_cutoff_not_met
+            if (not has_file) or (has_file and cutoff_unmet):
+                monitored_total += 1
+            for val in (m.digital_release, m.physical_release, m.in_cinemas, m.release_date):
+                if isinstance(val, str) and val > now_iso:
+                    unreleased_count += 1
+                    break
+        return InstanceSnapshot(
+            monitored_total=monitored_total,
+            unreleased_count=unreleased_count,
+        )
 
     async def get_library(self) -> list[LibraryWhisparrV3Movie]:
         """Return the full movie/scene library.

@@ -295,3 +295,83 @@ async def test_get_wanted_total_counts_from_cache(client: WhisparrV3Client) -> N
 
     assert await client.get_wanted_total("missing") == 2
     assert await client.get_wanted_total("cutoff") == 1
+
+
+# ---------------------------------------------------------------------------
+# PR 5: get_instance_snapshot for the dashboard monitored + unreleased counts
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_get_instance_snapshot_counts_monitored_and_unreleased(
+    client: WhisparrV3Client,
+) -> None:
+    """The snapshot sums missing+cutoff as monitored_total and counts
+    future-dated monitored items as unreleased_count.
+    """
+    future_iso = "2099-01-01T00:00:00Z"
+    past_iso = "2020-01-01T00:00:00Z"
+    movies = [
+        # Monitored, missing, past release: counted in monitored; not unreleased.
+        {
+            "id": 1,
+            "monitored": True,
+            "hasFile": False,
+            "title": "Past Missing",
+            "year": 2020,
+            "releaseDate": past_iso,
+        },
+        # Monitored, cutoff unmet, past release: counted in monitored; not unreleased.
+        {
+            "id": 2,
+            "monitored": True,
+            "hasFile": True,
+            "title": "Past Cutoff",
+            "year": 2020,
+            "digitalRelease": past_iso,
+            "movieFile": {"qualityCutoffNotMet": True},
+        },
+        # Monitored, future release, missing: counted in both.
+        {
+            "id": 3,
+            "monitored": True,
+            "hasFile": False,
+            "title": "Upcoming Missing",
+            "year": 2099,
+            "inCinemas": future_iso,
+        },
+        # Unmonitored future release: not counted anywhere.
+        {
+            "id": 4,
+            "monitored": False,
+            "hasFile": False,
+            "title": "Unmonitored",
+            "year": 2099,
+            "releaseDate": future_iso,
+        },
+        # Monitored, has file, cutoff met: not monitored-total, not unreleased.
+        {
+            "id": 5,
+            "monitored": True,
+            "hasFile": True,
+            "title": "Done",
+            "year": 2020,
+            "releaseDate": past_iso,
+            "movieFile": {"qualityCutoffNotMet": False},
+        },
+    ]
+    respx.get(f"{BASE}/api/v3/movie").mock(return_value=httpx.Response(200, json=movies))
+
+    snap = await client.get_instance_snapshot()
+    assert snap.monitored_total == 3  # ids 1, 2, 3
+    assert snap.unreleased_count == 1  # id 3
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_get_instance_snapshot_empty_library(client: WhisparrV3Client) -> None:
+    respx.get(f"{BASE}/api/v3/movie").mock(return_value=httpx.Response(200, json=[]))
+    snap = await client.get_instance_snapshot()
+    assert snap.monitored_total == 0
+    assert snap.unreleased_count == 0

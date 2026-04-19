@@ -130,6 +130,9 @@ class Instance:
     cutoff_page_offset: int = 1
     allowed_time_window: str = ""
     search_order: SearchOrder = SearchOrder.chronological
+    monitored_total: int = 0
+    unreleased_count: int = 0
+    snapshot_refreshed_at: str = ""
 
 
 # ---------------------------------------------------------------------------
@@ -176,7 +179,32 @@ def _row_to_instance(row: aiosqlite.Row, master_key: bytes) -> Instance:
         cutoff_page_offset=row["cutoff_page_offset"],
         allowed_time_window=row["allowed_time_window"],
         search_order=SearchOrder(row["search_order"]),
+        monitored_total=_optional_row_int(row, "monitored_total"),
+        unreleased_count=_optional_row_int(row, "unreleased_count"),
+        snapshot_refreshed_at=_optional_row_str(row, "snapshot_refreshed_at"),
     )
+
+
+def _optional_row_int(row: Any, key: str) -> int:
+    """Return ``row[key]`` as int, or 0 when the column is absent.
+
+    Tests sometimes insert minimal rows that pre-date the v13 columns;
+    this helper keeps those rows compatible with the post-v13 dataclass.
+    """
+    try:
+        val = row[key]
+    except (IndexError, KeyError):
+        return 0
+    return int(val) if val is not None else 0
+
+
+def _optional_row_str(row: Any, key: str) -> str:
+    """Return ``row[key]`` as str, or ``''`` when the column is absent."""
+    try:
+        val = row[key]
+    except (IndexError, KeyError):
+        return ""
+    return str(val) if val is not None else ""
 
 
 # ---------------------------------------------------------------------------
@@ -433,6 +461,9 @@ async def update_instance(
         "cutoff_page_offset": "cutoff_page_offset",
         "allowed_time_window": "allowed_time_window",
         "search_order": "search_order",
+        "monitored_total": "monitored_total",
+        "unreleased_count": "unreleased_count",
+        "snapshot_refreshed_at": "snapshot_refreshed_at",
     }
 
     _search_mode_fields = {
@@ -495,3 +526,29 @@ async def delete_instance(id: int) -> bool:  # noqa: A002
         cur = await db.execute("DELETE FROM instances WHERE id = ?", (id,))
         await db.commit()
         return (cur.rowcount or 0) > 0
+
+
+async def update_instance_snapshot(
+    id: int,  # noqa: A002
+    *,
+    monitored_total: int,
+    unreleased_count: int,
+) -> None:
+    """Atomically write the three snapshot columns for *id*.
+
+    Called by the supervisor's ``refresh_instance_snapshots`` task.  The
+    ``snapshot_refreshed_at`` value is always ``now`` (UTC), so the
+    dashboard can show "last refreshed Nm ago" and the Settings page
+    can surface stale snapshots when the arr is unreachable.
+    """
+    async with get_db() as db:
+        await db.execute(
+            "UPDATE instances SET"
+            " monitored_total = ?,"
+            " unreleased_count = ?,"
+            " snapshot_refreshed_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),"
+            " updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')"
+            " WHERE id = ?",
+            (int(monitored_total), int(unreleased_count), id),
+        )
+        await db.commit()

@@ -1,57 +1,6 @@
 <div class="sr-only" data-page-key="dashboard" data-page-title="Dashboard | Houndarr" aria-hidden="true"></div>
 
 <style>
-  #instance-grid.is-entering {
-    animation: instance-grid-enter var(--dur-base, 180ms) var(--ease-station, cubic-bezier(0.16,1,0.3,1));
-  }
-
-  @keyframes instance-grid-enter {
-    from { opacity: 0.65; transform: translateY(4px); }
-    to   { opacity: 1; transform: translateY(0); }
-  }
-
-  .metric-changed {
-    animation: metric-pulse 360ms var(--ease-station, cubic-bezier(0.16,1,0.3,1));
-  }
-
-  @keyframes metric-pulse {
-    0% {
-      background-color: rgba(6, 182, 212, 0.20);
-      box-shadow: 0 0 0 1px rgba(34, 211, 238, 0.28) inset;
-    }
-    100% {
-      background-color: rgba(21, 27, 39, 0.70);
-      box-shadow: 0 0 0 0 rgba(34, 211, 238, 0);
-    }
-  }
-
-  [data-run-now-btn="true"] {
-    transition:
-      background-color var(--dur-base, 180ms) var(--ease-station, cubic-bezier(0.16,1,0.3,1)),
-      color            var(--dur-base, 180ms) var(--ease-station, cubic-bezier(0.16,1,0.3,1)),
-      box-shadow       var(--dur-base, 180ms) var(--ease-station, cubic-bezier(0.16,1,0.3,1)),
-      transform        var(--dur-base, 180ms) var(--ease-station, cubic-bezier(0.16,1,0.3,1));
-  }
-
-  [data-run-now-btn="true"].is-running {
-    background-color: rgb(14 116 144);
-    color: rgb(207 250 254);
-    box-shadow: 0 0 0 1px rgba(34, 211, 238, 0.35) inset;
-  }
-
-  [data-run-now-btn="true"].is-success {
-    background-color: rgb(22 101 52);
-    color: rgb(220 252 231);
-    box-shadow: 0 0 0 1px rgba(74, 222, 128, 0.38) inset;
-  }
-
-  [data-run-now-btn="true"].is-error {
-    background-color: rgb(127 29 29);
-    color: rgb(254 226 226);
-    box-shadow: 0 0 0 1px rgba(248, 113, 113, 0.40) inset;
-    animation: run-now-shake 280ms var(--ease-station, cubic-bezier(0.16,1,0.3,1));
-  }
-
   @keyframes run-now-shake {
     0%, 100% { transform: translateX(0); }
     20%      { transform: translateX(-3px); }
@@ -61,16 +10,7 @@
   }
 
   @media (prefers-reduced-motion: reduce) {
-    #instance-grid.is-entering,
-    .metric-changed {
-      transition: none;
-      animation: none;
-      opacity: 1;
-      transform: none;
-    }
-    [data-run-now-btn="true"].is-error {
-      animation: none;
-    }
+    .dash-run-now.is-error { animation: none; }
   }
 
   /* ── Dashboard redesign: top section ─────────────────────────────── */
@@ -722,8 +662,7 @@
        with the card grid markup. -->
   <div
     id="instance-grid"
-    data-hydrated="false"
-    hx-get="/api/status?v=2"
+    hx-get="/api/status"
     hx-trigger="load, every 30s"
     hx-swap="innerHTML"
     hx-target="#instance-grid"
@@ -740,8 +679,6 @@
     const RUN_NOW_MIN_RUNNING_MS  = 700;
     const RUN_NOW_SUCCESS_HOLD_MS = 900;
     const RUN_NOW_ERROR_HOLD_MS   = 1100;
-    const previousMetrics = new Map();
-    let gridInitialHydration = false;
 
     function toNumber(value) {
       const parsed = Number(value);
@@ -796,16 +733,6 @@
         }, holdMs);
       }, waitForMin);
     }
-
-    // Type → color map (Station palette, unified saturation)
-    const TYPE_COLOR_MAP = {
-      sonarr:   '#7dd3fc',
-      radarr:   '#fcd34d',
-      lidarr:   '#6ee7b7',
-      readarr:  '#fca5a5',
-      whisparr_v2: '#f9a8d4',
-      whisparr_v3: '#e879f9',
-    };
 
     // ── Renderers: top-of-page sections (PR 2 redesign) ────────────────
     //
@@ -1216,12 +1143,6 @@
         ? `<dd class="dash-card__stat-value dash-card__stat-value--muted">${searchedVal}</dd>`
         : `<dd class="dash-card__stat-value dash-card__stat-value--searched">${searchedVal}</dd>`;
 
-      previousMetrics.set(inst.id, {
-        eligible: eligibleVal,
-        lifetime_searched: searchedVal,
-        last_dispatch_at: inst.last_dispatch_at || null,
-      });
-
       return `
 <article class="dash-card"${typeAttr}${disabledAttr}>
   <header class="dash-card__head">
@@ -1275,12 +1196,7 @@
 
         let payload;
         try { payload = JSON.parse(evt.detail.serverResponse); } catch { return; }
-        // Accept both legacy array and v=2 envelope (the dashboard asks
-        // for ?v=2 so this is defensive against older servers replying
-        // with the array shape).
-        const instances = Array.isArray(payload)
-          ? payload
-          : (payload && Array.isArray(payload.instances) ? payload.instances : []);
+        const instances = (payload && Array.isArray(payload.instances)) ? payload.instances : [];
         const recentSearches = (payload && Array.isArray(payload.recent_searches))
           ? payload.recent_searches
           : [];
@@ -1307,13 +1223,9 @@
           return;
         }
 
-        const isInitialHydration = evt.detail.target.dataset.hydrated !== 'true';
-        gridInitialHydration = isInitialHydration;
-
         // ── Instance cards (PR 3 redesign) ─────────────────────────────
         const cards = instances.map(renderCard).join('');
         evt.detail.serverResponse = `<div class="dash-grid">${cards}</div>`;
-        evt.detail.target.dataset.hydrated = 'true';
       },
       { signal },
     );
@@ -1325,31 +1237,6 @@
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;');
     }
-
-    const formatLocalTimestamp =
-      window.houndarrClientHelpers?.formatLocalTimestamp ||
-      function (isoTimestamp) {
-        const parsed = new Date(isoTimestamp);
-        if (Number.isNaN(parsed.getTime())) return isoTimestamp;
-        return new Intl.DateTimeFormat(undefined, {
-          year: 'numeric', month: '2-digit', day: '2-digit',
-          hour: '2-digit', minute: '2-digit', second: '2-digit',
-          hour12: false, timeZoneName: 'short',
-        }).format(parsed);
-      };
-
-    document.body.addEventListener(
-      'htmx:afterSwap',
-      function (evt) {
-        if (evt.detail.target.id !== 'instance-grid') return;
-        if (!gridInitialHydration) return;
-        gridInitialHydration = false;
-        const grid = evt.detail.target;
-        grid.classList.add('is-entering');
-        window.setTimeout(function () { grid.classList.remove('is-entering'); }, 200);
-      },
-      { signal },
-    );
 
     document.body.addEventListener(
       'htmx:beforeRequest',

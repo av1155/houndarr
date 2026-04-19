@@ -410,9 +410,9 @@ class TestAPIKeyNeverExposed:
         _login(app)
         resp = app.get("/api/status")
         assert resp.status_code == 200
-        items = resp.json()
-        assert isinstance(items, list)
-        for item in items:
+        body = resp.json()
+        assert isinstance(body, dict)
+        for item in body.get("instances", []):
             assert "api_key" not in item, (
                 f"Instance {item.get('name')!r} exposed api_key in /api/status"
             )

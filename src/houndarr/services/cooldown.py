@@ -1,12 +1,10 @@
-"""Cooldown service: per-item search tracking and per-instance hourly cap.
+"""Cooldown service: per-item search tracking and skip-log throttling.
 
 The ``cooldowns`` table stores the last time each (instance, item) pair was
-searched.  This module provides the four operations the search engine needs:
+searched.  This module provides three operations the search engine needs:
 
 * :func:`is_on_cooldown` - should we skip this item?
 * :func:`record_search` - mark an item as just-searched (upsert).
-* :func:`count_searches_last_hour` - how many searches has this instance done
-  in the past 60 minutes?
 * :func:`clear_cooldowns` - admin reset for a single instance.
 
 It also owns an in-memory LRU sentinel, :func:`should_log_skip`, that lets the
@@ -113,31 +111,6 @@ async def record_search(
             (instance_id, item_id, item_type, now),
         )
         await db.commit()
-
-
-async def count_searches_last_hour(instance_id: int) -> int:
-    """Return the number of searches recorded for *instance_id* in the last hour.
-
-    Used by the search engine to enforce ``hourly_cap``.
-
-    Args:
-        instance_id: Owning instance primary key.
-
-    Returns:
-        Integer count (0 if none).
-    """
-    cutoff = _iso(_now_utc() - timedelta(hours=1))
-    async with get_db() as db:
-        async with db.execute(
-            """
-            SELECT COUNT(*) FROM cooldowns
-            WHERE instance_id = ?
-              AND searched_at > ?
-            """,
-            (instance_id, cutoff),
-        ) as cur:
-            row = await cur.fetchone()
-    return int(row[0]) if row else 0
 
 
 async def clear_cooldowns(instance_id: int) -> int:

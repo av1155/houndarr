@@ -1,7 +1,7 @@
 """Status API: per-instance search metrics and run-now trigger.
 
-GET  /api/status             -> JSON list of InstanceStatus objects (v=1, legacy)
-GET  /api/status?v=2         -> JSON envelope with dashboard-redesign fields
+GET  /api/status             -> JSON envelope
+                                ``{"instances": [...], "recent_searches": [...]}``
 POST /api/instances/{id}/run-now -> trigger an immediate search cycle (202)
 """
 
@@ -40,15 +40,6 @@ _INSTANCE_COLS = (
 _METRICS_SQL = """
 SELECT
     instance_id,
-    SUM(CASE WHEN action = 'searched' THEN 1 ELSE 0 END)
-        AS items_found_total,
-    SUM(CASE WHEN action = 'searched'
-             AND date(timestamp) = date('now') THEN 1 ELSE 0 END)
-        AS searches_today,
-    SUM(CASE WHEN action = 'searched'
-             AND julianday(timestamp) >= julianday('now', '-1 hour')
-             THEN 1 ELSE 0 END)
-        AS searches_last_hour,
     SUM(CASE WHEN action = 'searched'
              AND julianday(timestamp) >= julianday('now', '-24 hours')
              THEN 1 ELSE 0 END)
@@ -188,9 +179,6 @@ async def _all_instance_metrics(
         async for row in cur:
             iid = row["instance_id"]
             metrics[iid] = {
-                "items_found_total": int(row["items_found_total"] or 0),
-                "searches_today": int(row["searches_today"] or 0),
-                "searches_last_hour": int(row["searches_last_hour"] or 0),
                 "searched_24h": int(row["searched_24h"] or 0),
                 "skipped_24h": int(row["skipped_24h"] or 0),
                 "errors_24h": int(row["errors_24h"] or 0),
@@ -209,9 +197,6 @@ async def _all_instance_metrics(
 
 
 _EMPTY_METRICS: dict[str, Any] = {
-    "items_found_total": 0,
-    "searches_today": 0,
-    "searches_last_hour": 0,
     "searched_24h": 0,
     "skipped_24h": 0,
     "errors_24h": 0,
@@ -393,19 +378,17 @@ async def _cooldown_data(
 
 
 @router.get("/api/status")
-async def get_status(request: Request) -> JSONResponse:
-    """Return per-instance status objects for the dashboard.
+async def get_status(request: Request) -> JSONResponse:  # noqa: ARG001
+    """Return the dashboard status envelope.
 
-    ``?v=1`` (default, legacy) returns a plain JSON array.  ``?v=2`` wraps
-    the per-instance array in ``{"instances": [...], "recent_searches":
-    [...]}`` and enriches each instance with the dashboard-redesign fields
-    (``last_dispatch_at``, ``active_error``, ``unlocking_next``,
-    ``cooldown_breakdown``, ``monitored_total``, ``unreleased_count``,
-    ``lifetime_searched``).  The v=2 envelope ships behind a query flag so
-    the legacy dashboard keeps working until the front-end is rewritten.
+    ``{"instances": [...], "recent_searches": [...]}``: each instance
+    carries per-card fields (``monitored_total``, ``unreleased_count``,
+    ``lifetime_searched``, ``last_dispatch_at``, ``active_error``,
+    ``cooldown_breakdown``, ``unlocking_next``, plus the policy fields
+    used by the chip row).  ``recent_searches`` is the global last-5
+    dispatches over the past 7 days, joined against instances for the
+    type-color rendering.
     """
-    version = request.query_params.get("v", "1")
-
     async with get_db() as db:
         async with db.execute(
             f"SELECT {_INSTANCE_COLS} FROM instances ORDER BY id ASC"  # noqa: S608  # nosec B608
@@ -413,93 +396,66 @@ async def get_status(request: Request) -> JSONResponse:
             instances = await cur.fetchall()
 
         if not instances:
-            if version == "2":
-                return JSONResponse({"instances": [], "recent_searches": []})
-            return JSONResponse([])
+            return JSONResponse({"instances": [], "recent_searches": []})
 
         instance_ids = [row["id"] for row in instances]
         metrics_map, activity_map = await _all_instance_metrics(db, instance_ids)
-
-        lifetime_map: dict[int, dict[str, Any]] = {}
-        error_map: dict[int, dict[str, Any]] = {}
-        cooldown_map: dict[int, dict[str, Any]] = {}
-        recent: list[dict[str, Any]] = []
-        if version == "2":
-            lifetime_map = await _lifetime_metrics(db, instance_ids)
-            error_map = await _active_errors(db, instance_ids)
-            cooldown_map = await _cooldown_data(db, list(instances))
-            recent = await _recent_searches(db, limit=5)
-
-    snapshots: dict[int, dict[str, Any]] = getattr(request.app.state, "instance_snapshots", {})
+        lifetime_map = await _lifetime_metrics(db, instance_ids)
+        error_map = await _active_errors(db, instance_ids)
+        cooldown_map = await _cooldown_data(db, list(instances))
+        recent = await _recent_searches(db, limit=5)
 
     results: list[dict[str, Any]] = []
     for inst in instances:
         iid = inst["id"]
         m = metrics_map.get(iid, _EMPTY_METRICS)
         act_action, act_at = activity_map.get(iid, (None, None))
-        entry: dict[str, Any] = {
-            "id": iid,
-            "name": inst["name"],
-            "type": inst["type"],
-            "enabled": bool(inst["enabled"]),
-            "last_search_at": m["last_search_at"],
-            "searches_last_hour": m["searches_last_hour"],
-            "searches_today": m["searches_today"],
-            "items_found_total": m["items_found_total"],
-            "searched_24h": m["searched_24h"],
-            "skipped_24h": m["skipped_24h"],
-            "errors_24h": m["errors_24h"],
-            "last_activity_action": act_action,
-            "last_activity_at": act_at,
-            "batch_size": inst["batch_size"],
-            "sleep_interval_mins": inst["sleep_interval_mins"],
-            "hourly_cap": inst["hourly_cap"],
-            "cooldown_days": inst["cooldown_days"],
-            "cutoff_enabled": bool(inst["cutoff_enabled"]),
-            "cutoff_batch_size": inst["cutoff_batch_size"],
-            "post_release_grace_hrs": inst["post_release_grace_hrs"],
-            "queue_limit": inst["queue_limit"],
-        }
-        if version == "2":
-            lifetime = lifetime_map.get(iid, {"lifetime_searched": 0, "last_dispatch_at": None})
-            cooldown = cooldown_map.get(
-                iid,
-                {
-                    "cooldown_breakdown": {"missing": 0, "cutoff": 0, "upgrade": 0},
-                    "unlocking_next": [],
-                    "cooldown_total": 0,
-                },
-            )
-            # Prefer the authoritative snapshot columns written by the
-            # supervisor's refresh_instance_snapshots task (PR 5).  Fall
-            # back to the in-memory sum captured by the engine's total_fn
-            # probe (PR 1) while the first refresh is still pending; this
-            # smooths the first ~20 seconds after boot.
-            column_monitored = int(inst["monitored_total"])
-            column_unreleased = int(inst["unreleased_count"])
-            if column_monitored == 0:
-                snap = snapshots.get(int(iid), {})
-                column_monitored = int(snap.get("missing_count", 0)) + int(
-                    snap.get("cutoff_count", 0)
-                )
-            entry["lifetime_searched"] = lifetime["lifetime_searched"]
-            entry["last_dispatch_at"] = lifetime["last_dispatch_at"]
-            entry["active_error"] = error_map.get(iid)
-            entry["cooldown_breakdown"] = cooldown["cooldown_breakdown"]
-            entry["unlocking_next"] = cooldown["unlocking_next"]
-            entry["cooldown_total"] = cooldown["cooldown_total"]
-            entry["monitored_total"] = column_monitored
-            entry["unreleased_count"] = column_unreleased
-            entry["snapshot_refreshed_at"] = (
-                str(inst["snapshot_refreshed_at"]) if inst["snapshot_refreshed_at"] else None
-            )
-            entry["upgrade_enabled"] = bool(inst["upgrade_enabled"])
-            entry["upgrade_cooldown_days"] = int(inst["upgrade_cooldown_days"])
-        results.append(entry)
+        lifetime = lifetime_map.get(iid, {"lifetime_searched": 0, "last_dispatch_at": None})
+        cooldown = cooldown_map.get(
+            iid,
+            {
+                "cooldown_breakdown": {"missing": 0, "cutoff": 0, "upgrade": 0},
+                "unlocking_next": [],
+                "cooldown_total": 0,
+            },
+        )
+        results.append(
+            {
+                "id": iid,
+                "name": inst["name"],
+                "type": inst["type"],
+                "enabled": bool(inst["enabled"]),
+                "last_search_at": m["last_search_at"],
+                "searched_24h": m["searched_24h"],
+                "skipped_24h": m["skipped_24h"],
+                "errors_24h": m["errors_24h"],
+                "last_activity_action": act_action,
+                "last_activity_at": act_at,
+                "batch_size": inst["batch_size"],
+                "sleep_interval_mins": inst["sleep_interval_mins"],
+                "hourly_cap": inst["hourly_cap"],
+                "cooldown_days": inst["cooldown_days"],
+                "cutoff_enabled": bool(inst["cutoff_enabled"]),
+                "cutoff_batch_size": inst["cutoff_batch_size"],
+                "post_release_grace_hrs": inst["post_release_grace_hrs"],
+                "queue_limit": inst["queue_limit"],
+                "lifetime_searched": lifetime["lifetime_searched"],
+                "last_dispatch_at": lifetime["last_dispatch_at"],
+                "active_error": error_map.get(iid),
+                "cooldown_breakdown": cooldown["cooldown_breakdown"],
+                "unlocking_next": cooldown["unlocking_next"],
+                "cooldown_total": cooldown["cooldown_total"],
+                "monitored_total": int(inst["monitored_total"]),
+                "unreleased_count": int(inst["unreleased_count"]),
+                "snapshot_refreshed_at": (
+                    str(inst["snapshot_refreshed_at"]) if inst["snapshot_refreshed_at"] else None
+                ),
+                "upgrade_enabled": bool(inst["upgrade_enabled"]),
+                "upgrade_cooldown_days": int(inst["upgrade_cooldown_days"]),
+            }
+        )
 
-    if version == "2":
-        return JSONResponse({"instances": results, "recent_searches": recent})
-    return JSONResponse(results)
+    return JSONResponse({"instances": results, "recent_searches": recent})
 
 
 @router.post("/api/instances/{instance_id}/run-now", status_code=202)

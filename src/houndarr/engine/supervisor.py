@@ -12,7 +12,7 @@ import asyncio
 import logging
 from contextlib import suppress
 from functools import partial
-from typing import Any, Literal
+from typing import Literal
 from uuid import uuid4
 
 import httpx
@@ -49,21 +49,11 @@ class Supervisor:
         await supervisor.stop()
     """
 
-    def __init__(
-        self,
-        master_key: bytes,
-        *,
-        instance_snapshots: dict[int, dict[str, Any]] | None = None,
-    ) -> None:
+    def __init__(self, master_key: bytes) -> None:
         self._master_key = master_key
         self._tasks: dict[int, asyncio.Task[None]] = {}
         self._manual_runs: dict[int, asyncio.Task[None]] = {}
         self._run_locks: dict[int, asyncio.Lock] = {}
-        # Shared with FastAPI app.state so /api/status can read per-instance
-        # monitored_total without hitting arr on every poll.  Engine writes
-        # into this bucket each cycle; None means snapshots are disabled
-        # (e.g. in isolated unit tests).
-        self._instance_snapshots = instance_snapshots
         # Global snapshot-refresh task handle.  Populated in ``start`` and
         # cancelled in ``stop``.
         self._snapshot_task: asyncio.Task[None] | None = None
@@ -326,7 +316,6 @@ class Supervisor:
                     self._master_key,
                     cycle_id=cycle_id,
                     cycle_trigger=cycle_trigger,
-                    instance_snapshots=self._instance_snapshots,
                 )
                 return False
             except httpx.TransportError:

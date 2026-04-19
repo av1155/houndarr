@@ -10,13 +10,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Houndarr now has a [Discord server](https://discord.gg/t29AhAarYk) for questions and discussion. (#411)
-- `What's New` modal surfaces the CHANGELOG block for the current version on first load after an update, and is dismissible. (#409)
+- `What's New` modal surfaces every CHANGELOG block between your last-seen and the running version on first load after an update, with older entries collapsed into an accordion. (#409)
 - `Reset to Defaults` button in the instance settings modal restores every search setting for an instance type. (#405)
-- Per-instance search order: `random` (new default for newly added instances) spreads picks across the whole backlog each cycle, `chronological` walks oldest-first. (#395)
+- Per-instance search order: `random` (new default for newly added instances) picks a random page of the wanted list each cycle and shuffles items within it, so coverage spreads across the backlog over time; `chronological` walks oldest-first. (#395)
 
 ### Changed
 
-- Documentation site was rebuilt on the [Diataxis](https://diataxis.fr/) structure with a redesigned light mode, migrated images, and rendered diagrams. (#399, #401)
+- Documentation site rebuilt on the [Diataxis](https://diataxis.fr/) structure with a Technical Paper light-mode redesign, expanded coverage (Unraid install guide, `your-first-cycle` tutorial, 4-page security section), offline search, click-to-zoom images, and rendered Mermaid diagrams. (#399, #401)
 
 ### Fixed
 

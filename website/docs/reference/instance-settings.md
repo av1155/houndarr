@@ -22,10 +22,9 @@ the per-app API command Houndarr sends see
   alt="The Houndarr Add Instance form showing search, cutoff, and upgrade configuration fields"
 />
 
-Every field is also available on an existing instance via the **Edit**
-button in the Settings row. The edit modal mirrors the Add Instance
-form but keeps the current values pre-populated, and the API key stays
-masked until you overwrite it.
+The same form opens when you click **Edit** on an existing row, with
+the current values pre-populated. The API key stays masked until you
+overwrite it.
 
 <Image
   img={require('@site/static/img/screenshots/houndarr-edit-instance-form.png')}
@@ -278,21 +277,22 @@ in Settings. New instances are created as enabled by default.
   alt="The Houndarr Settings page showing the instance list with per-row enable toggles"
 />
 
-On narrow viewports the same list collapses into a scrollable stack of
-rows with the Disable / Edit / Delete controls directly under each
-instance.
-
-<Image
-  img={require('@site/static/img/screenshots/houndarr-settings-mobile.png')}
-  alt="The Houndarr Settings page rendered on a mobile viewport, with each instance shown as a stacked row carrying Disable, Edit, and Delete buttons"
-/>
+<figure className="docs-screenshot-portrait">
+  <Image
+    img={require('@site/static/img/screenshots/houndarr-settings-mobile.png')}
+    alt="The Houndarr Settings page rendered on a mobile viewport, with each instance shown as a stacked row carrying Disable, Edit, and Delete buttons"
+  />
+  <figcaption>
+    Same list on a phone-width viewport; each row keeps its own
+    Disable / Edit / Delete controls.
+  </figcaption>
+</figure>
 
 ## Changelog notifications
 
-The Settings page carries a **Changelog notifications** toggle plus a
-**Show last changelog** button. Enabling the toggle surfaces a modal
-after each upgrade summarising what shipped; the button re-opens the
-same modal on demand.
+The **Changelog notifications** toggle opens a modal after each upgrade
+summarising what shipped. The **Show last changelog** button re-opens
+the same modal on demand.
 
 <Image
   img={require('@site/static/img/screenshots/houndarr-changelog-modal.png')}

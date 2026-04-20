@@ -1481,14 +1481,14 @@
       if (!inst.enabled) {
         return `
 <div class="dash-unlocks">
-  <p class="dash-unlocks__head">Expected to unlock next</p>
+  <p class="dash-unlocks__head">Cooldown schedule</p>
   <p class="dash-unlocks--empty">Instance disabled. No patrols running.</p>
 </div>`;
       }
       if (inst.active_error) {
         return `
 <div class="dash-unlocks">
-  <p class="dash-unlocks__head">Expected to unlock next</p>
+  <p class="dash-unlocks__head">Cooldown schedule</p>
   <p class="dash-unlocks--empty">Hound offline. Unable to compute unlocks.</p>
 </div>`;
       }
@@ -1501,7 +1501,7 @@
       if (items.length === 0) {
         return `
 <div class="dash-unlocks">
-  <p class="dash-unlocks__head">Expected to unlock next <span class="tally">${tally}</span></p>
+  <p class="dash-unlocks__head">Cooldown schedule <span class="tally">${tally}</span></p>
   <p class="dash-unlocks--empty">Nothing queued. All caught up.</p>
 </div>`;
       }
@@ -1515,7 +1515,7 @@
       }).join('');
       return `
 <div class="dash-unlocks">
-  <p class="dash-unlocks__head">Expected to unlock next <span class="tally">${tally}</span></p>
+  <p class="dash-unlocks__head">Cooldown schedule <span class="tally">${tally}</span></p>
   <div class="dash-unlocks__list">${rows}
   </div>
 </div>`;

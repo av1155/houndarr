@@ -316,10 +316,14 @@ async def _cooldown_data(
     ``search_kind`` that landed for that item.  Rows with no matching
     search log entry fall back to ``"missing"``.
 
-    ``unlocking_next`` is the top 3 items soonest to exit any active
-    cooldown window, using the instance's enabled cooldown_days values
-    (missing, cutoff when ``cutoff_enabled``, upgrade when
-    ``upgrade_enabled``).  The earliest applicable unlock time wins.
+    ``unlocking_next`` surfaces three cooldown rows that represent the
+    schedule: the soonest to unlock, the median, and the latest. Picking
+    a spread (instead of the top 3 soonest) avoids rendering three rows
+    with identical "11d 8h" labels when a batch of items was dispatched
+    seconds apart and all unlock together. Unlock time uses the
+    instance's enabled cooldown_days values (missing, cutoff when
+    ``cutoff_enabled``, upgrade when ``upgrade_enabled``); the earliest
+    applicable unlock time wins.
     """
     if not instances:
         return {}
@@ -385,11 +389,23 @@ async def _cooldown_data(
             unlock = parsed + timedelta(days=min_days)
             enriched.append({**row, "unlock_at": unlock})
         enriched.sort(key=lambda r: r["unlock_at"])
-        # Drop past-unlock rows so the "next to unlock" list is actually
-        # future-looking; items whose unlock has already passed will be
-        # cleared the next time the engine runs.
+        # Drop past-unlock rows so the panel is actually future-looking;
+        # items whose unlock has already passed will be cleared the next
+        # time the engine runs.
         now = datetime.now(UTC)
         upcoming = [r for r in enriched if r["unlock_at"] > now]
+        # Pick a spread across the schedule (soonest, median, latest) so
+        # the three rows never collapse to a single batch's clone-unlock
+        # time. Batched dispatches finish within seconds of each other,
+        # which makes a naive [:3] slice render three identical "11d 8h"
+        # rows; the spread gives the user a real sense of the window.
+        n = len(upcoming)
+        if n == 0:
+            picks: list[dict[str, Any]] = []
+        elif n <= 3:
+            picks = upcoming
+        else:
+            picks = [upcoming[0], upcoming[n // 2], upcoming[-1]]
         out[iid]["unlocking_next"] = [
             {
                 "item_id": r["item_id"],
@@ -398,7 +414,7 @@ async def _cooldown_data(
                 "unlock_at": r["unlock_at"].isoformat(timespec="seconds"),
                 "last_search_kind": r["last_search_kind"],
             }
-            for r in upcoming[:3]
+            for r in picks
         ]
     return out
 

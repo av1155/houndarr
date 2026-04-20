@@ -106,6 +106,7 @@ VIEWS: list[View] = [
         path="/settings/help",
         wait_selector="main, #app-content",
         filename="houndarr-settings-help.png",
+        full_page=False,
     ),
     View(
         name="add-instance",
@@ -144,12 +145,28 @@ async def _prepare_view(page: Page, view: View) -> None:
 async def _capture_view(
     page: Page, view: View, base_url: str, website_dir: Path, readme_dir: Path
 ) -> None:
-    """Navigate to ``view``, wait for content, write the PNG to both dirs."""
+    """Navigate to ``view``, wait for content, write the PNG to both dirs.
+
+    Parks the mouse off-screen and blurs any focused element before the
+    capture so hover highlights from prior interactions (e.g. the click
+    in the ``add-instance`` view) and ``:focus-visible`` rings don't
+    pollute the shot.
+    """
     await page.set_viewport_size({"width": view.viewport_width, "height": view.viewport_height})
     await page.goto(f"{base_url}{view.path}")
     await page.wait_for_selector(view.wait_selector, timeout=10_000)
     await _prepare_view(page, view)
     await page.wait_for_timeout(view.settle_ms)
+
+    # Park the mouse at the far bottom-right corner of the viewport and
+    # clear any lingering focus so screenshots render a pristine state.
+    await page.mouse.move(view.viewport_width - 1, view.viewport_height - 1)
+    await page.evaluate(
+        "() => { if (document.activeElement instanceof HTMLElement)"
+        " document.activeElement.blur(); }"
+    )
+    # Give the browser one frame to repaint without :hover / :focus styles.
+    await page.wait_for_timeout(80)
 
     wrote: list[str] = []
     for out_dir in (website_dir, readme_dir):

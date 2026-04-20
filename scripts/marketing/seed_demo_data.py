@@ -179,21 +179,89 @@ def _stagger_cooldowns(
     pool: list[tuple[int, str]],
     count: int,
     item_type: str,
+    search_kind: str,
     oldest_hours: float,
     newest_hours: float,
     now: datetime,
-) -> list[tuple[int, int, str, str]]:
-    """Evenly space ``count`` rows between ``oldest_hours`` and ``newest_hours`` ago."""
+) -> list[tuple[int, int, str, str, str]]:
+    """Evenly space ``count`` rows between ``oldest_hours`` and ``newest_hours`` ago.
+
+    Returns 5-tuples ``(instance_id, item_id, item_type, searched_at,
+    search_kind)``. The fifth element is the pass kind the cooldown
+    came from; callers strip it when inserting into the ``cooldowns``
+    table (which has no ``search_kind`` column) but carry it through
+    to the matching ``search_log`` row so the dashboard's cooldown
+    breakdown reports the correct per-kind counts.
+    """
     picks = pool[:count]
     if len(picks) < 2:
         steps = [oldest_hours] * len(picks)
     else:
         step = (oldest_hours - newest_hours) / (len(picks) - 1)
         steps = [oldest_hours - step * i for i in range(len(picks))]
-    rows: list[tuple[int, int, str, str]] = []
+    rows: list[tuple[int, int, str, str, str]] = []
     for (item_id, _label), hours in zip(picks, steps, strict=False):
         ts = now - timedelta(hours=hours)
-        rows.append((instance_id, item_id, item_type, ts.isoformat()))
+        rows.append((instance_id, item_id, item_type, ts.isoformat(), search_kind))
+    return rows
+
+
+def _distribute_cooldowns(
+    instance_id: int,
+    pool: list[tuple[int, str]],
+    item_type: str,
+    missing_count: int,
+    cutoff_count: int,
+    upgrade_count: int,
+    now: datetime,
+) -> list[tuple[int, int, str, str, str]]:
+    """Split a pool across missing / cutoff / upgrade cooldowns.
+
+    Each kind takes a contiguous slice of the pool so no ``item_id``
+    repeats within an instance (the ``cooldowns`` table has
+    ``UNIQUE(instance_id, item_id, item_type)``). Time ranges differ
+    by kind so the Cooldown Schedule panel renders a realistic spread:
+    missing rows span 67h -> 3h ago (14d cooldown left 11d 7h to 13d
+    23h), cutoff rows span 63h -> 5h (21d cooldown, further out), and
+    upgrade rows span 60h -> 10h (90d cooldown, furthest out).
+    """
+    rows: list[tuple[int, int, str, str, str]] = []
+    cursor = 0
+    if missing_count:
+        rows += _stagger_cooldowns(
+            instance_id,
+            pool[cursor : cursor + missing_count],
+            missing_count,
+            item_type,
+            "missing",
+            67,
+            3,
+            now,
+        )
+        cursor += missing_count
+    if cutoff_count:
+        rows += _stagger_cooldowns(
+            instance_id,
+            pool[cursor : cursor + cutoff_count],
+            cutoff_count,
+            item_type,
+            "cutoff",
+            63,
+            5,
+            now,
+        )
+        cursor += cutoff_count
+    if upgrade_count:
+        rows += _stagger_cooldowns(
+            instance_id,
+            pool[cursor : cursor + upgrade_count],
+            upgrade_count,
+            item_type,
+            "upgrade",
+            60,
+            10,
+            now,
+        )
     return rows
 
 
@@ -211,29 +279,47 @@ async def _seed_cooldowns_and_logs(
     pools: dict[str, list[tuple[int, str]]],
     now: datetime,
 ) -> tuple[int, int]:
-    """Seed cooldowns + matching search_log rows + recent hunts."""
-    cooldown_rows: list[tuple[int, int, str, str]] = []
-    cooldown_rows += _stagger_cooldowns(1, pools["sonarr"], 25, "episode", 67, 3, now)
-    cooldown_rows += _stagger_cooldowns(2, pools["sonarr_4k"], 15, "episode", 60, 5, now)
-    cooldown_rows += _stagger_cooldowns(3, pools["radarr"], 30, "movie", 70, 2, now)
-    cooldown_rows += _stagger_cooldowns(4, pools["radarr_4k"], 20, "movie", 64, 4, now)
-    cooldown_rows += _stagger_cooldowns(5, pools["lidarr"], 20, "album", 62, 6, now)
-    cooldown_rows += _stagger_cooldowns(6, pools["readarr"], 12, "book", 45, 10, now)
+    """Seed cooldowns + matching search_log rows + recent hunts.
+
+    Per-instance cooldown counts are split across missing / cutoff /
+    upgrade kinds so the dashboard's library-health bar shows amber
+    (cutoff) and violet (upgrade) segments prominently instead of one
+    dominant cyan cooldown bar. Mix matches what a real Houndarr
+    install with cutoff + upgrade passes enabled would accumulate
+    over a few weeks: cutoff roughly 80% of missing (quality-cutoff
+    is the second most common reason items need re-searching), and
+    upgrade roughly 20-25% of missing (upgrades have a 90-day
+    cooldown so items rotate through slower).
+    """
+    # (instance_id, pool_key, item_type, missing, cutoff, upgrade).
+    # Pool sizes (25/15/30/20/20/16) cap the per-instance totals.
+    splits: list[tuple[int, str, str, int, int, int]] = [
+        (1, "sonarr", "episode", 11, 10, 4),
+        (2, "sonarr_4k", "episode", 7, 6, 2),
+        (3, "radarr", "movie", 13, 12, 5),
+        (4, "radarr_4k", "movie", 9, 8, 3),
+        (5, "lidarr", "album", 12, 8, 0),
+        (6, "readarr", "book", 10, 6, 0),
+    ]
+    cooldown_rows: list[tuple[int, int, str, str, str]] = []
+    for iid, pool_key, item_type, miss, cut, upg in splits:
+        cooldown_rows += _distribute_cooldowns(iid, pools[pool_key], item_type, miss, cut, upg, now)
 
     await conn.executemany(
         "INSERT INTO cooldowns (instance_id, item_id, item_type, searched_at) VALUES (?, ?, ?, ?)",
-        cooldown_rows,
+        [(r[0], r[1], r[2], r[3]) for r in cooldown_rows],
     )
 
     log_rows: list[tuple[Any, ...]] = []
-    # Replay every cooldown as a searched row so labels resolve on the dashboard.
-    for iid, item_id, item_type, ts_iso in cooldown_rows:
+    # Replay every cooldown as a searched row so labels resolve AND the
+    # dashboard's cooldown-breakdown JOIN sees each row's real pass kind.
+    for iid, item_id, item_type, ts_iso, search_kind in cooldown_rows:
         log_rows.append(
             (
                 iid,
                 item_id,
                 item_type,
-                "missing",
+                search_kind,
                 uuid.uuid4().hex[:12],
                 "scheduled",
                 _pool_label(pools, item_id),

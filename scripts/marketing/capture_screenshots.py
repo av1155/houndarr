@@ -65,7 +65,7 @@ VIEWS: list[View] = [
         path="/",
         wait_selector=".dash-card",
         filename="houndarr-dashboard.png",
-        settle_ms=1200,
+        settle_ms=1500,
         hero=True,
     ),
     View(
@@ -80,21 +80,22 @@ VIEWS: list[View] = [
     View(
         name="logs",
         path="/logs",
-        wait_selector="#log-tbody",
+        wait_selector="#log-tbody tr",
         filename="houndarr-logs.png",
     ),
     View(
         name="logs-mobile",
         path="/logs",
-        wait_selector="#log-tbody",
+        wait_selector="#log-tbody tr",
         filename="houndarr-logs-mobile.png",
         viewport_width=390,
         viewport_height=844,
+        full_page=False,
     ),
     View(
         name="settings-instances",
         path="/settings",
-        wait_selector="#instance-tbody",
+        wait_selector="#instance-tbody tr",
         filename="houndarr-settings-instances.png",
     ),
     View(
@@ -108,13 +109,13 @@ VIEWS: list[View] = [
         path="/settings/help",
         wait_selector="main, #app-content",
         filename="houndarr-settings-help.png",
-        full_page=False,
     ),
     View(
         name="add-instance",
         path="/settings",
-        wait_selector="#instance-tbody",
+        wait_selector="#instance-tbody tr",
         filename="houndarr-add-instance-form.png",
+        full_page=False,
     ),
 ]
 
@@ -129,19 +130,73 @@ async def _login(page: Page, base_url: str, password: str) -> None:
     await page.wait_for_selector("#app-content", timeout=10_000)
 
 
+async def _wait_for_htmx_idle(page: Page) -> None:
+    """Poll until every HTMX-lifecycle class is gone from the DOM.
+
+    HTMX marks in-flight XHRs with ``.htmx-request`` and transient
+    swap/settle phases with ``.htmx-swapping`` / ``.htmx-settling`` /
+    ``.htmx-added``. If we screenshot during any of those, we catch a
+    half-rendered page (e.g. the dashboard grid missing its cards mid
+    swap). Mirrors the pattern used by ``tests/e2e_browser/test_flows.py``
+    so the capture script and the browser e2e suite agree on what
+    ``idle`` means.
+    """
+    await page.wait_for_function(
+        "document.querySelectorAll("
+        "'.htmx-request, .htmx-settling, .htmx-swapping, .htmx-added'"
+        ").length === 0",
+        timeout=10_000,
+    )
+
+
 async def _prepare_view(page: Page, view: View) -> None:
     """Run any per-view interaction needed before screenshotting."""
-    if view.name == "settings-account":
-        # The password form lives in a collapsed <details>; expand it via
-        # the .open property so we don't depend on summary text.
+    if view.name == "dashboard":
+        # The dashboard renders each instance as a .dash-card inside
+        # #instance-grid via a single HTMX innerHTML swap. Waiting for
+        # one card is not enough: the grid briefly shows the pre-swap
+        # empty state + one card can appear before htmx finishes
+        # processing every child. Wait for the seeded population (six
+        # enabled + one disabled) so we always capture the full grid.
+        await page.wait_for_function(
+            "document.querySelectorAll('#instance-grid .dash-card').length >= 7",
+            timeout=10_000,
+        )
+        # Wait for the top subheader (polled side effect) to be populated
+        # too so the "All N hounds on patrol." sentence is in the shot.
+        await page.wait_for_selector("#dash-top .dash-sub__sentence", timeout=10_000)
+    elif view.name == "settings-account":
+        # The password form lives in a collapsed <details>. Clicking the
+        # summary triggers the JS animation in settings_content.html which
+        # flips the .account-details-content height/opacity; setting
+        # `el.open = true` alone leaves the content at height:0 because
+        # the page's own toggleAccountDetails handler never fires.
+        await page.click("#account-settings > summary")
+        await page.wait_for_selector(
+            'form[hx-post="/settings/account/password"]',
+            state="visible",
+            timeout=5_000,
+        )
+        # Wait past the 180ms expand animation + a paint frame so the
+        # form is fully laid out before we wrap the body for the shot.
+        await page.wait_for_timeout(300)
+        # Scroll the expanded form into view so the password fields sit
+        # inside the full-page screenshot window.
         await page.evaluate(
             "() => { const el = document.querySelector('#account-settings');"
-            " if (el) el.open = true; }"
+            " if (el) el.scrollIntoView({block:'end'}); }"
         )
-        await page.wait_for_selector('form[hx-post="/settings/account/password"]', timeout=5_000)
+        await page.wait_for_timeout(200)
     elif view.name == "add-instance":
         await page.get_by_role("button", name=re.compile(r"add\s*instance", re.I)).first.click()
+        # showModal() opens the dialog in the top layer. Wait for both
+        # the native [open] attribute and the HTMX-injected form so the
+        # modal is fully hydrated before we shoot.
+        await page.wait_for_selector("#add-instance-modal[open]", timeout=5_000)
         await page.wait_for_selector('form[data-form-mode="add"]', state="visible", timeout=5_000)
+        await _wait_for_htmx_idle(page)
+        # The modal animates in (180ms). Wait past that + a paint frame.
+        await page.wait_for_timeout(300)
 
 
 _WRAP_JS = """
@@ -150,6 +205,11 @@ _WRAP_JS = """
     const SURFACE = '#0e1117';
     const isHero = opts.hero;
     const clipHeight = opts.clipHeight;  // null = full content, number = clip to viewport
+    // Elements to leave at body level so their native positioning
+    // (e.g. <dialog> top-layer for the add-instance modal) keeps
+    // working. Moving them into the wrapper collapses the top-layer
+    // entry and the modal would render at body-flow position.
+    const preserveSelectors = opts.preserve || [];
     const body = document.body;
     const innerStyles = [
         'border-radius: 10px',
@@ -164,10 +224,17 @@ _WRAP_JS = """
     if (clipHeight !== null) {
         innerStyles.push('max-height: ' + clipHeight + 'px');
     }
+    const preserved = preserveSelectors
+        .map(sel => document.querySelector(sel))
+        .filter(el => el !== null);
     const content = document.createElement('div');
     content.id = '__shot-inner';
     content.style.cssText = innerStyles.join(';');
-    while (body.firstChild) content.appendChild(body.firstChild);
+    const kids = Array.from(body.children);
+    for (const child of kids) {
+        if (preserved.includes(child)) continue;
+        content.appendChild(child);
+    }
     const outer = document.createElement('div');
     outer.id = '__shot-outer';
     const bg = isHero
@@ -179,7 +246,7 @@ _WRAP_JS = """
         'display: inline-block',
     ].join(';');
     outer.appendChild(content);
-    body.appendChild(outer);
+    body.insertBefore(outer, body.firstChild);
     body.style.margin = '0';
     body.style.background = BASE;
 }
@@ -200,10 +267,24 @@ async def _capture_view(
     Houndarr rather than a generic product.
     """
     await page.set_viewport_size({"width": view.viewport_width, "height": view.viewport_height})
-    await page.goto(f"{base_url}{view.path}")
+    await page.goto(f"{base_url}{view.path}", wait_until="domcontentloaded")
     await page.wait_for_selector(view.wait_selector, timeout=10_000)
-    await _prepare_view(page, view)
-    await page.wait_for_timeout(view.settle_ms)
+    # The dashboard's instance grid is rendered by an HTMX swap that
+    # fires on load. wait_for_selector returns as soon as ONE match
+    # appears, so without an HTMX-idle check we risk capturing the
+    # page mid swap. Wait for the XHR to settle before preparing the
+    # view-specific DOM tweaks.
+    await _wait_for_htmx_idle(page)
+    await page.wait_for_load_state("networkidle")
+    # For the add-instance view, the wrap MUST happen before showModal()
+    # fires. Reparenting a dialog's ancestor after the dialog has been
+    # promoted to the top layer drops it back to flow position (verified
+    # in Chromium 2026-04). Wrapping first means the dialog enters the
+    # top layer inside the already-wrapped tree and renders centered on
+    # the viewport as intended.
+    if view.name != "add-instance":
+        await _prepare_view(page, view)
+        await page.wait_for_timeout(view.settle_ms)
 
     # Park the mouse at the far bottom-right corner of the viewport and
     # clear any lingering focus so screenshots render a pristine state.
@@ -221,15 +302,53 @@ async def _capture_view(
     # views (``full_page=False``) we clip the inner height so the wrapper
     # doesn't expand to include the full scrollable content.
     clip_height = None if view.full_page else view.viewport_height
-    await page.evaluate(_WRAP_JS, {"hero": view.hero, "clipHeight": clip_height})
+    await page.evaluate(
+        _WRAP_JS,
+        {"hero": view.hero, "clipHeight": clip_height, "preserve": []},
+    )
+
+    # For the add-instance view, open the modal AFTER wrapping so the
+    # dialog enters the top layer within the already-wrapped tree. The
+    # resulting screenshot needs page.screenshot(clip=...) because the
+    # top-layer dialog is painted over the wrapper but lives outside
+    # the wrapper's DOM subtree.
+    used_page_clip = False
+    if view.name == "add-instance":
+        await _prepare_view(page, view)
+        await page.wait_for_timeout(view.settle_ms)
+        # Re-park the mouse + blur so the "+ Add Instance" click doesn't
+        # leave a hover or focus ring on the button in the final shot.
+        await page.mouse.move(view.viewport_width - 1, view.viewport_height - 1)
+        await page.evaluate(
+            "() => { if (document.activeElement instanceof HTMLElement)"
+            " document.activeElement.blur(); }"
+        )
+        await page.wait_for_timeout(80)
+        used_page_clip = True
 
     wrote: list[str] = []
     wrapper = page.locator("#__shot-outer")
-    for out_dir in (website_dir, readme_dir):
-        out_dir.mkdir(parents=True, exist_ok=True)
-        out_path = out_dir / view.filename
-        await wrapper.screenshot(path=str(out_path), type="png")
-        wrote.append(str(out_path.relative_to(REPO_ROOT)))
+    if used_page_clip:
+        box = await wrapper.bounding_box()
+        if box is None:
+            raise RuntimeError("wrapper lost its bounding box before capture")
+        clip = {
+            "x": box["x"],
+            "y": box["y"],
+            "width": box["width"],
+            "height": box["height"],
+        }
+        for out_dir in (website_dir, readme_dir):
+            out_dir.mkdir(parents=True, exist_ok=True)
+            out_path = out_dir / view.filename
+            await page.screenshot(path=str(out_path), type="png", clip=clip)
+            wrote.append(str(out_path.relative_to(REPO_ROOT)))
+    else:
+        for out_dir in (website_dir, readme_dir):
+            out_dir.mkdir(parents=True, exist_ok=True)
+            out_path = out_dir / view.filename
+            await wrapper.screenshot(path=str(out_path), type="png")
+            wrote.append(str(out_path.relative_to(REPO_ROOT)))
     print(f"[capture] {view.name:20s} -> {' + '.join(wrote)}")
 
 

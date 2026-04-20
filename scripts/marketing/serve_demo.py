@@ -57,6 +57,18 @@ def main() -> None:
     _sl.run_instance_search = _noop  # type: ignore[assignment]
     _sup.run_instance_search = _noop  # type: ignore[assignment]
 
+    # Trap SIGTERM / SIGINT so `kill <pid>` exits with 0 instead of the
+    # shell convention 128+signal (143 / 130). This is a throwaway demo
+    # server; graceful shutdown isn't meaningful. Returning 0 keeps the
+    # background-task harness from flagging every teardown as a failure.
+    import signal
+
+    def _handle_signal(signum: int, frame: object | None) -> None:  # noqa: ARG001
+        raise SystemExit(0)
+
+    signal.signal(signal.SIGTERM, _handle_signal)
+    signal.signal(signal.SIGINT, _handle_signal)
+
     import uvicorn
 
     print(f"[serve] http://{args.host}:{args.port}  data-dir={data_dir}")

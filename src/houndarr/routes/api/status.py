@@ -301,16 +301,17 @@ async def _cooldown_data(
     instance_ids = [row["id"] for row in instances]
     placeholders = ",".join("?" * len(instance_ids))
 
-    # Pull settings per instance for unlock-time computation.
-    config: dict[int, dict[str, Any]] = {}
-    for row in instances:
-        config[int(row["id"])] = {
+    # Pull the three cooldown_days windows per instance. The per-row
+    # unlock calculation picks whichever matches ``last_search_kind``,
+    # so the enabled flags are no longer consulted here.
+    config: dict[int, dict[str, int]] = {
+        int(row["id"]): {
             "cooldown_days": int(row["cooldown_days"]),
             "cutoff_cooldown_days": int(row["cutoff_cooldown_days"]),
-            "cutoff_enabled": bool(row["cutoff_enabled"]),
             "upgrade_cooldown_days": int(row["upgrade_cooldown_days"]),
-            "upgrade_enabled": bool(row["upgrade_enabled"]),
         }
+        for row in instances
+    }
 
     out: dict[int, dict[str, Any]] = {
         iid: {

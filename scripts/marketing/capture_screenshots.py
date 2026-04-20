@@ -29,17 +29,23 @@ DEFAULT_SEED_MODE = "populated"
 
 @dataclass(frozen=True, slots=True)
 class View:
-    """One captured view and its output filenames."""
+    """One captured view and its output filenames.
+
+    ``png_name`` or ``jpeg_name`` may be ``None`` when only one format is
+    needed. ``full_page=False`` caps the capture at the current viewport,
+    which is right for hero shots that need to stay landscape.
+    """
 
     name: str
     path: str
     wait_selector: str
-    png_name: str
-    jpeg_name: str
+    png_name: str | None
+    jpeg_name: str | None
     viewport_width: int = 1440
     viewport_height: int = 900
     mode: str = "populated"
     settle_ms: int = 800
+    full_page: bool = True
 
 
 VIEWS: list[View] = [
@@ -48,8 +54,17 @@ VIEWS: list[View] = [
         path="/",
         wait_selector=".dash-card",
         png_name="houndarr-dashboard.png",
+        jpeg_name=None,
+        settle_ms=1200,
+    ),
+    View(
+        name="dashboard-hero",
+        path="/",
+        wait_selector=".dash-card",
+        png_name=None,
         jpeg_name="Dashboard_Houndarr.jpeg",
         settle_ms=1200,
+        full_page=False,
     ),
     View(
         name="dashboard-empty",
@@ -135,20 +150,27 @@ async def _prepare_view(page: Page, view: View) -> None:
 async def _capture_view(
     page: Page, view: View, base_url: str, png_dir: Path, jpeg_dir: Path
 ) -> None:
-    """Navigate to ``view``, wait for content, write PNG + JPEG."""
+    """Navigate to ``view``, wait for content, write the configured outputs."""
     await page.set_viewport_size({"width": view.viewport_width, "height": view.viewport_height})
     await page.goto(f"{base_url}{view.path}")
     await page.wait_for_selector(view.wait_selector, timeout=10_000)
     await _prepare_view(page, view)
     await page.wait_for_timeout(view.settle_ms)
 
-    png_path = png_dir / view.png_name
-    jpeg_path = jpeg_dir / view.jpeg_name
-    png_dir.mkdir(parents=True, exist_ok=True)
-    jpeg_dir.mkdir(parents=True, exist_ok=True)
-    await page.screenshot(path=str(png_path), full_page=True, type="png")
-    await page.screenshot(path=str(jpeg_path), full_page=True, type="jpeg", quality=92)
-    print(f"[capture] {view.name:20s} -> {png_path.name} + {jpeg_path.name}")
+    wrote: list[str] = []
+    if view.png_name is not None:
+        png_dir.mkdir(parents=True, exist_ok=True)
+        png_path = png_dir / view.png_name
+        await page.screenshot(path=str(png_path), full_page=view.full_page, type="png")
+        wrote.append(png_path.name)
+    if view.jpeg_name is not None:
+        jpeg_dir.mkdir(parents=True, exist_ok=True)
+        jpeg_path = jpeg_dir / view.jpeg_name
+        await page.screenshot(
+            path=str(jpeg_path), full_page=view.full_page, type="jpeg", quality=92
+        )
+        wrote.append(jpeg_path.name)
+    print(f"[capture] {view.name:20s} -> {' + '.join(wrote)}")
 
 
 async def _run(

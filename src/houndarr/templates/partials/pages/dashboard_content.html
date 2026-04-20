@@ -839,7 +839,12 @@
         acc.unreleased += toNumber(i.unreleased_count);
         return acc;
       }, { monitored: 0, cooldown: 0, cutoffCd: 0, upgradeCd: 0, unreleased: 0 });
-      const gated = totals.cooldown + totals.cutoffCd + totals.upgradeCd;
+      // Upgrade cooldowns sit outside monitored_total (the upgrade pool is
+      // has_file + cutoff_met; those items are neither in /wanted/missing
+      // nor /wanted/cutoff). Subtracting upgradeCd here would under-report
+      // Eligible by exactly the upgrade-cooldown count. Keep the violet
+      // bar segment + legend entry to surface upgrade activity separately.
+      const gated = totals.cooldown + totals.cutoffCd;
       const eligible = Math.max(0, totals.monitored - gated - totals.unreleased);
       const ariaLabel = `${eligible} eligible, ${totals.cutoffCd} cutoff cooldown, ${totals.cooldown} cooldown, ${totals.upgradeCd} upgrade cooldown, ${totals.unreleased} unreleased`;
       return `
@@ -1126,7 +1131,11 @@
       const disabledAttr = disabled ? ' data-disabled="true"' : '';
       const watchingVal = toNumber(inst.monitored_total);
       const bd = inst.cooldown_breakdown || { missing: 0, cutoff: 0, upgrade: 0 };
-      const gated = toNumber(bd.missing) + toNumber(bd.cutoff) + toNumber(bd.upgrade);
+      // Per-card Eligible mirrors the library-health formula: upgrade
+      // cooldowns are tracked separately from monitored_total (the
+      // upgrade pool is has_file + cutoff_met items), so only subtract
+      // the in-monitored cooldown buckets here.
+      const gated = toNumber(bd.missing) + toNumber(bd.cutoff);
       const unr = toNumber(inst.unreleased_count);
       const eligibleVal = Math.max(0, watchingVal - gated - unr);
       const searchedVal = toNumber(inst.lifetime_searched);

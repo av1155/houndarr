@@ -165,12 +165,18 @@ class ArrClient(ABC):
     async def get_instance_snapshot(self) -> InstanceSnapshot:
         """Return the live monitored / unreleased counts for the dashboard.
 
-        Default implementation sums ``get_wanted_total("missing")`` and
-        ``get_wanted_total("cutoff")`` for ``monitored_total`` and probes
-        ``/wanted/missing?pageSize=1&sortKey=airDateUtc&sortDirection=asc``
-        to count items with a future release date for
-        ``unreleased_count``.  Subclasses that use non-standard field
-        names or lack a ``/wanted`` endpoint (Whisparr v3) override.
+        The default implementation sums ``get_wanted_total("missing")`` and
+        ``get_wanted_total("cutoff")`` to produce ``monitored_total`` and
+        delegates ``unreleased_count`` to :meth:`_count_unreleased_default`,
+        which currently returns 0 for every /wanted-based client.  Whisparr v3
+        overrides this method entirely because it has no ``/wanted`` endpoint
+        and computes both values from the cached ``/api/v3/movie`` response.
+
+        Subclasses that want a real ``unreleased_count`` for Sonarr, Radarr,
+        Lidarr, Readarr, or Whisparr v2 should override
+        ``_count_unreleased_default`` with a ``/wanted``-based probe that
+        counts items whose release date is in the future; until then, the
+        dashboard's Unreleased segment reads 0 for those instance types.
         """
         missing = await self.get_wanted_total("missing")
         cutoff = await self.get_wanted_total("cutoff")
@@ -182,10 +188,15 @@ class ArrClient(ABC):
         )
 
     async def _count_unreleased_default(self) -> int:
-        """Default unreleased probe using ``/wanted/missing?sortKey=airDateUtc``.
+        """Return 0 by default; /wanted-based clients may override later.
 
-        Returns 0 on error; an unreachable instance should not mask
-        previously-written snapshot values.  Subclasses may override
-        (Readarr / Lidarr swap the sort key).
+        No network call is made in the default.  A real implementation would
+        iterate ``/wanted/missing`` sorted ascending by the adapter's release
+        field and count entries whose timestamp is in the future, but that
+        work is deferred; the dashboard's Unreleased headline + bar segment
+        therefore stays at 0 for Sonarr, Radarr, Lidarr, Readarr, and
+        Whisparr v2 until each adapter wires its own probe.  Whisparr v3
+        bypasses this method entirely via an override on
+        :meth:`get_instance_snapshot`.
         """
         return 0

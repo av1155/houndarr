@@ -54,17 +54,8 @@ VIEWS: list[View] = [
         path="/",
         wait_selector=".dash-card",
         png_name="houndarr-dashboard.png",
-        jpeg_name=None,
-        settle_ms=1200,
-    ),
-    View(
-        name="dashboard-hero",
-        path="/",
-        wait_selector=".dash-card",
-        png_name=None,
         jpeg_name="Dashboard_Houndarr.jpeg",
         settle_ms=1200,
-        full_page=False,
     ),
     View(
         name="dashboard-empty",

@@ -72,10 +72,12 @@ class Supervisor:
                 instance.id, instance=instance, startup_offset=idx * _STARTUP_STAGGER_SECS
             )
 
-        # Snapshot refresh runs even when no search cycles are enabled, so a
-        # disabled instance's last-known snapshot columns still tick (useful
-        # for operators temporarily pausing search without losing the
-        # monitored-total reading).
+        # Snapshot refresh runs even when no search cycles are enabled, so
+        # a fresh install with zero enabled instances still gets the
+        # empty-state treatment right. Disabled instances skip the refresh
+        # itself (``_refresh_all_snapshots_once`` filters on ``enabled``)
+        # so their columns freeze at their last-known values until the
+        # operator re-enables them.
         self._snapshot_task = asyncio.create_task(
             self._snapshot_refresh_loop(),
             name="snapshot-refresh-loop",

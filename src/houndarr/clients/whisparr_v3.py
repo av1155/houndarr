@@ -180,7 +180,7 @@ class WhisparrV3Client(ArrClient):
         date.
         """
         movies = await self._get_all_movies()
-        now_iso = datetime.now(UTC).isoformat(timespec="seconds")
+        now = datetime.now(UTC)
         monitored_total = 0
         unreleased_count = 0
         for r in movies:
@@ -193,7 +193,15 @@ class WhisparrV3Client(ArrClient):
                 monitored_total += 1
             for key in ("digitalRelease", "physicalRelease", "inCinemas", "releaseDate"):
                 val = r.get(key)
-                if isinstance(val, str) and val > now_iso:
+                if not isinstance(val, str):
+                    continue
+                try:
+                    parsed = datetime.fromisoformat(val.replace("Z", "+00:00"))
+                except ValueError:
+                    continue
+                if parsed.tzinfo is None:
+                    parsed = parsed.replace(tzinfo=UTC)
+                if parsed > now:
                     unreleased_count += 1
                     break
         return InstanceSnapshot(

@@ -22,10 +22,16 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
 
-async def _noop(*_args: object, **_kwargs: object) -> None:
+async def _noop(*_args: object, **_kwargs: object) -> int:
     """Replacement for ``run_instance_search``. Sleeps forever so the supervisor
-    thinks it has a long-running cycle and never surfaces error rows."""
+    thinks it has a long-running cycle and never surfaces error rows.
+
+    Return type mirrors the real ``run_instance_search`` (``-> int``) so
+    the monkey-patch stays signature-compatible; the value is unreachable
+    because the sleep never returns.
+    """
     await asyncio.sleep(3600)
+    return 0
 
 
 def main() -> None:

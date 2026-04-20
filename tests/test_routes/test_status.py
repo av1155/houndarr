@@ -629,6 +629,58 @@ def test_status_v2_unlocking_next_returns_all_when_three_or_fewer(app: TestClien
     assert ids == [301, 302]
 
 
+def test_status_v2_unlocking_next_keys_window_by_kind(app: TestClient) -> None:
+    """Per-kind unlock windows: an upgrade-kind cooldown row renders the
+    upgrade_cooldown_days (default 90) rather than collapsing to the
+    min-across-enabled cooldown_days (default 14).  Regression for
+    `_cooldown_data` previously using a single ``min_days`` for all rows.
+    """
+    _login(app)
+    iid = _create_instance(app)
+
+    # Enable cutoff + upgrade on the seeded instance so their windows matter.
+    async def _enable_passes() -> None:
+        async with get_db() as conn:
+            await conn.execute(
+                "UPDATE instances SET cutoff_enabled = 1, upgrade_enabled = 1 WHERE id = ?",
+                (iid,),
+            )
+            await conn.commit()
+
+    asyncio.run(_enable_passes())
+    now = datetime.now(UTC)
+    searched_at = (now - timedelta(days=1)).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+    # Seed three rows (one per kind) at the same searched_at so only the
+    # per-row cooldown window explains the different unlock times.
+    asyncio.run(
+        _seed_search_log(
+            [
+                (iid, 501, "episode", "missing", "searched", None, "M", None, searched_at),
+                (iid, 502, "episode", "cutoff", "searched", None, "C", None, searched_at),
+                (iid, 503, "episode", "upgrade", "searched", None, "U", None, searched_at),
+            ]
+        )
+    )
+    asyncio.run(_seed_cooldown(iid, 501, "episode", days_ago=1.0))
+    asyncio.run(_seed_cooldown(iid, 502, "episode", days_ago=1.0))
+    asyncio.run(_seed_cooldown(iid, 503, "episode", days_ago=1.0))
+
+    body = app.get("/api/status").json()["instances"][0]
+    picks = {row["item_id"]: row for row in body["unlocking_next"]}
+    assert set(picks) == {501, 502, 503}
+
+    def _days_from_now(iso: str) -> float:
+        parsed = datetime.fromisoformat(iso.replace("Z", "+00:00"))
+        return (parsed - now).total_seconds() / 86400.0
+
+    # Defaults (see config.py): cooldown_days=14, cutoff_cooldown_days=21,
+    # upgrade_cooldown_days=90.  Each row was searched 1 day ago, so the
+    # remaining window is N-1 days.
+    assert 12.5 < _days_from_now(picks[501]["unlock_at"]) < 13.5  # missing: 14 - 1
+    assert 19.5 < _days_from_now(picks[502]["unlock_at"]) < 20.5  # cutoff: 21 - 1
+    assert 88.5 < _days_from_now(picks[503]["unlock_at"]) < 89.5  # upgrade: 90 - 1
+
+
 def test_status_v2_cooldown_breakdown_splits_by_kind(app: TestClient) -> None:
     _login(app)
     iid = _create_instance(app)

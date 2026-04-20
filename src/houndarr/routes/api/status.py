@@ -290,9 +290,11 @@ async def _cooldown_data(
     a spread (instead of the top 3 soonest) avoids rendering three rows
     with identical "11d 8h" labels when a batch of items was dispatched
     seconds apart and all unlock together. Unlock time uses the
-    instance's enabled cooldown_days values (missing, cutoff when
-    ``cutoff_enabled``, upgrade when ``upgrade_enabled``); the earliest
-    applicable unlock time wins.
+    cooldown window that matches the pass that actually wrote the row
+    (``missing`` -> ``cooldown_days``, ``cutoff`` -> ``cutoff_cooldown_days``,
+    ``upgrade`` -> ``upgrade_cooldown_days``), so upgrade-kind rows
+    accurately show the long 90-day default instead of collapsing to
+    the 14-day missing-pass minimum.
     """
     if not instances:
         return {}
@@ -340,13 +342,6 @@ async def _cooldown_data(
 
     for iid, rows in per_instance_rows.items():
         cfg = config[iid]
-        # Lowest cooldown_days across enabled windows for this instance.
-        candidate_windows = [cfg["cooldown_days"]]
-        if cfg["cutoff_enabled"]:
-            candidate_windows.append(cfg["cutoff_cooldown_days"])
-        if cfg["upgrade_enabled"]:
-            candidate_windows.append(cfg["upgrade_cooldown_days"])
-        min_days = min(candidate_windows) if candidate_windows else cfg["cooldown_days"]
         enriched: list[dict[str, Any]] = []
         for row in rows:
             try:
@@ -355,7 +350,17 @@ async def _cooldown_data(
                 continue
             if parsed.tzinfo is None:
                 parsed = parsed.replace(tzinfo=UTC)
-            unlock = parsed + timedelta(days=min_days)
+            # Unlock window keys off the pass that wrote the row so the
+            # user sees the actual cooldown for that kind, not the min
+            # across all enabled passes.
+            kind = row["last_search_kind"]
+            if kind == "cutoff":
+                days = cfg["cutoff_cooldown_days"]
+            elif kind == "upgrade":
+                days = cfg["upgrade_cooldown_days"]
+            else:
+                days = cfg["cooldown_days"]
+            unlock = parsed + timedelta(days=days)
             enriched.append({**row, "unlock_at": unlock})
         enriched.sort(key=lambda r: r["unlock_at"])
         # Drop past-unlock rows so the panel is actually future-looking;

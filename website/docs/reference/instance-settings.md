@@ -31,6 +31,16 @@ what a reset touches.
   alt="The Houndarr Add Instance form showing search, cutoff, and upgrade configuration fields"
 />
 
+Every field is also available on an existing instance via the **Edit**
+button in the Settings row. The edit modal mirrors the Add Instance
+form but keeps the current values pre-populated, and the API key stays
+masked until you overwrite it.
+
+<Image
+  img={require('@site/static/img/screenshots/houndarr-edit-instance-form.png')}
+  alt="The Houndarr Edit Instance modal, pre-populated with an existing Sonarr instance's connection, search policy, and schedule values"
+/>
+
 ## Missing search controls
 
 ### Batch Size
@@ -291,31 +301,6 @@ in Settings. New instances are created as enabled by default.
   img={require('@site/static/img/screenshots/houndarr-settings-instances.png')}
   alt="The Houndarr Settings page showing the instance list with per-row enable toggles"
 />
-<<<<<<< HEAD
-||||||| parent of b0fdab6 (feat(admin): polish update-check UX and Updates card)
-
-<figure className="docs-screenshot-portrait">
-  <Image
-    img={require('@site/static/img/screenshots/houndarr-settings-mobile.png')}
-    alt="The Houndarr Settings page rendered on a mobile viewport, with each instance shown as a stacked row carrying Disable, Edit, and Delete buttons"
-  />
-  <figcaption>
-    Same list on a phone-width viewport; each row keeps its own
-    Disable / Edit / Delete controls.
-  </figcaption>
-</figure>
-
-## Changelog notifications
-
-The **Changelog notifications** toggle opens a modal after each upgrade
-summarising what shipped. The **Show last changelog** button re-opens
-the same modal on demand.
-
-<Image
-  img={require('@site/static/img/screenshots/houndarr-changelog-modal.png')}
-  alt="The Houndarr What's New modal listing Added, Changed, and Fixed items from the latest release with a link to the full changelog on GitHub"
-/>
-=======
 
 <figure className="docs-screenshot-portrait">
   <Image
@@ -338,4 +323,24 @@ modal on demand.
   img={require('@site/static/img/screenshots/houndarr-changelog-modal.png')}
   alt="The Houndarr What's New modal listing Added, Changed, and Fixed items from the latest release with a link to the full changelog on GitHub"
 />
->>>>>>> b0fdab6 (feat(admin): polish update-check UX and Updates card)
+
+On narrow viewports the same list collapses into a scrollable stack of
+rows with the Disable / Edit / Delete controls directly under each
+instance.
+
+<Image
+  img={require('@site/static/img/screenshots/houndarr-settings-mobile.png')}
+  alt="The Houndarr Settings page rendered on a mobile viewport, with each instance shown as a stacked row carrying Disable, Edit, and Delete buttons"
+/>
+
+## Changelog notifications
+
+The Settings page carries a **Changelog notifications** toggle plus a
+**Show last changelog** button. Enabling the toggle surfaces a modal
+after each upgrade summarising what shipped; the button re-opens the
+same modal on demand.
+
+<Image
+  img={require('@site/static/img/screenshots/houndarr-changelog-modal.png')}
+  alt="The Houndarr What's New modal listing Added, Changed, and Fixed items from the latest release with a link to the full changelog on GitHub"
+/>

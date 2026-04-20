@@ -33,7 +33,7 @@ Small batches. Polite intervals. Zero indexer abuse.
 
 <div align="center">
 
-<img src="docs/images/houndarr-dashboard.png" alt="Houndarr dashboard" width="700" />
+<img src="docs/images/houndarr-dashboard-hero.png" alt="Houndarr dashboard" width="480" />
 
 <br><br>
 

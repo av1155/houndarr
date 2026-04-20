@@ -17,7 +17,7 @@ type ScreenshotItem = {
 };
 
 const DASHBOARD_SCREENSHOT: ScreenshotItem = {
-  img: require('@site/static/img/screenshots/houndarr-dashboard.png'),
+  img: require('@site/static/img/screenshots/houndarr-dashboard-hero.png'),
   alt: 'Houndarr Dashboard: library-health bar, Recent hunts strip, and per-instance cards with WATCHING / ELIGIBLE / SEARCHED stats, Expected-to-unlock panel, policy chips, and Run Now button',
   caption: 'Dashboard: gating state at a glance, per-instance Expected-to-unlock panels, on-demand Run Now',
 };

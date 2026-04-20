@@ -127,6 +127,7 @@ def set_db_path(path: str) -> None:
 
 
 def get_db_path() -> str:
+    """Return the configured SQLite file path set by :func:`set_db_path`."""
     return _db_path
 
 

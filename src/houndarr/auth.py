@@ -472,6 +472,11 @@ class AuthMiddleware(BaseHTTPMiddleware):
         super().__init__(app)
 
     async def dispatch(self, request: Request, call_next: Callable[..., Any]) -> Any:
+        """Route each request to the proxy-auth or built-in auth path.
+
+        Per-request dispatch keeps the middleware thin and lets each
+        branch handle its own public-path and CSRF rules.
+        """
         path = request.url.path
 
         if _is_proxy_auth_mode():

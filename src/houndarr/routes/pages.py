@@ -35,6 +35,14 @@ def _is_hx_request(request: Request) -> bool:
 
 
 def get_templates() -> Jinja2Templates:
+    """Return the lazy Jinja2Templates singleton for the HTML page routes.
+
+    Lazy so that ``Jinja2Templates`` is only constructed on first use,
+    which lets tests replace ``_templates`` before the first render and
+    avoids pointing at the templates directory during import of this
+    module (useful when the module is imported in contexts where the
+    filesystem path may not yet be valid).
+    """
     global _templates  # noqa: PLW0603
     if _templates is None:
         from pathlib import Path

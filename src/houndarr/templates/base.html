@@ -56,7 +56,7 @@
 
   {% block head %}{% endblock %}
 </head>
-<body class="bg-surface-base text-slate-100 min-h-dvh flex flex-col font-sans{% if show_nav is defined and not show_nav %} is-auth{% endif %}">
+<body class="text-slate-100 min-h-dvh flex flex-col font-sans{% if show_nav is defined and not show_nav %} is-auth{% endif %}">
 
   {%- import "_macros/htmx.html" as hx -%}
 

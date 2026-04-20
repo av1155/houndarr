@@ -1266,10 +1266,13 @@
       }
       const total = instances.length;
       const active = instances.filter(function (i) { return i.enabled; }).length;
-      const errored = instances.find(function (i) { return i.active_error; });
+      // Disabled instances are opted out of patrol, so they never count
+      // toward "needs attention" even if their last search_log row is an
+      // error.  renderAlert() filters the same way.
+      const errored = instances.find(function (i) { return i.enabled && i.active_error; });
       let sentence;
       if (errored) {
-        const on = total - instances.filter(function (i) { return i.active_error; }).length;
+        const on = total - instances.filter(function (i) { return i.enabled && i.active_error; }).length;
         sentence = `${on} of ${total} hounds on patrol. <span class="attn">${escHtml(errored.name)} needs attention.</span>`;
       } else {
         const recent = instances
@@ -1303,7 +1306,10 @@
     }
 
     function renderAlert(instances) {
-      const failing = instances.filter(function (i) { return i.active_error; });
+      // Only enabled instances trigger the top banner; a disabled instance
+      // has been explicitly opted out of patrol, so stale error rows
+      // should not keep shouting at the user.
+      const failing = instances.filter(function (i) { return i.enabled && i.active_error; });
       if (failing.length === 0) return '';
       const inst = failing[0];
       const failures = toNumber(inst.active_error && inst.active_error.failures_count);

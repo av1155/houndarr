@@ -427,6 +427,69 @@ def test_status_v2_active_error_when_latest_row_is_error(app: TestClient) -> Non
     assert "http://sonarr:8989" in inst["active_error"]["message"]
 
 
+def test_status_active_error_still_emitted_for_disabled_instance(app: TestClient) -> None:
+    """API reflects raw DB state: a disabled instance with an error row
+    keeps its ``active_error`` in the response.  The dashboard suppresses
+    the banner client-side (dashboard_content.html renderAlert + the
+    subheader sentence both filter on ``enabled && active_error``), so
+    asserting the API shape here documents the backend contract and
+    keeps the two layers independently correct.
+    """
+    _login(app)
+    iid = _create_instance(app)
+    now = datetime.now(UTC)
+    asyncio.run(
+        _seed_search_log(
+            [
+                (
+                    iid,
+                    None,
+                    None,
+                    None,
+                    "error",
+                    None,
+                    None,
+                    "Could not reach http://sonarr:8989",
+                    (now - timedelta(minutes=5)).strftime("%Y-%m-%dT%H:%M:%S.000Z"),
+                ),
+            ]
+        )
+    )
+    app.post(f"/settings/instances/{iid}/toggle-enabled", headers=csrf_headers(app))
+    inst = app.get("/api/status").json()["instances"][0]
+    assert inst["enabled"] is False
+    assert inst["active_error"] is not None
+    assert "http://sonarr:8989" in inst["active_error"]["message"]
+
+
+def test_dashboard_template_filters_banner_on_disabled_instances() -> None:
+    """Regression guard for the client-side alert filter.
+
+    ``renderAlert`` and the subheader's ``errored`` / on-patrol tally in
+    ``dashboard_content.html`` must each check ``enabled && active_error``
+    so disabling an instance silences the top-of-dashboard banner and
+    the "needs attention" callout.  Per-card pill + cooldown panel are
+    already guarded at their own call sites by ``!inst.enabled`` first.
+    """
+    from pathlib import Path
+
+    template = (
+        Path(__file__).resolve().parents[2]
+        / "src"
+        / "houndarr"
+        / "templates"
+        / "partials"
+        / "pages"
+        / "dashboard_content.html"
+    ).read_text()
+    # Three inline-JS call sites: renderAlert filter, subheader `errored`
+    # find, subheader "on patrol" count.  Stricter than >=3 to keep the
+    # test honest if someone adds a fourth surface without also filtering.
+    assert template.count("i.enabled && i.active_error") == 3, (
+        "Expected 3 call sites filtering banner/subheader on enabled + active_error"
+    )
+
+
 def test_status_v2_active_error_none_when_latest_row_non_error(app: TestClient) -> None:
     """Banner self-clears as soon as a non-error row lands."""
     _login(app)

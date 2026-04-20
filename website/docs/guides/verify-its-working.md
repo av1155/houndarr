@@ -33,6 +33,11 @@ shows:
 | Item label | The series, movie, album, or book title and relevant details |
 | Timestamp | When the action occurred |
 
+A counter strip above the table summarizes the loaded page, for
+example `rows 35 · cycles 8 · searched 7 · skip-only 10`. Any
+`searched` count above zero with no `err:N` above zero is a quick
+confirmation the loop is running.
+
 Searched rows for items that also appear in your *arr instance's
 wanted views mean Houndarr is working correctly.
 
@@ -78,6 +83,11 @@ against the [Skip Reasons reference](/docs/reference/skip-reasons).
 Cooldown, post-release grace, hourly caps, and queue backpressure
 are normal scheduling behavior. Errors are the signal that
 something is wrong; skips are not.
+
+Cooldown-reason rows are deduplicated so the log stays scannable
+even when hundreds of items are on cooldown. See
+[Log deduplication](/docs/reference/skip-reasons#log-deduplication)
+for which reasons dedupe.
 
 ## Step 5: check the error count
 

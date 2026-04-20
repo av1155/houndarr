@@ -402,6 +402,27 @@ button:focus-visible {
   text-decoration: none;
 }
 
+/* ── Auth atmosphere (login/setup) ───────────────────────────────────────
+   <main> is capped at max-w-7xl, so on wide viewports the default body
+   atmosphere bleeds through the gutters while a column-scoped glow only
+   paints the centred column. On auth pages we swap the body background
+   for a single wide, viewport-pinned radial that surrounds the card
+   regardless of viewport width, plus a soft edge vignette for depth. */
+body.is-auth {
+  background-color: var(--color-base);
+  background-image:
+    radial-gradient(
+      ellipse 110% 95% at 50% 45%,
+      rgba(6, 182, 212, 0.15)  0%,
+      rgba(6, 182, 212, 0.06) 32%,
+      rgba(6, 182, 212, 0.015) 60%,
+      transparent              88%
+    );
+  background-repeat: no-repeat;
+  background-attachment: fixed;
+}
+
+
 /* ── Nav atmospheric glow ───────────────────────────────────────────────── */
 body > nav {
   box-shadow:

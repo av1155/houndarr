@@ -88,9 +88,9 @@ Common causes:
 A stream of connection errors suggests a network or configuration
 problem. A single 404 or 401 usually does not.
 
-## Dashboard shows "Next run" but nothing happens
+## Dashboard shows "next patrol" but nothing happens
 
-The "Next run" time is an estimate based on the sleep interval.
-After a container restart, the first cycle runs after one full
-sleep interval. Check the Logs page to confirm whether a cycle
-actually completed.
+The "next patrol" countdown on each card is an estimate based on the
+sleep interval. After a container restart, the first cycle runs after
+one full sleep interval. Check the Logs page to confirm whether a
+cycle actually completed.

@@ -105,5 +105,5 @@ Once instances are enabled, the Dashboard shows:
 
 <Image
   img={require('@site/static/img/screenshots/houndarr-dashboard.png')}
-  alt="The Houndarr Dashboard showing the adaptive subheader, library-health bar, Recent hunts strip, and per-instance cards with WATCHING / ELIGIBLE / SEARCHED stats, Expected-to-unlock panel, policy chips, and Run Now button; the Whisparr v3 card at the bottom is in the disabled state"
+  alt="The Houndarr Dashboard showing the adaptive subheader, library-health bar, Recent hunts strip, and per-instance cards with WATCHING / ELIGIBLE / SEARCHED stats, Cooldown schedule panel, policy chips, and Run Now button; the Whisparr v3 card at the bottom is in the disabled state"
 />

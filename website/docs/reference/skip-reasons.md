@@ -55,6 +55,18 @@ falls outside every configured window, the cycle writes one
 configured windows, then sleeps. Manual `Run Now` clicks bypass this
 gate.
 
+## Log deduplication
+
+Three reasons are deduplicated in the log: `on cooldown`, `on cutoff
+cooldown`, and `on upgrade cooldown`. Each `(instance, item, reason)`
+triple writes at most one `search_log` row per 24 hours. The engine
+still evaluates every candidate every cycle; only the log write is
+suppressed. This keeps the logs scannable when hundreds of items
+share the same cooldown.
+
+The other reasons in the table above write a row every cycle they
+apply.
+
 ## Why skips are normal
 
 A high skip count with zero errors is pacing working as designed.

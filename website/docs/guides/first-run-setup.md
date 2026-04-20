@@ -82,28 +82,64 @@ searching on the configured schedule.
 
 ## The Dashboard
 
-Once instances are enabled, the Dashboard shows:
+Once instances are enabled, the Dashboard has two main sections.
 
-- An **adaptive subheader** with an *N of M hounds on patrol* sentence
-  and the most recent dispatch timestamp
-- A **library-health bar** with five gating segments (eligible,
-  cutoff cooldown, cooldown, upgrade cooldown, unreleased) summed
-  across every configured instance
-- A **Recent hunts** strip listing the last 5 dispatches in the past
-  7 days, each in its instance's type color
-- Per-instance **cards** with a type eyebrow, instance name, 3-stat
-  row (`WATCHING` monitored total, `ELIGIBLE` ready-to-search count,
-  and `SEARCHED` lifetime dispatches), a **Cooldown schedule** inset
-  panel showing the soonest, median, and latest items to unlock with
-  their titles and time-until-unlock, a policy chip row with tooltips,
-  and a type-colored **Run Now** outline button
-- An **error banner** and a red `N errors` pill on any card whose
-  latest `search_log` row is an error; both deep-link to the Logs
-  page filtered to that instance
-- A **disabled-card treatment** (dim border, muted stats, `paused`
-  footer, disabled Run Now) for any instance with `enabled=0`
+### Library health
+
+The top section carries an **adaptive subheader** with an *N of M
+hounds on patrol* sentence and the most recent dispatch timestamp, a
+**library-health bar** with five gating segments (eligible, cutoff
+cooldown, cooldown, upgrade cooldown, unreleased) summed across every
+configured instance, and a **Recent hunts** strip listing the last 5
+dispatches in the past 7 days, each in its instance's type color.
 
 <Image
-  img={require('@site/static/img/screenshots/houndarr-dashboard.png')}
-  alt="The Houndarr Dashboard showing the adaptive subheader, library-health bar, Recent hunts strip, and per-instance cards with WATCHING / ELIGIBLE / SEARCHED stats, Cooldown schedule panel, policy chips, and Run Now button; the Whisparr v3 card at the bottom is in the disabled state"
+  img={require('@site/static/img/screenshots/houndarr-dashboard-library-health.png')}
+  alt="The Houndarr Dashboard library-health section with the adaptive subheader, a five-segment library-health bar, and the Recent hunts strip of the last five dispatches"
 />
+
+On mobile the subheader and library-health bar stack vertically and
+the Recent hunts strip becomes a scrollable list.
+
+<figure className="docs-screenshot-portrait">
+  <Image
+    img={require('@site/static/img/screenshots/houndarr-dashboard-library-health-mobile.png')}
+    alt="The Houndarr Dashboard library-health section rendered on a phone-width viewport with the subheader, gating bar, legend, and Recent hunts list stacked vertically"
+  />
+  <figcaption>
+    Library-health section on a phone-width viewport.
+  </figcaption>
+</figure>
+
+### Instances
+
+The lower section lays out one **card per instance** with a type
+eyebrow, instance name, 3-stat row (`WATCHING` monitored total,
+`ELIGIBLE` ready-to-search count, and `SEARCHED` lifetime dispatches),
+a **Cooldown schedule** inset panel showing the soonest, median, and
+latest items to unlock with their titles and time-until-unlock, a
+policy chip row with tooltips, and a type-colored **Run Now** outline
+button. Cards also carry an **error banner** and a red `N errors`
+pill whenever the latest `search_log` row is an error (both deep-link
+to the Logs page filtered to that instance), and a **disabled-card
+treatment** (dim border, muted stats, `paused` footer, disabled Run
+Now) when `enabled=0`.
+
+<Image
+  img={require('@site/static/img/screenshots/houndarr-dashboard-instances.png')}
+  alt="The Houndarr Dashboard Instances section showing per-instance cards with WATCHING / ELIGIBLE / SEARCHED stats, Cooldown schedule panel, policy chips, and Run Now button"
+/>
+
+On mobile the grid collapses into a single column and the section
+header keeps the same rule + right-aligned **+ Add Instance** shortcut
+you see on desktop.
+
+<figure className="docs-screenshot-portrait">
+  <Image
+    img={require('@site/static/img/screenshots/houndarr-dashboard-instances-mobile.png')}
+    alt="The Houndarr Dashboard Instances section on a phone-width viewport with cards stacked one per row and the + Add Instance link aligned to the right of the section header"
+  />
+  <figcaption>
+    Instances section on a phone-width viewport.
+  </figcaption>
+</figure>

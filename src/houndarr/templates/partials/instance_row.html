@@ -1,23 +1,41 @@
 {# Single instance row: used by both initial render and HTMX swap after update. #}
+<<<<<<< HEAD
 <tr id="instance-row-{{ instance.core.id }}"
     class="border-b border-border-subtle hover:bg-surface-2 transition-colors duration-fast ease-station">
   <td data-col="name" class="px-4 py-3 font-medium text-white font-sans">{{ instance.core.name }}</td>
+||||||| parent of 67a912f (refactor(ui): tokenize the Settings page)
+<tr id="instance-row-{{ instance.id }}"
+    class="border-b border-[#1e2638] hover:bg-[#151b27] transition-colors">
+  <td data-col="name" class="px-4 py-3 font-medium text-white font-sans">{{ instance.name }}</td>
+=======
+<tr id="instance-row-{{ instance.id }}"
+    class="border-b border-border-subtle hover:bg-surface-2 transition-colors duration-fast ease-station">
+  <td data-col="name" class="px-4 py-3 font-medium text-white font-sans">{{ instance.name }}</td>
+>>>>>>> 67a912f (refactor(ui): tokenize the Settings page)
   <td data-col="type" class="px-4 py-3">
     {%- set badge_map = {
-      'sonarr':   {'bg': 'bg-sky-950/60',     'text': 'text-sky-300',     'border': 'border-sky-900/50',     'accent': 'border-l-sky-400',   'label': 'Sonarr'},
-      'radarr':   {'bg': 'bg-amber-950/60',   'text': 'text-amber-300',   'border': 'border-amber-900/50',   'accent': 'border-l-amber-400', 'label': 'Radarr'},
-      'lidarr':   {'bg': 'bg-emerald-950/60', 'text': 'text-emerald-300', 'border': 'border-emerald-900/50', 'accent': 'border-l-emerald-400','label': 'Lidarr'},
-      'readarr':  {'bg': 'bg-rose-950/60',    'text': 'text-rose-300',    'border': 'border-rose-900/50',    'accent': 'border-l-rose-400',  'label': 'Readarr'},
-      'whisparr_v2': {'bg': 'bg-pink-950/60',    'text': 'text-pink-300',    'border': 'border-pink-900/50',    'accent': 'border-l-pink-400',  'label': 'Whisparr v2'},
-      'whisparr_v3': {'bg': 'bg-fuchsia-950/60', 'text': 'text-fuchsia-300', 'border': 'border-fuchsia-900/50', 'accent': 'border-l-fuchsia-400','label': 'Whisparr v3'},
+      'sonarr':      {'bg': 'bg-sonarr-bg',      'text': 'text-sonarr',      'border': 'border-sonarr/40',      'label': 'Sonarr'},
+      'radarr':      {'bg': 'bg-radarr-bg',      'text': 'text-radarr',      'border': 'border-radarr/40',      'label': 'Radarr'},
+      'lidarr':      {'bg': 'bg-lidarr-bg',      'text': 'text-lidarr',      'border': 'border-lidarr/40',      'label': 'Lidarr'},
+      'readarr':     {'bg': 'bg-readarr-bg',     'text': 'text-readarr',     'border': 'border-readarr/40',     'label': 'Readarr'},
+      'whisparr_v2': {'bg': 'bg-whisparr-bg',    'text': 'text-whisparr',    'border': 'border-whisparr/40',    'label': 'Whisparr v2'},
+      'whisparr_v3': {'bg': 'bg-whisparr-v3-bg', 'text': 'text-whisparr-v3', 'border': 'border-whisparr-v3/40', 'label': 'Whisparr v3'},
     } -%}
+<<<<<<< HEAD
     {%- set b = badge_map.get(instance.core.type.value, badge_map['sonarr']) -%}
+||||||| parent of 67a912f (refactor(ui): tokenize the Settings page)
+    {%- set b = badge_map.get(instance.type.value, badge_map['sonarr']) -%}
+    <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-mono {{ b.bg }} {{ b.text }} border {{ b.border }}">
+=======
+    {%- set b = badge_map.get(instance.type.value, badge_map['sonarr']) -%}
+>>>>>>> 67a912f (refactor(ui): tokenize the Settings page)
     <span class="inline-flex items-center px-2 py-0.5 rounded-chip text-xs font-mono {{ b.bg }} {{ b.text }} border {{ b.border }}">
       {{ b.label }}
     </span>
   </td>
   <td data-col="url" class="px-4 py-3 text-slate-400 text-sm truncate max-w-xs font-mono text-xs">{{ instance.core.url }}</td>
   <td data-col="status" class="px-4 py-3 text-center">
+<<<<<<< HEAD
     {# Fixed min-width on the pill + label so toggling Active <-> Disabled
        (6 vs 8 chars) does not re-layout the column and shift every
        sibling row. Red state uses the same shape + pulse as green so
@@ -29,6 +47,14 @@
       </span>
     {% elif instance.core.enabled %}
       <span class="inline-flex items-center justify-center gap-1 text-xs text-success min-w-[4.5rem]">
+||||||| parent of 67a912f (refactor(ui): tokenize the Settings page)
+    {% if instance.enabled %}
+      <span class="inline-flex items-center gap-1 text-xs text-emerald-300">
+        <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block station-pulse-dot" title="Search enabled" aria-label="Search enabled"></span>
+=======
+    {% if instance.enabled %}
+      <span class="inline-flex items-center gap-1 text-xs text-success">
+>>>>>>> 67a912f (refactor(ui): tokenize the Settings page)
         <span class="w-1.5 h-1.5 rounded-full bg-success inline-block station-pulse-dot" title="Search enabled" aria-label="Search enabled"></span>
         <span class="hidden sm:inline">Active</span>
       </span>
@@ -48,8 +74,16 @@
         hx-post="/settings/instances/{{ instance.core.id }}/toggle-enabled"
         hx-target="#instance-row-{{ instance.core.id }}"
         hx-swap="outerHTML"
+<<<<<<< HEAD
         class="px-3 py-1 text-xs rounded-inset transition-colors duration-base ease-station min-w-[4.25rem] text-center {% if instance.core.enabled %}bg-warning-bg hover:bg-warning/20 text-warning border border-warning-border{% else %}bg-success-bg hover:bg-success/20 text-success border border-success-border{% endif %}">
         {{ 'Disable' if instance.core.enabled else 'Enable' }}
+||||||| parent of 67a912f (refactor(ui): tokenize the Settings page)
+        class="px-3 py-1 text-xs rounded transition-colors {% if instance.enabled %}bg-amber-950/50 hover:bg-amber-900/60 text-amber-300 border border-amber-900/40{% else %}bg-emerald-950/50 hover:bg-emerald-900/60 text-emerald-300 border border-emerald-900/40{% endif %}">
+        {{ 'Disable' if instance.enabled else 'Enable' }}
+=======
+        class="px-3 py-1 text-xs rounded-inset transition-colors duration-base ease-station {% if instance.enabled %}bg-warning-bg hover:bg-warning/20 text-warning border border-warning-border{% else %}bg-success-bg hover:bg-success/20 text-success border border-success-border{% endif %}">
+        {{ 'Disable' if instance.enabled else 'Enable' }}
+>>>>>>> 67a912f (refactor(ui): tokenize the Settings page)
       </button>
       <button
         type="button"
@@ -57,14 +91,21 @@
         hx-get="/settings/instances/{{ instance.core.id }}/edit"
         hx-target="#add-instance-modal-content"
         hx-swap="innerHTML"
-        class="px-3 py-1 text-xs rounded bg-[#1e2638] hover:bg-[#2a3448] text-slate-200 border border-[#2a3448] transition-colors">
+        class="px-3 py-1 text-xs rounded-inset bg-surface-3 hover:bg-border-default text-slate-200 border border-border-default transition-colors duration-base ease-station">
         Edit
       </button>
       <button
         hx-delete="/settings/instances/{{ instance.core.id }}"
         hx-target="#instance-row-{{ instance.core.id }}"
         hx-swap="outerHTML"
+<<<<<<< HEAD
         hx-confirm="Delete '{{ instance.core.name }}'? This cannot be undone."
+||||||| parent of 67a912f (refactor(ui): tokenize the Settings page)
+        hx-confirm="Delete '{{ instance.name }}'? This cannot be undone."
+        class="px-3 py-1 text-xs rounded bg-rose-950/50 hover:bg-rose-900/60 text-rose-300 border border-rose-900/40 transition-colors">
+=======
+        hx-confirm="Delete '{{ instance.name }}'? This cannot be undone."
+>>>>>>> 67a912f (refactor(ui): tokenize the Settings page)
         class="px-3 py-1 text-xs rounded-inset bg-danger-bg hover:bg-danger/20 text-danger border border-danger-border transition-colors duration-base ease-station">
         Delete
       </button>

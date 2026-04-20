@@ -172,10 +172,29 @@
     0 0 0 1px rgba(30, 38, 56, 0.9);
   width: 100%;
   height: auto;
+  /* Tall full-page screenshots (dashboard with 6+ cards) can overrun
+     the hero column and push the rest of the page down. Cap the
+     rendered height and crop to the top portion so the hero always
+     frames the subheader + library-health bar + the first row of
+     cards regardless of how many cards the seed contains. IdealImage
+     renders the <img> inside a wrapper span, so clip overflow on the
+     span and push the cover/crop rules onto the inner <img> where
+     object-fit actually applies. */
+  max-height: 820px;
+  overflow: hidden;
   transform: perspective(1400px) rotateY(-5deg) rotateX(1.5deg);
   transition:
     transform 0.4s cubic-bezier(0.16, 1, 0.3, 1),
     box-shadow 0.4s ease;
+}
+
+.heroScreenshot img {
+  width: 100%;
+  height: 100%;
+  max-height: 820px;
+  object-fit: cover;
+  object-position: top;
+  display: block;
 }
 
 .heroScreenshot:hover {

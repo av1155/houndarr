@@ -310,21 +310,8 @@
     .dash-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   }
 
-  /* Poll-refresh pulse: a soft cyan breath every time HTMX swaps a
-     fresh copy of .dash-grid into #instance-grid. The animation plays
-     on mount, so the first load (after the page-in stagger) also gets
-     it. Peak shadow is low enough not to be distracting but high
-     enough to register in peripheral vision when it fires. */
-  @keyframes dash-grid-poll-pulse {
-    0%   { box-shadow: 0 0 0    0 rgba(34, 211, 238, 0); }
-    30%  { box-shadow: 0 0 28px 0 rgba(34, 211, 238, 0.24); }
-    100% { box-shadow: 0 0 0    0 rgba(34, 211, 238, 0); }
-  }
-  .dash-grid { animation: dash-grid-poll-pulse 1100ms var(--ease-station); }
-
   @media (prefers-reduced-motion: reduce) {
     .dash-trail__row { transition: none; }
-    .dash-grid { animation: none; }
   }
 
   .dash-card {

@@ -3,14 +3,14 @@
   {% set ns = namespace(previous_cycle_id='') %}
   {% for row in rows %}
   {% if row.cycle_id and row.cycle_id != ns.previous_cycle_id %}
-  <tr class="border-b border-[#1e2638] bg-[#07080f]/80" data-cycle-group="{{ row.cycle_id }}" data-cycle-outcome="{{ row.cycle_progress or 'unknown' }}">
+  <tr class="border-b border-border-subtle bg-surface-base/80" data-cycle-group="{{ row.cycle_id }}" data-cycle-outcome="{{ row.cycle_progress or 'unknown' }}">
     <td colspan="10" class="px-3 py-2">
       <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-slate-500">
         <span class="font-mono text-slate-400" title="{{ row.cycle_id }}">Cycle {{ row.cycle_id[:8] }}</span>
         <span class="text-slate-500 log-instance-label">instance {{ row.instance_name }}</span>
         <span class="text-slate-500">trigger {{ row.cycle_trigger or 'unknown' }}</span>
         {% if row.cycle_progress == "progress" %}
-        <span class="text-emerald-400">outcome searched</span>
+        <span class="text-success">outcome searched</span>
         {% elif row.cycle_progress == "no_progress" %}
         <span class="text-slate-400">outcome skips only</span>
         {% else %}
@@ -24,7 +24,7 @@
   </tr>
   {% endif %}
 
-  <tr class="border-b border-[#1e2638] hover:bg-[#151b27] transition-colors"
+  <tr class="border-b border-border-subtle hover:bg-surface-2 transition-colors duration-fast ease-station"
       data-log-row="true"
       data-action="{{ row.action or '' }}"
       data-cycle-id="{{ row.cycle_id or '' }}"
@@ -145,7 +145,7 @@
         hx-get="/api/logs/partial?limit={{ next_limit }}{% if instance_id %}&instance_id={{ instance_id }}{% endif %}{% if action %}&action={{ action }}{% endif %}{% if search_kind %}&search_kind={{ search_kind }}{% endif %}{% if cycle_trigger %}&cycle_trigger={{ cycle_trigger }}{% endif %}&hide_system={{ 'true' if hide_system else 'false' }}&before={{ rows[-1].timestamp }}"
         hx-target="#pagination-row"
         hx-swap="outerHTML"
-        class="text-xs text-brand-400 hover:text-brand-300 transition-colors underline-offset-2 hover:underline font-sans">
+        class="text-xs text-brand-400 hover:text-brand-300 transition-colors duration-base ease-station underline-offset-2 hover:underline font-sans">
         Load older entries ↓
       </button>
     </td>

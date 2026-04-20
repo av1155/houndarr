@@ -509,6 +509,17 @@
   text-decoration-color: var(--paper-accent-strong);
 }
 
+/* ── Content images — consistent rounded corners ─────────────────────────── */
+/* Docs images (rendered from markdown) pick up the same 10px rounding as
+   the landing-page screenshots so nothing jumps to sharp corners when the
+   cursor enters, when medium-zoom animates the click-to-zoom, or when a
+   page scrolls a figure under a sticky header. Wrappers that handle
+   their own rounding (.docs-screenshot-portrait, the landing hero and
+   gallery) override this below or via scoped module styles. */
+.markdown img {
+  border-radius: var(--radius-md, 10px);
+}
+
 /* ── Portrait screenshot figures ─────────────────────────────────────────── */
 /* For tall screenshots (mobile UIs, modal dialogs). Renders as a framed
    card with a caption strip, centered, responsive. Avoids the "tiny image

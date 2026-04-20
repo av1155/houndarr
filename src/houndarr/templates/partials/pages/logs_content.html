@@ -316,7 +316,7 @@
     <select
       id="filter-instance"
       name="instance_id"
-      class="station-input text-base font-sans"
+      class="station-input station-select text-base font-sans"
     >
       <option value="">All instances</option>
       {% for inst in instances %}
@@ -332,7 +332,7 @@
     <select
       id="filter-action"
       name="action"
-      class="station-input text-base font-sans"
+      class="station-input station-select text-base font-sans"
     >
       <option value="">All actions</option>
       <option value="searched" {% if selected_action == "searched" %}selected{% endif %}>Searched</option>
@@ -347,7 +347,7 @@
     <select
       id="filter-limit"
       name="limit"
-      class="station-input text-base font-sans"
+      class="station-input station-select text-base font-sans"
     >
       <option value="25">25</option>
       <option value="50" selected>50</option>
@@ -365,7 +365,7 @@
     <select
       id="filter-search-kind"
       name="search_kind"
-      class="station-input text-base font-sans"
+      class="station-input station-select text-base font-sans"
     >
       <option value="">All kinds</option>
       <option value="missing" {% if selected_search_kind == "missing" %}selected{% endif %}>Missing</option>
@@ -379,7 +379,7 @@
     <select
       id="filter-cycle-trigger"
       name="cycle_trigger"
-      class="station-input text-base font-sans"
+      class="station-input station-select text-base font-sans"
     >
       <option value="">All triggers</option>
       <option value="scheduled" {% if selected_cycle_trigger == "scheduled" %}selected{% endif %}>Scheduled</option>

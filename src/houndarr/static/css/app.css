@@ -28,18 +28,6 @@ html {
   background: var(--color-border-strong);
 }
 
-/* ── Instance form select chevron ───────────────────────────────────────── */
-/* Native <select> chevrons sit flush against the right border and render at
-   subtly different positions across browsers.  On the settings instance
-   form the custom SVG keeps every dropdown aligned with consistent
-   padding-right.  The class is applied via ``select_cls`` in
-   templates/partials/instance_form.html. */
-.hd-select-chevron {
-  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20' stroke='%2394a3b8' stroke-width='1.75'><polyline points='6 8 10 12 14 8' stroke-linecap='round' stroke-linejoin='round'/></svg>");
-  background-position: right 0.75rem center;
-  background-size: 1rem 1rem;
-}
-
 /* ── Mobile nav backdrop ────────────────────────────────────────────────── */
 .mobile-nav-backdrop {
   background: rgba(2, 6, 23, 0);
@@ -239,13 +227,16 @@ body > nav {
   font-size: 14px;
   line-height: 1.4;
   color: #e2e8f0;
-  background: var(--color-surface-2);
+  /* Use background-color (not the shorthand) so the rule does not
+     wipe background-image set by the sibling .station-select class on
+     <select> elements. */
+  background-color: var(--color-surface-2);
   border: 1px solid var(--color-border-default);
   border-radius: var(--radius-inset);
   transition:
-    border-color var(--dur-base) var(--ease-station),
-    box-shadow   var(--dur-base) var(--ease-station),
-    background   var(--dur-base) var(--ease-station);
+    border-color     var(--dur-base) var(--ease-station),
+    box-shadow       var(--dur-base) var(--ease-station),
+    background-color var(--dur-base) var(--ease-station);
 }
 .station-input::placeholder {
   color: #64748b;
@@ -265,6 +256,21 @@ body > nav {
 }
 .station-input[aria-invalid="true"] {
   border-color: var(--color-danger);
+}
+
+/* Select variant: strips the native chevron and paints a consistent
+   slate caret so every <select> in the app aligns the same way. Compose
+   with .station-input (`class="station-input station-select"`). The
+   padding-right + background-image declarations come after
+   .station-input in source order, so they win cleanly. */
+.station-select {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: 2.5rem;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20' stroke='%2394a3b8' stroke-width='1.75'><polyline points='6 8 10 12 14 8' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 0.75rem center;
+  background-size: 1rem 1rem;
 }
 
 .station-button {

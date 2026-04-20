@@ -13,13 +13,13 @@
 {# Shared input class: Station style. Reuses the .station-input helper
    from app.css so every form on the site shares the exact same token-
    backed input treatment. #}
-{% set input_cls = "station-input h-11 px-3 text-base text-white placeholder:text-slate-600 font-sans" %}
-{% set mono_input_cls = "station-input h-11 px-3 text-base text-white placeholder:text-slate-600 font-mono" %}
-{# Select variant: strip the native chevron so every dropdown in this form
-   gets the same inset SVG chevron and padding-right.  Native chevron
-   positions diverge across browsers and option widths, so a custom chevron
-   keeps the form visually consistent. #}
-{% set select_cls = input_cls + " hd-select-chevron appearance-none pr-10 bg-no-repeat" %}
+{% set input_cls = "station-input h-11 text-base text-white placeholder:text-slate-600 font-sans" %}
+{% set mono_input_cls = "station-input h-11 text-base text-white placeholder:text-slate-600 font-mono" %}
+{# Select variant: pair .station-input with .station-select so the form's
+   dropdowns get the custom SVG caret and consistent right padding,
+   instead of the native browser chevron (which sits flush against the
+   border and varies across browsers). #}
+{% set select_cls = input_cls + " station-select" %}
 
 <div id="{{ 'edit-instance-form-shell-' ~ instance.id if is_edit else 'add-instance-form-shell' }}">
   {% if error is defined and error %}

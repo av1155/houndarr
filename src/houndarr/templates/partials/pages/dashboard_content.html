@@ -1081,10 +1081,14 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    color: #475569;
-    font-family: var(--font-mono);
-    font-size: 20px;
     margin-bottom: 4px;
+  }
+  .dash-empty-state__icon::before {
+    content: "";
+    width: 12px;
+    height: 12px;
+    border: 1px solid #475569;
+    border-radius: 50%;
   }
   .dash-empty-state__title {
     font-size: 18px;
@@ -1714,7 +1718,7 @@
         if (instances.length === 0) {
           evt.detail.serverResponse = `
 <section class="dash-empty-state" aria-label="No instances">
-  <span class="dash-empty-state__icon" aria-hidden="true">◯</span>
+  <span class="dash-empty-state__icon" aria-hidden="true"></span>
   <p class="dash-empty-state__title">No instances configured</p>
   <p class="dash-empty-state__body">
     Add a Sonarr, Radarr, Lidarr, Readarr, or Whisparr instance to start patrolling

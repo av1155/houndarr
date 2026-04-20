@@ -86,26 +86,28 @@
   }
 
   #instance-test-connection-btn {
-    transition: background-color 180ms ease, color 180ms ease, box-shadow 180ms ease,
-      transform 180ms ease;
+    transition: background-color var(--dur-base) var(--ease-station),
+      color var(--dur-base) var(--ease-station),
+      box-shadow var(--dur-base) var(--ease-station),
+      transform var(--dur-base) var(--ease-station);
   }
 
   #instance-test-connection-btn.is-testing {
-    background-color: rgb(51 65 85);
-    color: rgb(226 232 240);
+    background-color: var(--color-surface-3);
+    color: #e2e8f0;
     box-shadow: 0 0 0 1px rgba(148, 163, 184, 0.55) inset;
   }
 
   #instance-test-connection-btn.is-success {
-    background-color: rgb(22 101 52);
-    color: rgb(220 252 231);
-    box-shadow: 0 0 0 1px rgba(74, 222, 128, 0.4) inset;
+    background-color: var(--color-success-bg);
+    color: #dcfce7;
+    box-shadow: 0 0 0 1px var(--color-success-border) inset;
   }
 
   #instance-test-connection-btn.is-error {
-    background-color: rgb(153 27 27);
-    color: rgb(254 226 226);
-    box-shadow: 0 0 0 1px rgba(248, 113, 113, 0.45) inset;
+    background-color: var(--color-danger-bg);
+    color: #fee2e2;
+    box-shadow: 0 0 0 1px var(--color-danger-border) inset;
     animation: test-connection-shake 320ms ease;
   }
 
@@ -205,9 +207,9 @@
       column-gap: 8px;
       row-gap: 5px;
       padding: 12px;
-      background: #0e1117;
-      border: 1px solid #1e2638 !important;
-      border-radius: 10px;
+      background: var(--color-surface-1);
+      border: 1px solid var(--color-border-subtle) !important;
+      border-radius: var(--radius-container);
       align-items: start;
     }
 
@@ -280,9 +282,9 @@
     /* No-instances row */
     tr#no-instances-row {
       display: block;
-      border-radius: 10px;
-      border: 1px solid #1e2638 !important;
-      background: #0e1117;
+      border-radius: var(--radius-container);
+      border: 1px solid var(--color-border-subtle) !important;
+      background: var(--color-surface-1);
     }
 
     tr#no-instances-row > td {
@@ -330,7 +332,7 @@
 </div>
 
 {% if error is defined and error %}
-<div class="mb-4 border-l-4 border-red-500 bg-red-950/30 text-red-300 rounded-r-lg px-4 py-3 text-sm font-sans">
+<div class="mb-4 border-l-4 border-danger bg-danger-bg text-danger rounded-r-inset px-4 py-3 text-sm font-sans">
   {{ error }}
 </div>
 {% endif %}
@@ -345,7 +347,7 @@
         hx-target="#app-content"
         hx-swap="innerHTML"
         hx-push-url="true"
-        class="px-3 py-1.5 rounded border border-[#2a3448] bg-[#151b27] hover:bg-[#1e2638] text-slate-200 text-sm font-medium font-sans transition-colors"
+        class="station-button station-button--secondary px-3 py-1.5 text-sm font-medium font-sans"
       >
         Settings Guide
       </a>
@@ -356,16 +358,16 @@
         hx-target="#add-instance-modal-content"
         hx-swap="innerHTML"
         id="add-instance-btn"
-        class="px-3 py-1.5 rounded bg-brand-600 hover:bg-brand-500 text-white text-sm font-medium font-sans transition-colors"
+        class="station-button station-button--primary px-3 py-1.5 text-sm font-medium font-sans"
       >
         + Add Instance
       </button>
     </div>
   </div>
 
-  <div class="instance-table-wrapper rounded-xl border border-[#1e2638] overflow-x-auto">
+  <div class="instance-table-wrapper rounded-container border border-border-subtle overflow-x-auto">
     <table id="instance-table" class="w-full sm:min-w-[760px] text-sm">
-      <thead class="bg-[#151b27] text-[10px] text-slate-500 uppercase tracking-widest font-sans border-b border-[#1e2638]">
+      <thead class="bg-surface-2 text-[10px] text-slate-500 uppercase tracking-widest font-sans border-b border-border-subtle">
         <tr>
           <th class="px-4 py-3 text-left font-medium">Name</th>
           <th class="px-4 py-3 text-left font-medium">Type</th>
@@ -375,7 +377,7 @@
           <th class="px-4 py-3 text-right font-medium">Actions</th>
         </tr>
       </thead>
-      <tbody id="instance-tbody" class="divide-y divide-[#1e2638]">
+      <tbody id="instance-tbody" class="divide-y divide-border-subtle">
         {% for instance in instances %} {% include "partials/instance_row.html" %} {% else %}
         <tr id="no-instances-row">
           <td colspan="6" class="px-4 py-12 text-center">
@@ -391,10 +393,10 @@
   {% include "partials/changelog_settings_section.html" %}
 
   {% if auth_mode != "proxy" %}
-  <section id="account-section" class="mt-8 rounded-xl border border-[#1e2638] bg-[#0e1117] p-4 sm:p-5">
+  <section id="account-section" class="mt-8 rounded-container border border-border-subtle bg-surface-1 p-4 sm:p-5">
     <details id="account-settings" {% if account_error or account_success %}open{% endif %}>
       <summary
-        class="cursor-pointer list-none flex items-center justify-between rounded-lg px-2 py-2 text-slate-200 hover:bg-[#151b27] focus:outline-none focus:ring-2 focus:ring-brand-400/30"
+        class="cursor-pointer list-none flex items-center justify-between rounded-inset px-2 py-2 text-slate-200 hover:bg-surface-2 focus:outline-none focus:ring-2 focus:ring-brand-400/30"
       >
         <span>
           <span class="block text-base font-semibold">Account</span>
@@ -416,7 +418,7 @@
       <div class="account-details-content">
         <div class="account-details-inner pt-4 space-y-4">
           <div
-            class="inline-flex items-center gap-2 rounded-md border border-[#1e2638] bg-[#07080f]/70 px-3 py-1.5 text-xs text-slate-400 font-sans"
+            class="inline-flex items-center gap-2 rounded-inset border border-border-subtle bg-surface-base/70 px-3 py-1.5 text-xs text-slate-400 font-sans"
           >
             <span class="text-slate-500">Signed in as</span>
             <span class="font-medium text-slate-200">{{ username or "admin" }}</span>
@@ -439,8 +441,7 @@
                 type="password"
                 required
                 autocomplete="current-password"
-                class="w-full h-11 rounded-lg border border-[#2a3448] bg-[#0e1117] px-3 text-base text-white placeholder:text-slate-600 font-sans
-                           focus:outline-none focus:border-brand-400/70 focus:ring-2 focus:ring-brand-500/25"
+                class="station-input h-11 px-3 text-base text-white placeholder:text-slate-600 font-sans"
               />
             </div>
             <div>
@@ -454,8 +455,7 @@
                 required
                 minlength="8"
                 autocomplete="new-password"
-                class="w-full h-11 rounded-lg border border-[#2a3448] bg-[#0e1117] px-3 text-base text-white placeholder:text-slate-600 font-sans
-                           focus:outline-none focus:border-brand-400/70 focus:ring-2 focus:ring-brand-500/25"
+                class="station-input h-11 px-3 text-base text-white placeholder:text-slate-600 font-sans"
               />
             </div>
             <div>
@@ -469,15 +469,14 @@
                 required
                 minlength="8"
                 autocomplete="new-password"
-                class="w-full h-11 rounded-lg border border-[#2a3448] bg-[#0e1117] px-3 text-base text-white placeholder:text-slate-600 font-sans
-                           focus:outline-none focus:border-brand-400/70 focus:ring-2 focus:ring-brand-500/25"
+                class="station-input h-11 px-3 text-base text-white placeholder:text-slate-600 font-sans"
               />
             </div>
 
             <div class="sm:col-span-3 flex flex-wrap items-center gap-3 pt-1">
               <button
                 type="submit"
-                class="px-4 py-2.5 rounded-lg bg-brand-500 hover:bg-brand-400 text-white text-sm font-semibold font-sans transition-colors focus:outline-none focus:ring-2 focus:ring-brand-400/35"
+                class="station-button station-button--primary px-4 py-2.5 text-sm font-semibold font-sans focus:outline-none focus:ring-2 focus:ring-brand-400/35"
               >
                 Update Password
               </button>
@@ -485,12 +484,12 @@
             </div>
 
             {% if account_error is defined and account_error %}
-            <div class="sm:col-span-3 border-l-4 border-red-500 bg-red-950/30 rounded-r-lg px-3 py-2 text-sm text-red-300 font-sans">
+            <div class="sm:col-span-3 border-l-4 border-danger bg-danger-bg rounded-r-inset px-3 py-2 text-sm text-danger font-sans">
               {{ account_error }}
             </div>
             {% endif %} {% if account_success is defined and account_success %}
             <div
-              class="sm:col-span-3 border-l-4 border-emerald-500 bg-emerald-950/30 rounded-r-lg px-3 py-2 text-sm text-emerald-300 font-sans"
+              class="sm:col-span-3 border-l-4 border-success bg-success-bg rounded-r-inset px-3 py-2 text-sm text-success font-sans"
             >
               {{ account_success }}
             </div>
@@ -504,10 +503,10 @@
 
   <dialog
     id="add-instance-modal"
-    class="m-auto p-0 w-[min(94vw,52rem)] rounded-2xl border border-[#1e2638] bg-[#0e1117] text-slate-100"
+    class="m-auto p-0 w-[min(94vw,52rem)] rounded-container border border-border-subtle bg-surface-1 text-slate-100"
     style="box-shadow:0 30px 80px rgba(0,0,0,0.7), 0 0 0 1px rgba(30,38,56,0.8);"
   >
-    <div class="flex items-start justify-between border-b border-[#1e2638] px-6 py-5">
+    <div class="flex items-start justify-between border-b border-border-subtle px-6 py-5">
       <div>
         <h3 id="add-instance-modal-title" class="text-xl font-semibold tracking-tight text-white">
           Add Instance
@@ -531,7 +530,7 @@
         autofocus
         aria-label="Close add instance dialog"
         data-close-add-instance-modal="true"
-        class="ml-4 flex-shrink-0 rounded-lg border border-[#2a3448] bg-[#151b27] p-2 text-slate-400 hover:bg-[#1e2638] hover:text-slate-200 transition-colors focus:outline-none focus:ring-2 focus:ring-brand-400/30"
+        class="ml-4 flex-shrink-0 rounded-inset border border-border-default bg-surface-2 p-2 text-slate-400 hover:bg-surface-3 hover:text-slate-200 transition-colors duration-base ease-station focus:outline-none focus:ring-2 focus:ring-brand-400/30"
       >
         <span aria-hidden="true" class="text-xl leading-none">&times;</span>
       </button>

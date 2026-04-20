@@ -855,7 +855,7 @@
 <section class="dash-alert" role="alert">
   <span class="dash-alert__icon" aria-hidden="true">⚠</span>
   <div class="dash-alert__body">
-    <p class="dash-alert__head">Degraded · ${failing.length} hound${failing.length === 1 ? '' : 's'} offline</p>
+    <p class="dash-alert__head">Degraded · ${failing.length} instance${failing.length === 1 ? '' : 's'} offline</p>
     <p class="dash-alert__text">
       <strong>${escHtml(inst.name)}</strong><span class="muted">:</span>
       ${renderAlertMessage(msg)}<span class="dash-alert__meta"><span class="muted dash-alert__meta-lead">&nbsp;·&nbsp;</span>${escHtml(failText)} <span class="muted">·</span> last ${escHtml(whenAgo || 'just now')}</span>
@@ -969,7 +969,7 @@
     function renderSectionHead() {
       return `
 <header class="dash-section-head">
-  <h2 class="dash-section-head__title">The hounds on patrol</h2>
+  <h2 class="dash-section-head__title">Instances</h2>
   <span class="dash-section-head__rule" aria-hidden="true"></span>
   <a class="dash-section-head__add" href="/settings"
      hx-get="/settings" hx-target="#app-content" hx-swap="innerHTML" hx-push-url="true">+ Add Instance</a>
@@ -1039,7 +1039,7 @@
         return `
 <div class="dash-unlocks">
   <p class="dash-unlocks__head">Cooldown schedule</p>
-  <p class="dash-unlocks--empty">Hound offline. Unable to compute unlocks.</p>
+  <p class="dash-unlocks--empty">Instance offline. Unable to compute unlocks.</p>
 </div>`;
       }
       const items = Array.isArray(inst.unlocking_next) ? inst.unlocking_next : [];

@@ -290,7 +290,7 @@ src/houndarr/
 
 ### Key patterns
 
-- **Database:** SQLite via aiosqlite; schema version 9; `get_db()` async
+- **Database:** SQLite via aiosqlite; schema version 13; `get_db()` async
   context manager opens a fresh connection per call (FKs enabled per
   connection; WAL mode set once in `init_db()`)
 - **Config:** `AppSettings` is a plain dataclass (not Pydantic); `get_settings()`
@@ -308,17 +308,17 @@ src/houndarr/
 - **search_log:** Every search attempt writes a row with action
   `searched`/`skipped`/`error`/`info`
 
-### Database schema (SQLite, schema version 9)
+### Database schema (SQLite, schema version 13)
 
 | Table | Purpose | Key constraints |
 |-------|---------|-----------------|
 | `settings` | Key-value config store | `key TEXT PK` |
-| `instances` | *arr instance configs | `type CHECK IN ('radarr','sonarr','lidarr','readarr','whisparr_v2','whisparr_v3')`; per-type `*_search_mode` columns with CHECK constraints; `post_release_grace_hrs` (default 6); `queue_limit` (default 0); `upgrade_enabled` (default 0) with per-type `upgrade_*_search_mode`, `upgrade_batch_size`, `upgrade_cooldown_days`, `upgrade_hourly_cap`, `upgrade_item_offset`, `upgrade_series_offset` columns; `missing_page_offset` (default 1), `cutoff_page_offset` (default 1) for page-rotation across cycles |
+| `instances` | *arr instance configs | `type CHECK IN ('radarr','sonarr','lidarr','readarr','whisparr_v2','whisparr_v3')`; per-type `*_search_mode` columns with CHECK constraints; `post_release_grace_hrs` (default 6); `queue_limit` (default 0); `upgrade_enabled` (default 0) with per-type `upgrade_*_search_mode`, `upgrade_batch_size`, `upgrade_cooldown_days`, `upgrade_hourly_cap`, `upgrade_item_offset`, `upgrade_series_offset` columns; `missing_page_offset` (default 1), `cutoff_page_offset` (default 1) for page-rotation across cycles; `allowed_time_window` (default `''`) for per-instance search schedules; `search_order` (default `'random'` on fresh installs, `'chronological'` for migrated rows) with `CHECK(search_order IN ('random','chronological'))`; `monitored_total` / `unreleased_count` / `snapshot_refreshed_at` populated by the supervisor's snapshot refresh task for the dashboard |
 | `cooldowns` | Per-item search cooldown tracking | `instance_id FK→instances ON DELETE CASCADE`; `UNIQUE(instance_id, item_id, item_type)` |
 | `search_log` | Audit trail for every search cycle | `instance_id FK→instances ON DELETE SET NULL`; `action CHECK IN ('searched','skipped','error','info')` |
 
 Full DDL, column definitions, indexes, and migrations (`_migrate_to_v2`
-through `_migrate_to_v9`) are in `src/houndarr/database.py`. Bump
+through `_migrate_to_v13`) are in `src/houndarr/database.py`. Bump
 `SCHEMA_VERSION` when adding new migrations.
 
 ### *arr API reference (local)

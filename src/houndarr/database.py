@@ -131,6 +131,11 @@ def set_db_path(path: str) -> None:
     _db_path = path
 
 
+def get_db_path() -> str:
+    """Return the configured SQLite file path set by :func:`set_db_path`."""
+    return _db_path
+
+
 @asynccontextmanager
 async def get_db() -> AsyncGenerator[aiosqlite.Connection, None]:
     """Yield a database connection with foreign keys enabled."""

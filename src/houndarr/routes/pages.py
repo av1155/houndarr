@@ -27,20 +27,6 @@ from houndarr.services.instances import list_instances
 router = APIRouter()
 
 
-# Map InstanceType enum value to the accent slug used in --inst-* CSS tokens.
-# The cycle-card template reads instance_accent_by_name[name] and emits a
-# --cycle-accent CSS variable; this dispatch keeps the slug resolution in
-# Python so the template stays declarative.
-_INSTANCE_TYPE_TO_ACCENT_SLUG = {
-    "sonarr": "sonarr",
-    "radarr": "radarr",
-    "lidarr": "lidarr",
-    "readarr": "readarr",
-    "whisparr_v2": "whisparr-v2",
-    "whisparr_v3": "whisparr-v3",
-}
-
-
 def _render(
     request: Request,
     template_name: str,

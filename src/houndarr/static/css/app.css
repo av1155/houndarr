@@ -187,12 +187,12 @@ button:focus-visible {
   animation: dash-pulse-dot 2.4s var(--ease-station) infinite;
 }
 
-/* ── Login/Setup background radial glow ─────────────────────────────────── */
-.auth-glow-bg {
-  background:
-    radial-gradient(ellipse 60% 50% at 50% 40%, rgba(6, 182, 212, 0.08) 0%, transparent 70%),
-    var(--color-base);
-}
+/* ── Login/Setup layout hook ─────────────────────────────────────────────
+   The background radial is painted by `body.is-auth` so it spans the
+   full viewport instead of being clipped by <main>'s max-w-7xl column.
+   This class is kept in the auth templates purely as a layout anchor
+   (the Tailwind utilities on the same element handle flex centring and
+   the negative-margin escape from the <main> padding). */
 
 /* ── Body atmosphere — desktop ambient depth ────────────────────────────── */
 body {
@@ -206,6 +206,28 @@ body {
       rgba(34, 211, 238, 0.018) 31px,
       rgba(34, 211, 238, 0.018) 32px
     );
+}
+
+/* ── Auth atmosphere (login/setup) ───────────────────────────────────────
+   <main> is capped at max-w-7xl, so on wide viewports the default body
+   atmosphere (corner radials + stripes) bleeds through the gutters while
+   .auth-glow-bg only paints the centred column. On auth pages we swap
+   the body background for a single wide, viewport-pinned radial that
+   surrounds the card regardless of viewport width, plus a soft edge
+   vignette for depth. Stripes are dropped here since login/setup has
+   no dashboard texture to stay in continuity with. */
+body.is-auth {
+  background-color: var(--color-base);
+  background-image:
+    radial-gradient(
+      ellipse 110% 95% at 50% 45%,
+      rgba(6, 182, 212, 0.15)  0%,
+      rgba(6, 182, 212, 0.06) 32%,
+      rgba(6, 182, 212, 0.015) 60%,
+      transparent              88%
+    );
+  background-repeat: no-repeat;
+  background-attachment: fixed;
 }
 
 /* ── Nav atmospheric glow ───────────────────────────────────────────────── */

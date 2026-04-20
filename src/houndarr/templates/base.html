@@ -171,7 +171,7 @@
 
   {% block head %}{% endblock %}
 </head>
-<body class="bg-surface-base text-slate-100 min-h-screen flex flex-col font-sans">
+<body class="bg-surface-base text-slate-100 min-h-screen flex flex-col font-sans{% if show_nav is defined and not show_nav %} is-auth{% endif %}">
 
   {% if show_nav is not defined or show_nav %}
   <!-- Navigation -->

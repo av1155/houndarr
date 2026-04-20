@@ -198,6 +198,19 @@ from houndarr.database import get_db
 - Google-style for functions: `Args:`, `Returns:`, `Raises:` sections
 - Test functions may use brief single-line docstrings
 
+### Comments
+
+Read [`docs/commenting-standard.md`](docs/commenting-standard.md) at least once
+per session before writing or editing code in this repo. It codifies the full
+commenting standard (per-language rules for Python, HTML/Jinja2, CSS, JS, SQL,
+YAML, shell, Markdown) plus the universal principles that apply across all of
+them. Agents and human contributors alike are expected to match what is there;
+reviewers will flag comments that do not.
+
+Core rule (full rationale in the standard): **comments explain _why_, code
+explains _what_**. If a comment just restates the code, delete it and rename
+the variable or function instead.
+
 ### Logging
 
 Every module that logs uses `logger = logging.getLogger(__name__)` at module

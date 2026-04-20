@@ -59,9 +59,9 @@
        max-width: calc(100% - 38px) and centers via inset; we override
        both so the sheet can pin to the bottom edge and span the full
        containing-block width.  Use `width: 100%` (not 100vw) because
-       `scrollbar-gutter: stable both-edges` on <html> shrinks the
-       containing block for fixed-positioned elements; 100vw would
-       overshoot the right edge by the gutter width. */
+       `scrollbar-gutter: stable` on <html> shrinks the containing block
+       for fixed-positioned elements; 100vw would overshoot the
+       inline-end edge by the gutter width. */
     @media (max-width: 639px) {
       #changelog-modal {
         position: fixed;

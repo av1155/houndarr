@@ -19,16 +19,16 @@
     </div>
 
     <!-- Setup card -->
-    <div class="bg-[#0e1117] border border-[#1e2638] rounded-xl p-6" style="box-shadow:var(--shadow-4);">
+    <div class="bg-surface-1 border border-border-subtle rounded-container p-6" style="box-shadow:var(--shadow-4);">
       {% if error %}
-      <div class="mb-4 border-l-4 border-red-500 bg-red-950/30 text-red-200 rounded-r-lg px-4 py-3 text-sm" role="alert">
+      <div class="mb-4 border-l-4 border-danger bg-danger-bg text-slate-100 rounded-r-inset px-4 py-3 text-sm" role="alert">
         {{ error }}
       </div>
       {% endif %}
 
       <form action="/setup" method="post" class="space-y-5">
         <div>
-          <label for="username" class="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide">
+          <label for="username" class="block text-xs font-medium text-slate-500 mb-1.5 uppercase tracking-wide">
             Username
           </label>
           <input
@@ -40,15 +40,14 @@
             minlength="3"
             maxlength="32"
             pattern="[-A-Za-z0-9_.]+"
-            class="w-full bg-[#151b27] border border-[#2a3448] rounded-lg px-4 py-2.5 text-white font-sans placeholder-slate-600
-                   focus:outline-none focus:border-brand-400/70 focus:ring-2 focus:ring-brand-500/25 transition-colors text-base"
+            class="station-input font-sans text-base"
             placeholder="admin"
             autofocus
           />
         </div>
 
         <div>
-          <label for="password" class="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide">
+          <label for="password" class="block text-xs font-medium text-slate-500 mb-1.5 uppercase tracking-wide">
             Password
           </label>
           <input
@@ -58,14 +57,13 @@
             autocomplete="new-password"
             required
             minlength="8"
-            class="w-full bg-[#151b27] border border-[#2a3448] rounded-lg px-4 py-2.5 text-white font-mono placeholder-slate-600
-                   focus:outline-none focus:border-brand-400/70 focus:ring-2 focus:ring-brand-500/25 transition-colors text-base"
+            class="station-input font-mono text-base"
             placeholder="Minimum 8 characters"
           />
         </div>
 
         <div>
-          <label for="password_confirm" class="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide">
+          <label for="password_confirm" class="block text-xs font-medium text-slate-500 mb-1.5 uppercase tracking-wide">
             Confirm Password
           </label>
           <input
@@ -75,23 +73,21 @@
             autocomplete="new-password"
             required
             minlength="8"
-            class="w-full bg-[#151b27] border border-[#2a3448] rounded-lg px-4 py-2.5 text-white font-mono placeholder-slate-600
-                   focus:outline-none focus:border-brand-400/70 focus:ring-2 focus:ring-brand-500/25 transition-colors text-base"
+            class="station-input font-mono text-base"
             placeholder="Repeat your password"
           />
         </div>
 
         <button
           type="submit"
-          class="w-full bg-brand-600 hover:bg-brand-500 text-white font-semibold py-2.5 rounded-lg transition-colors
-                 focus:outline-none focus:ring-2 focus:ring-brand-400/50 focus:ring-offset-2 focus:ring-offset-[#0e1117]
-                 text-sm tracking-wide">
+          class="station-button station-button--primary w-full py-2.5 text-sm tracking-wide font-semibold
+                 focus:outline-none focus:ring-2 focus:ring-brand-400/50 focus:ring-offset-2 focus:ring-offset-surface-1">
           Create Account &amp; Get Started
         </button>
       </form>
     </div>
 
-    <p class="mt-5 text-center text-xs text-slate-600 font-mono">
+    <p class="mt-5 text-center text-xs text-slate-500 font-mono">
       Keep your credentials secure.
     </p>
   </div>

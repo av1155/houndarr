@@ -16,16 +16,16 @@ html {
 }
 
 ::-webkit-scrollbar-track {
-  background: #0e1117; /* surface-1 */
+  background: var(--color-surface-1);
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #2a3448; /* border-default */
-  border-radius: 3px;
+  background: var(--color-border-default);
+  border-radius: var(--radius-chip);
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #3d4f6b; /* border-strong */
+  background: var(--color-border-strong);
 }
 
 /* ── Instance form select chevron ───────────────────────────────────────── */
@@ -132,11 +132,11 @@ html {
 @keyframes station-pulse {
   0%, 100% {
     opacity: 1;
-    box-shadow: 0 0 0 0 rgba(74, 222, 128, 0);
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--seg-eligible) 0%, transparent);
   }
   50% {
     opacity: 0.85;
-    box-shadow: 0 0 0 3px rgba(74, 222, 128, 0.18);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--seg-eligible) 18%, transparent);
   }
 }
 
@@ -176,6 +176,102 @@ body > nav {
   box-shadow:
     0 1px 0 #1e2638,
     0 2px 20px rgba(6, 182, 212, 0.065);
+}
+
+/* ── Shared form / button primitives ─────────────────────────────────────
+   Used across auth (login, setup), changelog modal, and the instance
+   form. Keeps dashboard's precision-instrument look consistent with
+   every form control elsewhere. Built with tokens only so changing
+   tokens.css flows through automatically. */
+
+.station-input {
+  width: 100%;
+  padding: 10px 12px;
+  font-size: 14px;
+  line-height: 1.4;
+  color: #e2e8f0;
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-inset);
+  transition:
+    border-color var(--dur-base) var(--ease-station),
+    box-shadow   var(--dur-base) var(--ease-station),
+    background   var(--dur-base) var(--ease-station);
+}
+.station-input::placeholder {
+  color: #64748b;
+}
+.station-input:hover {
+  border-color: var(--color-border-strong);
+}
+.station-input:focus-visible {
+  outline: none;
+  border-color: color-mix(in srgb, var(--color-brand-400) 70%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-brand-500) 25%, transparent);
+}
+.station-input:disabled,
+.station-input[aria-disabled="true"] {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.station-input[aria-invalid="true"] {
+  border-color: var(--color-danger);
+}
+
+.station-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 14px;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1;
+  border: 1px solid transparent;
+  border-radius: var(--radius-inset);
+  cursor: pointer;
+  user-select: none;
+  transition:
+    background   var(--dur-base) var(--ease-station),
+    border-color var(--dur-base) var(--ease-station),
+    color        var(--dur-base) var(--ease-station),
+    transform    var(--dur-base) var(--ease-station);
+}
+.station-button:active {
+  transform: translateY(1px);
+}
+.station-button:disabled,
+.station-button[aria-disabled="true"] {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.station-button--primary {
+  color: #ffffff;
+  background: var(--color-brand-600);
+  border-color: var(--color-brand-500);
+}
+.station-button--primary:hover:not(:disabled) {
+  background: var(--color-brand-500);
+}
+.station-button--secondary {
+  color: #cbd5e1;
+  background: var(--color-surface-2);
+  border-color: var(--color-border-default);
+}
+.station-button--secondary:hover:not(:disabled) {
+  background: var(--color-surface-3);
+  border-color: var(--color-border-strong);
+  color: #f1f5f9;
+}
+.station-button--danger {
+  color: var(--color-danger);
+  background: transparent;
+  border-color: color-mix(in srgb, var(--color-danger) 50%, transparent);
+}
+.station-button--danger:hover:not(:disabled) {
+  background: var(--color-danger-bg);
+  border-color: var(--color-danger);
 }
 
 /* ── Reduced motion ─────────────────────────────────────────────────────── */

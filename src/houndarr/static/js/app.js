@@ -140,6 +140,12 @@
     setShellLoading(false);
     syncShellUi();
     triggerShellEnter();
+    // Treat every #app-content swap as a page navigation and jump to the
+    // top of the viewport, matching the browser's native behaviour for
+    // full-page loads. htmx:historyRestore (browser back/forward) has its
+    // own handler below and intentionally does NOT reset scroll so the
+    // user's prior scroll position is preserved on back navigation.
+    window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
   });
 
   document.body.addEventListener('htmx:responseError', function () {

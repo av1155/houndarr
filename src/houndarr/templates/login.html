@@ -3,72 +3,115 @@
 
 {% block title %}Login | Houndarr{% endblock %}
 
+{% block head %}
+<link rel="stylesheet" href="/static/css/auth.css?v={{ version }}" />
+<link rel="stylesheet" href="/static/css/auth-fields.css?v={{ version }}" />
+{% endblock %}
+
 {% block content %}
-<div class="auth-glow-bg flex items-center justify-center min-h-[calc(100vh-8rem)] -mx-4 sm:-mx-6 lg:-mx-8 -my-6 sm:-my-8 px-4">
-  <div class="w-full max-w-sm">
-    <!-- Wordmark / header -->
-    <div class="text-center mb-8">
-      <img
-        src="/static/img/houndarr-logo-dark-ui.png"
-        alt="Houndarr logo"
-        class="mx-auto w-16 h-16 pb-1 object-contain"
-        style="filter: drop-shadow(var(--glow-logo));"
-      />
-      <h1 class="mt-3 text-2xl font-bold text-white tracking-tight">Houndarr</h1>
-      <p class="mt-1.5 text-slate-400 text-sm">Sign in to your instance</p>
-    </div>
+<div class="auth-card">
+  <div class="auth-card__topbar">
+    <span class="auth-card__brand">
+      <img src="/static/img/houndarr-logo-dark.png" alt="Houndarr logo" />
+      <span>Houndarr</span>
+    </span>
+  </div>
 
-    <!-- Login card -->
-    <div class="bg-surface-1 border border-border-subtle rounded-container p-6" style="box-shadow:var(--shadow-4);">
-      {% if error %}
-      <div class="mb-4 border-l-4 border-danger bg-danger-bg text-slate-100 rounded-r-inset px-4 py-3 text-sm" role="alert">
-        {{ error }}
+  <section class="auth-form">
+    <h1>Welcome <span class="accent">back</span>.</h1>
+    <p class="auth-subhead">Sign in to your instance.</p>
+
+    {% if error %}
+    <div class="auth-alert" role="alert">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+           stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <circle cx="12" cy="12" r="10"/>
+        <line x1="12" y1="8" x2="12" y2="12"/>
+        <line x1="12" y1="16" x2="12.01" y2="16"/>
+      </svg>
+      <div>{{ error }}</div>
+    </div>
+    {% endif %}
+
+    <form action="/login" method="post" data-auth-form>
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+
+      <div class="field">
+        <label class="field__label" for="login-username"><span>Username</span></label>
+        <div class="input-wrap">
+          <svg class="leading" width="16" height="16" viewBox="0 0 24 24" fill="none"
+               stroke="currentColor" stroke-width="2" stroke-linecap="round"
+               stroke-linejoin="round" aria-hidden="true">
+            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+            <circle cx="12" cy="7" r="4"/>
+          </svg>
+          <input id="login-username" name="username" type="text"
+                 class="station-input"
+                 autocomplete="username" required
+                 minlength="3" maxlength="32" pattern="[A-Za-z0-9_.\-]+"
+                 placeholder="admin" autofocus
+                 {% if error %}aria-invalid="true"{% endif %} />
+        </div>
       </div>
-      {% endif %}
 
-      <form action="/login" method="post" class="space-y-5">
-        <div>
-          <label for="username" class="block text-xs font-medium text-slate-500 mb-1.5 uppercase tracking-wide">
-            Username
-          </label>
-          <input
-            id="username"
-            name="username"
-            type="text"
-            autocomplete="username"
-            required
-            minlength="3"
-            maxlength="32"
-            pattern="[A-Za-z0-9_.\-]+"
-            class="station-input font-sans text-base"
-            placeholder="username"
-            autofocus
-          />
+      <div class="field">
+        <label class="field__label" for="login-password">
+          <span>Password</span>
+          <span class="caps-badge" aria-live="polite">Caps Lock</span>
+        </label>
+        <div class="input-wrap">
+          <svg class="leading" width="16" height="16" viewBox="0 0 24 24" fill="none"
+               stroke="currentColor" stroke-width="2" stroke-linecap="round"
+               stroke-linejoin="round" aria-hidden="true">
+            <rect x="3" y="11" width="18" height="10" rx="2"/>
+            <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+          </svg>
+          <input id="login-password" name="password" type="password"
+                 class="station-input has-trailing mono"
+                 autocomplete="current-password" required
+                 placeholder="••••••••"
+                 data-pw-input
+                 {% if error %}aria-invalid="true"{% endif %} />
+          <div class="input-trailing">
+            <button type="button" class="icon-btn"
+                    aria-label="Show password" aria-pressed="false"
+                    data-pw-toggle tabindex="-1">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+                   stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                   stroke-linejoin="round" aria-hidden="true">
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8S1 12 1 12z"/>
+                <circle cx="12" cy="12" r="3"/>
+              </svg>
+            </button>
+          </div>
         </div>
+      </div>
 
-        <div>
-          <label for="password" class="block text-xs font-medium text-slate-500 mb-1.5 uppercase tracking-wide">
-            Password
-          </label>
-          <input
-            id="password"
-            name="password"
-            type="password"
-            autocomplete="current-password"
-            required
-            class="station-input font-mono text-base"
-            placeholder="••••••••"
-          />
-        </div>
+      <button type="submit" class="station-button">
+        <span class="spinner" aria-hidden="true"></span>
+        <span class="btn-label">Sign in</span>
+        <svg class="btn-arrow" width="14" height="14" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="2.5" stroke-linecap="round"
+             stroke-linejoin="round" aria-hidden="true">
+          <path d="M5 12h14"/>
+          <path d="m12 5 7 7-7 7"/>
+        </svg>
+      </button>
+    </form>
+  </section>
 
-        <button
-          type="submit"
-          class="station-button station-button--primary w-full py-2.5 text-sm tracking-wide font-semibold
-                 focus:outline-none focus:ring-2 focus:ring-brand-400/50 focus:ring-offset-2 focus:ring-offset-surface-1">
-          Sign In
-        </button>
-      </form>
-    </div>
+  <div class="auth-card__footer">
+    <span>Houndarr v{{ version }}</span>
+    <a href="https://github.com/av1155/houndarr" target="_blank" rel="noopener noreferrer"
+       aria-label="Houndarr on GitHub">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+        <path d="M12 .5C5.65.5.5 5.65.5 12a11.5 11.5 0 0 0 7.86 10.92c.58.1.79-.25.79-.56 0-.27-.01-.99-.02-1.94-3.2.7-3.88-1.54-3.88-1.54-.52-1.33-1.28-1.69-1.28-1.69-1.04-.72.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.77 2.7 1.26 3.36.96.1-.75.4-1.26.73-1.55-2.56-.29-5.25-1.28-5.25-5.7 0-1.26.45-2.29 1.18-3.1-.12-.29-.51-1.46.11-3.04 0 0 .97-.31 3.18 1.18a11.01 11.01 0 0 1 5.79 0c2.21-1.49 3.18-1.18 3.18-1.18.62 1.58.23 2.75.11 3.04.74.81 1.18 1.84 1.18 3.1 0 4.43-2.7 5.4-5.27 5.69.41.35.78 1.05.78 2.12 0 1.53-.01 2.77-.01 3.14 0 .31.21.67.8.56A11.5 11.5 0 0 0 23.5 12C23.5 5.65 18.35.5 12 .5Z"/>
+      </svg>
+    </a>
   </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/auth.js?v={{ version }}" defer></script>
 {% endblock %}

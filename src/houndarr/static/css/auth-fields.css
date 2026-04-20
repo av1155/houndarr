@@ -1,0 +1,272 @@
+/* Houndarr auth pages form controls: inputs, icon buttons, caps badge,
+ * field messages, password-strength meter, submit button. */
+
+.is-auth .field {
+  margin-bottom: 16px;
+}
+.is-auth .field__label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #64748b;
+  margin-bottom: 6px;
+}
+
+.is-auth .input-wrap {
+  position: relative;
+}
+.is-auth .input-wrap svg.leading {
+  position: absolute;
+  left: 11px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #475569;
+  pointer-events: none;
+  transition: color var(--dur-base) var(--ease-station);
+}
+.is-auth .input-wrap:focus-within svg.leading {
+  color: var(--color-brand-300);
+}
+
+.is-auth .auth-form .station-input {
+  width: 100%;
+  padding: 11px 12px 11px 38px;
+  font-size: 14px;
+  line-height: 1.4;
+  font-family: var(--font-sans);
+  color: #e2e8f0;
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-inset);
+  transition:
+    border-color var(--dur-base) var(--ease-station),
+    box-shadow var(--dur-base) var(--ease-station),
+    background-color var(--dur-base) var(--ease-station);
+}
+.is-auth .auth-form .station-input.mono {
+  font-family: var(--font-mono);
+}
+.is-auth .auth-form .station-input.has-trailing {
+  padding-right: 44px;
+}
+.is-auth .auth-form .station-input::placeholder {
+  color: #475569;
+}
+.is-auth .auth-form .station-input:hover {
+  border-color: var(--color-border-strong);
+}
+.is-auth .auth-form .station-input:focus-visible {
+  outline: none;
+  border-color: color-mix(in srgb, var(--color-brand-400) 70%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-brand-500) 25%, transparent);
+  background: #0f1521;
+}
+.is-auth .auth-form .station-input[aria-invalid="true"] {
+  border-color: var(--color-danger);
+  box-shadow: 0 0 0 3px rgba(248, 113, 113, 0.16);
+}
+
+.is-auth .input-trailing {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.is-auth .icon-btn {
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 0;
+  border-radius: 3px;
+  color: #64748b;
+  cursor: pointer;
+  transition:
+    color var(--dur-base) var(--ease-station),
+    background var(--dur-base) var(--ease-station);
+}
+.is-auth .icon-btn:hover {
+  color: var(--color-brand-300);
+  background: rgba(34, 211, 238, 0.08);
+}
+.is-auth .icon-btn:focus-visible {
+  outline: none;
+  color: var(--color-brand-300);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-brand-500) 35%, transparent);
+}
+
+.is-auth .caps-badge {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  padding: 3px 6px;
+  color: var(--color-warning);
+  background: var(--color-warning-bg);
+  border: 1px solid var(--color-warning-border);
+  border-radius: 2px;
+  display: none;
+}
+.is-auth .caps-badge.is-on {
+  display: inline-flex;
+}
+
+.is-auth .field__msg {
+  margin-top: 6px;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: #64748b;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 14px;
+}
+.is-auth .field__msg.err {
+  color: var(--color-danger);
+}
+.is-auth .field__msg svg {
+  width: 12px;
+  height: 12px;
+  flex: 0 0 auto;
+}
+
+/* ── Strength meter ────────────────────────────────────── */
+.is-auth .strength {
+  margin-top: 10px;
+  font-family: var(--font-mono);
+}
+.is-auth .strength__track {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+  margin-bottom: 6px;
+}
+.is-auth .strength__seg {
+  height: 3px;
+  background: var(--color-surface-3);
+  border-radius: var(--radius-bar);
+  transition: background var(--dur-base) var(--ease-station);
+}
+.is-auth .strength[data-level="1"] .strength__seg:nth-child(-n+1),
+.is-auth .strength[data-level="2"] .strength__seg:nth-child(-n+2) {
+  background: var(--color-danger);
+}
+.is-auth .strength[data-level="3"] .strength__seg:nth-child(-n+3) {
+  background: var(--color-warning);
+}
+.is-auth .strength[data-level="4"] .strength__seg {
+  background: var(--color-success);
+}
+.is-auth .strength__meta {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10.5px;
+  letter-spacing: 0.08em;
+  color: #64748b;
+  text-transform: uppercase;
+}
+.is-auth .strength__label {
+  color: #94a3b8;
+}
+.is-auth .strength[data-level="1"] .strength__label,
+.is-auth .strength[data-level="2"] .strength__label {
+  color: var(--color-danger);
+}
+.is-auth .strength[data-level="3"] .strength__label {
+  color: var(--color-warning);
+}
+.is-auth .strength[data-level="4"] .strength__label {
+  color: var(--color-success);
+}
+
+/* ── Submit button ─────────────────────────────────────── */
+.is-auth .auth-form .station-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  padding: 12px 14px;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  line-height: 1;
+  border: 1px solid var(--color-brand-500);
+  border-radius: var(--radius-inset);
+  color: #ffffff;
+  background: linear-gradient(180deg, var(--color-brand-500), var(--color-brand-600));
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+  transition: all var(--dur-base) var(--ease-station);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+.is-auth .auth-form .station-button::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(120deg, transparent 30%, rgba(255, 255, 255, 0.14) 50%, transparent 70%);
+  transform: translateX(-120%);
+  transition: transform 600ms var(--ease-station);
+}
+.is-auth .auth-form .station-button:hover:not(:disabled) {
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--color-brand-400) 18%, var(--color-brand-500)),
+    var(--color-brand-600)
+  );
+  box-shadow: var(--glow-brand), inset 0 1px 0 rgba(255, 255, 255, 0.14);
+  border-color: color-mix(in srgb, var(--color-brand-400) 50%, var(--color-brand-500));
+}
+.is-auth .auth-form .station-button:hover:not(:disabled)::after {
+  transform: translateX(120%);
+}
+.is-auth .auth-form .station-button:active:not(:disabled) {
+  transform: translateY(1px);
+}
+.is-auth .auth-form .station-button:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+.is-auth .auth-form .station-button .spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(255, 255, 255, 0.28);
+  border-top-color: #fff;
+  border-radius: 50%;
+  display: none;
+  animation: auth-spin 700ms linear infinite;
+}
+.is-auth .auth-form .station-button.is-loading {
+  pointer-events: none;
+}
+.is-auth .auth-form .station-button.is-loading .spinner {
+  display: inline-block;
+}
+.is-auth .auth-form .station-button.is-loading .btn-label {
+  opacity: 0.65;
+}
+.is-auth .auth-form .station-button.is-loading .btn-arrow {
+  display: none;
+}
+@keyframes auth-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .is-auth .auth-form .station-button::after,
+  .is-auth .auth-form .station-button .spinner {
+    animation: none;
+    transition: none;
+  }
+}

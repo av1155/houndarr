@@ -73,14 +73,14 @@ Click **Dashboard** in the top navigation.
 
 <Image
   img={require('@site/static/img/screenshots/houndarr-dashboard.png')}
-  alt="The Houndarr Dashboard page with top-level searched / skipped / error counts and per-instance cards with Run Now buttons"
+  alt="The Houndarr Dashboard showing the adaptive subheader, library-health bar with gating segments, Recent hunts strip, and per-instance cards with WATCHING / ELIGIBLE / SEARCHED stats, Expected-to-unlock panel, policy chips, and Run Now button"
 />
 
 Find the card for the instance you just added and click **Run
 Now**. This bypasses the `Sleep (minutes)` schedule and starts a
-cycle immediately. The card's status flips to "Running" for a few
-seconds while the engine probes the wanted list, picks candidates,
-and decides who to search.
+cycle immediately. The button flips through Running then Queued for
+a few seconds while the engine probes the wanted list, picks
+candidates, and decides who to search.
 
 ## Step 3: read the log
 

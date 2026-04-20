@@ -83,10 +83,9 @@ Once instances are enabled, the Dashboard shows:
   7 days, each in its instance's type color
 - Per-instance **cards** with a type eyebrow, instance name, 3-stat
   row (`WATCHING` monitored total, `ELIGIBLE` ready-to-search count,
-  and `SEARCHED` lifetime dispatches), a **Cooldown schedule** inset
-  panel showing the soonest, median, and latest items to unlock with
-  their titles and time-until-unlock, a policy chip row with tooltips,
-  and a type-colored **Run Now** outline button
+  and `SEARCHED` lifetime dispatches), an **Expected to unlock next**
+  inset panel with real titles and time-until-unlock, a policy chip
+  row with tooltips, and a type-colored **Run Now** outline button
 - An **error banner** and a red `N errors` pill on any card whose
   latest `search_log` row is an error; both deep-link to the Logs
   page filtered to that instance
@@ -95,5 +94,5 @@ Once instances are enabled, the Dashboard shows:
 
 <Image
   img={require('@site/static/img/screenshots/houndarr-dashboard.png')}
-  alt="The Houndarr Dashboard with top-level searched / skipped / error counts and per-instance cards showing live metrics and Run Now buttons"
+  alt="The Houndarr Dashboard showing the adaptive subheader, library-health bar, Recent hunts strip, and per-instance cards with WATCHING / ELIGIBLE / SEARCHED stats, Expected-to-unlock panel, policy chips, and Run Now button; the Whisparr v3 card at the bottom is in the disabled state"
 />

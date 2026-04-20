@@ -22,9 +22,9 @@
   <title>{% block title %}Houndarr{% endblock %}</title>
 
   <!-- Station Design System fonts -->
-  <link rel="stylesheet" href="/static/css/fonts.css" />
+  <link rel="stylesheet" href="/static/css/fonts.css?v={{ version }}" />
   <!-- Station Design System tokens -->
-  <link rel="stylesheet" href="/static/css/tokens.css" />
+  <link rel="stylesheet" href="/static/css/tokens.css?v={{ version }}" />
 
   <!-- Tailwind CSS via CDN play script -->
   <script src="https://cdn.tailwindcss.com"></script>
@@ -64,7 +64,7 @@
 
   <!-- HTMX -->
   <script src="https://unpkg.com/htmx.org@2.0.4/dist/htmx.min.js" defer></script>
-  <link rel="stylesheet" href="/static/css/app.css" />
+  <link rel="stylesheet" href="/static/css/app.css?v={{ version }}" />
 
   <!-- Client helpers: defined early so page scripts can use them on first load -->
   <script>
@@ -208,8 +208,8 @@
        hx-target="this"></div>
   {% endif %}
 
-  <script src="/static/js/app.js"></script>
-  <script src="/static/js/changelog.js"></script>
+  <script src="/static/js/app.js?v={{ version }}"></script>
+  <script src="/static/js/changelog.js?v={{ version }}"></script>
 
 </body>
 </html>

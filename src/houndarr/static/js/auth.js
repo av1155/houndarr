@@ -74,11 +74,29 @@
     });
   }
 
+  function initErrorDismiss(form) {
+    form.querySelectorAll('input[aria-invalid="true"]').forEach(function (input) {
+      input.addEventListener('input', function () {
+        input.removeAttribute('aria-invalid');
+      }, { once: true });
+    });
+
+    var card = form.closest('.auth-card');
+    var alert = card ? card.querySelector('.auth-alert') : null;
+    if (!alert) return;
+    var dismissAlert = function () {
+      alert.remove();
+      form.removeEventListener('input', dismissAlert);
+    };
+    form.addEventListener('input', dismissAlert);
+  }
+
   document.addEventListener('DOMContentLoaded', function () {
     document.querySelectorAll('[data-pw-toggle]').forEach(initPasswordToggle);
     document.querySelectorAll('input[data-pw-input]').forEach(initCapsBadge);
     var setupPw = document.querySelector('input[data-pw-input][data-strength-source]');
     if (setupPw) initStrengthMeter(setupPw);
     document.querySelectorAll('form[data-auth-form]').forEach(initSubmitLoading);
+    document.querySelectorAll('form[data-auth-form]').forEach(initErrorDismiss);
   });
 })();

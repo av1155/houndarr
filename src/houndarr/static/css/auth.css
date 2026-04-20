@@ -7,7 +7,10 @@ body.is-auth main#app-content {
   display: flex;
   align-items: center;
   justify-content: center;
-  min-height: 100vh;
+  /* Compensates for :root { zoom: 1.1 } — a raw 100vh box renders at
+   * 110vh after zoom and forces a page-wide vertical scrollbar on
+   * otherwise-short pages. */
+  min-height: calc(100vh / 1.1);
 }
 
 /* The base.html <footer> is replaced on auth pages by the card's
@@ -21,10 +24,6 @@ body.is-auth > footer {
   width: 100%;
   max-width: 420px;
   padding: 32px 20px 16px;
-  /* Lifts the composition out of dead-center so the card sits a touch
-   * above the vertical midline; softens the "floating target" feel on
-   * tall viewports without losing centered balance on short ones. */
-  transform: translateY(-10vh);
 }
 
 /* Scale the whole card + contents up ~10% so the auth composition carries
@@ -33,13 +32,6 @@ body.is-auth > footer {
 @supports (zoom: 1) {
   .is-auth .auth-card {
     zoom: 1.1;
-  }
-}
-
-@media (max-height: 640px) {
-  /* On very short viewports, don't push the card off-screen. */
-  .is-auth .auth-card {
-    transform: none;
   }
 }
 

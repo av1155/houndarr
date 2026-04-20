@@ -33,13 +33,13 @@ Small batches. Polite intervals. Zero indexer abuse.
 
 <div align="center">
 
-<img src="docs/images/Dashboard_Houndarr.jpeg" alt="Houndarr dashboard" width="700" />
+<img src="docs/images/houndarr-dashboard.png" alt="Houndarr dashboard" width="700" />
 
 <br><br>
 
-<img src="docs/images/Logs_Houndarr.jpeg" alt="Houndarr log viewer" width="340" />
+<img src="docs/images/houndarr-logs.png" alt="Houndarr log viewer" width="340" />
 &nbsp;&nbsp;
-<img src="docs/images/Settings_Houndarr.jpeg" alt="Houndarr settings" width="340" />
+<img src="docs/images/houndarr-settings-instances.png" alt="Houndarr settings" width="340" />
 
 </div>
 

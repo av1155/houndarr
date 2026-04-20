@@ -1,8 +1,18 @@
 """Capture the marketing screenshot set from a running demo server.
 
-Drives Playwright through a sequence of views and writes the PNG/JPEG
-pair each docs page references. Assumes ``serve_demo.py`` is running on
-``--base-url`` against a DB seeded by ``seed_demo_data.py``.
+Drives Playwright through a sequence of views and writes a PNG per view
+to two directories: ``website/static/img/screenshots/`` for the
+Docusaurus site (consumed by ``@docusaurus/plugin-ideal-image`` at build
+time) and ``docs/images/`` for the GitHub README. Assumes
+``serve_demo.py`` is running on ``--base-url`` against a DB seeded by
+``seed_demo_data.py``.
+
+PNG is the industry-standard format for UI screenshots in 2026:
+lossless preservation of text + flat-color regions, accepted by
+Docusaurus ideal-image without compounded lossy encoding, and (after
+``pngquant`` optimisation at quality 95) comparable in size to a JPEG
+at q92 for this kind of content. The single source-of-truth filename
+per view keeps the README and the site aligned.
 
 Views are split across two seed modes: the ``populated`` mode covers
 everything except ``dashboard-empty``, which requires the ``empty`` seed.
@@ -21,26 +31,26 @@ from pathlib import Path
 from playwright.async_api import Page, async_playwright
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_PNG_DIR = REPO_ROOT / "website" / "static" / "img" / "screenshots"
-DEFAULT_JPEG_DIR = REPO_ROOT / "docs" / "images"
+DEFAULT_WEBSITE_DIR = REPO_ROOT / "website" / "static" / "img" / "screenshots"
+DEFAULT_README_DIR = REPO_ROOT / "docs" / "images"
 
 DEFAULT_SEED_MODE = "populated"
 
 
 @dataclass(frozen=True, slots=True)
 class View:
-    """One captured view and its output filenames.
+    """One captured view and its output filename.
 
-    ``png_name`` or ``jpeg_name`` may be ``None`` when only one format is
-    needed. ``full_page=False`` caps the capture at the current viewport,
-    which is right for hero shots that need to stay landscape.
+    The same PNG is written to both the website directory (consumed by
+    Docusaurus) and the README directory (consumed by the GitHub README).
+    ``full_page=False`` caps the capture at the current viewport, which
+    is right for the empty-state hero shot that needs to stay landscape.
     """
 
     name: str
     path: str
     wait_selector: str
-    png_name: str | None
-    jpeg_name: str | None
+    filename: str
     viewport_width: int = 1440
     viewport_height: int = 900
     mode: str = "populated"
@@ -55,28 +65,27 @@ VIEWS: list[View] = [
         path="/",
         wait_selector=".dash-card",
         filename="houndarr-dashboard.png",
-        settle_ms=1500,
-        hero=True,
+        settle_ms=1200,
     ),
     View(
         name="dashboard-empty",
         path="/",
         wait_selector=".dash-empty-state",
-        png_name="houndarr-dashboard-empty.png",
-        jpeg_name="Dashboard_Empty_Houndarr.jpeg",
+        filename="houndarr-dashboard-empty.png",
         viewport_height=966,
         mode="empty",
+        full_page=False,
     ),
     View(
         name="logs",
         path="/logs",
-        wait_selector="#log-tbody tr",
+        wait_selector="#log-tbody",
         filename="houndarr-logs.png",
     ),
     View(
         name="logs-mobile",
         path="/logs",
-        wait_selector="#log-tbody tr",
+        wait_selector="#log-tbody",
         filename="houndarr-logs-mobile.png",
         viewport_width=390,
         viewport_height=844,
@@ -85,15 +94,14 @@ VIEWS: list[View] = [
     View(
         name="settings-instances",
         path="/settings",
-        wait_selector="#instance-tbody tr",
+        wait_selector="#instance-tbody",
         filename="houndarr-settings-instances.png",
     ),
     View(
         name="settings-account",
         path="/settings",
         wait_selector="#account-section",
-        png_name="houndarr-settings-account.png",
-        jpeg_name="Settings_Account_Houndarr.jpeg",
+        filename="houndarr-settings-account.png",
     ),
     View(
         name="settings-help",
@@ -104,9 +112,8 @@ VIEWS: list[View] = [
     View(
         name="add-instance",
         path="/settings",
-        wait_selector="#instance-tbody tr",
+        wait_selector="#instance-tbody",
         filename="houndarr-add-instance-form.png",
-        full_page=False,
     ),
 ]
 
@@ -245,18 +252,9 @@ _WRAP_JS = """
 
 
 async def _capture_view(
-    page: Page, view: View, base_url: str, png_dir: Path, jpeg_dir: Path
+    page: Page, view: View, base_url: str, website_dir: Path, readme_dir: Path
 ) -> None:
-    """Navigate to ``view``, wait for content, write the PNG to both dirs.
-
-    Parks the mouse off-screen and blurs any focused element before the
-    capture so hover highlights from prior interactions (e.g. the click
-    in the ``add-instance`` view) and ``:focus-visible`` rings don't
-    pollute the shot. Then wraps the page body in a Station-branded
-    decorative frame (radial gradient + cyan inset highlight + ambient
-    glow) and screenshots that wrapper so the README shots feel like
-    Houndarr rather than a generic product.
-    """
+    """Navigate to ``view``, wait for content, write the PNG to both dirs."""
     await page.set_viewport_size({"width": view.viewport_width, "height": view.viewport_height})
     await page.goto(f"{base_url}{view.path}", wait_until="domcontentloaded")
     await page.wait_for_selector(view.wait_selector, timeout=10_000)
@@ -318,28 +316,11 @@ async def _capture_view(
         used_page_clip = True
 
     wrote: list[str] = []
-    wrapper = page.locator("#__shot-outer")
-    if used_page_clip:
-        box = await wrapper.bounding_box()
-        if box is None:
-            raise RuntimeError("wrapper lost its bounding box before capture")
-        clip = {
-            "x": box["x"],
-            "y": box["y"],
-            "width": box["width"],
-            "height": box["height"],
-        }
-        for out_dir in (website_dir, readme_dir):
-            out_dir.mkdir(parents=True, exist_ok=True)
-            out_path = out_dir / view.filename
-            await page.screenshot(path=str(out_path), type="png", clip=clip)
-            wrote.append(str(out_path.relative_to(REPO_ROOT)))
-    else:
-        for out_dir in (website_dir, readme_dir):
-            out_dir.mkdir(parents=True, exist_ok=True)
-            out_path = out_dir / view.filename
-            await wrapper.screenshot(path=str(out_path), type="png")
-            wrote.append(str(out_path.relative_to(REPO_ROOT)))
+    for out_dir in (website_dir, readme_dir):
+        out_dir.mkdir(parents=True, exist_ok=True)
+        out_path = out_dir / view.filename
+        await page.screenshot(path=str(out_path), full_page=view.full_page, type="png")
+        wrote.append(str(out_path.relative_to(REPO_ROOT)))
     print(f"[capture] {view.name:20s} -> {' + '.join(wrote)}")
 
 
@@ -347,8 +328,8 @@ async def _run(
     base_url: str,
     views: list[View],
     password: str,
-    png_dir: Path,
-    jpeg_dir: Path,
+    website_dir: Path,
+    readme_dir: Path,
 ) -> None:
     """Launch a single Chromium session and capture every requested view."""
     async with async_playwright() as pw:
@@ -361,7 +342,7 @@ async def _run(
         page = await ctx.new_page()
         await _login(page, base_url, password)
         for view in views:
-            await _capture_view(page, view, base_url, png_dir, jpeg_dir)
+            await _capture_view(page, view, base_url, website_dir, readme_dir)
         await browser.close()
 
 
@@ -404,8 +385,18 @@ def main() -> None:
         default=None,
         help="Subset of view names. Defaults to every view matching the seed mode.",
     )
-    parser.add_argument("--png-dir", type=Path, default=DEFAULT_PNG_DIR)
-    parser.add_argument("--jpeg-dir", type=Path, default=DEFAULT_JPEG_DIR)
+    parser.add_argument(
+        "--website-dir",
+        type=Path,
+        default=DEFAULT_WEBSITE_DIR,
+        help="Where to write the Docusaurus PNGs.",
+    )
+    parser.add_argument(
+        "--readme-dir",
+        type=Path,
+        default=DEFAULT_README_DIR,
+        help="Where to write the README PNGs (GitHub).",
+    )
     args = parser.parse_args()
 
     views = _select_views(args.views, args.seed_mode)
@@ -416,8 +407,8 @@ def main() -> None:
             args.base_url.rstrip("/"),
             views,
             args.password,
-            args.png_dir.resolve(),
-            args.jpeg_dir.resolve(),
+            args.website_dir.resolve(),
+            args.readme_dir.resolve(),
         )
     )
 

@@ -52,6 +52,86 @@
               2:    '#151b27',
               3:    '#1e2638',
             },
+            // Mirror tokens.css --color-border-* so Tailwind utilities
+            // (border-border-subtle, etc.) stay in step with the CSS
+            // variable single-source-of-truth.
+            border: {
+              subtle:  '#1e2638',
+              default: '#2a3448',
+              strong:  '#3d4f6b',
+            },
+            // Semantic status colors with matching -bg / -border variants
+            // for alerts, badges, and state surfaces.
+            danger: {
+              DEFAULT: '#f87171',
+              bg:      'rgba(153, 27, 27, 0.30)',
+              border:  'rgba(248, 113, 113, 0.35)',
+            },
+            success: {
+              DEFAULT: '#4ade80',
+              bg:      'rgba(22, 101, 52, 0.35)',
+              border:  'rgba(74, 222, 128, 0.35)',
+            },
+            warning: {
+              DEFAULT: '#fbbf24',
+              bg:      'rgba(120, 53, 15, 0.30)',
+              border:  'rgba(251, 191, 36, 0.30)',
+            },
+            info: {
+              DEFAULT: '#67e8f9',
+            },
+            // Library-health segment colors (match --seg-*).
+            seg: {
+              eligible:     '#4ade80',
+              cooldown:     '#22d3ee',
+              'cutoff-cd':  '#fcd34d',
+              'upgrade-cd': '#a78bfa',
+              unreleased:  '#64748b',
+            },
+            // Instance-type signature colors — keep Tailwind names in
+            // parity with --color-<type> / --color-<type>-bg tokens.
+            sonarr: {
+              DEFAULT: '#7dd3fc',
+              bg:      'rgba(8, 47, 73, 0.50)',
+            },
+            radarr: {
+              DEFAULT: '#fcd34d',
+              bg:      'rgba(69, 26, 3, 0.50)',
+            },
+            lidarr: {
+              DEFAULT: '#6ee7b7',
+              bg:      'rgba(6, 78, 59, 0.50)',
+            },
+            readarr: {
+              DEFAULT: '#fca5a5',
+              bg:      'rgba(127, 29, 29, 0.50)',
+            },
+            whisparr: {
+              DEFAULT: '#f9a8d4',
+              bg:      'rgba(80, 7, 36, 0.50)',
+            },
+            'whisparr-v3': {
+              DEFAULT: '#e879f9',
+              bg:      'rgba(86, 19, 88, 0.50)',
+            },
+          },
+          borderRadius: {
+            // Three-tier radius system from tokens.css. Use these
+            // instead of Tailwind's rounded-md/lg/xl/2xl defaults so
+            // the whole app stays on one scale.
+            container: '6px',  // cards, alerts, modals, page panels
+            inset:     '4px',  // inset wells, buttons, outline pills
+            chip:      '3px',  // tight data-display chips
+            bar:       '2px',  // progress bars, small swatches
+          },
+          transitionDuration: {
+            fast: '120ms',
+            base: '180ms',
+            slow: '280ms',
+          },
+          transitionTimingFunction: {
+            station: 'cubic-bezier(0.16, 1, 0.3, 1)',
+            spring:  'cubic-bezier(0.34, 1.56, 0.64, 1)',
           },
           fontFamily: {
             sans: ['Inter', 'ui-sans-serif', 'system-ui', '-apple-system', 'BlinkMacSystemFont', '"Segoe UI"', 'Roboto', 'sans-serif'],
@@ -121,7 +201,7 @@
                 aria-label="Toggle navigation menu"
                 aria-controls="mobile-nav-menu"
                 aria-expanded="false"
-                class="sm:hidden inline-flex h-10 w-10 items-center justify-center rounded-md border border-surface-3 bg-surface-2 text-slate-300 hover:text-white hover:bg-surface-3 transition-colors">
+                class="sm:hidden inline-flex h-10 w-10 items-center justify-center rounded-container border border-border-subtle bg-surface-2 text-slate-300 hover:text-white hover:bg-surface-3 transition-colors duration-base ease-station">
           <svg class="w-4 h-4 mobile-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
           </svg>
@@ -133,7 +213,7 @@
           <form action="/logout" method="post" class="ml-2">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
             <button type="submit"
-                    class="px-3 py-2 rounded-md text-sm font-medium text-slate-400 hover:text-white hover:bg-surface-2 transition-colors">
+                    class="px-3 py-2 rounded-container text-sm font-medium text-slate-400 hover:text-white hover:bg-surface-2 transition-colors duration-base ease-station">
               Logout
             </button>
           </form>
@@ -148,7 +228,7 @@
             <form action="/logout" method="post">
               <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
               <button type="submit"
-                      class="w-full text-left px-3 py-2.5 rounded-lg text-sm font-medium text-slate-500 hover:text-slate-300 hover:bg-surface-2 transition-colors">
+                      class="w-full text-left px-3 py-2.5 rounded-container text-sm font-medium text-slate-500 hover:text-slate-300 hover:bg-surface-2 transition-colors duration-base ease-station">
                 Logout
               </button>
             </form>
@@ -164,14 +244,14 @@
   <!-- Flash messages: Station left-border style -->
   {% if flash_error %}
   <div id="flash-error"
-       class="border-l-4 border-red-500 bg-red-950/30 text-red-200 px-5 py-3 text-sm"
+       class="border-l-4 border-danger bg-danger-bg text-slate-100 px-5 py-3 text-sm"
        role="alert">
     {{ flash_error }}
   </div>
   {% endif %}
   {% if flash_success %}
   <div id="flash-success"
-       class="border-l-4 border-emerald-500 bg-emerald-950/30 text-emerald-200 px-5 py-3 text-sm"
+       class="border-l-4 border-success bg-success-bg text-slate-100 px-5 py-3 text-sm"
        role="alert">
     {{ flash_success }}
   </div>
@@ -183,7 +263,7 @@
   </main>
 
   <!-- Footer -->
-  <footer class="border-t border-surface-3 py-4 text-xs text-slate-600">
+  <footer class="border-t border-border-subtle py-4 text-xs text-slate-500">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-center gap-3 font-mono">
       <span>Houndarr v{{ version }}</span>
       <a href="https://github.com/av1155/houndarr"

@@ -20,7 +20,17 @@ to create an admin username and password.
 
 ## 2. Log in
 
-After creating your account, log in with your new credentials.
+After creating your account, log in with your new credentials. The
+Dashboard greets you with an empty-state panel until you add your
+first instance:
+
+<Image
+  img={require('@site/static/img/screenshots/houndarr-dashboard-empty.png')}
+  alt="The Houndarr Dashboard in its empty first-run state: the subheader reads 'No hounds on patrol yet.' above a centered panel with a dashed-circle icon, 'No instances configured' title, body copy naming Sonarr, Radarr, Lidarr, Readarr, and Whisparr, and a primary '+ Add your first instance' button"
+/>
+
+Click **Add your first instance** or open the **Settings** link in
+the top nav to continue.
 
 ## 3. Add your instances
 

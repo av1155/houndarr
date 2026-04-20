@@ -537,7 +537,7 @@ def test_status_v2_recent_searches_limit_5(app: TestClient) -> None:
     assert body["recent_searches"][0]["item_label"] == "Show 0"
 
 
-def test_status_v2_unlocking_next_sorted_by_earliest_unlock(app: TestClient) -> None:
+def test_status_v2_unlocking_next_spread_across_schedule(app: TestClient) -> None:
     _login(app)
     iid = _create_instance(app)
     # cooldown_days default is 14 for sonarr instance created via /settings
@@ -548,8 +548,22 @@ def test_status_v2_unlocking_next_sorted_by_earliest_unlock(app: TestClient) -> 
     asyncio.run(_seed_cooldown(iid, 204, "episode", days_ago=1.0))  # unlocks in 13d
     body = app.get("/api/status").json()["instances"][0]
     ids = [r["item_id"] for r in body["unlocking_next"]]
-    assert ids == [201, 202, 203]
+    # Spread picks: sorted ascending → [201, 202, 203, 204]; indices
+    # [0, n//2, n-1] = [0, 2, 3] → ids [201, 203, 204]. The median slot
+    # (203) replaces the second-soonest so the three rows never collapse
+    # to a single batch's clone-unlock timestamps.
+    assert ids == [201, 203, 204]
     assert body["cooldown_total"] == 4
+
+
+def test_status_v2_unlocking_next_returns_all_when_three_or_fewer(app: TestClient) -> None:
+    _login(app)
+    iid = _create_instance(app)
+    asyncio.run(_seed_cooldown(iid, 301, "episode", days_ago=13.0))
+    asyncio.run(_seed_cooldown(iid, 302, "episode", days_ago=10.0))
+    body = app.get("/api/status").json()["instances"][0]
+    ids = [r["item_id"] for r in body["unlocking_next"]]
+    assert ids == [301, 302]
 
 
 def test_status_v2_cooldown_breakdown_splits_by_kind(app: TestClient) -> None:

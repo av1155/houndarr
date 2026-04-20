@@ -46,6 +46,7 @@ class View:
     mode: str = "populated"
     settle_ms: int = 800
     full_page: bool = True
+    hero: bool = False
 
 
 VIEWS: list[View] = [
@@ -56,6 +57,7 @@ VIEWS: list[View] = [
         png_name="houndarr-dashboard.png",
         jpeg_name="Dashboard_Houndarr.jpeg",
         settle_ms=1200,
+        hero=True,
     ),
     View(
         name="dashboard-empty",
@@ -138,6 +140,48 @@ async def _prepare_view(page: Page, view: View) -> None:
         await page.wait_for_selector('form[data-form-mode="add"]', state="visible", timeout=5_000)
 
 
+_WRAP_JS = """
+(opts) => {
+    const BASE = '#07080f';
+    const SURFACE = '#0e1117';
+    const isHero = opts.hero;
+    const clipHeight = opts.clipHeight;  // null = full content, number = clip to viewport
+    const body = document.body;
+    const innerStyles = [
+        'border-radius: 10px',
+        'overflow: hidden',
+        'box-shadow:',
+        '  inset 0 0 0 1px rgba(34, 211, 238, ' + (isHero ? 0.08 : 0.06) + '),',
+        '  0 0 0 1px rgba(30, 38, 56, 0.9),',
+        '  0 8px 24px rgba(0, 0, 0, 0.55),',
+        '  0 2px 4px rgba(0, 0, 0, 0.35),',
+        '  0 0 ' + (isHero ? 60 : 28) + 'px rgba(34, 211, 238, ' + (isHero ? 0.15 : 0.08) + ')',
+    ];
+    if (clipHeight !== null) {
+        innerStyles.push('max-height: ' + clipHeight + 'px');
+    }
+    const content = document.createElement('div');
+    content.id = '__shot-inner';
+    content.style.cssText = innerStyles.join(';');
+    while (body.firstChild) content.appendChild(body.firstChild);
+    const outer = document.createElement('div');
+    outer.id = '__shot-outer';
+    const bg = isHero
+        ? 'radial-gradient(ellipse at 50% 0%, ' + SURFACE + ' 0%, ' + BASE + ' 70%)'
+        : BASE;
+    outer.style.cssText = [
+        'padding: ' + (isHero ? '56px' : '36px'),
+        'background: ' + bg,
+        'display: inline-block',
+    ].join(';');
+    outer.appendChild(content);
+    body.appendChild(outer);
+    body.style.margin = '0';
+    body.style.background = BASE;
+}
+"""
+
+
 async def _capture_view(
     page: Page, view: View, base_url: str, png_dir: Path, jpeg_dir: Path
 ) -> None:
@@ -146,7 +190,10 @@ async def _capture_view(
     Parks the mouse off-screen and blurs any focused element before the
     capture so hover highlights from prior interactions (e.g. the click
     in the ``add-instance`` view) and ``:focus-visible`` rings don't
-    pollute the shot.
+    pollute the shot. Then wraps the page body in a Station-branded
+    decorative frame (radial gradient + cyan inset highlight + ambient
+    glow) and screenshots that wrapper so the README shots feel like
+    Houndarr rather than a generic product.
     """
     await page.set_viewport_size({"width": view.viewport_width, "height": view.viewport_height})
     await page.goto(f"{base_url}{view.path}")
@@ -164,19 +211,21 @@ async def _capture_view(
     # Give the browser one frame to repaint without :hover / :focus styles.
     await page.wait_for_timeout(80)
 
+    # Wrap body -> #__shot-outer > #__shot-inner > (original content). Token
+    # values mirror the ones in src/houndarr/static/css/tokens.css so the
+    # frame stays in step with the Station palette. For viewport-only
+    # views (``full_page=False``) we clip the inner height so the wrapper
+    # doesn't expand to include the full scrollable content.
+    clip_height = None if view.full_page else view.viewport_height
+    await page.evaluate(_WRAP_JS, {"hero": view.hero, "clipHeight": clip_height})
+
     wrote: list[str] = []
-    if view.png_name is not None:
-        png_dir.mkdir(parents=True, exist_ok=True)
-        png_path = png_dir / view.png_name
-        await page.screenshot(path=str(png_path), full_page=view.full_page, type="png")
-        wrote.append(png_path.name)
-    if view.jpeg_name is not None:
-        jpeg_dir.mkdir(parents=True, exist_ok=True)
-        jpeg_path = jpeg_dir / view.jpeg_name
-        await page.screenshot(
-            path=str(jpeg_path), full_page=view.full_page, type="jpeg", quality=92
-        )
-        wrote.append(jpeg_path.name)
+    wrapper = page.locator("#__shot-outer")
+    for out_dir in (website_dir, readme_dir):
+        out_dir.mkdir(parents=True, exist_ok=True)
+        out_path = out_dir / view.filename
+        await wrapper.screenshot(path=str(out_path), type="png")
+        wrote.append(str(out_path.relative_to(REPO_ROOT)))
     print(f"[capture] {view.name:20s} -> {' + '.join(wrote)}")
 
 

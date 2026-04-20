@@ -6,9 +6,10 @@ Two modes:
   (one disabled Whisparr v3 for the mixed-state look), roughly 120 cooldowns
   staggered across 2-3 days so the Cooldown Schedule panel has a real
   spread, matching search_log rows so labels resolve, 42 historical
-  searches on the disabled instance to exercise the muted treatment, and
-  five recent hunts within the last 6 hours to populate the Recent Hunts
-  strip with a clean type-color mix.
+  searches on the disabled instance to exercise the muted treatment, plus
+  eight realistic recent cycles (see ``demo_cycles.py``) mixing searched,
+  skipped with every engine-emitted reason, plus an error + an info row,
+  across missing/cutoff/upgrade passes and scheduled/run_now triggers.
 * ``empty``: admin account only, no instances. Used to capture the
   empty-state dashboard screenshot.
 
@@ -33,10 +34,12 @@ from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT / "src"))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import aiosqlite  # noqa: E402
 import bcrypt  # noqa: E402
 from cryptography.fernet import Fernet  # noqa: E402
+from demo_cycles import build_realistic_cycles  # noqa: E402
 
 _TITLES_DIR = Path(__file__).resolve().parent / "demo_titles"
 
@@ -102,16 +105,22 @@ async def _wipe_demo_tables(conn: aiosqlite.Connection) -> None:
 
 
 def _instances_spec() -> list[tuple[Any, ...]]:
-    """Fixed demo instance set. Seven rows covering all six arr types."""
+    """Fixed demo instance set. Seven rows covering all six arr types.
+
+    Cutoff is enabled on every active instance and upgrade is enabled on
+    the TV + movie instances so the dashboard + logs surfaces exercise
+    every pass kind (missing, cutoff, upgrade) a real user with
+    aggressive settings would see.
+    """
     # Fields: id, name, type, url, enabled, cutoff_enabled, upgrade_enabled,
     #         sleep_interval_mins, monitored_total, unreleased_count.
     return [
-        (1, "Sonarr", "sonarr", "http://sonarr:8989", 1, 1, 0, 30, 120, 8),
-        (2, "Sonarr 4K", "sonarr", "http://sonarr-4k:8989", 1, 1, 0, 60, 65, 5),
+        (1, "Sonarr", "sonarr", "http://sonarr:8989", 1, 1, 1, 30, 120, 8),
+        (2, "Sonarr 4K", "sonarr", "http://sonarr-4k:8989", 1, 1, 1, 60, 65, 5),
         (3, "Radarr", "radarr", "http://radarr:7878", 1, 1, 1, 30, 180, 12),
         (4, "Radarr 4K", "radarr", "http://radarr-4k:7878", 1, 1, 1, 60, 95, 6),
-        (5, "Music Library", "lidarr", "http://lidarr:8686", 1, 0, 0, 30, 240, 4),
-        (6, "Readarr (BookShelf)", "readarr", "http://readarr:8787", 1, 0, 0, 60, 48, 2),
+        (5, "Music Library", "lidarr", "http://lidarr:8686", 1, 1, 0, 30, 240, 4),
+        (6, "Readarr (BookShelf)", "readarr", "http://readarr:8787", 1, 1, 0, 60, 48, 2),
         (7, "Whisparr v3", "whisparr_v3", "http://whisparr:6969", 0, 0, 0, 30, 0, 0),
     ]
 
@@ -256,31 +265,10 @@ async def _seed_cooldowns_and_logs(
             )
         )
 
-    # Five recent hunts within the last 6h to color the Recent Hunts strip.
-    recent_picks = [
-        (1, pools["sonarr"][4][0], "episode", pools["sonarr"][4][1], 12),
-        (3, pools["radarr"][19][0], "movie", pools["radarr"][19][1], 31),
-        (2, pools["sonarr_4k"][0][0], "episode", pools["sonarr_4k"][0][1], 58),
-        (5, pools["lidarr"][0][0], "album", pools["lidarr"][0][1], 96),
-        (4, pools["radarr_4k"][2][0], "movie", pools["radarr_4k"][2][1], 148),
-    ]
-    for iid, item_id, item_type, label, mins_ago in recent_picks:
-        ts = now - timedelta(minutes=mins_ago)
-        log_rows.append(
-            (
-                iid,
-                item_id,
-                item_type,
-                "missing",
-                uuid.uuid4().hex[:12],
-                "scheduled",
-                label,
-                "searched",
-                None,
-                "dispatched",
-                ts.isoformat(),
-            )
-        )
+    # Realistic recent cycles: mix of searched / skipped / error / info
+    # across every pass kind.  Also populates the dashboard's Recent
+    # Hunts strip with the searched rows inside the last 6h.
+    log_rows.extend(build_realistic_cycles(pools, now))
 
     await conn.executemany(
         """

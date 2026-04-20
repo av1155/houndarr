@@ -6,7 +6,7 @@ VUL-20) documented at https://github.com/rfsbraz/huntarr-security-review.
 Tests are organised by attack category rather than VUL number so related
 assertions live together.
 
-TODO(#398): add a CI-only test that fails if the collected test count
+TODO(av1155, #398): add a CI-only test that fails if the collected test count
 cited in website/docs/security/audit.md drifts from the actual count
 in this file. Expected value today: 63 collected cases from 25 test
 functions via parametrization. When it drifts, the doc number must be

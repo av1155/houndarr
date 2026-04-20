@@ -517,6 +517,9 @@
       {% endif %}
 
       <div class="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center sm:gap-3">
+        {# Only the three connection fields (plus instance_id in edit mode) go
+           to /settings/instances/test-connection; search-policy fields would
+           pollute the probe payload and break the connection-only validation. #}
         <button type="button"
                 id="instance-test-connection-btn"
                 data-test-connection-btn="true"

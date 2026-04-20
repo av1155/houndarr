@@ -19,6 +19,15 @@
     flex-direction: column;
     gap: 28px;
   }
+  /* #dash-top wraps the polled top-of-page sections (subheader, alert,
+     library-health, recent hunts, section heading). Apply the same flex
+     column + gap here so those sections get the 28px rhythm from the
+     preview; otherwise they collapse flush against one another. */
+  #dash-top {
+    display: flex;
+    flex-direction: column;
+    gap: 28px;
+  }
 
   .dash-sub__eyebrow {
     font-family: var(--font-mono);
@@ -155,6 +164,7 @@
   .dash-lh__legend-swatch--upgrade-cd { background: var(--seg-upgrade-cd); }
   .dash-lh__legend-swatch--unreleased { background: var(--seg-unreleased); }
 
+
   .dash-trail {
     background: var(--color-surface-1);
     border: 1px solid var(--color-border-subtle);
@@ -176,9 +186,13 @@
     grid-template-columns: minmax(0, 1fr) auto auto;
     align-items: center;
     gap: 14px;
-    padding: 11px 0;
+    padding: 11px 12px;
+    margin: 0 -12px;
     border-top: 1px solid var(--color-border-subtle);
+    border-radius: var(--radius-bar);
+    transition: background var(--dur-fast) var(--ease-station);
   }
+  .dash-trail__row:hover { background: rgba(148, 163, 184, 0.04); }
   .dash-trail__row:last-child { padding-bottom: 2px; }
   .dash-trail__title {
     font-size: 13.5px;
@@ -294,6 +308,23 @@
   }
   @media (min-width: 640px) {
     .dash-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  }
+
+  /* Poll-refresh pulse: a soft cyan breath every time HTMX swaps a
+     fresh copy of .dash-grid into #instance-grid. The animation plays
+     on mount, so the first load (after the page-in stagger) also gets
+     it. Peak shadow is low enough not to be distracting but high
+     enough to register in peripheral vision when it fires. */
+  @keyframes dash-grid-poll-pulse {
+    0%   { box-shadow: 0 0 0    0 rgba(34, 211, 238, 0); }
+    30%  { box-shadow: 0 0 28px 0 rgba(34, 211, 238, 0.24); }
+    100% { box-shadow: 0 0 0    0 rgba(34, 211, 238, 0); }
+  }
+  .dash-grid { animation: dash-grid-poll-pulse 1100ms var(--ease-station); }
+
+  @media (prefers-reduced-motion: reduce) {
+    .dash-trail__row { transition: none; }
+    .dash-grid { animation: none; }
   }
 
   .dash-card {
@@ -500,13 +531,15 @@
   }
   .dash-policy__chip {
     display: inline-flex;
-    align-items: center;
+    /* Align label + value on their shared text baseline. With
+       align-items: center the bounding boxes are centered but the
+       different font sizes leave visible ~1px baseline offset. */
+    align-items: baseline;
     gap: 5px;
-    padding: 3px 8px;
+    padding: 4px 8px 3px;
     background: rgba(11, 14, 20, 0.8);
     border: 1px solid var(--color-border-subtle);
     border-radius: var(--radius-chip);
-    cursor: help;
     transition: border-color var(--dur-base) var(--ease-station);
   }
   .dash-policy__chip:hover { border-color: var(--color-border-default); }
@@ -805,6 +838,19 @@
 </section>`;
     }
 
+    function renderAlertMessage(msg) {
+      // Wrap any http(s):// URL in the message in a <span class="mono"> so
+      // it picks up the red monospace treatment from the preview. Each
+      // segment passes through escHtml so the final string is safe.
+      const text = msg || 'Could not reach instance';
+      const match = text.match(/^(.*?)(https?:\/\/\S+)(.*)$/);
+      if (!match) return escHtml(text);
+      const before = match[1];
+      const url = match[2];
+      const after = match[3];
+      return `${escHtml(before)}<span class="mono">${escHtml(url)}</span>${escHtml(after)}`;
+    }
+
     function renderAlert(instances) {
       const failing = instances.filter(function (i) { return i.active_error; });
       if (failing.length === 0) return '';
@@ -821,7 +867,7 @@
     <p class="dash-alert__head">Degraded · ${failing.length} hound${failing.length === 1 ? '' : 's'} offline</p>
     <p class="dash-alert__text">
       <strong>${escHtml(inst.name)}</strong><span class="muted">:</span>
-      ${escHtml(msg || 'Could not reach instance')}<span class="dash-alert__meta"><span class="muted dash-alert__meta-lead">&nbsp;·&nbsp;</span>${escHtml(failText)} <span class="muted">·</span> last ${escHtml(whenAgo || 'just now')}</span>
+      ${renderAlertMessage(msg)}<span class="dash-alert__meta"><span class="muted dash-alert__meta-lead">&nbsp;·&nbsp;</span>${escHtml(failText)} <span class="muted">·</span> last ${escHtml(whenAgo || 'just now')}</span>
     </p>
   </div>
   <a class="dash-alert__link" href="${logsHref}"
@@ -830,7 +876,16 @@
     }
 
     function renderLibraryHealth(instances) {
-      const totals = instances.reduce(function (acc, i) {
+      // Match the per-card contract: disabled or offline instances have a
+      // stale monitored_total (0 or a cached snapshot) while their
+      // cooldown_breakdown still carries entries from the cooldowns table.
+      // Summing both would let cooldowns exceed monitored and drive
+      // Eligible negative (then clamped to 0). Cards skip those instances
+      // by showing "-"; the rollup does the same here.
+      const activeInstances = instances.filter(function (i) {
+        return i.enabled && !i.active_error;
+      });
+      const totals = activeInstances.reduce(function (acc, i) {
         const bd = i.cooldown_breakdown || { missing: 0, cutoff: 0, upgrade: 0 };
         acc.monitored += toNumber(i.monitored_total);
         acc.cooldown  += toNumber(bd.missing);
@@ -846,7 +901,7 @@
       // bar segment + legend entry to surface upgrade activity separately.
       const gated = totals.cooldown + totals.cutoffCd;
       const eligible = Math.max(0, totals.monitored - gated - totals.unreleased);
-      const ariaLabel = `${eligible} eligible, ${totals.cutoffCd} cutoff cooldown, ${totals.cooldown} cooldown, ${totals.upgradeCd} upgrade cooldown, ${totals.unreleased} unreleased`;
+      const ariaLabel = `${eligible} eligible, ${totals.cooldown} cooldown, ${totals.cutoffCd} cutoff cooldown, ${totals.upgradeCd} upgrade cooldown, ${totals.unreleased} unreleased`;
       return `
 <section class="dash-lh" aria-label="Library health">
   <p class="dash-lh__eyebrow">Library health · ${totals.monitored} monitored</p>
@@ -866,15 +921,15 @@
   </div>
   <div class="dash-lh__bar" role="img" aria-label="${escHtml(ariaLabel)}">
     <div class="dash-lh__segment dash-lh__segment--eligible"   style="flex: ${eligible};"></div>
-    <div class="dash-lh__segment dash-lh__segment--cutoff-cd"  style="flex: ${totals.cutoffCd};"></div>
     <div class="dash-lh__segment dash-lh__segment--cooldown"   style="flex: ${totals.cooldown};"></div>
+    <div class="dash-lh__segment dash-lh__segment--cutoff-cd"  style="flex: ${totals.cutoffCd};"></div>
     <div class="dash-lh__segment dash-lh__segment--upgrade-cd" style="flex: ${totals.upgradeCd};"></div>
     <div class="dash-lh__segment dash-lh__segment--unreleased" style="flex: ${totals.unreleased};"></div>
   </div>
   <div class="dash-lh__legend">
     <span class="dash-lh__legend-item"><span class="dash-lh__legend-swatch dash-lh__legend-swatch--eligible"></span>${eligible} eligible</span>
-    <span class="dash-lh__legend-item"><span class="dash-lh__legend-swatch dash-lh__legend-swatch--cutoff-cd"></span>${totals.cutoffCd} cutoff cooldown</span>
     <span class="dash-lh__legend-item"><span class="dash-lh__legend-swatch dash-lh__legend-swatch--cooldown"></span>${totals.cooldown} cooldown</span>
+    <span class="dash-lh__legend-item"><span class="dash-lh__legend-swatch dash-lh__legend-swatch--cutoff-cd"></span>${totals.cutoffCd} cutoff cooldown</span>
     <span class="dash-lh__legend-item"><span class="dash-lh__legend-swatch dash-lh__legend-swatch--upgrade-cd"></span>${totals.upgradeCd} upgrade cooldown</span>
     <span class="dash-lh__legend-item"><span class="dash-lh__legend-swatch dash-lh__legend-swatch--unreleased"></span>${totals.unreleased} unreleased</span>
   </div>

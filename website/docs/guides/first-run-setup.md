@@ -91,7 +91,7 @@ The top section shows:
 - An **adaptive subheader** with an *N of M hounds on patrol* sentence
   and the most recent dispatch timestamp
 - A **library-health bar** with five gating segments (eligible,
-  cutoff cooldown, cooldown, upgrade cooldown, unreleased) summed
+  cooldown, cutoff cooldown, upgrade cooldown, unreleased) summed
   across every configured instance
 - A **Recent hunts** strip listing the last 5 dispatches in the past
   7 days, each in its instance's type color

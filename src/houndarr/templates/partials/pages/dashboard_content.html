@@ -454,6 +454,14 @@
     border: 1px solid var(--color-border-subtle);
     border-radius: var(--radius-inset);
     padding: 14px 16px;
+    /* Absorb the card's extra vertical space so disabled / short-list
+       cards align with taller siblings in the same grid row. The card
+       is flex-column; the grid stretches siblings to a shared height.
+       Without this the cooldown box hugs its natural height and the
+       footer drifts up, leaving the card feeling top-heavy. */
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
   }
   .dash-unlocks__head {
     font-family: var(--font-mono);
@@ -477,6 +485,11 @@
     display: flex;
     flex-direction: column;
     gap: 8px;
+    /* Centre a short list vertically in the expanded cooldown box so
+       a 1- or 2-item card doesn't cluster at the top like the empty
+       state used to. 3+ items fill naturally (auto margins collapse
+       to 0 when there's no slack). */
+    margin: auto 0;
   }
   .dash-unlocks__row {
     display: grid;
@@ -504,7 +517,10 @@
     font-style: italic;
     text-align: center;
     padding: 18px 8px;
-    margin: 0;
+    /* Same auto-margin trick as __list: centres the empty message
+       vertically in the expanded cooldown box so a disabled or
+       all-caught-up card stays visually balanced with sibling cards. */
+    margin: auto 0;
   }
 
   .dash-policy {

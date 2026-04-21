@@ -18,13 +18,16 @@
   </td>
   <td data-col="url" class="px-4 py-3 text-slate-400 text-sm truncate max-w-xs font-mono text-xs">{{ instance.url }}</td>
   <td data-col="status" class="px-4 py-3 text-center">
+    {# Fixed min-width on the pill + label so toggling Active <-> Disabled
+       (6 vs 8 chars) does not re-layout the column and shift every
+       sibling row. #}
     {% if instance.enabled %}
-      <span class="inline-flex items-center gap-1 text-xs text-success">
+      <span class="inline-flex items-center justify-center gap-1 text-xs text-success min-w-[4.5rem]">
         <span class="w-1.5 h-1.5 rounded-full bg-success inline-block station-pulse-dot" title="Search enabled" aria-label="Search enabled"></span>
         <span class="hidden sm:inline">Active</span>
       </span>
     {% else %}
-      <span class="inline-flex items-center gap-1 text-xs text-slate-500">
+      <span class="inline-flex items-center justify-center gap-1 text-xs text-slate-500 min-w-[4.5rem]">
         <span class="w-1.5 h-1.5 rounded-full bg-slate-600 inline-block" title="Search disabled" aria-label="Search disabled"></span>
         <span class="hidden sm:inline">Disabled</span>
       </span>
@@ -39,7 +42,7 @@
         hx-post="/settings/instances/{{ instance.id }}/toggle-enabled"
         hx-target="#instance-row-{{ instance.id }}"
         hx-swap="outerHTML"
-        class="px-3 py-1 text-xs rounded-inset transition-colors duration-base ease-station {% if instance.enabled %}bg-warning-bg hover:bg-warning/20 text-warning border border-warning-border{% else %}bg-success-bg hover:bg-success/20 text-success border border-success-border{% endif %}">
+        class="px-3 py-1 text-xs rounded-inset transition-colors duration-base ease-station min-w-[4.25rem] text-center {% if instance.enabled %}bg-warning-bg hover:bg-warning/20 text-warning border border-warning-border{% else %}bg-success-bg hover:bg-success/20 text-success border border-success-border{% endif %}">
         {{ 'Disable' if instance.enabled else 'Enable' }}
       </button>
       <button

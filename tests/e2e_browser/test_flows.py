@@ -284,21 +284,24 @@ def test_password_change_4xx_renders_error(
 
 
 def test_admin_dropdown_toggle_persists(logged_in_page: Page, houndarr_url: str) -> None:
-    """The Admin collapsible toggles state and persists to localStorage."""
+    """The Admin collapsible is closed by default; opening it persists via
+    localStorage so a reload restores the user's last choice."""
     page = logged_in_page
     page.goto(f"{houndarr_url}/settings")
     panel = page.locator("#admin-grouped")
     toggle = page.locator("#admin-toggle")
-    expect(panel).to_have_attribute("data-open", "true")
+    # Fresh load with no stored preference should leave the panel closed.
+    expect(panel).to_have_attribute("data-open", "false")
     toggle.click()
     page.wait_for_timeout(400)
-    expect(panel).to_have_attribute("data-open", "false")
-    # Reload and confirm the preference persisted.
+    expect(panel).to_have_attribute("data-open", "true")
+    # Reload and confirm the opened preference persisted.
     page.reload()
-    expect(page.locator("#admin-grouped")).to_have_attribute("data-open", "false")
-    # Re-open so the cleanup leaves the default state.
+    expect(page.locator("#admin-grouped")).to_have_attribute("data-open", "true")
+    # Clean up: collapse again so the cleared localStorage matches default.
     page.locator("#admin-toggle").click()
     page.wait_for_timeout(400)
+    page.evaluate("() => localStorage.removeItem('houndarr.adminOpen')")
 
 
 def test_admin_security_confirm_password_match_indicator(

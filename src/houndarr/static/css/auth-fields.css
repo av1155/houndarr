@@ -115,6 +115,17 @@
   color: var(--color-brand-300);
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-brand-500) 35%, transparent);
 }
+/* Pressed state: auth.js flips aria-pressed when the password is
+   revealed. Background is slightly stronger than :hover so moving
+   the cursor away does not drop the affordance, and the toggle
+   reads as on at a glance. */
+.icon-btn[aria-pressed="true"] {
+  color: var(--color-brand-300);
+  background: rgba(34, 211, 238, 0.14);
+}
+.icon-btn[aria-pressed="true"]:hover {
+  background: rgba(34, 211, 238, 0.22);
+}
 
 /* Caps Lock indicator: lives inside .input-trailing next to the eye
    toggle.  Styled like macOS — a small upward-arrow glyph in the

@@ -1,5 +1,5 @@
 /* ─────────────────────────────────────────────────────────────────────────── */
-/* Houndarr — Station Design System Tokens                                    */
+/* Houndarr: Station Design System Tokens                                     */
 /* All design decisions live here. App and docs both import this file.        */
 /*                                                                            */
 /* Palette hex values are mirrored into base.html's inline Tailwind CDN       */
@@ -11,7 +11,7 @@
 
 :root {
   /* ── Palette ─────────────────────────────────────────────────────────── */
-  --color-base:      #07080f;   /* body background — midnight navy */
+  --color-base:      #07080f;   /* body background: midnight navy */
   --color-surface-1: #0e1117;   /* card / nav background */
   --color-surface-2: #151b27;   /* secondary surface, input bg */
   --color-surface-3: #1e2638;   /* border color, tertiary surface */
@@ -40,7 +40,7 @@
   --color-danger-text:  #fca5a5;
   --color-success-text: #86efac;
 
-  /* ── Brand — refined Station cyan ────────────────────────────────────── */
+  /* ── Brand (refined Station cyan) ────────────────────────────────────── */
   --color-brand-50:  #ecfeff;
   --color-brand-100: #cffafe;
   --color-brand-200: #a5f3fc;
@@ -83,14 +83,14 @@
                ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;
 
   /* ── Spacing (4px base, 8px unit) ───────────────────────────────────── */
-  --space-1: 0.25rem;   /*  4px — micro gaps, badge padding */
-  --space-2: 0.5rem;    /*  8px — input padding, label gap */
-  --space-3: 0.75rem;   /* 12px — card padding units */
-  --space-4: 1rem;      /* 16px — standard section padding */
-  --space-5: 1.5rem;    /* 24px — comfortable card padding */
-  --space-6: 2rem;      /* 32px — section gaps */
-  --space-7: 3rem;      /* 48px — generous page gaps */
-  --space-8: 4rem;      /* 64px — hero rhythm */
+  --space-1: 0.25rem;   /*  4px, micro gaps, badge padding */
+  --space-2: 0.5rem;    /*  8px, input padding, label gap */
+  --space-3: 0.75rem;   /* 12px, card padding units */
+  --space-4: 1rem;      /* 16px, standard section padding */
+  --space-5: 1.5rem;    /* 24px, comfortable card padding */
+  --space-6: 2rem;      /* 32px, section gaps */
+  --space-7: 3rem;      /* 48px, generous page gaps */
+  --space-8: 4rem;      /* 64px, hero rhythm */
 
   /* ── Border radius ───────────────────────────────────────────────────── */
   --radius-sm:   4px;        /* inputs, inline badges */

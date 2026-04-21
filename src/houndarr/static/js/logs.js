@@ -346,20 +346,15 @@ function initLogsPage() {
       }
 
       copyMainBtns.forEach((btn) => {
-        btn.classList.remove('bg-emerald-700', 'hover:bg-emerald-600', 'border-emerald-500/60');
-        btn.classList.remove('bg-red-800', 'hover:bg-red-700', 'border-red-600/60');
+        btn.classList.remove('is-copy-success', 'is-copy-error');
       });
 
       if (state === 'success') {
         setCopyButtonLabel('Copied');
-        copyMainBtns.forEach((btn) =>
-          btn.classList.add('bg-emerald-700', 'hover:bg-emerald-600', 'border-emerald-500/60'),
-        );
+        copyMainBtns.forEach((btn) => btn.classList.add('is-copy-success'));
       } else if (state === 'error') {
         setCopyButtonLabel('Copy failed');
-        copyMainBtns.forEach((btn) =>
-          btn.classList.add('bg-red-800', 'hover:bg-red-700', 'border-red-600/60'),
-        );
+        copyMainBtns.forEach((btn) => btn.classList.add('is-copy-error'));
       } else {
         setCopyButtonLabel('Copy as TSV');
         return;

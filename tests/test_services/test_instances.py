@@ -389,3 +389,53 @@ async def test_update_instance_snapshot_overwrites_prior_values(
     assert refreshed is not None
     assert refreshed.monitored_total == 60
     assert refreshed.unreleased_count == 5
+
+
+# ---------------------------------------------------------------------------
+# active_error_instance_ids: 2-day window
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio()
+async def test_active_error_ignores_rows_older_than_window(db: None, master_key: bytes) -> None:
+    """An error row older than 2 days must not keep the dot lit. If a
+    genuinely stuck instance is still failing, a fresh error row lands
+    well inside the window; a two-day silence means the problem is
+    stale."""
+    from datetime import UTC, datetime, timedelta
+
+    from houndarr.database import get_db
+    from houndarr.services.instances import active_error_instance_ids
+
+    inst = await _make(master_key)
+    stale = (datetime.now(tz=UTC) - timedelta(days=3)).isoformat()
+    async with get_db() as conn:
+        await conn.execute(
+            "INSERT INTO search_log (instance_id, action, cycle_trigger, timestamp)"
+            " VALUES (?, 'error', 'system', ?)",
+            (inst.id, stale),
+        )
+        await conn.commit()
+
+    assert await active_error_instance_ids() == set()
+
+
+@pytest.mark.asyncio()
+async def test_active_error_reports_fresh_error(db: None, master_key: bytes) -> None:
+    """An error row from the last minute still lights the dot."""
+    from datetime import UTC, datetime
+
+    from houndarr.database import get_db
+    from houndarr.services.instances import active_error_instance_ids
+
+    inst = await _make(master_key)
+    fresh = datetime.now(tz=UTC).isoformat()
+    async with get_db() as conn:
+        await conn.execute(
+            "INSERT INTO search_log (instance_id, action, cycle_trigger, timestamp)"
+            " VALUES (?, 'error', 'system', ?)",
+            (inst.id, fresh),
+        )
+        await conn.commit()
+
+    assert await active_error_instance_ids() == {inst.id}

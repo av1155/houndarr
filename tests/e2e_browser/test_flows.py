@@ -319,11 +319,11 @@ def test_admin_security_confirm_password_match_indicator(
     expect(page.locator(".pw-match")).to_have_class(re.compile(r"is-mismatch"))
 
 
-def test_admin_show_last_changelog_opens_modal(logged_in_page: Page, houndarr_url: str) -> None:
-    """The 'Show last changelog' button force-opens the What's new modal."""
+def test_admin_whats_new_button_opens_modal(logged_in_page: Page, houndarr_url: str) -> None:
+    """The 'What's new' button force-opens the What's new modal."""
     page = logged_in_page
     page.goto(f"{houndarr_url}/settings")
-    page.get_by_role("button", name=re.compile(r"show\s*last\s*changelog", re.I)).click()
+    page.get_by_role("button", name=re.compile(r"what'?s\s*new", re.I)).click()
     expect(page.locator("dialog#changelog-modal[open]")).to_be_visible(timeout=4_000)
 
 

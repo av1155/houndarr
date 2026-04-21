@@ -38,13 +38,49 @@ def _url(repo: str = "av1155/houndarr") -> str:
 @pytest.mark.asyncio()
 @respx.mock
 async def test_disabled_never_issues_http(db: None) -> None:
-    """If the toggle is off, no request reaches github.com even when
-    the cache is empty."""
+    """If the toggle is off, no background poll reaches github.com even
+    when the cache is empty."""
     route = respx.get(_url()).mock(return_value=httpx.Response(200, json=_LATEST_BODY))
     status = await uc.get_update_status(force=False)
     assert not status.enabled
     assert status.latest_version is None
     assert not route.called
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_manual_check_runs_even_when_disabled(db: None) -> None:
+    """Check-now (force=True) fires the request regardless of the toggle
+    so admins who keep auto-check off still have a one-off button."""
+    route = respx.get(_url()).mock(
+        return_value=httpx.Response(200, json=_LATEST_BODY, headers={"ETag": 'W/"manual"'})
+    )
+    # Toggle stays off.
+    status = await uc.get_update_status(force=True)
+
+    assert route.called
+    assert not status.enabled
+    assert status.latest_version == "2.0.0"
+    assert status.checked_at is not None
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_load_cached_status_never_issues_http(db: None) -> None:
+    """``load_cached_status`` is the hook used by the preferences endpoint
+    to re-render the row; it must never block on github.com even when
+    the toggle is on and the cache is stale."""
+    await uc.set_enabled(True)
+    stale = (datetime.now(tz=UTC) - timedelta(hours=48)).isoformat()
+    await set_setting(uc.KEY_LAST_AT, stale)
+    await set_setting(uc.KEY_LATEST_VERSION, "1.9.0")
+
+    route = respx.get(_url()).mock(return_value=httpx.Response(200, json=_LATEST_BODY))
+    status = await uc.load_cached_status()
+
+    assert not route.called
+    assert status.enabled
+    assert status.latest_version == "1.9.0"
 
 
 @pytest.mark.asyncio()
@@ -111,39 +147,23 @@ async def test_cache_expiry_refreshes(db: None) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Manual refresh rate limit
+# Manual refresh
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio()
 @respx.mock
-async def test_manual_refresh_respects_15min_floor(db: None) -> None:
-    """Spamming Refresh within 15 min returns the cached state and
-    does not issue a second HTTP call."""
+async def test_manual_refresh_always_hits_github(db: None) -> None:
+    """Manual refresh has no client-side throttle: every click fires
+    the request so the UI stays in sync with what the user just
+    asked for. The button's own ``hx-disable-elt`` guards against
+    in-flight double-submit, and GitHub's 60 req/hr/IP budget plus
+    the ETag handshake handle the real ceiling."""
     await uc.set_enabled(True)
-    # Seed a last-manual 5 minutes ago so the guard bites.
-    recent_manual = (datetime.now(tz=UTC) - timedelta(minutes=5)).isoformat()
-    await set_setting(uc.KEY_LAST_MANUAL_AT, recent_manual)
     await set_setting(uc.KEY_LATEST_VERSION, "1.9.0")
-    await set_setting(uc.KEY_LAST_AT, recent_manual)
-
-    route = respx.get(_url()).mock(return_value=httpx.Response(200, json=_LATEST_BODY))
-    status = await uc.get_update_status(force=True)
-
-    assert not route.called
-    assert status.latest_version == "1.9.0"
-
-
-@pytest.mark.asyncio()
-@respx.mock
-async def test_manual_refresh_after_floor_refetches(db: None) -> None:
-    """Past the 15 min floor, Refresh actually hits the API."""
-    await uc.set_enabled(True)
-    old_manual = (datetime.now(tz=UTC) - timedelta(minutes=30)).isoformat()
-    await set_setting(uc.KEY_LAST_MANUAL_AT, old_manual)
-    # Also within the 24h cache window, so only the force=True flag
-    # should be driving the refetch.
-    await set_setting(uc.KEY_LAST_AT, old_manual)
+    # Recent cache that a ``force=False`` call would honour:
+    fresh = (datetime.now(tz=UTC) - timedelta(minutes=2)).isoformat()
+    await set_setting(uc.KEY_LAST_AT, fresh)
 
     route = respx.get(_url()).mock(return_value=httpx.Response(200, json=_LATEST_BODY))
     status = await uc.get_update_status(force=True)

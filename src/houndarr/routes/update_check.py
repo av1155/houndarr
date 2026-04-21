@@ -2,22 +2,18 @@
 
 Three HTMX-friendly routes:
 
-- ``GET  /settings/admin/update-check`` — renders the inline status
-  row partial. The Updates panel issues this via
-  ``hx-trigger="load once delay:200ms"`` so the rest of the card paints
-  immediately and the check populates out of band.
-- ``POST /settings/admin/update-check/refresh`` — forces a re-poll
-  subject to the 15 min server-wide floor in
-  :func:`houndarr.services.update_check._manual_allowed`, then swaps
-  the partial back in.
-- ``POST /settings/admin/update-check/preferences`` — toggles
-  ``update_check_enabled`` from the switch. Returns 204 like the
-  existing changelog preferences endpoint so HTMX leaves the switch
-  animation alone.
+- ``GET  /settings/admin/update-check`` returns the inline status
+  partial with ``show_result=False`` so reloads never re-show a stale
+  one-shot manual-click message.
+- ``POST /settings/admin/update-check/refresh`` forces a poll and
+  returns the same partial with ``show_result=True`` so the outcome
+  animates in under the button. The button uses ``hx-disabled-elt``
+  for in-flight protection; no other client-side throttle.
+- ``POST /settings/admin/update-check/preferences`` toggles
+  ``update_check_enabled`` and returns the re-rendered partial from
+  cache (no network) so the switch animation stays snappy.
 
-Authentication is handled by ``AuthMiddleware`` (all routes require a
-live session). CSRF is enforced by the same middleware on mutating
-verbs.
+Auth + CSRF are handled by ``AuthMiddleware`` for every route.
 """
 
 from __future__ import annotations
@@ -27,11 +23,12 @@ from pathlib import Path
 from typing import Annotated
 
 from fastapi import APIRouter, Form, Request
-from fastapi.responses import HTMLResponse, Response
+from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
 from houndarr.services.update_check import (
     get_update_status,
+    load_cached_status,
     set_enabled,
 )
 
@@ -87,36 +84,55 @@ def _get_templates() -> Jinja2Templates:
 
 @router.get("", response_class=HTMLResponse)
 async def status(request: Request) -> HTMLResponse:
-    """Return the inline status partial for the Admin > Updates panel."""
+    """Return the inline status partial for the Admin > Updates panel.
+
+    ``show_result=False`` so the ephemeral result message from a prior
+    manual click does not reappear on page reload when auto-check is
+    off; the row renders down to just the button + cached timestamp.
+    """
     snapshot = await get_update_status(force=False)
     return _get_templates().TemplateResponse(
         request=request,
         name="partials/admin/update_check_row.html",
-        context={"s": snapshot},
+        context={"s": snapshot, "show_result": False},
     )
 
 
 @router.post("/refresh", response_class=HTMLResponse)
 async def refresh(request: Request) -> HTMLResponse:
-    """Force a GitHub re-poll (rate-limited to once per 15 min)."""
+    """Force a GitHub re-poll.
+
+    ``show_result=True`` so the result message is rendered under the
+    button after a manual click even when auto-check is off. The
+    message is ephemeral: the next GET (from a reload or navigation)
+    lands with ``show_result=False`` and the message falls away.
+    """
     snapshot = await get_update_status(force=True)
     return _get_templates().TemplateResponse(
         request=request,
         name="partials/admin/update_check_row.html",
-        context={"s": snapshot},
+        context={"s": snapshot, "show_result": True},
     )
 
 
-@router.post("/preferences", response_class=Response)
+@router.post("/preferences", response_class=HTMLResponse)
 async def preferences(
     request: Request,
     enabled: Annotated[str, Form()] = "",
-) -> Response:
+) -> HTMLResponse:
     """Toggle ``update_check_enabled`` from the Admin > Updates switch.
 
-    Checkbox posts ``enabled=on`` when checked, omits the field when
-    unchecked. Returns ``204 No Content`` so HTMX keeps the switch's
-    CSS transition from being interrupted by an outerHTML swap.
+    Returns the re-rendered status row so the slot reflects the new
+    state without a page reload. The row is loaded from cache only
+    (no github.com round-trip) so the switch animation stays snappy;
+    when the user flips the toggle on with no cached data yet, the
+    partial carries an ``hx-trigger`` that async-fires the first
+    poll after the swap lands.
     """
     await set_enabled(enabled == "on")
-    return Response(status_code=204)
+    snapshot = await load_cached_status()
+    return _get_templates().TemplateResponse(
+        request=request,
+        name="partials/admin/update_check_row.html",
+        context={"s": snapshot, "show_result": False},
+    )

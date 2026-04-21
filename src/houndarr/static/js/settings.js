@@ -19,7 +19,6 @@ function initSettingsPage() {
     const addInstanceModalSubtitle = document.getElementById('add-instance-modal-subtitle');
     const closeAnimationMs = 160;
     const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    let isClosingAddInstanceModal = false;
     let pendingModalShow = false;
     let connectionStatusTimer = null;
 
@@ -234,37 +233,18 @@ function initSettingsPage() {
 
     window.houndarrOpenAddInstanceModal = function () {
       addInstanceModal.classList.remove('is-closing');
-      isClosingAddInstanceModal = false;
+      addInstanceModal.__hxClosing = false;
       pendingModalShow = !addInstanceModal.open;
       setAddInstanceModalChrome('add');
     };
 
     window.houndarrCloseAddInstanceModal = function () {
-      if (!addInstanceModal.open || isClosingAddInstanceModal) {
-        return;
-      }
-
-      const finalizeClose = function () {
-        addInstanceModal.classList.remove('is-closing');
-        if (addInstanceModal.open) {
-          addInstanceModal.close();
-        }
-        addInstanceModalContent.innerHTML = '';
-        isClosingAddInstanceModal = false;
+      hxCloseDialogAnimated(addInstanceModal, closeAnimationMs, () => {
+        addInstanceModalContent.replaceChildren();
         pendingModalShow = false;
         setAddInstanceModalChrome('add');
-        document.body.style.overflow = '';
         addInstanceBtn.focus();
-      };
-
-      if (prefersReducedMotion) {
-        finalizeClose();
-        return;
-      }
-
-      isClosingAddInstanceModal = true;
-      addInstanceModal.classList.add('is-closing');
-      window.setTimeout(finalizeClose, closeAnimationMs);
+      });
     };
 
     document.body.addEventListener(

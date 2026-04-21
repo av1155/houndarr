@@ -18,6 +18,18 @@ toggle, caps-lock indicator, strength meter, and confirm-password
 match indicator you see on the `/login` and `/setup` pages, because
 they share one module.
 
+On success, the tab reloads. That is deliberate: the session
+signing secret is rotated at the same time the password is written,
+which invalidates every cookie signed with the old secret (other
+tabs, other devices, a session you suspect was copied). The tab
+that made the change is reissued a fresh cookie before the reload
+so it stays signed in without any action from you.
+
+The current-password check shares the same IP-scoped bucket as
+`/login`. Five wrong entries in a minute return HTTP 429 until the
+window rolls off, so a session-compromised attacker cannot
+brute-force the current password through this form.
+
 Behavior in proxy / SSO mode: the password form is hidden. Instead you
 see a read-only "Signed in as `<username>`" card that echoes whatever
 username your upstream proxy forwarded on the request. Credential
@@ -99,6 +111,11 @@ The confirmation flow demands two factors:
 |------|----------|----------|
 | Built-in | Type `RESET` | Current admin password |
 | Proxy / SSO | Type `RESET` | Type your proxy username (echoed from the auth header) |
+
+In built-in mode the password check shares the IP-scoped bucket used
+by `/login`. Five wrong entries in a minute lock the form out with
+HTTP 429 until the window clears, so a stolen session cookie cannot
+be used to brute-force its way into a destructive action.
 
 A failure during the in-process re-init (extremely rare) drops a
 `.factory-reset-pending` sentinel in the data directory and exits the

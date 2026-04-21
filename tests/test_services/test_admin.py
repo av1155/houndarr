@@ -27,7 +27,6 @@ from houndarr.config import (
 )
 from houndarr.database import get_db, set_db_path
 from houndarr.services.admin import (
-    FACTORY_RESET_SENTINEL,
     clear_all_search_logs,
     factory_reset,
     reset_all_instance_policy,
@@ -270,11 +269,10 @@ async def test_factory_reset_deletes_files_and_reinits(
 
     await factory_reset(app=fake_app, data_dir=tmp_data_dir)
 
-    # DB file recreated, master-key file rotated, sentinel absent.
+    # DB file recreated, master-key file rotated.
     assert Path(db_path).exists()
     new_key = Path(key_path).read_bytes()
     assert new_key != original_key
-    assert not Path(tmp_data_dir, FACTORY_RESET_SENTINEL).exists()
 
     # app.state rewired to the fresh state.
     assert fake_app.state.master_key == new_key
@@ -289,9 +287,15 @@ async def test_factory_reset_deletes_files_and_reinits(
 
 
 @pytest.mark.asyncio()
-async def test_factory_reset_writes_sentinel_on_reinit_failure(
+async def test_factory_reset_propagates_reinit_failure(
     tmp_data_dir: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """If the in-process re-init raises, the exception bubbles to the
+    route layer. The route layer's hybrid fallback then schedules a
+    process exit so the orchestrator restarts the container; on next
+    boot the empty data dir drops into first-run. No sentinel file is
+    written: the container restart is the recovery mechanism.
+    """
     db_path = os.path.join(tmp_data_dir, "houndarr.db")
     set_db_path(db_path)
     from houndarr.database import init_db as _real_init_db
@@ -309,5 +313,7 @@ async def test_factory_reset_writes_sentinel_on_reinit_failure(
     with pytest.raises(RuntimeError, match="init_db blew up"):
         await factory_reset(app=fake_app, data_dir=tmp_data_dir)
 
-    sentinel = Path(tmp_data_dir) / FACTORY_RESET_SENTINEL
-    assert sentinel.exists()
+    # The on-disk DB and masterkey are already wiped (the file-delete
+    # step ran before init_db), so a container restart lands on first-run.
+    assert not Path(db_path).exists()
+    assert not Path(tmp_data_dir, "houndarr.masterkey").exists()

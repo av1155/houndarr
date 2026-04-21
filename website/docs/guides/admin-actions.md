@@ -123,9 +123,9 @@ by `/login`. Five wrong entries in a minute lock the form out with
 HTTP 429 until the window clears, so a stolen session cookie cannot
 be used to brute-force its way into a destructive action.
 
-A failure during the in-process re-init (extremely rare) drops a
-`.factory-reset-pending` sentinel in the data directory and exits the
-container so your orchestrator can restart it. On boot the empty data
+A failure during the in-process re-init (extremely rare) exits the
+container so your orchestrator can restart it. The database and master
+key are already deleted at that point, so on boot the empty data
 directory triggers the normal first-run flow.
 
 Because the database is wiped, the only audit trail for a factory

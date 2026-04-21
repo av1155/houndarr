@@ -14,13 +14,17 @@ html {
 
 /* ── Global content scale ────────────────────────────────────────────────
    Scales every element uniformly so 100% browser zoom reads like 110%.
-   `zoom` on the root is the simplest portable knob in April 2026 (Safari,
-   Chrome, Firefox 126+). It does not re-evaluate media queries, which is
-   what we want so Tailwind breakpoints still trip at real pixel widths. */
-@supports (zoom: 1) {
-  :root {
-    zoom: 1.1;
-  }
+   Implemented via html font-size plus rem-based layout (not CSS `zoom`):
+   password-manager extensions (Bitwarden, 1Password) position their inline
+   autofill menu via getBoundingClientRect(), which does not account for
+   CSS zoom and lands the popup offset from the visually-scaled input.
+   Tailwind utilities are rem-based, so they scale automatically; custom
+   CSS below uses rem for layout and keeps px only for hairlines, focus
+   rings, and animation micro-motion. Media queries still evaluate at real
+   viewport pixels, so Tailwind breakpoints trip at their documented
+   widths. */
+html {
+  font-size: 110%;
 }
 
 /* ── Atmosphere painted on <html> ─────────────────────────────────────────
@@ -256,10 +260,10 @@ body > nav {
 
 .station-input {
   width: 100%;
-  padding: 10px 12px;
-  font-size: 14px;
+  padding: 0.625rem 0.75rem;
+  font-size: 0.875rem;
   line-height: 1.4;
-  color: #e2e8f0;
+  color: var(--color-text-primary);
   /* Use background-color (not the shorthand) so the rule does not
      wipe background-image set by the sibling .station-select class on
      <select> elements. */
@@ -272,7 +276,7 @@ body > nav {
     background-color var(--dur-base) var(--ease-station);
 }
 .station-input::placeholder {
-  color: #64748b;
+  color: var(--color-text-muted);
 }
 .station-input:hover {
   border-color: var(--color-border-strong);
@@ -310,10 +314,10 @@ body > nav {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  padding: 8px 14px;
+  gap: 0.375rem;
+  padding: 0.5rem 0.875rem;
   font-family: var(--font-sans);
-  font-size: 13px;
+  font-size: 0.8125rem;
   font-weight: 500;
   line-height: 1;
   border: 1px solid transparent;
@@ -335,7 +339,7 @@ body > nav {
   cursor: not-allowed;
 }
 .station-button--primary {
-  color: #ffffff;
+  color: var(--color-text-inverse);
   background: var(--color-brand-600);
   border-color: var(--color-brand-500);
 }
@@ -343,7 +347,7 @@ body > nav {
   background: var(--color-brand-500);
 }
 .station-button--secondary {
-  color: #cbd5e1;
+  color: var(--color-text-emphasis);
   background: var(--color-surface-2);
   border-color: var(--color-border-default);
 }

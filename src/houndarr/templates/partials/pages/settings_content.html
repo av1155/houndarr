@@ -3,7 +3,7 @@
 <style>
   #add-instance-modal {
     opacity: 0;
-    transform: translateY(12px) scale(0.98);
+    transform: translateY(0.75rem) scale(0.98);
   }
 
   #add-instance-modal[open] {
@@ -32,7 +32,7 @@
   @keyframes add-instance-modal-in {
     from {
       opacity: 0;
-      transform: translateY(12px) scale(0.98);
+      transform: translateY(0.75rem) scale(0.98);
     }
 
     to {
@@ -59,7 +59,7 @@
 
     to {
       opacity: 0;
-      transform: translateY(8px) scale(0.985);
+      transform: translateY(0.5rem) scale(0.985);
     }
   }
 
@@ -94,7 +94,7 @@
 
   #instance-test-connection-btn.is-testing {
     background-color: var(--color-surface-3);
-    color: #e2e8f0;
+    color: var(--color-text-primary);
     box-shadow: 0 0 0 1px rgba(148, 163, 184, 0.55) inset;
   }
 
@@ -192,7 +192,7 @@
     #instance-tbody {
       display: flex;
       flex-direction: column;
-      gap: 8px;
+      gap: 0.5rem;
     }
 
     /* Instance rows → cards
@@ -204,9 +204,9 @@
       display: grid;
       grid-template-columns: 1fr auto auto;
       grid-template-rows: auto auto auto auto;
-      column-gap: 8px;
-      row-gap: 5px;
-      padding: 12px;
+      column-gap: 0.5rem;
+      row-gap: 0.3125rem;
+      padding: 0.75rem;
       background: var(--color-surface-1);
       border: 1px solid var(--color-border-subtle) !important;
       border-radius: var(--radius-container);
@@ -226,10 +226,10 @@
     tr[id^='instance-row-'] td[data-col='name'] {
       grid-column: 1;
       grid-row: 1;
-      font-size: 15px;
+      font-size: 0.9375rem;
       font-weight: 600;
       align-self: center;
-      padding-right: 4px;
+      padding-right: 0.25rem;
     }
 
     tr[id^='instance-row-'] td[data-col='status'] {
@@ -254,24 +254,24 @@
       grid-column: 1 / -1;
       grid-row: 2;
       word-break: break-all;
-      font-size: 10px;
+      font-size: 0.625rem;
       white-space: normal;
-      color: #475569;
+      color: var(--color-text-subtle);
     }
 
     /* Row 3: batch */
     tr[id^='instance-row-'] td[data-col='batch'] {
       grid-column: 1 / -1;
       grid-row: 3;
-      font-size: 11px;
-      color: #64748b;
+      font-size: 0.6875rem;
+      color: var(--color-text-muted);
     }
 
     /* Row 4: actions */
     tr[id^='instance-row-'] td[data-col='actions'] {
       grid-column: 1 / -1;
       grid-row: 4;
-      padding-top: 4px;
+      padding-top: 0.25rem;
     }
 
     tr[id^='instance-row-'] td[data-col='actions'] .flex {
@@ -332,7 +332,7 @@
   /* ───── Admin sub-section primitives ─────────────────────────── */
   .toggle-row {
     display: flex; align-items: center; justify-content: space-between;
-    gap: 1rem; padding: 10px 12px;
+    gap: 1rem; padding: 0.625rem 0.75rem;
     border-radius: var(--radius-inset);
     background: var(--color-surface-2);
     border: 1px solid var(--color-border-subtle);
@@ -342,13 +342,13 @@
       background var(--dur-base) var(--ease-station);
   }
   .toggle-row:hover { border-color: var(--color-border-default); }
-  .toggle-row__title { display: block; font-size: 13px; font-weight: 500; color: #e2e8f0; }
+  .toggle-row__title { display: block; font-size: 0.8125rem; font-weight: 500; color: var(--color-text-primary); }
 
   .switch {
     position: relative;
     display: inline-block;
-    width: 40px;
-    height: 22px;
+    width: 2.5rem;
+    height: 1.375rem;
     flex-shrink: 0;
   }
   .switch input {
@@ -376,8 +376,8 @@
     top: 50%;
     left: 2px;
     transform: translate(0, -50%);
-    width: 16px;
-    height: 16px;
+    width: 1rem;
+    height: 1rem;
     background: #cbd5e1;
     border-radius: 999px;
     box-shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
@@ -395,7 +395,7 @@
     box-shadow: var(--glow-brand);
   }
   .switch input:checked + .switch__track .switch__thumb {
-    transform: translate(18px, -50%);
+    transform: translate(1.125rem, -50%);
     background: #ffffff;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 255, 255, 0.06);
   }
@@ -405,7 +405,7 @@
     transform: translate(0, -50%) scale(0.92);
   }
   .switch input:checked:active + .switch__track .switch__thumb {
-    transform: translate(18px, -50%) scale(0.92);
+    transform: translate(1.125rem, -50%) scale(0.92);
   }
   .switch input:focus-visible + .switch__track {
     box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-brand-500) 25%, transparent);
@@ -418,7 +418,7 @@
   .neutral-row,
   .danger-row {
     display: flex; align-items: center; justify-content: space-between;
-    gap: 1rem; padding: 14px 16px;
+    gap: 1rem; padding: 0.875rem 1rem;
     border-radius: var(--radius-inset);
     flex-wrap: wrap;
   }
@@ -432,7 +432,7 @@
   }
   .danger-row h4 { color: #fee2e2; }
   .neutral-row > .min-w-0,
-  .danger-row > .min-w-0 { flex: 1 1 0; min-width: 220px; }
+  .danger-row > .min-w-0 { flex: 1 1 0; min-width: 13.75rem; }
   .neutral-row > button,
   .danger-row > button { flex-shrink: 0; margin-left: auto; }
 
@@ -462,7 +462,7 @@
     animation: confirm-in 220ms var(--ease-station);
   }
   @keyframes confirm-in {
-    from { opacity: 0; transform: translateY(10px) scale(0.985); }
+    from { opacity: 0; transform: translateY(0.625rem) scale(0.985); }
     to   { opacity: 1; transform: translateY(0) scale(1); }
   }
   @media (prefers-reduced-motion: reduce) {
@@ -515,8 +515,8 @@
   </div>
 
   <div class="instance-table-wrapper rounded-container border border-border-subtle overflow-x-auto">
-    <table id="instance-table" class="w-full sm:min-w-[760px] text-sm">
-      <thead class="bg-surface-2 text-[10px] text-slate-500 uppercase tracking-widest font-sans border-b border-border-subtle">
+    <table id="instance-table" class="w-full sm:min-w-[47.5rem] text-sm">
+      <thead class="bg-surface-2 text-[0.625rem] text-slate-500 uppercase tracking-widest font-sans border-b border-border-subtle">
         <tr>
           <th class="px-4 py-3 text-left font-medium">Name</th>
           <th class="px-4 py-3 text-left font-medium">Type</th>

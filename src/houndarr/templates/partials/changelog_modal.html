@@ -8,7 +8,7 @@
   <style>
     #changelog-modal {
       opacity: 0;
-      transform: translateY(12px) scale(0.98);
+      transform: translateY(0.75rem) scale(0.98);
     }
 
     #changelog-modal[open] {
@@ -36,7 +36,7 @@
     }
 
     @keyframes changelog-modal-in {
-      from { opacity: 0; transform: translateY(12px) scale(0.98); }
+      from { opacity: 0; transform: translateY(0.75rem) scale(0.98); }
       to   { opacity: 1; transform: translateY(0) scale(1); }
     }
 
@@ -47,7 +47,7 @@
 
     @keyframes changelog-modal-out {
       from { opacity: 1; transform: translateY(0) scale(1); }
-      to   { opacity: 0; transform: translateY(8px) scale(0.985); }
+      to   { opacity: 0; transform: translateY(0.5rem) scale(0.985); }
     }
 
     @keyframes changelog-backdrop-out {
@@ -73,7 +73,7 @@
         max-height: 90dvh;
         max-width: 100%;
         width: 100%;
-        border-radius: 16px 16px 0 0;
+        border-radius: 1rem 1rem 0 0;
         transform: translateY(100%);
       }
 

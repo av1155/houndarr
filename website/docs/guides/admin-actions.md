@@ -100,9 +100,9 @@ The confirmation flow demands two factors:
 | Built-in | Type `RESET` | Current admin password |
 | Proxy / SSO | Type `RESET` | Type your proxy username (echoed from the auth header) |
 
-A failure during the in-process re-init (extremely rare) drops a
-`.factory-reset-pending` sentinel in the data directory and exits the
-container so your orchestrator can restart it. On boot the empty data
+A failure during the in-process re-init (extremely rare) exits the
+container so your orchestrator can restart it. The database and master
+key are already deleted at that point, so on boot the empty data
 directory triggers the normal first-run flow.
 
 Because the database is wiped, the only audit trail for a factory

@@ -11,16 +11,17 @@ Three top-level helpers back the routes under ``/settings/admin``:
   leave a single audit breadcrumb.
 * :func:`factory_reset`: stop the supervisor, delete the SQLite
   database and master-key files, re-initialise fresh state, and reset
-  the in-memory auth caches. Used by the Danger zone action; supports
-  a fallback (sentinel + process exit) so a partial wipe still lands
-  on setup after a container restart.
+  the in-memory auth caches. Used by the Danger zone action. If the
+  in-process re-init raises after the on-disk wipe, the route layer
+  falls back to a delayed process exit so the orchestrator restarts
+  the container; on next boot ``init_db`` + ``ensure_master_key``
+  resume from the empty data directory exactly as on first run.
 """
 
 from __future__ import annotations
 
 import logging
 import os
-from contextlib import suppress
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -70,8 +71,6 @@ from houndarr.services.instances import (
 )
 
 logger = logging.getLogger(__name__)
-
-FACTORY_RESET_SENTINEL = ".factory-reset-pending"
 
 
 def _policy_defaults() -> dict[str, object]:
@@ -173,10 +172,13 @@ async def factory_reset(*, app: FastAPI, data_dir: str) -> None:
     schema, rotates the master key, resets the auth caches, and spins up
     a fresh supervisor with zero instances.
 
-    If any step after the file deletion raises, a sentinel file is written
-    inside ``data_dir`` and the exception is re-raised so the caller can
-    decide whether to exit the process (fallback path). On a successful
-    re-init, the app is in the same state as it is on first boot.
+    If any step after the file deletion raises, the exception is
+    re-raised so the route layer can fall back to a delayed process
+    exit. The orchestrator restarts the container and on next boot
+    ``init_db`` + ``ensure_master_key`` resume from the empty data
+    directory exactly as on first run, so no sentinel coordination is
+    required. On a successful in-process re-init the app is in the same
+    state as it is on first boot.
 
     Args:
         app: The FastAPI application; ``app.state.supervisor`` is replaced
@@ -193,7 +195,6 @@ async def factory_reset(*, app: FastAPI, data_dir: str) -> None:
         db_path.with_suffix(".db-shm"),
         data_path / "houndarr.masterkey",
     ]
-    sentinel_path = data_path / FACTORY_RESET_SENTINEL
 
     supervisor = getattr(app.state, "supervisor", None)
     if isinstance(supervisor, Supervisor):
@@ -211,27 +212,16 @@ async def factory_reset(*, app: FastAPI, data_dir: str) -> None:
         logger.exception("Factory reset: file deletion failed")
         raise
 
-    # From this point the on-disk state is wiped; any failure leaves a
-    # sentinel so the container's next boot can finish the reset cleanly.
-    try:
-        await init_db()
-        new_key = ensure_master_key(str(data_path))
-        app.state.master_key = new_key
-        reset_auth_caches()
-        new_supervisor = Supervisor(master_key=new_key)
-        await new_supervisor.start()
-        app.state.supervisor = new_supervisor
-    except Exception:
-        logger.exception("Factory reset: in-process re-init failed; writing sentinel for next boot")
-        try:
-            sentinel_path.write_text("pending\n", encoding="utf-8")
-        except OSError:
-            logger.exception("Factory reset: could not write sentinel file")
-        raise
-
-    # Clean up any stale sentinel from a previous aborted reset.
-    with suppress(FileNotFoundError):
-        sentinel_path.unlink()
+    # On-disk state is wiped at this point. If anything below raises, the
+    # route layer catches it and schedules a delayed process exit; the
+    # orchestrator's restart drops into first-run on the empty data dir.
+    await init_db()
+    new_key = ensure_master_key(str(data_path))
+    app.state.master_key = new_key
+    reset_auth_caches()
+    new_supervisor = Supervisor(master_key=new_key)
+    await new_supervisor.start()
+    app.state.supervisor = new_supervisor
 
 
 def request_process_exit() -> None:

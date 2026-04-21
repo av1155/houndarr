@@ -57,7 +57,6 @@
       <div class="field">
         <label class="field__label" for="login-password">
           <span>Password</span>
-          <span class="caps-badge" aria-live="polite">Caps Lock</span>
         </label>
         <div class="input-wrap">
           <svg class="leading" width="16" height="16" viewBox="0 0 24 24" fill="none"
@@ -73,6 +72,13 @@
                  data-pw-input
                  {% if error %}aria-invalid="true"{% endif %} />
           <div class="input-trailing">
+            <span class="caps-badge" role="status" aria-label="Caps Lock is on">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"
+                   stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M8 3.2 3.6 7.6h2.5v4h3.8v-4h2.5z"/>
+                <line x1="5.6" y1="13.3" x2="10.4" y2="13.3"/>
+              </svg>
+            </span>
             <button type="button" class="icon-btn"
                     aria-label="Show password" aria-pressed="false"
                     data-pw-toggle tabindex="-1">

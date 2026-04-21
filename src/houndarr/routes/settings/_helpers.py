@@ -61,16 +61,9 @@ from houndarr.services.instances import (
     SearchOrder,
     SonarrSearchMode,
     WhisparrSearchMode,
+    active_error_instance_ids,
     list_instances,
 )
-
-
-# active_error_instance_ids() is added by PR18 (f65e0bc).  Until it lands,
-# return an empty set so template `(active_error_ids or [])` checks
-# evaluate to "no instances in error" without breaking the call sites.
-async def active_error_instance_ids() -> set[int]:
-    """Stub: returns empty until PR18 ships the real query."""
-    return set()
 
 
 # Re-exported from houndarr.services.instance_validation so existing

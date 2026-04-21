@@ -1,6 +1,12 @@
 /* ─────────────────────────────────────────────────────────────────────────── */
 /* Houndarr — Station Design System Tokens                                    */
 /* All design decisions live here. App and docs both import this file.        */
+/*                                                                            */
+/* Palette hex values are mirrored into base.html's inline Tailwind CDN       */
+/* config (brand, surface, border, danger, success, warning, info, seg, and   */
+/* per-*arr type colors) because CDN Tailwind cannot read CSS variables at    */
+/* build time. When editing a palette/state/type hex here, update base.html   */
+/* to match.                                                                  */
 /* ─────────────────────────────────────────────────────────────────────────── */
 
 :root {
@@ -14,6 +20,25 @@
   --color-border-subtle:  #1e2638;
   --color-border-default: #2a3448;
   --color-border-strong:  #3d4f6b;
+
+  /* ── Text scale ──────────────────────────────────────────────────────
+     Semantic tokens for text so intent survives a rebrand or theme swap.
+     Ordered high-contrast to low-contrast. Pass-through pattern: new
+     components should reach for these, not raw slate hex values. */
+  --color-text-heading:  #f8fafc;   /* page h1 (highest emphasis) */
+  --color-text-primary:  #e2e8f0;   /* body text on dark surfaces */
+  --color-text-emphasis: #cbd5e1;   /* secondary emphasis, stat values */
+  --color-text-muted:    #94a3b8;   /* passes 4.5:1 body-text threshold */
+  --color-text-subtle:   #64748b;   /* UI-element only (3:1 minimum) */
+  --color-text-inverse:  #ffffff;   /* on primary buttons + modal accents */
+
+  /* ── State text tints ────────────────────────────────────────────────
+     Lighter text variants of the core state colors for use on neutral
+     backgrounds (headings, icons, pill text). On colored state backgrounds
+     (e.g. --color-danger-bg) components use inline tints since those sit
+     inside a narrow context and do not warrant their own tokens. */
+  --color-danger-text:  #fca5a5;
+  --color-success-text: #86efac;
 
   /* ── Brand — refined Station cyan ────────────────────────────────────── */
   --color-brand-50:  #ecfeff;
@@ -68,11 +93,11 @@
   --space-8: 4rem;      /* 64px — hero rhythm */
 
   /* ── Border radius ───────────────────────────────────────────────────── */
-  --radius-sm:   4px;     /* inputs, inline badges */
-  --radius-md:   6px;     /* cards, buttons, tooltips */
-  --radius-lg:   10px;    /* modals, panels, popovers */
-  --radius-xl:   16px;    /* large panels */
-  --radius-full: 9999px;  /* pill badges */
+  --radius-sm:   4px;        /* inputs, inline badges */
+  --radius-md:   6px;        /* cards, buttons, tooltips */
+  --radius-lg:   0.625rem;   /* modals, panels, popovers (10px at 16px base) */
+  --radius-xl:   1rem;       /* large panels (16px at 16px base) */
+  --radius-full: 9999px;     /* pill badges */
 
   /* ── Shadows (cool-toned, midnight-shifted) ──────────────────────────── */
   --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.50);

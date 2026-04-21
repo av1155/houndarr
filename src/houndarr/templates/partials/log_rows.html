@@ -5,7 +5,7 @@
   {% if row.cycle_id and row.cycle_id != ns.previous_cycle_id %}
   <tr class="border-b border-border-subtle bg-surface-base/80" data-cycle-group="{{ row.cycle_id }}" data-cycle-outcome="{{ row.cycle_progress or 'unknown' }}">
     <td colspan="10" class="px-3 py-2">
-      <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-slate-500">
+      <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-[0.625rem] text-slate-500">
         <span class="font-mono text-slate-400" title="{{ row.cycle_id }}">Cycle {{ row.cycle_id[:8] }}</span>
         <span class="text-slate-500 log-instance-label">instance {{ row.instance_name }}</span>
         <span class="text-slate-500">trigger {{ row.cycle_trigger or 'unknown' }}</span>
@@ -35,7 +35,7 @@
     </td>
 
     {# Instance #}
-    <td class="px-3 py-2.5 text-xs text-slate-300 max-w-[140px] truncate font-sans" title="{{ row.instance_name }}" data-col="instance">
+    <td class="px-3 py-2.5 text-xs text-slate-300 max-w-[8.75rem] truncate font-sans" title="{{ row.instance_name }}" data-col="instance">
       {{ row.instance_name }}
     </td>
 
@@ -102,7 +102,7 @@
       {% elif row.cycle_progress == "no_progress" %}
         <span class="badge badge-soft badge-neutral">skips only</span>
       {% else %}
-        <span class="text-[10px] text-slate-600 font-mono">unknown</span>
+        <span class="text-[0.625rem] text-slate-600 font-mono">unknown</span>
       {% endif %}
     </td>
 
@@ -118,7 +118,7 @@
         <div class="truncate text-slate-600">-</div>
       {% endif %}
       {% if row.item_id is not none %}
-        <div class="text-[10px] text-slate-600 font-mono">id:{{ row.item_id }}</div>
+        <div class="text-[0.625rem] text-slate-600 font-mono">id:{{ row.item_id }}</div>
       {% endif %}
     </td>
 

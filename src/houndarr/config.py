@@ -162,15 +162,9 @@ def _parse_update_check_repo(raw: str) -> str:
 
     The value is interpolated into ``https://api.github.com/repos/{repo}/...``
     so the GitHub URL parser already keeps the host pinned. This guard is
-    defence in depth: every :func:`get_settings` call that reads env
-    (the no-pin fallback, including the no-override branch of
-    :func:`bootstrap_settings`) flows through here, so a typo (missing
-    slash, accidental query string, absolute URL) is caught before a
-    garbled request hits the GitHub API. CLI overrides bypass this path
-    entirely because :func:`bootstrap_settings` constructs ``AppSettings``
-    from kwargs directly; ``HOUNDARR_UPDATE_CHECK_REPO`` only affects
-    the env-fallback callers (scripts, tests, and any caller that
-    invokes :func:`bootstrap_settings` with no overrides).
+    defence in depth: catch typos (missing slash, accidental query strings)
+    at startup and log a warning instead of letting a garbled request hit
+    the GitHub API.
     """
     value = raw.strip()
     if not value:
@@ -200,7 +194,9 @@ def get_settings() -> AppSettings:
         trusted_proxies=os.environ.get("HOUNDARR_TRUSTED_PROXIES", ""),
         auth_mode=os.environ.get("HOUNDARR_AUTH_MODE", "builtin").lower(),
         auth_proxy_header=os.environ.get("HOUNDARR_AUTH_PROXY_HEADER", ""),
-        update_check_repo=os.environ.get("HOUNDARR_UPDATE_CHECK_REPO", "av1155/houndarr"),
+        update_check_repo=_parse_update_check_repo(
+            os.environ.get("HOUNDARR_UPDATE_CHECK_REPO", "")
+        ),
     )
 
 
@@ -318,7 +314,7 @@ class AppSettings:
     trusted_proxies: str = ""
     auth_mode: str = "builtin"
     auth_proxy_header: str = ""
-    update_check_repo: str = "av1155/houndarr"
+    update_check_repo: str = _DEFAULT_UPDATE_CHECK_REPO
 
     # Derived paths (computed from data_dir)
     db_path: Path = field(init=False)

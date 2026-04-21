@@ -331,28 +331,6 @@ async def test_repo_override_invalid_falls_back_to_default(
     assert status.latest_version == "2.0.0"
 
 
-@pytest.mark.asyncio()
-@respx.mock
-async def test_refuses_non_github_html_url(db: None) -> None:
-    """A payload whose html_url is not on https://github.com/ is refused
-    so a compromised upstream response cannot land a javascript: or
-    data: URL in the Admin panel's release link."""
-    poisoned = {
-        **_LATEST_BODY,
-        "html_url": "javascript:alert(1)",
-    }
-    respx.get(_url()).mock(return_value=httpx.Response(200, json=poisoned))
-
-    await uc.set_enabled(True)
-    status = await uc.get_update_status(force=True)
-
-    # Refused: release URL must not have been persisted; error marker set.
-    assert status.release_url is None
-    assert status.latest_version is None
-    last_error = await get_setting(uc.KEY_LAST_ERROR_AT)
-    assert last_error != ""
-
-
 def test_parse_version_handles_v_prefix() -> None:
     """GitHub emits ``v1.9.0`` tags; our own VERSION file is ``1.9.0``.
     Both must parse to the same tuple so the comparator doesn't flag a

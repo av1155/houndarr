@@ -312,6 +312,20 @@ async def _run_check() -> UpdateStatus:
         await set_setting(KEY_LAST_ERROR_AT, _now().isoformat())
         return await _load_status()
 
+    # html_url is rendered verbatim into an <a href="..."> in the Admin
+    # panel. Jinja autoescape handles HTML chars but not URL schemes, so
+    # an upstream response containing a javascript: URL would execute on
+    # click. GitHub always hands back https://github.com/..., but treat
+    # the payload as untrusted and refuse anything else.
+    if not html_url.startswith("https://github.com/"):
+        logger.warning(
+            "update_check: release payload html_url %r does not start with "
+            "https://github.com/; refusing to persist",
+            html_url,
+        )
+        await set_setting(KEY_LAST_ERROR_AT, _now().isoformat())
+        return await _load_status()
+
     normalized_tag = tag_raw.lstrip("vV")
     await set_setting(KEY_LATEST_VERSION, normalized_tag)
     await set_setting(KEY_RELEASE_URL, html_url)

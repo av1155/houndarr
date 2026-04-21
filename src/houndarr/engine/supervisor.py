@@ -59,6 +59,11 @@ class Supervisor:
         # Global snapshot-refresh task handle.  Populated in ``start`` and
         # cancelled in ``stop``.
         self._snapshot_task: asyncio.Task[None] | None = None
+        # Fire-and-forget snapshot-prime tasks spawned on ``start_instance_task``.
+        # Tracked so ``stop()`` can cancel anything still mid-flight when the
+        # supervisor tears down (e.g. during a factory reset that wipes the DB
+        # out from under an in-progress snapshot write).
+        self._prime_tasks: set[asyncio.Task[None]] = set()
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -107,6 +112,16 @@ class Supervisor:
             with suppress(asyncio.CancelledError):
                 await snapshot
         self._snapshot_task = None
+
+        # Cancel any in-flight snapshot-prime tasks spawned from
+        # ``start_instance_task`` so they don't write to the DB after the
+        # supervisor has torn down (factory reset deletes the DB right after
+        # this call returns).
+        if self._prime_tasks:
+            for prime in list(self._prime_tasks):
+                prime.cancel()
+            await asyncio.gather(*self._prime_tasks, return_exceptions=True)
+            self._prime_tasks.clear()
 
         if not self._tasks and not self._manual_runs:
             return
@@ -165,10 +180,12 @@ class Supervisor:
         # added or re-enabled instance's dashboard counters (monitored /
         # unreleased) populate right away instead of sitting at zero for
         # up to 10 minutes waiting on the scheduled refresh loop.
-        asyncio.create_task(  # noqa: RUF006
+        prime = asyncio.create_task(
             self._refresh_one_snapshot(current),
             name=f"snapshot-prime-{instance_id}",
         )
+        self._prime_tasks.add(prime)
+        prime.add_done_callback(self._prime_tasks.discard)
 
         logger.info("Supervisor: started task for instance %r (id=%d)", current.name, current.id)
         return True

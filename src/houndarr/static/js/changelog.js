@@ -17,6 +17,7 @@
   window.__houndarrChangelogController = controller;
   const { signal } = controller;
 
+  const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const closeAnimationMs = 160;
   let previouslyFocused = null;
 

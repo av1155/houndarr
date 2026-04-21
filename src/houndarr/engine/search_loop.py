@@ -885,13 +885,16 @@ async def _run_upgrade_pass(
         )
         return 0
 
-    # Advance series offset for series-based apps (Sonarr/Whisparr v2).
+    # Advance series offset for series-based apps (Sonarr/Whisparr v2),
+    # but only when the slice produced something. Rotating through an
+    # always-empty library (no enabled/monitored series yet) would walk
+    # the cursor off into the future for no coverage gain.
     # Unlike upgrade_item_offset, this advances in both chronological and
     # random modes on purpose: the series offset decides which slice of
     # series feeds the upgrade pool, so continuing to rotate it in random
     # mode preserves whole-library coverage while the shuffle happens
     # within each rotated slice.
-    if instance.type in (InstanceType.sonarr, InstanceType.whisparr_v2):
+    if pool and instance.type in (InstanceType.sonarr, InstanceType.whisparr_v2):
         new_series_offset = instance.upgrade_series_offset + 5
         try:
             await _persist_offset_with_typed_wrap(

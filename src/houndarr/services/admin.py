@@ -20,8 +20,10 @@ Three top-level helpers back the routes under ``/settings/admin``:
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
+from contextlib import suppress
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -196,11 +198,26 @@ async def factory_reset(*, app: FastAPI, data_dir: str) -> None:
         data_path / "houndarr.masterkey",
     ]
 
+    # Stop every background task that touches the database before the
+    # on-disk wipe, so none of them race a half-deleted file or wake up
+    # on a schema that has not been recreated yet.
     supervisor = getattr(app.state, "supervisor", None)
     if isinstance(supervisor, Supervisor):
         await supervisor.stop()
     app.state.supervisor = None
-    app.state.master_key = None
+
+    retention_task = getattr(app.state, "retention_task", None)
+    if retention_task is not None and not retention_task.done():
+        retention_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await retention_task
+    app.state.retention_task = None
+
+    # NOTE: we deliberately do NOT null app.state.master_key here. Keeping
+    # the old key in memory keeps any inflight request that reads it (e.g.
+    # the dashboard poll) from hitting ``decrypt(None)`` during the few
+    # hundred ms the DB is being rebuilt. The key is atomically replaced
+    # once the new one is ready.
 
     try:
         for path in paths_to_delete:

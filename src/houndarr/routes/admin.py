@@ -26,7 +26,15 @@ from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse, Response
 
 from houndarr import __version__
-from houndarr.auth import CSRF_COOKIE_NAME, _client_ip, check_password, clear_session
+from houndarr.auth import (
+    CSRF_COOKIE_NAME,
+    _client_ip,
+    check_login_rate_limit,
+    check_password,
+    clear_login_attempts,
+    clear_session,
+    record_failed_login,
+)
 from houndarr.config import get_settings
 from houndarr.routes._templates import get_templates
 from houndarr.services.admin import (
@@ -154,13 +162,29 @@ async def admin_factory_reset(
             )
         effective_user = proxy_user
     else:
+        # Rate limit: factory reset is a destructive action. Share the IP-
+        # scoped bucket with /login so a stolen session cannot brute-force
+        # the admin password through this endpoint either.
+        if not check_login_rate_limit(request):
+            return _flash_response(
+                request,
+                tone="danger",
+                message="Too many attempts. Try again in a minute.",
+                status_code=429,
+            )
         if not current_password or not await check_password(current_password):
+            record_failed_login(request)
+            logger.warning(
+                "Factory reset rejected: incorrect current_password from %s",
+                _client_ip(request),
+            )
             return _flash_response(
                 request,
                 tone="danger",
                 message="Current password is incorrect.",
                 status_code=422,
             )
+        clear_login_attempts(request)
         effective_user = "admin"
 
     logger.warning(
@@ -186,7 +210,9 @@ async def admin_factory_reset(
         logger.exception("Factory reset: in-process path failed; scheduling process exit")
 
         async def _delayed_exit() -> None:
-            await asyncio.sleep(0.5)
+            # 1.5s gives the HX-Redirect response time to flush over slow
+            # connections (mobile, tunnelled) before the container exits.
+            await asyncio.sleep(1.5)
             request_process_exit()
 
         # Fire-and-forget: RUF006's "keep a reference" rule doesn't apply

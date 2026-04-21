@@ -333,6 +333,41 @@ if [[ "$AUTHENTICATED" == "1" ]]; then
     else
         _fail "GET /settings/changelog/full -> $SC (expected 200 with Changelog heading)"
     fi
+
+    # Rate limit regression guard: six wrong-password factory-reset
+    # attempts must trip the shared /login IP bucket so a session-
+    # compromised attacker cannot brute-force the admin password
+    # through the destructive endpoint. The first five return 422;
+    # the sixth must return 429.
+    #
+    # Uses a dedicated cookie jar so login-attempt noise from earlier
+    # sections (Section 5's rate-limit probe) doesn't mix with the
+    # counter this section is trying to assert on.
+    rm -f /tmp/houndarr_smoke_rl2_cookies
+    curl -s -c /tmp/houndarr_smoke_rl2_cookies \
+        -b /tmp/houndarr_smoke_rl2_cookies \
+        -o /dev/null \
+        -d "username=${USERNAME}&password=${PASSWORD}" \
+        "$HOST/login" >/dev/null 2>&1 || true
+    RL2_CSRF=$(grep "houndarr_csrf" /tmp/houndarr_smoke_rl2_cookies 2>/dev/null | awk '{print $NF}' || true)
+
+    LAST_FR_SC="000"
+    for i in $(seq 1 6); do
+        LAST_FR_SC=$(curl -s -o /dev/null -w "%{http_code}" \
+            -X POST \
+            --max-redirs 0 \
+            -c /tmp/houndarr_smoke_rl2_cookies \
+            -b /tmp/houndarr_smoke_rl2_cookies \
+            -H "X-CSRF-Token: ${RL2_CSRF}" \
+            -d "confirm_phrase=RESET&current_password=definitely-not-the-password" \
+            "$HOST/settings/admin/factory-reset" || true)
+    done
+
+    if [[ "$LAST_FR_SC" == "429" ]]; then
+        _pass "6 rapid wrong-password factory-reset attempts -> 429"
+    else
+        _fail "6 rapid wrong-password factory-reset attempts -> $LAST_FR_SC (expected 429)"
+    fi
 else
     _warn "Admin endpoint CSRF checks skipped (login failed)"
 fi

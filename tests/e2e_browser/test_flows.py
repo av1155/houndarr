@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import re
 import uuid
+from contextlib import suppress
 
 from playwright.sync_api import Locator, Page, expect
 
@@ -397,3 +398,253 @@ def test_admin_factory_reset_wrong_password_flash(
         re.compile(r"password is incorrect", re.I),
         timeout=4_000,
     )
+
+
+# ---------------------------------------------------------------------------
+# Additional browser coverage added in the post-audit hardening pass.
+# These guard behaviours that TestClient cannot observe: the browser-only
+# HX-Refresh reload, the Caps-Lock modifier wiring, live instance CRUD
+# without layout shift, and the preferences-switch rollback on 5xx.
+# ---------------------------------------------------------------------------
+
+
+_EXPECTED_500_CONSOLE_NOISE = [
+    r"Failed to load resource: the server responded with a status of 500",
+    r"Response Status Error Code 500",
+]
+
+
+def test_password_change_hx_refresh_recovers_csrf(logged_in_page: Page, houndarr_url: str) -> None:
+    """After a successful password change the server sets HX-Refresh so the
+    tab reloads and re-stamps hx-headers with the rotated CSRF cookie.
+    Without that reload, the next mutating HTMX request would 403 because
+    app.js captured the old token at initial page load. This test proves
+    recovery by issuing another HTMX mutation (clear-logs) after the
+    change and asserting its success flash lands.
+
+    The password is changed to a temp value and restored inside a try /
+    finally so a failure mid-test doesn't lock subsequent tests out of
+    the shared container.
+    """
+    page = logged_in_page
+    original_password = "CITestPass1!"
+    temp_password = "TempCI999!"
+
+    def _submit_password_change(current: str, new: str) -> tuple[int, dict[str, str]]:
+        page.goto(f"{houndarr_url}/settings")
+        section = page.locator("#admin-security")
+        expect(section).to_be_visible()
+        section.locator('input[name="current_password"]').fill(current)
+        section.locator('input[name="new_password"]').fill(new)
+        section.locator('input[name="new_password_confirm"]').fill(new)
+        form = section.locator('form[hx-post="/settings/account/password"]')
+        with page.expect_response(
+            lambda r: "/settings/account/password" in r.url and r.request.method == "POST"
+        ) as resp_info:
+            form.evaluate("f => f.requestSubmit()")
+        resp = resp_info.value
+        return resp.status, dict(resp.headers)
+
+    try:
+        status, headers = _submit_password_change(original_password, temp_password)
+        assert status == 200, f"password change returned {status}"
+        assert headers.get("hx-refresh") == "true", (
+            "server must set HX-Refresh: true so the tab reloads and the "
+            "hx-headers attribute picks up the rotated CSRF cookie"
+        )
+        # The browser's HTMX runtime reads HX-Refresh and calls location.reload();
+        # wait for the network to settle before asserting the recovery.
+        page.wait_for_load_state("networkidle", timeout=10_000)
+
+        # Prove the recovery: issue another HTMX mutation from the same tab.
+        # Clear-logs is a low-risk POST that surfaces a flash on success.
+        # If HX-Refresh didn't trigger (or app.js didn't re-stamp), this
+        # request would hit the old CSRF token against the new session and
+        # return 403 with no flash.
+        page.goto(f"{houndarr_url}/settings")
+        page.locator('button[data-confirm-reset="logs"]').click()
+        expect(page.locator("#confirm-dialog")).not_to_have_class(re.compile(r"hidden"))
+        with page.expect_response(
+            lambda r: "/settings/admin/clear-logs" in r.url and r.request.method == "POST"
+        ) as clear_resp:
+            page.locator("#confirm-go").click()
+        assert clear_resp.value.status == 200, (
+            f"post-rotation clear-logs returned {clear_resp.value.status}; "
+            "HX-Refresh recovery failed — hx-headers is still carrying the "
+            "pre-rotation CSRF token"
+        )
+        expect(page.locator("#admin-flash")).to_contain_text(
+            re.compile(r"Cleared|already empty", re.I),
+            timeout=4_000,
+        )
+    finally:
+        # Restore the original password so downstream tests using the
+        # shared logged_in_page fixture keep working. Best-effort: if the
+        # current password is already the original (test failed before
+        # the first change), the 422 path is harmless.
+        with suppress(Exception):
+            _submit_password_change(temp_password, original_password)
+
+
+def test_caps_lock_badge_toggles_with_modifier_state(
+    logged_in_page: Page, houndarr_url: str
+) -> None:
+    """The Caps-Lock badge on password inputs toggles via
+    ``event.getModifierState('CapsLock')`` in auth.js. Physical CapsLock
+    state is a moving target across chromium / firefox / webkit headless
+    runs, so this dispatches a synthetic keydown event with the modifier
+    forced true (and again false) and asserts the class flip on the
+    scoped .caps-badge. That exercises the exact wiring in auth.js
+    without depending on OS-level modifier state behaviour.
+    """
+    page = logged_in_page
+    page.goto(f"{houndarr_url}/settings")
+    section = page.locator("#admin-security")
+    expect(section).to_be_visible()
+
+    # The badge should start hidden (no modifier active).
+    current_field = section.locator("#current-password")
+    current_field.click()
+    caps_badge = section.locator("#current-password").locator(
+        "xpath=ancestor::*[contains(@class,'field')][1]//*[contains(@class,'caps-badge')]"
+    )
+
+    # Simulate CapsLock-on keydown.
+    page.evaluate(
+        """() => {
+          const input = document.getElementById('current-password');
+          input.focus();
+          const evt = new KeyboardEvent('keydown', { key: 'A', bubbles: true });
+          Object.defineProperty(evt, 'getModifierState', {
+            value: (k) => k === 'CapsLock',
+          });
+          input.dispatchEvent(evt);
+        }"""
+    )
+    expect(caps_badge).to_have_class(re.compile(r"\bis-on\b"), timeout=2_000)
+
+    # Simulate CapsLock-off keyup.
+    page.evaluate(
+        """() => {
+          const input = document.getElementById('current-password');
+          const evt = new KeyboardEvent('keyup', { key: 'A', bubbles: true });
+          Object.defineProperty(evt, 'getModifierState', {
+            value: () => false,
+          });
+          input.dispatchEvent(evt);
+        }"""
+    )
+    expect(caps_badge).not_to_have_class(re.compile(r"\bis-on\b"), timeout=2_000)
+
+
+def test_instance_toggle_and_delete_keeps_layout_stable(
+    logged_in_page: Page, houndarr_url: str, mock_sonarr_url: str
+) -> None:
+    """Add an instance, toggle enabled twice, verify the status cell and
+    toggle-button widths do not shift under the Active <-> Disabled
+    label swap, then delete the row. Locks in the row-stability fix at
+    partials/instance_row.html:25-45 (min-w-[4.5rem] on the status pill
+    and min-w-[4.25rem] on the toggle button) so a future padding edit
+    cannot silently regress the flicker the user previously flagged.
+    """
+    page = logged_in_page
+    instance_name = f"E2E Toggle {uuid.uuid4().hex[:8]}"
+    page.goto(f"{houndarr_url}/settings")
+
+    page.get_by_role("button", name=re.compile(r"add\s*instance", re.I)).first.click()
+    add_form = page.locator('form[data-form-mode="add"]')
+    expect(add_form).to_be_visible()
+    add_form.locator('input[name="name"]').fill(instance_name)
+    add_form.locator('select[name="type"]').select_option("sonarr")
+    add_form.locator('input[name="url"]').fill(mock_sonarr_url)
+    add_form.locator('input[name="api_key"]').fill("e2e-toggle-key")
+    _wait_for_connection_ui_idle(page)
+    _test_connection_and_wait_for_success(
+        page, add_form, add_form.locator("button[data-test-connection-btn]")
+    )
+    _submit_form(add_form)
+    expect(page.locator("#instance-tbody")).to_contain_text(instance_name, timeout=10_000)
+
+    row = page.locator("#instance-tbody tr").filter(has_text=instance_name)
+    status_cell = row.locator('[data-col="status"]')
+    toggle_btn = row.locator('button[hx-post*="/toggle-enabled"]')
+
+    # Capture initial geometry.
+    initial_status_box = status_cell.bounding_box()
+    initial_toggle_box = toggle_btn.bounding_box()
+    assert initial_status_box is not None
+    assert initial_toggle_box is not None
+
+    # Toggle Active -> Disabled. Wait for the row to swap and the text to change.
+    toggle_btn.click()
+    expect(toggle_btn).to_have_text(re.compile(r"Enable", re.I), timeout=5_000)
+    _wait_for_htmx_idle(page)
+
+    after_status_box = status_cell.bounding_box()
+    after_toggle_box = toggle_btn.bounding_box()
+    assert after_status_box is not None
+    assert after_toggle_box is not None
+    # Allow 2 px of subpixel variance; anything more signals a reflow.
+    assert abs(after_status_box["width"] - initial_status_box["width"]) <= 2, (
+        f"status cell width shifted on toggle: "
+        f"{initial_status_box['width']} -> {after_status_box['width']}"
+    )
+    assert abs(after_toggle_box["width"] - initial_toggle_box["width"]) <= 2, (
+        f"toggle button width shifted on toggle: "
+        f"{initial_toggle_box['width']} -> {after_toggle_box['width']}"
+    )
+
+    # Toggle back so the row is Active again, then delete.
+    toggle_btn.click()
+    expect(toggle_btn).to_have_text(re.compile(r"Disable", re.I), timeout=5_000)
+
+    delete_btn = row.locator("button[hx-delete]")
+    # hx-confirm triggers a window.confirm(); auto-accept it.
+    page.once("dialog", lambda dialog: dialog.accept())
+    delete_btn.click()
+    expect(row).to_have_count(0, timeout=5_000)
+
+
+def test_changelog_preferences_switch_rolls_back_on_error(
+    logged_in_page: Page, houndarr_url: str, console_guard
+) -> None:
+    """W4 regression guard: the changelog-popup switch flips visually the
+    instant the user clicks the checkbox, well before the form POST
+    reaches the server. When /settings/changelog/preferences returns a
+    5xx, settings_content.html's htmx:responseError handler must flip
+    the checkbox back so the rendered state matches what actually
+    persisted server-side. Intercept the endpoint with page.route to
+    force a 500 and assert the rollback.
+    """
+    for p in _EXPECTED_500_CONSOLE_NOISE:
+        console_guard.allow(p)
+    page = logged_in_page
+    page.goto(f"{houndarr_url}/settings")
+
+    # Make sure the Admin dropdown is open so #admin-updates is in layout.
+    if page.locator("#admin-grouped").get_attribute("data-open") != "true":
+        page.locator("#admin-toggle").click()
+    expect(page.locator("#admin-updates")).to_be_visible()
+
+    checkbox = page.locator('#admin-updates input[type="checkbox"][name="enabled"]')
+    initial_checked = checkbox.is_checked()
+
+    # Force every /preferences call during this test to fail with 500.
+    pattern = re.compile(r"/settings/changelog/preferences$")
+    page.route(pattern, lambda route: route.fulfill(status=500, body=""))
+
+    try:
+        with page.expect_response(
+            lambda r: "/settings/changelog/preferences" in r.url and r.request.method == "POST"
+        ) as resp_info:
+            checkbox.click()
+        assert resp_info.value.status == 500
+
+        # The htmx:responseError handler flips the checkbox back; give it a
+        # moment to run and then assert the state matches the initial value.
+        page.wait_for_timeout(200)
+        assert checkbox.is_checked() == initial_checked, (
+            "switch should roll back to its persisted state when the server rejects /preferences"
+        )
+    finally:
+        page.unroute(pattern)

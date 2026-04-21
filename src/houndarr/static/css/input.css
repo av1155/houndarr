@@ -1,5 +1,5 @@
 /* ─────────────────────────────────────────────────────────────────────── */
-/* Houndarr — Tailwind CSS v4 build entry point                           */
+/* Houndarr: Tailwind CSS v4 build entry point                            */
 /*                                                                        */
 /* Compiled at Docker build time to src/houndarr/static/css/app.built.css  */
 /* by the css-build stage in the Dockerfile. The runtime image ships only  */
@@ -27,13 +27,13 @@
 /* daisyUI v5 component plugin. Runs at Tailwind build time; nothing
    ships to the browser except compiled CSS. themes: false disables
    the built-in theme set because we define our own "station" theme
-   below — having both would inflate the bundle with unused OKLCH
+   below; having both would inflate the bundle with unused OKLCH
    palettes. */
 @plugin "daisyui" {
   themes: false;
 }
 
-/* Station theme — maps daisyUI's semantic slots to Houndarr's palette.
+/* Station theme: maps daisyUI's semantic slots to Houndarr's palette.
    Kept in parity with tokens.css (source of truth for design decisions)
    and @theme above (Tailwind utility generation). Component radii use
    the existing 3-tier Station radius tokens so daisyUI buttons, inputs,
@@ -72,7 +72,7 @@
   --color-error: #f87171;
   --color-error-content: #07080f;
 
-  /* Radii — three-tier Station scale */
+  /* Radii: three-tier Station scale */
   --radius-selector: 9999px;  /* pill badges + toggles */
   --radius-field:    4px;      /* inputs, buttons */
   --radius-box:      6px;      /* cards, modals */
@@ -162,7 +162,7 @@
                ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
 }
 
-/* Layered imports — custom design tokens and component primitives.
+/* Layered imports: custom design tokens and component primitives.
    Order matters for cascade: tokens first (variables), then layout,
    then per-page. Tailwind utilities always win regardless of order. */
 @import "./tokens.css";

@@ -48,7 +48,7 @@
       hx-target="#admin-security"
       hx-select="#admin-security"
       hx-swap="outerHTML"
-      class="grid grid-cols-1 md:grid-cols-3 gap-3 items-start"
+      class="grid grid-cols-1 min-[971px]:grid-cols-3 gap-3 items-start"
       autocomplete="off"
     >
       <div class="field">
@@ -188,7 +188,7 @@
         <p class="pw-match" aria-live="polite">&nbsp;</p>
       </div>
 
-      <div class="md:col-span-3 flex flex-wrap items-center gap-3 pt-1">
+      <div class="min-[971px]:col-span-3 flex flex-wrap items-center gap-3 pt-1">
         <button
           type="submit"
           class="station-button station-button--primary px-4 py-2 text-sm font-semibold font-sans focus:outline-none focus:ring-2 focus:ring-brand-400/35"
@@ -200,14 +200,14 @@
 
       {% if account_error is defined and account_error %}
       <div
-        class="md:col-span-3 border-l-4 border-danger bg-danger-bg rounded-r-inset px-3 py-2 text-sm text-danger font-sans"
+        class="min-[971px]:col-span-3 border-l-4 border-danger bg-danger-bg rounded-r-inset px-3 py-2 text-sm text-danger font-sans"
       >
         {{ account_error }}
       </div>
       {% endif %}
       {% if account_success is defined and account_success %}
       <div
-        class="md:col-span-3 border-l-4 border-success bg-success-bg rounded-r-inset px-3 py-2 text-sm text-success font-sans"
+        class="min-[971px]:col-span-3 border-l-4 border-success bg-success-bg rounded-r-inset px-3 py-2 text-sm text-success font-sans"
       >
         {{ account_success }}
       </div>

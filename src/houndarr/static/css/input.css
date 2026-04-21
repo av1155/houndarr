@@ -1,0 +1,128 @@
+/* ─────────────────────────────────────────────────────────────────────── */
+/* Houndarr — Tailwind CSS v4 build entry point                           */
+/*                                                                        */
+/* Compiled at Docker build time to src/houndarr/static/css/app.built.css  */
+/* by the css-build stage in the Dockerfile. The runtime image ships only  */
+/* the compiled output; neither Node nor this file is present in the       */
+/* final Python image.                                                     */
+/*                                                                        */
+/* The @theme block below mirrors what used to be the inline               */
+/* tailwind.config = { theme: { extend: { ... } } } script in base.html,   */
+/* so the same utility classes (bg-brand-400, rounded-inset, etc.) still   */
+/* resolve. Palette/radius/duration values stay in sync with tokens.css,   */
+/* which is still the source of truth for design decisions.                */
+/* ─────────────────────────────────────────────────────────────────────── */
+
+/* Google Fonts @import must precede all other rules per CSS spec. Inlined
+   from the former fonts.css so the compiled output keeps the import at the
+   top of the generated stylesheet. */
+@import url('https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,400;0,14..32,500;0,14..32,600;0,14..32,700;0,14..32,800;1,14..32,400&family=JetBrains+Mono:ital,wght@0,400;0,500;1,400&display=swap');
+
+@import "tailwindcss";
+
+/* Content scanning: Tailwind v4 auto-discovers templates, but pin an
+   explicit source so the build never misses Jinja partials. */
+@source "../../templates";
+
+@theme {
+  /* ── Brand palette (refined Station cyan) ─────────────────────────── */
+  --color-brand-50:  #ecfeff;
+  --color-brand-100: #cffafe;
+  --color-brand-200: #a5f3fc;
+  --color-brand-300: #67e8f9;
+  --color-brand-400: #22d3ee;
+  --color-brand-500: #06b6d4;
+  --color-brand-600: #0891b2;
+  --color-brand-700: #0e7490;
+  --color-brand-800: #155e75;
+  --color-brand-900: #164e63;
+
+  /* ── Surface scale ────────────────────────────────────────────────── */
+  --color-surface-base: #07080f;
+  --color-surface-1:    #0e1117;
+  --color-surface-2:    #151b27;
+  --color-surface-3:    #1e2638;
+
+  /* ── Border scale ─────────────────────────────────────────────────── */
+  --color-border-subtle:  #1e2638;
+  --color-border-default: #2a3448;
+  --color-border-strong:  #3d4f6b;
+
+  /* ── Semantic state colors + -bg / -border variants ───────────────── */
+  --color-danger:        #f87171;
+  --color-danger-bg:     rgba(153, 27, 27, 0.30);
+  --color-danger-border: rgba(248, 113, 113, 0.35);
+
+  --color-success:        #4ade80;
+  --color-success-bg:     rgba(22, 101, 52, 0.35);
+  --color-success-border: rgba(74, 222, 128, 0.35);
+
+  --color-warning:        #fbbf24;
+  --color-warning-bg:     rgba(120, 53, 15, 0.30);
+  --color-warning-border: rgba(251, 191, 36, 0.30);
+
+  --color-info: #67e8f9;
+
+  /* ── Library-health segment colors (match --seg-*) ────────────────── */
+  --color-seg-eligible:    #4ade80;
+  --color-seg-cooldown:    #22d3ee;
+  --color-seg-cutoff-cd:   #fcd34d;
+  --color-seg-upgrade-cd:  #a78bfa;
+  --color-seg-unreleased:  #64748b;
+
+  /* ── Instance-type signature colors ───────────────────────────────── */
+  --color-sonarr:       #7dd3fc;
+  --color-sonarr-bg:    rgba(8, 47, 73, 0.50);
+  --color-radarr:       #fcd34d;
+  --color-radarr-bg:    rgba(69, 26, 3, 0.50);
+  --color-lidarr:       #6ee7b7;
+  --color-lidarr-bg:    rgba(6, 78, 59, 0.50);
+  --color-readarr:      #fca5a5;
+  --color-readarr-bg:   rgba(127, 29, 29, 0.50);
+  --color-whisparr:     #f9a8d4;
+  --color-whisparr-bg:  rgba(80, 7, 36, 0.50);
+  --color-whisparr-v3:    #e879f9;
+  --color-whisparr-v3-bg: rgba(86, 19, 88, 0.50);
+
+  /* ── Border-radius scale (Station three-tier system) ──────────────── */
+  --radius-container: 6px;
+  --radius-inset:     4px;
+  --radius-chip:      3px;
+  --radius-bar:       2px;
+
+  /* ── Transition timing functions ──────────────────────────────────── */
+  --ease-station: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-spring:  cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  /* ── Font families ────────────────────────────────────────────────── */
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system,
+               BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "JetBrains Mono", "Fira Code", "Cascadia Code",
+               ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+}
+
+/* Layered imports — custom design tokens and component primitives.
+   Order matters for cascade: tokens first (variables), then layout,
+   then per-page. Tailwind utilities always win regardless of order. */
+@import "./tokens.css";
+@import "./app.css";
+@import "./auth.css";
+@import "./auth-fields.css";
+
+/* Named duration utilities. Tailwind v4 has no `--duration-*` theme
+   namespace (durations normally go via numeric arbitrary values), so
+   register fast/base/slow as custom utilities driven by CSS variables
+   declared on :root in tokens.css. */
+@utility duration-fast { transition-duration: var(--dur-fast); }
+@utility duration-base { transition-duration: var(--dur-base); }
+@utility duration-slow { transition-duration: var(--dur-slow); }
+
+/* ── v4 compatibility shims ───────────────────────────────────────────
+   Tailwind v4's Preflight removed the automatic margin: auto on
+   <dialog> elements. Houndarr uses <dialog> for the changelog modal,
+   add-instance modal, and confirm dialog — restore the centering. */
+@layer base {
+  dialog {
+    margin: auto;
+  }
+}

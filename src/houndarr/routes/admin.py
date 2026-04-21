@@ -212,7 +212,7 @@ async def admin_factory_reset(
 
     try:
         await factory_reset(app=request.app, data_dir=settings.data_dir)
-    except Exception:
+    except Exception:  # noqa: BLE001
         # Hybrid fallback: schedule a delayed process exit so this response
         # reaches the client before the container restarts. The orchestrator
         # brings Houndarr back up with a clean data_dir and the redirect

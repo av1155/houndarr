@@ -68,7 +68,7 @@ def verify_password(password: str, hashed: str) -> bool:
     """Return True if password matches the bcrypt hash."""
     try:
         return bool(bcrypt.checkpw(password.encode(), hashed.encode()))
-    except Exception:
+    except Exception:  # noqa: BLE001
         return False
 
 

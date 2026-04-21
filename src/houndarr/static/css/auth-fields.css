@@ -16,10 +16,13 @@
   margin-bottom: 6px;
 }
 
-.is-auth .input-wrap {
+/* Generic input-wrap + trailing / leading icon primitives: shared
+   between the auth pages (login / setup) and the Settings > Admin >
+   Security password form so a single auth.js controls both. */
+.input-wrap {
   position: relative;
 }
-.is-auth .input-wrap svg.leading {
+.input-wrap svg.leading {
   position: absolute;
   left: 11px;
   top: 50%;
@@ -28,7 +31,7 @@
   pointer-events: none;
   transition: color var(--dur-base) var(--ease-station);
 }
-.is-auth .input-wrap:focus-within svg.leading {
+.input-wrap:focus-within svg.leading {
   color: var(--color-brand-300);
 }
 
@@ -70,7 +73,7 @@
   box-shadow: 0 0 0 3px rgba(248, 113, 113, 0.16);
 }
 
-.is-auth .input-trailing {
+.input-trailing {
   position: absolute;
   right: 6px;
   top: 50%;
@@ -79,7 +82,7 @@
   align-items: center;
   gap: 4px;
 }
-.is-auth .icon-btn {
+.icon-btn {
   width: 28px;
   height: 28px;
   display: inline-flex;
@@ -94,17 +97,17 @@
     color var(--dur-base) var(--ease-station),
     background var(--dur-base) var(--ease-station);
 }
-.is-auth .icon-btn:hover {
+.icon-btn:hover {
   color: var(--color-brand-300);
   background: rgba(34, 211, 238, 0.08);
 }
-.is-auth .icon-btn:focus-visible {
+.icon-btn:focus-visible {
   outline: none;
   color: var(--color-brand-300);
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-brand-500) 35%, transparent);
 }
 
-.is-auth .caps-badge {
+.caps-badge {
   font-family: var(--font-mono);
   font-size: 9.5px;
   font-weight: 600;
@@ -116,7 +119,7 @@
   border-radius: 2px;
   display: none;
 }
-.is-auth .caps-badge.is-on {
+.caps-badge.is-on {
   display: inline-flex;
 }
 
@@ -139,34 +142,38 @@
   flex: 0 0 auto;
 }
 
-/* ── Strength meter ────────────────────────────────────── */
-.is-auth .strength {
+/* ── Strength meter ──────────────────────────────────────
+   Generic: works for the setup page's new-password field AND the
+   Admin > Security password form.  Scoped container is the auth form
+   on /setup; in Settings the same markup renders inline beside the
+   password input. */
+.strength {
   margin-top: 10px;
   font-family: var(--font-mono);
 }
-.is-auth .strength__track {
+.strength__track {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 4px;
   margin-bottom: 6px;
 }
-.is-auth .strength__seg {
+.strength__seg {
   height: 3px;
   background: var(--color-surface-3);
   border-radius: var(--radius-bar);
   transition: background var(--dur-base) var(--ease-station);
 }
-.is-auth .strength[data-level="1"] .strength__seg:nth-child(-n+1),
-.is-auth .strength[data-level="2"] .strength__seg:nth-child(-n+2) {
+.strength[data-level="1"] .strength__seg:nth-child(-n+1),
+.strength[data-level="2"] .strength__seg:nth-child(-n+2) {
   background: var(--color-danger);
 }
-.is-auth .strength[data-level="3"] .strength__seg:nth-child(-n+3) {
+.strength[data-level="3"] .strength__seg:nth-child(-n+3) {
   background: var(--color-warning);
 }
-.is-auth .strength[data-level="4"] .strength__seg {
+.strength[data-level="4"] .strength__seg {
   background: var(--color-success);
 }
-.is-auth .strength__meta {
+.strength__meta {
   display: flex;
   justify-content: space-between;
   font-size: 10.5px;
@@ -174,18 +181,34 @@
   color: #64748b;
   text-transform: uppercase;
 }
-.is-auth .strength__label {
+.strength__label {
   color: #94a3b8;
 }
-.is-auth .strength[data-level="1"] .strength__label,
-.is-auth .strength[data-level="2"] .strength__label {
+.strength[data-level="1"] .strength__label,
+.strength[data-level="2"] .strength__label {
   color: var(--color-danger);
 }
-.is-auth .strength[data-level="3"] .strength__label {
+.strength[data-level="3"] .strength__label {
   color: var(--color-warning);
 }
-.is-auth .strength[data-level="4"] .strength__label {
+.strength[data-level="4"] .strength__label {
   color: var(--color-success);
+}
+/* Match indicator for the confirm-password row (Admin > Security only;
+   unused on auth pages). ✗ / ✓ glyphs are set by auth.js via
+   textContent + a tone class; colours mirror the strength palette. */
+.pw-match {
+  margin-top: 6px;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: #64748b;
+  min-height: 14px;
+}
+.pw-match.is-match {
+  color: var(--color-success);
+}
+.pw-match.is-mismatch {
+  color: var(--color-danger);
 }
 
 /* ── Submit button ─────────────────────────────────────── */

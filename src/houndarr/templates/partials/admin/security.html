@@ -176,6 +176,7 @@
             placeholder="Repeat new password"
             data-pw-input
             data-pw-confirm="new-password"
+            aria-describedby="pw-match"
             class="station-input has-trailing h-10 px-3 text-sm text-white placeholder:text-slate-600 font-mono"
           />
           <div class="input-trailing">
@@ -200,7 +201,7 @@
             </button>
           </div>
         </div>
-        <p class="pw-match" aria-live="polite">&nbsp;</p>
+        <p id="pw-match" class="pw-match" aria-live="polite">&nbsp;</p>
       </div>
 
       <div class="min-[971px]:col-span-3 flex flex-wrap items-center gap-3 pt-1">

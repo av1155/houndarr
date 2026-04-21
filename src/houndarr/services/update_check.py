@@ -6,20 +6,29 @@ service never reaches out to github.com until an admin flips it on.
 
 Network call reaches a single hard-coded endpoint: the GitHub Releases
 API for the configured ``owner/repo`` (default ``av1155/houndarr``,
-overridable via ``HOUNDARR_UPDATE_CHECK_REPO``). No user-controlled
+overridable via ``HOUNDARR_UPDATE_CHECK_REPO`` and validated against a
+conservative slug regex in :mod:`houndarr.config`). No user-controlled
 URL construction, so there is no SSRF surface. The endpoint
 ``/releases/latest`` already excludes drafts and pre-releases server-
 side, which matches our "stable releases only" product decision.
 
+This service runs **on demand** rather than on a timer. There is no
+scheduled asyncio task; each GET ``/settings/admin/update-check``
+invocation triggered by the Admin > Updates panel's ``hx-trigger="load"``
+calls :func:`get_update_status` which decides whether to hit the wire.
+Admins who never open Settings never cause a request to leave the
+container.
+
 Cache + rate-limit behaviour:
 
-* When disabled (``update_check_enabled == "0"``), the background poll
-  never issues an HTTP request.
-* The background poll honours a ``BACKGROUND_CHECK_INTERVAL`` gap
-  between successful checks; within that window we serve cached state.
-* Manual refresh (``force=True``) always hits the wire. There is no
-  client-side throttle beyond HTMX's ``hx-disable-elt`` on the button,
-  which prevents in-flight double-submission; GitHub's own
+* When disabled (``update_check_enabled == "0"``), :func:`get_update_status`
+  with ``force=False`` short-circuits and never issues an HTTP request.
+* On-demand checks honour a ``BACKGROUND_CHECK_INTERVAL`` gap (24h) between
+  successful checks so repeated Settings renders serve cached state instead
+  of spamming the GitHub API.
+* Manual refresh (``force=True``) bypasses the window and always hits the
+  wire. There is no client-side throttle beyond HTMX's ``hx-disable-elt``
+  on the button, which prevents in-flight double-submission; GitHub's own
   60 req/hr/IP unauthenticated budget is the real ceiling, and the
   ``If-None-Match`` / 304 handshake below keeps it from draining on
   unchanged releases.
@@ -189,10 +198,11 @@ async def load_cached_status() -> UpdateStatus:
 
 
 def _should_fetch(*, last_at: datetime | None) -> bool:
-    """Decide whether the background poll should run right now.
+    """Decide whether an on-demand check should hit the wire right now.
 
     Manual (``force=True``) clicks bypass this entirely and always hit
-    the wire, so only the background cadence needs a window here.
+    the wire, so only the on-demand cadence (debounced by the 24h window)
+    needs a check here.
     """
     if last_at is None:
         return True

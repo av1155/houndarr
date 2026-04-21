@@ -405,6 +405,15 @@ async def active_error_instance_ids() -> set[int]:
     fresh error rows well inside that window. Keeps the common case
     (zero errors) cheap and bounds the cost on installs that bump
     log retention.
+
+    The cutoff is formatted with ``strftime('%Y-%m-%dT%H:%M:%fZ', ...)``
+    so it matches the stored column format exactly. SQLite compares
+    TEXT lexicographically, and ``datetime('now', '-2 days')`` returns
+    a space-separated value; at position 10 of the comparison that
+    space (0x20) sorts below the stored value's 'T' (0x54), which lets
+    same-calendar-day rows older than 48 h slip through the filter.
+    Matching formats makes the comparison a pure ISO-8601 string
+    compare and restores the advertised window.
     """
     sql = """
     SELECT instance_id FROM (
@@ -413,7 +422,7 @@ async def active_error_instance_ids() -> set[int]:
                    PARTITION BY instance_id ORDER BY timestamp DESC
                ) AS rn
         FROM search_log
-        WHERE timestamp >= datetime('now', '-2 days')
+        WHERE timestamp >= strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-2 days')
     )
     WHERE rn = 1 AND action = 'error'
     """

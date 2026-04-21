@@ -59,7 +59,7 @@ body.is-auth > footer {
   font-weight: 700;
   font-size: 1rem;
   letter-spacing: -0.01em;
-  color: #f1f5f9;
+  color: var(--color-text-heading);
 }
 
 /* ── Form shell ────────────────────────────────────────── */
@@ -121,7 +121,7 @@ body.is-auth > footer {
   background: var(--color-danger-bg);
   border-radius: 0 var(--radius-inset) var(--radius-inset) 0;
   font-size: 0.8125rem;
-  color: #fecaca;
+  color: var(--color-danger-text);
   line-height: 1.45;
 }
 .is-auth .auth-alert svg {

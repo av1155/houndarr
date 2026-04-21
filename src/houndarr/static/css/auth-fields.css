@@ -27,7 +27,7 @@
   left: 0.6875rem;
   top: 50%;
   transform: translateY(-50%);
-  color: #475569;
+  color: var(--color-text-subtle);
   pointer-events: none;
   transition: color var(--dur-base) var(--ease-station);
 }
@@ -78,7 +78,7 @@
   outline: none;
   border-color: color-mix(in srgb, var(--color-brand-400) 70%, transparent);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-brand-500) 25%, transparent);
-  background: #0f1521;
+  background: var(--color-surface-1);
 }
 .is-auth .auth-form .station-input[aria-invalid="true"] {
   border-color: var(--color-danger);
@@ -103,7 +103,7 @@
   background: transparent;
   border: 0;
   border-radius: 3px;
-  color: #64748b;
+  color: var(--color-text-subtle);
   cursor: pointer;
   transition:
     color var(--dur-base) var(--ease-station),

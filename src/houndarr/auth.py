@@ -243,6 +243,20 @@ async def set_password(password: str) -> None:
     _setup_complete = True
 
 
+async def rotate_session_secret() -> None:
+    """Regenerate the session signing secret and drop the serializer cache.
+
+    Every cookie signed with the previous secret fails signature verification
+    afterwards, so a stolen cookie cannot outlive a password change. The
+    caller is responsible for issuing the current admin a fresh
+    :func:`create_session` cookie on the outgoing response so the password
+    change does not also sign them out of the tab they made it from.
+    """
+    global _serializer  # noqa: PLW0603
+    await set_setting("session_secret", os.urandom(32).hex())
+    _serializer = None
+
+
 def normalize_username(username: str) -> str:
     """Return a normalized username for storage and comparison."""
     return username.strip().lower()

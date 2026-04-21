@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import html
+import logging
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated
@@ -12,7 +13,17 @@ from fastapi.responses import HTMLResponse, Response
 from fastapi.templating import Jinja2Templates
 
 from houndarr import __version__
-from houndarr.auth import check_password, resolve_signed_in_as, set_password
+from houndarr.auth import (
+    _client_ip,
+    check_login_rate_limit,
+    check_password,
+    clear_login_attempts,
+    create_session,
+    record_failed_login,
+    resolve_signed_in_as,
+    rotate_session_secret,
+    set_password,
+)
 from houndarr.clients.base import ArrClient
 from houndarr.clients.lidarr import LidarrClient
 from houndarr.clients.radarr import RadarrClient
@@ -66,6 +77,8 @@ from houndarr.services.time_window import (
     validate_allowed_time_window,
 )
 from houndarr.services.url_validation import validate_instance_url
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -416,7 +429,21 @@ async def account_password_update(
     new_password_confirm: Annotated[str, Form()],
 ) -> HTMLResponse:
     """Update admin password from the settings page."""
+    # Rate limit: the same IP-scoped bucket that guards /login, so a stolen
+    # session cannot brute-force the current password through this endpoint.
+    if not check_login_rate_limit(request):
+        return await _render_settings_page(
+            request,
+            status_code=429,
+            account_error="Too many password attempts. Try again in a minute.",
+        )
+
     if not await check_password(current_password):
+        record_failed_login(request)
+        logger.warning(
+            "Password change rejected: incorrect current_password from %s",
+            _client_ip(request),
+        )
         return await _render_settings_page(
             request,
             status_code=422,
@@ -445,10 +472,18 @@ async def account_password_update(
         )
 
     await set_password(new_password)
-    return await _render_settings_page(
+    clear_login_attempts(request)
+    # Rotate the session-signing secret so any previously issued cookie
+    # (stolen or otherwise) stops validating. The current admin still
+    # expects to stay signed in on the tab they made the change from, so
+    # re-issue a session cookie on the outgoing response.
+    await rotate_session_secret()
+    response = await _render_settings_page(
         request,
         account_success="Password updated successfully.",
     )
+    await create_session(response)
+    return response
 
 
 # ---------------------------------------------------------------------------

@@ -717,7 +717,11 @@ function initSettingsPage() {
     /* Intercept the confirm-go submit when a custom callback is queued
        (generic hx-confirm flow). The admin reset flow leaves
        pendingCustomConfirm null, so the form submits via hx-post as
-       before and this handler is a no-op. */
+       before and this handler is a no-op. The dialog's DOM node is
+       replaced on every HTMX swap into Settings (GC handles teardown),
+       but we still bind with { signal } for consistency with the rest
+       of this module and to be safe if the dialog ever becomes
+       persistent. */
     confirmGo.addEventListener('click', (event) => {
       if (!pendingCustomConfirm) return;
       event.preventDefault();
@@ -725,7 +729,7 @@ function initSettingsPage() {
       pendingCustomConfirm = null;
       close();
       cb();
-    });
+    }, { signal });
 
     document.body.addEventListener('click', (event) => {
       const openBtn = event.target.closest('[data-confirm-reset]');
@@ -768,10 +772,11 @@ function initSettingsPage() {
     }, { signal });
 
     // Typed phrase gating: enable Confirm only when the phrase matches.
+    // Same rationale as the confirmGo click listener above for { signal }.
     if (phraseInput) {
       phraseInput.addEventListener('input', () => {
         confirmGo.disabled = phraseInput.value.trim() !== FACTORY_PHRASE;
-      });
+      }, { signal });
     }
 
     document.addEventListener('keydown', (event) => {

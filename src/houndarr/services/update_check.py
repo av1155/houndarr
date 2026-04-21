@@ -233,12 +233,26 @@ async def _fetch(
         response = await client.get(url, headers=headers)
 
     remaining = response.headers.get("x-ratelimit-remaining")
+    reset_epoch = response.headers.get("x-ratelimit-reset")
     if remaining is not None:
         try:
             if int(remaining) < 10:
+                # Include the reset timestamp so operators know how long
+                # the budget is constrained. The 304 handshake means a
+                # normal install rarely touches this path; when it does,
+                # the log line should be actionable without a second lookup.
+                try:
+                    reset_iso = (
+                        datetime.fromtimestamp(int(reset_epoch), tz=UTC).isoformat()
+                        if reset_epoch is not None
+                        else "unknown"
+                    )
+                except (ValueError, OverflowError, OSError):
+                    reset_iso = "unknown"
                 logger.warning(
-                    "GitHub rate-limit budget is low (remaining=%s) for update check",
+                    "GitHub rate-limit budget is low for update check (remaining=%s reset_at=%s)",
                     remaining,
+                    reset_iso,
                 )
         except ValueError:
             pass

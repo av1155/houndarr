@@ -128,8 +128,10 @@ def _parse_update_check_repo(raw: str) -> str:
     The value is interpolated into ``https://api.github.com/repos/{repo}/...``
     so the GitHub URL parser already keeps the host pinned. This guard is
     defence in depth: catch typos (missing slash, accidental query strings)
-    at startup and log a warning instead of letting a garbled request hit
-    the GitHub API.
+    when :func:`get_settings` first constructs ``AppSettings`` (the CLI
+    entry point in ``houndarr.__main__`` does this once at boot and
+    caches the result in ``_runtime_settings``), and log a warning
+    instead of letting a garbled request hit the GitHub API.
     """
     value = raw.strip()
     if not value:

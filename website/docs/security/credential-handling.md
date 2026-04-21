@@ -110,7 +110,19 @@ hours, enforced server-side.
 **Login rate limiting.** 5 failed attempts per IP per 60-second
 sliding window. After that, further attempts return HTTP 429. Error
 messages are generic and never reveal whether the username or
-password was the wrong part.
+password was the wrong part. The same IP bucket also guards the
+post-auth password endpoints (`POST /settings/account/password`
+and `POST /settings/admin/factory-reset`), so a stolen session
+cookie cannot brute-force the current password through those
+surfaces either.
+
+**Password rotation.** Changing the admin password rotates the
+session signing secret. Every cookie signed with the previous
+secret stops validating, so any session the admin wants to revoke
+(another tab, another device, a suspected theft) is invalidated
+by the password change itself. The tab that made the change is
+reissued a fresh cookie and reloaded automatically so it stays
+signed in without a manual refresh.
 
 **X-Forwarded-For.** Honored only when the connecting IP is listed
 in `HOUNDARR_TRUSTED_PROXIES`. With no trusted proxies configured

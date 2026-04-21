@@ -420,10 +420,10 @@ function initSettingsPage() {
             setAddInstanceModalChrome(modalForm.dataset.formMode, modalForm.dataset.instanceName);
           }
 
-          const firstInput = addInstanceModalContent.querySelector('input:not([type="hidden"]), select, textarea, button');
-          if (firstInput) {
-            firstInput.focus();
-          }
+          // Intentionally no auto-focus on the Name input. The dialog's
+          // close button carries `autofocus` so the browser still has a
+          // safe keyboard landing spot without stealing focus into a
+          // text field the user may not want to type in.
           syncAddInstancePlaceholders();
           syncAppOnlyControls();
 

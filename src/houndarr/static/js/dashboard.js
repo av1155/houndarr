@@ -93,7 +93,7 @@ function initDashboardPage() {
       }, waitForMin);
     }
 
-    // ── Renderers: top-of-page sections (PR 2 redesign) ────────────────
+    // Top-of-page renderers.
     //
     // These take the /api/status?v=2 envelope and emit HTML strings for
     // the four top-of-page widgets plus the section heading.  All
@@ -350,7 +350,7 @@ function initDashboardPage() {
       ].join('');
     }
 
-    // ── Instance card renderer (PR 3) ──────────────────────────────────
+    // Instance card renderer.
 
     function formatTimeUntil(iso) {
       if (!iso) return '';
@@ -648,7 +648,7 @@ function initDashboardPage() {
           return;
         }
 
-        // ── Instance cards (PR 3 redesign) ─────────────────────────────
+        // Render one card per instance; escHtml is applied inside renderCard.
         const cards = instances.map(renderCard).join('');
         evt.detail.serverResponse = `<div class="dash-grid">${cards}</div>`;
       },

@@ -453,9 +453,9 @@ function initSettingsPage() {
     );
   })();
 
-  /* ── Admin dropdown collapse + confirm-dialog wiring ─────────
-     Ported from the design's settings-redesign.js, trimmed for this
-     production surface (no tweaks panel, no legacy layout swap). */
+  /* Admin dropdown: collapse + expand animation, plus confirm-dialog
+     wiring for destructive actions inside the dropdown. Animation falls
+     back to an instant toggle when prefers-reduced-motion is set. */
   (function () {
     const panel = document.getElementById('admin-grouped');
     const body = document.getElementById('admin-body');

@@ -4,12 +4,19 @@
 /* Design tokens live in tokens.css; this file consumes them.                 */
 /* ─────────────────────────────────────────────────────────────────────────── */
 
-/* ── Scrollbar gutter ─────────────────────────────────────────────────────
-   `stable` (not `both-edges`) avoids a known Chromium bug and keeps the
-   reserved strip on the inline-end edge only. The atmosphere painted on
-   <html> below fills that strip so it never reads as an empty gap. */
-html {
-  scrollbar-gutter: stable;
+/* Native scrollbar hidden on every element across every engine. Applied
+   universally because `scrollbar-width` is not inherited (per MDN): only
+   the root-element value propagates to the viewport, so inner scrollable
+   surfaces (modals, logs table) default to `auto` and render a classic
+   scrollbar on Chromium when macOS "Show scroll bars" is set to Always,
+   which reserves space and shifts content. The `::-webkit-scrollbar`
+   rule further down is a belt-and-suspenders fallback for engines that
+   don't honor the standard property yet. `.hx-scrollbar` provides the
+   visual affordance so accessibility isn't lost. */
+*,
+*::before,
+*::after {
+  scrollbar-width: none;
 }
 
 /* ── Global content scale ────────────────────────────────────────────────
@@ -27,17 +34,15 @@ html {
   font-size: 110%;
 }
 
-/* ── Atmosphere painted on <html> ─────────────────────────────────────────
-   CSS Backgrounds Level 3: the root element's background paints the
-   canvas, which includes the area reserved by `scrollbar-gutter`. Keeping
-   the gradient on body left the gutter unpainted and the viewport edges
-   visibly stopped short; moving it to html fixes that while the sticky
-   nav and content stay within body's width. `background-attachment: fixed`
-   locks the gradient to the viewport across scroll. */
+/* Atmosphere lives on <html> so CSS Backgrounds 3 canvas propagation
+   extends it across the full viewport. Kept off a fixed pseudo because
+   WebKit clips fixed-position painting to the root box even with
+   width: 100vw. `background-attachment: fixed` is deliberately omitted:
+   WebKit/Chromium clip fixed-attached layers to the element box, which
+   undoes the canvas propagation we need. */
 html {
   background-color: var(--color-base);
   background-repeat: no-repeat;
-  background-attachment: fixed;
   background-image:
     radial-gradient(ellipse 55% 40% at 0% 0%,    rgba(6, 182, 212, 0.055) 0%, transparent 60%),
     radial-gradient(ellipse 40% 30% at 100% 100%, rgba(14, 116, 144, 0.030) 0%, transparent 55%),
@@ -50,7 +55,7 @@ html {
     );
 }
 
-/* Auth pages (login/setup) swap to a centered radial vignette; no stripes. */
+/* Auth pages swap the stripe atmosphere for a centered vignette. */
 html:has(body.is-auth) {
   background-image:
     radial-gradient(
@@ -62,28 +67,54 @@ html:has(body.is-auth) {
     );
 }
 
-/* Body stays transparent so html's atmosphere shows through every page. */
+/* Transparent so the canvas-propagated html atmosphere shows through. */
 body {
   background: transparent;
 }
 
-/* ── Scrollbar ──────────────────────────────────────────────────────────── */
+/* Paired with `scrollbar-width: none` on html; applies to every scrollable
+   element so nothing paints a scrollbar column. */
 ::-webkit-scrollbar {
+  display: none;
+}
+
+/* Custom overlay thumb. JS (app.js) sizes + positions it against window
+   scroll and toggles `.is-visible`. Fixed position means it never
+   reserves layout space, so no shift between pages that overflow and
+   pages that don't. */
+.hx-scrollbar {
+  position: fixed;
+  top: 0;
+  right: 2px;
+  bottom: 0;
   width: 6px;
-  height: 6px;
+  z-index: 60;
+  pointer-events: none;
+  opacity: 0;
+  /* Asymmetric: quick appearance on user scroll, slow melt on idle. */
+  transition: opacity 420ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-::-webkit-scrollbar-track {
-  background: var(--color-surface-1);
+.hx-scrollbar.is-visible {
+  opacity: 1;
+  transition: opacity 160ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-::-webkit-scrollbar-thumb {
+.hx-scrollbar__thumb {
+  position: absolute;
+  right: 0;
+  width: 6px;
+  min-height: 2rem;
   background: var(--color-border-default);
   border-radius: var(--radius-chip);
+  transform: translateY(0);
+  will-change: transform;
 }
 
-::-webkit-scrollbar-thumb:hover {
-  background: var(--color-border-strong);
+@media (prefers-reduced-motion: reduce) {
+  .hx-scrollbar {
+    transition: none;
+  }
 }
 
 /* ── Mobile nav backdrop ────────────────────────────────────────────────── */

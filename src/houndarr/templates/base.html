@@ -128,6 +128,12 @@
   <div id="mobile-nav-backdrop" class="sm:hidden fixed inset-0 z-40 mobile-nav-backdrop" aria-hidden="true"></div>
   {% endif %}
 
+  {# Custom overlay thumb driven by app.js; replaces the hidden native
+     scrollbar (see app.css for why native is hidden). #}
+  <div class="hx-scrollbar" aria-hidden="true">
+    <div class="hx-scrollbar__thumb"></div>
+  </div>
+
   <!-- Flash messages: Station left-border style -->
   {% if flash_error %}
   <div id="flash-error"

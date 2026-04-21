@@ -741,7 +741,10 @@ function initSettingsPage() {
 
     /* Route `hx-confirm` through the shared dialog so every destructive
        HTMX action (Delete instance, etc.) gets the Station confirm UI
-       instead of the native browser prompt. */
+       instead of the native browser prompt. The { signal } options
+       argument on addEventListener is what aborts the previous binding
+       on the next initSettingsPage() re-run; without it every HTMX swap
+       into Settings would leak a fresh handler onto document.body. */
     document.body.addEventListener('htmx:confirm', (evt) => {
       if (!evt.detail || !evt.detail.question) return;
       evt.preventDefault();
@@ -761,8 +764,8 @@ function initSettingsPage() {
           elt.getAttribute('data-confirm-tone') ||
           (isDestructive ? 'danger' : 'neutral'),
         onConfirm: () => evt.detail.issueRequest(true),
-      }, { signal });
-    });
+      });
+    }, { signal });
 
     // Typed phrase gating: enable Confirm only when the phrase matches.
     if (phraseInput) {

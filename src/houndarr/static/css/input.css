@@ -188,10 +188,27 @@
    over any layered styles by spec). */
 
 /* Let per-use py-* utilities determine button height; daisyUI's
-   height: 2.5rem would otherwise pin every button to 40px tall. */
+   height: 2.5rem would otherwise pin every button to 40px tall. The
+   medium font-weight (500) matches the .station-button baseline the
+   app used before daisyUI; explicit font-semibold utilities in the
+   templates still override for CTAs that want the heavier weight. */
 .btn {
   height: auto;
   min-height: 0;
+  font-weight: 500;
+}
+
+/* Station's primary button brightens on hover (brand-600 → brand-500)
+   rather than daisyUI's default darken. Preserve that direction so the
+   interaction reads the same as every other cyan-tinted affordance in
+   the Station system. */
+.btn-primary {
+  background-color: var(--color-brand-600);
+  border-color: var(--color-brand-500);
+}
+.btn-primary:hover:not(:disabled) {
+  background-color: var(--color-brand-500);
+  border-color: var(--color-brand-400);
 }
 
 /* Station badges: chip-radius (3px), monospace, tight padding. */

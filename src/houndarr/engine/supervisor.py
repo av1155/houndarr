@@ -160,6 +160,16 @@ class Supervisor:
         )
         task.add_done_callback(partial(self._on_scheduled_task_done, instance_id))
         self._tasks[instance_id] = task
+
+        # Kick off an immediate one-shot snapshot refresh so a freshly-
+        # added or re-enabled instance's dashboard counters (monitored /
+        # unreleased) populate right away instead of sitting at zero for
+        # up to 10 minutes waiting on the scheduled refresh loop.
+        asyncio.create_task(  # noqa: RUF006
+            self._refresh_one_snapshot(current),
+            name=f"snapshot-prime-{instance_id}",
+        )
+
         logger.info("Supervisor: started task for instance %r (id=%d)", current.name, current.id)
         return True
 
@@ -372,6 +382,36 @@ class Supervisor:
             except asyncio.CancelledError:
                 raise
 
+    async def _refresh_one_snapshot(self, instance: Instance) -> None:
+        """Refresh snapshot columns for a single enabled instance.
+
+        Shared between the scheduled refresh loop and the one-shot prime
+        fired on ``start_instance_task`` so a freshly-added instance's
+        dashboard counters land in the next status poll instead of
+        sitting at zero until the 10-minute loop wakes. Skips disabled
+        instances and treats transport errors as soft failures.
+        """
+        if not instance.enabled:
+            return
+        lock = self._run_locks.setdefault(instance.id, asyncio.Lock())
+        async with lock:
+            try:
+                adapter = get_adapter(instance.type)
+                async with adapter.make_client(instance) as client:
+                    snap = await client.get_instance_snapshot()
+                await update_instance_snapshot(
+                    instance.id,
+                    monitored_total=snap.monitored_total,
+                    unreleased_count=snap.unreleased_count,
+                )
+            except httpx.TransportError:
+                logger.debug(
+                    "Supervisor: snapshot refresh skipped for %r; instance unreachable",
+                    instance.name,
+                )
+            except Exception:  # noqa: BLE001
+                logger.exception("Supervisor: snapshot refresh failed for %r", instance.name)
+
     async def _refresh_all_snapshots_once(self) -> None:
         """Refresh the snapshot columns for every enabled instance once.
 
@@ -381,26 +421,7 @@ class Supervisor:
         """
         instances = await list_instances(master_key=self._master_key)
         for inst in instances:
-            if not inst.enabled:
-                continue
-            lock = self._run_locks.setdefault(inst.id, asyncio.Lock())
-            async with lock:
-                try:
-                    adapter = get_adapter(inst.type)
-                    async with adapter.make_client(inst) as client:
-                        snap = await client.get_instance_snapshot()
-                    await update_instance_snapshot(
-                        inst.id,
-                        monitored_total=snap.monitored_total,
-                        unreleased_count=snap.unreleased_count,
-                    )
-                except httpx.TransportError:
-                    logger.debug(
-                        "Supervisor: snapshot refresh skipped for %r; instance unreachable",
-                        inst.name,
-                    )
-                except Exception:  # noqa: BLE001
-                    logger.exception("Supervisor: snapshot refresh failed for %r", inst.name)
+            await self._refresh_one_snapshot(inst)
 
     def _on_scheduled_task_done(self, instance_id: int, task: asyncio.Task[None]) -> None:
         """Remove finished scheduled task references."""

@@ -471,8 +471,12 @@ async def account_password_update(
             account_error="New password must be different from current password.",
         )
 
-    await set_password(new_password)
+    # Clear the failed-attempt bucket on a successful credential check
+    # before the persistence step so a transient DB error in set_password
+    # doesn't leave the counter inflated against the admin who just
+    # entered the right password.
     clear_login_attempts(request)
+    await set_password(new_password)
     # Rotate the session-signing secret so any previously issued cookie
     # (stolen or otherwise) stops validating. The current admin still
     # expects to stay signed in on the tab they made the change from, so
@@ -483,6 +487,15 @@ async def account_password_update(
         account_success="Password updated successfully.",
     )
     await create_session(response)
+    # The response body was rendered from the incoming (pre-rotation)
+    # cookies, so every hidden csrf_token input and the body-level
+    # hx-headers attribute stamped by app.js at initial page load are
+    # stale relative to the cookies we just issued. Force a full reload so
+    # HTMX re-stamps hx-headers from the fresh cookie and every form
+    # renders with the new csrf_token; without this, the next mutating
+    # HTMX request from the tab would 403 until the admin manually
+    # refreshed.
+    response.headers["HX-Refresh"] = "true"
     return response
 
 

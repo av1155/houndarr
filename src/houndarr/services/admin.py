@@ -237,6 +237,17 @@ async def factory_reset(*, app: FastAPI, data_dir: str) -> None:
         new_supervisor = Supervisor(master_key=new_key)
         await new_supervisor.start()
         app.state.supervisor = new_supervisor
+        # Respawn the log-retention loop we cancelled above. Without this,
+        # an operator who stays in the same container process after the
+        # reset gets unbounded search_log growth until the next restart.
+        # Lazy import avoids a circular dependency: houndarr.app imports
+        # this module's siblings during router registration.
+        from houndarr.app import _periodic_log_retention
+
+        app.state.retention_task = asyncio.create_task(
+            _periodic_log_retention(),
+            name="log-retention-loop",
+        )
     except Exception:
         logger.exception("Factory reset: in-process re-init failed; writing sentinel for next boot")
         try:

@@ -81,8 +81,12 @@
         </div>
         {% else %}
         <div id="confirm-second-factor" class="hidden mt-3">
-          <label for="confirm-password-input" class="block text-xs font-medium text-slate-400 mb-1.5">
-            Current password
+          <label
+            class="flex items-center justify-between gap-2 text-xs font-medium text-slate-400 mb-1.5"
+            for="confirm-password-input"
+          >
+            <span>Current password</span>
+            <span class="caps-badge" aria-live="polite">Caps Lock</span>
           </label>
           <div class="input-wrap">
             <input
@@ -91,16 +95,16 @@
               type="password"
               autocomplete="current-password"
               data-pw-input
-              class="station-input has-trailing h-10 px-3 text-sm text-white"
+              class="station-input has-trailing h-10 px-3 text-sm text-white font-mono"
             />
             <div class="input-trailing">
-              <span class="caps-badge" aria-hidden="true">Caps</span>
               <button
                 type="button"
                 class="icon-btn"
                 data-pw-toggle
                 aria-label="Show password"
                 aria-pressed="false"
+                tabindex="-1"
               >
                 <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
                   <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/>

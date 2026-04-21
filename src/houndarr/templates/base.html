@@ -145,6 +145,13 @@
   <!-- HTMX -->
   <script src="https://unpkg.com/htmx.org@2.0.4/dist/htmx.min.js" defer></script>
   <link rel="stylesheet" href="/static/css/app.css?v={{ version }}" />
+  {# Password-form primitives (strength meter, caps badge, show/hide).
+     Auth pages load this from their own templates (the nav shell is off
+     there); elsewhere ship it from base so Admin > Security shares the
+     same look as /login and /setup. #}
+  {% if show_nav is not defined or show_nav %}
+  <link rel="stylesheet" href="/static/css/auth-fields.css?v={{ version }}" />
+  {% endif %}
 
   <!-- Client helpers: defined early so page scripts can use them on first load -->
   <script>

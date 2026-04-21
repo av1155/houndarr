@@ -56,6 +56,12 @@
 .is-auth .auth-form .station-input.has-trailing {
   padding-right: 44px;
 }
+/* Generic has-trailing for password forms outside the auth card (e.g.
+   Admin > Security). Adds room for the eye-toggle + caps badge so the
+   input text does not slide under them. */
+.station-input.has-trailing {
+  padding-right: 44px;
+}
 .is-auth .auth-form .station-input::placeholder {
   color: #475569;
 }

@@ -27,9 +27,23 @@
   }
 
   function initCapsBadge(input) {
-    var wrap = input.closest('.input-wrap');
-    if (!wrap) return;
-    var badge = wrap.querySelector('.caps-badge');
+    // The caps-badge lives in one of two places depending on the form:
+    //   1. Inside the .input-wrap container (legacy auth layout).
+    //   2. Inside the .field container alongside the label (setup.html
+    //      and Admin > Security both follow this pattern; placing the
+    //      badge in the label keeps the input's trailing-icon area
+    //      uncluttered on narrow viewports).
+    // Walk outward from the input, scoping by .field so a badge in a
+    // neighbouring field does not flicker when this input is focused.
+    var field = input.closest('.field');
+    var badge = null;
+    if (field) {
+      badge = field.querySelector('.caps-badge');
+    }
+    if (!badge) {
+      var wrap = input.closest('.input-wrap');
+      if (wrap) badge = wrap.querySelector('.caps-badge');
+    }
     if (!badge) return;
     var update = function (e) {
       if (!e.getModifierState) return;

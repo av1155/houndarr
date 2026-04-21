@@ -35,6 +35,19 @@ body.is-auth > footer {
   }
 }
 
+/* Sign-in card sits a touch above vertical center so the shorter login
+ * form does not read as bottom-heavy against the radial vignette. Setup
+ * is left centered because the extra fields already fill the composition. */
+.is-auth .auth-card--login {
+  transform: translateY(-5vh);
+}
+
+@media (max-height: 640px) {
+  .is-auth .auth-card--login {
+    transform: none;
+  }
+}
+
 .is-auth .auth-card__topbar {
   display: flex;
   align-items: center;

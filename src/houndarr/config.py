@@ -40,6 +40,7 @@ from __future__ import annotations
 import ipaddress
 import logging
 import os
+import re
 from dataclasses import dataclass, field
 from ipaddress import IPv4Address, IPv4Network, IPv6Address, IPv6Network
 from pathlib import Path
@@ -150,6 +151,34 @@ def _parse_bool_env(name: str, default: bool = False) -> bool:
     if raw in ("0", "false", "no"):
         return False
     return default
+
+
+_DEFAULT_UPDATE_CHECK_REPO = "av1155/houndarr"
+_UPDATE_CHECK_REPO_RE = re.compile(r"^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$")
+
+
+def _parse_update_check_repo(raw: str) -> str:
+    """Validate HOUNDARR_UPDATE_CHECK_REPO; fall back to the default on junk.
+
+    The value is interpolated into ``https://api.github.com/repos/{repo}/...``
+    so the GitHub URL parser already keeps the host pinned. This guard is
+    defence in depth: catch typos (missing slash, accidental query strings)
+    when :func:`get_settings` first constructs ``AppSettings`` (the CLI
+    entry point in ``houndarr.__main__`` does this once at boot and
+    caches the result in ``_runtime_settings``), and log a warning
+    instead of letting a garbled request hit the GitHub API.
+    """
+    value = raw.strip()
+    if not value:
+        return _DEFAULT_UPDATE_CHECK_REPO
+    if not _UPDATE_CHECK_REPO_RE.match(value):
+        logger.warning(
+            "HOUNDARR_UPDATE_CHECK_REPO=%r is not a valid owner/repo slug; falling back to %r",
+            value,
+            _DEFAULT_UPDATE_CHECK_REPO,
+        )
+        return _DEFAULT_UPDATE_CHECK_REPO
+    return value
 
 
 def get_settings() -> AppSettings:

@@ -24,6 +24,67 @@
    explicit source so the build never misses Jinja partials. */
 @source "../../templates";
 
+/* daisyUI v5 component plugin. Runs at Tailwind build time; nothing
+   ships to the browser except compiled CSS. themes: false disables
+   the built-in theme set because we define our own "station" theme
+   below — having both would inflate the bundle with unused OKLCH
+   palettes. */
+@plugin "daisyui" {
+  themes: false;
+}
+
+/* Station theme — maps daisyUI's semantic slots to Houndarr's palette.
+   Kept in parity with tokens.css (source of truth for design decisions)
+   and @theme above (Tailwind utility generation). Component radii use
+   the existing 3-tier Station radius tokens so daisyUI buttons, inputs,
+   and cards match the rest of the app. */
+@plugin "daisyui/theme" {
+  name: "station";
+  default: true;
+  prefersdark: true;
+  color-scheme: dark;
+
+  /* Surfaces (dark-first) */
+  --color-base-100: #07080f;
+  --color-base-200: #0e1117;
+  --color-base-300: #151b27;
+  --color-base-content: #e2e8f0;
+
+  /* Brand primary = Station cyan */
+  --color-primary: #06b6d4;
+  --color-primary-content: #ffffff;
+  --color-secondary: #22d3ee;
+  --color-secondary-content: #07080f;
+  --color-accent: #67e8f9;
+  --color-accent-content: #07080f;
+
+  /* Neutral bg for subdued controls */
+  --color-neutral: #151b27;
+  --color-neutral-content: #cbd5e1;
+
+  /* Semantic states (match --color-* tokens in tokens.css) */
+  --color-info: #67e8f9;
+  --color-info-content: #07080f;
+  --color-success: #4ade80;
+  --color-success-content: #07080f;
+  --color-warning: #fbbf24;
+  --color-warning-content: #07080f;
+  --color-error: #f87171;
+  --color-error-content: #07080f;
+
+  /* Radii — three-tier Station scale */
+  --radius-selector: 9999px;  /* pill badges + toggles */
+  --radius-field:    4px;      /* inputs, buttons */
+  --radius-box:      6px;      /* cards, modals */
+
+  /* Sizing / borders / depth */
+  --size-selector: 0.25rem;
+  --size-field:    0.25rem;
+  --border:        1px;
+  --depth:         0;
+  --noise:         0;
+}
+
 @theme {
   /* ── Brand palette (refined Station cyan) ─────────────────────────── */
   --color-brand-50:  #ecfeff;

@@ -9,6 +9,7 @@
   },
   "devDependencies": {
     "@tailwindcss/cli": "^4.0.0",
+    "daisyui": "^5.5.19",
     "tailwindcss": "^4.0.0"
   },
   "pnpm": {

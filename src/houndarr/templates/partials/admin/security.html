@@ -191,7 +191,7 @@
       <div class="min-[971px]:col-span-3 flex flex-wrap items-center gap-3 pt-1">
         <button
           type="submit"
-          class="station-button station-button--primary px-4 py-2 text-sm font-semibold font-sans focus:outline-none focus:ring-2 focus:ring-brand-400/35"
+          class="btn btn-primary px-4 py-2 text-sm font-semibold font-sans focus:outline-none focus:ring-2 focus:ring-brand-400/35"
         >
           Update Password
         </button>
@@ -200,14 +200,14 @@
 
       {% if account_error is defined and account_error %}
       <div
-        class="min-[971px]:col-span-3 border-l-4 border-danger bg-danger-bg rounded-r-inset px-3 py-2 text-sm text-danger font-sans"
+        class="min-[971px]:col-span-3 alert alert-soft alert-error text-sm font-sans"
       >
         {{ account_error }}
       </div>
       {% endif %}
       {% if account_success is defined and account_success %}
       <div
-        class="min-[971px]:col-span-3 border-l-4 border-success bg-success-bg rounded-r-inset px-3 py-2 text-sm text-success font-sans"
+        class="min-[971px]:col-span-3 alert alert-soft alert-success text-sm font-sans"
       >
         {{ account_success }}
       </div>

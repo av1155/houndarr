@@ -481,7 +481,7 @@
 </div>
 
 {% if error is defined and error %}
-<div class="mb-4 border-l-4 border-danger bg-danger-bg text-danger rounded-r-inset px-4 py-3 text-sm font-sans">
+<div class="mb-4 alert alert-soft alert-error text-sm font-sans">
   {{ error }}
 </div>
 {% endif %}
@@ -496,7 +496,7 @@
         hx-target="#app-content"
         hx-swap="innerHTML"
         hx-push-url="true"
-        class="station-button station-button--secondary px-3 py-1.5 text-sm font-medium font-sans"
+        class="btn btn-soft btn-neutral px-3 py-1.5 text-sm font-medium font-sans"
       >
         Settings Guide
       </a>
@@ -507,7 +507,7 @@
         hx-target="#add-instance-modal-content"
         hx-swap="innerHTML"
         id="add-instance-btn"
-        class="station-button station-button--primary px-3 py-1.5 text-sm font-medium font-sans"
+        class="btn btn-primary px-3 py-1.5 text-sm font-medium font-sans"
       >
         + Add Instance
       </button>
@@ -1259,12 +1259,12 @@
         iconEl.className =
           'w-9 h-9 rounded-inset grid place-items-center bg-danger-bg border border-danger-border text-danger shrink-0';
         confirmGo.className =
-          'station-button station-button--danger px-3 py-2 text-sm font-medium';
+          'btn btn-soft btn-error px-3 py-2 text-sm font-medium';
       } else {
         iconEl.className =
           'w-9 h-9 rounded-inset grid place-items-center bg-surface-2 border border-border-default text-slate-300 shrink-0';
         confirmGo.className =
-          'station-button station-button--primary px-3 py-2 text-sm font-medium';
+          'btn btn-primary px-3 py-2 text-sm font-medium';
       }
     }
 

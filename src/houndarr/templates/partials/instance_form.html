@@ -21,7 +21,7 @@
 
 <div id="{{ 'edit-instance-form-shell-' ~ instance.core.id if is_edit else 'add-instance-form-shell' }}">
   {% if error is defined and error %}
-  <div class="mb-3 border-l-4 border-red-500 bg-red-950/30 text-red-300 rounded-r-lg px-3 py-2 text-sm">
+  <div class="mb-3 alert alert-soft alert-error text-sm">
     {{ error }}
   </div>
   {% endif %}
@@ -375,26 +375,26 @@
                 hx-include="#{{ form_id }} [name='type'],#{{ form_id }} [name='url'],#{{ form_id }} [name='api_key']{% if is_edit %},#{{ form_id }} [name='instance_id']{% endif %}"
                 hx-target="#instance-connection-status"
                 hx-swap="innerHTML"
-                class="px-4 py-2.5 rounded-lg border border-[#2a3448] bg-[#151b27] hover:bg-[#1e2638] text-slate-200 text-sm font-medium transition-colors sm:w-[10.5rem]">
+                class="btn btn-soft btn-neutral px-4 py-2.5 text-sm font-medium sm:w-[10.5rem]">
           Test Connection
         </button>
         <button type="button"
                 id="instance-reset-btn"
                 data-reset-instance-form="true"
-                class="px-4 py-2.5 rounded-lg border border-[#2a3448] bg-[#151b27] hover:bg-[#1e2638] text-slate-200 text-sm font-medium transition-colors sm:w-[10.5rem]">
+                class="btn btn-soft btn-neutral px-4 py-2.5 text-sm font-medium sm:w-[10.5rem]">
           Reset to Defaults
         </button>
         <button id="instance-submit-btn"
                 type="submit"
                 disabled
-                class="col-span-2 sm:col-auto px-4 py-2.5 rounded-lg bg-brand-500 text-white text-sm font-semibold transition-colors
-                       disabled:cursor-not-allowed disabled:opacity-40 hover:enabled:bg-brand-400
+                class="btn btn-primary col-span-2 sm:col-auto px-4 py-2.5 text-sm font-semibold
+                       disabled:cursor-not-allowed disabled:opacity-40
                        focus:outline-none focus:ring-2 focus:ring-brand-500/35">
           {{ 'Save Changes' if is_edit else 'Add Instance' }}
         </button>
         <button type="button"
                 data-close-add-instance-modal="true"
-                class="col-span-2 sm:col-auto px-4 py-2.5 rounded-lg border border-[#2a3448] bg-[#0e1117] hover:bg-[#151b27] text-slate-300 text-sm font-medium transition-colors">
+                class="btn btn-soft btn-neutral col-span-2 sm:col-auto px-4 py-2.5 text-sm font-medium">
           Cancel
         </button>
       </div>

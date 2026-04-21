@@ -42,13 +42,13 @@
     {# Action badge #}
     <td class="px-3 py-2.5" data-col="action">
       {% if row.action == "searched" %}
-        <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium font-mono bg-emerald-950/50 text-emerald-300 border border-emerald-900/40">searched</span>
+        <span class="badge badge-soft badge-success">searched</span>
       {% elif row.action == "skipped" %}
-        <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium font-mono bg-amber-950/40 text-amber-300 border border-amber-900/40">skipped</span>
+        <span class="badge badge-soft badge-warning">skipped</span>
       {% elif row.action == "error" %}
-        <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium font-mono bg-rose-950/50 text-rose-300 border border-rose-900/40">error</span>
+        <span class="badge badge-soft badge-error">error</span>
       {% else %}
-        <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium font-mono bg-[#1e2638] text-slate-400">info</span>
+        <span class="badge badge-soft badge-neutral">info</span>
       {% endif %}
     </td>
 
@@ -60,11 +60,14 @@
     {# Search kind #}
     <td class="px-3 py-2.5" data-col="kind">
       {% if row.search_kind == "missing" %}
-        <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium font-mono bg-sky-950/50 text-sky-300 border border-sky-900/40">missing</span>
+        <span class="badge badge-soft badge-info">missing</span>
       {% elif row.search_kind == "cutoff" %}
-        <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium font-mono bg-amber-950/40 text-amber-300 border border-amber-900/40">cutoff</span>
+        <span class="badge badge-soft badge-warning">cutoff</span>
       {% elif row.search_kind == "upgrade" %}
-        <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium font-mono bg-violet-950/50 text-violet-300 border border-violet-900/40">upgrade</span>
+        {# Violet (upgrade cooldown) is outside daisyUI's state palette; keep as
+           explicit utilities so the badge stays on the Station seg-upgrade-cd
+           token instead of collapsing to a generic state color. #}
+        <span class="badge badge-soft text-seg-upgrade-cd border-seg-upgrade-cd bg-seg-upgrade-cd/15">upgrade</span>
       {% else %}
         <span class="text-slate-600">-</span>
       {% endif %}
@@ -73,11 +76,11 @@
     {# Cycle trigger #}
     <td class="px-3 py-2.5" data-col="trigger">
       {% if row.cycle_trigger == "scheduled" %}
-        <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium font-mono bg-blue-950/50 text-blue-300 border border-blue-900/40">scheduled</span>
+        <span class="badge badge-soft badge-primary">scheduled</span>
       {% elif row.cycle_trigger == "run_now" %}
-        <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium font-mono bg-emerald-950/50 text-emerald-300 border border-emerald-900/40">run_now</span>
+        <span class="badge badge-soft badge-success">run_now</span>
       {% elif row.cycle_trigger == "system" %}
-        <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium font-mono bg-[#1e2638] text-slate-300">system</span>
+        <span class="badge badge-soft badge-neutral">system</span>
       {% else %}
         <span class="text-slate-600">-</span>
       {% endif %}
@@ -95,9 +98,9 @@
     {# Cycle outcome #}
     <td class="px-3 py-2.5" data-col="outcome">
       {% if row.cycle_progress == "progress" %}
-        <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium font-mono bg-emerald-950/50 text-emerald-300 border border-emerald-900/40">searched</span>
+        <span class="badge badge-soft badge-success">searched</span>
       {% elif row.cycle_progress == "no_progress" %}
-        <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium font-mono bg-[#1e2638] text-slate-300">skips only</span>
+        <span class="badge badge-soft badge-neutral">skips only</span>
       {% else %}
         <span class="text-[10px] text-slate-600 font-mono">unknown</span>
       {% endif %}

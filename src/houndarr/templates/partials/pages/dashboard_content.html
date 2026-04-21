@@ -1008,6 +1008,10 @@
     align-items: center;
     gap: 6px;
     padding: 6px 12px;
+    /* Pin to the right edge of whichever flex line this ends up on: when
+       the footer wraps at narrow viewports the button becomes the only
+       item on its own line, and space-between alone would left-align it. */
+    margin-left: auto;
     border: 1px solid color-mix(in srgb, var(--type-color) 50%, transparent);
     color: var(--type-color);
     background: transparent;

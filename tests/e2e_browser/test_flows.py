@@ -623,7 +623,12 @@ def test_changelog_preferences_switch_rolls_back_on_error(
         page.locator("#admin-toggle").click()
     expect(page.locator("#admin-updates")).to_be_visible()
 
-    checkbox = page.locator('#admin-updates input[type="checkbox"][name="enabled"]')
+    # Commit 45e0fdd added a second input[name="enabled"] inside
+    # #admin-updates for the release-auto-check toggle, so the old
+    # #admin-updates input[type="checkbox"][name="enabled"] selector now
+    # resolves to 2 elements and fails Playwright's strict mode. Scope
+    # to the changelog form specifically.
+    checkbox = page.locator('form[hx-post="/settings/changelog/preferences"] input[name="enabled"]')
     initial_checked = checkbox.is_checked()
 
     # Force every /preferences call during this test to fail with 500.

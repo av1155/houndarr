@@ -65,6 +65,7 @@ from houndarr.services.instances import (
     SearchOrder,
     SonarrSearchMode,
     WhisparrSearchMode,
+    active_error_instance_ids,
     create_instance,
     delete_instance,
     get_instance,
@@ -400,6 +401,7 @@ async def _render_settings_page(
     from houndarr.database import get_setting
 
     instances = await list_instances(master_key=_master_key(request))
+    error_ids = await active_error_instance_ids()
     # signed_in_as covers both builtin (local admin username) and proxy
     # mode (forwarded auth header). The template renders it verbatim so
     # the Admin > Security card never shows a stale or generic label.
@@ -414,6 +416,7 @@ async def _render_settings_page(
         template_name,
         status_code=status_code,
         instances=instances,
+        active_error_ids=error_ids,
         signed_in_as=signed_in_as,
         auth_mode=get_settings().auth_mode,
         account_error=account_error,
@@ -729,8 +732,14 @@ async def instance_create(
         await supervisor.reconcile_instance(instance.id)
 
     instances = await list_instances(master_key=_master_key(request))
+    error_ids = await active_error_instance_ids()
     # HTMX: return just the refreshed table body partial
-    return _render(request, "partials/instance_table_body.html", instances=instances)
+    return _render(
+        request,
+        "partials/instance_table_body.html",
+        instances=instances,
+        active_error_ids=error_ids,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -920,7 +929,13 @@ async def instance_update(
         return HTMLResponse(content="Not found", status_code=404)
 
     # HTMX: return just the refreshed row
-    return _render(request, "partials/instance_row.html", instance=updated)
+    error_ids = await active_error_instance_ids()
+    return _render(
+        request,
+        "partials/instance_row.html",
+        instance=updated,
+        active_error_ids=error_ids,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -978,4 +993,10 @@ async def instance_toggle_enabled(request: Request, instance_id: int) -> HTMLRes
     if isinstance(supervisor, Supervisor):
         await supervisor.reconcile_instance(updated.id)
 
-    return _render(request, "partials/instance_row.html", instance=updated)
+    error_ids = await active_error_instance_ids()
+    return _render(
+        request,
+        "partials/instance_row.html",
+        instance=updated,
+        active_error_ids=error_ids,
+    )

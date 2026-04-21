@@ -20,8 +20,14 @@
   <td data-col="status" class="px-4 py-3 text-center">
     {# Fixed min-width on the pill + label so toggling Active <-> Disabled
        (6 vs 8 chars) does not re-layout the column and shift every
-       sibling row. #}
-    {% if instance.enabled %}
+       sibling row. Red state uses the same shape + pulse as green so
+       the eye picks up the colour shift without a layout jump. #}
+    {% if instance.enabled and instance.id in (active_error_ids or []) %}
+      <span class="inline-flex items-center justify-center gap-1 text-xs text-danger min-w-[4.5rem]">
+        <span class="w-1.5 h-1.5 rounded-full bg-danger inline-block station-pulse-dot" title="Instance is reporting errors" aria-label="Instance is reporting errors"></span>
+        <span class="hidden sm:inline">Error</span>
+      </span>
+    {% elif instance.enabled %}
       <span class="inline-flex items-center justify-center gap-1 text-xs text-success min-w-[4.5rem]">
         <span class="w-1.5 h-1.5 rounded-full bg-success inline-block station-pulse-dot" title="Search enabled" aria-label="Search enabled"></span>
         <span class="hidden sm:inline">Active</span>

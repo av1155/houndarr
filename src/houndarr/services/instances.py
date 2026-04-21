@@ -390,6 +390,33 @@ async def list_instances(*, master_key: bytes) -> list[Instance]:
     return [_row_to_instance(r, master_key) for r in rows]
 
 
+async def active_error_instance_ids() -> set[int]:
+    """Return the set of instance IDs whose newest ``search_log`` row is an error.
+
+    Used by the Settings page to paint the status dot red on a per-row
+    basis. Mirrors the signal the dashboard already keys off
+    (``enabled && active_error``); the dashboard just renders a banner
+    while Settings renders an inline dot.
+
+    A single window query keeps the common case (zero errors) cheap:
+    no per-instance fan-out.
+    """
+    sql = """
+    SELECT instance_id FROM (
+        SELECT instance_id, action,
+               ROW_NUMBER() OVER (
+                   PARTITION BY instance_id ORDER BY timestamp DESC
+               ) AS rn
+        FROM search_log
+    )
+    WHERE rn = 1 AND action = 'error'
+    """
+    async with get_db() as db:
+        async with db.execute(sql) as cur:
+            rows = await cur.fetchall()
+    return {int(row["instance_id"]) for row in rows}
+
+
 async def update_instance(
     id: int,  # noqa: A002
     *,

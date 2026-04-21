@@ -226,7 +226,7 @@ async def factory_reset(*, app: FastAPI, data_dir: str) -> None:
                 path.unlink()
             except FileNotFoundError:
                 continue
-    except Exception:
+    except Exception:  # noqa: BLE001
         logger.exception("Factory reset: file deletion failed")
         raise
 
@@ -251,7 +251,7 @@ async def factory_reset(*, app: FastAPI, data_dir: str) -> None:
             _periodic_log_retention(),
             name="log-retention-loop",
         )
-    except Exception:
+    except Exception:  # noqa: BLE001
         logger.exception("Factory reset: in-process re-init failed; writing sentinel for next boot")
         try:
             sentinel_path.write_text("pending\n", encoding="utf-8")

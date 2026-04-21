@@ -983,3 +983,36 @@ async def set_setting(key: str, value: str) -> None:
     from houndarr.repositories.settings import set_setting as _repo_set_setting
 
     await _repo_set_setting(key, value)
+
+
+async def clear_all_search_logs() -> int:
+    """Delete every row in ``search_log`` and return the count that was removed.
+
+    Backs the Admin > Maintenance > Clear all logs action.  The audit
+    breadcrumb row ("Audit log cleared by admin…") is written by the
+    caller after this returns so the DELETE + INSERT aren't racy with
+    concurrent search_loop writes; this helper stays a pure truncate.
+    """
+    async with get_db() as db:
+        cur = await db.execute("DELETE FROM search_log")
+        await db.commit()
+        return cur.rowcount or 0
+
+
+async def write_admin_audit(message: str) -> None:
+    """Insert a single system-audit row into ``search_log``.
+
+    Used by Admin operations to leave a breadcrumb on the Activity logs
+    page (e.g. "Policy settings reset to defaults by admin"). The row is
+    attributed to ``cycle_trigger='system'`` and ``action='info'`` so it
+    sorts alongside the scheduler's lifecycle events rather than a real
+    search result.  ``instance_id`` is NULL because these are
+    library-wide operations, not per-instance.
+    """
+    async with get_db() as db:
+        await db.execute(
+            "INSERT INTO search_log (instance_id, cycle_trigger, action, message)"
+            " VALUES (NULL, 'system', 'info', ?)",
+            (message,),
+        )
+        await db.commit()

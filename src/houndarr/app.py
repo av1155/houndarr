@@ -164,6 +164,7 @@ def create_app() -> FastAPI:
     # -----------------------------------------------------------------------
     # Routes
     # -----------------------------------------------------------------------
+    from houndarr.routes.admin import router as admin_router
     from houndarr.routes.api.logs import router as logs_router
     from houndarr.routes.api.status import router as status_router
     from houndarr.routes.changelog import router as changelog_router
@@ -177,5 +178,6 @@ def create_app() -> FastAPI:
     app.include_router(pages_router)
     app.include_router(settings_router)
     app.include_router(changelog_router)
+    app.include_router(admin_router)
 
     return app

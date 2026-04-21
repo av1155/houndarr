@@ -473,19 +473,15 @@ def test_dashboard_template_filters_banner_on_disabled_instances() -> None:
     """
     from pathlib import Path
 
-    template = (
-        Path(__file__).resolve().parents[2]
-        / "src"
-        / "houndarr"
-        / "templates"
-        / "partials"
-        / "pages"
-        / "dashboard_content.html"
+    # Script was extracted from the template into src/houndarr/static/js/
+    # dashboard.js; the filter call sites moved with it.
+    script = (
+        Path(__file__).resolve().parents[2] / "src" / "houndarr" / "static" / "js" / "dashboard.js"
     ).read_text()
-    # Three inline-JS call sites: renderAlert filter, subheader `errored`
-    # find, subheader "on patrol" count.  Stricter than >=3 to keep the
-    # test honest if someone adds a fourth surface without also filtering.
-    assert template.count("i.enabled && i.active_error") == 3, (
+    # Three JS call sites: renderAlert filter, subheader `errored` find,
+    # subheader "on patrol" count.  Stricter than >=3 to keep the test
+    # honest if someone adds a fourth surface without also filtering.
+    assert script.count("i.enabled && i.active_error") == 3, (
         "Expected 3 call sites filtering banner/subheader on enabled + active_error"
     )
 

@@ -12,7 +12,7 @@ from fastapi.responses import HTMLResponse, Response
 from fastapi.templating import Jinja2Templates
 
 from houndarr import __version__
-from houndarr.auth import check_password, get_username, set_password
+from houndarr.auth import check_password, resolve_signed_in_as, set_password
 from houndarr.clients.base import ArrClient
 from houndarr.clients.lidarr import LidarrClient
 from houndarr.clients.radarr import RadarrClient
@@ -387,7 +387,10 @@ async def _render_settings_page(
     from houndarr.database import get_setting
 
     instances = await list_instances(master_key=_master_key(request))
-    username = await get_username()
+    # signed_in_as covers both builtin (local admin username) and proxy
+    # mode (forwarded auth header). The template renders it verbatim so
+    # the Admin > Security card never shows a stale or generic label.
+    signed_in_as = await resolve_signed_in_as(request)
     changelog_popups_enabled = (await get_setting("changelog_popups_disabled")) != "1"
     template_name = (
         "partials/pages/settings_content.html" if _is_hx_request(request) else "settings.html"
@@ -397,7 +400,7 @@ async def _render_settings_page(
         template_name,
         status_code=status_code,
         instances=instances,
-        username=username,
+        signed_in_as=signed_in_as,
         auth_mode=get_settings().auth_mode,
         account_error=account_error,
         account_success=account_success,

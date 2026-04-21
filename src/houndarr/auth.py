@@ -300,6 +300,40 @@ async def check_credentials(username: str, password: str) -> bool:
     return compare_digest(normalized_username, normalize_username(stored_username))
 
 
+def reset_auth_caches() -> None:
+    """Clear every module-level auth cache used by the builtin flow.
+
+    Called by :func:`houndarr.services.admin.factory_reset` after the
+    database is wiped so a subsequent ``/setup`` request is not short-
+    circuited by a stale ``_setup_complete=True`` (or a serializer keyed
+    to the old session_secret) and so brute-force counters start fresh.
+    In proxy-mode installs these caches are not consulted for routing
+    decisions, but resetting them keeps the module honest if the operator
+    later switches modes.
+    """
+    global _serializer, _setup_complete  # noqa: PLW0603
+    _serializer = None
+    _setup_complete = None
+    _login_attempts.clear()
+
+
+async def resolve_signed_in_as(request: Request) -> str:
+    """Return the identity label for the signed-in admin.
+
+    In proxy auth mode this is the username the upstream proxy forwarded
+    (stashed on ``request.state.proxy_auth_user`` by the middleware); in
+    builtin mode it is the configured single-admin username. Falls back to
+    ``"admin"`` when no other value is available, so templates always have
+    something meaningful to render.
+    """
+    if _is_proxy_auth_mode():
+        proxy_user = getattr(request.state, "proxy_auth_user", None)
+        if proxy_user:
+            return str(proxy_user)
+    stored = await get_username()
+    return stored or "admin"
+
+
 # ---------------------------------------------------------------------------
 # Brute-force rate limiter (in-memory, resets on restart)
 # ---------------------------------------------------------------------------

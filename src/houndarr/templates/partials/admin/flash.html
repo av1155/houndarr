@@ -1,0 +1,21 @@
+{#
+  Admin flash toast: rendered by routes/admin.py and swapped into
+  #admin-flash by HTMX. `tone` is 'success' | 'danger' | 'info';
+  class strings reuse the existing left-border alert primitive from
+  base.html so the look is consistent with flash_error / flash_success.
+#}
+{% set tone_classes = {
+  'success': 'border-success bg-success-bg text-success',
+  'danger':  'border-danger bg-danger-bg text-danger',
+  'info':    'border-brand-400 bg-surface-2 text-slate-200',
+} %}
+{% set cls = tone_classes.get(tone, tone_classes['info']) %}
+<div
+  id="admin-flash"
+  data-admin-flash
+  data-admin-flash-tone="{{ tone }}"
+  role="status"
+  class="border-l-4 rounded-r-inset px-3 py-2 text-sm font-sans {{ cls }}"
+>
+  {{ message }}
+</div>

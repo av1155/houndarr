@@ -30,7 +30,12 @@ from markupsafe import Markup
 
 from houndarr import __version__
 from houndarr.database import get_setting, set_setting
-from houndarr.services.changelog import ReleaseEntry, releases_between, should_show
+from houndarr.services.changelog import (
+    ReleaseEntry,
+    get_changelog,
+    releases_between,
+    should_show,
+)
 
 router = APIRouter(prefix="/settings/changelog", tags=["changelog"])
 
@@ -230,8 +235,37 @@ async def preferences(
     """
     new_disabled = "0" if enabled == "on" else "1"
     await set_setting("changelog_popups_disabled", new_disabled)
+    # Template path is rewired to the new Admin > Updates partial in
+    # task 5 (the template is created there). Keeping the old partial
+    # as the re-render target during the backend step avoids a
+    # transient 500 on tests that exercise this endpoint.
     return _get_templates().TemplateResponse(
         request=request,
         name="partials/changelog_settings_section.html",
         context={"changelog_popups_enabled": new_disabled == "0"},
+    )
+
+
+def _is_hx_request(request: Request) -> bool:
+    return request.headers.get("HX-Request") == "true"
+
+
+@router.get("/full", response_class=HTMLResponse)
+async def full(request: Request) -> HTMLResponse:
+    """Render every parsed release from ``CHANGELOG.md`` on its own page.
+
+    HX-aware: returns only the content partial when ``HX-Request: true``
+    so shell navigation swaps cleanly into ``#app-content``; returns the
+    full ``changelog_full.html`` wrapper otherwise.
+    """
+    releases = get_changelog()
+    template_name = (
+        "partials/pages/changelog_full_content.html"
+        if _is_hx_request(request)
+        else "changelog_full.html"
+    )
+    return _get_templates().TemplateResponse(
+        request=request,
+        name=template_name,
+        context={"releases": releases, "version": __version__},
     )

@@ -51,7 +51,16 @@
     };
     input.addEventListener('keydown', update);
     input.addEventListener('keyup', update);
-    input.addEventListener('blur', function () {
+    input.addEventListener('blur', function (e) {
+      // Focus moving to a sibling inside the same field (eye toggle,
+      // caps badge, etc.) is not a reason to hide the indicator; the
+      // caps-lock state still applies and the browser has no API to
+      // re-query it without a key event, so blur-hiding would strand
+      // the badge off until the user types again.
+      var scope = input.closest('.input-wrap') || input.closest('.field');
+      if (scope && e.relatedTarget && scope.contains(e.relatedTarget)) {
+        return;
+      }
       badge.classList.remove('is-on');
     });
   }

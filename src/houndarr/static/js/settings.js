@@ -1,9 +1,9 @@
-// settings.js — Settings page controller. Previously inline in
-// templates/partials/pages/settings_content.html. Re-runs its
-// initialization every time HTMX swaps the Settings page into
-// #app-content; AbortController from the outer `initSettingsPage`
-// closes over every listener so the previous page's bindings tear
-// down cleanly before a new one is wired.
+// Settings page controller. initSettingsPage() re-runs every time
+// HTMX swaps the Settings partial into #app-content; the outer
+// AbortController aborts the previous binding so every listener
+// (add-instance modal, test-connection, confirm dialog, admin
+// dropdown, flash toast, preferences switch) tears down before a
+// new one is wired.
 
 function initSettingsPage() {
   window.__houndarrSettingsPageController?.abort();

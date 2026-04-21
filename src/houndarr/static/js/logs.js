@@ -1,7 +1,7 @@
-// logs.js — Logs page controller. Previously inline in
-// templates/partials/pages/logs_content.html. Re-runs on every HTMX
-// swap that lands #app-content on the Logs page, using the
-// AbortController pattern from settings.js / dashboard.js.
+// Logs page controller. initLogsPage() re-runs every time HTMX
+// swaps the Logs partial into #app-content; the outer AbortController
+// aborts the previous binding so listeners don't linger on the
+// detached DOM between navigations.
 
 function initLogsPage() {
   window.__houndarrLogsPageController?.abort();

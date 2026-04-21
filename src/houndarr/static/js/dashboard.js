@@ -1,8 +1,7 @@
-// dashboard.js — Dashboard page controller. Previously inline in
-// templates/partials/pages/dashboard_content.html. Re-runs on every
-// HTMX swap that lands #app-content on the Dashboard page, using the
-// AbortController pattern from settings.js / changelog.js to tear
-// prior listeners down cleanly.
+// Dashboard page controller. initDashboardPage() re-runs every time
+// HTMX swaps the Dashboard partial into #app-content; the outer
+// AbortController aborts the previous binding so listeners don't
+// linger on the detached DOM between navigations.
 
 function initDashboardPage() {
   window.__houndarrDashboardPageController?.abort();

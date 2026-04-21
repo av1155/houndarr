@@ -140,6 +140,40 @@ body {
   }
 }
 
+/* ── Modal animation keyframes ───────────────────────────────────────────
+   Shared by every <dialog> that uses the `[open]` + `.is-closing` +
+   `::backdrop` pattern (add-instance modal, changelog modal). Each
+   caller picks its own animation duration and ease inline; the
+   keyframe names live here so the translate/scale vocabulary is
+   defined exactly once. Backdrop opacity is parameterised via a CSS
+   custom property (`--hx-backdrop-opacity`) so callers needing a
+   darker or lighter backdrop just override the variable on the
+   dialog (defaults to 0.65). */
+@keyframes hx-modal-in {
+  from { opacity: 0; transform: translateY(0.75rem) scale(0.98); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes hx-modal-out {
+  from { opacity: 1; transform: translateY(0) scale(1); }
+  to   { opacity: 0; transform: translateY(0.5rem) scale(0.985); }
+}
+@keyframes hx-backdrop-in {
+  from { background: rgba(2, 6, 23, 0); }
+  to   { background: rgba(2, 6, 23, var(--hx-backdrop-opacity, 0.65)); }
+}
+@keyframes hx-backdrop-out {
+  from { background: rgba(2, 6, 23, var(--hx-backdrop-opacity, 0.65)); }
+  to   { background: rgba(2, 6, 23, 0); }
+}
+@keyframes hx-modal-sheet-in {
+  from { transform: translateY(100%); }
+  to   { transform: translateY(0); }
+}
+@keyframes hx-modal-sheet-out {
+  from { transform: translateY(0); }
+  to   { transform: translateY(100%); }
+}
+
 /* ── Mobile nav backdrop ────────────────────────────────────────────────── */
 .mobile-nav-backdrop {
   background: rgba(2, 6, 23, 0);

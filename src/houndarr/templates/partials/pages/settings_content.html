@@ -6,14 +6,20 @@
     transform: translateY(0.75rem) scale(0.98);
   }
 
+  /* Keyframes live in app.css (hx-modal-*, hx-backdrop-*); this block
+     only sets per-modal durations/eases and the heavier 0.8 backdrop
+     opacity (the add-instance form wants more focus than the
+     changelog sheet). */
+  #add-instance-modal { --hx-backdrop-opacity: 0.8; }
+
   #add-instance-modal[open] {
     opacity: 1;
     transform: translateY(0) scale(1);
-    animation: add-instance-modal-in 180ms ease-out;
+    animation: hx-modal-in 180ms ease-out;
   }
 
   #add-instance-modal[open].is-closing {
-    animation: add-instance-modal-out 160ms ease-in forwards;
+    animation: hx-modal-out 160ms ease-in forwards;
   }
 
   #add-instance-modal::backdrop {
@@ -21,56 +27,12 @@
   }
 
   #add-instance-modal[open]::backdrop {
-    animation: add-instance-backdrop-in var(--dur-base, 180ms) var(--ease-station, cubic-bezier(0.16,1,0.3,1)) forwards;
+    animation: hx-backdrop-in var(--dur-base, 180ms) var(--ease-station, cubic-bezier(0.16,1,0.3,1)) forwards;
     backdrop-filter: blur(3px);
   }
 
   #add-instance-modal[open].is-closing::backdrop {
-    animation: add-instance-backdrop-out 160ms ease-in forwards;
-  }
-
-  @keyframes add-instance-modal-in {
-    from {
-      opacity: 0;
-      transform: translateY(0.75rem) scale(0.98);
-    }
-
-    to {
-      opacity: 1;
-      transform: translateY(0) scale(1);
-    }
-  }
-
-  @keyframes add-instance-backdrop-in {
-    from {
-      background: rgba(2, 6, 23, 0);
-    }
-
-    to {
-      background: rgba(2, 6, 23, 0.8);
-    }
-  }
-
-  @keyframes add-instance-modal-out {
-    from {
-      opacity: 1;
-      transform: translateY(0) scale(1);
-    }
-
-    to {
-      opacity: 0;
-      transform: translateY(0.5rem) scale(0.985);
-    }
-  }
-
-  @keyframes add-instance-backdrop-out {
-    from {
-      background: rgba(2, 6, 23, 0.8);
-    }
-
-    to {
-      background: rgba(2, 6, 23, 0);
-    }
+    animation: hx-backdrop-out 160ms ease-in forwards;
   }
 
   @media (prefers-reduced-motion: reduce) {

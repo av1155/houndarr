@@ -405,6 +405,7 @@ async def _render_settings_page(
     # the Admin > Security card never shows a stale or generic label.
     signed_in_as = await resolve_signed_in_as(request)
     changelog_popups_enabled = (await get_setting("changelog_popups_disabled")) != "1"
+    update_check_enabled = (await get_setting("update_check_enabled")) == "1"
     template_name = (
         "partials/pages/settings_content.html" if _is_hx_request(request) else "settings.html"
     )
@@ -418,6 +419,7 @@ async def _render_settings_page(
         account_error=account_error,
         account_success=account_success,
         changelog_popups_enabled=changelog_popups_enabled,
+        update_check_enabled=update_check_enabled,
     )
 
 

@@ -132,6 +132,7 @@ def get_settings() -> AppSettings:
         trusted_proxies=os.environ.get("HOUNDARR_TRUSTED_PROXIES", ""),
         auth_mode=os.environ.get("HOUNDARR_AUTH_MODE", "builtin").lower(),
         auth_proxy_header=os.environ.get("HOUNDARR_AUTH_PROXY_HEADER", ""),
+        update_check_repo=os.environ.get("HOUNDARR_UPDATE_CHECK_REPO", "av1155/houndarr"),
     )
 
 
@@ -168,6 +169,11 @@ class AppSettings:
             username from the reverse proxy (e.g. ``Remote-User``).
             Required when ``auth_mode`` is ``proxy``.
             Corresponds to ``HOUNDARR_AUTH_PROXY_HEADER`` env var.
+        update_check_repo: ``owner/repo`` slug the update-check service
+            polls for the latest stable release. Defaults to the upstream
+            Houndarr repository; forks override via
+            ``HOUNDARR_UPDATE_CHECK_REPO`` so no code change is needed to
+            redirect the check at their own release stream.
     """
 
     data_dir: str = "/data"
@@ -180,6 +186,7 @@ class AppSettings:
     trusted_proxies: str = ""
     auth_mode: str = "builtin"
     auth_proxy_header: str = ""
+    update_check_repo: str = "av1155/houndarr"
 
     # Derived paths (computed from data_dir)
     db_path: Path = field(init=False)

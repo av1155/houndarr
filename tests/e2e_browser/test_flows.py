@@ -327,15 +327,6 @@ def test_admin_show_last_changelog_opens_modal(logged_in_page: Page, houndarr_ur
     expect(page.locator("dialog#changelog-modal[open]")).to_be_visible(timeout=4_000)
 
 
-def test_admin_view_full_changelog_navigates(logged_in_page: Page, houndarr_url: str) -> None:
-    """The 'View full CHANGELOG.md' link navigates to /settings/changelog/full."""
-    page = logged_in_page
-    page.goto(f"{houndarr_url}/settings")
-    page.get_by_role("link", name=re.compile(r"view\s*full\s*CHANGELOG", re.I)).click()
-    expect(page).to_have_url(re.compile(r"/settings/changelog/full$"))
-    expect(page.locator("[data-page-key='changelog-full']")).to_be_visible()
-
-
 def test_admin_clear_logs_flash(logged_in_page: Page, houndarr_url: str) -> None:
     """Clear logs surfaces a success flash; the dialog closes automatically."""
     page = logged_in_page

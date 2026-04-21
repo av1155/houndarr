@@ -462,22 +462,21 @@ function initSettingsPage() {
     const toggle = document.getElementById('admin-toggle');
     if (!panel || !body || !toggle) return;
 
-    const KEY = 'houndarr.adminOpen';
     const DUR = 260;
     const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     let animating = false;
 
-    // Admin dropdown starts collapsed on every fresh load; only the
-    // explicit "I left it open last time" localStorage flag (houndarr.adminOpen
-    // === '1') restores the open state. Any other value — including unset —
-    // keeps the panel tucked away so the page reads Instances first.
-    const saved = localStorage.getItem(KEY);
-    const startOpen = saved === '1';
-    panel.setAttribute('data-open', String(startOpen));
-    toggle.setAttribute('aria-expanded', String(startOpen));
+    // Always start collapsed. No persistence: refresh, re-login, and
+    // HTMX navigation away-and-back all reset to closed so the page
+    // leads with Instances. A stale localStorage flag from an earlier
+    // build could still be around on returning users; clear it so the
+    // key does not linger.
+    try { localStorage.removeItem('houndarr.adminOpen'); } catch { /* ignore */ }
+    panel.setAttribute('data-open', 'false');
+    toggle.setAttribute('aria-expanded', 'false');
     body.style.transition = '';
-    body.style.height = startOpen ? 'auto' : '0px';
-    body.style.opacity = startOpen ? '1' : '0';
+    body.style.height = '0px';
+    body.style.opacity = '0';
 
     toggle.addEventListener('click', () => {
       if (animating) return;
@@ -492,7 +491,6 @@ function initSettingsPage() {
         body.style.transition = '';
         body.style.height = shouldOpen ? 'auto' : '0px';
         body.style.opacity = shouldOpen ? '1' : '0';
-        persist(shouldOpen);
         return;
       }
 
@@ -533,11 +531,6 @@ function initSettingsPage() {
           animating = false;
         }, DUR);
       }
-      persist(shouldOpen);
-    }
-
-    function persist(open) {
-      try { localStorage.setItem(KEY, open ? '1' : '0'); } catch { /* ignore */ }
     }
   })();
 

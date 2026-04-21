@@ -78,26 +78,37 @@ body {
   display: none;
 }
 
-/* Custom overlay thumb. JS (app.js) sizes + positions it against window
-   scroll and toggles `.is-visible`. Fixed position means it never
-   reserves layout space, so no shift between pages that overflow and
-   pages that don't. */
+/* Custom overlay thumb. JS (app.js) sizes + positions it against a
+   scroll target (window or a modal's scroll region) and toggles
+   `.is-visible` when the target is actually scrollable. Fixed/absolute
+   position means it never reserves layout space, so no shift between
+   pages that overflow and pages that don't. Stays visible the whole
+   time the target is scrollable (no idle fade). */
 .hx-scrollbar {
   position: fixed;
-  top: 0;
-  right: 2px;
-  bottom: 0;
   width: 6px;
   z-index: 60;
   pointer-events: none;
-  opacity: 0;
-  /* Asymmetric: quick appearance on user scroll, slow melt on idle. */
-  transition: opacity 420ms cubic-bezier(0.4, 0, 0.2, 1);
+  display: none;
 }
 
 .hx-scrollbar.is-visible {
-  opacity: 1;
-  transition: opacity 160ms cubic-bezier(0.4, 0, 0.2, 1);
+  display: block;
+}
+
+/* Window bar pins to the viewport edges. Modal bars get top/right/
+   height from JS against the dialog's scroll region. */
+.hx-scrollbar--window {
+  top: 0;
+  right: 2px;
+  bottom: 0;
+}
+
+/* Modal bars are appended inside the <dialog> so they share its top
+   layer (showModal() puts the dialog above all fixed-position siblings);
+   absolute positioning keeps the coordinates dialog-relative. */
+.hx-scrollbar--modal {
+  position: absolute;
 }
 
 .hx-scrollbar__thumb {
@@ -109,10 +120,22 @@ body {
   border-radius: var(--radius-chip);
   transform: translateY(0);
   will-change: transform;
+  /* Interactive thumb while the track stays click-through so form
+     elements flush with the modal's right edge still receive clicks.
+     Matches native scrollbar convention: default arrow cursor, no
+     hand pointer on hover. */
+  pointer-events: auto;
+  cursor: default;
+  transition: background-color 120ms ease-out;
+}
+
+.hx-scrollbar__thumb:hover,
+.hx-scrollbar__thumb.is-dragging {
+  background: var(--color-border-strong);
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .hx-scrollbar {
+  .hx-scrollbar__thumb {
     transition: none;
   }
 }

@@ -1,5 +1,6 @@
 // houndarrClientHelpers (including formatLocalTimestamp) is defined in base.html <head>
 // so it is available on both initial page load and HTMX navigation.
+// The overlay scrollbar module lives in hx-scrollbar.js.
 
 (function () {
   function getCsrfToken() {
@@ -169,70 +170,3 @@
   });
 })();
 
-// Overlay scrollbar: sizes + positions `.hx-scrollbar__thumb` against
-// window scroll, fades in on scroll, fades out on idle. Paired with the
-// hidden native scrollbar in app.css; see that comment for the strip-bug
-// background.
-(function () {
-  var bar = document.querySelector('.hx-scrollbar');
-  var thumb = bar && bar.querySelector('.hx-scrollbar__thumb');
-  if (!bar || !thumb) return;
-
-  var idleTimeoutId = null;
-  var rafId = null;
-  var IDLE_MS = 900;
-  var MIN_THUMB_PX = 32;
-
-  function update() {
-    rafId = null;
-    var doc = document.documentElement;
-    var viewH = window.innerHeight;
-    var docH = Math.max(doc.scrollHeight, document.body.scrollHeight);
-    if (docH - viewH < MIN_THUMB_PX / 2) {
-      // Ignore sub-pixel rounding and incidental border/padding overflow
-      // that isn't meaningfully scrollable. No point showing a thumb
-      // whose travel distance is smaller than the thumb's own minimum
-      // height.
-      bar.classList.remove('is-visible');
-      thumb.style.height = '0';
-      return;
-    }
-    var ratio = viewH / docH;
-    var thumbH = Math.max(MIN_THUMB_PX, Math.round(ratio * viewH));
-    var maxThumbTop = viewH - thumbH;
-    var scrollRatio = window.scrollY / (docH - viewH);
-    var thumbY = Math.round(scrollRatio * maxThumbTop);
-    thumb.style.height = thumbH + 'px';
-    thumb.style.transform = 'translateY(' + thumbY + 'px)';
-  }
-
-  function schedule() {
-    if (rafId !== null) return;
-    rafId = window.requestAnimationFrame(update);
-  }
-
-  function reveal() {
-    bar.classList.add('is-visible');
-    if (idleTimeoutId !== null) window.clearTimeout(idleTimeoutId);
-    idleTimeoutId = window.setTimeout(function () {
-      bar.classList.remove('is-visible');
-    }, IDLE_MS);
-  }
-
-  window.addEventListener('scroll', function () {
-    schedule();
-    reveal();
-  }, { passive: true });
-
-  window.addEventListener('resize', schedule, { passive: true });
-
-  // Recalculate when HTMX swaps change content height, or when any other
-  // DOM mutation (modals, async content) changes scrollable area.
-  document.body.addEventListener('htmx:afterSettle', schedule);
-  document.body.addEventListener('htmx:afterSwap', schedule);
-  var observer = new MutationObserver(schedule);
-  observer.observe(document.body, { childList: true, subtree: true });
-
-  // Defer the initial measurement so layout has settled.
-  window.requestAnimationFrame(schedule);
-})();

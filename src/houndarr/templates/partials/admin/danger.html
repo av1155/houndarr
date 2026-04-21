@@ -1,0 +1,30 @@
+{#
+  Admin > Danger zone.  Single action: Factory reset. Triggers the
+  shared confirm dialog which, unlike the neutral maintenance actions,
+  demands a typed phrase plus a second factor (password in builtin,
+  typed proxy username in proxy mode).
+#}
+<section id="admin-danger" class="space-y-3">
+  <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+    <h3 class="text-base font-semibold text-danger/90">Danger zone</h3>
+  </div>
+  <div class="space-y-2.5">
+    <div class="danger-row">
+      <div class="min-w-0">
+        <h4 class="text-sm font-semibold text-slate-100">Factory reset Houndarr</h4>
+        <p class="text-xs text-slate-500 mt-0.5">
+          Deletes the database and master-key file, then {{ "returns you to the
+          dashboard once you've re-authenticated through your proxy." if auth_mode == "proxy" else "returns you to the
+          sign-up page." }}
+        </p>
+      </div>
+      <button
+        type="button"
+        data-confirm-reset="factory"
+        class="station-button station-button--danger px-4 py-1.5 text-xs font-medium shrink-0"
+      >
+        Factory reset
+      </button>
+    </div>
+  </div>
+</section>

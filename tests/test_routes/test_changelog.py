@@ -283,8 +283,8 @@ async def test_preferences_enable_writes_zero(app: TestClient, sample_changelog:
     )
     assert resp.status_code == 200
     assert await get_setting("changelog_popups_disabled") == "0"
-    # Returns the settings section partial with the checkbox checked.
-    assert 'id="changelog-section"' in resp.text
+    # Returns the Admin > Updates section partial with the checkbox checked.
+    assert 'id="admin-updates"' in resp.text
     assert "checked" in resp.text
 
 
@@ -297,7 +297,7 @@ async def test_preferences_disable_writes_one(app: TestClient, sample_changelog:
     )
     assert resp.status_code == 200
     assert await get_setting("changelog_popups_disabled") == "1"
-    assert 'id="changelog-section"' in resp.text
+    assert 'id="admin-updates"' in resp.text
     # The checkbox should NOT be checked when disabled.
     # We verify by locating the input element and checking the attribute.
     # This is a weak assertion; the stronger one is the value in the DB above.

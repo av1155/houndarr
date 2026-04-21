@@ -1,0 +1,64 @@
+{#
+  Admin > Updates sub-section (formerly the standalone Changelog
+  notifications card). Three controls:
+    1. iOS-style switch that toggles changelog_popups_disabled via the
+       existing /settings/changelog/preferences endpoint.
+    2. "Show last changelog" button re-opens the modal for the current
+       version even after dismissal.
+    3. "View full CHANGELOG.md →" link navigates to the new
+       /settings/changelog/full page.
+  The form and section share the #admin-updates id so the preferences
+  endpoint can outerHTML-swap this whole block after a toggle.
+#}
+<section id="admin-updates" class="space-y-3">
+  <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+    <h3 class="text-base font-semibold text-slate-200">Updates</h3>
+  </div>
+  <div class="rounded-container border border-border-subtle bg-surface-1 p-5 sm:p-6 space-y-3">
+    <form
+      hx-post="/settings/changelog/preferences"
+      hx-target="#admin-updates"
+      hx-swap="outerHTML"
+    >
+      <label class="toggle-row">
+        <span class="toggle-row__title">Show changelog after each update</span>
+        <span class="switch" role="switch">
+          <input
+            type="checkbox"
+            name="enabled"
+            value="on"
+            {% if changelog_popups_enabled %}checked{% endif %}
+            onchange="this.form.requestSubmit()"
+            aria-label="Show changelog after each update"
+          />
+          <span class="switch__track"><span class="switch__thumb"></span></span>
+        </span>
+      </label>
+    </form>
+
+    <div class="pt-3 mt-3 border-t border-border-subtle/60 flex flex-wrap items-center gap-2">
+      <button
+        type="button"
+        hx-get="/settings/changelog/popup?force=1"
+        hx-target="#changelog-slot"
+        hx-swap="outerHTML"
+        class="station-button station-button--secondary px-3 py-1.5 text-xs font-medium font-sans"
+      >
+        <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M14 3h7v7"/><path d="M21 3l-9 9"/><path d="M21 14v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5"/>
+        </svg>
+        Show last changelog
+      </button>
+      <a
+        href="/settings/changelog/full"
+        hx-get="/settings/changelog/full"
+        hx-target="#app-content"
+        hx-swap="innerHTML"
+        hx-push-url="true"
+        class="text-xs text-brand-300 hover:text-brand-200 underline underline-offset-4 decoration-dotted ml-1"
+      >
+        View full CHANGELOG.md →
+      </a>
+    </div>
+  </div>
+</section>

@@ -144,3 +144,7 @@ When using proxy auth mode (`HOUNDARR_AUTH_MODE=proxy`):
 - [ ] Verify your proxy strips or overwrites the auth header from
       client requests before forwarding (all major SSO proxies do
       this by default)
+- [ ] Do not expose Houndarr behind a proxy that lets non-admin
+      users through. Every authenticated request in proxy mode can
+      trigger the [Admin actions](/docs/guides/admin-actions),
+      including factory reset.

@@ -17,6 +17,15 @@ see [Increase Throughput](/docs/guides/increase-throughput). For
 the per-app API command Houndarr sends see
 [Search Commands](/docs/reference/search-commands).
 
+:::tip Want to start fresh?
+If you want every instance back to default policy without losing the
+instances themselves, use **Settings > Admin > Maintenance > Reset
+all instance settings**. It reverts every field below at once but
+keeps your connection details and API keys. See
+[Admin actions](/docs/guides/admin-actions) for the full list of
+what a reset touches.
+:::
+
 <Image
   img={require('@site/static/img/screenshots/houndarr-add-instance-form.png')}
   alt="The Houndarr Add Instance form showing search, cutoff, and upgrade configuration fields"

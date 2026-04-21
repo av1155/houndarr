@@ -398,8 +398,13 @@ async def active_error_instance_ids() -> set[int]:
     (``enabled && active_error``); the dashboard just renders a banner
     while Settings renders an inline dot.
 
-    A single window query keeps the common case (zero errors) cheap:
-    no per-instance fan-out.
+    The window is narrowed to the last 48 hours so the ROW_NUMBER()
+    partition only scans recent rows. An error that hasn't re-surfaced
+    in two days is stale for the "is this instance healthy right now?"
+    question the dot answers, and a genuinely stuck instance writes
+    fresh error rows well inside that window. Keeps the common case
+    (zero errors) cheap and bounds the cost on installs that bump
+    log retention.
     """
     sql = """
     SELECT instance_id FROM (
@@ -408,6 +413,7 @@ async def active_error_instance_ids() -> set[int]:
                    PARTITION BY instance_id ORDER BY timestamp DESC
                ) AS rn
         FROM search_log
+        WHERE timestamp >= datetime('now', '-2 days')
     )
     WHERE rn = 1 AND action = 'error'
     """

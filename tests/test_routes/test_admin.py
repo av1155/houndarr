@@ -330,3 +330,21 @@ def test_factory_reset_proxy_username_case_insensitive(
     )
     assert resp.status_code == 200
     assert resp.headers.get("HX-Redirect") == "/"
+
+
+# ---------------------------------------------------------------------------
+# Settings page rendering in proxy mode: Security sub-section hides the
+# password form and echoes the proxy identity instead.
+# ---------------------------------------------------------------------------
+
+
+def test_settings_security_in_proxy_renders_signed_in_card(proxy_app: TestClient) -> None:
+    resp = proxy_app.get("/settings", headers={_AUTH_HEADER: _AUTH_USER})
+    assert resp.status_code == 200
+    # Signed-in-as echoes the proxy user, not the stored admin username.
+    assert _AUTH_USER.encode() in resp.content
+    # Password form is hidden in proxy mode — no Update Password submit.
+    assert b"Update Password" not in resp.content
+    # Factory reset prompts for the typed username instead of password.
+    assert b"Type your current username" in resp.content
+    assert b"current_password" not in resp.content

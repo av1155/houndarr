@@ -86,26 +86,28 @@
   }
 
   #instance-test-connection-btn {
-    transition: background-color 180ms ease, color 180ms ease, box-shadow 180ms ease,
-      transform 180ms ease;
+    transition: background-color var(--dur-base) var(--ease-station),
+      color var(--dur-base) var(--ease-station),
+      box-shadow var(--dur-base) var(--ease-station),
+      transform var(--dur-base) var(--ease-station);
   }
 
   #instance-test-connection-btn.is-testing {
-    background-color: rgb(51 65 85);
-    color: rgb(226 232 240);
+    background-color: var(--color-surface-3);
+    color: #e2e8f0;
     box-shadow: 0 0 0 1px rgba(148, 163, 184, 0.55) inset;
   }
 
   #instance-test-connection-btn.is-success {
-    background-color: rgb(22 101 52);
-    color: rgb(220 252 231);
-    box-shadow: 0 0 0 1px rgba(74, 222, 128, 0.4) inset;
+    background-color: var(--color-success-bg);
+    color: #dcfce7;
+    box-shadow: 0 0 0 1px var(--color-success-border) inset;
   }
 
   #instance-test-connection-btn.is-error {
-    background-color: rgb(153 27 27);
-    color: rgb(254 226 226);
-    box-shadow: 0 0 0 1px rgba(248, 113, 113, 0.45) inset;
+    background-color: var(--color-danger-bg);
+    color: #fee2e2;
+    box-shadow: 0 0 0 1px var(--color-danger-border) inset;
     animation: test-connection-shake 320ms ease;
   }
 
@@ -205,9 +207,9 @@
       column-gap: 8px;
       row-gap: 5px;
       padding: 12px;
-      background: #0e1117;
-      border: 1px solid #1e2638 !important;
-      border-radius: 10px;
+      background: var(--color-surface-1);
+      border: 1px solid var(--color-border-subtle) !important;
+      border-radius: var(--radius-container);
       align-items: start;
     }
 
@@ -280,9 +282,9 @@
     /* No-instances row */
     tr#no-instances-row {
       display: block;
-      border-radius: 10px;
-      border: 1px solid #1e2638 !important;
-      background: #0e1117;
+      border-radius: var(--radius-container);
+      border: 1px solid var(--color-border-subtle) !important;
+      background: var(--color-surface-1);
     }
 
     tr#no-instances-row > td {
@@ -290,38 +292,150 @@
     }
   }
 
-  #account-settings > summary::-webkit-details-marker {
-    display: none;
+  /* ───── Admin dropdown ─────────────────────────────────────────
+     Ported from settings-redesign.css.  The panel collapses like the
+     instance table's modal, but uses JS-driven height animation so
+     the inner sub-sections can grow/shrink without a fixed height. */
+  .admin-panel { box-shadow: var(--shadow-2); }
+  .admin-panel__header {
+    cursor: pointer; background: transparent; border: 0;
+    font: inherit; color: inherit;
+    transition: background-color 180ms ease;
   }
-
-  #account-settings > summary {
-    transition: background-color 180ms ease, color 180ms ease;
+  .admin-panel__header:focus-visible {
+    outline: 2px solid var(--color-brand-400); outline-offset: -2px;
   }
-
-  .account-details-chevron {
-    transition: transform 180ms ease, color 180ms ease;
-  }
-
-  #account-settings[open] .account-details-chevron {
-    transform: rotate(180deg);
-  }
-
-  .account-details-content {
+  .admin-panel__body {
     overflow: hidden;
     height: 0;
     opacity: 0;
+    border-top: 1px solid transparent;
+    will-change: height, opacity;
   }
-
-  #account-settings[open] .account-details-content {
+  .admin-panel[data-open="true"] .admin-panel__body {
     height: auto;
     opacity: 1;
+    border-top-color: var(--color-border-subtle);
   }
+  .admin-chevron {
+    transition: transform 200ms var(--ease-station), color 180ms ease;
+    transform: rotate(-90deg);
+  }
+  .admin-panel[data-open="true"] .admin-chevron { transform: rotate(0deg); }
 
   @media (prefers-reduced-motion: reduce) {
-    #account-settings > summary,
-    .account-details-chevron {
-      transition: none;
+    .admin-panel__header,
+    .admin-panel__body,
+    .admin-chevron { transition: none; }
+  }
+
+  /* ───── Admin sub-section primitives ─────────────────────────── */
+  .toggle-row {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 1rem; padding: 10px 12px;
+    border-radius: var(--radius-inset);
+    background: var(--color-surface-2);
+    border: 1px solid var(--color-border-subtle);
+    cursor: pointer;
+    transition:
+      border-color var(--dur-base) var(--ease-station),
+      background var(--dur-base) var(--ease-station);
+  }
+  .toggle-row:hover { border-color: var(--color-border-default); }
+  .toggle-row__title { display: block; font-size: 13px; font-weight: 500; color: #e2e8f0; }
+
+  .switch { position: relative; display: inline-block; width: 36px; height: 20px; flex-shrink: 0; }
+  .switch input { position: absolute; opacity: 0; pointer-events: none; }
+  .switch__track {
+    position: absolute; inset: 0;
+    background: var(--color-surface-3);
+    border: 1px solid var(--color-border-default);
+    border-radius: 999px;
+    transition:
+      background var(--dur-base) var(--ease-station),
+      border-color var(--dur-base) var(--ease-station);
+  }
+  .switch__thumb {
+    position: absolute;
+    top: 50%; left: 2px; transform: translateY(-50%);
+    width: 14px; height: 14px;
+    background: #cbd5e1;
+    border-radius: 999px;
+    transition:
+      left var(--dur-base) var(--ease-station),
+      background var(--dur-base) var(--ease-station);
+  }
+  .switch input:checked + .switch__track {
+    background: color-mix(in srgb, var(--color-brand-500) 55%, transparent);
+    border-color: var(--color-brand-500);
+    box-shadow: var(--glow-brand);
+  }
+  .switch input:checked + .switch__track .switch__thumb {
+    left: 18px;
+    background: #ffffff;
+  }
+  .switch input:focus-visible + .switch__track {
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-brand-500) 25%, transparent);
+  }
+
+  .neutral-row,
+  .danger-row {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 1rem; padding: 14px 16px;
+    border-radius: var(--radius-inset);
+    flex-wrap: wrap;
+  }
+  .neutral-row {
+    border: 1px solid var(--color-border-subtle);
+    background: var(--color-surface-2);
+  }
+  .danger-row {
+    border: 1px solid color-mix(in srgb, var(--color-danger) 18%, var(--color-border-subtle));
+    background: rgba(153, 27, 27, 0.06);
+  }
+  .danger-row h4 { color: #fee2e2; }
+  .neutral-row > .min-w-0,
+  .danger-row > .min-w-0 { flex: 1 1 0; min-width: 220px; }
+  .neutral-row > button,
+  .danger-row > button { flex-shrink: 0; margin-left: auto; }
+
+  @media (max-width: 640px) {
+    .neutral-row, .danger-row {
+      flex-direction: column;
+      align-items: stretch;
+      gap: 0.5rem;
+      padding: 1rem 1.25rem;
     }
+    .neutral-row > button,
+    .danger-row > button { align-self: flex-end; margin-left: 0; }
+  }
+
+  /* ───── Confirm dialog ─────────────────────────────────────── */
+  .confirm-dialog { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; }
+  .confirm-dialog.hidden { display: none; }
+  .confirm-dialog__backdrop {
+    position: absolute; inset: 0;
+    background: rgba(2, 6, 23, 0.72);
+    backdrop-filter: blur(3px);
+  }
+  .confirm-dialog__panel {
+    position: relative;
+    width: min(94vw, 30rem);
+    box-shadow: var(--shadow-4), 0 0 0 1px rgba(30, 38, 56, 0.8);
+    animation: confirm-in 220ms var(--ease-station);
+  }
+  @keyframes confirm-in {
+    from { opacity: 0; transform: translateY(10px) scale(0.985); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .confirm-dialog__panel { animation: none; }
+  }
+
+  /* ───── Admin flash toast auto-fade ────────────────────────── */
+  #admin-flash[data-admin-flash].is-fading {
+    opacity: 0;
+    transition: opacity 280ms var(--ease-station);
   }
 </style>
 
@@ -330,7 +444,7 @@
 </div>
 
 {% if error is defined and error %}
-<div class="mb-4 border-l-4 border-red-500 bg-red-950/30 text-red-300 rounded-r-lg px-4 py-3 text-sm font-sans">
+<div class="mb-4 border-l-4 border-danger bg-danger-bg text-danger rounded-r-inset px-4 py-3 text-sm font-sans">
   {{ error }}
 </div>
 {% endif %}
@@ -345,7 +459,7 @@
         hx-target="#app-content"
         hx-swap="innerHTML"
         hx-push-url="true"
-        class="px-3 py-1.5 rounded border border-[#2a3448] bg-[#151b27] hover:bg-[#1e2638] text-slate-200 text-sm font-medium font-sans transition-colors"
+        class="station-button station-button--secondary px-3 py-1.5 text-sm font-medium font-sans"
       >
         Settings Guide
       </a>
@@ -356,16 +470,16 @@
         hx-target="#add-instance-modal-content"
         hx-swap="innerHTML"
         id="add-instance-btn"
-        class="px-3 py-1.5 rounded bg-brand-600 hover:bg-brand-500 text-white text-sm font-medium font-sans transition-colors"
+        class="station-button station-button--primary px-3 py-1.5 text-sm font-medium font-sans"
       >
         + Add Instance
       </button>
     </div>
   </div>
 
-  <div class="instance-table-wrapper rounded-xl border border-[#1e2638] overflow-x-auto">
+  <div class="instance-table-wrapper rounded-container border border-border-subtle overflow-x-auto">
     <table id="instance-table" class="w-full sm:min-w-[760px] text-sm">
-      <thead class="bg-[#151b27] text-[10px] text-slate-500 uppercase tracking-widest font-sans border-b border-[#1e2638]">
+      <thead class="bg-surface-2 text-[10px] text-slate-500 uppercase tracking-widest font-sans border-b border-border-subtle">
         <tr>
           <th class="px-4 py-3 text-left font-medium">Name</th>
           <th class="px-4 py-3 text-left font-medium">Type</th>
@@ -375,7 +489,7 @@
           <th class="px-4 py-3 text-right font-medium">Actions</th>
         </tr>
       </thead>
-      <tbody id="instance-tbody" class="divide-y divide-[#1e2638]">
+      <tbody id="instance-tbody" class="divide-y divide-border-subtle">
         {% for instance in instances %} {% include "partials/instance_row.html" %} {% else %}
         <tr id="no-instances-row">
           <td colspan="6" class="px-4 py-12 text-center">
@@ -388,126 +502,74 @@
     </table>
   </div>
 
-  {% include "partials/changelog_settings_section.html" %}
-
-  {% if auth_mode != "proxy" %}
-  <section id="account-section" class="mt-8 rounded-xl border border-[#1e2638] bg-[#0e1117] p-4 sm:p-5">
-    <details id="account-settings" {% if account_error or account_success %}open{% endif %}>
-      <summary
-        class="cursor-pointer list-none flex items-center justify-between rounded-lg px-2 py-2 text-slate-200 hover:bg-[#151b27] focus:outline-none focus:ring-2 focus:ring-brand-400/30"
-      >
-        <span>
-          <span class="block text-base font-semibold">Account</span>
-          <span class="block text-sm text-slate-400 mt-0.5"
-            >Manage admin credentials for this Houndarr instance.</span
-          >
-        </span>
-        <span class="account-details-chevron text-slate-400" aria-hidden="true">
-          <svg class="w-4 h-4" viewBox="0 0 20 20" fill="currentColor">
-            <path
-              fill-rule="evenodd"
-              d="M5.23 7.21a.75.75 0 0 1 1.06.02L10 11.118l3.71-3.89a.75.75 0 1 1 1.08 1.04l-4.25 4.46a.75.75 0 0 1-1.08 0l-4.25-4.46a.75.75 0 0 1 .02-1.06Z"
-              clip-rule="evenodd"
-            />
+  <!-- ═══════════ ADMIN PARENT DROPDOWN ═══════════ -->
+  <section
+    id="admin-grouped"
+    class="admin-panel mt-10 rounded-container border border-border-subtle bg-surface-1 overflow-hidden"
+    data-open="true"
+  >
+    <button
+      type="button"
+      id="admin-toggle"
+      class="admin-panel__header w-full text-left flex items-center justify-between gap-4 px-5 sm:px-6 py-4 sm:py-5 hover:bg-surface-2/30 transition-colors"
+      aria-expanded="true"
+      aria-controls="admin-body"
+    >
+      <div class="flex items-center gap-3 min-w-0">
+        <div
+          class="admin-icon shrink-0 w-9 h-9 rounded-inset bg-surface-2 border border-border-subtle grid place-items-center text-brand-300"
+          aria-hidden="true"
+        >
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 3l8 3v5c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10V6l8-3z"/>
+            <circle cx="12" cy="12" r="2.2"/>
+            <path d="M12 9v1.2M12 13.8V15M14.6 10.5l-1 .6M10.4 13l-1 .6M14.6 13.5l-1-.6M10.4 11l-1-.6"/>
           </svg>
-        </span>
-      </summary>
-
-      <div class="account-details-content">
-        <div class="account-details-inner pt-4 space-y-4">
-          <div
-            class="inline-flex items-center gap-2 rounded-md border border-[#1e2638] bg-[#07080f]/70 px-3 py-1.5 text-xs text-slate-400 font-sans"
-          >
-            <span class="text-slate-500">Signed in as</span>
-            <span class="font-medium text-slate-200">{{ signed_in_as }}</span>
-          </div>
-
-          <form
-            hx-post="/settings/account/password"
-            hx-target="#account-section"
-            hx-select="#account-section"
-            hx-swap="outerHTML"
-            class="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4"
-          >
-            <div>
-              <label class="block text-xs font-medium text-slate-400 mb-1.5" for="current-password"
-                >Current Password</label
-              >
-              <input
-                id="current-password"
-                name="current_password"
-                type="password"
-                required
-                autocomplete="current-password"
-                class="w-full h-11 rounded-lg border border-[#2a3448] bg-[#0e1117] px-3 text-base text-white placeholder:text-slate-600 font-sans
-                           focus:outline-none focus:border-brand-400/70 focus:ring-2 focus:ring-brand-500/25"
-              />
-            </div>
-            <div>
-              <label class="block text-xs font-medium text-slate-400 mb-1.5" for="new-password"
-                >New Password</label
-              >
-              <input
-                id="new-password"
-                name="new_password"
-                type="password"
-                required
-                minlength="8"
-                autocomplete="new-password"
-                class="w-full h-11 rounded-lg border border-[#2a3448] bg-[#0e1117] px-3 text-base text-white placeholder:text-slate-600 font-sans
-                           focus:outline-none focus:border-brand-400/70 focus:ring-2 focus:ring-brand-500/25"
-              />
-            </div>
-            <div>
-              <label class="block text-xs font-medium text-slate-400 mb-1.5" for="confirm-password"
-                >Confirm Password</label
-              >
-              <input
-                id="confirm-password"
-                name="new_password_confirm"
-                type="password"
-                required
-                minlength="8"
-                autocomplete="new-password"
-                class="w-full h-11 rounded-lg border border-[#2a3448] bg-[#0e1117] px-3 text-base text-white placeholder:text-slate-600 font-sans
-                           focus:outline-none focus:border-brand-400/70 focus:ring-2 focus:ring-brand-500/25"
-              />
-            </div>
-
-            <div class="sm:col-span-3 flex flex-wrap items-center gap-3 pt-1">
-              <button
-                type="submit"
-                class="px-4 py-2.5 rounded-lg bg-brand-500 hover:bg-brand-400 text-white text-sm font-semibold font-sans transition-colors focus:outline-none focus:ring-2 focus:ring-brand-400/35"
-              >
-                Update Password
-              </button>
-              <p class="text-xs text-slate-500">Current password is required for security.</p>
-            </div>
-
-            {% if account_error is defined and account_error %}
-            <div class="sm:col-span-3 border-l-4 border-red-500 bg-red-950/30 rounded-r-lg px-3 py-2 text-sm text-red-300 font-sans">
-              {{ account_error }}
-            </div>
-            {% endif %} {% if account_success is defined and account_success %}
-            <div
-              class="sm:col-span-3 border-l-4 border-emerald-500 bg-emerald-950/30 rounded-r-lg px-3 py-2 text-sm text-emerald-300 font-sans"
-            >
-              {{ account_success }}
-            </div>
-            {% endif %}
-          </form>
+        </div>
+        <div class="min-w-0">
+          <h2 class="text-base font-semibold text-slate-100">Admin</h2>
+          <p class="text-xs text-slate-500 mt-0.5">
+            Security, updates, maintenance, and factory-reset actions.
+          </p>
         </div>
       </div>
-    </details>
+      <svg
+        class="admin-chevron w-4 h-4 text-slate-400 shrink-0"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        aria-hidden="true"
+      >
+        <polyline points="6 9 12 15 18 9"/>
+      </svg>
+    </button>
+
+    <div id="admin-body" class="admin-panel__body">
+      <div class="px-5 sm:px-6 py-5 sm:py-6 space-y-8">
+        {% include "partials/admin/security.html" %}
+        {% include "partials/admin/updates.html" %}
+        {% include "partials/admin/maintenance.html" %}
+        {% include "partials/admin/danger.html" %}
+
+        <!-- Flash slot: the three admin endpoints outerHTML-swap their
+             toast partials into this div. Stays empty on initial
+             render, auto-clears after 3.2s via the admin JS. -->
+        <div id="admin-flash" aria-live="polite"></div>
+      </div>
+    </div>
   </section>
-  {% endif %}
+
+  {% include "partials/admin/confirm_dialog.html" %}
 
   <dialog
     id="add-instance-modal"
-    class="m-auto p-0 w-[min(94vw,52rem)] rounded-2xl border border-[#1e2638] bg-[#0e1117] text-slate-100"
+    class="m-auto p-0 w-[min(94vw,52rem)] rounded-container border border-border-subtle bg-surface-1 text-slate-100"
     style="box-shadow:0 30px 80px rgba(0,0,0,0.7), 0 0 0 1px rgba(30,38,56,0.8);"
   >
-    <div class="flex items-start justify-between border-b border-[#1e2638] px-6 py-5">
+    <div class="flex items-start justify-between border-b border-border-subtle px-6 py-5">
       <div>
         <h3 id="add-instance-modal-title" class="text-xl font-semibold tracking-tight text-white">
           Add Instance
@@ -531,7 +593,7 @@
         autofocus
         aria-label="Close add instance dialog"
         data-close-add-instance-modal="true"
-        class="ml-4 flex-shrink-0 rounded-lg border border-[#2a3448] bg-[#151b27] p-2 text-slate-400 hover:bg-[#1e2638] hover:text-slate-200 transition-colors focus:outline-none focus:ring-2 focus:ring-brand-400/30"
+        class="ml-4 flex-shrink-0 rounded-inset border border-border-default bg-surface-2 p-2 text-slate-400 hover:bg-surface-3 hover:text-slate-200 transition-colors duration-base ease-station focus:outline-none focus:ring-2 focus:ring-brand-400/30"
       >
         <span aria-hidden="true" class="text-xl leading-none">&times;</span>
       </button>
@@ -559,15 +621,10 @@
     const addInstanceModalContent = document.getElementById('add-instance-modal-content');
     const addInstanceModalTitle = document.getElementById('add-instance-modal-title');
     const addInstanceModalSubtitle = document.getElementById('add-instance-modal-subtitle');
-    const accountSettings = document.getElementById('account-settings');
-    const accountSummary = accountSettings ? accountSettings.querySelector('summary') : null;
-    const accountContent = accountSettings ? accountSettings.querySelector('.account-details-content') : null;
     const closeAnimationMs = 160;
-    const accountAnimationMs = 180;
     const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     let isClosingAddInstanceModal = false;
     let pendingModalShow = false;
-    let isAccountAnimating = false;
     let connectionStatusTimer = null;
 
     if (!addInstanceBtn || !addInstanceModal || !addInstanceModalContent) {
@@ -584,84 +641,6 @@
       window.setTimeout(() => {
         row.classList.remove('just-updated');
       }, 450);
-    }
-
-    function initializeAccountContent() {
-      if (!accountSettings || !accountContent) {
-        return;
-      }
-
-      accountContent.style.transition = '';
-      accountContent.style.height = accountSettings.open ? 'auto' : '0px';
-      accountContent.style.opacity = accountSettings.open ? '1' : '0';
-    }
-
-    function toggleAccountDetails(shouldOpen) {
-      if (!accountSettings || !accountContent || isAccountAnimating) {
-        return;
-      }
-
-      if (prefersReducedMotion) {
-        accountSettings.open = shouldOpen;
-        initializeAccountContent();
-        return;
-      }
-
-      const startHeight = accountContent.getBoundingClientRect().height;
-      isAccountAnimating = true;
-
-      if (shouldOpen) {
-        accountSettings.open = true;
-        const endHeight = accountContent.scrollHeight;
-
-        accountContent.style.height = `${startHeight}px`;
-        accountContent.style.opacity = '0';
-
-        requestAnimationFrame(() => {
-          accountContent.style.transition = `height ${accountAnimationMs}ms ease, opacity ${accountAnimationMs}ms ease`;
-          accountContent.style.height = `${endHeight}px`;
-          accountContent.style.opacity = '1';
-        });
-
-        window.setTimeout(() => {
-          accountContent.style.transition = '';
-          accountContent.style.height = 'auto';
-          isAccountAnimating = false;
-        }, accountAnimationMs);
-        return;
-      }
-
-      accountContent.style.height = `${startHeight}px`;
-      accountContent.style.opacity = '1';
-
-      requestAnimationFrame(() => {
-        accountContent.style.transition = `height ${accountAnimationMs}ms ease, opacity ${accountAnimationMs}ms ease`;
-        accountContent.style.height = '0px';
-        accountContent.style.opacity = '0';
-      });
-
-      window.setTimeout(() => {
-        accountSettings.open = false;
-        accountContent.style.transition = '';
-        accountContent.style.height = '0px';
-        isAccountAnimating = false;
-      }, accountAnimationMs);
-    }
-
-    initializeAccountContent();
-
-    if (accountSummary) {
-      accountSummary.addEventListener(
-        'click',
-        function (event) {
-          event.preventDefault();
-          if (!accountSettings) {
-            return;
-          }
-          toggleAccountDetails(!accountSettings.open);
-        },
-        { signal },
-      );
     }
 
     function setAddInstanceModalChrome(mode, instanceName) {
@@ -1042,16 +1021,11 @@
           window.houndarrCloseAddInstanceModal();
         }
 
-        if (evt.detail.target.id === 'account-section') {
-          // When the password form re-renders (success or validation
-          // error), the submit button the user just clicked is
-          // replaced, so focus falls to <body>.  Keep the <details>
-          // expanded and return focus to the first password field so
+        if (evt.detail.target.id === 'admin-security') {
+          // After the password-change form re-renders (success or
+          // validation error) via the /settings/account/password
+          // endpoint, return focus to the first password field so
           // keyboard users do not lose their place.
-          const details = document.querySelector('#account-settings');
-          if (details) {
-            details.open = true;
-          }
           const firstPwInput = document.querySelector('#current-password');
           if (firstPwInput) {
             firstPwInput.focus();
@@ -1101,5 +1075,288 @@
       },
       { signal },
     );
+  })();
+
+  /* ── Admin dropdown collapse + confirm-dialog wiring ─────────
+     Ported from the design's settings-redesign.js, trimmed for this
+     production surface (no tweaks panel, no legacy layout swap). */
+  (function () {
+    const panel = document.getElementById('admin-grouped');
+    const body = document.getElementById('admin-body');
+    const toggle = document.getElementById('admin-toggle');
+    if (!panel || !body || !toggle) return;
+
+    const KEY = 'houndarr.adminOpen';
+    const DUR = 260;
+    const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    let animating = false;
+
+    const saved = localStorage.getItem(KEY);
+    const startOpen = saved === null ? true : saved === '1';
+    panel.setAttribute('data-open', String(startOpen));
+    toggle.setAttribute('aria-expanded', String(startOpen));
+    body.style.transition = '';
+    body.style.height = startOpen ? 'auto' : '0px';
+    body.style.opacity = startOpen ? '1' : '0';
+
+    toggle.addEventListener('click', () => {
+      if (animating) return;
+      const isOpen = panel.getAttribute('data-open') === 'true';
+      setOpen(!isOpen);
+    });
+
+    function setOpen(shouldOpen) {
+      if (prefersReduced) {
+        panel.setAttribute('data-open', String(shouldOpen));
+        toggle.setAttribute('aria-expanded', String(shouldOpen));
+        body.style.transition = '';
+        body.style.height = shouldOpen ? 'auto' : '0px';
+        body.style.opacity = shouldOpen ? '1' : '0';
+        persist(shouldOpen);
+        return;
+      }
+
+      animating = true;
+      const startHeight = body.getBoundingClientRect().height;
+      panel.setAttribute('data-open', String(shouldOpen));
+      toggle.setAttribute('aria-expanded', String(shouldOpen));
+
+      if (shouldOpen) {
+        body.style.transition = '';
+        body.style.height = `${startHeight}px`;
+        body.style.opacity = '0';
+        body.style.height = 'auto';
+        const endHeight = body.scrollHeight;
+        body.style.height = `${startHeight}px`;
+        requestAnimationFrame(() => {
+          body.style.transition = `height ${DUR}ms var(--ease-station), opacity ${DUR}ms ease`;
+          body.style.height = `${endHeight}px`;
+          body.style.opacity = '1';
+        });
+        window.setTimeout(() => {
+          body.style.transition = '';
+          body.style.height = 'auto';
+          animating = false;
+        }, DUR);
+      } else {
+        body.style.transition = '';
+        body.style.height = `${startHeight}px`;
+        body.style.opacity = '1';
+        requestAnimationFrame(() => {
+          body.style.transition = `height ${DUR}ms var(--ease-station), opacity ${DUR}ms ease`;
+          body.style.height = '0px';
+          body.style.opacity = '0';
+        });
+        window.setTimeout(() => {
+          body.style.transition = '';
+          body.style.height = '0px';
+          animating = false;
+        }, DUR);
+      }
+      persist(shouldOpen);
+    }
+
+    function persist(open) {
+      try { localStorage.setItem(KEY, open ? '1' : '0'); } catch { /* ignore */ }
+    }
+  })();
+
+  /* ── Confirm dialog (Admin > Maintenance + Danger zone) ───── */
+  (function () {
+    const dialog = document.getElementById('confirm-dialog');
+    const form = document.getElementById('confirm-form');
+    if (!dialog || !form) return;
+
+    const titleEl = document.getElementById('confirm-title');
+    const bodyEl = document.getElementById('confirm-body');
+    const bulletsEl = document.getElementById('confirm-bullets');
+    const typedWrap = document.getElementById('confirm-typed');
+    const phraseInput = document.getElementById('confirm-phrase-input');
+    const secondFactorWrap = document.getElementById('confirm-second-factor');
+    const confirmGo = document.getElementById('confirm-go');
+    const iconEl = document.getElementById('confirm-icon');
+    const FACTORY_PHRASE = 'RESET';
+
+    // Kind-specific copy + endpoints.  The factory variant is the only
+    // one that surfaces the typed-phrase + second-factor fields; neutral
+    // actions just show the title / body / confirm button.
+    const COPY = {
+      instances: {
+        tone: 'neutral',
+        title: 'Reset policy settings?',
+        body: 'Reverts policy settings (batch, cadence, cooldowns, cutoff, upgrade) to their factory defaults.',
+        keep: 'Your instances, connections, and API keys are kept.',
+        cta: 'Reset settings',
+        endpoint: '/settings/admin/reset-instances',
+        requiresTyped: false,
+      },
+      logs: {
+        tone: 'neutral',
+        title: 'Clear all logs?',
+        body: 'Empties the Activity log on disk.  A single breadcrumb entry survives so you can see when the wipe happened.',
+        keep: 'Instances, settings, and credentials are not affected.',
+        cta: 'Clear logs',
+        endpoint: '/settings/admin/clear-logs',
+        requiresTyped: false,
+      },
+      factory: {
+        tone: 'danger',
+        title: 'Factory reset Houndarr?',
+        body: 'This deletes the database and master-key file, then returns you to first-run state.',
+        bullets: [
+          'All instances, preferences, logs, and sessions are dropped.',
+          'The master key is regenerated; existing backups of encrypted API keys become unreadable.',
+        ],
+        cta: 'Factory reset',
+        endpoint: '/settings/admin/factory-reset',
+        requiresTyped: true,
+      },
+    };
+
+    function setIconTone(tone) {
+      if (tone === 'danger') {
+        iconEl.className =
+          'w-9 h-9 rounded-inset grid place-items-center bg-danger-bg border border-danger-border text-danger shrink-0';
+        confirmGo.className =
+          'station-button station-button--danger px-3 py-2 text-sm font-medium';
+      } else {
+        iconEl.className =
+          'w-9 h-9 rounded-inset grid place-items-center bg-surface-2 border border-border-default text-slate-300 shrink-0';
+        confirmGo.className =
+          'station-button station-button--primary px-3 py-2 text-sm font-medium';
+      }
+    }
+
+    function makeBullet(text) {
+      const li = document.createElement('li');
+      li.className = 'flex gap-2';
+      const marker = document.createElement('span');
+      marker.className = 'text-slate-600 mt-0.5';
+      marker.textContent = '\u2014';
+      const bodyText = document.createElement('span');
+      bodyText.textContent = text;
+      li.append(marker, bodyText);
+      return li;
+    }
+
+    function openFor(kind) {
+      const copy = COPY[kind];
+      if (!copy) return;
+      form.setAttribute('hx-post', copy.endpoint);
+      if (window.htmx && typeof window.htmx.process === 'function') {
+        window.htmx.process(form);
+      }
+      setIconTone(copy.tone);
+      titleEl.textContent = copy.title;
+      bodyEl.textContent = copy.body;
+
+      bulletsEl.replaceChildren();
+      if (copy.bullets && copy.bullets.length) {
+        bulletsEl.classList.remove('hidden');
+        copy.bullets.forEach((b) => bulletsEl.appendChild(makeBullet(b)));
+      } else if (copy.keep) {
+        bulletsEl.classList.remove('hidden');
+        const li = document.createElement('li');
+        li.className = 'flex gap-2 text-slate-500';
+        const marker = document.createElement('span');
+        marker.className = 'text-slate-600 mt-0.5';
+        marker.textContent = '\u2713';
+        const t = document.createElement('span');
+        t.textContent = copy.keep;
+        li.append(marker, t);
+        bulletsEl.appendChild(li);
+      } else {
+        bulletsEl.classList.add('hidden');
+      }
+
+      if (copy.requiresTyped) {
+        typedWrap.classList.remove('hidden');
+        secondFactorWrap.classList.remove('hidden');
+        phraseInput.value = '';
+        phraseInput.placeholder = FACTORY_PHRASE;
+        const secondInput = secondFactorWrap.querySelector('input');
+        if (secondInput) secondInput.value = '';
+        confirmGo.textContent = copy.cta;
+        confirmGo.disabled = true;
+      } else {
+        typedWrap.classList.add('hidden');
+        secondFactorWrap.classList.add('hidden');
+        confirmGo.textContent = copy.cta;
+        confirmGo.disabled = false;
+      }
+
+      dialog.classList.remove('hidden');
+      setTimeout(() => {
+        if (copy.requiresTyped) {
+          phraseInput.focus();
+        } else {
+          confirmGo.focus();
+        }
+      }, 40);
+    }
+
+    function close() {
+      dialog.classList.add('hidden');
+      confirmGo.disabled = false;
+    }
+
+    document.body.addEventListener('click', (event) => {
+      const openBtn = event.target.closest('[data-confirm-reset]');
+      if (openBtn) {
+        openFor(openBtn.getAttribute('data-confirm-reset'));
+        return;
+      }
+      const dismissBtn = event.target.closest('[data-dismiss-confirm]');
+      if (dismissBtn) {
+        close();
+      }
+    });
+
+    // Typed phrase gating: enable Confirm only when the phrase matches.
+    if (phraseInput) {
+      phraseInput.addEventListener('input', () => {
+        confirmGo.disabled = phraseInput.value.trim() !== FACTORY_PHRASE;
+      });
+    }
+
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape' && !dialog.classList.contains('hidden')) {
+        close();
+      }
+    });
+
+    // Close the dialog on any server response (success or flash-rendering
+    // error) so the #admin-flash slot is visible to the user.
+    document.body.addEventListener('htmx:afterRequest', (evt) => {
+      if (!evt.detail || !evt.detail.elt) return;
+      if (evt.detail.elt.closest('#confirm-dialog')) {
+        close();
+      }
+    });
+  })();
+
+  /* ── Admin flash toast auto-fade ─────────────────────────────
+     The route returns a single .border-l-4 .{{ tone }} div which HTMX
+     innerHTML-swaps into the stable #admin-flash wrapper.  After 3.2s
+     we fade the inner child to 0 opacity and clear it so the wrapper
+     is ready for the next flash. */
+  (function () {
+    const FADE_MS = 3200;
+    let fadeTimer = null;
+    document.body.addEventListener('htmx:afterSwap', (evt) => {
+      const wrapper = evt.detail && evt.detail.target;
+      if (!wrapper || wrapper.id !== 'admin-flash') return;
+      if (fadeTimer) window.clearTimeout(fadeTimer);
+      const toast = wrapper.querySelector('[data-admin-flash]');
+      if (!toast) return;
+      fadeTimer = window.setTimeout(() => {
+        toast.classList.add('is-fading');
+        window.setTimeout(() => {
+          if (toast.parentElement === wrapper) {
+            wrapper.replaceChildren();
+          }
+        }, 320);
+      }, FADE_MS);
+    });
   })();
 </script>

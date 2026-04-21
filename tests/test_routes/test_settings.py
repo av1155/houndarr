@@ -113,7 +113,14 @@ def test_settings_page_renders(app: TestClient) -> None:
     assert b"https://github.com/av1155/houndarr" in resp.content
     assert b"Settings Guide" in resp.content
     assert b'href="/settings/help"' in resp.content
-    assert b"Account" in resp.content
+    # Admin dropdown replaces the old Account section; the four sub-sections
+    # collectively cover password change, changelog prefs, maintenance, and
+    # factory reset.
+    assert b'id="admin-grouped"' in resp.content
+    assert b'id="admin-security"' in resp.content
+    assert b'id="admin-updates"' in resp.content
+    assert b'id="admin-maintenance"' in resp.content
+    assert b'id="admin-danger"' in resp.content
     assert b"Update Password" in resp.content
     assert b"Signed in as" in resp.content
 
@@ -122,9 +129,10 @@ def test_settings_page_includes_changelog_section(app: TestClient) -> None:
     _login(app)
     resp = app.get("/settings")
     assert resp.status_code == 200
-    assert b'id="changelog-section"' in resp.content
-    assert b"Changelog notifications" in resp.content
+    assert b'id="admin-updates"' in resp.content
+    assert b"Show changelog after each update" in resp.content
     assert b"Show last changelog" in resp.content
+    assert b"View full CHANGELOG.md" in resp.content
     # Fresh install defaults to enabled → checkbox checked.
     assert b"checked" in resp.content
 
@@ -142,8 +150,7 @@ async def test_settings_page_reflects_disabled_changelog(app: TestClient) -> Non
     input_match = re.search(rb'<input[^>]*name="enabled"[^>]*>', resp.content)
     assert input_match is not None
     assert b"checked" not in input_match.group(0)
-    assert b'id="account-settings"' in resp.content
-    assert b'id="account-settings" open' not in resp.content
+    assert b'id="admin-grouped"' in resp.content
     assert b"What do these settings mean?" in resp.content
 
 
@@ -636,7 +643,7 @@ def test_password_change_success(app: TestClient) -> None:
     )
     assert resp.status_code == 200
     assert b"Password updated successfully" in resp.content
-    assert b'id="account-settings" open' in resp.content
+    assert b'id="admin-security"' in resp.content
 
     app.post("/logout", headers=csrf_headers(app))
     login_resp = app.post(
@@ -660,7 +667,7 @@ def test_password_change_requires_correct_current_password(app: TestClient) -> N
     )
     assert resp.status_code == 422
     assert b"Current password is incorrect" in resp.content
-    assert b'id="account-settings" open' in resp.content
+    assert b'id="admin-security"' in resp.content
 
 
 def test_password_change_requires_matching_confirmation(app: TestClient) -> None:
@@ -676,7 +683,7 @@ def test_password_change_requires_matching_confirmation(app: TestClient) -> None
     )
     assert resp.status_code == 422
     assert b"New passwords do not match" in resp.content
-    assert b'id="account-settings" open' in resp.content
+    assert b'id="admin-security"' in resp.content
 
 
 def test_password_change_htmx(app: TestClient) -> None:

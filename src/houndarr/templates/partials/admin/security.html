@@ -1,0 +1,201 @@
+{#
+  Admin > Security sub-section.
+
+  Builtin: renders the password-change form that POSTs to
+  /settings/account/password (the existing endpoint, unchanged). The
+  form reuses static/js/auth.js's strength meter + show-hide + caps-
+  lock + confirm-match via data attributes.
+
+  Proxy: renders a read-only identity card with a pointer at the SSO
+  docs page instead of the form, because there is no local password to
+  change when auth is delegated to the upstream proxy.
+#}
+<section id="admin-security" class="space-y-3">
+  <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+    <h3 class="text-base font-semibold text-slate-200">Security</h3>
+  </div>
+
+  <div class="rounded-container border border-border-subtle bg-surface-1 p-5 sm:p-6">
+    <div
+      class="inline-flex items-center gap-2 rounded-inset border border-border-subtle bg-surface-2/70 px-3 py-1.5 text-xs text-slate-400 font-sans mb-5"
+    >
+      <span class="text-slate-500">Signed in as</span>
+      <span class="font-medium text-slate-200 font-mono text-[11px]">{{ signed_in_as }}</span>
+    </div>
+
+    {% if auth_mode == "proxy" %}
+    <p class="text-sm text-slate-400">
+      Password management is handled by your SSO or reverse-proxy provider.
+      Houndarr trusts the authenticated identity forwarded by the configured
+      <code class="text-slate-300">auth header</code> for every request.
+    </p>
+    <p class="mt-2 text-xs text-slate-500">
+      See
+      <a
+        href="https://av1155.github.io/houndarr/docs/guides/sso-proxy-auth"
+        target="_blank"
+        rel="noopener noreferrer"
+        class="text-brand-300 hover:text-brand-200 underline underline-offset-4 decoration-dotted"
+      >
+        SSO / proxy auth guide →
+      </a>
+      for how to rotate credentials at the proxy layer.
+    </p>
+    {% else %}
+    <form
+      data-auth-form
+      hx-post="/settings/account/password"
+      hx-target="#admin-security"
+      hx-select="#admin-security"
+      hx-swap="outerHTML"
+      class="grid grid-cols-1 md:grid-cols-3 gap-3 items-start"
+      autocomplete="off"
+    >
+      <div class="field">
+        <label class="block text-xs font-medium text-slate-400 mb-1.5" for="current-password">
+          Current Password
+        </label>
+        <div class="input-wrap">
+          <input
+            id="current-password"
+            name="current_password"
+            type="password"
+            required
+            autocomplete="current-password"
+            data-pw-input
+            class="station-input has-trailing h-10 px-3 text-sm text-white placeholder:text-slate-600"
+          />
+          <div class="input-trailing">
+            <span class="caps-badge" aria-hidden="true">Caps</span>
+            <button
+              type="button"
+              class="icon-btn"
+              data-pw-toggle
+              aria-label="Show password"
+              aria-pressed="false"
+            >
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/>
+                <circle cx="12" cy="12" r="3"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="field">
+        <label class="block text-xs font-medium text-slate-400 mb-1.5" for="new-password">
+          New Password
+        </label>
+        <div class="input-wrap">
+          <input
+            id="new-password"
+            name="new_password"
+            type="password"
+            required
+            minlength="8"
+            autocomplete="new-password"
+            data-pw-input
+            data-strength-source
+            class="station-input has-trailing h-10 px-3 text-sm text-white placeholder:text-slate-600"
+          />
+          <div class="input-trailing">
+            <span class="caps-badge" aria-hidden="true">Caps</span>
+            <button
+              type="button"
+              class="icon-btn"
+              data-pw-toggle
+              aria-label="Show password"
+              aria-pressed="false"
+            >
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/>
+                <circle cx="12" cy="12" r="3"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+        <div
+          class="strength"
+          data-strength
+          role="meter"
+          aria-valuemin="0"
+          aria-valuemax="4"
+          aria-valuenow="0"
+          aria-valuetext="—"
+        >
+          <div class="strength__track">
+            <span class="strength__seg"></span>
+            <span class="strength__seg"></span>
+            <span class="strength__seg"></span>
+            <span class="strength__seg"></span>
+          </div>
+          <div class="strength__meta">
+            <span class="strength__label">—</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="field">
+        <label class="block text-xs font-medium text-slate-400 mb-1.5" for="confirm-password">
+          Confirm Password
+        </label>
+        <div class="input-wrap">
+          <input
+            id="confirm-password"
+            name="new_password_confirm"
+            type="password"
+            required
+            minlength="8"
+            autocomplete="new-password"
+            data-pw-input
+            data-pw-confirm="new-password"
+            class="station-input has-trailing h-10 px-3 text-sm text-white placeholder:text-slate-600"
+          />
+          <div class="input-trailing">
+            <span class="caps-badge" aria-hidden="true">Caps</span>
+            <button
+              type="button"
+              class="icon-btn"
+              data-pw-toggle
+              aria-label="Show password"
+              aria-pressed="false"
+            >
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/>
+                <circle cx="12" cy="12" r="3"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+        <p class="pw-match" aria-live="polite">&nbsp;</p>
+      </div>
+
+      <div class="md:col-span-3 flex flex-wrap items-center gap-3 pt-1">
+        <button
+          type="submit"
+          class="station-button station-button--primary px-4 py-2 text-sm font-semibold font-sans focus:outline-none focus:ring-2 focus:ring-brand-400/35"
+        >
+          Update Password
+        </button>
+        <p class="text-xs text-slate-500">Current password is required for security.</p>
+      </div>
+
+      {% if account_error is defined and account_error %}
+      <div
+        class="md:col-span-3 border-l-4 border-danger bg-danger-bg rounded-r-inset px-3 py-2 text-sm text-danger font-sans"
+      >
+        {{ account_error }}
+      </div>
+      {% endif %}
+      {% if account_success is defined and account_success %}
+      <div
+        class="md:col-span-3 border-l-4 border-success bg-success-bg rounded-r-inset px-3 py-2 text-sm text-success font-sans"
+      >
+        {{ account_success }}
+      </div>
+      {% endif %}
+    </form>
+    {% endif %}
+  </div>
+</section>

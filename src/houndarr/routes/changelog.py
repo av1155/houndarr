@@ -235,13 +235,9 @@ async def preferences(
     """
     new_disabled = "0" if enabled == "on" else "1"
     await set_setting("changelog_popups_disabled", new_disabled)
-    # Template path is rewired to the new Admin > Updates partial in
-    # task 5 (the template is created there). Keeping the old partial
-    # as the re-render target during the backend step avoids a
-    # transient 500 on tests that exercise this endpoint.
     return _get_templates().TemplateResponse(
         request=request,
-        name="partials/changelog_settings_section.html",
+        name="partials/admin/updates.html",
         context={"changelog_popups_enabled": new_disabled == "0"},
     )
 

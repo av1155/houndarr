@@ -249,18 +249,13 @@ def test_password_change_4xx_renders_error(
     logged_in_page: Page, houndarr_url: str, console_guard
 ) -> None:
     """Submitting the password form with the wrong current password should
-    render the account-section error in-place."""
+    render the admin-security error in-place."""
     for p in _EXPECTED_422_CONSOLE_NOISE:
         console_guard.allow(p)
     page = logged_in_page
     page.goto(f"{houndarr_url}/settings")
-    section = page.locator("#account-section")
+    section = page.locator("#admin-security")
     expect(section).to_be_visible()
-
-    # The password form lives inside a collapsed <details>; expand it
-    # via the .open property rather than a click-on-summary so we do
-    # not depend on the summary's exact accessible name.
-    section.locator("#account-settings").evaluate("el => { el.open = true; }")
 
     pw_form = section.locator('form[hx-post="/settings/account/password"]')
     pw_form.locator('input[name="current_password"]').fill("WrongOldPass1!")
@@ -274,10 +269,128 @@ def test_password_change_4xx_renders_error(
     assert resp_info.value.status == 422, resp_info.value.status
     _wait_for_htmx_idle(page)
 
-    expect(page.locator("#account-section")).to_contain_text(
+    expect(page.locator("#admin-security")).to_contain_text(
         "Current password is incorrect.",
         timeout=5_000,
     )
     # Focus is restored to the first password input so keyboard users do
     # not land on document.body after the submit button is replaced.
     expect(page.locator("#current-password")).to_be_focused(timeout=5_000)
+
+
+# ---------------------------------------------------------------------------
+# Admin dropdown coverage (Security / Updates / Maintenance / Danger zone)
+# ---------------------------------------------------------------------------
+
+
+def test_admin_dropdown_toggle_persists(logged_in_page: Page, houndarr_url: str) -> None:
+    """The Admin collapsible toggles state and persists to localStorage."""
+    page = logged_in_page
+    page.goto(f"{houndarr_url}/settings")
+    panel = page.locator("#admin-grouped")
+    toggle = page.locator("#admin-toggle")
+    expect(panel).to_have_attribute("data-open", "true")
+    toggle.click()
+    page.wait_for_timeout(400)
+    expect(panel).to_have_attribute("data-open", "false")
+    # Reload and confirm the preference persisted.
+    page.reload()
+    expect(page.locator("#admin-grouped")).to_have_attribute("data-open", "false")
+    # Re-open so the cleanup leaves the default state.
+    page.locator("#admin-toggle").click()
+    page.wait_for_timeout(400)
+
+
+def test_admin_security_confirm_password_match_indicator(
+    logged_in_page: Page, houndarr_url: str
+) -> None:
+    """Typing a matching confirm-password paints the is-match indicator."""
+    page = logged_in_page
+    page.goto(f"{houndarr_url}/settings")
+    page.locator("#new-password").fill("AnotherGood2!")
+    page.locator("#confirm-password").fill("AnotherGood2!")
+    expect(page.locator(".pw-match")).to_have_class(re.compile(r"is-match"))
+    # A mismatch flips it to is-mismatch.
+    page.locator("#confirm-password").fill("Different2!")
+    expect(page.locator(".pw-match")).to_have_class(re.compile(r"is-mismatch"))
+
+
+def test_admin_show_last_changelog_opens_modal(logged_in_page: Page, houndarr_url: str) -> None:
+    """The 'Show last changelog' button force-opens the What's new modal."""
+    page = logged_in_page
+    page.goto(f"{houndarr_url}/settings")
+    page.get_by_role("button", name=re.compile(r"show\s*last\s*changelog", re.I)).click()
+    expect(page.locator("dialog#changelog-modal[open]")).to_be_visible(timeout=4_000)
+
+
+def test_admin_view_full_changelog_navigates(logged_in_page: Page, houndarr_url: str) -> None:
+    """The 'View full CHANGELOG.md' link navigates to /settings/changelog/full."""
+    page = logged_in_page
+    page.goto(f"{houndarr_url}/settings")
+    page.get_by_role("link", name=re.compile(r"view\s*full\s*CHANGELOG", re.I)).click()
+    expect(page).to_have_url(re.compile(r"/settings/changelog/full$"))
+    expect(page.locator("[data-page-key='changelog-full']")).to_be_visible()
+
+
+def test_admin_clear_logs_flash(logged_in_page: Page, houndarr_url: str) -> None:
+    """Clear logs surfaces a success flash; the dialog closes automatically."""
+    page = logged_in_page
+    page.goto(f"{houndarr_url}/settings")
+    page.locator('button[data-confirm-reset="logs"]').click()
+    expect(page.locator("#confirm-dialog")).not_to_have_class(re.compile(r"hidden"))
+    page.locator("#confirm-go").click()
+    # Dialog closes and a toast lands in the flash slot.
+    expect(page.locator("#confirm-dialog")).to_have_class(re.compile(r"hidden"), timeout=4_000)
+    flash = page.locator("#admin-flash")
+    expect(flash).to_contain_text(re.compile(r"Cleared|already empty", re.I), timeout=4_000)
+
+
+def test_admin_reset_instances_empty_state_flash(logged_in_page: Page, houndarr_url: str) -> None:
+    """With no instances configured the reset button renders the 'nothing to reset' flash."""
+    page = logged_in_page
+    page.goto(f"{houndarr_url}/settings")
+    page.locator('button[data-confirm-reset="instances"]').click()
+    expect(page.locator("#confirm-title")).to_contain_text("Reset policy settings")
+    page.locator("#confirm-go").click()
+    expect(page.locator("#admin-flash")).to_contain_text(
+        re.compile(r"No instances configured|Policy settings reset", re.I),
+        timeout=4_000,
+    )
+
+
+def test_admin_factory_reset_phrase_gates_submit(logged_in_page: Page, houndarr_url: str) -> None:
+    """Confirm button stays disabled until the typed phrase matches RESET."""
+    page = logged_in_page
+    page.goto(f"{houndarr_url}/settings")
+    page.locator('button[data-confirm-reset="factory"]').click()
+    confirm_go = page.locator("#confirm-go")
+    expect(confirm_go).to_be_disabled()
+    page.locator("#confirm-phrase-input").fill("nope")
+    expect(confirm_go).to_be_disabled()
+    page.locator("#confirm-phrase-input").fill("RESET")
+    expect(confirm_go).to_be_enabled()
+    # Dismiss without submitting.
+    page.locator("[data-dismiss-confirm]").first.click()
+    expect(page.locator("#confirm-dialog")).to_have_class(re.compile(r"hidden"))
+
+
+def test_admin_factory_reset_wrong_password_flash(
+    logged_in_page: Page, houndarr_url: str, console_guard
+) -> None:
+    """Factory reset with wrong password renders a 422 error flash."""
+    for p in _EXPECTED_422_CONSOLE_NOISE:
+        console_guard.allow(p)
+    page = logged_in_page
+    page.goto(f"{houndarr_url}/settings")
+    page.locator('button[data-confirm-reset="factory"]').click()
+    page.locator("#confirm-phrase-input").fill("RESET")
+    page.locator("#confirm-password-input").fill("WrongPassword123!")
+    with page.expect_response(
+        lambda r: "/settings/admin/factory-reset" in r.url and r.request.method == "POST"
+    ) as resp_info:
+        page.locator("#confirm-go").click()
+    assert resp_info.value.status == 422, resp_info.value.status
+    expect(page.locator("#admin-flash")).to_contain_text(
+        re.compile(r"password is incorrect", re.I),
+        timeout=4_000,
+    )

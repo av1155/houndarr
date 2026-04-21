@@ -119,6 +119,10 @@ PROTECTED_ROUTES=(
     "GET /api/status"
     "GET /api/logs"
     "GET /api/logs/partial"
+    "GET /settings/changelog/full"
+    "POST /settings/admin/reset-instances"
+    "POST /settings/admin/clear-logs"
+    "POST /settings/admin/factory-reset"
 )
 
 for route in "${PROTECTED_ROUTES[@]}"; do
@@ -263,6 +267,74 @@ if [[ "$AUTHENTICATED" == "1" ]]; then
     fi
 else
     _warn "Authenticated checks skipped (login failed)"
+fi
+
+# -----------------------------------------------------------------------
+# 6b. Admin endpoints: CSRF + behavior gates
+# -----------------------------------------------------------------------
+
+_section "6b. Admin endpoints CSRF"
+
+if [[ "$AUTHENTICATED" == "1" ]]; then
+    for admin_path in /settings/admin/reset-instances /settings/admin/clear-logs /settings/admin/factory-reset; do
+        # Authenticated POST without X-CSRF-Token must return 403.
+        SC=$(curl -s -o /dev/null -w "%{http_code}" \
+            -X POST \
+            --max-redirs 0 \
+            -c /tmp/houndarr_smoke_cookies \
+            -b /tmp/houndarr_smoke_cookies \
+            "$HOST$admin_path" || true)
+        if [[ "$SC" == "403" ]]; then
+            _pass "POST $admin_path without CSRF -> 403"
+        else
+            _fail "POST $admin_path without CSRF -> $SC (expected 403)"
+        fi
+    done
+
+    # factory-reset with valid session + CSRF but wrong password must 422
+    # (the endpoint should never redirect unauthenticated, but verify that
+    # the dangerous path is password-gated in builtin mode).
+    SC=$(curl -s -o "$BODY" -w "%{http_code}" \
+        -X POST \
+        --max-redirs 0 \
+        -c /tmp/houndarr_smoke_cookies \
+        -b /tmp/houndarr_smoke_cookies \
+        -H "X-CSRF-Token: ${CSRF_TOKEN}" \
+        -d "confirm_phrase=RESET&current_password=definitely-not-the-password" \
+        "$HOST/settings/admin/factory-reset" || true)
+    if [[ "$SC" == "422" ]]; then
+        _pass "POST /settings/admin/factory-reset with wrong password -> 422"
+    else
+        _fail "POST /settings/admin/factory-reset with wrong password -> $SC (expected 422)"
+    fi
+
+    # factory-reset with wrong phrase + right password must still 422.
+    SC=$(curl -s -o "$BODY" -w "%{http_code}" \
+        -X POST \
+        --max-redirs 0 \
+        -c /tmp/houndarr_smoke_cookies \
+        -b /tmp/houndarr_smoke_cookies \
+        -H "X-CSRF-Token: ${CSRF_TOKEN}" \
+        -d "confirm_phrase=nope&current_password=${PASSWORD}" \
+        "$HOST/settings/admin/factory-reset" || true)
+    if [[ "$SC" == "422" ]]; then
+        _pass "POST /settings/admin/factory-reset with wrong phrase -> 422"
+    else
+        _fail "POST /settings/admin/factory-reset with wrong phrase -> $SC (expected 422)"
+    fi
+
+    # The full-changelog page is GET-only and should render for an authed user.
+    SC=$(curl -s -o "$BODY" -w "%{http_code}" \
+        -c /tmp/houndarr_smoke_cookies \
+        -b /tmp/houndarr_smoke_cookies \
+        "$HOST/settings/changelog/full" || true)
+    if [[ "$SC" == "200" ]] && grep -q "Changelog" "$BODY"; then
+        _pass "GET /settings/changelog/full renders for authenticated user"
+    else
+        _fail "GET /settings/changelog/full -> $SC (expected 200 with Changelog heading)"
+    fi
+else
+    _warn "Admin endpoint CSRF checks skipped (login failed)"
 fi
 
 # -----------------------------------------------------------------------

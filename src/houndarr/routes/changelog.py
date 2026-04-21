@@ -2,11 +2,11 @@
 
 Four endpoints, all authenticated (handled by ``AuthMiddleware``):
 
-- ``GET  /settings/changelog/popup`` — returns the modal HTML partial if the
+- ``GET  /settings/changelog/popup`` returns the modal HTML partial if the
   running version is newer than ``changelog_last_seen_version`` and popups
   are not disabled; otherwise returns an empty placeholder div.  Supports
   ``?force=1`` to bypass the decision and always render (used by the
-  Settings page "Show last changelog" button).
+  Settings page "What's new" button).
 - ``POST /settings/changelog/dismiss`` — writes ``changelog_last_seen_version``
   to the running version.  Idempotent.
 - ``POST /settings/changelog/disable`` — writes the last-seen marker AND

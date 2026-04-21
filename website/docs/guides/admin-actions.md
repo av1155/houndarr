@@ -27,20 +27,26 @@ auth](/docs/guides/sso-proxy-auth).
 
 ## Updates
 
-Two controls for the What's new modal and the changelog:
+Controls for the release check and the What's new modal:
 
+- **Automatically check for new releases** toggle. When enabled,
+  Houndarr polls GitHub Releases once every 24 hours for the latest
+  stable tag. The result renders inline under the toggle. Off on
+  every install, so nothing reaches GitHub until you flip it on.
+- **Check now** button. Forces an immediate poll regardless of the
+  toggle state. Useful for one-off checks without enabling the
+  background poll.
 - **Show changelog after each update** toggle. When enabled, the
-  modal opens automatically the first time you load the Settings or
-  Dashboard page after a version bump. When disabled, the modal stays
-  silent and the last-seen version is silently advanced on every load
-  so re-enabling later does not surface a backlog.
-- **Show last changelog** button. Opens the modal on demand, useful
-  when you want to re-read what shipped without waiting for the next
-  release.
-- **View full CHANGELOG.md →** link. Navigates to a dedicated page
-  that renders every release block bundled with the build, with the
-  same markdown vocabulary (inline code, bold, links, issue refs) as
-  the modal.
+  What's new modal opens automatically the first time you load the
+  Settings or Dashboard page after a version bump. When disabled,
+  the modal stays silent and the last-seen version is silently
+  advanced on every load so re-enabling later does not surface a
+  backlog.
+- **What's new** button. Opens the modal on demand, useful when you
+  want to re-read what shipped without waiting for the next release.
+- **Latest on GitHub ↗** link. Opens `CHANGELOG.md` on GitHub so the
+  remote view is always one click away, independent of the image
+  version you are on.
 
 ## Maintenance
 

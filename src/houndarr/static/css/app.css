@@ -95,6 +95,21 @@ body {
   background-size: 1rem 1rem;
 }
 
+/* Fade + slide-down reveal used by the Admin > Updates status row.
+   Every HTMX swap that lands the status block in the DOM replays the
+   animation, so a manual Check-now click produces a smooth transition
+   under the button without any JS. */
+@keyframes update-status-reveal-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.update-status-reveal {
+  animation: update-status-reveal-in 220ms var(--ease-station) both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .update-status-reveal { animation: none; }
+}
+
 /* ── Mobile nav backdrop ────────────────────────────────────────────────── */
 .mobile-nav-backdrop {
   background: rgba(2, 6, 23, 0);

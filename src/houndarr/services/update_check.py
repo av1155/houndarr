@@ -11,18 +11,22 @@ URL construction, so there is no SSRF surface. The endpoint
 ``/releases/latest`` already excludes drafts and pre-releases server-
 side, which matches our "stable releases only" product decision.
 
-Cache + rate-limit behaviour, in priority order:
+Cache + rate-limit behaviour:
 
-1. ``update_check_enabled == "0"`` -> never issue a request.
-2. Manual refresh (``force=True``) is rate-limited to once per
-   ``MANUAL_REFRESH_MIN_INTERVAL`` so an admin mashing the button can
-   not burn through the unauthenticated 60 req/hr/IP bucket.
-3. Background poll honours a ``BACKGROUND_CHECK_INTERVAL`` gap between
-   successful checks; within that window we serve cached state.
-4. Every outgoing request sends ``If-None-Match`` when we hold an ETag,
-   so GitHub responds with 304 Not Modified for unchanged releases. The
-   304 still lets us advance ``update_check_last_at`` without re-parsing
-   the body.
+* When disabled (``update_check_enabled == "0"``), the background poll
+  never issues an HTTP request.
+* The background poll honours a ``BACKGROUND_CHECK_INTERVAL`` gap
+  between successful checks; within that window we serve cached state.
+* Manual refresh (``force=True``) always hits the wire. There is no
+  client-side throttle beyond HTMX's ``hx-disable-elt`` on the button,
+  which prevents in-flight double-submission; GitHub's own
+  60 req/hr/IP unauthenticated budget is the real ceiling, and the
+  ``If-None-Match`` / 304 handshake below keeps it from draining on
+  unchanged releases.
+* Every outgoing request sends ``If-None-Match`` when we hold an ETag,
+  so GitHub responds with 304 Not Modified for unchanged releases. The
+  304 still lets us advance ``update_check_last_at`` without re-parsing
+  the body.
 
 On network failure (timeout, 5xx, invalid JSON) the cached state from
 the last successful check is preserved and a warning is logged. The
@@ -45,8 +49,7 @@ from houndarr.database import get_setting, set_setting
 
 logger = logging.getLogger(__name__)
 
-# Settings keys. Namespaced under ``update_check_`` so they stay grouped
-# in the key/value store and so a future grep picks them up together.
+# Namespaced under ``update_check_`` so a future grep finds them together.
 KEY_ENABLED = "update_check_enabled"
 KEY_LAST_AT = "update_check_last_at"
 KEY_ETAG = "update_check_etag"
@@ -54,17 +57,11 @@ KEY_LATEST_VERSION = "update_check_latest_version"
 KEY_RELEASE_URL = "update_check_release_url"
 KEY_PUBLISHED_AT = "update_check_published_at"
 KEY_LAST_ERROR_AT = "update_check_last_error_at"
-KEY_LAST_MANUAL_AT = "update_check_last_manual_at"
 
-# Polling cadence. Background fires at most once per 24 h; manual
-# refresh fires at most once per 15 min. Both are server-wide, not
-# per-session, because the rate-limit budget lives on the egress IP.
 BACKGROUND_CHECK_INTERVAL = timedelta(hours=24)
-MANUAL_REFRESH_MIN_INTERVAL = timedelta(minutes=15)
 
-# Network timeouts. GitHub usually answers in well under a second; the
-# generous ceilings leave headroom for transient congestion without
-# letting a single bad connection stall the admin partial for long.
+# Generous ceiling so a slow connection does not stall the admin partial;
+# GitHub typically answers well under a second.
 _HTTP_TIMEOUT = httpx.Timeout(10.0, connect=5.0)
 _USER_AGENT = f"Houndarr-UpdateCheck/{__version__}"
 
@@ -122,8 +119,8 @@ def _parse_iso(value: str | None) -> datetime | None:
     if not value:
         return None
     try:
-        # ``fromisoformat`` in 3.11+ accepts the ``Z`` suffix but older
-        # DBs may carry a value stored by this module, so normalise.
+        # ``Z`` suffix comes from GitHub's ``published_at`` payload; our
+        # own writes use ``+00:00``. Normalise both.
         return datetime.fromisoformat(value.replace("Z", "+00:00"))
     except ValueError:
         return None
@@ -148,8 +145,14 @@ async def set_enabled(enabled: bool) -> None:
         await set_setting(KEY_LAST_ERROR_AT, "")
 
 
-async def _load_status(*, enabled: bool) -> UpdateStatus:
-    """Read the cached state from ``settings`` without issuing HTTP."""
+async def _load_status() -> UpdateStatus:
+    """Read the cached state from ``settings`` without issuing HTTP.
+
+    ``enabled`` is read inside the helper so callers never pass a stale
+    flag. The manual-check path can flip the toggle and still render a
+    correct snapshot in the same request.
+    """
+    enabled = await is_enabled()
     latest_version = await get_setting(KEY_LATEST_VERSION) or None
     release_url = await get_setting(KEY_RELEASE_URL) or None
     published_at = await get_setting(KEY_PUBLISHED_AT) or None
@@ -174,26 +177,26 @@ async def _load_status(*, enabled: bool) -> UpdateStatus:
     )
 
 
-def _should_fetch(*, last_at: datetime | None, force: bool) -> bool:
-    """Decide whether an outgoing request is warranted right now.
+async def load_cached_status() -> UpdateStatus:
+    """Return the current snapshot without issuing HTTP.
 
-    Background path re-fetches once the 24 h window has elapsed. Manual
-    path short-circuits that window but still respects a 15 min floor
-    enforced by ``_manual_allowed``.
+    The preferences endpoint uses this to re-render the status row
+    immediately after a toggle flip: blocking on a github.com round-
+    trip inside the POST response would freeze the switch animation
+    for up to 10s on a slow network.
+    """
+    return await _load_status()
+
+
+def _should_fetch(*, last_at: datetime | None) -> bool:
+    """Decide whether the background poll should run right now.
+
+    Manual (``force=True``) clicks bypass this entirely and always hit
+    the wire, so only the background cadence needs a window here.
     """
     if last_at is None:
         return True
-    if force:
-        return True
     return _now() - last_at >= BACKGROUND_CHECK_INTERVAL
-
-
-async def _manual_allowed() -> bool:
-    """Return whether a manual refresh would stay inside the rate limit."""
-    last_manual = _parse_iso(await get_setting(KEY_LAST_MANUAL_AT))
-    if last_manual is None:
-        return True
-    return _now() - last_manual >= MANUAL_REFRESH_MIN_INTERVAL
 
 
 async def _fetch(
@@ -243,9 +246,13 @@ async def _fetch(
     return 200, payload, response.headers.get("ETag")
 
 
-async def _run_check(*, force: bool) -> UpdateStatus:
-    """Perform the HTTP call and persist results; called only after
-    ``is_enabled()`` returns True and ``_should_fetch`` returns True."""
+async def _run_check() -> UpdateStatus:
+    """Perform the HTTP call and persist results.
+
+    Reached through two paths: the background poll (entered only after
+    ``is_enabled()`` + ``_should_fetch`` agree) and the manual
+    Check-now button (runs regardless of toggle and cache age).
+    """
     repo = get_settings().update_check_repo
     prior_etag = await get_setting(KEY_ETAG) or None
 
@@ -254,7 +261,7 @@ async def _run_check(*, force: bool) -> UpdateStatus:
     except (httpx.TimeoutException, httpx.TransportError) as exc:
         logger.warning("update_check: network error reaching github.com (%s)", exc)
         await set_setting(KEY_LAST_ERROR_AT, _now().isoformat())
-        return await _load_status(enabled=True)
+        return await _load_status()
 
     if status == 304:
         # No content change; still bump ``last_at`` so the UI shows
@@ -262,9 +269,7 @@ async def _run_check(*, force: bool) -> UpdateStatus:
         # prior error so the panel doesn't lie about freshness.
         await set_setting(KEY_LAST_AT, _now().isoformat())
         await set_setting(KEY_LAST_ERROR_AT, "")
-        if force:
-            await set_setting(KEY_LAST_MANUAL_AT, _now().isoformat())
-        return await _load_status(enabled=True)
+        return await _load_status()
 
     if status != 200 or not isinstance(payload, dict):
         logger.warning(
@@ -273,7 +278,7 @@ async def _run_check(*, force: bool) -> UpdateStatus:
             type(payload).__name__,
         )
         await set_setting(KEY_LAST_ERROR_AT, _now().isoformat())
-        return await _load_status(enabled=True)
+        return await _load_status()
 
     tag_raw = payload.get("tag_name")
     html_url = payload.get("html_url")
@@ -281,7 +286,7 @@ async def _run_check(*, force: bool) -> UpdateStatus:
     if not isinstance(tag_raw, str) or not isinstance(html_url, str):
         logger.warning("update_check: release payload missing tag_name or html_url")
         await set_setting(KEY_LAST_ERROR_AT, _now().isoformat())
-        return await _load_status(enabled=True)
+        return await _load_status()
 
     normalized_tag = tag_raw.lstrip("vV")
     await set_setting(KEY_LATEST_VERSION, normalized_tag)
@@ -291,31 +296,26 @@ async def _run_check(*, force: bool) -> UpdateStatus:
     await set_setting(KEY_LAST_ERROR_AT, "")
     if etag:
         await set_setting(KEY_ETAG, etag)
-    if force:
-        await set_setting(KEY_LAST_MANUAL_AT, _now().isoformat())
 
-    return await _load_status(enabled=True)
+    return await _load_status()
 
 
 async def get_update_status(*, force: bool = False) -> UpdateStatus:
-    """Return the current update-check snapshot, fetching from GitHub
-    only when the cache window has expired (or ``force=True``).
+    """Return the current update-check snapshot, fetching when warranted.
 
-    ``force=True`` is gated by ``_manual_allowed`` so callers that
-    route user input (the Refresh button) can not bypass the 15 min
-    floor just by passing the flag.
+    ``force=False`` (background poll) runs only when the toggle is on
+    and the 24 h cache window has elapsed. ``force=True`` (manual
+    Check-now) hits the wire unconditionally: the button is a direct
+    user action and the ETag handshake keeps repeated clicks cheap.
     """
-    enabled = await is_enabled()
-    if not enabled:
-        return await _load_status(enabled=False)
+    if force:
+        return await _run_check()
 
-    if force and not await _manual_allowed():
-        # Refresh spammed: return cached state, leave rate-limit record
-        # alone so the existing 15 min window keeps counting down.
-        return await _load_status(enabled=True)
+    if not await is_enabled():
+        return await _load_status()
 
     last_at = _parse_iso(await get_setting(KEY_LAST_AT))
-    if not _should_fetch(last_at=last_at, force=force):
-        return await _load_status(enabled=True)
+    if not _should_fetch(last_at=last_at):
+        return await _load_status()
 
-    return await _run_check(force=force)
+    return await _run_check()

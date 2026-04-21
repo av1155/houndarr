@@ -98,6 +98,12 @@ function hxAttachThumbDrag(thumb, read, apply) {
   document.body.addEventListener('htmx:afterSwap', schedule);
   var observer = new MutationObserver(schedule);
   observer.observe(document.body, { childList: true, subtree: true });
+  // ResizeObserver catches CSS-animated height changes (e.g. the Settings
+  // admin-dropdown collapse) that do not trigger a DOM mutation. Without
+  // this the thumb keeps its old size after the panel shrinks and
+  // technically scrolling stops being possible, leaving a phantom bar.
+  var resizeObserver = new ResizeObserver(schedule);
+  resizeObserver.observe(document.body);
 
   hxAttachThumbDrag(
     thumb,
@@ -179,6 +185,11 @@ function hxAttachThumbDrag(thumb, read, apply) {
     // Form rows grow + shrink as the user edits; keep the thumb sized.
     var observer = new MutationObserver(schedule);
     observer.observe(target, { childList: true, subtree: true });
+    // ResizeObserver catches CSS-animated height changes inside the
+    // modal (collapsible sections, async-loaded form rows) that do not
+    // trigger a DOM mutation.
+    var resizeObserver = new ResizeObserver(schedule);
+    resizeObserver.observe(target);
 
     hxAttachThumbDrag(
       thumb,
@@ -202,6 +213,7 @@ function hxAttachThumbDrag(thumb, read, apply) {
       target.removeEventListener('scroll', schedule);
       window.removeEventListener('resize', schedule);
       observer.disconnect();
+      resizeObserver.disconnect();
       bar.remove();
     };
   }

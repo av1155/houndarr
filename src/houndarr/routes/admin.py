@@ -19,6 +19,7 @@ middleware, so no per-route guard is needed here.
 from __future__ import annotations
 
 import asyncio
+import hmac
 import logging
 from typing import Annotated
 
@@ -153,7 +154,7 @@ async def admin_factory_reset(
                 message="Could not verify proxy identity; refresh and try again.",
                 status_code=422,
             )
-        if confirm_username.strip().lower() != proxy_user.lower():
+        if not hmac.compare_digest(confirm_username.strip().lower(), proxy_user.lower()):
             return _flash_response(
                 request,
                 tone="danger",

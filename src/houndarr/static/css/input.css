@@ -293,6 +293,30 @@
   border-left-color: var(--color-info);
 }
 
+/* Copy-button flash state (logs page, Copy as TSV split-button). Tailwind
+   v4 sorts custom @theme colors *after* the built-in palette, so Tailwind
+   classes like `bg-emerald-700` added dynamically by the flash JS end up
+   losing the cascade against the static `bg-surface-2` on the button.
+   These semantic state classes are unlayered and win cleanly; the
+   button's existing `transition-colors duration-base` utility animates
+   background + border smoothly in and back out. */
+.copy-main-btn.is-copy-success {
+  background-color: #047857;             /* emerald-700 */
+  border-color: rgba(16, 185, 129, 0.6); /* emerald-500/60 */
+  color: var(--color-text-inverse);
+}
+.copy-main-btn.is-copy-success:hover {
+  background-color: #059669;             /* emerald-600 */
+}
+.copy-main-btn.is-copy-error {
+  background-color: #991b1b;             /* red-800 */
+  border-color: rgba(220, 38, 38, 0.6);  /* red-600/60 */
+  color: var(--color-text-inverse);
+}
+.copy-main-btn.is-copy-error:hover {
+  background-color: #b91c1c;             /* red-700 */
+}
+
 /* `.btn-soft.btn-*` has the same 8%-against-base invisibility problem
    as `.badge-soft` and `.alert-soft`. For the three soft-btn variants
    Houndarr uses (neutral cancel/secondary, error destructive), layer
@@ -318,12 +342,33 @@
   border-color: var(--color-danger);
 }
 
-/* ── v4 compatibility shims ───────────────────────────────────────────
-   Tailwind v4's Preflight removed the automatic margin: auto on
-   <dialog> elements. Houndarr uses <dialog> for the changelog modal,
-   add-instance modal, and confirm dialog — restore the centering. */
+/* Tailwind v4 Preflight compatibility shims.
+   Preflight removed the automatic `margin: auto` on <dialog>, which
+   Houndarr relies on for centered modals (changelog, add-instance,
+   confirm), so it's restored here. Preflight also flipped the default
+   button cursor back to the UA default; an interactive sysadmin button
+   should still read as clickable, so pointer is re-enabled. */
 @layer base {
   dialog {
     margin: auto;
   }
+  button:not(:disabled):not([aria-disabled="true"]),
+  [role="button"]:not(:disabled):not([aria-disabled="true"]) {
+    cursor: pointer;
+  }
+}
+
+/* Baseline-aligned link-arrow sized for inline use next to link text. */
+.inline-link-icon {
+  display: inline-block;
+  width: 0.875rem;
+  height: 0.875rem;
+  vertical-align: -0.1875em;
+  margin-inline-start: 0.25rem;
+}
+
+.dash-sub__eyebrow-icon {
+  width: 0.75rem;
+  height: 0.75rem;
+  flex-shrink: 0;
 }

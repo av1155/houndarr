@@ -91,6 +91,21 @@ def _submit_form(form: Locator) -> None:
     form.evaluate("form => form.requestSubmit()")
 
 
+def _open_admin_dropdown(page: Page) -> None:
+    """Click the Admin toggle and wait for the body to finish animating open.
+
+    Commit fdeeb74 made ``#admin-body`` start at ``height:0; opacity:0``
+    on every page load, so any test that clicks into an element nested
+    inside the dropdown needs to open it first. Playwright would
+    otherwise wait 30s for a zero-height element to become actionable
+    and fail with ``pointer events intercepted``.
+    """
+    panel = page.locator("#admin-grouped")
+    if panel.get_attribute("data-open") != "true":
+        page.locator("#admin-toggle").click()
+    expect(panel).to_have_attribute("data-open", "true")
+
+
 def test_full_instance_lifecycle(
     logged_in_page: Page, houndarr_url: str, mock_sonarr_url: str
 ) -> None:
@@ -329,6 +344,7 @@ def test_admin_whats_new_button_opens_modal(logged_in_page: Page, houndarr_url: 
     """The 'What's new' button force-opens the What's new modal."""
     page = logged_in_page
     page.goto(f"{houndarr_url}/settings")
+    _open_admin_dropdown(page)
     page.get_by_role("button", name=re.compile(r"what'?s\s*new", re.I)).click()
     expect(page.locator("dialog#changelog-modal[open]")).to_be_visible(timeout=4_000)
 
@@ -337,6 +353,7 @@ def test_admin_clear_logs_flash(logged_in_page: Page, houndarr_url: str) -> None
     """Clear logs surfaces a success flash; the dialog closes automatically."""
     page = logged_in_page
     page.goto(f"{houndarr_url}/settings")
+    _open_admin_dropdown(page)
     page.locator('button[data-confirm-reset="logs"]').click()
     expect(page.locator("#confirm-dialog")).not_to_have_class(re.compile(r"hidden"))
     page.locator("#confirm-go").click()
@@ -350,6 +367,7 @@ def test_admin_reset_instances_empty_state_flash(logged_in_page: Page, houndarr_
     """With no instances configured the reset button renders the 'nothing to reset' flash."""
     page = logged_in_page
     page.goto(f"{houndarr_url}/settings")
+    _open_admin_dropdown(page)
     page.locator('button[data-confirm-reset="instances"]').click()
     expect(page.locator("#confirm-title")).to_contain_text("Reset policy settings")
     page.locator("#confirm-go").click()
@@ -363,6 +381,7 @@ def test_admin_factory_reset_phrase_gates_submit(logged_in_page: Page, houndarr_
     """Confirm button stays disabled until the typed phrase matches RESET."""
     page = logged_in_page
     page.goto(f"{houndarr_url}/settings")
+    _open_admin_dropdown(page)
     page.locator('button[data-confirm-reset="factory"]').click()
     confirm_go = page.locator("#confirm-go")
     expect(confirm_go).to_be_disabled()
@@ -383,6 +402,7 @@ def test_admin_factory_reset_wrong_password_flash(
         console_guard.allow(p)
     page = logged_in_page
     page.goto(f"{houndarr_url}/settings")
+    _open_admin_dropdown(page)
     page.locator('button[data-confirm-reset="factory"]').click()
     page.locator("#confirm-phrase-input").fill("RESET")
     page.locator("#confirm-password-input").fill("WrongPassword123!")
@@ -429,6 +449,7 @@ def test_password_change_hx_refresh_recovers_csrf(logged_in_page: Page, houndarr
 
     def _submit_password_change(current: str, new: str) -> tuple[int, dict[str, str]]:
         page.goto(f"{houndarr_url}/settings")
+        _open_admin_dropdown(page)
         section = page.locator("#admin-security")
         expect(section).to_be_visible()
         section.locator('input[name="current_password"]').fill(current)
@@ -459,6 +480,7 @@ def test_password_change_hx_refresh_recovers_csrf(logged_in_page: Page, houndarr
         # request would hit the old CSRF token against the new session and
         # return 403 with no flash.
         page.goto(f"{houndarr_url}/settings")
+        _open_admin_dropdown(page)
         page.locator('button[data-confirm-reset="logs"]').click()
         expect(page.locator("#confirm-dialog")).not_to_have_class(re.compile(r"hidden"))
         with page.expect_response(
@@ -496,6 +518,7 @@ def test_caps_lock_badge_toggles_with_modifier_state(
     """
     page = logged_in_page
     page.goto(f"{houndarr_url}/settings")
+    _open_admin_dropdown(page)
     section = page.locator("#admin-security")
     expect(section).to_be_visible()
 

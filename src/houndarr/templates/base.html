@@ -131,14 +131,14 @@
   <!-- Flash messages: Station left-border style -->
   {% if flash_error %}
   <div id="flash-error"
-       class="border-l-4 border-danger bg-danger-bg text-slate-100 px-5 py-3 text-sm"
+       class="alert alert-soft alert-error text-slate-100 text-sm"
        role="alert">
     {{ flash_error }}
   </div>
   {% endif %}
   {% if flash_success %}
   <div id="flash-success"
-       class="border-l-4 border-success bg-success-bg text-slate-100 px-5 py-3 text-sm"
+       class="alert alert-soft alert-success text-slate-100 text-sm"
        role="alert">
     {{ flash_success }}
   </div>

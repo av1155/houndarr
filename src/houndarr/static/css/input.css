@@ -178,6 +178,129 @@
 @utility duration-base { transition-duration: var(--dur-base); }
 @utility duration-slow { transition-duration: var(--dur-slow); }
 
+/* ── daisyUI component overrides (Station parity) ─────────────────────
+   daisyUI's defaults produce 40px-tall buttons, pill-shaped sans-serif
+   badges, and full-border alerts. Houndarr's aesthetic is tighter: 32px
+   buttons, chip-radius mono badges, left-border-only alerts. Rules below
+   are intentionally unlayered so they beat daisyUI's `@layer daisyui`
+   and `@layer utilities` rules in the CSS cascade (unlayered styles win
+   over any layered styles by spec). */
+
+/* Let per-use py-* utilities determine button height; daisyUI's
+   height: 2.5rem would otherwise pin every button to 40px tall. */
+.btn {
+  height: auto;
+  min-height: 0;
+}
+
+/* Station badges: chip-radius (3px), monospace, tight padding. */
+.badge {
+  border-radius: var(--radius-chip);
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  font-weight: 500;
+  padding: 0.125rem 0.5rem;
+  min-height: 0;
+  height: auto;
+  gap: 0.25rem;
+}
+
+/* daisyUI's default `.badge-soft` tints the state color at 8% against
+   `--color-base-100`. On Houndarr's near-black base (#07080f) that mix
+   is visually imperceptible, so the badges lose their tinted background
+   entirely. Re-use the existing Station state-bg / state-border tokens
+   (already tuned for dark surfaces) to restore the visible chip. */
+.badge-soft.badge-success {
+  background-color: var(--color-success-bg);
+  border-color: var(--color-success-border);
+  color: var(--color-success);
+}
+.badge-soft.badge-warning {
+  background-color: var(--color-warning-bg);
+  border-color: var(--color-warning-border);
+  color: var(--color-warning);
+}
+.badge-soft.badge-error {
+  background-color: var(--color-danger-bg);
+  border-color: var(--color-danger-border);
+  color: var(--color-danger);
+}
+.badge-soft.badge-info {
+  background-color: color-mix(in srgb, var(--color-info) 15%, transparent);
+  border-color: color-mix(in srgb, var(--color-info) 40%, transparent);
+  color: var(--color-info);
+}
+.badge-soft.badge-primary {
+  background-color: color-mix(in srgb, var(--color-brand-500) 15%, transparent);
+  border-color: color-mix(in srgb, var(--color-brand-500) 40%, transparent);
+  color: var(--color-brand-300);
+}
+.badge-soft.badge-neutral {
+  background-color: var(--color-surface-3);
+  border-color: var(--color-border-default);
+  color: var(--color-text-emphasis);
+}
+
+/* Station alerts: tinted background with a state-colored left border
+   only, instead of daisyUI's full-bordered box. The per-state
+   border-left-color lets the text color stay independent (e.g. flash
+   messages use white text but still need a red left rule). Background
+   tint uses the existing --color-*-bg tokens because daisyUI's soft
+   variant has the same 8%-against-base-100 invisibility problem on
+   dark themes. */
+.alert {
+  grid-auto-flow: column;
+  border: none;
+  border-left: 3px solid var(--color-border-default);
+  border-radius: 0 var(--radius-inset) var(--radius-inset) 0;
+  padding: 0.75rem 1rem;
+}
+.alert-soft.alert-success {
+  background-color: var(--color-success-bg);
+  color: var(--color-success);
+  border-left-color: var(--color-success);
+}
+.alert-soft.alert-warning {
+  background-color: var(--color-warning-bg);
+  color: var(--color-warning);
+  border-left-color: var(--color-warning);
+}
+.alert-soft.alert-error {
+  background-color: var(--color-danger-bg);
+  color: var(--color-danger);
+  border-left-color: var(--color-danger);
+}
+.alert-soft.alert-info {
+  background-color: color-mix(in srgb, var(--color-info) 15%, transparent);
+  color: var(--color-info);
+  border-left-color: var(--color-info);
+}
+
+/* `.btn-soft.btn-*` has the same 8%-against-base invisibility problem
+   as `.badge-soft` and `.alert-soft`. For the three soft-btn variants
+   Houndarr uses (neutral cancel/secondary, error destructive), layer
+   Station state colors on top so the bg actually reads against the
+   dark surface. */
+.btn-soft.btn-neutral {
+  background-color: var(--color-surface-2);
+  border-color: var(--color-border-default);
+  color: var(--color-text-emphasis);
+}
+.btn-soft.btn-neutral:hover:not(:disabled) {
+  background-color: var(--color-surface-3);
+  border-color: var(--color-border-strong);
+  color: var(--color-text-heading);
+}
+.btn-soft.btn-error {
+  background-color: transparent;
+  border-color: color-mix(in srgb, var(--color-danger) 50%, transparent);
+  color: var(--color-danger);
+}
+.btn-soft.btn-error:hover:not(:disabled) {
+  background-color: var(--color-danger-bg);
+  border-color: var(--color-danger);
+}
+
 /* ── v4 compatibility shims ───────────────────────────────────────────
    Tailwind v4's Preflight removed the automatic margin: auto on
    <dialog> elements. Houndarr uses <dialog> for the changelog modal,

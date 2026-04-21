@@ -23,7 +23,7 @@
 
 <div id="{{ 'edit-instance-form-shell-' ~ instance.id if is_edit else 'add-instance-form-shell' }}">
   {% if error is defined and error %}
-  <div class="mb-3 border-l-4 border-danger bg-danger-bg text-danger rounded-r-inset px-3 py-2 text-sm">
+  <div class="mb-3 alert alert-soft alert-error text-sm">
     {{ error }}
   </div>
   {% endif %}
@@ -380,26 +380,26 @@
                 hx-include="#{{ form_id }} [name='type'],#{{ form_id }} [name='url'],#{{ form_id }} [name='api_key']{% if is_edit %},#{{ form_id }} [name='instance_id']{% endif %}"
                 hx-target="#instance-connection-status"
                 hx-swap="innerHTML"
-                class="station-button station-button--secondary px-4 py-2.5 text-sm font-medium sm:w-[10.5rem]">
+                class="btn btn-soft btn-neutral px-4 py-2.5 text-sm font-medium sm:w-[10.5rem]">
           Test Connection
         </button>
         <button type="button"
                 id="instance-reset-btn"
                 data-reset-instance-form="true"
-                class="station-button station-button--secondary px-4 py-2.5 text-sm font-medium sm:w-[10.5rem]">
+                class="btn btn-soft btn-neutral px-4 py-2.5 text-sm font-medium sm:w-[10.5rem]">
           Reset to Defaults
         </button>
         <button id="instance-submit-btn"
                 type="submit"
                 disabled
-                class="station-button station-button--primary col-span-2 sm:col-auto px-4 py-2.5 text-sm font-semibold
+                class="btn btn-primary col-span-2 sm:col-auto px-4 py-2.5 text-sm font-semibold
                        disabled:cursor-not-allowed disabled:opacity-40
                        focus:outline-none focus:ring-2 focus:ring-brand-500/35">
           {{ 'Save Changes' if is_edit else 'Add Instance' }}
         </button>
         <button type="button"
                 data-close-add-instance-modal="true"
-                class="station-button station-button--secondary col-span-2 sm:col-auto px-4 py-2.5 text-sm font-medium">
+                class="btn btn-soft btn-neutral col-span-2 sm:col-auto px-4 py-2.5 text-sm font-medium">
           Cancel
         </button>
       </div>

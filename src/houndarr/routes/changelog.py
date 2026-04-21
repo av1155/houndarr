@@ -223,23 +223,23 @@ async def disable(request: Request) -> Response:
     return Response(status_code=204)
 
 
-@router.post("/preferences", response_class=HTMLResponse)
+@router.post("/preferences", response_class=Response)
 async def preferences(
     request: Request,
     enabled: Annotated[str, Form()] = "",
-) -> HTMLResponse:
-    """Toggle ``changelog_popups_disabled`` from the Settings page checkbox.
+) -> Response:
+    """Toggle ``changelog_popups_disabled`` from the Settings page switch.
 
     Checkbox sends ``enabled=on`` when checked, omits the field when
-    unchecked.  Re-renders the Settings section partial for outerHTML swap.
+    unchecked. Returns ``204 No Content`` so HTMX skips the swap (per
+    the htmx-config in ``base.html``). The switch's CSS transition runs
+    to completion on the in-place DOM element instead of being
+    interrupted by an outerHTML replacement that would snap the thumb
+    to its final position without animating.
     """
     new_disabled = "0" if enabled == "on" else "1"
     await set_setting("changelog_popups_disabled", new_disabled)
-    return _get_templates().TemplateResponse(
-        request=request,
-        name="partials/admin/updates.html",
-        context={"changelog_popups_enabled": new_disabled == "0"},
-    )
+    return Response(status_code=204)
 
 
 def _is_hx_request(request: Request) -> bool:

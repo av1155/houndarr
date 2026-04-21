@@ -5,6 +5,7 @@ from __future__ import annotations
 import ipaddress
 import logging
 import os
+import re
 from dataclasses import dataclass, field
 from ipaddress import IPv4Address, IPv4Network, IPv6Address, IPv6Network
 from pathlib import Path
@@ -117,6 +118,32 @@ def _parse_bool_env(name: str, default: bool = False) -> bool:
     return default
 
 
+_DEFAULT_UPDATE_CHECK_REPO = "av1155/houndarr"
+_UPDATE_CHECK_REPO_RE = re.compile(r"^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$")
+
+
+def _parse_update_check_repo(raw: str) -> str:
+    """Validate HOUNDARR_UPDATE_CHECK_REPO; fall back to the default on junk.
+
+    The value is interpolated into ``https://api.github.com/repos/{repo}/...``
+    so the GitHub URL parser already keeps the host pinned. This guard is
+    defence in depth: catch typos (missing slash, accidental query strings)
+    at startup and log a warning instead of letting a garbled request hit
+    the GitHub API.
+    """
+    value = raw.strip()
+    if not value:
+        return _DEFAULT_UPDATE_CHECK_REPO
+    if not _UPDATE_CHECK_REPO_RE.match(value):
+        logger.warning(
+            "HOUNDARR_UPDATE_CHECK_REPO=%r is not a valid owner/repo slug; falling back to %r",
+            value,
+            _DEFAULT_UPDATE_CHECK_REPO,
+        )
+        return _DEFAULT_UPDATE_CHECK_REPO
+    return value
+
+
 def get_settings() -> AppSettings:
     """Return current runtime settings, falling back to defaults."""
     if _runtime_settings is not None:
@@ -132,7 +159,9 @@ def get_settings() -> AppSettings:
         trusted_proxies=os.environ.get("HOUNDARR_TRUSTED_PROXIES", ""),
         auth_mode=os.environ.get("HOUNDARR_AUTH_MODE", "builtin").lower(),
         auth_proxy_header=os.environ.get("HOUNDARR_AUTH_PROXY_HEADER", ""),
-        update_check_repo=os.environ.get("HOUNDARR_UPDATE_CHECK_REPO", "av1155/houndarr"),
+        update_check_repo=_parse_update_check_repo(
+            os.environ.get("HOUNDARR_UPDATE_CHECK_REPO", "")
+        ),
     )
 
 
@@ -186,7 +215,7 @@ class AppSettings:
     trusted_proxies: str = ""
     auth_mode: str = "builtin"
     auth_proxy_header: str = ""
-    update_check_repo: str = "av1155/houndarr"
+    update_check_repo: str = _DEFAULT_UPDATE_CHECK_REPO
 
     # Derived paths (computed from data_dir)
     db_path: Path = field(init=False)

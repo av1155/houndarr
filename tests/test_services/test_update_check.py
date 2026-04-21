@@ -307,6 +307,42 @@ async def test_repo_override_env_var(db: None, monkeypatch: pytest.MonkeyPatch) 
     assert status.latest_version == "2.0.0"
 
 
+@pytest.mark.asyncio()
+@respx.mock
+async def test_repo_override_invalid_falls_back_to_default(
+    db: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Malformed HOUNDARR_UPDATE_CHECK_REPO values fall back to the
+    default upstream repo rather than sending a garbage path to the
+    GitHub API."""
+    from houndarr import config
+
+    monkeypatch.setattr(config, "_runtime_settings", None)
+    # Missing slash, query-string injection, absolute URL: all rejected.
+    monkeypatch.setenv("HOUNDARR_UPDATE_CHECK_REPO", "not-a-valid-slug")
+
+    # If the validator didn't fall back, the request would land on this
+    # malformed URL and the default-repo mock would never be hit.
+    respx.get(_url("av1155/houndarr")).mock(return_value=httpx.Response(200, json=_LATEST_BODY))
+    await uc.set_enabled(True)
+
+    status = await uc.get_update_status(force=False)
+
+    assert status.latest_version == "2.0.0"
+
+
+def test_parse_version_handles_v_prefix() -> None:
+    """GitHub emits ``v1.9.0`` tags; our own VERSION file is ``1.9.0``.
+    Both must parse to the same tuple so the comparator doesn't flag a
+    version mismatch purely on the prefix."""
+    assert uc._parse_version_tuple("v1.9.0") == (1, 9, 0)
+    assert uc._parse_version_tuple("1.9.0") == (1, 9, 0)
+    assert uc._parse_version_tuple("V2.0.0") == (2, 0, 0)
+    # Junk still rejected.
+    assert uc._parse_version_tuple("1.9") is None
+    assert uc._parse_version_tuple("v1.9-rc1") is None
+
+
 # ---------------------------------------------------------------------------
 # Toggle-off side effect
 # ---------------------------------------------------------------------------

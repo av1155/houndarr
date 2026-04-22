@@ -10,8 +10,6 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Any
 
-import aiosqlite
-
 from houndarr.config import (
     DEFAULT_ALLOWED_TIME_WINDOW,
     DEFAULT_BATCH_SIZE,
@@ -36,7 +34,7 @@ from houndarr.config import (
     DEFAULT_UPGRADE_WHISPARR_SEARCH_MODE,
     DEFAULT_WHISPARR_SEARCH_MODE,
 )
-from houndarr.crypto import decrypt, encrypt
+from houndarr.crypto import encrypt
 from houndarr.database import get_db
 
 
@@ -133,83 +131,6 @@ class Instance:
     monitored_total: int = 0
     unreleased_count: int = 0
     snapshot_refreshed_at: str = ""
-
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-
-def _row_to_instance(row: aiosqlite.Row, master_key: bytes) -> Instance:
-    """Convert an aiosqlite Row to an :class:`Instance`, decrypting the key."""
-    return Instance(
-        id=row["id"],
-        name=row["name"],
-        type=InstanceType(row["type"]),
-        url=row["url"],
-        api_key=decrypt(row["encrypted_api_key"], master_key),
-        enabled=bool(row["enabled"]),
-        batch_size=row["batch_size"],
-        sleep_interval_mins=row["sleep_interval_mins"],
-        hourly_cap=row["hourly_cap"],
-        cooldown_days=row["cooldown_days"],
-        post_release_grace_hrs=row["post_release_grace_hrs"],
-        queue_limit=row["queue_limit"],
-        cutoff_enabled=bool(row["cutoff_enabled"]),
-        cutoff_batch_size=row["cutoff_batch_size"],
-        cutoff_cooldown_days=row["cutoff_cooldown_days"],
-        cutoff_hourly_cap=row["cutoff_hourly_cap"],
-        created_at=row["created_at"],
-        updated_at=row["updated_at"],
-        sonarr_search_mode=SonarrSearchMode(row["sonarr_search_mode"]),
-        lidarr_search_mode=LidarrSearchMode(row["lidarr_search_mode"]),
-        readarr_search_mode=ReadarrSearchMode(row["readarr_search_mode"]),
-        whisparr_search_mode=WhisparrSearchMode(row["whisparr_search_mode"]),
-        upgrade_enabled=bool(row["upgrade_enabled"]),
-        upgrade_batch_size=row["upgrade_batch_size"],
-        upgrade_cooldown_days=row["upgrade_cooldown_days"],
-        upgrade_hourly_cap=row["upgrade_hourly_cap"],
-        upgrade_sonarr_search_mode=SonarrSearchMode(row["upgrade_sonarr_search_mode"]),
-        upgrade_lidarr_search_mode=LidarrSearchMode(row["upgrade_lidarr_search_mode"]),
-        upgrade_readarr_search_mode=ReadarrSearchMode(row["upgrade_readarr_search_mode"]),
-        upgrade_whisparr_search_mode=WhisparrSearchMode(row["upgrade_whisparr_search_mode"]),
-        upgrade_item_offset=row["upgrade_item_offset"],
-        upgrade_series_offset=row["upgrade_series_offset"],
-        missing_page_offset=row["missing_page_offset"],
-        cutoff_page_offset=row["cutoff_page_offset"],
-        allowed_time_window=row["allowed_time_window"],
-        search_order=SearchOrder(row["search_order"]),
-        monitored_total=_optional_row_int(row, "monitored_total"),
-        unreleased_count=_optional_row_int(row, "unreleased_count"),
-        snapshot_refreshed_at=_optional_row_str(row, "snapshot_refreshed_at"),
-    )
-
-
-def _optional_row_int(row: Any, key: str) -> int:
-    """Return ``row[key]`` as int, or 0 when the column is absent.
-
-    Tests sometimes insert minimal rows that pre-date the v13 columns;
-    this helper keeps those rows compatible with the post-v13 dataclass.
-    """
-    try:
-        val = row[key]
-    except (IndexError, KeyError):
-        return 0
-    return int(val) if val is not None else 0
-
-
-def _optional_row_str(row: Any, key: str) -> str:
-    """Return ``row[key]`` as str, or ``''`` when the column is absent."""
-    try:
-        val = row[key]
-    except (IndexError, KeyError):
-        return ""
-    return str(val) if val is not None else ""
-
-
-# ---------------------------------------------------------------------------
-# Public API
-# ---------------------------------------------------------------------------
 
 
 async def create_instance(
@@ -362,6 +283,13 @@ async def create_instance(
 async def get_instance(id: int, *, master_key: bytes) -> Instance | None:  # noqa: A002
     """Fetch a single instance by *id*, or ``None`` if not found.
 
+    Thin delegator over
+    :func:`houndarr.repositories.instances.get_instance`.  The service
+    keeps the historical ``id`` parameter name (shadowing a builtin,
+    hence the ``# noqa: A002``) so existing callers do not move; the
+    repository uses the unshadowed ``instance_id`` keyword matching
+    the Protocol in :mod:`houndarr.protocols`.
+
     Args:
         id: Primary key of the instance row.
         master_key: Fernet key used to decrypt the stored API key.
@@ -369,16 +297,16 @@ async def get_instance(id: int, *, master_key: bytes) -> Instance | None:  # noq
     Returns:
         Decrypted :class:`Instance`, or ``None``.
     """
-    async with get_db() as db:
-        async with db.execute("SELECT * FROM instances WHERE id = ?", (id,)) as cur:
-            row = await cur.fetchone()
-    if row is None:
-        return None
-    return _row_to_instance(row, master_key)
+    from houndarr.repositories.instances import get_instance as _repo_get_instance
+
+    return await _repo_get_instance(id, master_key=master_key)
 
 
 async def list_instances(*, master_key: bytes) -> list[Instance]:
-    """Return all instances ordered by creation time (oldest first).
+    """Return all instances ordered by ``id`` ascending.
+
+    Thin delegator over
+    :func:`houndarr.repositories.instances.list_instances`.
 
     Args:
         master_key: Fernet key used to decrypt each stored API key.
@@ -386,10 +314,9 @@ async def list_instances(*, master_key: bytes) -> list[Instance]:
     Returns:
         List of decrypted :class:`Instance` objects (may be empty).
     """
-    async with get_db() as db:
-        async with db.execute("SELECT * FROM instances ORDER BY id ASC") as cur:
-            rows = await cur.fetchall()
-    return [_row_to_instance(r, master_key) for r in rows]
+    from houndarr.repositories.instances import list_instances as _repo_list_instances
+
+    return await _repo_list_instances(master_key=master_key)
 
 
 async def update_instance(

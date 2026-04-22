@@ -55,16 +55,18 @@ class SettingsRepository(Protocol):
 class InstanceRepository(Protocol):
     """Instance CRUD boundary backing the ``instances`` table.
 
-    Track D.3 + D.4 will land a concrete module under
-    ``repositories/instances.py`` whose function shapes match this
-    Protocol; the service layer in ``services/instances.py`` then
-    becomes a facade over the repository.
+    Track D.3 lands the read half under ``repositories/instances.py``;
+    D.4 lands the write half with concrete payload dataclasses.  The
+    read methods take the Fernet ``master_key`` so the repository can
+    decrypt ``encrypted_api_key`` before returning an :class:`Instance`;
+    the service layer in ``services/instances.py`` becomes a facade
+    over this boundary.
     """
 
-    def list_instances(self) -> Awaitable[list[Instance]]:
-        """Return every instance ordered by id."""
+    def list_instances(self, *, master_key: bytes) -> Awaitable[list[Instance]]:
+        """Return every instance ordered by id ascending."""
 
-    def get_instance(self, instance_id: int) -> Awaitable[Instance | None]:
+    def get_instance(self, instance_id: int, *, master_key: bytes) -> Awaitable[Instance | None]:
         """Return the instance identified by *instance_id*, or ``None``."""
 
     def insert_instance(self, payload: Any) -> Awaitable[int]:

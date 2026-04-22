@@ -159,6 +159,7 @@ class ArrClient(ABC):
         page: int,
         page_size: int,
         include_sort: bool = True,
+        include_param: bool = True,
     ) -> PaginatedResponse[Any]:
         """Fetch one page of ``/wanted/{kind}`` via the per-subclass envelope.
 
@@ -184,6 +185,14 @@ class ArrClient(ABC):
         the sort params; Radarr's cutoff endpoint includes them so it
         relies on the default.
 
+        ``include_param`` defaults to ``True`` because the page reads on
+        every embed-using client want the parent aggregate inlined into
+        each record (so the parser can read ``series.title`` /
+        ``artist.artistName`` / ``author.authorName`` without an extra
+        round trip).  :meth:`_fetch_wanted_total` flips it to ``False``
+        because the size-1 probe only needs ``totalRecords``, and
+        omitting the embed matches every per-app probe pre-refactor.
+
         Subclasses without ``/wanted`` endpoints (Whisparr v3) leave the
         hooks unset and never call this method; calling it on a client
         whose :attr:`_WANTED_ENVELOPE` is unset raises
@@ -202,6 +211,9 @@ class ArrClient(ABC):
             page_size: Number of records to request.
             include_sort: When true, append ``sortKey`` and
                 ``sortDirection`` to the request.
+            include_param: When true and :attr:`_WANTED_INCLUDE_PARAM` is
+                set, append ``{_WANTED_INCLUDE_PARAM}=true`` to the
+                request.
 
         Returns:
             The parsed :class:`PaginatedResponse` envelope.  Records are
@@ -232,7 +244,7 @@ class ArrClient(ABC):
         if include_sort:
             params["sortKey"] = self._WANTED_SORT_KEY
             params["sortDirection"] = "ascending"
-        if self._WANTED_INCLUDE_PARAM is not None:
+        if include_param and self._WANTED_INCLUDE_PARAM is not None:
             params[self._WANTED_INCLUDE_PARAM] = "true"
         data = await self._get(path, **params)
         return envelope_cls.model_validate(data)
@@ -260,7 +272,15 @@ class ArrClient(ABC):
         """
         path = f"{self._WANTED_BASE_PATH}/{kind}"
         try:
-            envelope = await self._fetch_wanted_page(kind, page=1, page_size=1)
+            # The probe omits the embed-parent param because totalRecords
+            # is independent of record shape; matches every per-app
+            # get_wanted_total override pre-refactor.
+            envelope = await self._fetch_wanted_page(
+                kind,
+                page=1,
+                page_size=1,
+                include_param=False,
+            )
         except httpx.HTTPStatusError as exc:
             raise ClientHTTPError(
                 f"wanted total: HTTP {exc.response.status_code} from {path}"

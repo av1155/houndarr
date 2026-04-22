@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Literal
+from typing import ClassVar, Literal
 
 from houndarr.clients._wire_models import (
     ArrSeries,
@@ -47,6 +47,12 @@ class MissingEpisode:
 class SonarrClient(ArrClient):
     """Async client for the Sonarr v3 REST API."""
 
+    _WANTED_SORT_KEY: ClassVar[str] = "airDateUtc"
+    _WANTED_INCLUDE_PARAM: ClassVar[str | None] = "includeSeries"
+    _WANTED_ENVELOPE: ClassVar[type[PaginatedResponse[SonarrWantedEpisode]]] = PaginatedResponse[
+        SonarrWantedEpisode
+    ]
+
     async def get_missing(
         self,
         *,
@@ -65,16 +71,7 @@ class SonarrClient(ArrClient):
         Returns:
             List of :class:`MissingEpisode` dataclasses, oldest first.
         """
-        data = await self._get(
-            "/api/v3/wanted/missing",
-            page=page,
-            pageSize=page_size,
-            sortKey="airDateUtc",
-            sortDirection="ascending",
-            includeSeries="true",
-            monitored="true",
-        )
-        envelope = PaginatedResponse[SonarrWantedEpisode].model_validate(data)
+        envelope = await self._fetch_wanted_page("missing", page=page, page_size=page_size)
         return [_parse_episode(w) for w in envelope.records]
 
     async def search(self, item_id: int) -> None:
@@ -113,7 +110,9 @@ class SonarrClient(ArrClient):
         """Return a page of monitored episodes that have not met their quality cutoff.
 
         Calls ``GET /api/v3/wanted/cutoff`` with ``includeSeries=true`` so that
-        series metadata is embedded in each record.
+        series metadata is embedded in each record.  Sonarr's cutoff
+        endpoint historically omits the sort params, so the call passes
+        ``include_sort=False`` to suppress them.
 
         Args:
             page: 1-based page number.
@@ -122,28 +121,30 @@ class SonarrClient(ArrClient):
         Returns:
             List of :class:`MissingEpisode` dataclasses for cutoff-unmet episodes.
         """
-        data = await self._get(
-            "/api/v3/wanted/cutoff",
+        envelope = await self._fetch_wanted_page(
+            "cutoff",
             page=page,
-            pageSize=page_size,
-            includeSeries="true",
-            monitored="true",
+            page_size=page_size,
+            include_sort=False,
         )
-        envelope = PaginatedResponse[SonarrWantedEpisode].model_validate(data)
         return [_parse_episode(w) for w in envelope.records]
 
     async def get_wanted_total(self, kind: Literal["missing", "cutoff"]) -> int:
-        """Return the totalRecords count for ``wanted/{kind}`` via a size-1 probe."""
-        data = await self._get(
-            f"/api/v3/wanted/{kind}",
-            page=1,
-            pageSize=1,
-            sortKey="airDateUtc",
-            sortDirection="ascending",
-            monitored="true",
-        )
-        envelope = PaginatedResponse[SonarrWantedEpisode].model_validate(data)
-        return envelope.total_records
+        """Return the totalRecords count for ``wanted/{kind}`` via a size-1 probe.
+
+        Delegates to :meth:`ArrClient._fetch_wanted_total`, which wraps
+        raw ``httpx`` and ``pydantic`` failures in typed
+        :class:`~houndarr.errors.ClientError` subclasses with the
+        original exception preserved on ``__cause__``.
+
+        Raises:
+            ClientHTTPError: Non-2xx response.
+            ClientTransportError: Transport failure (connect, timeout,
+                malformed URL, etc.).
+            ClientValidationError: Response shape did not match the
+                paginated envelope schema.
+        """
+        return await self._fetch_wanted_total(kind)
 
     async def get_series(self) -> list[ArrSeries]:
         """Return the full series list.
@@ -178,9 +179,7 @@ class SonarrClient(ArrClient):
         return [_parse_library_episode(SonarrLibraryEpisode.model_validate(r)) for r in records]
 
 
-# ---------------------------------------------------------------------------
 # Parsing helpers
-# ---------------------------------------------------------------------------
 
 
 def _parse_library_episode(wire: SonarrLibraryEpisode) -> LibraryEpisode:

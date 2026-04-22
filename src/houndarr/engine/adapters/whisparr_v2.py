@@ -20,6 +20,10 @@ from houndarr.clients.whisparr_v2 import (
     MissingWhisparrEpisode,
     WhisparrClient,
 )
+from houndarr.engine.adapters._common import (
+    ContextOverride,
+    build_missing_candidate,
+)
 from houndarr.engine.candidates import SearchCandidate
 from houndarr.services.instances import Instance, WhisparrSearchMode
 
@@ -93,29 +97,6 @@ def adapt_missing(item: MissingWhisparrEpisode, instance: Instance) -> SearchCan
     Returns:
         A fully populated :class:`SearchCandidate`.
     """
-    episode_mode = instance.whisparr_search_mode == WhisparrSearchMode.episode
-
-    use_season_context = not episode_mode and item.series_id is not None and item.season_number > 0
-
-    if use_season_context:
-        assert item.series_id is not None  # noqa: S101
-        item_id = _season_item_id(item.series_id, item.season_number)
-        label = _season_context_label(item)
-        group_key: tuple[int, int] | None = (item.series_id, item.season_number)
-        search_payload = {
-            "command": "SeasonSearch",
-            "series_id": item.series_id,
-            "season_number": item.season_number,
-        }
-    else:
-        item_id = item.episode_id
-        label = _episode_label(item)
-        group_key = None
-        search_payload = {
-            "command": "EpisodeSearch",
-            "episode_id": item.episode_id,
-        }
-
     unreleased_reason = _whisparr_unreleased_reason(
         item.release_date, instance.post_release_grace_hrs
     )
@@ -128,13 +109,33 @@ def adapt_missing(item: MissingWhisparrEpisode, instance: Instance) -> SearchCan
     if item.series_id is None and unreleased_reason is None:
         unreleased_reason = "no series linked"
 
-    return SearchCandidate(
-        item_id=item_id,
+    context: ContextOverride | None = None
+    if (
+        instance.whisparr_search_mode != WhisparrSearchMode.episode
+        and item.series_id is not None
+        and item.season_number > 0
+    ):
+        context = ContextOverride(
+            item_id=_season_item_id(item.series_id, item.season_number),
+            label=_season_context_label(item),
+            group_key=(item.series_id, item.season_number),
+            search_payload={
+                "command": "SeasonSearch",
+                "series_id": item.series_id,
+                "season_number": item.season_number,
+            },
+        )
+
+    return build_missing_candidate(
         item_type="whisparr_episode",
-        label=label,
+        item_id=item.episode_id,
+        label=_episode_label(item),
         unreleased_reason=unreleased_reason,
-        group_key=group_key,
-        search_payload=search_payload,
+        search_payload={
+            "command": "EpisodeSearch",
+            "episode_id": item.episode_id,
+        },
+        context=context,
     )
 
 

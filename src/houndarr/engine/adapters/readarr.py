@@ -10,6 +10,10 @@ from __future__ import annotations
 import logging
 
 from houndarr.clients.readarr import LibraryBook, MissingBook, ReadarrClient
+from houndarr.engine.adapters._common import (
+    ContextOverride,
+    build_missing_candidate,
+)
 from houndarr.engine.candidates import (
     SearchCandidate,
     _is_unreleased,
@@ -72,38 +76,32 @@ def adapt_missing(item: MissingBook, instance: Instance) -> SearchCandidate:
     Returns:
         A fully populated :class:`SearchCandidate`.
     """
-    book_mode = instance.readarr_search_mode == ReadarrSearchMode.book
-
-    use_author_context = not book_mode and item.author_id > 0
-
-    if use_author_context:
-        item_id = _author_item_id(item.author_id)
-        label = _author_context_label(item)
-        group_key: tuple[int, int] | None = (item.author_id, 0)
-        search_payload = {
-            "command": "AuthorSearch",
-            "author_id": item.author_id,
-        }
-    else:
-        item_id = item.book_id
-        label = _book_label(item)
-        group_key = None
-        search_payload = {
-            "command": "BookSearch",
-            "book_id": item.book_id,
-        }
-
     unreleased_reason = _readarr_unreleased_reason(
         item.release_date, instance.post_release_grace_hrs
     )
 
-    return SearchCandidate(
-        item_id=item_id,
+    context: ContextOverride | None = None
+    if instance.readarr_search_mode != ReadarrSearchMode.book and item.author_id > 0:
+        context = ContextOverride(
+            item_id=_author_item_id(item.author_id),
+            label=_author_context_label(item),
+            group_key=(item.author_id, 0),
+            search_payload={
+                "command": "AuthorSearch",
+                "author_id": item.author_id,
+            },
+        )
+
+    return build_missing_candidate(
         item_type="book",
-        label=label,
+        item_id=item.book_id,
+        label=_book_label(item),
         unreleased_reason=unreleased_reason,
-        group_key=group_key,
-        search_payload=search_payload,
+        search_payload={
+            "command": "BookSearch",
+            "book_id": item.book_id,
+        },
+        context=context,
     )
 
 

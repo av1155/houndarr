@@ -18,7 +18,10 @@ from houndarr.clients.whisparr_v3 import (
     MissingWhisparrV3Movie,
     WhisparrV3Client,
 )
-from houndarr.engine.adapters._common import fetch_movie_upgrade_pool
+from houndarr.engine.adapters._common import (
+    build_missing_candidate,
+    fetch_movie_upgrade_pool,
+)
 from houndarr.engine.candidates import (
     SearchCandidate,
     _is_unreleased,
@@ -87,12 +90,11 @@ def adapt_missing(item: MissingWhisparrV3Movie, instance: Instance) -> SearchCan
     Returns:
         A fully populated :class:`SearchCandidate`.
     """
-    return SearchCandidate(
-        item_id=item.movie_id,
+    return build_missing_candidate(
         item_type="whisparr_v3_movie",
+        item_id=item.movie_id,
         label=_movie_label(item),
         unreleased_reason=_unreleased_reason(item, instance.post_release_grace_hrs),
-        group_key=None,
         search_payload={
             "command": "MoviesSearch",
             "movie_id": item.movie_id,

@@ -15,7 +15,7 @@ from houndarr.clients.base import ArrClient, WantedKind
 __all__ = ["LidarrClient", "LibraryAlbum", "MissingAlbum"]
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class LibraryAlbum:
     """An album from Lidarr's full library endpoint."""
 
@@ -28,7 +28,7 @@ class LibraryAlbum:
     release_date: str | None
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class MissingAlbum:
     """A single missing album returned by Lidarr's wanted/missing endpoint."""
 

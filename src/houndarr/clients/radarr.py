@@ -15,7 +15,7 @@ from houndarr.clients.base import ArrClient, WantedKind
 __all__ = ["LibraryMovie", "MissingMovie", "RadarrClient"]
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class LibraryMovie:
     """A movie from Radarr's full library endpoint."""
 
@@ -30,7 +30,7 @@ class LibraryMovie:
     digital_release: str | None
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class MissingMovie:
     """A single missing movie returned by Radarr's wanted/missing endpoint."""
 

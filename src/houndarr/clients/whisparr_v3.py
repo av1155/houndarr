@@ -41,7 +41,7 @@ from houndarr.clients.base import ArrClient, WantedKind
 __all__ = ["LibraryWhisparrV3Movie", "MissingWhisparrV3Movie", "WhisparrV3Client"]
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class MissingWhisparrV3Movie:
     """A missing or cutoff-unmet movie/scene from the Whisparr v3 library."""
 
@@ -57,7 +57,7 @@ class MissingWhisparrV3Movie:
     digital_release: str | None
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class LibraryWhisparrV3Movie:
     """A movie/scene from Whisparr v3's full library with file and cutoff metadata."""
 

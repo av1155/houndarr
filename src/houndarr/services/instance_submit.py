@@ -34,10 +34,9 @@ service imports them through their current home.
 from __future__ import annotations
 
 from houndarr.errors import InstanceValidationError
-from houndarr.routes.settings._helpers import (
-    API_KEY_UNCHANGED,
+from houndarr.routes.settings._helpers import API_KEY_UNCHANGED, check_connection
+from houndarr.services.instance_validation import (
     SearchModes,
-    check_connection,
     resolve_search_modes,
     type_mismatch_message,
     validate_cutoff_controls,

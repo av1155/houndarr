@@ -35,7 +35,6 @@ from houndarr.config import (
     DEFAULT_UPGRADE_WHISPARR_SEARCH_MODE,
     DEFAULT_WHISPARR_SEARCH_MODE,
 )
-from houndarr.database import get_db
 
 
 class InstanceType(StrEnum):

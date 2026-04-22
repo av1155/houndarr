@@ -1,0 +1,184 @@
+"""Structural Protocols for Houndarr's repository and factory seams.
+
+Track B.20 declaration.  These Protocols advertise the repository
+shape that Track D.3-D.6 will implement concretely in
+``src/houndarr/repositories/``; this module lands the declarations
+first so service-layer callers can depend on the shape instead of
+the eventual SQL-executing module.  A similar story holds for
+:class:`ClientFactory`: today every :class:`ArrClient` is constructed
+inline via an adapter's ``make_client``; Track C will introduce a
+registered factory that satisfies this Protocol.
+
+Every declaration is ``@runtime_checkable`` so tests can assert
+conformance with ``isinstance(instance, InstanceRepository)`` once
+a concrete implementation lands.  The signatures are deliberately
+minimal: Track D refines them as each repository boundary solidifies.
+Until then this module is the single source of truth for the seam.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Awaitable, Callable, Iterable
+from typing import Any, Protocol, runtime_checkable
+
+from houndarr.clients.base import ArrClient
+from houndarr.enums import ItemType
+from houndarr.services.instances import Instance, InstanceType
+from houndarr.value_objects import ItemRef
+
+# Repositories
+
+
+@runtime_checkable
+class SettingsRepository(Protocol):
+    """Key-value settings storage backed by the ``settings`` table."""
+
+    def get_setting(self, key: str) -> Awaitable[str | None]:
+        """Return the stored value for *key*, or ``None`` if absent."""
+
+    def set_setting(self, key: str, value: str) -> Awaitable[None]:
+        """Insert or update *key* with *value*."""
+
+    def delete_setting(self, key: str) -> Awaitable[None]:
+        """Remove *key* if it exists (no error if already absent)."""
+
+
+@runtime_checkable
+class InstanceRepository(Protocol):
+    """Instance CRUD boundary backing the ``instances`` table.
+
+    Track D.3 + D.4 will land a concrete module under
+    ``repositories/instances.py`` whose function shapes match this
+    Protocol; the service layer in ``services/instances.py`` then
+    becomes a facade over the repository.
+    """
+
+    def list_instances(self) -> Awaitable[list[Instance]]:
+        """Return every instance ordered by id."""
+
+    def get_instance(self, instance_id: int) -> Awaitable[Instance | None]:
+        """Return the instance identified by *instance_id*, or ``None``."""
+
+    def insert_instance(self, payload: Any) -> Awaitable[int]:
+        """Insert a new instance row and return the assigned primary key.
+
+        *payload* is intentionally typed as :class:`Any` here; Track
+        D.4 will replace it with the concrete ``InstanceInsert``
+        dataclass declared alongside the repository.
+        """
+
+    def update_instance(self, instance_id: int, payload: Any) -> Awaitable[None]:
+        """Partially update the instance identified by *instance_id*.
+
+        *payload* is placeholder-typed for the same reason as
+        :meth:`insert_instance`; Track D.4 replaces it with the
+        concrete ``InstanceUpdate`` dataclass.
+        """
+
+    def delete_instance(self, instance_id: int) -> Awaitable[None]:
+        """Delete the instance row and any FK-cascaded rows."""
+
+
+@runtime_checkable
+class CooldownRepository(Protocol):
+    """Cooldown SQL boundary backing the ``cooldowns`` table.
+
+    The LRU skip-log sentinel (``should_log_skip``) stays in the
+    service layer; this Protocol only covers the SQL write paths
+    that Track D.5 will migrate to ``repositories/cooldowns.py``.
+    """
+
+    def exists_active_cooldown(self, ref: ItemRef, cooldown_days: int) -> Awaitable[bool]:
+        """Return ``True`` when *ref* is within its cooldown window."""
+
+    def upsert_cooldown(self, ref: ItemRef) -> Awaitable[None]:
+        """Record *ref* as just-searched, upserting the existing row."""
+
+    def delete_cooldowns_for_instance(self, instance_id: int) -> Awaitable[int]:
+        """Delete every cooldown row for *instance_id* and return the count."""
+
+
+@runtime_checkable
+class SearchLogRepository(Protocol):
+    """``search_log`` SQL boundary.
+
+    Track D.6 will land ``repositories/search_log.py``; the engine's
+    :func:`_write_log` helper becomes a thin call to
+    :meth:`insert_log_row`.
+    """
+
+    def insert_log_row(
+        self,
+        *,
+        instance_id: int | None,
+        item_id: int | None,
+        item_type: str | None,
+        action: str,
+        search_kind: str | None = None,
+        cycle_id: str | None = None,
+        cycle_trigger: str | None = None,
+        item_label: str | None = None,
+        reason: str | None = None,
+        message: str | None = None,
+    ) -> Awaitable[None]:
+        """Insert a single row into ``search_log``."""
+
+    def fetch_log_rows(
+        self,
+        *,
+        instance_id: int | None = None,
+        action: str | None = None,
+        search_kind: str | None = None,
+        cycle_id: str | None = None,
+        limit: int = 100,
+        after_id: int | None = None,
+    ) -> Awaitable[list[dict[str, Any]]]:
+        """Return a filtered page of log rows."""
+
+    def fetch_recent_searches(
+        self,
+        instance_id: int,
+        *,
+        search_kind: str,
+        within_seconds: int,
+    ) -> Awaitable[int]:
+        """Count ``action='searched'`` rows in the trailing window."""
+
+    def delete_logs_for_instance(self, instance_id: int) -> Awaitable[int]:
+        """Delete every ``search_log`` row for *instance_id*."""
+
+
+# Client construction
+
+
+@runtime_checkable
+class ClientFactory(Protocol):
+    """Construct an :class:`ArrClient` for a given :class:`Instance`.
+
+    Today every adapter exposes its own ``make_client`` function; the
+    supervisor and search loop receive adapters via
+    :func:`houndarr.engine.adapters.get_adapter` and call
+    ``adapter.make_client(instance)`` inline.  Track C will introduce
+    a registered factory seam so tests can swap client construction
+    without monkeypatching.  Implementations must return an unopened
+    client; callers open it via ``async with``.
+    """
+
+    def __call__(self, instance: Instance) -> ArrClient:
+        """Build a fresh (unopened) :class:`ArrClient` for *instance*."""
+
+
+# Re-exports for downstream imports
+
+
+__all__ = [
+    "ClientFactory",
+    "CooldownRepository",
+    "InstanceRepository",
+    "SearchLogRepository",
+    "SettingsRepository",
+]
+
+
+# Silence "unused" hints on passthrough imports used by ``@runtime_checkable``
+_TYPE_HINTS: tuple[Any, ...] = (Callable, Iterable, ItemType, InstanceType)

@@ -19,7 +19,7 @@ from houndarr.engine.candidates import SearchCandidate
 from houndarr.services.instances import Instance, InstanceType
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class AppAdapter:
     """Bundle of adapter functions for a single *arr application.
 

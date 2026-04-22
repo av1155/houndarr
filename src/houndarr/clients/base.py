@@ -15,7 +15,7 @@ from houndarr.clients._wire_models import QueueStatus, SystemStatus
 logger = logging.getLogger(__name__)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class InstanceSnapshot:
     """Per-instance library counts surfaced on the dashboard.
 

@@ -14,7 +14,7 @@ from houndarr.clients.base import ArrClient, WantedKind
 __all__ = ["LibraryBook", "MissingBook", "ReadarrClient"]
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class LibraryBook:
     """A book from Readarr's full library endpoint."""
 
@@ -27,7 +27,7 @@ class LibraryBook:
     release_date: str | None
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class MissingBook:
     """A single missing book returned by Readarr's wanted/missing endpoint."""
 

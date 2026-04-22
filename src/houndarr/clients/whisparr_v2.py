@@ -21,7 +21,7 @@ from houndarr.clients.base import ArrClient, WantedKind
 __all__ = ["LibraryWhisparrEpisode", "MissingWhisparrEpisode", "WhisparrClient"]
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class LibraryWhisparrEpisode:
     """An episode from Whisparr's full library with file and cutoff metadata."""
 
@@ -36,7 +36,7 @@ class LibraryWhisparrEpisode:
     cutoff_met: bool
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class MissingWhisparrEpisode:
     """A single missing episode returned by Whisparr's wanted/missing endpoint."""
 

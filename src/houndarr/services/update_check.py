@@ -75,7 +75,7 @@ _HTTP_TIMEOUT = httpx.Timeout(10.0, connect=5.0)
 _USER_AGENT = f"Houndarr-UpdateCheck/{__version__}"
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class UpdateStatus:
     """Snapshot returned to the route/template layer.
 

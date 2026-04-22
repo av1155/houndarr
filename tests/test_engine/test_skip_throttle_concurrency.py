@@ -31,7 +31,7 @@ post-sentinel skip-row count in ``search_log``.
 Per the user instruction accompanying this test: engine code is NOT modified.
 The assertion reflects what the chosen sentinel design *should* produce.  A
 failure here against current (pre-sentinel) code documents the structural
-noise — it is the observation, not a bug to fix in this PR.
+noise; it is the observation, not a bug to fix in this PR.
 """
 
 from __future__ import annotations
@@ -85,7 +85,7 @@ async def test_concurrent_passes_produce_at_most_one_skip_row(
     should produce at most ONE ``action='skipped'`` row in ``search_log``.
 
     Against current engine code (no sentinel) this asserts and will fail with
-    2 rows written — the structural noise PR 0 is intended to eliminate.
+    2 rows written; the structural noise PR 0 is intended to eliminate.
     """
     instance = make_instance(
         instance_id=_INSTANCE_ID,
@@ -147,7 +147,7 @@ async def test_concurrent_passes_produce_at_most_one_skip_row(
     # (two cycles from the same supervisor landing inside the same tick).
     await asyncio.gather(run_one_pass("A"), run_one_pass("B"))
 
-    # Dispatch should not have fired — the item is on cooldown.
+    # Dispatch should not have fired; the item is on cooldown.
     assert dispatch_mock.await_count == 0, (
         "Cooldowned item was dispatched; engine cooldown check is broken or the test seed is wrong."
     )

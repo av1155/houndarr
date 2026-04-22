@@ -25,6 +25,7 @@ from houndarr.engine.adapters import get_adapter
 from houndarr.engine.adapters.protocols import AppAdapterProto
 from houndarr.engine.candidates import SearchCandidate
 from houndarr.enums import CycleTrigger, ItemType, SearchAction, SearchKind
+from houndarr.errors import ClientError, EngineError
 from houndarr.services.cooldown import (
     is_on_cooldown_ref,
     record_search_ref,
@@ -819,6 +820,16 @@ async def run_instance_search(
     3. Optionally run the cutoff pass via :func:`_run_search_pass`.
     4. Return the total number of items searched.
 
+    Error surface (Track B.13):
+    Typed Houndarr errors (:class:`~houndarr.errors.EngineError` and
+    :class:`~houndarr.errors.ClientError` subclasses) and
+    :class:`httpx.TransportError` propagate unchanged; the supervisor's
+    reconnect loop inspects ``httpx.TransportError`` specifically, and
+    its typed catch consumes the two Houndarr bases.  Any other
+    exception escaping the internal handlers is wrapped in a fresh
+    :class:`EngineError` with the original on ``__cause__`` so callers
+    only ever see a Houndarr-specific surface.
+
     Args:
         instance: Fully-populated (decrypted) instance.
         master_key: Unused here but kept in signature for symmetry with
@@ -826,6 +837,36 @@ async def run_instance_search(
 
     Returns:
         Count of items searched in this cycle.
+    """
+    try:
+        return await _run_instance_search_impl(
+            instance,
+            master_key,
+            cycle_id=cycle_id,
+            cycle_trigger=cycle_trigger,
+        )
+    except httpx.TransportError:
+        raise
+    except (EngineError, ClientError):
+        raise
+    except Exception as exc:  # noqa: BLE001
+        raise EngineError(
+            f"unhandled error in search cycle for {instance.name!r}: {exc}"
+        ) from exc
+
+
+async def _run_instance_search_impl(
+    instance: Instance,
+    master_key: bytes,
+    *,
+    cycle_id: str | None = None,
+    cycle_trigger: CycleTrigger | str = CycleTrigger.scheduled,
+) -> int:
+    """Cycle body; wrapped by :func:`run_instance_search` for typed errors.
+
+    Kept as a private implementation so the public entrypoint can own
+    the error-surface contract without indenting a 200-line try block.
+    Callers outside this module should use :func:`run_instance_search`.
     """
     logger.info(
         "[%s] starting search cycle (batch_size=%d)",

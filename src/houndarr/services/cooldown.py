@@ -1,23 +1,24 @@
 """Cooldown service: per-item search tracking and skip-log throttling.
 
-The ``cooldowns`` table stores the last time each (instance, item) pair was
-searched.  This module provides three operations the search engine needs:
+The ``cooldowns`` table SQL migrated into
+:mod:`houndarr.repositories.cooldowns` under Track D.5.  This module
+stays the service-layer facade over that boundary and retains
+exclusive ownership of the in-memory LRU throttle
+(:func:`should_log_skip`) that gates duplicate cooldown-reason skip
+rows in ``search_log``.  The throttle is single-process state, not
+SQL, so it does not belong in a repository.
 
-* :func:`is_on_cooldown_ref` - should we skip this item?
-* :func:`record_search_ref` - mark an item as just-searched (upsert).
-* :func:`clear_cooldowns` - admin reset for a single instance.
+Public surface:
 
-The ``_ref`` variants take an :class:`~houndarr.value_objects.ItemRef` and
-own the SQL implementation; the positional :func:`is_on_cooldown` and
-:func:`record_search` are compat shims kept around for test seeds and any
-caller that predates the :class:`ItemRef` migration.  New code should
-build an :class:`ItemRef` and call the ``_ref`` form directly.
-
-It also owns an in-memory LRU sentinel, :func:`should_log_skip`, that lets the
-engine throttle duplicate cooldown-reason skip rows in ``search_log`` to at
-most one per ``(instance_id, item_id, search_kind, reason_bucket)`` per 24 h.
-Single-process only (the cache is module-level; multi-worker deploys would
-reintroduce noise proportionally).
+* :func:`is_on_cooldown_ref` and :func:`record_search_ref` are thin
+  delegators over the repository.  They are the canonical API; new
+  engine code should build an :class:`~houndarr.value_objects.ItemRef`
+  and call them.
+* :func:`is_on_cooldown` and :func:`record_search` are positional
+  compat shims kept for test seeds and any caller that predates the
+  :class:`ItemRef` migration.
+* :func:`clear_cooldowns` delegates the admin reset to the repository.
+* :func:`should_log_skip` owns the LRU sentinel.
 """
 
 from __future__ import annotations
@@ -26,7 +27,6 @@ import asyncio
 from collections import OrderedDict
 from datetime import UTC, datetime, timedelta
 
-from houndarr.database import get_db
 from houndarr.engine.candidates import ItemType
 from houndarr.value_objects import ItemRef
 
@@ -40,75 +40,41 @@ _SKIP_LOG_TTL = timedelta(hours=24)
 _SKIP_LOG_LOCK = asyncio.Lock()
 
 
-def _now_utc() -> datetime:
-    return datetime.now(UTC)
-
-
-def _iso(dt: datetime) -> str:
-    """Format a datetime as the ISO-8601 string stored in SQLite."""
-    return dt.strftime("%Y-%m-%dT%H:%M:%S.%f") + "Z"
-
-
 async def is_on_cooldown_ref(ref: ItemRef, cooldown_days: int) -> bool:
     """Return ``True`` if *ref* was searched within *cooldown_days* days.
 
-    Source of truth for the cooldown-lookup SQL.  The positional form
-    :func:`is_on_cooldown` is a thin compat shim around this function.
+    Thin delegator over
+    :func:`houndarr.repositories.cooldowns.exists_active_cooldown`;
+    the SQL lives in the repository and this module stays in place
+    as the stable import path for engine callers.
 
     Args:
         ref: The item to check.
         cooldown_days: Number of days before the same item can be
             re-searched.  Pass ``0`` (or any non-positive value) to
-            disable cooldowns entirely; the function short-circuits to
-            ``False`` and performs no DB read in that case.
+            disable cooldowns entirely; the underlying repository
+            call short-circuits without touching the database.
 
     Returns:
         ``True`` if a cooldown record exists and has not yet expired.
     """
-    if cooldown_days <= 0:
-        return False
+    from houndarr.repositories.cooldowns import exists_active_cooldown
 
-    cutoff = _iso(_now_utc() - timedelta(days=cooldown_days))
-    async with get_db() as db:
-        async with db.execute(
-            """
-            SELECT 1 FROM cooldowns
-            WHERE instance_id = ?
-              AND item_id     = ?
-              AND item_type   = ?
-              AND searched_at > ?
-            LIMIT 1
-            """,
-            (ref.instance_id, ref.item_id, ref.item_type.value, cutoff),
-        ) as cur:
-            row = await cur.fetchone()
-    return row is not None
+    return await exists_active_cooldown(ref, cooldown_days)
 
 
 async def record_search_ref(ref: ItemRef) -> None:
     """Upsert a cooldown record for *ref* with the current UTC timestamp.
 
-    Source of truth for the cooldown-upsert SQL.  If a record already
-    exists for ``(ref.instance_id, ref.item_id, ref.item_type)`` it is
-    updated in place; otherwise a new row is inserted.  The positional
-    form :func:`record_search` is a thin compat shim around this
-    function.
+    Thin delegator over
+    :func:`houndarr.repositories.cooldowns.upsert_cooldown`.
 
     Args:
         ref: The item to record as just-searched.
     """
-    now = _iso(_now_utc())
-    async with get_db() as db:
-        await db.execute(
-            """
-            INSERT INTO cooldowns (instance_id, item_id, item_type, searched_at)
-            VALUES (?, ?, ?, ?)
-            ON CONFLICT(instance_id, item_id, item_type)
-            DO UPDATE SET searched_at = excluded.searched_at
-            """,
-            (ref.instance_id, ref.item_id, ref.item_type.value, now),
-        )
-        await db.commit()
+    from houndarr.repositories.cooldowns import upsert_cooldown
+
+    await upsert_cooldown(ref)
 
 
 async def is_on_cooldown(
@@ -172,6 +138,8 @@ async def record_search(
 async def clear_cooldowns(instance_id: int) -> int:
     """Delete all cooldown records for *instance_id*.
 
+    Thin delegator over
+    :func:`houndarr.repositories.cooldowns.delete_cooldowns_for_instance`.
     Intended for the admin "reset cooldowns" action.
 
     Args:
@@ -180,13 +148,9 @@ async def clear_cooldowns(instance_id: int) -> int:
     Returns:
         Number of rows deleted.
     """
-    async with get_db() as db:
-        cur = await db.execute(
-            "DELETE FROM cooldowns WHERE instance_id = ?",
-            (instance_id,),
-        )
-        await db.commit()
-        return cur.rowcount or 0
+    from houndarr.repositories.cooldowns import delete_cooldowns_for_instance
+
+    return await delete_cooldowns_for_instance(instance_id)
 
 
 async def should_log_skip(key: SkipLogKey) -> bool:

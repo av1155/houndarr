@@ -15,8 +15,8 @@ from houndarr.engine.adapters.sonarr import _season_item_id
 from houndarr.engine.adapters.whisparr_v2 import (
     _season_item_id as whisparr_season_item_id,
 )
+from houndarr.repositories.cooldowns import _iso
 from houndarr.services.cooldown import (
-    _iso,
     clear_cooldowns,
     is_on_cooldown,
     record_search,

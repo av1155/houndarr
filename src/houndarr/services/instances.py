@@ -10,6 +10,8 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Any
 
+import aiosqlite
+
 from houndarr.config import (
     DEFAULT_ALLOWED_TIME_WINDOW,
     DEFAULT_BATCH_SIZE,
@@ -135,7 +137,7 @@ class Instance:
 # ---------------------------------------------------------------------------
 
 
-def _row_to_instance(row: Any, master_key: bytes) -> Instance:
+def _row_to_instance(row: aiosqlite.Row, master_key: bytes) -> Instance:
     """Convert an aiosqlite Row to an :class:`Instance`, decrypting the key."""
     return Instance(
         id=row["id"],

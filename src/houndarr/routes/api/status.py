@@ -9,6 +9,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+import aiosqlite
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
 
@@ -79,7 +80,7 @@ WHERE rn = 1
 
 
 async def _all_instance_metrics(
-    db: Any,  # noqa: ANN401
+    db: aiosqlite.Connection,
     instance_ids: list[int],
 ) -> tuple[dict[int, dict[str, Any]], dict[int, tuple[str | None, str | None]]]:
     """Fetch aggregated search metrics and last-activity for all instances.

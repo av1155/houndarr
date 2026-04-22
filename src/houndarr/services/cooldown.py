@@ -16,6 +16,7 @@ from datetime import UTC, datetime, timedelta
 
 from houndarr.database import get_db
 from houndarr.engine.candidates import ItemType
+from houndarr.value_objects import ItemRef
 
 
 def _now_utc() -> datetime:
@@ -117,6 +118,16 @@ async def count_searches_last_hour(instance_id: int) -> int:
         ) as cur:
             row = await cur.fetchone()
     return int(row[0]) if row else 0
+
+
+async def is_on_cooldown_ref(ref: ItemRef, cooldown_days: int) -> bool:
+    """ItemRef-accepting overload of :func:`is_on_cooldown`."""
+    return await is_on_cooldown(ref.instance_id, ref.item_id, ref.item_type, cooldown_days)
+
+
+async def record_search_ref(ref: ItemRef) -> None:
+    """ItemRef-accepting overload of :func:`record_search`."""
+    await record_search(ref.instance_id, ref.item_id, ref.item_type)
 
 
 async def clear_cooldowns(instance_id: int) -> int:

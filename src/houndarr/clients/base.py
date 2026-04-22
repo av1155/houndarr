@@ -4,12 +4,17 @@ from __future__ import annotations
 
 import logging
 from abc import ABC, abstractmethod
-from typing import Any, Literal
+from typing import Any, ClassVar, Literal
 
 import httpx
 from pydantic import ValidationError
 
-from houndarr.clients._wire_models import QueueStatus, SystemStatus
+from houndarr.clients._wire_models import PaginatedResponse, QueueStatus, SystemStatus
+from houndarr.errors import (
+    ClientHTTPError,
+    ClientTransportError,
+    ClientValidationError,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +43,11 @@ class ArrClient(ABC):
     Override :attr:`_SYSTEM_STATUS_PATH` for apps whose API version differs
     from the v3 default (e.g. Lidarr and Readarr use ``/api/v1/``).
 
+    Subclasses with ``/wanted`` endpoints (every paginated client today
+    apart from Whisparr v3) override the four ``_WANTED_*`` class-level
+    hooks and let :meth:`_fetch_wanted_page` and :meth:`_fetch_wanted_total`
+    do the request shaping, validation, and typed-error wrap.
+
     Usage::
 
         async with SonarrClient(url="http://sonarr:8989", api_key="abc") as client:
@@ -49,6 +59,15 @@ class ArrClient(ABC):
 
     _SYSTEM_STATUS_PATH: str = "/api/v3/system/status"
     _QUEUE_STATUS_PATH: str = "/api/v3/queue/status"
+
+    # Class-level hooks for the /wanted template.  Subclasses with a /wanted
+    # endpoint override these; Whisparr v3 leaves them unset because it
+    # computes totals from /api/v3/movie instead.  See _fetch_wanted_page
+    # for the per-hook contract.
+    _WANTED_BASE_PATH: ClassVar[str] = "/api/v3/wanted"
+    _WANTED_SORT_KEY: ClassVar[str] = ""
+    _WANTED_INCLUDE_PARAM: ClassVar[str | None] = None
+    _WANTED_ENVELOPE: ClassVar[type[PaginatedResponse[Any]] | None] = None
 
     def __init__(
         self,
@@ -63,9 +82,7 @@ class ArrClient(ABC):
             timeout=timeout,
         )
 
-    # ------------------------------------------------------------------
     # Context-manager support
-    # ------------------------------------------------------------------
 
     async def __aenter__(self) -> ArrClient:
         await self._client.__aenter__()
@@ -78,9 +95,7 @@ class ArrClient(ABC):
         """Close the underlying HTTP client."""
         await self._client.aclose()
 
-    # ------------------------------------------------------------------
     # Low-level helpers
-    # ------------------------------------------------------------------
 
     async def _get(self, path: str, **params: Any) -> Any:
         """GET *path* with optional query *params*, raise on non-2xx."""
@@ -94,9 +109,7 @@ class ArrClient(ABC):
         response.raise_for_status()
         return response.json()
 
-    # ------------------------------------------------------------------
     # Health check
-    # ------------------------------------------------------------------
 
     async def ping(self) -> SystemStatus | None:
         """Return the parsed system status if reachable, or ``None``.
@@ -116,9 +129,7 @@ class ArrClient(ABC):
         except _PING_SAFE_ERRORS:
             return None
 
-    # ------------------------------------------------------------------
     # Queue status
-    # ------------------------------------------------------------------
 
     async def get_queue_status(self) -> QueueStatus:
         """Fetch the download queue status from the *arr instance.
@@ -139,9 +150,130 @@ class ArrClient(ABC):
         result = await self._get(self._QUEUE_STATUS_PATH)
         return QueueStatus.model_validate(result)
 
-    # ------------------------------------------------------------------
+    # /wanted template (paginated clients only; Whisparr v3 does not use it)
+
+    async def _fetch_wanted_page(
+        self,
+        kind: Literal["missing", "cutoff"],
+        *,
+        page: int,
+        page_size: int,
+        include_sort: bool = True,
+    ) -> PaginatedResponse[Any]:
+        """Fetch one page of ``/wanted/{kind}`` via the per-subclass envelope.
+
+        The four class-level hooks (override at subclass scope):
+
+        - :attr:`_WANTED_BASE_PATH`: API root that prefixes ``/{kind}``.
+          Defaults to ``/api/v3/wanted`` for v3-API clients (Sonarr, Radarr,
+          Whisparr v2); Lidarr and Readarr override to ``/api/v1/wanted``.
+        - :attr:`_WANTED_SORT_KEY`: sort field name passed when ``include_sort``
+          is true.  Required for every paginated /wanted client; the missing
+          pass on every client and the cutoff pass on Radarr include it.
+        - :attr:`_WANTED_INCLUDE_PARAM`: optional embed-parent query param
+          (``includeSeries`` for Sonarr / Whisparr v2, ``includeArtist`` for
+          Lidarr, ``includeAuthor`` for Readarr, ``None`` for Radarr).
+        - :attr:`_WANTED_ENVELOPE`: the parametrised :class:`PaginatedResponse`
+          subclass (e.g. ``PaginatedResponse[RadarrWantedMovie]``) that
+          validates the response payload.
+
+        ``include_sort`` defaults to ``True`` because the missing pass on
+        every paginated client sorts ascending by its release-date field.
+        Callers pass ``include_sort=False`` for the cutoff pass on Sonarr,
+        Lidarr, Readarr, and Whisparr v2 because those endpoints today omit
+        the sort params; Radarr's cutoff endpoint includes them so it
+        relies on the default.
+
+        Subclasses without ``/wanted`` endpoints (Whisparr v3) leave the
+        hooks unset and never call this method; calling it on a client
+        whose :attr:`_WANTED_ENVELOPE` is unset raises
+        :class:`NotImplementedError` so the misconfiguration surfaces
+        immediately rather than silently producing an empty result.
+
+        Raw ``httpx`` and ``pydantic`` errors propagate unwrapped so
+        callers can choose: page-level reads (``get_missing``,
+        ``get_cutoff_unmet``) re-raise the raw exception today; the
+        size-1 probe in :meth:`_fetch_wanted_total` wraps them into
+        typed :class:`~houndarr.errors.ClientError` subclasses.
+
+        Args:
+            kind: ``"missing"`` or ``"cutoff"``.
+            page: 1-based page number.
+            page_size: Number of records to request.
+            include_sort: When true, append ``sortKey`` and
+                ``sortDirection`` to the request.
+
+        Returns:
+            The parsed :class:`PaginatedResponse` envelope.  Records are
+            typed ``Any`` at the static-typing layer because the envelope
+            class is supplied at the class-attribute level; runtime
+            records are the per-app wire model declared in
+            :attr:`_WANTED_ENVELOPE`.
+
+        Raises:
+            NotImplementedError: :attr:`_WANTED_ENVELOPE` is unset on the
+                concrete subclass.
+            httpx.HTTPError: Non-2xx response or transport failure.
+            pydantic.ValidationError: Response payload did not match the
+                declared envelope schema.
+        """
+        envelope_cls = type(self)._WANTED_ENVELOPE
+        if envelope_cls is None:
+            raise NotImplementedError(
+                f"{type(self).__name__} did not declare _WANTED_ENVELOPE; "
+                "the /wanted template requires a per-subclass envelope."
+            )
+        path = f"{self._WANTED_BASE_PATH}/{kind}"
+        params: dict[str, Any] = {
+            "page": page,
+            "pageSize": page_size,
+            "monitored": "true",
+        }
+        if include_sort:
+            params["sortKey"] = self._WANTED_SORT_KEY
+            params["sortDirection"] = "ascending"
+        if self._WANTED_INCLUDE_PARAM is not None:
+            params[self._WANTED_INCLUDE_PARAM] = "true"
+        data = await self._get(path, **params)
+        return envelope_cls.model_validate(data)
+
+    async def _fetch_wanted_total(self, kind: Literal["missing", "cutoff"]) -> int:
+        """Default size-1 probe for ``/wanted/{kind}`` totals with typed wraps.
+
+        Subclasses with ``/wanted`` endpoints rely on this default and let
+        :meth:`get_wanted_total` collapse to a one-liner.  Whisparr v3
+        overrides :meth:`get_wanted_total` directly because it has no
+        ``/wanted`` path and computes the total from a cached
+        ``/api/v3/movie`` response.
+
+        Wraps raw ``httpx`` and ``pydantic`` failures into typed
+        :class:`~houndarr.errors.ClientError` subclasses so callers get
+        a Houndarr-specific surface they can catch.  The original
+        exception is preserved on ``__cause__`` via ``raise ... from``.
+
+        Raises:
+            ClientHTTPError: Non-2xx response.
+            ClientTransportError: Transport failure (connect, timeout,
+                malformed URL, etc.).
+            ClientValidationError: Response shape did not match the
+                paginated envelope schema.
+        """
+        path = f"{self._WANTED_BASE_PATH}/{kind}"
+        try:
+            envelope = await self._fetch_wanted_page(kind, page=1, page_size=1)
+        except httpx.HTTPStatusError as exc:
+            raise ClientHTTPError(
+                f"wanted total: HTTP {exc.response.status_code} from {path}"
+            ) from exc
+        except (httpx.RequestError, httpx.InvalidURL) as exc:
+            raise ClientTransportError(
+                f"wanted total: transport error reaching {path}: {exc}"
+            ) from exc
+        except ValidationError as exc:
+            raise ClientValidationError(f"wanted total: malformed payload from {path}") from exc
+        return envelope.total_records
+
     # Abstract interface
-    # ------------------------------------------------------------------
 
     @abstractmethod
     async def get_missing(self, *, page: int = 1, page_size: int = 10) -> list[Any]:

@@ -10,10 +10,11 @@ full library via ``GET /api/v3/movie`` and filtering client-side.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import Literal
 
 import httpx
 
+from houndarr.clients._wire_models import WhisparrV3LibraryMovie
 from houndarr.clients.base import ArrClient
 
 __all__ = ["LibraryWhisparrV3Movie", "MissingWhisparrV3Movie", "WhisparrV3Client"]
@@ -67,13 +68,13 @@ class WhisparrV3Client(ArrClient):
         timeout: httpx.Timeout = httpx.Timeout(30.0, connect=5.0),
     ) -> None:
         super().__init__(url=url, api_key=api_key, timeout=timeout)
-        self._movie_cache: list[dict[str, Any]] | None = None
+        self._movie_cache: list[WhisparrV3LibraryMovie] | None = None
 
-    async def _get_all_movies(self) -> list[dict[str, Any]]:
+    async def _get_all_movies(self) -> list[WhisparrV3LibraryMovie]:
         """Fetch and cache the full movie library from ``GET /api/v3/movie``."""
         if self._movie_cache is None:
-            result: list[dict[str, Any]] = await self._get("/api/v3/movie")
-            self._movie_cache = result
+            result = await self._get("/api/v3/movie")
+            self._movie_cache = [WhisparrV3LibraryMovie.model_validate(r) for r in result]
         return self._movie_cache
 
     async def get_missing(
@@ -96,11 +97,7 @@ class WhisparrV3Client(ArrClient):
         """
         movies = await self._get_all_movies()
         missing = sorted(
-            [
-                _parse_movie(r)
-                for r in movies
-                if r.get("monitored", False) and not r.get("hasFile", False)
-            ],
+            [_parse_movie(m) for m in movies if m.monitored and not m.has_file],
             key=lambda m: m.in_cinemas or "",
         )
         start = (page - 1) * page_size
@@ -139,12 +136,14 @@ class WhisparrV3Client(ArrClient):
         """
         movies = await self._get_all_movies()
         cutoff: list[MissingWhisparrV3Movie] = []
-        for r in movies:
-            if not r.get("monitored", False) or not r.get("hasFile", False):
+        for m in movies:
+            if not m.monitored or not m.has_file:
                 continue
-            movie_file: dict[str, Any] = r.get("movieFile") or {}
-            if movie_file.get("qualityCutoffNotMet", True):
-                cutoff.append(_parse_movie(r))
+            cutoff_not_met = True
+            if m.movie_file is not None and m.movie_file.quality_cutoff_not_met is not None:
+                cutoff_not_met = m.movie_file.quality_cutoff_not_met
+            if cutoff_not_met:
+                cutoff.append(_parse_movie(m))
         cutoff.sort(key=lambda m: m.in_cinemas or "")
         start = (page - 1) * page_size
         return cutoff[start : start + page_size]
@@ -157,15 +156,15 @@ class WhisparrV3Client(ArrClient):
         """
         movies = await self._get_all_movies()
         if kind == "missing":
-            return sum(
-                1 for r in movies if r.get("monitored", False) and not r.get("hasFile", False)
-            )
+            return sum(1 for m in movies if m.monitored and not m.has_file)
         count = 0
-        for r in movies:
-            if not r.get("monitored", False) or not r.get("hasFile", False):
+        for m in movies:
+            if not m.monitored or not m.has_file:
                 continue
-            movie_file: dict[str, Any] = r.get("movieFile") or {}
-            if movie_file.get("qualityCutoffNotMet", True):
+            cutoff_not_met = True
+            if m.movie_file is not None and m.movie_file.quality_cutoff_not_met is not None:
+                cutoff_not_met = m.movie_file.quality_cutoff_not_met
+            if cutoff_not_met:
                 count += 1
         return count
 
@@ -179,7 +178,7 @@ class WhisparrV3Client(ArrClient):
             List of :class:`LibraryWhisparrV3Movie` dataclasses.
         """
         movies = await self._get_all_movies()
-        return [_parse_library_movie(r) for r in movies]
+        return [_parse_library_movie(m) for m in movies]
 
 
 # ---------------------------------------------------------------------------
@@ -187,35 +186,36 @@ class WhisparrV3Client(ArrClient):
 # ---------------------------------------------------------------------------
 
 
-def _parse_library_movie(record: dict[str, Any]) -> LibraryWhisparrV3Movie:
-    has_file = bool(record.get("hasFile", False))
-    movie_file: dict[str, Any] = record.get("movieFile") or {}
-    cutoff_not_met = movie_file.get("qualityCutoffNotMet", True)
+def _parse_library_movie(wire: WhisparrV3LibraryMovie) -> LibraryWhisparrV3Movie:
+    has_file = bool(wire.has_file)
+    cutoff_not_met = True
+    if wire.movie_file is not None and wire.movie_file.quality_cutoff_not_met is not None:
+        cutoff_not_met = wire.movie_file.quality_cutoff_not_met
     return LibraryWhisparrV3Movie(
-        movie_id=record["id"],
-        title=record.get("title") or "",
-        year=record.get("year", 0),
-        monitored=bool(record.get("monitored", False)),
+        movie_id=wire.id,
+        title=wire.title or "",
+        year=wire.year or 0,
+        monitored=bool(wire.monitored),
         has_file=has_file,
         cutoff_met=not cutoff_not_met if has_file else False,
-        in_cinemas=record.get("inCinemas"),
-        physical_release=record.get("physicalRelease"),
-        digital_release=record.get("digitalRelease"),
+        in_cinemas=wire.in_cinemas,
+        physical_release=wire.physical_release,
+        digital_release=wire.digital_release,
     )
 
 
-def _parse_movie(record: dict[str, Any]) -> MissingWhisparrV3Movie:
+def _parse_movie(wire: WhisparrV3LibraryMovie) -> MissingWhisparrV3Movie:
     return MissingWhisparrV3Movie(
-        movie_id=record["id"],
-        title=record.get("title") or "",
-        year=record.get("year", 0),
-        status=record.get("status"),
-        minimum_availability=record.get("minimumAvailability"),
-        is_available=record.get("isAvailable"),
-        in_cinemas=record.get("inCinemas"),
-        physical_release=record.get("physicalRelease"),
-        release_date=record.get("releaseDate"),
-        digital_release=record.get("digitalRelease"),
+        movie_id=wire.id,
+        title=wire.title or "",
+        year=wire.year or 0,
+        status=wire.status,
+        minimum_availability=wire.minimum_availability,
+        is_available=wire.is_available,
+        in_cinemas=wire.in_cinemas,
+        physical_release=wire.physical_release,
+        release_date=wire.release_date,
+        digital_release=wire.digital_release,
     )
 
 

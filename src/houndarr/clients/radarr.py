@@ -144,10 +144,6 @@ class RadarrClient(ArrClient):
         records = await self._get("/api/v3/movie")
         return [_parse_library_movie(RadarrLibraryMovie.model_validate(r)) for r in records]
 
-    async def search_movie(self, movie_id: int) -> None:
-        """Alias for :meth:`search` with a more descriptive name."""
-        await self.search(movie_id)
-
 
 # ---------------------------------------------------------------------------
 # Parsing helpers

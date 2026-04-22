@@ -110,7 +110,7 @@ class ContextOverride:
 
 def build_missing_candidate(
     *,
-    item_type: ItemType,
+    item_type: ItemType | str,
     item_id: int,
     label: str,
     unreleased_reason: str | None,
@@ -167,7 +167,7 @@ def build_missing_candidate(
 
 def build_cutoff_candidate(
     *,
-    item_type: ItemType,
+    item_type: ItemType | str,
     item_id: int,
     label: str,
     unreleased_reason: str | None,

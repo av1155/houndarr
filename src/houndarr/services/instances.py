@@ -7,6 +7,7 @@ caller-supplied Fernet *master_key*; every read decrypts transparently.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from dataclasses import fields as dataclass_fields
 from enum import StrEnum
 from typing import Any
 
@@ -34,7 +35,6 @@ from houndarr.config import (
     DEFAULT_UPGRADE_WHISPARR_SEARCH_MODE,
     DEFAULT_WHISPARR_SEARCH_MODE,
 )
-from houndarr.crypto import encrypt
 from houndarr.database import get_db
 
 
@@ -218,62 +218,41 @@ async def create_instance(
     Returns:
         The newly created :class:`Instance` with its database-assigned *id*.
     """
-    encrypted = encrypt(api_key, master_key)
-    async with get_db() as db:
-        cur = await db.execute(
-            """
-            INSERT INTO instances (
-                name, type, url, encrypted_api_key,
-                enabled, batch_size, sleep_interval_mins,
-                hourly_cap, cooldown_days, post_release_grace_hrs, queue_limit,
-                cutoff_enabled, cutoff_batch_size, cutoff_cooldown_days, cutoff_hourly_cap,
-                sonarr_search_mode, lidarr_search_mode, readarr_search_mode,
-                whisparr_search_mode,
-                upgrade_enabled, upgrade_batch_size, upgrade_cooldown_days,
-                upgrade_hourly_cap,
-                upgrade_sonarr_search_mode, upgrade_lidarr_search_mode,
-                upgrade_readarr_search_mode, upgrade_whisparr_search_mode,
-                allowed_time_window, search_order
-            ) VALUES (
-                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
-            )
-            """,
-            (
-                name,
-                type.value,
-                url,
-                encrypted,
-                int(enabled),
-                batch_size,
-                sleep_interval_mins,
-                hourly_cap,
-                cooldown_days,
-                post_release_grace_hrs,
-                queue_limit,
-                int(cutoff_enabled),
-                cutoff_batch_size,
-                cutoff_cooldown_days,
-                cutoff_hourly_cap,
-                sonarr_search_mode.value,
-                lidarr_search_mode.value,
-                readarr_search_mode.value,
-                whisparr_search_mode.value,
-                int(upgrade_enabled),
-                upgrade_batch_size,
-                upgrade_cooldown_days,
-                upgrade_hourly_cap,
-                upgrade_sonarr_search_mode.value,
-                upgrade_lidarr_search_mode.value,
-                upgrade_readarr_search_mode.value,
-                upgrade_whisparr_search_mode.value,
-                allowed_time_window,
-                search_order.value,
-            ),
-        )
-        await db.commit()
-        row_id = cur.lastrowid
-        assert row_id is not None  # noqa: S101
+    from houndarr.repositories.instances import InstanceInsert
+    from houndarr.repositories.instances import insert_instance as _repo_insert_instance
+
+    payload = InstanceInsert(
+        name=name,
+        type=type,
+        url=url,
+        api_key=api_key,
+        enabled=enabled,
+        batch_size=batch_size,
+        sleep_interval_mins=sleep_interval_mins,
+        hourly_cap=hourly_cap,
+        cooldown_days=cooldown_days,
+        post_release_grace_hrs=post_release_grace_hrs,
+        queue_limit=queue_limit,
+        cutoff_enabled=cutoff_enabled,
+        cutoff_batch_size=cutoff_batch_size,
+        cutoff_cooldown_days=cutoff_cooldown_days,
+        cutoff_hourly_cap=cutoff_hourly_cap,
+        sonarr_search_mode=sonarr_search_mode,
+        lidarr_search_mode=lidarr_search_mode,
+        readarr_search_mode=readarr_search_mode,
+        whisparr_search_mode=whisparr_search_mode,
+        upgrade_enabled=upgrade_enabled,
+        upgrade_batch_size=upgrade_batch_size,
+        upgrade_cooldown_days=upgrade_cooldown_days,
+        upgrade_hourly_cap=upgrade_hourly_cap,
+        upgrade_sonarr_search_mode=upgrade_sonarr_search_mode,
+        upgrade_lidarr_search_mode=upgrade_lidarr_search_mode,
+        upgrade_readarr_search_mode=upgrade_readarr_search_mode,
+        upgrade_whisparr_search_mode=upgrade_whisparr_search_mode,
+        allowed_time_window=allowed_time_window,
+        search_order=search_order,
+    )
+    row_id = await _repo_insert_instance(payload, master_key=master_key)
 
     instance = await get_instance(row_id, master_key=master_key)
     assert instance is not None  # just inserted, cannot be None  # noqa: S101
@@ -327,121 +306,46 @@ async def update_instance(
 ) -> Instance | None:
     """Partially update an instance and return the refreshed :class:`Instance`.
 
-    Accepts any subset of the mutable columns.  If ``api_key`` is included it
-    is re-encrypted before being persisted.  Unrecognised field names are
-    silently ignored to avoid SQL injection.
+    Thin delegator over
+    :func:`houndarr.repositories.instances.update_instance`.  Accepts
+    any subset of the mutable columns as kwargs to preserve the
+    pre-D.4 call sites; unrecognised field names are silently ignored
+    for safety and the remainder are packed into an
+    :class:`~houndarr.repositories.instances.InstanceUpdate` payload.
+    Payloads with no non-``None`` fields cause the repository to
+    no-op, at which point this function still re-fetches and returns
+    the current :class:`Instance` so the pre-refactor
+    empty-update-returns-state contract stays intact.
 
     Args:
         id: Primary key of the instance to update.
-        master_key: Fernet key (needed for re-encryption and for the return value).
-        **fields: Column-value pairs to update.  Accepted keys:
-            ``name``, ``type``, ``url``, ``api_key``, ``enabled``,
-            ``batch_size``, ``sleep_interval_mins``, ``hourly_cap``,
-            ``cooldown_days``, ``post_release_grace_hrs``, ``queue_limit``,
-            ``cutoff_enabled``, ``cutoff_batch_size``,
-            ``cutoff_cooldown_days``, ``cutoff_hourly_cap``,
-            ``sonarr_search_mode``, ``lidarr_search_mode``,
-            ``readarr_search_mode``, ``whisparr_search_mode``,
-            ``upgrade_enabled``, ``upgrade_batch_size``,
-            ``upgrade_cooldown_days``, ``upgrade_hourly_cap``,
-            ``upgrade_sonarr_search_mode``, ``upgrade_lidarr_search_mode``,
-            ``upgrade_readarr_search_mode``, ``upgrade_whisparr_search_mode``,
-            ``upgrade_item_offset``, ``upgrade_series_offset``,
-            ``missing_page_offset``, ``cutoff_page_offset``,
-            ``allowed_time_window``, ``search_order``.
+        master_key: Fernet key used to re-encrypt ``api_key`` when
+            that field is part of the update, and to decrypt on the
+            return-value round trip.
+        **fields: Column-value pairs to update.  See
+            :class:`~houndarr.repositories.instances.InstanceUpdate`
+            for the accepted keys; values that do not appear there
+            are silently dropped.
 
     Returns:
         Updated :class:`Instance`, or ``None`` if *id* does not exist.
     """
-    # Map public field names → DB column names
-    allowed_cols: dict[str, str] = {
-        "name": "name",
-        "type": "type",
-        "url": "url",
-        "api_key": "encrypted_api_key",
-        "enabled": "enabled",
-        "batch_size": "batch_size",
-        "sleep_interval_mins": "sleep_interval_mins",
-        "hourly_cap": "hourly_cap",
-        "cooldown_days": "cooldown_days",
-        "post_release_grace_hrs": "post_release_grace_hrs",
-        "queue_limit": "queue_limit",
-        "cutoff_enabled": "cutoff_enabled",
-        "cutoff_batch_size": "cutoff_batch_size",
-        "cutoff_cooldown_days": "cutoff_cooldown_days",
-        "cutoff_hourly_cap": "cutoff_hourly_cap",
-        "sonarr_search_mode": "sonarr_search_mode",
-        "lidarr_search_mode": "lidarr_search_mode",
-        "readarr_search_mode": "readarr_search_mode",
-        "whisparr_search_mode": "whisparr_search_mode",
-        "upgrade_enabled": "upgrade_enabled",
-        "upgrade_batch_size": "upgrade_batch_size",
-        "upgrade_cooldown_days": "upgrade_cooldown_days",
-        "upgrade_hourly_cap": "upgrade_hourly_cap",
-        "upgrade_sonarr_search_mode": "upgrade_sonarr_search_mode",
-        "upgrade_lidarr_search_mode": "upgrade_lidarr_search_mode",
-        "upgrade_readarr_search_mode": "upgrade_readarr_search_mode",
-        "upgrade_whisparr_search_mode": "upgrade_whisparr_search_mode",
-        "upgrade_item_offset": "upgrade_item_offset",
-        "upgrade_series_offset": "upgrade_series_offset",
-        "missing_page_offset": "missing_page_offset",
-        "cutoff_page_offset": "cutoff_page_offset",
-        "allowed_time_window": "allowed_time_window",
-        "search_order": "search_order",
-        "monitored_total": "monitored_total",
-        "unreleased_count": "unreleased_count",
-        "snapshot_refreshed_at": "snapshot_refreshed_at",
-    }
+    from houndarr.repositories.instances import InstanceUpdate
+    from houndarr.repositories.instances import update_instance as _repo_update_instance
 
-    _search_mode_fields = {
-        "sonarr_search_mode",
-        "lidarr_search_mode",
-        "readarr_search_mode",
-        "whisparr_search_mode",
-        "upgrade_sonarr_search_mode",
-        "upgrade_lidarr_search_mode",
-        "upgrade_readarr_search_mode",
-        "upgrade_whisparr_search_mode",
-        "search_order",
-    }
+    allowed_field_names = {f.name for f in dataclass_fields(InstanceUpdate)}
+    payload_kwargs = {name: value for name, value in fields.items() if name in allowed_field_names}
+    payload = InstanceUpdate(**payload_kwargs)
 
-    assignments: list[str] = []
-    values: list[Any] = []
-
-    for field_name, value in fields.items():
-        col = allowed_cols.get(field_name)
-        if col is None:
-            continue
-        # Coerce types for SQLite
-        if field_name == "api_key":
-            value = encrypt(str(value), master_key)
-        elif (field_name == "type" and isinstance(value, InstanceType)) or (
-            field_name in _search_mode_fields and isinstance(value, StrEnum)
-        ):
-            value = value.value
-        elif field_name in ("enabled", "cutoff_enabled", "upgrade_enabled"):
-            value = int(bool(value))
-        assignments.append(f"{col} = ?")
-        values.append(value)
-
-    if not assignments:
-        # Nothing to do; return current state
-        return await get_instance(id, master_key=master_key)
-
-    # Always refresh updated_at
-    assignments.append("updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')")
-    values.append(id)
-
-    sql = f"UPDATE instances SET {', '.join(assignments)} WHERE id = ?"  # noqa: S608  # nosec B608
-    async with get_db() as db:
-        await db.execute(sql, values)
-        await db.commit()
-
+    await _repo_update_instance(id, payload, master_key=master_key)
     return await get_instance(id, master_key=master_key)
 
 
 async def delete_instance(id: int) -> bool:  # noqa: A002
     """Delete an instance row (cascade removes cooldowns).
+
+    Thin delegator over
+    :func:`houndarr.repositories.instances.delete_instance`.
 
     Args:
         id: Primary key of the instance to delete.
@@ -449,10 +353,9 @@ async def delete_instance(id: int) -> bool:  # noqa: A002
     Returns:
         ``True`` if a row was deleted, ``False`` if *id* did not exist.
     """
-    async with get_db() as db:
-        cur = await db.execute("DELETE FROM instances WHERE id = ?", (id,))
-        await db.commit()
-        return (cur.rowcount or 0) > 0
+    from houndarr.repositories.instances import delete_instance as _repo_delete_instance
+
+    return await _repo_delete_instance(id)
 
 
 async def update_instance_snapshot(
@@ -463,19 +366,16 @@ async def update_instance_snapshot(
 ) -> None:
     """Atomically write the three snapshot columns for *id*.
 
-    Called by the supervisor's ``refresh_instance_snapshots`` task.  The
-    ``snapshot_refreshed_at`` value is always ``now`` (UTC), so the
-    dashboard can show "last refreshed Nm ago" and the Settings page
-    can surface stale snapshots when the arr is unreachable.
+    Thin delegator over
+    :func:`houndarr.repositories.instances.update_instance_snapshot`.
+    Called by the supervisor's ``refresh_instance_snapshots`` task.
     """
-    async with get_db() as db:
-        await db.execute(
-            "UPDATE instances SET"
-            " monitored_total = ?,"
-            " unreleased_count = ?,"
-            " snapshot_refreshed_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),"
-            " updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')"
-            " WHERE id = ?",
-            (int(monitored_total), int(unreleased_count), id),
-        )
-        await db.commit()
+    from houndarr.repositories.instances import (
+        update_instance_snapshot as _repo_update_instance_snapshot,
+    )
+
+    await _repo_update_instance_snapshot(
+        id,
+        monitored_total=monitored_total,
+        unreleased_count=unreleased_count,
+    )

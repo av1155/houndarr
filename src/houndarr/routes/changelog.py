@@ -7,11 +7,11 @@ Four endpoints, all authenticated (handled by ``AuthMiddleware``):
   are not disabled; otherwise returns an empty placeholder div.  Supports
   ``?force=1`` to bypass the decision and always render (used by the
   Settings page "What's new" button).
-- ``POST /settings/changelog/dismiss`` — writes ``changelog_last_seen_version``
+- ``POST /settings/changelog/dismiss``: writes ``changelog_last_seen_version``
   to the running version.  Idempotent.
-- ``POST /settings/changelog/disable`` — writes the last-seen marker AND
+- ``POST /settings/changelog/disable``: writes the last-seen marker AND
   ``changelog_popups_disabled = "1"``.
-- ``POST /settings/changelog/preferences`` — toggles
+- ``POST /settings/changelog/preferences``: toggles
   ``changelog_popups_disabled`` from the Settings page; re-renders the
   Settings section partial.
 """

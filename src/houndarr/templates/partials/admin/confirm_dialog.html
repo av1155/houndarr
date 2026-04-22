@@ -43,7 +43,7 @@
           </div>
         </div>
 
-        {# Typed-phrase field — only visible for factory reset. #}
+        {# Typed-phrase field: only visible for factory reset. #}
         <div id="confirm-typed" class="hidden mt-4">
           {% call forms.form_field(
               id="confirm-phrase-input",
@@ -58,7 +58,7 @@
           {%- endcall %}
         </div>
 
-        {# Second-factor field — password in builtin, typed username in proxy. #}
+        {# Second-factor field: password in builtin, typed username in proxy. #}
         {% if auth_mode == "proxy" %}
         <div id="confirm-second-factor" class="hidden mt-3">
           <label for="confirm-username-input" class="block text-xs font-medium text-slate-400 mb-1.5">

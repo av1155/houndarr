@@ -43,7 +43,7 @@
     });
   }
 
-  var STRENGTH_LABELS = ['—', 'Weak', 'Fair', 'Good', 'Strong'];
+  var STRENGTH_LABELS = ['-', 'Weak', 'Fair', 'Good', 'Strong'];
 
   function scorePassword(pw) {
     if (!pw) return 0;

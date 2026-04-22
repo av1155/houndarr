@@ -531,7 +531,7 @@ def test_password_change_hx_refresh_recovers_csrf(logged_in_page: Page, houndarr
             page.locator("#confirm-go").click()
         assert clear_resp.value.status == 200, (
             f"post-rotation clear-logs returned {clear_resp.value.status}; "
-            "HX-Refresh recovery failed — hx-headers is still carrying the "
+            "HX-Refresh recovery failed; hx-headers is still carrying the "
             "pre-rotation CSRF token"
         )
         expect(page.locator("#admin-flash")).to_contain_text(

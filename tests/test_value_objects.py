@@ -20,11 +20,13 @@ class TestItemRef:
         assert ref.item_id == 42
         assert ref.item_type == ItemType.episode
 
-    def test_slots(self) -> None:
-        """Slots dataclass rejects arbitrary attribute assignment."""
+    def test_slots_limits_attribute_surface(self) -> None:
+        """slots=True restricts which attributes the dataclass exposes."""
         ref = ItemRef(instance_id=1, item_id=1, item_type=ItemType.movie)
+        assert set(ItemRef.__slots__) == {"instance_id", "item_id", "item_type"}
+        # Frozen dataclass rejects even the declared attrs at runtime.
         with pytest.raises(AttributeError):
-            ref.extra = "no"  # type: ignore[attr-defined]
+            ref.item_id = 2  # type: ignore[misc]
 
     def test_as_tuple_returns_str_valued_item_type(self) -> None:
         ref = ItemRef(instance_id=1, item_id=5, item_type=ItemType.album)

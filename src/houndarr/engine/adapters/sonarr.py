@@ -243,8 +243,8 @@ async def fetch_upgrade_pool(
     """
     all_series = await client.get_series()
     monitored = sorted(
-        [s for s in all_series if s.get("monitored", False)],
-        key=lambda s: s.get("id", 0),
+        [s for s in all_series if s.monitored],
+        key=lambda s: s.id or 0,
     )
 
     if not monitored:
@@ -258,7 +258,7 @@ async def fetch_upgrade_pool(
 
     episodes: list[LibraryEpisode] = []
     for s in selected:
-        series_id = s.get("id", 0)
+        series_id = s.id or 0
         try:
             eps = await client.get_episodes(series_id)
         except Exception:  # noqa: BLE001

@@ -54,12 +54,18 @@ class PaginatedResponse[T](_ArrModel):
 
     Whisparr v3 does not expose ``/wanted`` endpoints; its client filters the
     cached ``/api/v3/movie`` payload in memory instead.
+
+    The envelope fields default to zero / one so responses that supply only
+    ``records`` (seen in tests and in the wild from some misbehaving
+    proxies) still validate.  Real *arr responses always include the full
+    envelope; the defaults merely preserve the tolerance the old
+    ``dict.get(..., 0)`` chain already had.
     """
 
     records: list[T]
-    total_records: int = Field(alias="totalRecords")
-    page: int
-    page_size: int = Field(alias="pageSize")
+    total_records: int = Field(default=0, alias="totalRecords")
+    page: int = 1
+    page_size: int = Field(default=0, alias="pageSize")
 
 
 class SystemStatus(_ArrModel):

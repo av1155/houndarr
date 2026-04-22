@@ -28,7 +28,7 @@ _SEARCH_KINDS = {"missing", "cutoff", "upgrade"}
 _CYCLE_TRIGGERS = {"scheduled", "run_now", "system"}
 
 
-def _parse_instance_id(raw: str | None) -> int | None:
+def parse_instance_id(raw: str | None) -> int | None:
     """Parse optional instance_id query param from HTMX form values.
 
     Empty-string values are treated as no filter.
@@ -50,7 +50,7 @@ def _parse_instance_id(raw: str | None) -> int | None:
         raise HTTPException(status_code=422, detail="instance_id must be an integer") from exc
 
 
-def _parse_search_kind(raw: str | None) -> str | None:
+def parse_search_kind(raw: str | None) -> str | None:
     """Parse optional search_kind query param."""
     if raw is None or raw == "":
         return None
@@ -62,7 +62,7 @@ def _parse_search_kind(raw: str | None) -> str | None:
     return raw
 
 
-def _parse_cycle_trigger(raw: str | None) -> str | None:
+def parse_cycle_trigger(raw: str | None) -> str | None:
     """Parse optional cycle_trigger query param."""
     if raw is None or raw == "":
         return None
@@ -74,7 +74,7 @@ def _parse_cycle_trigger(raw: str | None) -> str | None:
     return raw
 
 
-def _parse_hide_system(raw: str | None) -> bool:
+def parse_hide_system(raw: str | None) -> bool:
     """Parse hide_system checkbox/select values from query params."""
     if raw is None or raw == "":
         return False
@@ -130,11 +130,11 @@ async def get_logs(
     Returns:
         JSON array of log-row objects.
     """
-    parsed_instance_id = _parse_instance_id(instance_id)
+    parsed_instance_id = parse_instance_id(instance_id)
     parsed_action = action or None
-    parsed_search_kind = _parse_search_kind(search_kind)
-    parsed_cycle_trigger = _parse_cycle_trigger(cycle_trigger)
-    parsed_hide_system = _parse_hide_system(hide_system)
+    parsed_search_kind = parse_search_kind(search_kind)
+    parsed_cycle_trigger = parse_cycle_trigger(cycle_trigger)
+    parsed_hide_system = parse_hide_system(hide_system)
     rows = await query_logs(
         instance_id=parsed_instance_id,
         action=parsed_action,
@@ -177,10 +177,10 @@ async def get_logs_partial(
         swap preserves the table structure.
     """
     try:
-        parsed_instance_id = _parse_instance_id(instance_id)
-        parsed_search_kind = _parse_search_kind(search_kind)
-        parsed_cycle_trigger = _parse_cycle_trigger(cycle_trigger)
-        parsed_hide_system = _parse_hide_system(hide_system)
+        parsed_instance_id = parse_instance_id(instance_id)
+        parsed_search_kind = parse_search_kind(search_kind)
+        parsed_cycle_trigger = parse_cycle_trigger(cycle_trigger)
+        parsed_hide_system = parse_hide_system(hide_system)
     except HTTPException as exc:
         return _partial_validation_error(str(exc.detail))
 

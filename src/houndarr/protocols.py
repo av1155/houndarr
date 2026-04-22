@@ -18,12 +18,11 @@ Until then this module is the single source of truth for the seam.
 
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable, Iterable
+from collections.abc import Awaitable
 from typing import Any, Literal, Protocol, runtime_checkable
 
 from houndarr.clients.base import ArrClient
-from houndarr.enums import ItemType
-from houndarr.services.instances import Instance, InstanceType
+from houndarr.services.instances import Instance
 from houndarr.value_objects import ItemRef
 
 # ``RunNowStatus`` is duplicated here (rather than imported from
@@ -244,7 +243,3 @@ __all__ = [
     "SettingsRepository",
     "SupervisorProto",
 ]
-
-
-# Silence "unused" hints on passthrough imports used by ``@runtime_checkable``
-_TYPE_HINTS: tuple[Any, ...] = (Callable, Iterable, ItemType, InstanceType)

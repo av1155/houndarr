@@ -1,10 +1,10 @@
 """Pin the pure helpers in routes/api/logs.py.
 
-Track A.14 of the refactor plan.  Track D.9 will extract the dynamic SQL
+Track A.14 of the refactor plan.  Track D.9 extracted the dynamic SQL
 builder into ``services/log_query.py``.  These tests lock the parser
-helpers (_parse_instance_id / _parse_search_kind / _parse_cycle_trigger
-/ _parse_hide_system), the summary builder (_summarize_rows), the
-limit clamp (_compute_load_more_limit), and the HTMX 422 partial shape
+helpers (parse_instance_id / parse_search_kind / parse_cycle_trigger
+/ parse_hide_system), the summary builder (summarize_rows), the
+limit clamp (compute_load_more_limit), and the HTMX 422 partial shape
 (_partial_validation_error) so the extraction cannot drift them.
 """
 
@@ -16,18 +16,13 @@ import pytest
 from fastapi import HTTPException
 
 from houndarr.routes.api.logs import (
-    _parse_cycle_trigger,
-    _parse_hide_system,
-    _parse_instance_id,
-    _parse_search_kind,
     _partial_validation_error,
+    parse_cycle_trigger,
+    parse_hide_system,
+    parse_instance_id,
+    parse_search_kind,
 )
-from houndarr.services.log_query import (
-    compute_load_more_limit as _compute_load_more_limit,
-)
-from houndarr.services.log_query import (
-    summarize_rows as _summarize_rows,
-)
+from houndarr.services.log_query import compute_load_more_limit, summarize_rows
 
 pytestmark = pytest.mark.pinning
 
@@ -37,99 +32,99 @@ pytestmark = pytest.mark.pinning
 
 class TestParseInstanceId:
     def test_none_returns_none(self) -> None:
-        assert _parse_instance_id(None) is None
+        assert parse_instance_id(None) is None
 
     def test_empty_string_returns_none(self) -> None:
-        assert _parse_instance_id("") is None
+        assert parse_instance_id("") is None
 
     def test_integer_string_parses(self) -> None:
-        assert _parse_instance_id("42") == 42
+        assert parse_instance_id("42") == 42
 
     def test_negative_accepted(self) -> None:
         """Pinning quirk: negative ints pass the int() cast; upstream should gate."""
-        assert _parse_instance_id("-1") == -1
+        assert parse_instance_id("-1") == -1
 
 
 class TestParseSearchKind:
     @pytest.mark.parametrize("kind", ["missing", "cutoff", "upgrade"])
     def test_known_kinds_accepted(self, kind: str) -> None:
-        assert _parse_search_kind(kind) == kind
+        assert parse_search_kind(kind) == kind
 
     def test_none_returns_none(self) -> None:
-        assert _parse_search_kind(None) is None
+        assert parse_search_kind(None) is None
 
     def test_empty_returns_none(self) -> None:
-        assert _parse_search_kind("") is None
+        assert parse_search_kind("") is None
 
     def test_unknown_kind_raises_422(self) -> None:
         with pytest.raises(HTTPException) as exc:
-            _parse_search_kind("bogus")
+            parse_search_kind("bogus")
         assert exc.value.status_code == 422
 
 
 class TestParseCycleTrigger:
     @pytest.mark.parametrize("trigger", ["scheduled", "run_now", "system"])
     def test_known_triggers_accepted(self, trigger: str) -> None:
-        assert _parse_cycle_trigger(trigger) == trigger
+        assert parse_cycle_trigger(trigger) == trigger
 
     def test_none_returns_none(self) -> None:
-        assert _parse_cycle_trigger(None) is None
+        assert parse_cycle_trigger(None) is None
 
     def test_empty_returns_none(self) -> None:
-        assert _parse_cycle_trigger("") is None
+        assert parse_cycle_trigger("") is None
 
     def test_unknown_trigger_raises_422(self) -> None:
         with pytest.raises(HTTPException) as exc:
-            _parse_cycle_trigger("manual")
+            parse_cycle_trigger("manual")
         assert exc.value.status_code == 422
 
 
 class TestParseHideSystem:
     @pytest.mark.parametrize("raw", ["1", "true", "True", "TRUE", "yes", "on", " On "])
     def test_truthy_values(self, raw: str) -> None:
-        assert _parse_hide_system(raw) is True
+        assert parse_hide_system(raw) is True
 
     @pytest.mark.parametrize("raw", ["0", "false", "False", "no", "off"])
     def test_falsy_values(self, raw: str) -> None:
-        assert _parse_hide_system(raw) is False
+        assert parse_hide_system(raw) is False
 
     def test_none_returns_false(self) -> None:
-        assert _parse_hide_system(None) is False
+        assert parse_hide_system(None) is False
 
     def test_empty_returns_false(self) -> None:
-        assert _parse_hide_system("") is False
+        assert parse_hide_system("") is False
 
     def test_garbage_raises_422(self) -> None:
         with pytest.raises(HTTPException) as exc:
-            _parse_hide_system("maybe")
+            parse_hide_system("maybe")
         assert exc.value.status_code == 422
 
 
-# _compute_load_more_limit
+# compute_load_more_limit
 
 
 class TestComputeLoadMoreLimit:
     def test_small_limit_capped_at_100_upper(self) -> None:
-        assert _compute_load_more_limit(50) == 50
+        assert compute_load_more_limit(50) == 50
 
     def test_at_100_returns_100(self) -> None:
-        assert _compute_load_more_limit(100) == 100
+        assert compute_load_more_limit(100) == 100
 
     def test_over_100_capped_to_100(self) -> None:
-        assert _compute_load_more_limit(500) == 100
+        assert compute_load_more_limit(500) == 100
 
     def test_zero_clamped_to_one(self) -> None:
         """Minimum is 1 even if caller passes 0 or negative."""
-        assert _compute_load_more_limit(0) == 1
-        assert _compute_load_more_limit(-50) == 1
+        assert compute_load_more_limit(0) == 1
+        assert compute_load_more_limit(-50) == 1
 
 
-# _summarize_rows
+# summarize_rows
 
 
 class TestSummarizeRows:
     def test_empty_rows_yields_zero_everything(self) -> None:
-        summary = _summarize_rows([])
+        summary = summarize_rows([])
         assert summary == {
             "total_rows": 0,
             "searched_rows": 0,
@@ -148,7 +143,7 @@ class TestSummarizeRows:
             {"action": "error", "cycle_id": "c2", "cycle_progress": ""},
             {"action": "info", "cycle_id": None, "cycle_progress": ""},
         ]
-        summary = _summarize_rows(rows)
+        summary = summarize_rows(rows)
         assert summary["total_rows"] == 4
         assert summary["searched_rows"] == 1
         assert summary["skipped_rows"] == 1
@@ -161,7 +156,7 @@ class TestSummarizeRows:
             {"action": "skipped", "cycle_id": "c1", "cycle_progress": ""},
             {"action": "searched", "cycle_id": "c1", "cycle_progress": "progress"},
         ]
-        summary = _summarize_rows(rows)
+        summary = summarize_rows(rows)
         assert summary["total_cycles"] == 1
         assert summary["searched_cycles"] == 1
         assert summary["skip_only_cycles"] == 0
@@ -171,7 +166,7 @@ class TestSummarizeRows:
             {"action": "skipped", "cycle_id": "c1", "cycle_progress": ""},
             {"action": "skipped", "cycle_id": "c1", "cycle_progress": ""},
         ]
-        summary = _summarize_rows(rows)
+        summary = summarize_rows(rows)
         assert summary["total_cycles"] == 1
         assert summary["searched_cycles"] == 0
         assert summary["skip_only_cycles"] == 1
@@ -181,7 +176,7 @@ class TestSummarizeRows:
             {"action": "info", "cycle_id": None, "cycle_progress": ""},
             {"action": "info", "cycle_id": None, "cycle_progress": ""},
         ]
-        summary = _summarize_rows(rows)
+        summary = summarize_rows(rows)
         assert summary["total_cycles"] == 0
 
 

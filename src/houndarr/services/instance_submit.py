@@ -25,18 +25,20 @@ the connection-status guard banner via
 :func:`connection_guard_response`.  The service raises rather than
 returning a tagged tuple so the caller's happy path stays linear.
 
-Track D.11 will lift the validators out of
-:mod:`houndarr.routes.settings._helpers` into a dedicated
-:mod:`houndarr.services.instance_validation` module; until then this
-service imports them through their current home.
+Track D.11 lifted the static validators into
+:mod:`houndarr.services.instance_validation`, and the follow-up to
+that batch moved ``API_KEY_UNCHANGED`` and :func:`check_connection`
+alongside them, so this service depends only on neighbouring
+services instead of back across the route boundary.
 """
 
 from __future__ import annotations
 
 from houndarr.errors import InstanceValidationError
-from houndarr.routes.settings._helpers import API_KEY_UNCHANGED, check_connection
 from houndarr.services.instance_validation import (
+    API_KEY_UNCHANGED,
     SearchModes,
+    check_connection,
     resolve_search_modes,
     type_mismatch_message,
     validate_cutoff_controls,

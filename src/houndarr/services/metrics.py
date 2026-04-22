@@ -391,6 +391,12 @@ async def gather_cooldown_data(
             try:
                 parsed = datetime.fromisoformat(entry["searched_at"].replace("Z", "+00:00"))
             except ValueError:
+                # Defensive: repositories/cooldowns always writes ISO-8601
+                # via _iso(), so a malformed timestamp means the row was
+                # seeded by a pre-D.5 fixture or external tooling.  The
+                # row still counts in cooldown_total + cooldown_breakdown
+                # above; only unlocking_next skips it, so the dashboard
+                # shows the correct count but no unlock estimate.
                 continue
             if parsed.tzinfo is None:
                 parsed = parsed.replace(tzinfo=UTC)

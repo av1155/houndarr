@@ -18,13 +18,6 @@ from fastapi.responses import HTMLResponse
 
 from houndarr import __version__
 from houndarr.auth import resolve_signed_in_as
-from houndarr.clients.base import ArrClient
-from houndarr.clients.lidarr import LidarrClient
-from houndarr.clients.radarr import RadarrClient
-from houndarr.clients.readarr import ReadarrClient
-from houndarr.clients.sonarr import SonarrClient
-from houndarr.clients.whisparr_v2 import WhisparrClient
-from houndarr.clients.whisparr_v3 import WhisparrV3Client
 from houndarr.config import (
     DEFAULT_ALLOWED_TIME_WINDOW,
     DEFAULT_BATCH_SIZE,
@@ -46,8 +39,11 @@ from houndarr.config import (
 from houndarr.routes._htmx import is_hx_request
 from houndarr.routes._templates import get_templates
 from houndarr.services.instance_validation import (
+    API_KEY_UNCHANGED,
     ConnectionCheck,
     SearchModes,
+    build_client,
+    check_connection,
     resolve_search_modes,
     type_mismatch_message,
     validate_cutoff_controls,
@@ -65,12 +61,12 @@ from houndarr.services.instances import (
     list_instances,
 )
 
-# Re-exported from houndarr.services.instance_validation so existing
-# imports from this module keep working; D.11 moved the real definitions
-# into the service layer.
+# Re-exports from houndarr.services.instance_validation so existing
+# route-layer imports through this module keep working.  The real
+# definitions now live in the service so instance_submit can depend
+# on the service layer instead of reaching back into routes.
 __all__ = [
     "API_KEY_UNCHANGED",
-    "ArrClient",
     "ConnectionCheck",
     "SearchModes",
     "blank_instance",
@@ -88,9 +84,6 @@ __all__ = [
 ]
 
 logger = logging.getLogger(__name__)
-
-API_KEY_UNCHANGED = "__UNCHANGED__"
-"""Sentinel sent back in the edit form to indicate the stored key is kept."""
 
 
 def render(
@@ -144,50 +137,6 @@ def blank_instance() -> Instance:
         updated_at="",
         allowed_time_window=DEFAULT_ALLOWED_TIME_WINDOW,
         search_order=SearchOrder(DEFAULT_SEARCH_ORDER),
-    )
-
-
-_CLIENT_CONSTRUCTORS: dict[InstanceType, type[ArrClient]] = {
-    InstanceType.radarr: RadarrClient,
-    InstanceType.sonarr: SonarrClient,
-    InstanceType.lidarr: LidarrClient,
-    InstanceType.readarr: ReadarrClient,
-    InstanceType.whisparr_v2: WhisparrClient,
-    InstanceType.whisparr_v3: WhisparrV3Client,
-}
-
-
-def build_client(instance_type: InstanceType, url: str, api_key: str) -> ArrClient:
-    """Construct the *arr client matching *instance_type*."""
-    client_cls = _CLIENT_CONSTRUCTORS.get(instance_type)
-    if client_cls is None:
-        msg = f"No client for instance type: {instance_type!r}"
-        raise ValueError(msg)
-    return client_cls(url=url, api_key=api_key)
-
-
-async def check_connection(
-    instance_type: InstanceType,
-    url: str,
-    api_key: str,
-) -> ConnectionCheck:
-    """Test connectivity and identify the remote *arr application.
-
-    Kept here (and not in :mod:`houndarr.services.instance_validation`)
-    because it performs a live HTTP probe through the client layer;
-    the validation service stays pure.  The returned
-    :class:`ConnectionCheck` is the service type so callers only see
-    one dataclass for the connection-probe result.
-    """
-    client = build_client(instance_type, url, api_key)
-    async with client:
-        status = await client.ping()
-    if status is None:
-        return ConnectionCheck(reachable=False)
-    return ConnectionCheck(
-        reachable=True,
-        app_name=status.app_name,
-        version=status.version,
     )
 
 

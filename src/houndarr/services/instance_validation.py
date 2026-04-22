@@ -1,26 +1,44 @@
-"""Pure validation helpers + form-output dataclasses for instance writes.
+"""Validation helpers, form-output dataclasses, and the live probe.
 
-Track D.11 lifts the validators and their data structures out of
-:mod:`houndarr.routes.settings._helpers` into this service module so
-the HTTP-shaped helpers in ``_helpers.py`` stay focused on request
-plumbing (render, master_key lookup, connection-guard response
-shaping) and the pure logic becomes testable without the FastAPI
-machinery.
+Track D.11 lifted the static validators and their data structures
+out of :mod:`houndarr.routes.settings._helpers` into this service
+module so the HTTP-shaped helpers in ``_helpers.py`` could stay
+focused on request plumbing (render, master_key lookup,
+connection-guard response shaping) and the pure logic became
+testable without the FastAPI machinery.  A follow-up to D.11 also
+moves the ``API_KEY_UNCHANGED`` form sentinel, the
+:func:`build_client` client factory, and the :func:`check_connection`
+live probe here so :mod:`houndarr.services.instance_submit` depends
+only on the service layer; previously it had to reach back into
+``_helpers.py`` to pick those up, inverting the expected
+service -> route dependency direction.
 
-The two "form output" dataclasses live here because they are what
-the validators emit:
+Contents:
 
 - :class:`ConnectionCheck` captures the result of the live
   connection probe (reachable flag + app name + version).
 - :class:`SearchModes` captures the four resolved per-app enum
   values :func:`resolve_search_modes` returns.
+- :data:`API_KEY_UNCHANGED` is the form-layer sentinel the
+  edit-instance partial submits when the operator has not changed
+  the stored key; the service substitutes the existing plaintext
+  key when it sees the sentinel.
+- :func:`build_client` routes a selected :class:`InstanceType` to
+  its concrete client class.
+- :func:`check_connection` opens a client, calls ``ping()``, and
+  packages the result as a :class:`ConnectionCheck`.  This is the
+  one non-pure function in the module: it makes a live HTTP request
+  through the client layer.  Kept here rather than in a
+  dedicated one-function module because it builds and consumes
+  :class:`ConnectionCheck` directly, and splitting it out would
+  force every caller to import from two neighbouring service
+  modules instead of one.
 
 Validators return ``str | None`` where the string is the user-facing
-error message.  The instance submit service
-(:mod:`houndarr.services.instance_submit`) converts non-``None``
-returns into :class:`~houndarr.errors.InstanceValidationError` so
-the route layer never sees the bare string contract.  The sentinel
-pattern survived the move intentionally: both D.10 (submit
+error message.  :mod:`houndarr.services.instance_submit` converts
+non-``None`` returns into :class:`~houndarr.errors.InstanceValidationError`
+so the route layer never sees the bare string contract.  The
+sentinel pattern survived the move intentionally: both D.10 (submit
 orchestration) and the pre-refactor route handlers lean on it, and
 raising early would have cascaded into the route's guard-banner
 logic that the service now owns.
@@ -30,6 +48,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from houndarr.clients.base import ArrClient
+from houndarr.clients.lidarr import LidarrClient
+from houndarr.clients.radarr import RadarrClient
+from houndarr.clients.readarr import ReadarrClient
+from houndarr.clients.sonarr import SonarrClient
+from houndarr.clients.whisparr_v2 import WhisparrClient
+from houndarr.clients.whisparr_v3 import WhisparrV3Client
 from houndarr.services.instances import (
     InstanceType,
     LidarrSearchMode,
@@ -37,6 +62,9 @@ from houndarr.services.instances import (
     SonarrSearchMode,
     WhisparrSearchMode,
 )
+
+API_KEY_UNCHANGED = "__UNCHANGED__"
+"""Sentinel sent back in the edit form to indicate the stored key is kept."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -266,4 +294,79 @@ def resolve_search_modes(
         lidarr=lidarr_mode,
         readarr=readarr_mode,
         whisparr=whisparr_mode,
+    )
+
+
+_CLIENT_CONSTRUCTORS: dict[InstanceType, type[ArrClient]] = {
+    InstanceType.radarr: RadarrClient,
+    InstanceType.sonarr: SonarrClient,
+    InstanceType.lidarr: LidarrClient,
+    InstanceType.readarr: ReadarrClient,
+    InstanceType.whisparr_v2: WhisparrClient,
+    InstanceType.whisparr_v3: WhisparrV3Client,
+}
+
+
+def build_client(instance_type: InstanceType, url: str, api_key: str) -> ArrClient:
+    """Construct the *arr client matching *instance_type*.
+
+    Args:
+        instance_type: The :class:`InstanceType` selected in the
+            form.
+        url: Base URL of the remote *arr.
+        api_key: Plaintext API key for the remote.
+
+    Returns:
+        An unopened :class:`~houndarr.clients.base.ArrClient`; the
+        caller enters it via ``async with``.
+
+    Raises:
+        ValueError: When *instance_type* has no registered client
+            class.  The :class:`InstanceType` enum is the authority
+            for valid values, so this only triggers on programmer
+            error during future migrations.
+    """
+    client_cls = _CLIENT_CONSTRUCTORS.get(instance_type)
+    if client_cls is None:
+        msg = f"No client for instance type: {instance_type!r}"
+        raise ValueError(msg)
+    return client_cls(url=url, api_key=api_key)
+
+
+async def check_connection(
+    instance_type: InstanceType,
+    url: str,
+    api_key: str,
+) -> ConnectionCheck:
+    """Probe the remote *arr and return a :class:`ConnectionCheck`.
+
+    Opens a client, calls ``ping()``, and converts the result into
+    the service's :class:`ConnectionCheck` dataclass so every
+    caller (the submit service and the route's explicit test
+    connection button) speaks one shape.
+
+    Args:
+        instance_type: The :class:`InstanceType` selected in the
+            form.  Drives which client class is instantiated.
+        url: Base URL of the remote *arr.
+        api_key: Plaintext API key for the remote.
+
+    Returns:
+        :class:`ConnectionCheck` with ``reachable=True`` plus the
+        remote's self-reported ``app_name`` and ``version`` on
+        success, or ``reachable=False`` with both optional fields
+        ``None`` on any probe failure (transport, HTTP error, or
+        client validation error; the client's ``ping()`` wraps all
+        three into a single ``None`` return per
+        :data:`~houndarr.clients.base.ArrClient._PING_SAFE_ERRORS`).
+    """
+    client = build_client(instance_type, url, api_key)
+    async with client:
+        status = await client.ping()
+    if status is None:
+        return ConnectionCheck(reachable=False)
+    return ConnectionCheck(
+        reachable=True,
+        app_name=status.app_name,
+        version=status.version,
     )

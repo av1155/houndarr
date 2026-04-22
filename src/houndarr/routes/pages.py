@@ -202,10 +202,10 @@ async def logs_page(
     instance/action rows.
     """
     from houndarr.routes.api.logs import (
-        _parse_cycle_trigger,
-        _parse_hide_system,
-        _parse_instance_id,
-        _parse_search_kind,
+        parse_cycle_trigger,
+        parse_hide_system,
+        parse_instance_id,
+        parse_search_kind,
     )
     from houndarr.services.log_query import (
         compute_load_more_limit,
@@ -214,10 +214,10 @@ async def logs_page(
     )
 
     try:
-        parsed_instance_id = _parse_instance_id(instance_id)
-        parsed_search_kind = _parse_search_kind(search_kind)
-        parsed_cycle_trigger = _parse_cycle_trigger(cycle_trigger)
-        parsed_hide_system = _parse_hide_system(hide_system) if hide_system is not None else True
+        parsed_instance_id = parse_instance_id(instance_id)
+        parsed_search_kind = parse_search_kind(search_kind)
+        parsed_cycle_trigger = parse_cycle_trigger(cycle_trigger)
+        parsed_hide_system = parse_hide_system(hide_system) if hide_system is not None else True
     except HTTPException:
         # Malformed query string: fall back to unfiltered view so the
         # page still loads rather than bubbling a 422 JSON response.

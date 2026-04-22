@@ -15,6 +15,9 @@ import logging
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+import httpx
+from pydantic import ValidationError
+
 from houndarr.clients.whisparr_v2 import (
     LibraryWhisparrEpisode,
     MissingWhisparrEpisode,
@@ -269,7 +272,7 @@ async def fetch_upgrade_pool(
         series_id = s.id or 0
         try:
             eps = await client.get_episodes(series_id)
-        except Exception:  # noqa: BLE001
+        except (httpx.HTTPError, httpx.InvalidURL, ValidationError):
             logger.warning(
                 "[%s] failed to fetch episodes for series %d, skipping",
                 instance.name,

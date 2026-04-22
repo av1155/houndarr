@@ -9,6 +9,9 @@ from __future__ import annotations
 
 import logging
 
+import httpx
+from pydantic import ValidationError
+
 from houndarr.clients.readarr import LibraryBook, MissingBook, ReadarrClient
 from houndarr.engine.candidates import (
     SearchCandidate,
@@ -213,7 +216,7 @@ async def fetch_upgrade_pool(
     for page in range(1, _UPGRADE_CUTOFF_EXCLUSION_MAX_PAGES + 1):
         try:
             cutoff_items = await client.get_cutoff_unmet(page=page, page_size=250)
-        except Exception:  # noqa: BLE001
+        except (httpx.HTTPError, httpx.InvalidURL, ValidationError):
             logger.warning(
                 "[%s] failed to fetch cutoff page %d for exclusion set",
                 instance.name,

@@ -10,6 +10,9 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+import httpx
+from pydantic import ValidationError
+
 from houndarr.clients.sonarr import LibraryEpisode, MissingEpisode, SonarrClient
 from houndarr.engine.candidates import (
     SearchCandidate,
@@ -261,7 +264,7 @@ async def fetch_upgrade_pool(
         series_id = s.id or 0
         try:
             eps = await client.get_episodes(series_id)
-        except Exception:  # noqa: BLE001
+        except (httpx.HTTPError, httpx.InvalidURL, ValidationError):
             logger.warning(
                 "[%s] failed to fetch episodes for series %d, skipping",
                 instance.name,

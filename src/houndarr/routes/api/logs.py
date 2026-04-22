@@ -2,14 +2,22 @@
 
 GET /api/logs         → JSON list of log rows (used by tests and external consumers)
 GET /api/logs/partial → server-rendered <tbody> HTMX partial (used by the /logs page)
+
+Route thinning (D.23).  The duplicated query-param parsing collapsed
+into one :class:`_ParsedLogFilters` value object resolved via a
+FastAPI ``Depends`` injection, and the shared service call moved to a
+single helper.  Each handler is now three statements: take the
+parsed filters, fetch the rows, wrap the response.
 """
 
 from __future__ import annotations
 
 import html
 import logging
+from dataclasses import dataclass
+from typing import Annotated, Any
 
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 
 from houndarr.routes._templates import get_templates
@@ -86,6 +94,66 @@ def parse_hide_system(raw: str | None) -> bool:
     raise HTTPException(status_code=422, detail="hide_system must be a boolean")
 
 
+@dataclass(frozen=True, slots=True)
+class _ParsedLogFilters:
+    """Validated filter bundle shared by both log route handlers.
+
+    Populated by :func:`_resolve_filters` via a FastAPI ``Depends``
+    injection; unpacked by :func:`_fetch_filtered_rows` into the
+    service-level :func:`query_logs` call.  The dataclass kept private
+    because its field set mirrors the service kwargs one-for-one and
+    is not part of any public contract.
+    """
+
+    instance_id: int | None
+    action: str | None
+    search_kind: str | None
+    cycle_trigger: str | None
+    hide_system: bool
+    before: str | None
+    limit: int
+
+
+def _resolve_filters(
+    instance_id: str | None = Query(default=None),
+    action: str | None = Query(default=None),
+    search_kind: str | None = Query(default=None),
+    cycle_trigger: str | None = Query(default=None),
+    hide_system: str | None = Query(default=None),
+    before: str | None = Query(default=None),
+    limit: int = Query(default=LIMIT_DEFAULT, ge=1, le=LIMIT_MAX),
+) -> _ParsedLogFilters:
+    """FastAPI dependency: bind + validate the log-filter query params.
+
+    Raises :class:`HTTPException` 422 on any individual parser failure.
+    The JSON endpoint lets FastAPI surface the default 422 body; the
+    HTMX partial endpoint catches the exception and renders a tbody
+    error row instead (see :func:`_partial_validation_error`).
+    """
+    return _ParsedLogFilters(
+        instance_id=parse_instance_id(instance_id),
+        action=action or None,
+        search_kind=parse_search_kind(search_kind),
+        cycle_trigger=parse_cycle_trigger(cycle_trigger),
+        hide_system=parse_hide_system(hide_system),
+        before=before,
+        limit=limit,
+    )
+
+
+async def _fetch_filtered_rows(filters: _ParsedLogFilters) -> list[dict[str, Any]]:
+    """Dispatch the parsed filter bundle to :func:`query_logs`."""
+    return await query_logs(
+        instance_id=filters.instance_id,
+        action=filters.action,
+        search_kind=filters.search_kind,
+        cycle_trigger=filters.cycle_trigger,
+        hide_system=filters.hide_system,
+        before=filters.before,
+        limit=filters.limit,
+    )
+
+
 def _partial_validation_error(detail: str) -> HTMLResponse:
     """Render a tbody-shaped 422 error for ``/api/logs/partial``.
 
@@ -108,42 +176,10 @@ def _partial_validation_error(detail: str) -> HTMLResponse:
 
 @router.get("/api/logs")
 async def get_logs(
-    instance_id: str | None = Query(default=None),
-    action: str | None = Query(default=None),
-    search_kind: str | None = Query(default=None),
-    cycle_trigger: str | None = Query(default=None),
-    hide_system: str | None = Query(default=None),
-    before: str | None = Query(default=None),
-    limit: int = Query(default=LIMIT_DEFAULT, ge=1, le=LIMIT_MAX),
+    filters: Annotated[_ParsedLogFilters, Depends(_resolve_filters)],
 ) -> JSONResponse:
-    """Return paginated log rows as JSON.
-
-    Args:
-        instance_id: Filter to a specific instance ID.
-        action: Filter by action (``searched``, ``skipped``, ``error``, ``info``).
-        search_kind: Filter by search pass kind (``missing`` or ``cutoff``).
-        cycle_trigger: Filter by cycle trigger (``scheduled``, ``run_now``, ``system``).
-        hide_system: When true, hide system lifecycle rows.
-        before: Timestamp cursor; only return rows older than this ISO-8601 value.
-        limit: Max rows (1–500, default 50).
-
-    Returns:
-        JSON array of log-row objects.
-    """
-    parsed_instance_id = parse_instance_id(instance_id)
-    parsed_action = action or None
-    parsed_search_kind = parse_search_kind(search_kind)
-    parsed_cycle_trigger = parse_cycle_trigger(cycle_trigger)
-    parsed_hide_system = parse_hide_system(hide_system)
-    rows = await query_logs(
-        instance_id=parsed_instance_id,
-        action=parsed_action,
-        search_kind=parsed_search_kind,
-        cycle_trigger=parsed_cycle_trigger,
-        hide_system=parsed_hide_system,
-        before=before,
-        limit=limit,
-    )
+    """Return paginated log rows as JSON."""
+    rows = await _fetch_filtered_rows(filters)
     return JSONResponse(rows)
 
 
@@ -160,54 +196,41 @@ async def get_logs_partial(
 ) -> HTMLResponse:
     """Return a server-rendered <tbody> partial for HTMX swaps.
 
-    Args:
-        request: FastAPI request (required for template rendering).
-        instance_id: Filter to a specific instance ID.
-        action: Filter by action.
-        search_kind: Filter by search pass kind.
-        cycle_trigger: Filter by trigger type.
-        hide_system: Whether to hide system lifecycle rows.
-        before: Timestamp cursor.
-        limit: Max rows.
-
-    Returns:
-        HTML fragment containing ``<tbody>`` rows.  On a validation
-        failure, returns a ``<tr>`` error row with status 422 instead
-        of FastAPI's default JSON ``{"detail": ...}`` body so the HTMX
-        swap preserves the table structure.
+    The partial endpoint does not use the ``Depends(_resolve_filters)``
+    shortcut the JSON endpoint uses because a validation failure has
+    to render as a tbody-shaped HTML row instead of FastAPI's default
+    JSON 422 body; intercepting :class:`HTTPException` from inside the
+    dependency is not a supported FastAPI pattern.  The query-param
+    wiring therefore stays on the handler and the parser is called
+    inline inside a ``try`` block.
     """
     try:
-        parsed_instance_id = parse_instance_id(instance_id)
-        parsed_search_kind = parse_search_kind(search_kind)
-        parsed_cycle_trigger = parse_cycle_trigger(cycle_trigger)
-        parsed_hide_system = parse_hide_system(hide_system)
+        filters = _resolve_filters(
+            instance_id=instance_id,
+            action=action,
+            search_kind=search_kind,
+            cycle_trigger=cycle_trigger,
+            hide_system=hide_system,
+            before=before,
+            limit=limit,
+        )
     except HTTPException as exc:
         return _partial_validation_error(str(exc.detail))
 
-    parsed_action = action or None
-    load_more_limit = compute_load_more_limit(limit)
-    rows = await query_logs(
-        instance_id=parsed_instance_id,
-        action=parsed_action,
-        search_kind=parsed_search_kind,
-        cycle_trigger=parsed_cycle_trigger,
-        hide_system=parsed_hide_system,
-        before=before,
-        limit=limit,
-    )
+    rows = await _fetch_filtered_rows(filters)
     return get_templates().TemplateResponse(
         request=request,
         name="partials/log_rows.html",
         context={
             "rows": rows,
-            # Pass back current filter values so the partial can render pagination
-            "instance_id": parsed_instance_id,
-            "action": parsed_action,
-            "search_kind": parsed_search_kind,
-            "cycle_trigger": parsed_cycle_trigger,
-            "hide_system": parsed_hide_system,
-            "before": before,
-            "limit": limit,
-            "load_more_limit": load_more_limit,
+            # Pass back current filter values so the partial can render pagination.
+            "instance_id": filters.instance_id,
+            "action": filters.action,
+            "search_kind": filters.search_kind,
+            "cycle_trigger": filters.cycle_trigger,
+            "hide_system": filters.hide_system,
+            "before": filters.before,
+            "limit": filters.limit,
+            "load_more_limit": compute_load_more_limit(filters.limit),
         },
     )

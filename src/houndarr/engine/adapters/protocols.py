@@ -7,6 +7,14 @@ instances without a call-site cascade.
 
 Runtime-checkable so tests can ``isinstance(adapter, AppAdapterProto)``
 as a conformance check when the registry is rewired.
+
+Each member is declared via ``@property`` so the Protocol advertises
+read-only attributes.  That matters because :class:`AppAdapter` is a
+frozen dataclass: its slots are read-only at runtime, and a
+bare-attribute Protocol would reject frozen instances as
+non-conforming.  Future class-based adapters can expose the same
+callables as plain attributes or as properties; either form
+satisfies this Protocol.
 """
 
 from __future__ import annotations
@@ -23,9 +31,26 @@ from houndarr.services.instances import Instance
 class AppAdapterProto(Protocol):
     """Structural contract every adapter (module or class) must satisfy."""
 
-    adapt_missing: Callable[..., SearchCandidate]
-    adapt_cutoff: Callable[..., SearchCandidate]
-    adapt_upgrade: Callable[..., SearchCandidate]
-    fetch_upgrade_pool: Callable[..., Awaitable[list[Any]]]
-    dispatch_search: Callable[..., Awaitable[None]]
-    make_client: Callable[[Instance], ArrClient]
+    @property
+    def adapt_missing(self) -> Callable[..., SearchCandidate]:
+        """Build a :class:`SearchCandidate` from a raw missing-pass item."""
+
+    @property
+    def adapt_cutoff(self) -> Callable[..., SearchCandidate]:
+        """Build a :class:`SearchCandidate` from a raw cutoff-unmet item."""
+
+    @property
+    def adapt_upgrade(self) -> Callable[..., SearchCandidate]:
+        """Build a :class:`SearchCandidate` from a raw upgrade-pool item."""
+
+    @property
+    def fetch_upgrade_pool(self) -> Callable[..., Awaitable[list[Any]]]:
+        """Fetch the per-cycle upgrade candidate list from the *arr app."""
+
+    @property
+    def dispatch_search(self) -> Callable[..., Awaitable[None]]:
+        """Send the *arr search command for one candidate."""
+
+    @property
+    def make_client(self) -> Callable[[Instance], ArrClient]:
+        """Return a fresh (unopened) :class:`ArrClient` for *instance*."""

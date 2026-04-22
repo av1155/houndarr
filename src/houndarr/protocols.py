@@ -19,12 +19,20 @@ Until then this module is the single source of truth for the seam.
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable, Iterable
-from typing import Any, Protocol, runtime_checkable
+from typing import Any, Literal, Protocol, runtime_checkable
 
 from houndarr.clients.base import ArrClient
 from houndarr.enums import ItemType
 from houndarr.services.instances import Instance, InstanceType
 from houndarr.value_objects import ItemRef
+
+# ``RunNowStatus`` is duplicated here (rather than imported from
+# ``houndarr.engine.supervisor``) so this Protocol module stays
+# import-cheap: pulling the supervisor module transitively drags in
+# asyncio task bookkeeping, httpx, and the search loop.  The concrete
+# :class:`~houndarr.engine.supervisor.Supervisor` still exports the
+# same Literal alias, and both resolve to an identical type.
+RunNowStatus = Literal["accepted", "not_found", "disabled"]
 
 # Repositories
 
@@ -148,6 +156,35 @@ class SearchLogRepository(Protocol):
         """Delete every ``search_log`` row for *instance_id*."""
 
 
+# Supervisor
+
+
+@runtime_checkable
+class SupervisorProto(Protocol):
+    """Route-facing view of the engine supervisor.
+
+    Track B.21 introduces this Protocol so FastAPI routes can depend
+    on the structural contract instead of the concrete
+    :class:`~houndarr.engine.supervisor.Supervisor` class.  Only the
+    methods route handlers invoke are declared; internal task
+    bookkeeping and lifecycle helpers stay on the concrete type.
+
+    Wired through :func:`get_supervisor` in ``routes/api/status.py``
+    today; Track D.12 + D.26 will move it into a shared
+    :mod:`houndarr.deps` module and migrate the remaining
+    ``settings/instances`` callers.
+    """
+
+    async def trigger_run_now(self, instance_id: int) -> RunNowStatus:
+        """Kick off one manual cycle for the instance identified by id."""
+
+    async def reconcile_instance(self, instance_id: int) -> None:
+        """Re-evaluate whether the instance should have a running task."""
+
+    async def stop_instance_task(self, instance_id: int) -> bool:
+        """Stop the instance's running task; return ``True`` if one was cancelled."""
+
+
 # Client construction
 
 
@@ -175,8 +212,10 @@ __all__ = [
     "ClientFactory",
     "CooldownRepository",
     "InstanceRepository",
+    "RunNowStatus",
     "SearchLogRepository",
     "SettingsRepository",
+    "SupervisorProto",
 ]
 
 

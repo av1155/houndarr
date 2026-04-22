@@ -54,15 +54,22 @@ class TestRepositoryProtocolsDeclared:
         assert isinstance(object(), proto) is False
 
     def test_module_all_exports_every_protocol(self) -> None:
-        """``houndarr.protocols.__all__`` must list every declared Protocol."""
+        """``houndarr.protocols.__all__`` must list every declared symbol.
+
+        Covers the five repository + factory Protocols from B.20 plus
+        the :class:`SupervisorProto` and the :data:`RunNowStatus`
+        Literal that landed in B.21.
+        """
         import houndarr.protocols as module
 
         assert set(module.__all__) == {
             "ClientFactory",
             "CooldownRepository",
             "InstanceRepository",
+            "RunNowStatus",
             "SearchLogRepository",
             "SettingsRepository",
+            "SupervisorProto",
         }
 
     def test_empty_stub_is_not_accepted_as_instance_repository(self) -> None:

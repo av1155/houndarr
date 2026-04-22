@@ -80,39 +80,32 @@ async def _write_log(
     reason: str | None = None,
     message: str | None = None,
 ) -> None:
-    """Insert a single row into ``search_log``."""
-    async with get_db() as db:
-        await db.execute(
-            """
-            INSERT INTO search_log
-                (
-                    instance_id,
-                    item_id,
-                    item_type,
-                    search_kind,
-                    cycle_id,
-                    cycle_trigger,
-                    item_label,
-                    action,
-                    reason,
-                    message
-                )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                instance_id,
-                item_id,
-                item_type,
-                search_kind,
-                cycle_id,
-                cycle_trigger,
-                item_label,
-                action,
-                reason,
-                message,
-            ),
-        )
-        await db.commit()
+    """Insert a single row into ``search_log``.
+
+    Thin delegator over
+    :func:`houndarr.repositories.search_log.insert_log_row`.  The
+    engine keeps this module-local symbol so the many hot-path call
+    sites (queue gate, window gate, dispatch, cycle prologue / epilogue,
+    upgrade pool fetch) all continue to import from one place; D.27
+    will sweep remaining ``_write_log`` call sites to the repository
+    directly.  The :class:`~houndarr.enums.SearchKind` /
+    :class:`~houndarr.enums.CycleTrigger` unions collapse to their
+    underlying str here so the repository sees a plain column value.
+    """
+    from houndarr.repositories.search_log import insert_log_row
+
+    await insert_log_row(
+        instance_id=instance_id,
+        item_id=item_id,
+        item_type=item_type,
+        action=action,
+        search_kind=str(search_kind) if search_kind is not None else None,
+        cycle_id=cycle_id,
+        cycle_trigger=str(cycle_trigger) if cycle_trigger is not None else None,
+        item_label=item_label,
+        reason=reason,
+        message=message,
+    )
 
 
 def _clamp(value: int, minimum: int, maximum: int) -> int:

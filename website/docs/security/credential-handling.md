@@ -79,8 +79,10 @@ template output, or JSON API payload. Specifically:
 
 Relevant source files:
 
-- `src/houndarr/routes/settings.py`: sentinel constant and
-  resolution logic
+- `src/houndarr/routes/settings/_helpers.py`: `API_KEY_UNCHANGED`
+  sentinel definition
+- `src/houndarr/routes/settings/instances.py`: resolution logic that
+  keeps the stored key when the form submits the sentinel unchanged
 - `src/houndarr/templates/partials/instance_form.html`: form
   pre-fills sentinel, not the key
 - `src/houndarr/routes/api/status.py`: field-level selection

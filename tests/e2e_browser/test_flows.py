@@ -217,7 +217,8 @@ def test_save_instance_4xx_renders_error(
     _wait_for_connection_ui_idle(page)
 
     # requestSubmit with ``connection_verified=false`` in the hidden input
-    # triggers the 422 guard path at routes/settings.py:594.
+    # triggers the 422 guard path in routes/settings/instances.py
+    # (instance_create, the connection_verified != "true" branch).
     with page.expect_response(
         lambda r: r.url.endswith("/settings/instances") and r.request.method == "POST"
     ) as resp_info:

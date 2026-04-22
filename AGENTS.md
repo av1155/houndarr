@@ -276,9 +276,15 @@ src/houndarr/
       whisparr_v2.py   # Whisparr v2 adapter: candidate conversion + dispatch
       whisparr_v3.py   # Whisparr v3 adapter: movie/scene candidate conversion + dispatch
   routes/
+    _htmx.py           # is_hx_request() shared helper for partial vs full renders
     pages.py           # Setup, Login, Dashboard, Logs, Settings page routes
-    settings.py        # Settings CRUD (instance add/edit/delete/toggle)
     health.py          # GET /api/health (Docker HEALTHCHECK)
+    settings/          # Settings surface split by concern
+      __init__.py      # composes the sub-routers into a single settings_router
+      _helpers.py      # template render, client build, connection check, validators
+      page.py          # GET /settings
+      account.py       # POST /settings/account/password
+      instances.py     # /settings/instances/* (CRUD, test-connection, toggle)
     api/
       logs.py          # GET /api/logs (JSON, with cursor-based pagination)
       status.py        # GET /api/status (JSON, dashboard polling)
@@ -294,7 +300,9 @@ src/houndarr/
   context manager opens a fresh connection per call (FKs enabled per
   connection; WAL mode set once in `init_db()`)
 - **Config:** `AppSettings` is a plain dataclass (not Pydantic); `get_settings()`
-  is a lazy singleton
+  is a lazy singleton. Pydantic is used only at the *arr wire boundary
+  (`src/houndarr/clients/_wire_models.py`), not for internal domain models or
+  config
 - **Encryption:** Master key in `request.app.state.master_key`; passed
   explicitly to service functions as `master_key=` kwarg; never imported globally
 - **Auth:** Global `AuthMiddleware` (Starlette `BaseHTTPMiddleware`) handles

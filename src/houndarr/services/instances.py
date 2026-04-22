@@ -84,6 +84,171 @@ class SearchOrder(StrEnum):
     random = "random"
 
 
+@dataclass(frozen=True, slots=True)
+class InstanceCore:
+    """Row identity plus wire credentials for one configured *arr instance.
+
+    These six fields uniquely identify an instance and describe how the
+    engine reaches it.  They are kept apart from the policy sub-structs
+    so callers that only need "which instance and how do I talk to it"
+    (the client factory, the connection check, the snapshot writer) do
+    not have to carry the full policy bag.
+
+    ``api_key`` is always the **decrypted** plaintext value; the
+    encrypted form only ever lives in the ``encrypted_api_key`` column.
+    """
+
+    id: int
+    name: str
+    type: InstanceType
+    url: str
+    api_key: str
+    enabled: bool = True
+
+
+@dataclass(frozen=True, slots=True)
+class MissingPolicy:
+    """Tunables controlling one missing-search pass on an instance.
+
+    Captures the rate shape (``batch_size`` / ``sleep_interval_mins`` /
+    ``hourly_cap``), the per-item cooldown (``cooldown_days``), the
+    post-release grace window (``post_release_grace_hrs``), the queue
+    backpressure gate (``queue_limit``; ``0`` disables the check), and
+    the per-app search-strategy mode for the four *arr variants that
+    expose one (Sonarr, Lidarr, Readarr, Whisparr).  Radarr has no
+    strategy knob and so never reads any of the mode fields.
+
+    Defaults match :mod:`houndarr.config`; the field set matches the
+    ``instances`` table columns written on fresh ``INSERT``.
+    """
+
+    batch_size: int = DEFAULT_BATCH_SIZE
+    sleep_interval_mins: int = DEFAULT_SLEEP_INTERVAL_MINUTES
+    hourly_cap: int = DEFAULT_HOURLY_CAP
+    cooldown_days: int = DEFAULT_COOLDOWN_DAYS
+    post_release_grace_hrs: int = DEFAULT_POST_RELEASE_GRACE_HOURS
+    queue_limit: int = DEFAULT_QUEUE_LIMIT
+    sonarr_search_mode: SonarrSearchMode = SonarrSearchMode(DEFAULT_SONARR_SEARCH_MODE)
+    lidarr_search_mode: LidarrSearchMode = LidarrSearchMode(DEFAULT_LIDARR_SEARCH_MODE)
+    readarr_search_mode: ReadarrSearchMode = ReadarrSearchMode(DEFAULT_READARR_SEARCH_MODE)
+    whisparr_search_mode: WhisparrSearchMode = WhisparrSearchMode(DEFAULT_WHISPARR_SEARCH_MODE)
+
+
+@dataclass(frozen=True, slots=True)
+class CutoffPolicy:
+    """Tunables controlling one cutoff-unmet search pass.
+
+    ``cutoff_enabled`` is the master switch; the three rate fields mirror
+    :class:`MissingPolicy` at the cutoff cadence, which is typically much
+    slower because cutoff-unmet is an optional polish pass, not the
+    primary workload.  Cutoff is single-mode per app (no
+    ``*_search_mode`` knobs) because the upstream *arr APIs expose a
+    single cutoff endpoint per app.
+    """
+
+    cutoff_enabled: bool = False
+    cutoff_batch_size: int = DEFAULT_CUTOFF_BATCH_SIZE
+    cutoff_cooldown_days: int = DEFAULT_CUTOFF_COOLDOWN_DAYS
+    cutoff_hourly_cap: int = DEFAULT_CUTOFF_HOURLY_CAP
+
+
+@dataclass(frozen=True, slots=True)
+class UpgradePolicy:
+    """Tunables controlling one upgrade-search pass plus pool offsets.
+
+    ``upgrade_enabled`` is the master switch; the three rate fields
+    behave like :class:`MissingPolicy` but gate upgrade searches
+    specifically.  Per-app ``upgrade_*_search_mode`` knobs parallel the
+    missing-pass modes.
+
+    ``upgrade_item_offset`` and ``upgrade_series_offset`` track
+    library-pool rotation state: the engine fetches the upgrade pool
+    from the *arr library and rotates through it across cycles so a
+    large library is explored evenly instead of always retrying the
+    same head.  The offsets live here rather than in
+    :class:`SchedulePolicy` because they are intrinsic to how the
+    upgrade pool is constructed, not to when or in what order the
+    cycle runs.
+    """
+
+    upgrade_enabled: bool = False
+    upgrade_batch_size: int = DEFAULT_UPGRADE_BATCH_SIZE
+    upgrade_cooldown_days: int = DEFAULT_UPGRADE_COOLDOWN_DAYS
+    upgrade_hourly_cap: int = DEFAULT_UPGRADE_HOURLY_CAP
+    upgrade_sonarr_search_mode: SonarrSearchMode = SonarrSearchMode(
+        DEFAULT_UPGRADE_SONARR_SEARCH_MODE
+    )
+    upgrade_lidarr_search_mode: LidarrSearchMode = LidarrSearchMode(
+        DEFAULT_UPGRADE_LIDARR_SEARCH_MODE
+    )
+    upgrade_readarr_search_mode: ReadarrSearchMode = ReadarrSearchMode(
+        DEFAULT_UPGRADE_READARR_SEARCH_MODE
+    )
+    upgrade_whisparr_search_mode: WhisparrSearchMode = WhisparrSearchMode(
+        DEFAULT_UPGRADE_WHISPARR_SEARCH_MODE
+    )
+    upgrade_item_offset: int = 0
+    upgrade_series_offset: int = 0
+
+
+@dataclass(frozen=True, slots=True)
+class SchedulePolicy:
+    """When the engine runs and in what order it walks items.
+
+    ``allowed_time_window`` is an optional schedule spec (e.g.
+    ``"09:00-23:00"``) that gates scheduled cycles; the empty string
+    disables the gate and runs 24/7.  ``search_order`` selects
+    ``chronological`` (legacy; oldest-first) or ``random`` (shuffle
+    within each page, random start page).
+
+    ``missing_page_offset`` and ``cutoff_page_offset`` rotate the
+    *arr ``/wanted`` pagination across cycles so the pool is explored
+    evenly rather than always re-walking page 1.  They begin at 1
+    (the *arr APIs are 1-indexed) and wrap when the probe reports
+    no more items.
+    """
+
+    allowed_time_window: str = DEFAULT_ALLOWED_TIME_WINDOW
+    search_order: SearchOrder = SearchOrder(DEFAULT_SEARCH_ORDER)
+    missing_page_offset: int = 1
+    cutoff_page_offset: int = 1
+
+
+@dataclass(frozen=True, slots=True)
+class RuntimeSnapshot:
+    """Refreshable telemetry written by the supervisor for the dashboard.
+
+    The supervisor's ``refresh_instance_snapshots`` task writes these
+    three columns periodically; the dashboard reads them to render
+    per-instance headline counts without issuing a fresh *arr call on
+    every page load.  They carry no search-policy meaning and so live
+    apart from the three policy sub-structs above.
+
+    ``snapshot_refreshed_at`` is an ISO-8601 UTC timestamp or the
+    empty string when no refresh has run yet (first boot, or pre-v13
+    migration).
+    """
+
+    monitored_total: int = 0
+    unreleased_count: int = 0
+    snapshot_refreshed_at: str = ""
+
+
+@dataclass(frozen=True, slots=True)
+class InstanceTimestamps:
+    """Row-level audit timestamps.
+
+    ``created_at`` and ``updated_at`` are written by SQLite's column
+    defaults (``DEFAULT strftime('%Y-%m-%dT%H:%M:%fZ', 'now')``) and
+    bumped by the repository's update path.  They are required here
+    because a deserialised instance always knows both values; the
+    sub-struct rejects partial construction on purpose.
+    """
+
+    created_at: str
+    updated_at: str
+
+
 @dataclass
 class Instance:
     """In-memory representation of a configured *arr instance.

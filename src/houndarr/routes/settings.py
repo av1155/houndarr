@@ -190,9 +190,11 @@ async def _check_connection(
         status = await client.ping()
     if status is None:
         return _ConnectionCheck(reachable=False)
-    app_name: str | None = status.get("appName") if isinstance(status, dict) else None
-    version: str | None = status.get("version") if isinstance(status, dict) else None
-    return _ConnectionCheck(reachable=True, app_name=app_name, version=version)
+    return _ConnectionCheck(
+        reachable=True,
+        app_name=status.app_name,
+        version=status.version,
+    )
 
 
 def _whisparr_version_major(version: str | None) -> int | None:

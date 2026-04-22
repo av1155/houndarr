@@ -18,6 +18,7 @@ from typing import Any, Literal
 from uuid import uuid4
 
 import httpx
+from pydantic import ValidationError
 
 from houndarr.database import get_db
 from houndarr.engine.adapters import AppAdapter, get_adapter
@@ -841,7 +842,7 @@ async def run_instance_search(
         try:
             async with adapter.make_client(instance) as queue_client:
                 queue_status = await queue_client.get_queue_status()
-            total_queued = int(queue_status.get("totalCount", 0))
+            total_queued = queue_status.total_count
             if total_queued >= instance.queue_limit:
                 reason = f"queue backpressure ({total_queued}/{instance.queue_limit})"
                 logger.info("[%s] skipping cycle: %s", instance.name, reason)
@@ -864,10 +865,11 @@ async def run_instance_search(
                 total_queued,
                 instance.queue_limit,
             )
-        except (httpx.HTTPError, httpx.InvalidURL, KeyError, ValueError):
+        except (httpx.HTTPError, httpx.InvalidURL, KeyError, ValueError, ValidationError):
             # If the queue check fails, log a warning and continue with the
             # search cycle; failing open avoids blocking searches when the
-            # queue endpoint is temporarily unavailable.
+            # queue endpoint is temporarily unavailable or the payload
+            # shape drifts.
             logger.warning(
                 "[%s] queue status check failed; proceeding with search",
                 instance.name,

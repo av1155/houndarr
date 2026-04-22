@@ -7,6 +7,9 @@ from abc import ABC, abstractmethod
 from typing import Any, Literal
 
 import httpx
+from pydantic import ValidationError
+
+from houndarr.clients._wire_models import QueueStatus, SystemStatus
 
 logger = logging.getLogger(__name__)
 
@@ -83,32 +86,34 @@ class ArrClient(ABC):
     # Health check
     # ------------------------------------------------------------------
 
-    async def ping(self) -> dict[str, Any] | None:
-        """Return the system status dict if reachable, or ``None``.
+    async def ping(self) -> SystemStatus | None:
+        """Return the parsed system status if reachable, or ``None``.
 
         Uses the system/status endpoint at :attr:`_SYSTEM_STATUS_PATH`.
         Defaults to ``/api/v3/system/status`` (Radarr, Sonarr, Whisparr);
         Lidarr and Readarr override to ``/api/v1/system/status``.
 
-        The returned dict includes ``appName`` (str) identifying the *arr
-        application and ``version`` (str) with the running version.
+        The returned :class:`SystemStatus` exposes ``app_name`` and
+        ``version``; both are optional because *arr forks sometimes omit
+        them.  Network failures and malformed payloads both collapse to
+        ``None`` so callers can treat unreachable and unparseable alike.
         """
         try:
-            result: dict[str, Any] = await self._get(self._SYSTEM_STATUS_PATH)
-            return result
-        except (httpx.HTTPError, httpx.InvalidURL, ValueError):
+            result = await self._get(self._SYSTEM_STATUS_PATH)
+            return SystemStatus.model_validate(result)
+        except (httpx.HTTPError, httpx.InvalidURL, ValueError, ValidationError):
             return None
 
     # ------------------------------------------------------------------
     # Queue status
     # ------------------------------------------------------------------
 
-    async def get_queue_status(self) -> dict[str, Any]:
+    async def get_queue_status(self) -> QueueStatus:
         """Fetch the download queue status from the *arr instance.
 
-        Returns a dict with at least ``totalCount`` (int), the total number
-        of items currently in the download queue.  All five *arr apps expose
-        an identical ``QueueStatusResource`` schema on this endpoint.
+        Returns a :class:`QueueStatus` with ``total_count``: the total
+        number of items currently in the download queue.  All five *arr
+        apps expose the same ``QueueStatusResource`` schema here.
 
         Uses :attr:`_QUEUE_STATUS_PATH` which defaults to
         ``/api/v3/queue/status`` (Sonarr, Radarr, Whisparr) and is overridden
@@ -116,9 +121,11 @@ class ArrClient(ABC):
 
         Raises:
             httpx.HTTPError: If the request fails or returns a non-2xx status.
+            pydantic.ValidationError: If the response is missing
+                ``totalCount`` or its shape cannot be validated.
         """
-        result: dict[str, Any] = await self._get(self._QUEUE_STATUS_PATH)
-        return result
+        result = await self._get(self._QUEUE_STATUS_PATH)
+        return QueueStatus.model_validate(result)
 
     # ------------------------------------------------------------------
     # Abstract interface

@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 from collections.abc import AsyncGenerator
-from typing import Any
 
 import pytest
 import pytest_asyncio
 from fastapi.testclient import TestClient
 
+from houndarr.clients._wire_models import SystemStatus
 from houndarr.clients.base import ArrClient
 from houndarr.database import get_db
 
@@ -29,9 +29,9 @@ _VALID_FORM = {
 
 @pytest.fixture(autouse=True)
 def _mock_connection_ping(monkeypatch: pytest.MonkeyPatch) -> None:
-    async def _always_ok(self: ArrClient) -> dict[str, Any] | None:
+    async def _always_ok(self: ArrClient) -> SystemStatus | None:
         name = type(self).__name__.replace("Client", "")
-        return {"appName": name, "version": "4.0.0"}
+        return SystemStatus(app_name=name, version="4.0.0")
 
     monkeypatch.setattr(ArrClient, "ping", _always_ok)
 

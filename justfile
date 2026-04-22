@@ -47,6 +47,15 @@ test-quick:
 test-integration:
     {{pytest}} -m integration tests/test_e2e/
 
+# Run only characterisation (pinning) tests: the Track A safety net that
+# locks current behaviour before a refactor batch touches its module.
+pin:
+    {{pytest}} -m pinning
+
+# Run the full suite in parallel across available CPUs (pytest-xdist).
+test-parallel:
+    {{pytest}} -n auto
+
 # Apply ruff auto-fixes and reformat in place.
 fix:
     {{python}} -m ruff check --fix src/ tests/

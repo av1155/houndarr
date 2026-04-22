@@ -29,6 +29,7 @@ from houndarr.errors import (
     ClientError,
     EngineDispatchError,
     EngineError,
+    EngineOffsetPersistError,
     EnginePoolFetchError,
 )
 from houndarr.services.cooldown import (
@@ -291,6 +292,45 @@ async def _dispatch_with_typed_wrap(
         raise
     except Exception as exc:  # noqa: BLE001
         raise EngineDispatchError(str(exc)) from exc
+
+
+async def _persist_offset_with_typed_wrap(
+    instance_id: int,
+    *,
+    master_key: bytes,
+    **offsets: int,
+) -> None:
+    """Call :func:`update_instance` with offset kwargs, typing failures.
+
+    Track B.15 introduces this helper so the four offset-persist call
+    sites (upgrade series offset + upgrade item offset in
+    :func:`_run_upgrade_pass`; missing page offset + cutoff page offset
+    in :func:`_run_instance_search_impl`) can narrow their
+    ``except Exception`` to :class:`EngineOffsetPersistError`.
+
+    These writes are non-fatal by design: callers swallow the typed
+    error and the next cycle retries the persist.  The wrap keeps the
+    log line identical (``"failed to persist ..."``) while giving
+    observability a typed surface to key on.
+
+    Args:
+        instance_id: Primary key of the row being updated.
+        master_key: Fernet key required by :func:`update_instance`.
+        **offsets: Integer columns to update, e.g.
+            ``missing_page_offset=7``.  Non-integer columns are not a
+            valid shape for this helper; callers should use
+            :func:`update_instance` directly for those.
+
+    Raises:
+        EngineOffsetPersistError: Any non-typed ``Exception``; the
+            original is preserved on ``__cause__``.
+    """
+    try:
+        await update_instance(instance_id, master_key=master_key, **offsets)
+    except (EngineError, ClientError):
+        raise
+    except Exception as exc:  # noqa: BLE001
+        raise EngineOffsetPersistError(str(exc)) from exc
 
 
 async def _fetch_pool_with_typed_wrap(
@@ -713,12 +753,12 @@ async def _run_upgrade_pass(
     if instance.type in (InstanceType.sonarr, InstanceType.whisparr_v2):
         new_series_offset = instance.upgrade_series_offset + 5
         try:
-            await update_instance(
+            await _persist_offset_with_typed_wrap(
                 instance.id,
                 master_key=master_key,
                 upgrade_series_offset=new_series_offset,
             )
-        except Exception:  # noqa: BLE001
+        except EngineOffsetPersistError:
             logger.warning("[%s] failed to persist upgrade_series_offset", instance.name)
 
     if not pool:
@@ -872,12 +912,12 @@ async def _run_upgrade_pass(
     # keep the column meaningful and avoid per-cycle row churn.
     if instance.search_order == SearchOrder.chronological:
         try:
-            await update_instance(
+            await _persist_offset_with_typed_wrap(
                 instance.id,
                 master_key=master_key,
                 upgrade_item_offset=new_offset,
             )
-        except Exception:  # noqa: BLE001
+        except EngineOffsetPersistError:
             logger.warning("[%s] failed to persist upgrade_item_offset", instance.name)
 
     return searched
@@ -1067,12 +1107,12 @@ async def _run_instance_search_impl(
         # Only advance the offset in chronological mode.
         if instance.search_order == SearchOrder.chronological:
             try:
-                await update_instance(
+                await _persist_offset_with_typed_wrap(
                     instance.id,
                     master_key=master_key,
                     missing_page_offset=next_missing_page,
                 )
-            except Exception:  # noqa: BLE001
+            except EngineOffsetPersistError:
                 logger.warning("[%s] failed to persist missing_page_offset", instance.name)
 
     logger.info("[%s] cycle complete: %d searched", instance.name, searched)
@@ -1110,12 +1150,12 @@ async def _run_instance_search_impl(
             # chronological mode.  See the missing pass for rationale.
             if instance.search_order == SearchOrder.chronological:
                 try:
-                    await update_instance(
+                    await _persist_offset_with_typed_wrap(
                         instance.id,
                         master_key=master_key,
                         cutoff_page_offset=next_cutoff_page,
                     )
-                except Exception:  # noqa: BLE001
+                except EngineOffsetPersistError:
                     logger.warning("[%s] failed to persist cutoff_page_offset", instance.name)
             searched += cutoff_searched
 

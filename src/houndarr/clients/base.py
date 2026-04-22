@@ -18,6 +18,10 @@ from houndarr.errors import (
 
 logger = logging.getLogger(__name__)
 
+WantedKind = Literal["missing", "cutoff"]
+
+
+
 # Default timeouts (seconds): connect=5, read=30
 _DEFAULT_TIMEOUT = httpx.Timeout(30.0, connect=5.0)
 
@@ -154,7 +158,7 @@ class ArrClient(ABC):
 
     async def _fetch_wanted_page(
         self,
-        kind: Literal["missing", "cutoff"],
+        kind: WantedKind,
         *,
         page: int,
         page_size: int,
@@ -249,7 +253,7 @@ class ArrClient(ABC):
         data = await self._get(path, **params)
         return envelope_cls.model_validate(data)
 
-    async def _fetch_wanted_total(self, kind: Literal["missing", "cutoff"]) -> int:
+    async def _fetch_wanted_total(self, kind: WantedKind) -> int:
         """Default size-1 probe for ``/wanted/{kind}`` totals with typed wraps.
 
         Subclasses with ``/wanted`` endpoints rely on this default and let
@@ -308,7 +312,7 @@ class ArrClient(ABC):
         """Trigger an automatic search for the item identified by *item_id*."""
 
     @abstractmethod
-    async def get_wanted_total(self, kind: Literal["missing", "cutoff"]) -> int:
+    async def get_wanted_total(self, kind: WantedKind) -> int:
         """Return the total number of records in the wanted/*kind* list.
 
         Used by the engine's random-start-page computation to size the

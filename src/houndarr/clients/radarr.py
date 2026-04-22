@@ -3,14 +3,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import ClassVar, Literal
+from typing import ClassVar
 
 from houndarr.clients._wire_models import (
     PaginatedResponse,
     RadarrLibraryMovie,
     RadarrWantedMovie,
 )
-from houndarr.clients.base import ArrClient
+from houndarr.clients.base import ArrClient, WantedKind
 
 __all__ = ["LibraryMovie", "MissingMovie", "RadarrClient"]
 
@@ -112,7 +112,7 @@ class RadarrClient(ArrClient):
         envelope = await self._fetch_wanted_page("cutoff", page=page, page_size=page_size)
         return [_parse_movie(w) for w in envelope.records]
 
-    async def get_wanted_total(self, kind: Literal["missing", "cutoff"]) -> int:
+    async def get_wanted_total(self, kind: WantedKind) -> int:
         """Return the totalRecords count for ``wanted/{kind}`` via a size-1 probe.
 
         Delegates to :meth:`ArrClient._fetch_wanted_total`, which wraps

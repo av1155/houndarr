@@ -63,8 +63,10 @@ just            # list every recipe
 just check      # all five gates, CI order
 just quick      # lint + type + non-integration pytest (fast feedback loop)
 just fix        # ruff check --fix + ruff format, in place
+just pin        # pytest -m pinning (characterisation subset)
 just test-quick # pytest -m "not integration"
 just test-integration  # pytest -m integration tests/test_e2e/
+just test-parallel     # pytest -n auto across CPUs (pytest-xdist)
 just test-browser chromium  # Playwright e2e against a live stack
 just dev        # python -m houndarr --data-dir ./data-dev --dev
 ```
@@ -114,6 +116,17 @@ unit loop and `-m integration` when you need the engine-cycle coverage.
 The `integration` marker is orthogonal to `norecursedirs`: the browser
 tree is excluded from default collection entirely; the `test_e2e/` tree
 is collected and simply filterable by marker.
+
+### `@pytest.mark.pinning`
+
+Characterisation tests that lock current behaviour before a refactor
+batch touches its target module.  Registered in
+`[tool.pytest.ini_options]`; run via `just pin` (or `pytest -m pinning`).
+Orthogonal to `integration`: pinning tests are unit-scope and run in
+the default suite.  Landed during the Track A safety-net pass under
+the refactor plan; any new behavioural contract added during a
+refactor should come with a pinning test so later migrations cannot
+silently drift it.
 
 **Pytest config** (from `pyproject.toml`):
 
@@ -229,7 +242,7 @@ from houndarr.database import get_db
 | Constants | UPPER_SNAKE_CASE | `SESSION_MAX_AGE_SECONDS`, `SCHEMA_VERSION` |
 | Module-level state | `_leading_underscore` | `_db_path`, `_runtime_settings` |
 | Enums | `StrEnum`, lowercase values | `InstanceType.sonarr` |
-| Type aliases | PascalCase or Literal | `ItemType = Literal["episode", "movie", "album", "book", "whisparr_episode", "whisparr_v3_movie"]` |
+| Type aliases | PascalCase or Literal | `RunNowStatus = Literal["accepted", "not_found", "disabled"]` |
 
 ### Docstrings
 
@@ -294,6 +307,9 @@ src/houndarr/
   config.py            # AppSettings dataclass, get_settings() singleton
   crypto.py            # Fernet encrypt/decrypt, master key management
   database.py          # get_db() context manager, schema migrations
+  enums.py             # StrEnum consolidation (SearchKind, SearchAction, CycleTrigger, ItemType)
+  errors.py            # HoundarrError hierarchy (Client/Engine/Service/Route)
+  value_objects.py     # Frozen value objects shared across layers (ItemRef)
   clients/             # httpx-based *arr API clients
     base.py            # ArrClient ABC with _get()/_post() + raise_for_status() + get_queue_status()
     sonarr.py          # SonarrClient (episode/season search, v3 API)
@@ -303,11 +319,12 @@ src/houndarr/
     whisparr_v2.py     # WhisparrClient (v2, Sonarr-based, episode/season search)
     whisparr_v3.py     # WhisparrV3Client (v3, Radarr-based, movie/scene search)
   engine/
-    candidates.py      # SearchCandidate dataclass, ItemType, date helpers
+    candidates.py      # SearchCandidate dataclass, ItemType re-export, date helpers
     search_loop.py     # run_instance_search(): unified search pipeline (missing/cutoff/upgrade passes, queue-backpressure gate)
     supervisor.py      # Supervisor: one asyncio.Task per enabled instance
     adapters/
       __init__.py      # AppAdapter dataclass, ADAPTERS registry, get_adapter()
+      protocols.py     # AppAdapterProto: runtime_checkable Protocol matching the AppAdapter shape
       sonarr.py        # Sonarr adapter: candidate conversion + dispatch
       radarr.py        # Radarr adapter: candidate conversion + dispatch
       lidarr.py        # Lidarr adapter: candidate conversion + dispatch

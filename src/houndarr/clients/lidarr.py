@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Literal
+from typing import ClassVar, Literal
 
 from houndarr.clients._wire_models import (
     LidarrLibraryAlbum,
@@ -44,6 +44,14 @@ class LidarrClient(ArrClient):
 
     _SYSTEM_STATUS_PATH: str = "/api/v1/system/status"
     _QUEUE_STATUS_PATH: str = "/api/v1/queue/status"
+    # Lidarr is a v1 API (Sonarr / Radarr / Whisparr are v3); the override
+    # routes the /wanted template at /api/v1/wanted/{kind}.
+    _WANTED_BASE_PATH: ClassVar[str] = "/api/v1/wanted"
+    _WANTED_SORT_KEY: ClassVar[str] = "releaseDate"
+    _WANTED_INCLUDE_PARAM: ClassVar[str | None] = "includeArtist"
+    _WANTED_ENVELOPE: ClassVar[type[PaginatedResponse[LidarrWantedAlbum]]] = PaginatedResponse[
+        LidarrWantedAlbum
+    ]
 
     async def get_missing(
         self,
@@ -63,16 +71,7 @@ class LidarrClient(ArrClient):
         Returns:
             List of :class:`MissingAlbum` dataclasses.
         """
-        data = await self._get(
-            "/api/v1/wanted/missing",
-            page=page,
-            pageSize=page_size,
-            sortKey="releaseDate",
-            sortDirection="ascending",
-            includeArtist="true",
-            monitored="true",
-        )
-        envelope = PaginatedResponse[LidarrWantedAlbum].model_validate(data)
+        envelope = await self._fetch_wanted_page("missing", page=page, page_size=page_size)
         return [_parse_album(w) for w in envelope.records]
 
     async def search(self, item_id: int) -> None:
@@ -110,6 +109,8 @@ class LidarrClient(ArrClient):
         """Return a page of monitored albums that have not met their quality cutoff.
 
         Calls ``GET /api/v1/wanted/cutoff`` with ``includeArtist=true``.
+        Lidarr's cutoff endpoint historically omits the sort params, so
+        the call passes ``include_sort=False`` to suppress them.
 
         Args:
             page: 1-based page number.
@@ -118,28 +119,30 @@ class LidarrClient(ArrClient):
         Returns:
             List of :class:`MissingAlbum` dataclasses.
         """
-        data = await self._get(
-            "/api/v1/wanted/cutoff",
+        envelope = await self._fetch_wanted_page(
+            "cutoff",
             page=page,
-            pageSize=page_size,
-            includeArtist="true",
-            monitored="true",
+            page_size=page_size,
+            include_sort=False,
         )
-        envelope = PaginatedResponse[LidarrWantedAlbum].model_validate(data)
         return [_parse_album(w) for w in envelope.records]
 
     async def get_wanted_total(self, kind: Literal["missing", "cutoff"]) -> int:
-        """Return the totalRecords count for ``wanted/{kind}`` via a size-1 probe."""
-        data = await self._get(
-            f"/api/v1/wanted/{kind}",
-            page=1,
-            pageSize=1,
-            sortKey="releaseDate",
-            sortDirection="ascending",
-            monitored="true",
-        )
-        envelope = PaginatedResponse[LidarrWantedAlbum].model_validate(data)
-        return envelope.total_records
+        """Return the totalRecords count for ``wanted/{kind}`` via a size-1 probe.
+
+        Delegates to :meth:`ArrClient._fetch_wanted_total`, which wraps
+        raw ``httpx`` and ``pydantic`` failures in typed
+        :class:`~houndarr.errors.ClientError` subclasses with the
+        original exception preserved on ``__cause__``.
+
+        Raises:
+            ClientHTTPError: Non-2xx response.
+            ClientTransportError: Transport failure (connect, timeout,
+                malformed URL, etc.).
+            ClientValidationError: Response shape did not match the
+                paginated envelope schema.
+        """
+        return await self._fetch_wanted_total(kind)
 
     async def get_albums(self) -> list[LibraryAlbum]:
         """Return the full album library.
@@ -156,9 +159,7 @@ class LidarrClient(ArrClient):
         return [_parse_library_album(LidarrLibraryAlbum.model_validate(r)) for r in records]
 
 
-# ---------------------------------------------------------------------------
 # Parsing helpers
-# ---------------------------------------------------------------------------
 
 
 def _parse_library_album(wire: LidarrLibraryAlbum) -> LibraryAlbum:

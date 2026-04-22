@@ -74,9 +74,7 @@ def test_every_frozen_dataclass_uses_slots() -> None:
         # to @dataclass; the convention is loud and explicit.
         if "__slots__" not in cls.__dict__:
             offenders.append(f"{cls.__module__}.{cls.__qualname__}")
-    assert offenders == [], (
-        "frozen dataclasses missing slots=True: " + ", ".join(sorted(offenders))
-    )
+    assert offenders == [], "frozen dataclasses missing slots=True: " + ", ".join(sorted(offenders))
 
 
 def test_audit_finds_at_least_the_known_frozen_set() -> None:

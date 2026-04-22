@@ -94,7 +94,7 @@ async def test_concurrent_passes_produce_at_most_one_skip_row(
         hourly_cap=10,
         cooldown_days=14,
     )
-    adapter = get_adapter(instance.type)
+    adapter = get_adapter(instance.core.type)
 
     # One pre-built candidate that matches the cooldowned item.  Both passes
     # pull from the same fetch_fn and hit is_on_cooldown -> True, then fall

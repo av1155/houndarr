@@ -102,12 +102,12 @@ async def run_with_reconnect(
     if got_connect_error:
         if not state.in_retry:
             await write_log(
-                instance_id=instance.id,
+                instance_id=instance.core.id,
                 item_id=None,
                 item_type=None,
                 action=SearchAction.error.value,
                 cycle_trigger=cycle_trigger,
-                message=f"Could not reach {instance.url}",
+                message=f"Could not reach {instance.core.url}",
             )
         state.in_retry = True
         return error_retry_secs
@@ -115,16 +115,16 @@ async def run_with_reconnect(
     if state.in_retry:
         logger.info(
             "Reconnect: %r (%s) is reachable again",
-            instance.name,
-            instance.url,
+            instance.core.name,
+            instance.core.url,
         )
         await write_log(
-            instance_id=instance.id,
+            instance_id=instance.core.id,
             item_id=None,
             item_type=None,
             action=SearchAction.info.value,
             cycle_trigger=cycle_trigger,
-            message=f"{instance.name!r} ({instance.url}) is reachable again",
+            message=f"{instance.core.name!r} ({instance.core.url}) is reachable again",
         )
         state.in_retry = False
     return success_sleep_secs

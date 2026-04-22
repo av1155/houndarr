@@ -115,35 +115,35 @@
           <label class="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide" for="{{ form_id }}-batch">Batch Size</label>
           <input id="{{ form_id }}-batch" name="batch_size" type="number" min="1" max="250"
                  value="{{ instance.missing.batch_size }}"
-                 data-default-value="{{ defaults.batch_size }}"
+                 data-default-value="{{ defaults.missing.batch_size }}"
                  class="{{ mono_input_cls }}" />
         </div>
         <div>
           <label class="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide" for="{{ form_id }}-sleep">Sleep (minutes)</label>
           <input id="{{ form_id }}-sleep" name="sleep_interval_mins" type="number" min="1"
                  value="{{ instance.missing.sleep_interval_mins }}"
-                 data-default-value="{{ defaults.sleep_interval_mins }}"
+                 data-default-value="{{ defaults.missing.sleep_interval_mins }}"
                  class="{{ mono_input_cls }}" />
         </div>
         <div>
           <label class="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide" for="{{ form_id }}-hcap">Hourly Cap</label>
           <input id="{{ form_id }}-hcap" name="hourly_cap" type="number" min="0"
                  value="{{ instance.missing.hourly_cap }}"
-                 data-default-value="{{ defaults.hourly_cap }}"
+                 data-default-value="{{ defaults.missing.hourly_cap }}"
                  class="{{ mono_input_cls }}" />
         </div>
         <div>
           <label class="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide" for="{{ form_id }}-cool">Cooldown (days)</label>
           <input id="{{ form_id }}-cool" name="cooldown_days" type="number" min="0"
                  value="{{ instance.missing.cooldown_days }}"
-                 data-default-value="{{ defaults.cooldown_days }}"
+                 data-default-value="{{ defaults.missing.cooldown_days }}"
                  class="{{ mono_input_cls }}" />
         </div>
         <div>
           <label class="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide" for="{{ form_id }}-delay">Post-Release Grace (hrs)</label>
           <input id="{{ form_id }}-delay" name="post_release_grace_hrs" type="number" min="0"
                  value="{{ instance.missing.post_release_grace_hrs }}"
-                 data-default-value="{{ defaults.post_release_grace_hrs }}"
+                 data-default-value="{{ defaults.missing.post_release_grace_hrs }}"
                  class="{{ mono_input_cls }}" />
           <p class="mt-1.5 text-xs text-slate-600">Hours to wait after release date. Unreleased items are always skipped.</p>
         </div>
@@ -151,7 +151,7 @@
           <label class="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide" for="{{ form_id }}-qlimit">Queue Limit</label>
           <input id="{{ form_id }}-qlimit" name="queue_limit" type="number" min="0"
                  value="{{ instance.missing.queue_limit }}"
-                 data-default-value="{{ defaults.queue_limit }}"
+                 data-default-value="{{ defaults.missing.queue_limit }}"
                  class="{{ mono_input_cls }}" />
           <p class="mt-1.5 text-xs text-slate-600">Skip searches when the queue exceeds this. 0 = disabled.</p>
         </div>
@@ -159,7 +159,7 @@
           <label class="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide" for="{{ form_id }}-window">Allowed Search Window</label>
           <input id="{{ form_id }}-window" name="allowed_time_window" type="text"
                  value="{{ instance.schedule.allowed_time_window }}"
-                 data-default-value="{{ defaults.allowed_time_window }}"
+                 data-default-value="{{ defaults.schedule.allowed_time_window }}"
                  placeholder="e.g. 09:00-23:00 or 09:00-12:00,18:00-22:00"
                  class="{{ mono_input_cls }}" />
           <p class="mt-1.5 text-xs text-slate-600">Restrict scheduled cycles to one or more <code>HH:MM-HH:MM</code> windows (container local time via <code>TZ</code>). Blank = always allowed. Run Now bypasses the window.</p>
@@ -169,7 +169,7 @@
             Search Order
           </label>
           <select id="{{ form_id }}-order" name="search_order"
-                  data-default-value="{{ defaults.search_order.value }}"
+                  data-default-value="{{ defaults.schedule.search_order.value }}"
                   class="{{ select_cls }}">
             <option value="chronological" {% if instance.schedule.search_order.value == 'chronological' %}selected{% endif %}>Chronological</option>
             <option value="random"        {% if instance.schedule.search_order.value == 'random'        %}selected{% endif %}>Random (default)</option>
@@ -182,7 +182,7 @@
             Sonarr Missing Search Mode
           </label>
           <select id="{{ form_id }}-sonarr-mode" name="sonarr_search_mode"
-                  data-default-value="{{ defaults.sonarr_search_mode.value }}"
+                  data-default-value="{{ defaults.missing.sonarr_search_mode.value }}"
                   class="{{ select_cls }}">
             <option value="episode"        {% if instance.missing.sonarr_search_mode.value == 'episode'        %}selected{% endif %}>Episode search (default)</option>
             <option value="season_context" {% if instance.missing.sonarr_search_mode.value == 'season_context' %}selected{% endif %}>Season-context search (advanced)</option>
@@ -195,7 +195,7 @@
             Lidarr Missing Search Mode
           </label>
           <select id="{{ form_id }}-lidarr-mode" name="lidarr_search_mode"
-                  data-default-value="{{ defaults.lidarr_search_mode.value }}"
+                  data-default-value="{{ defaults.missing.lidarr_search_mode.value }}"
                   class="{{ select_cls }}">
             <option value="album"          {% if instance.missing.lidarr_search_mode.value == 'album'          %}selected{% endif %}>Album search (default)</option>
             <option value="artist_context" {% if instance.missing.lidarr_search_mode.value == 'artist_context' %}selected{% endif %}>Artist-context search (advanced)</option>
@@ -208,7 +208,7 @@
             Readarr Missing Search Mode
           </label>
           <select id="{{ form_id }}-readarr-mode" name="readarr_search_mode"
-                  data-default-value="{{ defaults.readarr_search_mode.value }}"
+                  data-default-value="{{ defaults.missing.readarr_search_mode.value }}"
                   class="{{ select_cls }}">
             <option value="book"           {% if instance.missing.readarr_search_mode.value == 'book'           %}selected{% endif %}>Book search (default)</option>
             <option value="author_context" {% if instance.missing.readarr_search_mode.value == 'author_context' %}selected{% endif %}>Author-context search (advanced)</option>
@@ -221,7 +221,7 @@
             Whisparr v2 Missing Search Mode
           </label>
           <select id="{{ form_id }}-whisparr-mode" name="whisparr_search_mode"
-                  data-default-value="{{ defaults.whisparr_search_mode.value }}"
+                  data-default-value="{{ defaults.missing.whisparr_search_mode.value }}"
                   class="{{ select_cls }}">
             <option value="episode"        {% if instance.missing.whisparr_search_mode.value == 'episode'        %}selected{% endif %}>Episode search (default)</option>
             <option value="season_context" {% if instance.missing.whisparr_search_mode.value == 'season_context' %}selected{% endif %}>Season-context search (advanced)</option>
@@ -241,7 +241,7 @@
         <label class="inline-flex items-center gap-2 cursor-pointer select-none rounded-inset border border-border-default bg-surface-1 px-3 py-2">
           <input type="checkbox" name="cutoff_enabled" value="on"
                  {% if is_edit and instance.cutoff.cutoff_enabled %}checked{% endif %}
-                 data-default-checked="{{ 1 if defaults.cutoff_enabled else 0 }}"
+                 data-default-checked="{{ 1 if defaults.cutoff.cutoff_enabled else 0 }}"
                  class="rounded-chip border-border-default bg-surface-1 text-brand-500 focus:ring-brand-500 focus:ring-offset-surface-base" />
           <span class="text-xs font-medium text-slate-300">Enable cutoff search</span>
         </label>
@@ -251,21 +251,21 @@
           <label class="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide" for="{{ form_id }}-cbatch">Cutoff Batch</label>
           <input id="{{ form_id }}-cbatch" name="cutoff_batch_size" type="number" min="1" max="250"
                  value="{{ instance.cutoff.cutoff_batch_size }}"
-                 data-default-value="{{ defaults.cutoff_batch_size }}"
+                 data-default-value="{{ defaults.cutoff.cutoff_batch_size }}"
                  class="{{ mono_input_cls }}" />
         </div>
         <div>
           <label class="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide" for="{{ form_id }}-ccool">Cutoff Cooldown</label>
           <input id="{{ form_id }}-ccool" name="cutoff_cooldown_days" type="number" min="0"
                  value="{{ instance.cutoff.cutoff_cooldown_days }}"
-                 data-default-value="{{ defaults.cutoff_cooldown_days }}"
+                 data-default-value="{{ defaults.cutoff.cutoff_cooldown_days }}"
                  class="{{ mono_input_cls }}" />
         </div>
         <div>
           <label class="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide" for="{{ form_id }}-chcap">Cutoff Cap</label>
           <input id="{{ form_id }}-chcap" name="cutoff_hourly_cap" type="number" min="0"
                  value="{{ instance.cutoff.cutoff_hourly_cap }}"
-                 data-default-value="{{ defaults.cutoff_hourly_cap }}"
+                 data-default-value="{{ defaults.cutoff.cutoff_hourly_cap }}"
                  class="{{ mono_input_cls }}" />
         </div>
       </div>
@@ -281,7 +281,7 @@
         <label class="inline-flex items-center gap-2 cursor-pointer select-none rounded-inset border border-border-default bg-surface-1 px-3 py-2">
           <input type="checkbox" name="upgrade_enabled" value="on"
                  {% if is_edit and instance.upgrade.upgrade_enabled %}checked{% endif %}
-                 data-default-checked="{{ 1 if defaults.upgrade_enabled else 0 }}"
+                 data-default-checked="{{ 1 if defaults.upgrade.upgrade_enabled else 0 }}"
                  class="rounded-chip border-border-default bg-surface-1 text-brand-500 focus:ring-brand-500 focus:ring-offset-surface-base" />
           <span class="text-xs font-medium text-slate-300">Enable upgrade search</span>
         </label>
@@ -291,7 +291,7 @@
           <label class="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide" for="{{ form_id }}-ubatch">Upgrade Batch</label>
           <input id="{{ form_id }}-ubatch" name="upgrade_batch_size" type="number" min="1" max="250"
                  value="{{ instance.upgrade.upgrade_batch_size }}"
-                 data-default-value="{{ defaults.upgrade_batch_size }}"
+                 data-default-value="{{ defaults.upgrade.upgrade_batch_size }}"
                  class="{{ mono_input_cls }}" />
           <p class="mt-1.5 text-xs text-slate-600">Hard cap: 5 per cycle.</p>
         </div>
@@ -299,7 +299,7 @@
           <label class="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide" for="{{ form_id }}-ucool">Upgrade Cooldown (days)</label>
           <input id="{{ form_id }}-ucool" name="upgrade_cooldown_days" type="number" min="7"
                  value="{{ instance.upgrade.upgrade_cooldown_days }}"
-                 data-default-value="{{ defaults.upgrade_cooldown_days }}"
+                 data-default-value="{{ defaults.upgrade.upgrade_cooldown_days }}"
                  class="{{ mono_input_cls }}" />
           <p class="mt-1.5 text-xs text-slate-600">Minimum: 7 days.</p>
         </div>
@@ -307,7 +307,7 @@
           <label class="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide" for="{{ form_id }}-uhcap">Upgrade Hourly Cap</label>
           <input id="{{ form_id }}-uhcap" name="upgrade_hourly_cap" type="number" min="0"
                  value="{{ instance.upgrade.upgrade_hourly_cap }}"
-                 data-default-value="{{ defaults.upgrade_hourly_cap }}"
+                 data-default-value="{{ defaults.upgrade.upgrade_hourly_cap }}"
                  class="{{ mono_input_cls }}" />
           <p class="mt-1.5 text-xs text-slate-600">Hard cap: 5. 0 = unlimited.</p>
         </div>
@@ -319,7 +319,7 @@
           Sonarr Upgrade Search Mode
         </label>
         <select id="{{ form_id }}-upgrade-sonarr-mode" name="upgrade_sonarr_search_mode"
-                data-default-value="{{ defaults.upgrade_sonarr_search_mode.value }}"
+                data-default-value="{{ defaults.upgrade.upgrade_sonarr_search_mode.value }}"
                 class="{{ select_cls }}">
           <option value="episode"        {% if instance.upgrade.upgrade_sonarr_search_mode.value == 'episode'        %}selected{% endif %}>Episode search (default)</option>
           <option value="season_context" {% if instance.upgrade.upgrade_sonarr_search_mode.value == 'season_context' %}selected{% endif %}>Season-context search</option>
@@ -331,7 +331,7 @@
           Lidarr Upgrade Search Mode
         </label>
         <select id="{{ form_id }}-upgrade-lidarr-mode" name="upgrade_lidarr_search_mode"
-                data-default-value="{{ defaults.upgrade_lidarr_search_mode.value }}"
+                data-default-value="{{ defaults.upgrade.upgrade_lidarr_search_mode.value }}"
                 class="{{ select_cls }}">
           <option value="album"          {% if instance.upgrade.upgrade_lidarr_search_mode.value == 'album'          %}selected{% endif %}>Album search (default)</option>
           <option value="artist_context" {% if instance.upgrade.upgrade_lidarr_search_mode.value == 'artist_context' %}selected{% endif %}>Artist-context search</option>
@@ -343,7 +343,7 @@
           Readarr Upgrade Search Mode
         </label>
         <select id="{{ form_id }}-upgrade-readarr-mode" name="upgrade_readarr_search_mode"
-                data-default-value="{{ defaults.upgrade_readarr_search_mode.value }}"
+                data-default-value="{{ defaults.upgrade.upgrade_readarr_search_mode.value }}"
                 class="{{ select_cls }}">
           <option value="book"           {% if instance.upgrade.upgrade_readarr_search_mode.value == 'book'           %}selected{% endif %}>Book search (default)</option>
           <option value="author_context" {% if instance.upgrade.upgrade_readarr_search_mode.value == 'author_context' %}selected{% endif %}>Author-context search</option>
@@ -355,7 +355,7 @@
           Whisparr v2 Upgrade Search Mode
         </label>
         <select id="{{ form_id }}-upgrade-whisparr-mode" name="upgrade_whisparr_search_mode"
-                data-default-value="{{ defaults.upgrade_whisparr_search_mode.value }}"
+                data-default-value="{{ defaults.upgrade.upgrade_whisparr_search_mode.value }}"
                 class="{{ select_cls }}">
           <option value="episode"        {% if instance.upgrade.upgrade_whisparr_search_mode.value == 'episode'        %}selected{% endif %}>Episode search (default)</option>
           <option value="season_context" {% if instance.upgrade.upgrade_whisparr_search_mode.value == 'season_context' %}selected{% endif %}>Season-context search</option>

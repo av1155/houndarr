@@ -81,7 +81,7 @@ class TestRunInstanceSearchWrap:
         with pytest.raises(EngineError) as exc_info:
             await run_instance_search(instance, _MASTER_KEY)
         assert exc_info.value.__cause__ is original
-        assert instance.name in str(exc_info.value)
+        assert instance.core.name in str(exc_info.value)
 
     @pytest.mark.asyncio()
     async def test_key_error_wraps_to_engine_error(

@@ -72,7 +72,7 @@ class Supervisor:
     async def start(self) -> None:
         """Load enabled instances and launch one loop-task per instance."""
         instances = await list_instances(master_key=self._master_key)
-        enabled = [i for i in instances if i.enabled]
+        enabled = [i for i in instances if i.core.enabled]
 
         for idx, instance in enumerate(enabled):
             await self.start_instance_task(
@@ -168,7 +168,7 @@ class Supervisor:
         current = instance
         if current is None:
             current = await get_instance(instance_id, master_key=self._master_key)
-        if current is None or not current.enabled:
+        if current is None or not current.core.enabled:
             return False
 
         task = asyncio.create_task(
@@ -189,7 +189,11 @@ class Supervisor:
         self._prime_tasks.add(prime)
         prime.add_done_callback(self._prime_tasks.discard)
 
-        logger.info("Supervisor: started task for instance %r (id=%d)", current.name, current.id)
+        logger.info(
+            "Supervisor: started task for instance %r (id=%d)",
+            current.core.name,
+            current.core.id,
+        )
         return True
 
     async def stop_instance_task(self, instance_id: int) -> bool:

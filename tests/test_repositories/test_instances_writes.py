@@ -90,18 +90,18 @@ async def test_insert_instance_applies_schema_defaults(db: None, master_key: byt
 
     inst = await repo.get_instance(row_id, master_key=master_key)
     assert inst is not None
-    assert inst.enabled is True
-    assert inst.batch_size == 2
-    assert inst.sleep_interval_mins == 30
-    assert inst.hourly_cap == 4
-    assert inst.cooldown_days == 14
-    assert inst.post_release_grace_hrs == 6
-    assert inst.queue_limit == 0
-    assert inst.cutoff_enabled is False
-    assert inst.cutoff_batch_size == 1
-    assert inst.cutoff_cooldown_days == 21
-    assert inst.cutoff_hourly_cap == 1
-    assert inst.sonarr_search_mode is SonarrSearchMode.episode
+    assert inst.core.enabled is True
+    assert inst.missing.batch_size == 2
+    assert inst.missing.sleep_interval_mins == 30
+    assert inst.missing.hourly_cap == 4
+    assert inst.missing.cooldown_days == 14
+    assert inst.missing.post_release_grace_hrs == 6
+    assert inst.missing.queue_limit == 0
+    assert inst.cutoff.cutoff_enabled is False
+    assert inst.cutoff.cutoff_batch_size == 1
+    assert inst.cutoff.cutoff_cooldown_days == 21
+    assert inst.cutoff.cutoff_hourly_cap == 1
+    assert inst.missing.sonarr_search_mode is SonarrSearchMode.episode
 
 
 @pytest.mark.pinning()
@@ -115,11 +115,11 @@ async def test_update_instance_applies_single_field(db: None, master_key: bytes)
         url="http://s:8989",
         api_key="k",
     )
-    await update_instance(created.id, InstanceUpdate(name="After"), master_key=master_key)
-    inst = await repo.get_instance(created.id, master_key=master_key)
+    await update_instance(created.core.id, InstanceUpdate(name="After"), master_key=master_key)
+    inst = await repo.get_instance(created.core.id, master_key=master_key)
     assert inst is not None
-    assert inst.name == "After"
-    assert inst.url == "http://s:8989"  # other fields untouched
+    assert inst.core.name == "After"
+    assert inst.core.url == "http://s:8989"  # other fields untouched
 
 
 @pytest.mark.pinning()
@@ -133,13 +133,13 @@ async def test_update_instance_is_noop_when_payload_is_empty(db: None, master_ke
         url="http://s:8989",
         api_key="k",
     )
-    original_updated_at = created.updated_at
+    original_updated_at = created.timestamps.updated_at
 
-    await update_instance(created.id, InstanceUpdate(), master_key=master_key)
+    await update_instance(created.core.id, InstanceUpdate(), master_key=master_key)
 
-    inst = await repo.get_instance(created.id, master_key=master_key)
+    inst = await repo.get_instance(created.core.id, master_key=master_key)
     assert inst is not None
-    assert inst.updated_at == original_updated_at
+    assert inst.timestamps.updated_at == original_updated_at
 
 
 @pytest.mark.pinning()
@@ -154,17 +154,21 @@ async def test_update_instance_reencrypts_api_key(db: None, master_key: bytes) -
         api_key="old-key",
     )
 
-    await update_instance(created.id, InstanceUpdate(api_key="rotated-key"), master_key=master_key)
+    await update_instance(
+        created.core.id, InstanceUpdate(api_key="rotated-key"), master_key=master_key
+    )
 
     # Repo read decrypts to plaintext
-    inst = await repo.get_instance(created.id, master_key=master_key)
+    inst = await repo.get_instance(created.core.id, master_key=master_key)
     assert inst is not None
-    assert inst.api_key == "rotated-key"
+    assert inst.core.api_key == "rotated-key"
 
     # Raw SQL row holds ciphertext, not the plaintext
     async with (
         get_db() as conn,
-        conn.execute("SELECT encrypted_api_key FROM instances WHERE id = ?", (created.id,)) as cur,
+        conn.execute(
+            "SELECT encrypted_api_key FROM instances WHERE id = ?", (created.core.id,)
+        ) as cur,
     ):
         row = await cur.fetchone()
     assert row is not None
@@ -184,7 +188,7 @@ async def test_update_instance_coerces_enum_fields(db: None, master_key: bytes) 
     )
 
     await update_instance(
-        created.id,
+        created.core.id,
         InstanceUpdate(
             sonarr_search_mode=SonarrSearchMode.season_context,
             search_order=SearchOrder.random,
@@ -192,10 +196,10 @@ async def test_update_instance_coerces_enum_fields(db: None, master_key: bytes) 
         master_key=master_key,
     )
 
-    inst = await repo.get_instance(created.id, master_key=master_key)
+    inst = await repo.get_instance(created.core.id, master_key=master_key)
     assert inst is not None
-    assert inst.sonarr_search_mode is SonarrSearchMode.season_context
-    assert inst.search_order is SearchOrder.random
+    assert inst.missing.sonarr_search_mode is SonarrSearchMode.season_context
+    assert inst.schedule.search_order is SearchOrder.random
 
 
 @pytest.mark.pinning()
@@ -211,15 +215,15 @@ async def test_update_instance_coerces_bool_fields(db: None, master_key: bytes) 
     )
 
     await update_instance(
-        created.id,
+        created.core.id,
         InstanceUpdate(enabled=False, cutoff_enabled=True, upgrade_enabled=True),
         master_key=master_key,
     )
-    inst = await repo.get_instance(created.id, master_key=master_key)
+    inst = await repo.get_instance(created.core.id, master_key=master_key)
     assert inst is not None
-    assert inst.enabled is False
-    assert inst.cutoff_enabled is True
-    assert inst.upgrade_enabled is True
+    assert inst.core.enabled is False
+    assert inst.cutoff.cutoff_enabled is True
+    assert inst.upgrade.upgrade_enabled is True
 
 
 @pytest.mark.pinning()
@@ -234,11 +238,11 @@ async def test_update_instance_bumps_updated_at(db: None, master_key: bytes) -> 
         api_key="k",
     )
 
-    await update_instance(created.id, InstanceUpdate(name="Stamped"), master_key=master_key)
-    inst = await repo.get_instance(created.id, master_key=master_key)
+    await update_instance(created.core.id, InstanceUpdate(name="Stamped"), master_key=master_key)
+    inst = await repo.get_instance(created.core.id, master_key=master_key)
     assert inst is not None
     # updated_at is a ISO-8601 string; lexicographic compare == chronological
-    assert inst.updated_at >= created.updated_at
+    assert inst.timestamps.updated_at >= created.timestamps.updated_at
 
 
 @pytest.mark.pinning()
@@ -253,9 +257,9 @@ async def test_delete_instance_returns_true_when_row_existed(db: None, master_ke
         api_key="k",
     )
 
-    deleted = await delete_instance(created.id)
+    deleted = await delete_instance(created.core.id)
     assert deleted is True
-    assert await repo.get_instance(created.id, master_key=master_key) is None
+    assert await repo.get_instance(created.core.id, master_key=master_key) is None
 
 
 @pytest.mark.pinning()
@@ -277,16 +281,16 @@ async def test_update_instance_snapshot_writes_three_columns(db: None, master_ke
         url="http://s:8989",
         api_key="k",
     )
-    assert created.monitored_total == 0
-    assert created.snapshot_refreshed_at == ""
+    assert created.snapshot.monitored_total == 0
+    assert created.snapshot.snapshot_refreshed_at == ""
 
-    await update_instance_snapshot(created.id, monitored_total=42, unreleased_count=7)
+    await update_instance_snapshot(created.core.id, monitored_total=42, unreleased_count=7)
 
-    inst = await repo.get_instance(created.id, master_key=master_key)
+    inst = await repo.get_instance(created.core.id, master_key=master_key)
     assert inst is not None
-    assert inst.monitored_total == 42
-    assert inst.unreleased_count == 7
-    assert inst.snapshot_refreshed_at != ""  # ISO-8601 filled by strftime
+    assert inst.snapshot.monitored_total == 42
+    assert inst.snapshot.unreleased_count == 7
+    assert inst.snapshot.snapshot_refreshed_at != ""  # ISO-8601 filled by strftime
 
 
 @pytest.mark.pinning()
@@ -302,13 +306,13 @@ async def test_update_instance_snapshot_overwrites_prior_values(
         url="http://s:8989",
         api_key="k",
     )
-    await update_instance_snapshot(created.id, monitored_total=100, unreleased_count=10)
-    await update_instance_snapshot(created.id, monitored_total=200, unreleased_count=20)
+    await update_instance_snapshot(created.core.id, monitored_total=100, unreleased_count=10)
+    await update_instance_snapshot(created.core.id, monitored_total=200, unreleased_count=20)
 
-    inst = await repo.get_instance(created.id, master_key=master_key)
+    inst = await repo.get_instance(created.core.id, master_key=master_key)
     assert inst is not None
-    assert inst.monitored_total == 200
-    assert inst.unreleased_count == 20
+    assert inst.snapshot.monitored_total == 200
+    assert inst.snapshot.unreleased_count == 20
 
 
 @pytest.mark.pinning()
@@ -322,10 +326,10 @@ async def test_service_create_instance_delegates_to_repo(db: None, master_key: b
         url="http://radarr:7878",
         api_key="rkey",
     )
-    assert inst.id >= 1
-    assert inst.name == "Delegated"
-    assert inst.api_key == "rkey"
-    assert inst.type is InstanceType.radarr
+    assert inst.core.id >= 1
+    assert inst.core.name == "Delegated"
+    assert inst.core.api_key == "rkey"
+    assert inst.core.type is InstanceType.radarr
 
 
 @pytest.mark.pinning()
@@ -345,14 +349,14 @@ async def test_service_update_instance_filters_unrecognized_kwargs(
     )
 
     inst = await svc_update(
-        created.id,
+        created.core.id,
         master_key=master_key,
         name="Renamed",
         nonexistent_field="ignored",
         another_bogus_kwarg=123,
     )
     assert inst is not None
-    assert inst.name == "Renamed"
+    assert inst.core.name == "Renamed"
 
 
 @pytest.mark.pinning()
@@ -380,8 +384,8 @@ async def test_service_delete_instance_delegates_to_repo(db: None, master_key: b
         url="http://s:8989",
         api_key="k",
     )
-    assert await svc_delete(created.id) is True
-    assert await svc_delete(created.id) is False
+    assert await svc_delete(created.core.id) is True
+    assert await svc_delete(created.core.id) is False
 
 
 @pytest.mark.pinning()

@@ -375,7 +375,7 @@ async def submit_update(
         upgrade_hourly_cap=upgrade_hourly_cap,
     )
 
-    resolved_api_key = current.api_key if api_key == API_KEY_UNCHANGED else api_key
+    resolved_api_key = current.core.api_key if api_key == API_KEY_UNCHANGED else api_key
 
     if not connection_verified:
         raise InstanceValidationError("Test connection successfully before saving changes.")
@@ -410,7 +410,7 @@ async def submit_update(
         "type": instance_type,
         "url": cleaned_url,
         "api_key": resolved_api_key,
-        "enabled": current.enabled,
+        "enabled": current.core.enabled,
         "batch_size": batch_size,
         "sleep_interval_mins": sleep_interval_mins,
         "hourly_cap": hourly_cap,
@@ -441,7 +441,7 @@ async def submit_update(
     # Reset offsets when upgrade is toggled off so a future re-enable
     # starts from a clean position rather than picking up halfway
     # through the page rotation cycle.
-    if current.upgrade_enabled and not upgrade_enabled:
+    if current.upgrade.upgrade_enabled and not upgrade_enabled:
         update_kwargs["upgrade_item_offset"] = 0
         update_kwargs["upgrade_series_offset"] = 0
 

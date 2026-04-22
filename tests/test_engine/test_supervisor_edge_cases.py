@@ -16,7 +16,19 @@ from cryptography.fernet import Fernet
 from houndarr.database import get_db
 from houndarr.engine import supervisor as _supervisor_mod
 from houndarr.engine.supervisor import Supervisor
-from houndarr.services.instances import Instance, InstanceType, SonarrSearchMode
+from houndarr.services.instances import (
+    CutoffPolicy,
+    Instance,
+    InstanceCore,
+    InstanceTimestamps,
+    InstanceType,
+    MissingPolicy,
+    RuntimeSnapshot,
+    SchedulePolicy,
+    SearchOrder,
+    SonarrSearchMode,
+    UpgradePolicy,
+)
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -39,25 +51,36 @@ def _make_instance(
     sleep_interval_mins: int = 30,
 ) -> Instance:
     return Instance(
-        id=instance_id,
-        name="Test Sonarr",
-        type=InstanceType.sonarr,
-        url=url,
-        api_key="test-api-key",
-        enabled=enabled,
-        batch_size=2,
-        sleep_interval_mins=sleep_interval_mins,
-        hourly_cap=4,
-        cooldown_days=14,
-        post_release_grace_hrs=6,
-        queue_limit=0,
-        cutoff_enabled=False,
-        cutoff_batch_size=1,
-        cutoff_cooldown_days=21,
-        cutoff_hourly_cap=1,
-        created_at="2024-01-01T00:00:00Z",
-        updated_at="2024-01-01T00:00:00Z",
-        sonarr_search_mode=SonarrSearchMode.episode,
+        core=InstanceCore(
+            id=instance_id,
+            name="Test Sonarr",
+            type=InstanceType.sonarr,
+            url=url,
+            api_key="test-api-key",
+            enabled=enabled,
+        ),
+        missing=MissingPolicy(
+            batch_size=2,
+            sleep_interval_mins=sleep_interval_mins,
+            hourly_cap=4,
+            cooldown_days=14,
+            post_release_grace_hrs=6,
+            queue_limit=0,
+            sonarr_search_mode=SonarrSearchMode.episode,
+        ),
+        cutoff=CutoffPolicy(
+            cutoff_enabled=False,
+            cutoff_batch_size=1,
+            cutoff_cooldown_days=21,
+            cutoff_hourly_cap=1,
+        ),
+        upgrade=UpgradePolicy(),
+        schedule=SchedulePolicy(search_order=SearchOrder.chronological),
+        snapshot=RuntimeSnapshot(),
+        timestamps=InstanceTimestamps(
+            created_at="2024-01-01T00:00:00Z",
+            updated_at="2024-01-01T00:00:00Z",
+        ),
     )
 
 

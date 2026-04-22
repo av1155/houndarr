@@ -146,9 +146,9 @@ async def reset_all_instance_policy(
     defaults = _policy_defaults()
     instances = await list_instances(master_key=master_key)
     for instance in instances:
-        await update_instance(instance.id, master_key=master_key, **defaults)
+        await update_instance(instance.core.id, master_key=master_key, **defaults)
         if supervisor is not None:
-            await supervisor.reconcile_instance(instance.id)
+            await supervisor.reconcile_instance(instance.core.id)
 
     await write_admin_audit(
         f"Policy settings reset to defaults for {len(instances)} instance(s) by admin",

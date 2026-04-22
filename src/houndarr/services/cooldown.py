@@ -22,6 +22,7 @@ from datetime import UTC, datetime, timedelta
 
 from houndarr.database import get_db
 from houndarr.engine.candidates import ItemType
+from houndarr.value_objects import ItemRef
 
 # ---------------------------------------------------------------------------
 # Skip-log throttle sentinel (single-process LRU with TTL)
@@ -109,6 +110,16 @@ async def record_search(
             (instance_id, item_id, item_type, now),
         )
         await db.commit()
+
+
+async def is_on_cooldown_ref(ref: ItemRef, cooldown_days: int) -> bool:
+    """ItemRef-accepting overload of :func:`is_on_cooldown`."""
+    return await is_on_cooldown(ref.instance_id, ref.item_id, ref.item_type, cooldown_days)
+
+
+async def record_search_ref(ref: ItemRef) -> None:
+    """ItemRef-accepting overload of :func:`record_search`."""
+    await record_search(ref.instance_id, ref.item_id, ref.item_type)
 
 
 async def clear_cooldowns(instance_id: int) -> int:

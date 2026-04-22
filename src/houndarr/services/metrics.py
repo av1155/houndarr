@@ -156,6 +156,132 @@ EMPTY_METRICS: dict[str, Any] = {
 }
 
 
+# Columns pulled from the instances table for the dashboard status
+# payload.  ``encrypted_api_key`` is deliberately excluded so the
+# Fernet decrypt round trip never runs on this hot path; the status
+# endpoint never needs plaintext credentials.
+_STATUS_INSTANCE_COLS = (
+    "id, name, type, enabled, batch_size, sleep_interval_mins, hourly_cap,"
+    " cooldown_days, cutoff_enabled, cutoff_batch_size,"
+    " cutoff_cooldown_days,"
+    " post_release_grace_hrs, queue_limit,"
+    " upgrade_enabled, upgrade_cooldown_days,"
+    " monitored_total, unreleased_count, snapshot_refreshed_at"
+)
+
+# Default cooldown shape when an instance has no open cooldown rows.
+# Kept in one place so the route assembler and the per-row gatherer
+# stay in lockstep.
+_EMPTY_COOLDOWN: dict[str, Any] = {
+    "cooldown_breakdown": {"missing": 0, "cutoff": 0, "upgrade": 0},
+    "unlocking_next": [],
+    "cooldown_total": 0,
+}
+
+
+def _build_instance_status_row(
+    inst: aiosqlite.Row,
+    *,
+    window_metrics: dict[str, Any],
+    last_activity: tuple[str | None, str | None],
+    lifetime: dict[str, Any],
+    active_error: dict[str, Any] | None,
+    cooldown: dict[str, Any],
+) -> dict[str, Any]:
+    """Assemble one instance entry for the ``/api/status`` envelope.
+
+    The route's per-row dict assembly moved here unchanged: same keys,
+    same coercions, same ordering.  The only reason this is a
+    separate function instead of inlined into
+    :func:`gather_dashboard_status` is readability; a 30-line literal
+    inside a for-loop inside an async function reads worse than a
+    named helper with argument-level documentation via the keyword
+    call site.
+    """
+    action, at = last_activity
+    refreshed = inst["snapshot_refreshed_at"]
+    return {
+        "id": inst["id"],
+        "name": inst["name"],
+        "type": inst["type"],
+        "enabled": bool(inst["enabled"]),
+        "last_search_at": window_metrics["last_search_at"],
+        "searched_24h": window_metrics["searched_24h"],
+        "skipped_24h": window_metrics["skipped_24h"],
+        "errors_24h": window_metrics["errors_24h"],
+        "last_activity_action": action,
+        "last_activity_at": at,
+        "batch_size": inst["batch_size"],
+        "sleep_interval_mins": inst["sleep_interval_mins"],
+        "hourly_cap": inst["hourly_cap"],
+        "cooldown_days": inst["cooldown_days"],
+        "cutoff_enabled": bool(inst["cutoff_enabled"]),
+        "cutoff_batch_size": inst["cutoff_batch_size"],
+        "post_release_grace_hrs": inst["post_release_grace_hrs"],
+        "queue_limit": inst["queue_limit"],
+        "lifetime_searched": lifetime["lifetime_searched"],
+        "last_dispatch_at": lifetime["last_dispatch_at"],
+        "active_error": active_error,
+        "cooldown_breakdown": cooldown["cooldown_breakdown"],
+        "unlocking_next": cooldown["unlocking_next"],
+        "cooldown_total": cooldown["cooldown_total"],
+        "monitored_total": int(inst["monitored_total"]),
+        "unreleased_count": int(inst["unreleased_count"]),
+        "snapshot_refreshed_at": str(refreshed) if refreshed else None,
+        "upgrade_enabled": bool(inst["upgrade_enabled"]),
+        "upgrade_cooldown_days": int(inst["upgrade_cooldown_days"]),
+    }
+
+
+async def gather_dashboard_status(db: aiosqlite.Connection) -> dict[str, list[dict[str, Any]]]:
+    """Build the full ``/api/status`` JSON envelope against an open connection.
+
+    One SQL fetch for the instance rows, then the five per-cycle
+    gathers (window metrics, lifetime metrics, active errors, cooldown
+    data, recent searches), then the per-instance assembly.  The five
+    gathers share the same connection so they run against a stable
+    snapshot of the instance table.
+
+    Args:
+        db: Open :class:`aiosqlite.Connection`.  The caller owns the
+            connection lifetime; this function issues reads only.
+
+    Returns:
+        ``{"instances": [...], "recent_searches": [...]}`` ready for
+        ``JSONResponse``.  Empty installs short-circuit with both
+        lists empty.
+    """
+    async with db.execute(
+        f"SELECT {_STATUS_INSTANCE_COLS} FROM instances ORDER BY id ASC"  # noqa: S608  # nosec B608
+    ) as cur:
+        instances = await cur.fetchall()
+
+    if not instances:
+        return {"instances": [], "recent_searches": []}
+
+    instance_ids = [row["id"] for row in instances]
+    metrics_map, activity_map = await gather_window_metrics(db, instance_ids)
+    lifetime_map = await gather_lifetime_metrics(db, instance_ids)
+    error_map = await gather_active_errors(db, instance_ids)
+    cooldown_map = await gather_cooldown_data(db, list(instances))
+    recent = await gather_recent_searches(db, limit=5)
+
+    rows: list[dict[str, Any]] = []
+    for inst in instances:
+        iid = inst["id"]
+        rows.append(
+            _build_instance_status_row(
+                inst,
+                window_metrics=metrics_map.get(iid, EMPTY_METRICS),
+                last_activity=activity_map.get(iid, (None, None)),
+                lifetime=lifetime_map.get(iid, {"lifetime_searched": 0, "last_dispatch_at": None}),
+                active_error=error_map.get(iid),
+                cooldown=cooldown_map.get(iid, _EMPTY_COOLDOWN),
+            )
+        )
+    return {"instances": rows, "recent_searches": recent}
+
+
 async def gather_window_metrics(
     db: aiosqlite.Connection,
     instance_ids: list[int],

@@ -76,7 +76,7 @@ class Supervisor:
 
         for idx, instance in enumerate(enabled):
             await self.start_instance_task(
-                instance.id, instance=instance, startup_offset=idx * _STARTUP_STAGGER_SECS
+                instance.core.id, instance=instance, startup_offset=idx * _STARTUP_STAGGER_SECS
             )
 
         # Snapshot refresh runs even when no search cycles are enabled, so
@@ -218,7 +218,7 @@ class Supervisor:
     async def reconcile_instance(self, instance_id: int) -> None:
         """Start or stop tasks to match the instance's current enabled state."""
         instance = await get_instance(instance_id, master_key=self._master_key)
-        if instance is None or not instance.enabled:
+        if instance is None or not instance.core.enabled:
             await self.stop_instance_task(instance_id)
             return
 
@@ -231,7 +231,7 @@ class Supervisor:
         instance = await get_instance(instance_id, master_key=self._master_key)
         if instance is None:
             return "not_found"
-        if not instance.enabled:
+        if not instance.core.enabled:
             return "disabled"
 
         existing = self._manual_runs.get(instance_id)
@@ -278,10 +278,10 @@ class Supervisor:
                     )
                     return
 
-                if not instance.enabled:
+                if not instance.core.enabled:
                     logger.info(
                         "Supervisor: instance %r disabled; stopping loop",
-                        instance.name,
+                        instance.core.name,
                     )
                     return
 
@@ -291,7 +291,7 @@ class Supervisor:
                     cycle=partial(self._run_search_cycle, instance, cycle_trigger="scheduled"),
                     cycle_trigger="scheduled",
                     error_retry_secs=_CONNECT_RETRY_SECS,
-                    success_sleep_secs=instance.sleep_interval_mins * 60,
+                    success_sleep_secs=instance.missing.sleep_interval_mins * 60,
                     write_log=_write_log,
                 )
                 await asyncio.sleep(sleep_secs)
@@ -303,7 +303,7 @@ class Supervisor:
     async def _run_manual_once(self, instance_id: int) -> None:
         """Run one ad-hoc cycle, serialized with the scheduled loop."""
         instance = await get_instance(instance_id, master_key=self._master_key)
-        if instance is None or not instance.enabled:
+        if instance is None or not instance.core.enabled:
             return
 
         await self._run_search_cycle(instance, cycle_trigger="run_now")
@@ -316,7 +316,7 @@ class Supervisor:
         Returns:
             ``True`` if the cycle failed with a connection error, ``False`` otherwise.
         """
-        lock = self._run_locks.setdefault(instance.id, asyncio.Lock())
+        lock = self._run_locks.setdefault(instance.core.id, asyncio.Lock())
         async with lock:
             cycle_id = str(uuid4())
             try:
@@ -330,8 +330,8 @@ class Supervisor:
             except httpx.TransportError:
                 logger.warning(
                     "Supervisor: could not reach %r (%s); retrying in %d s",
-                    instance.name,
-                    instance.url,
+                    instance.core.name,
+                    instance.core.url,
                     _CONNECT_RETRY_SECS,
                 )
                 return True
@@ -344,11 +344,11 @@ class Supervisor:
                 # pre-refactor `except Exception` produced.
                 logger.error(
                     "Supervisor: unhandled error in search loop for %r: %s",
-                    instance.name,
+                    instance.core.name,
                     exc,
                 )
                 await _write_log(
-                    instance_id=instance.id,
+                    instance_id=instance.core.id,
                     item_id=None,
                     item_type=None,
                     action=SearchAction.error.value,
@@ -394,26 +394,26 @@ class Supervisor:
         sitting at zero until the 10-minute loop wakes. Skips disabled
         instances and treats transport errors as soft failures.
         """
-        if not instance.enabled:
+        if not instance.core.enabled:
             return
-        lock = self._run_locks.setdefault(instance.id, asyncio.Lock())
+        lock = self._run_locks.setdefault(instance.core.id, asyncio.Lock())
         async with lock:
             try:
-                adapter: AppAdapterProto = get_adapter(instance.type)
+                adapter: AppAdapterProto = get_adapter(instance.core.type)
                 async with adapter.make_client(instance) as client:
                     snap = await client.get_instance_snapshot()
                 await update_instance_snapshot(
-                    instance.id,
+                    instance.core.id,
                     monitored_total=snap.monitored_total,
                     unreleased_count=snap.unreleased_count,
                 )
             except httpx.TransportError:
                 logger.debug(
                     "Supervisor: snapshot refresh skipped for %r; instance unreachable",
-                    instance.name,
+                    instance.core.name,
                 )
             except Exception:  # noqa: BLE001
-                logger.exception("Supervisor: snapshot refresh failed for %r", instance.name)
+                logger.exception("Supervisor: snapshot refresh failed for %r", instance.core.name)
 
     async def _refresh_all_snapshots_once(self) -> None:
         """Refresh the snapshot columns for every enabled instance once.

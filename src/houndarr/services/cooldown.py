@@ -3,9 +3,15 @@
 The ``cooldowns`` table stores the last time each (instance, item) pair was
 searched.  This module provides three operations the search engine needs:
 
-* :func:`is_on_cooldown` - should we skip this item?
-* :func:`record_search` - mark an item as just-searched (upsert).
+* :func:`is_on_cooldown_ref` - should we skip this item?
+* :func:`record_search_ref` - mark an item as just-searched (upsert).
 * :func:`clear_cooldowns` - admin reset for a single instance.
+
+The ``_ref`` variants take an :class:`~houndarr.value_objects.ItemRef` and
+own the SQL implementation; the positional :func:`is_on_cooldown` and
+:func:`record_search` are compat shims kept around for test seeds and any
+caller that predates the :class:`ItemRef` migration.  New code should
+build an :class:`ItemRef` and call the ``_ref`` form directly.
 
 It also owns an in-memory LRU sentinel, :func:`should_log_skip`, that lets the
 engine throttle duplicate cooldown-reason skip rows in ``search_log`` to at
@@ -43,20 +49,18 @@ def _iso(dt: datetime) -> str:
     return dt.strftime("%Y-%m-%dT%H:%M:%S.%f") + "Z"
 
 
-async def is_on_cooldown(
-    instance_id: int,
-    item_id: int,
-    item_type: ItemType | str,
-    cooldown_days: int,
-) -> bool:
-    """Return ``True`` if *item_id* was searched within *cooldown_days* days.
+async def is_on_cooldown_ref(ref: ItemRef, cooldown_days: int) -> bool:
+    """Return ``True`` if *ref* was searched within *cooldown_days* days.
+
+    Source of truth for the cooldown-lookup SQL.  The positional form
+    :func:`is_on_cooldown` is a thin compat shim around this function.
 
     Args:
-        instance_id: Owning instance primary key.
-        item_id: Item identifier (e.g. episode, movie, album, or book ID).
-        item_type: ``"episode"``, ``"movie"``, ``"album"``, ``"book"``, or ``"whisparr_episode"``.
-        cooldown_days: Number of days before the same item can be re-searched.
-            Pass ``0`` to disable cooldowns entirely.
+        ref: The item to check.
+        cooldown_days: Number of days before the same item can be
+            re-searched.  Pass ``0`` (or any non-positive value) to
+            disable cooldowns entirely; the function short-circuits to
+            ``False`` and performs no DB read in that case.
 
     Returns:
         ``True`` if a cooldown record exists and has not yet expired.
@@ -75,26 +79,23 @@ async def is_on_cooldown(
               AND searched_at > ?
             LIMIT 1
             """,
-            (instance_id, item_id, item_type, cutoff),
+            (ref.instance_id, ref.item_id, ref.item_type.value, cutoff),
         ) as cur:
             row = await cur.fetchone()
     return row is not None
 
 
-async def record_search(
-    instance_id: int,
-    item_id: int,
-    item_type: ItemType | str,
-) -> None:
-    """Upsert a cooldown record for *item_id* with the current UTC timestamp.
+async def record_search_ref(ref: ItemRef) -> None:
+    """Upsert a cooldown record for *ref* with the current UTC timestamp.
 
-    If a record already exists for ``(instance_id, item_id, item_type)`` it is
-    updated in place; otherwise a new row is inserted.
+    Source of truth for the cooldown-upsert SQL.  If a record already
+    exists for ``(ref.instance_id, ref.item_id, ref.item_type)`` it is
+    updated in place; otherwise a new row is inserted.  The positional
+    form :func:`record_search` is a thin compat shim around this
+    function.
 
     Args:
-        instance_id: Owning instance primary key.
-        item_id: Item identifier (e.g. episode, movie, album, or book ID).
-        item_type: ``"episode"``, ``"movie"``, ``"album"``, ``"book"``, or ``"whisparr_episode"``.
+        ref: The item to record as just-searched.
     """
     now = _iso(_now_utc())
     async with get_db() as db:
@@ -105,19 +106,67 @@ async def record_search(
             ON CONFLICT(instance_id, item_id, item_type)
             DO UPDATE SET searched_at = excluded.searched_at
             """,
-            (instance_id, item_id, item_type, now),
+            (ref.instance_id, ref.item_id, ref.item_type.value, now),
         )
         await db.commit()
 
 
-async def is_on_cooldown_ref(ref: ItemRef, cooldown_days: int) -> bool:
-    """ItemRef-accepting overload of :func:`is_on_cooldown`."""
-    return await is_on_cooldown(ref.instance_id, ref.item_id, ref.item_type, cooldown_days)
+async def is_on_cooldown(
+    instance_id: int,
+    item_id: int,
+    item_type: ItemType | str,
+    cooldown_days: int,
+) -> bool:
+    """Positional compat wrapper over :func:`is_on_cooldown_ref`.
+
+    Retained so test fixtures and seed helpers that predate the
+    :class:`ItemRef` migration can keep calling the three-positional-arg
+    form.  New engine code should build an :class:`ItemRef` and call
+    :func:`is_on_cooldown_ref` directly.
+
+    Args:
+        instance_id: Owning instance primary key.
+        item_id: Item identifier (e.g. episode, movie, album, or book
+            ID).
+        item_type: ``"episode"``, ``"movie"``, ``"album"``, ``"book"``,
+            ``"whisparr_episode"``, or ``"whisparr_v3_movie"``.  Plain
+            ``str`` values are coerced to :class:`ItemType` for the
+            ItemRef construction.
+        cooldown_days: Number of days before the same item can be
+            re-searched.
+
+    Returns:
+        ``True`` if a cooldown record exists and has not yet expired.
+    """
+    return await is_on_cooldown_ref(
+        ItemRef(instance_id, item_id, ItemType(item_type)),
+        cooldown_days,
+    )
 
 
-async def record_search_ref(ref: ItemRef) -> None:
-    """ItemRef-accepting overload of :func:`record_search`."""
-    await record_search(ref.instance_id, ref.item_id, ref.item_type)
+async def record_search(
+    instance_id: int,
+    item_id: int,
+    item_type: ItemType | str,
+) -> None:
+    """Positional compat wrapper over :func:`record_search_ref`.
+
+    Retained for the same reason as :func:`is_on_cooldown`.  New engine
+    code should build an :class:`ItemRef` and call
+    :func:`record_search_ref` directly.
+
+    Args:
+        instance_id: Owning instance primary key.
+        item_id: Item identifier (e.g. episode, movie, album, or book
+            ID).
+        item_type: ``"episode"``, ``"movie"``, ``"album"``, ``"book"``,
+            ``"whisparr_episode"``, or ``"whisparr_v3_movie"``.  Plain
+            ``str`` values are coerced to :class:`ItemType` for the
+            ItemRef construction.
+    """
+    await record_search_ref(
+        ItemRef(instance_id, item_id, ItemType(item_type)),
+    )
 
 
 async def clear_cooldowns(instance_id: int) -> int:

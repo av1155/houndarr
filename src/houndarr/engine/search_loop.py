@@ -207,12 +207,15 @@ async def _count_searches_last_hour(instance_id: int, search_kind: SearchKind | 
     return int(row[0]) if row else 0
 
 
-async def _latest_missing_reason(
-    instance_id: int,
-    item_id: int,
-    item_type: str,
-) -> str | None:
-    """Return the latest logged missing-pass reason for one item, if any."""
+async def _latest_missing_reason_ref(ref: ItemRef) -> str | None:
+    """Return the latest logged missing-pass reason for *ref*, if any.
+
+    Used by the release-timing retry branch in :func:`_run_search_pass`
+    to decide whether an item that is currently on cooldown should be
+    retried (because the last logged reason was a pre-release or
+    post-release-grace skip that has since elapsed) or left on
+    cooldown.
+    """
     async with get_db() as db:
         async with db.execute(
             """
@@ -225,26 +228,11 @@ async def _latest_missing_reason(
             ORDER BY timestamp DESC, id DESC
             LIMIT 1
             """,
-            (instance_id, item_id, item_type),
+            (ref.instance_id, ref.item_id, ref.item_type.value),
         ) as cur:
             row = await cur.fetchone()
 
     return str(row[0]) if row and row[0] is not None else None
-
-
-async def _latest_missing_reason_ref(ref: ItemRef) -> str | None:
-    """Return the latest logged missing-pass reason for *ref*, if any.
-
-    ItemRef-accepting variant of :func:`_latest_missing_reason`.  Used
-    by the release-timing retry branch in :func:`_run_search_pass` so
-    the call site stays symmetric with the adjacent cooldown-service
-    ``is_on_cooldown_ref`` call.
-    """
-    return await _latest_missing_reason(
-        ref.instance_id,
-        ref.item_id,
-        ref.item_type.value,
-    )
 
 
 def _is_release_timing_reason(reason: str | None) -> bool:

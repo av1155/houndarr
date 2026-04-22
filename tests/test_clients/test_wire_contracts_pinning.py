@@ -29,9 +29,7 @@ pytestmark = pytest.mark.pinning
 _EMPTY_PAGINATED = {"page": 1, "pageSize": 1, "totalRecords": 0, "records": []}
 
 
-# ---------------------------------------------------------------------------
 # Sonarr
-# ---------------------------------------------------------------------------
 
 
 class TestSonarrWireContract:
@@ -81,9 +79,7 @@ class TestSonarrWireContract:
         assert total == 99
 
 
-# ---------------------------------------------------------------------------
 # Radarr
-# ---------------------------------------------------------------------------
 
 
 class TestRadarrWireContract:
@@ -125,9 +121,7 @@ class TestRadarrWireContract:
         assert total == 42
 
 
-# ---------------------------------------------------------------------------
 # Lidarr (v1 API)
-# ---------------------------------------------------------------------------
 
 
 class TestLidarrWireContract:
@@ -154,9 +148,7 @@ class TestLidarrWireContract:
         assert route.called
 
 
-# ---------------------------------------------------------------------------
 # Readarr (v1 API)
-# ---------------------------------------------------------------------------
 
 
 class TestReadarrWireContract:
@@ -183,9 +175,7 @@ class TestReadarrWireContract:
         assert route.called
 
 
-# ---------------------------------------------------------------------------
 # Whisparr v2 (Sonarr-shaped API at v3)
-# ---------------------------------------------------------------------------
 
 
 class TestWhisparrV2WireContract:
@@ -212,9 +202,7 @@ class TestWhisparrV2WireContract:
         assert route.called
 
 
-# ---------------------------------------------------------------------------
 # Cross-app path dispatch sanity: every wanted endpoint carries api key + accept
-# ---------------------------------------------------------------------------
 
 
 class TestCommonRequestHeaders:

@@ -39,9 +39,7 @@ async def logged_in_client(app: TestClient) -> AsyncGenerator[TestClient, None]:
     yield app
 
 
-# ---------------------------------------------------------------------------
 # settings/account/password: HX-Refresh on success
-# ---------------------------------------------------------------------------
 
 
 class TestAccountPasswordHeaders:
@@ -70,9 +68,7 @@ class TestAccountPasswordHeaders:
         assert "HX-Refresh" not in resp.headers
 
 
-# ---------------------------------------------------------------------------
 # admin/factory-reset: HX-Redirect on success
-# ---------------------------------------------------------------------------
 
 
 class TestFactoryResetHeaders:
@@ -100,9 +96,7 @@ class TestFactoryResetHeaders:
         assert "HX-Redirect" not in resp.headers
 
 
-# ---------------------------------------------------------------------------
 # changelog/popup: HX-Trigger-After-Swap on active modal
-# ---------------------------------------------------------------------------
 
 
 class TestChangelogPopupHeaders:
@@ -122,9 +116,7 @@ class TestChangelogPopupHeaders:
         assert resp.status_code == 204
 
 
-# ---------------------------------------------------------------------------
 # settings/instances/test-connection: HX-Trigger event name
-# ---------------------------------------------------------------------------
 
 
 class TestInstanceTestConnectionHeaders:

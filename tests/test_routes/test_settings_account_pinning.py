@@ -37,9 +37,7 @@ async def logged_in_client(app: TestClient) -> AsyncGenerator[TestClient, None]:
     yield app
 
 
-# ---------------------------------------------------------------------------
 # Validation matrix
-# ---------------------------------------------------------------------------
 
 
 class TestPasswordValidation:
@@ -96,9 +94,7 @@ class TestPasswordValidation:
         assert "must be different" in resp.text
 
 
-# ---------------------------------------------------------------------------
 # Happy path
-# ---------------------------------------------------------------------------
 
 
 class TestPasswordHappyPath:
@@ -141,9 +137,7 @@ class TestPasswordHappyPath:
         assert "Current password is incorrect" in resp.text
 
 
-# ---------------------------------------------------------------------------
 # CSRF
-# ---------------------------------------------------------------------------
 
 
 class TestCsrfEnforcement:

@@ -35,9 +35,7 @@ from houndarr.services.time_window import (
 pytestmark = pytest.mark.pinning
 
 
-# ---------------------------------------------------------------------------
 # None input handling (runtime safety beyond the static type hint)
-# ---------------------------------------------------------------------------
 
 
 class TestNoneHandling:
@@ -52,9 +50,7 @@ class TestNoneHandling:
         assert validate_allowed_time_window(None) is None  # type: ignore[arg-type]
 
 
-# ---------------------------------------------------------------------------
 # Sub-minute precision in is_within_window
-# ---------------------------------------------------------------------------
 
 
 class TestSubMinuteGating:
@@ -84,9 +80,7 @@ class TestSubMinuteGating:
         assert is_within_window(time(16, 59), ranges) is True
 
 
-# ---------------------------------------------------------------------------
 # Round-trip parse + format
-# ---------------------------------------------------------------------------
 
 
 class TestParseFormatRoundTrip:
@@ -113,9 +107,7 @@ class TestParseFormatRoundTrip:
         assert format_ranges(parse_time_window(raw)) == canonical
 
 
-# ---------------------------------------------------------------------------
 # Mixed wraparound / non-wraparound ranges
-# ---------------------------------------------------------------------------
 
 
 class TestMixedWraparoundRanges:
@@ -138,9 +130,7 @@ class TestMixedWraparoundRanges:
         assert is_within_window(time(14, 0), ranges) is False
 
 
-# ---------------------------------------------------------------------------
 # validate_allowed_time_window message stability
-# ---------------------------------------------------------------------------
 
 
 class TestValidatorMessages:

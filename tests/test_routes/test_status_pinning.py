@@ -53,9 +53,7 @@ async def seeded_instances(db: None) -> AsyncGenerator[None, None]:
     yield
 
 
-# ---------------------------------------------------------------------------
 # _all_instance_metrics
-# ---------------------------------------------------------------------------
 
 
 class TestAllInstanceMetrics:
@@ -104,9 +102,7 @@ class TestAllInstanceMetrics:
         assert metrics.get(1, {"searched_24h": 0})["searched_24h"] == 0
 
 
-# ---------------------------------------------------------------------------
 # _lifetime_metrics
-# ---------------------------------------------------------------------------
 
 
 class TestLifetimeMetrics:
@@ -137,9 +133,7 @@ class TestLifetimeMetrics:
         assert result[1]["last_dispatch_at"] is not None
 
 
-# ---------------------------------------------------------------------------
 # _active_errors
-# ---------------------------------------------------------------------------
 
 
 class TestActiveErrors:
@@ -202,9 +196,7 @@ class TestActiveErrors:
         assert 1 not in result
 
 
-# ---------------------------------------------------------------------------
 # _recent_searches
-# ---------------------------------------------------------------------------
 
 
 class TestRecentSearches:
@@ -250,9 +242,7 @@ class TestRecentSearches:
         assert result == []
 
 
-# ---------------------------------------------------------------------------
 # _cooldown_data
-# ---------------------------------------------------------------------------
 
 
 class TestCooldownData:

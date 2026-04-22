@@ -14,9 +14,7 @@ from fastapi.testclient import TestClient
 pytestmark = pytest.mark.pinning
 
 
-# ---------------------------------------------------------------------------
 # Setup page
-# ---------------------------------------------------------------------------
 
 
 class TestSetupPage:
@@ -75,9 +73,7 @@ class TestSetupPage:
         assert resp.headers["location"] == "/login"
 
 
-# ---------------------------------------------------------------------------
 # Login / logout
-# ---------------------------------------------------------------------------
 
 
 class TestLogin:

@@ -63,9 +63,7 @@ _UPGRADE_HOURLY_CAP_HARD_CAP = 5
 _UPGRADE_MIN_COOLDOWN_DAYS = 7
 
 
-# ---------------------------------------------------------------------------
 # search_log helper
-# ---------------------------------------------------------------------------
 
 
 async def _write_log(
@@ -194,9 +192,7 @@ def _is_release_timing_reason(reason: str | None) -> bool:
     )
 
 
-# ---------------------------------------------------------------------------
 # Unified search pass
-# ---------------------------------------------------------------------------
 
 
 async def _run_search_pass(  # noqa: C901
@@ -531,9 +527,7 @@ async def _run_search_pass(  # noqa: C901
     return searched, page
 
 
-# ---------------------------------------------------------------------------
 # Upgrade pass (dedicated, does NOT reuse _run_search_pass)
-# ---------------------------------------------------------------------------
 
 
 async def _run_upgrade_pass(
@@ -772,9 +766,7 @@ async def _run_upgrade_pass(
     return searched
 
 
-# ---------------------------------------------------------------------------
 # Public API
-# ---------------------------------------------------------------------------
 
 
 async def run_instance_search(

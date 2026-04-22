@@ -24,9 +24,7 @@ from houndarr.database import get_db
 from houndarr.engine.candidates import ItemType
 from houndarr.value_objects import ItemRef
 
-# ---------------------------------------------------------------------------
 # Skip-log throttle sentinel (single-process LRU with TTL)
-# ---------------------------------------------------------------------------
 
 SkipLogKey = tuple[int, int, str, str]
 

@@ -41,9 +41,7 @@ def _reset_sentinel() -> Iterator[None]:
     _reset_skip_log_cache()
 
 
-# ---------------------------------------------------------------------------
 # _reset_skip_log_cache
-# ---------------------------------------------------------------------------
 
 
 class TestResetSkipLogCache:
@@ -74,9 +72,7 @@ class TestResetSkipLogCache:
         assert await should_log_skip(key) is True
 
 
-# ---------------------------------------------------------------------------
 # TTL boundary
-# ---------------------------------------------------------------------------
 
 
 class TestSkipLogTtlBoundary:
@@ -106,9 +102,7 @@ class TestSkipLogTtlBoundary:
         assert await should_log_skip(key) is False
 
 
-# ---------------------------------------------------------------------------
 # LRU ordering / move_to_end semantics
-# ---------------------------------------------------------------------------
 
 
 class TestSkipLogLruOrdering:
@@ -174,9 +168,7 @@ class TestSkipLogLruOrdering:
         assert len(cooldown_module._SKIP_LOG_CACHE) == 2
 
 
-# ---------------------------------------------------------------------------
 # Reason-bucket key discrimination
-# ---------------------------------------------------------------------------
 
 
 class TestSkipLogReasonBuckets:

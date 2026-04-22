@@ -18,9 +18,7 @@ from houndarr.config import DEFAULT_LOG_RETENTION_DAYS, AppSettings
 pytestmark = pytest.mark.pinning
 
 
-# ---------------------------------------------------------------------------
 # Startup wiring: lifespan calls each bootstrap step exactly once in order
-# ---------------------------------------------------------------------------
 
 
 class TestLifespanStartup:
@@ -97,9 +95,7 @@ class TestLifespanStartup:
         assert not retention.done()
 
 
-# ---------------------------------------------------------------------------
 # RequestValidationError split
-# ---------------------------------------------------------------------------
 
 
 class TestValidationHandler:
@@ -118,9 +114,7 @@ class TestValidationHandler:
         assert "detail" in resp.json()
 
 
-# ---------------------------------------------------------------------------
 # Module-level wiring constants
-# ---------------------------------------------------------------------------
 
 
 class TestModuleConstants:

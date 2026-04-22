@@ -59,9 +59,7 @@ class _StubClient(ArrClient):
         return self.wanted_totals[kind]
 
 
-# ---------------------------------------------------------------------------
 # Constructor side-effects
-# ---------------------------------------------------------------------------
 
 
 class TestConstructor:
@@ -95,9 +93,7 @@ class TestConstructor:
         assert timeout.connect == 5.0
 
 
-# ---------------------------------------------------------------------------
 # _get + _post
-# ---------------------------------------------------------------------------
 
 
 class TestGetPost:
@@ -161,9 +157,7 @@ class TestGetPost:
                 await client._post("/cmd", json={})
 
 
-# ---------------------------------------------------------------------------
 # ping: swallow-all contract
-# ---------------------------------------------------------------------------
 
 
 class TestPing:
@@ -226,9 +220,7 @@ class TestPing:
             await client.aclose()
 
 
-# ---------------------------------------------------------------------------
 # get_instance_snapshot default
-# ---------------------------------------------------------------------------
 
 
 class TestInstanceSnapshotDefault:
@@ -260,9 +252,7 @@ class TestInstanceSnapshotDefault:
             await stub.aclose()
 
 
-# ---------------------------------------------------------------------------
 # Context-manager lifecycle
-# ---------------------------------------------------------------------------
 
 
 class TestContextManager:

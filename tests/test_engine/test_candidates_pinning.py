@@ -27,9 +27,7 @@ from houndarr.engine.candidates import (
 pytestmark = pytest.mark.pinning
 
 
-# ---------------------------------------------------------------------------
 # _parse_iso_utc: boundary cases not covered by test_candidates.py
-# ---------------------------------------------------------------------------
 
 
 class TestParseIsoUtcBoundary:
@@ -70,9 +68,7 @@ class TestParseIsoUtcBoundary:
         assert _parse_iso_utc("2024-06-15T10:30:00z") is None
 
 
-# ---------------------------------------------------------------------------
 # _is_unreleased
-# ---------------------------------------------------------------------------
 
 
 class TestIsUnreleased:
@@ -111,9 +107,7 @@ class TestIsUnreleased:
         assert _is_unreleased(future_naive) is True
 
 
-# ---------------------------------------------------------------------------
 # _is_within_post_release_grace
-# ---------------------------------------------------------------------------
 
 
 class TestIsWithinPostReleaseGrace:

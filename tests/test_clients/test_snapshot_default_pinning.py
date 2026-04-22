@@ -75,9 +75,7 @@ class _OverridingSubclass(_CallCountingStub):
         return InstanceSnapshot(monitored_total=999, unreleased_count=7)
 
 
-# ---------------------------------------------------------------------------
 # Default path call-count invariants
-# ---------------------------------------------------------------------------
 
 
 class TestDefaultSnapshotCallCount:
@@ -135,9 +133,7 @@ class TestDefaultSnapshotCallCount:
         assert snap.unreleased_count == 0
 
 
-# ---------------------------------------------------------------------------
 # Subclass override dispatch
-# ---------------------------------------------------------------------------
 
 
 class TestSnapshotSubclassOverride:

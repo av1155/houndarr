@@ -57,9 +57,7 @@ async def logged_in_client(app: TestClient) -> AsyncGenerator[TestClient, None]:
     yield app
 
 
-# ---------------------------------------------------------------------------
 # Reset-instances endpoint
-# ---------------------------------------------------------------------------
 
 
 class TestResetInstances:
@@ -78,9 +76,7 @@ class TestResetInstances:
         assert resp.status_code == 403
 
 
-# ---------------------------------------------------------------------------
 # Clear-logs endpoint
-# ---------------------------------------------------------------------------
 
 
 class TestClearLogs:
@@ -117,9 +113,7 @@ class TestClearLogs:
         assert resp.status_code == 403
 
 
-# ---------------------------------------------------------------------------
 # Factory-reset endpoint (builtin mode)
-# ---------------------------------------------------------------------------
 
 
 class TestFactoryResetBuiltin:

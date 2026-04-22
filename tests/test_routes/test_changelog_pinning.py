@@ -27,9 +27,7 @@ from houndarr.routes.changelog import (
 pytestmark = pytest.mark.pinning
 
 
-# ---------------------------------------------------------------------------
 # _is_safe_url allowlist
-# ---------------------------------------------------------------------------
 
 
 class TestIsSafeUrl:
@@ -80,9 +78,7 @@ class TestIsSafeUrl:
         assert _is_safe_url("   https://ok.example") is True
 
 
-# ---------------------------------------------------------------------------
 # _render_changelog_bullet output shape
-# ---------------------------------------------------------------------------
 
 
 class TestRenderChangelogBullet:
@@ -145,9 +141,7 @@ class TestRenderChangelogBullet:
         assert "issues/1" in out
 
 
-# ---------------------------------------------------------------------------
 # _range_label
-# ---------------------------------------------------------------------------
 
 
 class TestRangeLabel:
@@ -175,9 +169,7 @@ class TestRangeLabel:
         assert _range_label(releases, manual=False, last_seen=None) == ""  # type: ignore[arg-type]
 
 
-# ---------------------------------------------------------------------------
 # _empty_slot_response shape
-# ---------------------------------------------------------------------------
 
 
 class TestEmptySlotResponse:

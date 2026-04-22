@@ -69,9 +69,7 @@ async def supervisor(
     await sup.stop()
 
 
-# ---------------------------------------------------------------------------
 # trigger_run_now
-# ---------------------------------------------------------------------------
 
 
 class TestTriggerRunNow:
@@ -96,9 +94,7 @@ class TestTriggerRunNow:
         assert second == "accepted"
 
 
-# ---------------------------------------------------------------------------
 # start_instance_task / stop_instance_task / reconcile_instance
-# ---------------------------------------------------------------------------
 
 
 class TestInstanceTaskLifecycle:
@@ -158,9 +154,7 @@ class TestInstanceTaskLifecycle:
         assert 9999 not in supervisor._tasks
 
 
-# ---------------------------------------------------------------------------
 # Module-level constants (pinning drift protection)
-# ---------------------------------------------------------------------------
 
 
 class TestModuleConstants:

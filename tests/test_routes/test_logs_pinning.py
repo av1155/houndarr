@@ -28,9 +28,7 @@ from houndarr.routes.api.logs import (
 pytestmark = pytest.mark.pinning
 
 
-# ---------------------------------------------------------------------------
 # Parsers
-# ---------------------------------------------------------------------------
 
 
 class TestParseInstanceId:
@@ -103,9 +101,7 @@ class TestParseHideSystem:
         assert exc.value.status_code == 422
 
 
-# ---------------------------------------------------------------------------
 # _compute_load_more_limit
-# ---------------------------------------------------------------------------
 
 
 class TestComputeLoadMoreLimit:
@@ -124,9 +120,7 @@ class TestComputeLoadMoreLimit:
         assert _compute_load_more_limit(-50) == 1
 
 
-# ---------------------------------------------------------------------------
 # _summarize_rows
-# ---------------------------------------------------------------------------
 
 
 class TestSummarizeRows:
@@ -187,9 +181,7 @@ class TestSummarizeRows:
         assert summary["total_cycles"] == 0
 
 
-# ---------------------------------------------------------------------------
 # _partial_validation_error
-# ---------------------------------------------------------------------------
 
 
 class TestPartialValidationError:

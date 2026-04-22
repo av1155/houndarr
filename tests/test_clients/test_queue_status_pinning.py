@@ -23,9 +23,7 @@ from houndarr.clients.sonarr import SonarrClient
 pytestmark = pytest.mark.pinning
 
 
-# ---------------------------------------------------------------------------
 # QueueStatus Pydantic contract
-# ---------------------------------------------------------------------------
 
 
 class TestQueueStatusWireContract:
@@ -69,9 +67,7 @@ class TestQueueStatusWireContract:
         assert status.total_count == 1_000_000
 
 
-# ---------------------------------------------------------------------------
 # Per-API-version path dispatch (end-to-end smoke pinning)
-# ---------------------------------------------------------------------------
 
 
 class TestQueueStatusPathDispatch:

@@ -33,9 +33,7 @@ from houndarr.services.instances import (
 pytestmark = pytest.mark.pinning
 
 
-# ---------------------------------------------------------------------------
 # validate_cutoff_controls
-# ---------------------------------------------------------------------------
 
 
 class TestValidateCutoffControls:
@@ -56,9 +54,7 @@ class TestValidateCutoffControls:
         assert msg == "Cutoff hourly cap must be 0 or greater."
 
 
-# ---------------------------------------------------------------------------
 # validate_upgrade_controls
-# ---------------------------------------------------------------------------
 
 
 class TestValidateUpgradeControls:
@@ -79,9 +75,7 @@ class TestValidateUpgradeControls:
         assert msg == "Upgrade hourly cap must be 0 or greater."
 
 
-# ---------------------------------------------------------------------------
 # resolve_search_modes
-# ---------------------------------------------------------------------------
 
 
 class TestResolveSearchModes:
@@ -123,9 +117,7 @@ class TestResolveSearchModes:
         assert result == "Invalid Whisparr search mode."
 
 
-# ---------------------------------------------------------------------------
 # type_mismatch_message
-# ---------------------------------------------------------------------------
 
 
 class TestTypeMismatchMessage:
@@ -166,9 +158,7 @@ class TestTypeMismatchMessage:
         assert type_mismatch_message(check, InstanceType.sonarr) is None
 
 
-# ---------------------------------------------------------------------------
 # connection_status_response + connection_guard_response
-# ---------------------------------------------------------------------------
 
 
 class TestConnectionResponses:

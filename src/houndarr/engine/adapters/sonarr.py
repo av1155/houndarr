@@ -111,12 +111,12 @@ def adapt_missing(item: MissingEpisode, instance: Instance) -> SearchCandidate:
         A fully populated :class:`SearchCandidate`.
     """
     unreleased_reason = _sonarr_unreleased_reason(
-        item.air_date_utc, instance.post_release_grace_hrs
+        item.air_date_utc, instance.missing.post_release_grace_hrs
     )
 
     context: ContextOverride | None = None
     if (
-        instance.sonarr_search_mode != SonarrSearchMode.episode
+        instance.missing.sonarr_search_mode != SonarrSearchMode.episode
         and item.series_id is not None
         and item.season > 0
     ):
@@ -148,7 +148,7 @@ def adapt_cutoff(item: MissingEpisode, instance: Instance) -> SearchCandidate:
     """Convert a Sonarr cutoff-unmet episode into a :class:`SearchCandidate`.
 
     The cutoff pass always uses episode-mode regardless of
-    ``instance.sonarr_search_mode``, matching the current behavior in
+    ``instance.missing.sonarr_search_mode``, matching the current behavior in
     ``search_loop.py``.
 
     Args:
@@ -163,7 +163,7 @@ def adapt_cutoff(item: MissingEpisode, instance: Instance) -> SearchCandidate:
         item_id=item.episode_id,
         label=_episode_label(item),
         unreleased_reason=_sonarr_unreleased_reason(
-            item.air_date_utc, instance.post_release_grace_hrs
+            item.air_date_utc, instance.missing.post_release_grace_hrs
         ),
         search_payload={
             "command": "EpisodeSearch",
@@ -190,7 +190,7 @@ def _library_season_context_label(item: LibraryEpisode) -> str:
 def adapt_upgrade(item: LibraryEpisode, instance: Instance) -> SearchCandidate:
     """Convert a Sonarr library episode into a :class:`SearchCandidate` for upgrade.
 
-    Respects ``instance.upgrade_sonarr_search_mode`` for episode vs season-context.
+    Respects ``instance.upgrade.upgrade_sonarr_search_mode`` for episode vs season-context.
     No unreleased checks: upgrade items already have files.
 
     Args:
@@ -200,7 +200,7 @@ def adapt_upgrade(item: LibraryEpisode, instance: Instance) -> SearchCandidate:
     Returns:
         A fully populated :class:`SearchCandidate`.
     """
-    episode_mode = instance.upgrade_sonarr_search_mode == SonarrSearchMode.episode
+    episode_mode = instance.upgrade.upgrade_sonarr_search_mode == SonarrSearchMode.episode
 
     use_season_context = not episode_mode and item.series_id > 0 and item.season > 0
 
@@ -268,7 +268,7 @@ async def fetch_upgrade_pool(
     """Fetch and filter Sonarr library for upgrade-eligible episodes.
 
     Uses series rotation: fetches up to ``_UPGRADE_MAX_SERIES_PER_CYCLE``
-    monitored series per cycle, starting from ``instance.upgrade_series_offset``.
+    monitored series per cycle, starting from ``instance.upgrade.upgrade_series_offset``.
 
     Args:
         client: An open :class:`SonarrClient` context.
@@ -286,7 +286,7 @@ async def fetch_upgrade_pool(
     if not monitored:
         return []
 
-    offset = instance.upgrade_series_offset % len(monitored)
+    offset = instance.upgrade.upgrade_series_offset % len(monitored)
     selected = monitored[offset : offset + _UPGRADE_MAX_SERIES_PER_CYCLE]
     if len(selected) < _UPGRADE_MAX_SERIES_PER_CYCLE:
         remaining = _UPGRADE_MAX_SERIES_PER_CYCLE - len(selected)
@@ -352,7 +352,7 @@ def make_client(instance: Instance) -> SonarrClient:
     Returns:
         A new (unopened) :class:`SonarrClient`.
     """
-    return SonarrClient(url=instance.url, api_key=instance.api_key)
+    return SonarrClient(url=instance.core.url, api_key=instance.core.api_key)
 
 
 def _episode_leaf_pairs(items: list[MissingEpisode]) -> frozenset[tuple[str, int]]:

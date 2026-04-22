@@ -107,7 +107,7 @@ def adapt_missing(item: MissingWhisparrEpisode, instance: Instance) -> SearchCan
         A fully populated :class:`SearchCandidate`.
     """
     unreleased_reason = _whisparr_unreleased_reason(
-        item.release_date, instance.post_release_grace_hrs
+        item.release_date, instance.missing.post_release_grace_hrs
     )
 
     # Episodes without any series linkage (series_id is None means both
@@ -120,7 +120,7 @@ def adapt_missing(item: MissingWhisparrEpisode, instance: Instance) -> SearchCan
 
     context: ContextOverride | None = None
     if (
-        instance.whisparr_search_mode != WhisparrSearchMode.episode
+        instance.missing.whisparr_search_mode != WhisparrSearchMode.episode
         and item.series_id is not None
         and item.season_number > 0
     ):
@@ -161,7 +161,7 @@ def adapt_cutoff(item: MissingWhisparrEpisode, instance: Instance) -> SearchCand
         A fully populated :class:`SearchCandidate`.
     """
     unreleased_reason = _whisparr_unreleased_reason(
-        item.release_date, instance.post_release_grace_hrs
+        item.release_date, instance.missing.post_release_grace_hrs
     )
 
     # Same orphan guard as adapt_missing: skip records with no series linkage.
@@ -200,7 +200,7 @@ def adapt_upgrade(
 ) -> SearchCandidate:
     """Convert a Whisparr library episode into a :class:`SearchCandidate` for upgrade.
 
-    Respects ``instance.upgrade_whisparr_search_mode`` for episode vs season-context.
+    Respects ``instance.upgrade.upgrade_whisparr_search_mode`` for episode vs season-context.
     No unreleased checks: upgrade items already have files.
 
     Args:
@@ -210,7 +210,7 @@ def adapt_upgrade(
     Returns:
         A fully populated :class:`SearchCandidate`.
     """
-    episode_mode = instance.upgrade_whisparr_search_mode == WhisparrSearchMode.episode
+    episode_mode = instance.upgrade.upgrade_whisparr_search_mode == WhisparrSearchMode.episode
 
     use_season_context = not episode_mode and item.series_id > 0 and item.season_number > 0
 
@@ -278,7 +278,7 @@ async def fetch_upgrade_pool(
     """Fetch and filter Whisparr library for upgrade-eligible episodes.
 
     Uses series rotation: fetches up to ``_UPGRADE_MAX_SERIES_PER_CYCLE``
-    monitored series per cycle, starting from ``instance.upgrade_series_offset``.
+    monitored series per cycle, starting from ``instance.upgrade.upgrade_series_offset``.
 
     Args:
         client: An open :class:`WhisparrClient` context.
@@ -296,7 +296,7 @@ async def fetch_upgrade_pool(
     if not monitored:
         return []
 
-    offset = instance.upgrade_series_offset % len(monitored)
+    offset = instance.upgrade.upgrade_series_offset % len(monitored)
     selected = monitored[offset : offset + _UPGRADE_MAX_SERIES_PER_CYCLE]
     if len(selected) < _UPGRADE_MAX_SERIES_PER_CYCLE:
         remaining = _UPGRADE_MAX_SERIES_PER_CYCLE - len(selected)
@@ -358,7 +358,7 @@ def make_client(instance: Instance) -> WhisparrClient:
     Returns:
         A new (unopened) :class:`WhisparrClient`.
     """
-    return WhisparrClient(url=instance.url, api_key=instance.api_key)
+    return WhisparrClient(url=instance.core.url, api_key=instance.core.api_key)
 
 
 def _whisparr_leaf_pairs(items: list[MissingWhisparrEpisode]) -> frozenset[tuple[str, int]]:

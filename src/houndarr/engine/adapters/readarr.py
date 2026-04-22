@@ -81,11 +81,11 @@ def adapt_missing(item: MissingBook, instance: Instance) -> SearchCandidate:
         A fully populated :class:`SearchCandidate`.
     """
     unreleased_reason = _readarr_unreleased_reason(
-        item.release_date, instance.post_release_grace_hrs
+        item.release_date, instance.missing.post_release_grace_hrs
     )
 
     context: ContextOverride | None = None
-    if instance.readarr_search_mode != ReadarrSearchMode.book and item.author_id > 0:
+    if instance.missing.readarr_search_mode != ReadarrSearchMode.book and item.author_id > 0:
         context = ContextOverride(
             item_id=_author_item_id(item.author_id),
             label=_author_context_label(item),
@@ -126,7 +126,7 @@ def adapt_cutoff(item: MissingBook, instance: Instance) -> SearchCandidate:
         item_id=item.book_id,
         label=_book_label(item),
         unreleased_reason=_readarr_unreleased_reason(
-            item.release_date, instance.post_release_grace_hrs
+            item.release_date, instance.missing.post_release_grace_hrs
         ),
         search_payload={
             "command": "BookSearch",
@@ -151,7 +151,7 @@ def _library_author_context_label(item: LibraryBook) -> str:
 def adapt_upgrade(item: LibraryBook, instance: Instance) -> SearchCandidate:
     """Convert a Readarr library book into a :class:`SearchCandidate` for upgrade.
 
-    Respects ``instance.upgrade_readarr_search_mode`` for book vs author-context.
+    Respects ``instance.upgrade.upgrade_readarr_search_mode`` for book vs author-context.
     No unreleased checks: upgrade items already have files.
 
     Args:
@@ -161,7 +161,7 @@ def adapt_upgrade(item: LibraryBook, instance: Instance) -> SearchCandidate:
     Returns:
         A fully populated :class:`SearchCandidate`.
     """
-    book_mode = instance.upgrade_readarr_search_mode == ReadarrSearchMode.book
+    book_mode = instance.upgrade.upgrade_readarr_search_mode == ReadarrSearchMode.book
 
     use_author_context = not book_mode and item.author_id > 0
 
@@ -215,7 +215,7 @@ async def fetch_upgrade_pool(
         except Exception:  # noqa: BLE001
             logger.warning(
                 "[%s] failed to fetch cutoff page %d for exclusion set",
-                instance.name,
+                instance.core.name,
                 page,
             )
             break
@@ -257,7 +257,7 @@ def make_client(instance: Instance) -> ReadarrClient:
     Returns:
         A new (unopened) :class:`ReadarrClient`.
     """
-    return ReadarrClient(url=instance.url, api_key=instance.api_key)
+    return ReadarrClient(url=instance.core.url, api_key=instance.core.api_key)
 
 
 def _book_leaf_pairs(items: list[MissingBook]) -> frozenset[tuple[str, int]]:

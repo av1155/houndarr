@@ -82,11 +82,11 @@ def adapt_missing(item: MissingAlbum, instance: Instance) -> SearchCandidate:
         A fully populated :class:`SearchCandidate`.
     """
     unreleased_reason = _lidarr_unreleased_reason(
-        item.release_date, instance.post_release_grace_hrs
+        item.release_date, instance.missing.post_release_grace_hrs
     )
 
     context: ContextOverride | None = None
-    if instance.lidarr_search_mode != LidarrSearchMode.album and item.artist_id > 0:
+    if instance.missing.lidarr_search_mode != LidarrSearchMode.album and item.artist_id > 0:
         context = ContextOverride(
             item_id=_artist_item_id(item.artist_id),
             label=_artist_context_label(item),
@@ -127,7 +127,7 @@ def adapt_cutoff(item: MissingAlbum, instance: Instance) -> SearchCandidate:
         item_id=item.album_id,
         label=_album_label(item),
         unreleased_reason=_lidarr_unreleased_reason(
-            item.release_date, instance.post_release_grace_hrs
+            item.release_date, instance.missing.post_release_grace_hrs
         ),
         search_payload={
             "command": "AlbumSearch",
@@ -152,7 +152,7 @@ def _library_artist_context_label(item: LibraryAlbum) -> str:
 def adapt_upgrade(item: LibraryAlbum, instance: Instance) -> SearchCandidate:
     """Convert a Lidarr library album into a :class:`SearchCandidate` for upgrade.
 
-    Respects ``instance.upgrade_lidarr_search_mode`` for album vs artist-context.
+    Respects ``instance.upgrade.upgrade_lidarr_search_mode`` for album vs artist-context.
     No unreleased checks: upgrade items already have files.
 
     Args:
@@ -162,7 +162,7 @@ def adapt_upgrade(item: LibraryAlbum, instance: Instance) -> SearchCandidate:
     Returns:
         A fully populated :class:`SearchCandidate`.
     """
-    album_mode = instance.upgrade_lidarr_search_mode == LidarrSearchMode.album
+    album_mode = instance.upgrade.upgrade_lidarr_search_mode == LidarrSearchMode.album
 
     use_artist_context = not album_mode and item.artist_id > 0
 
@@ -216,7 +216,7 @@ async def fetch_upgrade_pool(
         except Exception:  # noqa: BLE001
             logger.warning(
                 "[%s] failed to fetch cutoff page %d for exclusion set",
-                instance.name,
+                instance.core.name,
                 page,
             )
             break
@@ -258,7 +258,7 @@ def make_client(instance: Instance) -> LidarrClient:
     Returns:
         A new (unopened) :class:`LidarrClient`.
     """
-    return LidarrClient(url=instance.url, api_key=instance.api_key)
+    return LidarrClient(url=instance.core.url, api_key=instance.core.api_key)
 
 
 def _album_leaf_pairs(items: list[MissingAlbum]) -> frozenset[tuple[str, int]]:

@@ -89,7 +89,7 @@ def adapt_missing(item: MissingMovie, instance: Instance) -> SearchCandidate:
         item_type="movie",
         item_id=item.movie_id,
         label=_movie_label(item),
-        unreleased_reason=_radarr_unreleased_reason(item, instance.post_release_grace_hrs),
+        unreleased_reason=_radarr_unreleased_reason(item, instance.missing.post_release_grace_hrs),
         search_payload={
             "command": "MoviesSearch",
             "movie_id": item.movie_id,
@@ -213,7 +213,7 @@ def make_client(instance: Instance) -> RadarrClient:
     Returns:
         A new (unopened) :class:`RadarrClient`.
     """
-    return RadarrClient(url=instance.url, api_key=instance.api_key)
+    return RadarrClient(url=instance.core.url, api_key=instance.core.api_key)
 
 
 async def fetch_instance_snapshot(

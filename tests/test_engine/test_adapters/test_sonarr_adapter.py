@@ -417,11 +417,12 @@ class TestFetchReconcileSetsUpgrade:
         client.get_episodes.side_effect = lambda series_id: episodes_by_series[series_id]
 
         instance = _make_instance()
-        instance_with_upgrade = replace(
-            instance,
+        instance.upgrade = replace(
+            instance.upgrade,
             upgrade_enabled=True,
             upgrade_series_offset=0,
         )
+        instance_with_upgrade = instance
 
         sets = await fetch_reconcile_sets(client, instance_with_upgrade)
 

@@ -6,7 +6,7 @@ caller-supplied Fernet *master_key*; every read decrypts transparently.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from dataclasses import fields as dataclass_fields
 from enum import StrEnum
 from typing import Any
@@ -248,53 +248,477 @@ class InstanceTimestamps:
     updated_at: str
 
 
-@dataclass
+@dataclass(init=False)
 class Instance:
     """In-memory representation of a configured *arr instance.
 
-    ``api_key`` is always the **decrypted** plaintext value; the encrypted
-    form is only ever kept in the database column ``encrypted_api_key``.
+    Composes seven frozen sub-structs (:class:`InstanceCore`,
+    :class:`MissingPolicy`, :class:`CutoffPolicy`, :class:`UpgradePolicy`,
+    :class:`SchedulePolicy`, :class:`RuntimeSnapshot`,
+    :class:`InstanceTimestamps`) and exposes every flat attribute of
+    the pre-refactor dataclass via ``@property`` delegation.  Both
+    access patterns work: ``instance.batch_size`` reads through to
+    ``instance.missing.batch_size``, and assignment to
+    ``instance.batch_size`` rebuilds the :class:`MissingPolicy`
+    sub-struct via :func:`dataclasses.replace`.
+
+    The constructor still accepts the 39 flat keyword arguments the
+    pre-refactor dataclass accepted so every caller site keeps working
+    through the caller-migration batches.  The flat property
+    delegators and the flat-kwargs ``__init__`` are both removed in
+    :ref:`D.20 <track-d>` once every caller has switched to sub-struct
+    access (``instance.missing.batch_size``) and sub-struct
+    construction (``Instance(core=..., missing=...)``).
+
+    ``api_key`` is always the **decrypted** plaintext value; the
+    encrypted form only ever lives in the database column
+    ``encrypted_api_key``.  :class:`Instance` stays mutable
+    (non-frozen) deliberately: the skip-log cache and test fixtures
+    rely on in-place attribute writes, and the slots audit records
+    this as a known exception.
     """
 
-    id: int
-    name: str
-    type: InstanceType
-    url: str
-    api_key: str
-    enabled: bool
-    batch_size: int
-    sleep_interval_mins: int
-    hourly_cap: int
-    cooldown_days: int
-    post_release_grace_hrs: int
-    queue_limit: int
-    cutoff_enabled: bool
-    cutoff_batch_size: int
-    cutoff_cooldown_days: int
-    cutoff_hourly_cap: int
-    created_at: str
-    updated_at: str
-    sonarr_search_mode: SonarrSearchMode = SonarrSearchMode.episode
-    lidarr_search_mode: LidarrSearchMode = LidarrSearchMode.album
-    readarr_search_mode: ReadarrSearchMode = ReadarrSearchMode.book
-    whisparr_search_mode: WhisparrSearchMode = WhisparrSearchMode.episode
-    upgrade_enabled: bool = False
-    upgrade_batch_size: int = DEFAULT_UPGRADE_BATCH_SIZE
-    upgrade_cooldown_days: int = DEFAULT_UPGRADE_COOLDOWN_DAYS
-    upgrade_hourly_cap: int = DEFAULT_UPGRADE_HOURLY_CAP
-    upgrade_sonarr_search_mode: SonarrSearchMode = SonarrSearchMode.episode
-    upgrade_lidarr_search_mode: LidarrSearchMode = LidarrSearchMode.album
-    upgrade_readarr_search_mode: ReadarrSearchMode = ReadarrSearchMode.book
-    upgrade_whisparr_search_mode: WhisparrSearchMode = WhisparrSearchMode.episode
-    upgrade_item_offset: int = 0
-    upgrade_series_offset: int = 0
-    missing_page_offset: int = 1
-    cutoff_page_offset: int = 1
-    allowed_time_window: str = ""
-    search_order: SearchOrder = SearchOrder.chronological
-    monitored_total: int = 0
-    unreleased_count: int = 0
-    snapshot_refreshed_at: str = ""
+    core: InstanceCore
+    missing: MissingPolicy
+    cutoff: CutoffPolicy
+    upgrade: UpgradePolicy
+    schedule: SchedulePolicy
+    snapshot: RuntimeSnapshot
+    timestamps: InstanceTimestamps
+
+    def __init__(  # noqa: PLR0913
+        self,
+        *,
+        id: int,  # noqa: A002
+        name: str,
+        type: InstanceType,  # noqa: A002
+        url: str,
+        api_key: str,
+        enabled: bool,
+        batch_size: int,
+        sleep_interval_mins: int,
+        hourly_cap: int,
+        cooldown_days: int,
+        post_release_grace_hrs: int,
+        queue_limit: int,
+        cutoff_enabled: bool,
+        cutoff_batch_size: int,
+        cutoff_cooldown_days: int,
+        cutoff_hourly_cap: int,
+        created_at: str,
+        updated_at: str,
+        sonarr_search_mode: SonarrSearchMode = SonarrSearchMode.episode,
+        lidarr_search_mode: LidarrSearchMode = LidarrSearchMode.album,
+        readarr_search_mode: ReadarrSearchMode = ReadarrSearchMode.book,
+        whisparr_search_mode: WhisparrSearchMode = WhisparrSearchMode.episode,
+        upgrade_enabled: bool = False,
+        upgrade_batch_size: int = DEFAULT_UPGRADE_BATCH_SIZE,
+        upgrade_cooldown_days: int = DEFAULT_UPGRADE_COOLDOWN_DAYS,
+        upgrade_hourly_cap: int = DEFAULT_UPGRADE_HOURLY_CAP,
+        upgrade_sonarr_search_mode: SonarrSearchMode = SonarrSearchMode.episode,
+        upgrade_lidarr_search_mode: LidarrSearchMode = LidarrSearchMode.album,
+        upgrade_readarr_search_mode: ReadarrSearchMode = ReadarrSearchMode.book,
+        upgrade_whisparr_search_mode: WhisparrSearchMode = WhisparrSearchMode.episode,
+        upgrade_item_offset: int = 0,
+        upgrade_series_offset: int = 0,
+        missing_page_offset: int = 1,
+        cutoff_page_offset: int = 1,
+        allowed_time_window: str = "",
+        search_order: SearchOrder = SearchOrder.chronological,
+        monitored_total: int = 0,
+        unreleased_count: int = 0,
+        snapshot_refreshed_at: str = "",
+    ) -> None:
+        """Accept the pre-refactor 39-kwarg shape and build sub-structs.
+
+        Defaults match the pre-refactor :class:`Instance` dataclass
+        field-by-field so byte-level behaviour is preserved for every
+        caller that does not pass a given kwarg.  The sub-struct
+        defaults (which route through :mod:`houndarr.config` constants)
+        apply only when a sub-struct is constructed directly; the
+        Instance facade takes its flat-kwarg defaults as the source of
+        truth to avoid silently changing what ``Instance(...)`` without
+        ``search_order`` resolves to mid-refactor.
+        """
+        self.core = InstanceCore(
+            id=id,
+            name=name,
+            type=type,
+            url=url,
+            api_key=api_key,
+            enabled=enabled,
+        )
+        self.missing = MissingPolicy(
+            batch_size=batch_size,
+            sleep_interval_mins=sleep_interval_mins,
+            hourly_cap=hourly_cap,
+            cooldown_days=cooldown_days,
+            post_release_grace_hrs=post_release_grace_hrs,
+            queue_limit=queue_limit,
+            sonarr_search_mode=sonarr_search_mode,
+            lidarr_search_mode=lidarr_search_mode,
+            readarr_search_mode=readarr_search_mode,
+            whisparr_search_mode=whisparr_search_mode,
+        )
+        self.cutoff = CutoffPolicy(
+            cutoff_enabled=cutoff_enabled,
+            cutoff_batch_size=cutoff_batch_size,
+            cutoff_cooldown_days=cutoff_cooldown_days,
+            cutoff_hourly_cap=cutoff_hourly_cap,
+        )
+        self.upgrade = UpgradePolicy(
+            upgrade_enabled=upgrade_enabled,
+            upgrade_batch_size=upgrade_batch_size,
+            upgrade_cooldown_days=upgrade_cooldown_days,
+            upgrade_hourly_cap=upgrade_hourly_cap,
+            upgrade_sonarr_search_mode=upgrade_sonarr_search_mode,
+            upgrade_lidarr_search_mode=upgrade_lidarr_search_mode,
+            upgrade_readarr_search_mode=upgrade_readarr_search_mode,
+            upgrade_whisparr_search_mode=upgrade_whisparr_search_mode,
+            upgrade_item_offset=upgrade_item_offset,
+            upgrade_series_offset=upgrade_series_offset,
+        )
+        self.schedule = SchedulePolicy(
+            allowed_time_window=allowed_time_window,
+            search_order=search_order,
+            missing_page_offset=missing_page_offset,
+            cutoff_page_offset=cutoff_page_offset,
+        )
+        self.snapshot = RuntimeSnapshot(
+            monitored_total=monitored_total,
+            unreleased_count=unreleased_count,
+            snapshot_refreshed_at=snapshot_refreshed_at,
+        )
+        self.timestamps = InstanceTimestamps(
+            created_at=created_at,
+            updated_at=updated_at,
+        )
+
+    # InstanceCore delegation.
+
+    @property
+    def id(self) -> int:  # noqa: A003
+        return self.core.id
+
+    @id.setter
+    def id(self, value: int) -> None:
+        self.core = replace(self.core, id=value)
+
+    @property
+    def name(self) -> str:
+        return self.core.name
+
+    @name.setter
+    def name(self, value: str) -> None:
+        self.core = replace(self.core, name=value)
+
+    @property
+    def type(self) -> InstanceType:  # noqa: A003
+        return self.core.type
+
+    @type.setter
+    def type(self, value: InstanceType) -> None:
+        self.core = replace(self.core, type=value)
+
+    @property
+    def url(self) -> str:
+        return self.core.url
+
+    @url.setter
+    def url(self, value: str) -> None:
+        self.core = replace(self.core, url=value)
+
+    @property
+    def api_key(self) -> str:
+        return self.core.api_key
+
+    @api_key.setter
+    def api_key(self, value: str) -> None:
+        self.core = replace(self.core, api_key=value)
+
+    @property
+    def enabled(self) -> bool:
+        return self.core.enabled
+
+    @enabled.setter
+    def enabled(self, value: bool) -> None:
+        self.core = replace(self.core, enabled=value)
+
+    # MissingPolicy delegation.
+
+    @property
+    def batch_size(self) -> int:
+        return self.missing.batch_size
+
+    @batch_size.setter
+    def batch_size(self, value: int) -> None:
+        self.missing = replace(self.missing, batch_size=value)
+
+    @property
+    def sleep_interval_mins(self) -> int:
+        return self.missing.sleep_interval_mins
+
+    @sleep_interval_mins.setter
+    def sleep_interval_mins(self, value: int) -> None:
+        self.missing = replace(self.missing, sleep_interval_mins=value)
+
+    @property
+    def hourly_cap(self) -> int:
+        return self.missing.hourly_cap
+
+    @hourly_cap.setter
+    def hourly_cap(self, value: int) -> None:
+        self.missing = replace(self.missing, hourly_cap=value)
+
+    @property
+    def cooldown_days(self) -> int:
+        return self.missing.cooldown_days
+
+    @cooldown_days.setter
+    def cooldown_days(self, value: int) -> None:
+        self.missing = replace(self.missing, cooldown_days=value)
+
+    @property
+    def post_release_grace_hrs(self) -> int:
+        return self.missing.post_release_grace_hrs
+
+    @post_release_grace_hrs.setter
+    def post_release_grace_hrs(self, value: int) -> None:
+        self.missing = replace(self.missing, post_release_grace_hrs=value)
+
+    @property
+    def queue_limit(self) -> int:
+        return self.missing.queue_limit
+
+    @queue_limit.setter
+    def queue_limit(self, value: int) -> None:
+        self.missing = replace(self.missing, queue_limit=value)
+
+    @property
+    def sonarr_search_mode(self) -> SonarrSearchMode:
+        return self.missing.sonarr_search_mode
+
+    @sonarr_search_mode.setter
+    def sonarr_search_mode(self, value: SonarrSearchMode) -> None:
+        self.missing = replace(self.missing, sonarr_search_mode=value)
+
+    @property
+    def lidarr_search_mode(self) -> LidarrSearchMode:
+        return self.missing.lidarr_search_mode
+
+    @lidarr_search_mode.setter
+    def lidarr_search_mode(self, value: LidarrSearchMode) -> None:
+        self.missing = replace(self.missing, lidarr_search_mode=value)
+
+    @property
+    def readarr_search_mode(self) -> ReadarrSearchMode:
+        return self.missing.readarr_search_mode
+
+    @readarr_search_mode.setter
+    def readarr_search_mode(self, value: ReadarrSearchMode) -> None:
+        self.missing = replace(self.missing, readarr_search_mode=value)
+
+    @property
+    def whisparr_search_mode(self) -> WhisparrSearchMode:
+        return self.missing.whisparr_search_mode
+
+    @whisparr_search_mode.setter
+    def whisparr_search_mode(self, value: WhisparrSearchMode) -> None:
+        self.missing = replace(self.missing, whisparr_search_mode=value)
+
+    # CutoffPolicy delegation.
+
+    @property
+    def cutoff_enabled(self) -> bool:
+        return self.cutoff.cutoff_enabled
+
+    @cutoff_enabled.setter
+    def cutoff_enabled(self, value: bool) -> None:
+        self.cutoff = replace(self.cutoff, cutoff_enabled=value)
+
+    @property
+    def cutoff_batch_size(self) -> int:
+        return self.cutoff.cutoff_batch_size
+
+    @cutoff_batch_size.setter
+    def cutoff_batch_size(self, value: int) -> None:
+        self.cutoff = replace(self.cutoff, cutoff_batch_size=value)
+
+    @property
+    def cutoff_cooldown_days(self) -> int:
+        return self.cutoff.cutoff_cooldown_days
+
+    @cutoff_cooldown_days.setter
+    def cutoff_cooldown_days(self, value: int) -> None:
+        self.cutoff = replace(self.cutoff, cutoff_cooldown_days=value)
+
+    @property
+    def cutoff_hourly_cap(self) -> int:
+        return self.cutoff.cutoff_hourly_cap
+
+    @cutoff_hourly_cap.setter
+    def cutoff_hourly_cap(self, value: int) -> None:
+        self.cutoff = replace(self.cutoff, cutoff_hourly_cap=value)
+
+    # UpgradePolicy delegation.
+
+    @property
+    def upgrade_enabled(self) -> bool:
+        return self.upgrade.upgrade_enabled
+
+    @upgrade_enabled.setter
+    def upgrade_enabled(self, value: bool) -> None:
+        self.upgrade = replace(self.upgrade, upgrade_enabled=value)
+
+    @property
+    def upgrade_batch_size(self) -> int:
+        return self.upgrade.upgrade_batch_size
+
+    @upgrade_batch_size.setter
+    def upgrade_batch_size(self, value: int) -> None:
+        self.upgrade = replace(self.upgrade, upgrade_batch_size=value)
+
+    @property
+    def upgrade_cooldown_days(self) -> int:
+        return self.upgrade.upgrade_cooldown_days
+
+    @upgrade_cooldown_days.setter
+    def upgrade_cooldown_days(self, value: int) -> None:
+        self.upgrade = replace(self.upgrade, upgrade_cooldown_days=value)
+
+    @property
+    def upgrade_hourly_cap(self) -> int:
+        return self.upgrade.upgrade_hourly_cap
+
+    @upgrade_hourly_cap.setter
+    def upgrade_hourly_cap(self, value: int) -> None:
+        self.upgrade = replace(self.upgrade, upgrade_hourly_cap=value)
+
+    @property
+    def upgrade_sonarr_search_mode(self) -> SonarrSearchMode:
+        return self.upgrade.upgrade_sonarr_search_mode
+
+    @upgrade_sonarr_search_mode.setter
+    def upgrade_sonarr_search_mode(self, value: SonarrSearchMode) -> None:
+        self.upgrade = replace(self.upgrade, upgrade_sonarr_search_mode=value)
+
+    @property
+    def upgrade_lidarr_search_mode(self) -> LidarrSearchMode:
+        return self.upgrade.upgrade_lidarr_search_mode
+
+    @upgrade_lidarr_search_mode.setter
+    def upgrade_lidarr_search_mode(self, value: LidarrSearchMode) -> None:
+        self.upgrade = replace(self.upgrade, upgrade_lidarr_search_mode=value)
+
+    @property
+    def upgrade_readarr_search_mode(self) -> ReadarrSearchMode:
+        return self.upgrade.upgrade_readarr_search_mode
+
+    @upgrade_readarr_search_mode.setter
+    def upgrade_readarr_search_mode(self, value: ReadarrSearchMode) -> None:
+        self.upgrade = replace(self.upgrade, upgrade_readarr_search_mode=value)
+
+    @property
+    def upgrade_whisparr_search_mode(self) -> WhisparrSearchMode:
+        return self.upgrade.upgrade_whisparr_search_mode
+
+    @upgrade_whisparr_search_mode.setter
+    def upgrade_whisparr_search_mode(self, value: WhisparrSearchMode) -> None:
+        self.upgrade = replace(self.upgrade, upgrade_whisparr_search_mode=value)
+
+    @property
+    def upgrade_item_offset(self) -> int:
+        return self.upgrade.upgrade_item_offset
+
+    @upgrade_item_offset.setter
+    def upgrade_item_offset(self, value: int) -> None:
+        self.upgrade = replace(self.upgrade, upgrade_item_offset=value)
+
+    @property
+    def upgrade_series_offset(self) -> int:
+        return self.upgrade.upgrade_series_offset
+
+    @upgrade_series_offset.setter
+    def upgrade_series_offset(self, value: int) -> None:
+        self.upgrade = replace(self.upgrade, upgrade_series_offset=value)
+
+    # SchedulePolicy delegation.
+
+    @property
+    def allowed_time_window(self) -> str:
+        return self.schedule.allowed_time_window
+
+    @allowed_time_window.setter
+    def allowed_time_window(self, value: str) -> None:
+        self.schedule = replace(self.schedule, allowed_time_window=value)
+
+    @property
+    def search_order(self) -> SearchOrder:
+        return self.schedule.search_order
+
+    @search_order.setter
+    def search_order(self, value: SearchOrder) -> None:
+        self.schedule = replace(self.schedule, search_order=value)
+
+    @property
+    def missing_page_offset(self) -> int:
+        return self.schedule.missing_page_offset
+
+    @missing_page_offset.setter
+    def missing_page_offset(self, value: int) -> None:
+        self.schedule = replace(self.schedule, missing_page_offset=value)
+
+    @property
+    def cutoff_page_offset(self) -> int:
+        return self.schedule.cutoff_page_offset
+
+    @cutoff_page_offset.setter
+    def cutoff_page_offset(self, value: int) -> None:
+        self.schedule = replace(self.schedule, cutoff_page_offset=value)
+
+    # RuntimeSnapshot delegation.
+
+    @property
+    def monitored_total(self) -> int:
+        return self.snapshot.monitored_total
+
+    @monitored_total.setter
+    def monitored_total(self, value: int) -> None:
+        self.snapshot = replace(self.snapshot, monitored_total=value)
+
+    @property
+    def unreleased_count(self) -> int:
+        return self.snapshot.unreleased_count
+
+    @unreleased_count.setter
+    def unreleased_count(self, value: int) -> None:
+        self.snapshot = replace(self.snapshot, unreleased_count=value)
+
+    @property
+    def snapshot_refreshed_at(self) -> str:
+        return self.snapshot.snapshot_refreshed_at
+
+    @snapshot_refreshed_at.setter
+    def snapshot_refreshed_at(self, value: str) -> None:
+        self.snapshot = replace(self.snapshot, snapshot_refreshed_at=value)
+
+    # InstanceTimestamps delegation.
+
+    @property
+    def created_at(self) -> str:
+        return self.timestamps.created_at
+
+    @created_at.setter
+    def created_at(self, value: str) -> None:
+        self.timestamps = replace(self.timestamps, created_at=value)
+
+    @property
+    def updated_at(self) -> str:
+        return self.timestamps.updated_at
+
+    @updated_at.setter
+    def updated_at(self, value: str) -> None:
+        self.timestamps = replace(self.timestamps, updated_at=value)
 
 
 async def create_instance(

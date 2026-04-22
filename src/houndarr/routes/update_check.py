@@ -19,13 +19,12 @@ Auth + CSRF are handled by ``AuthMiddleware`` for every route.
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from pathlib import Path
 from typing import Annotated
 
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse
-from fastapi.templating import Jinja2Templates
 
+from houndarr.routes._templates import get_templates
 from houndarr.services.update_check import (
     get_update_status,
     load_cached_status,
@@ -33,8 +32,6 @@ from houndarr.services.update_check import (
 )
 
 router = APIRouter(prefix="/settings/admin/update-check", tags=["update-check"])
-
-_templates: Jinja2Templates | None = None
 
 
 def _timeago(value: datetime | None) -> str:
@@ -64,24 +61,6 @@ def _timeago(value: datetime | None) -> str:
     return f"{days} day{'s' if days != 1 else ''} ago"
 
 
-def _get_templates() -> Jinja2Templates:
-    """Lazy-init the template loader.
-
-    Matching the pattern used by other routes (changelog, settings)
-    keeps module import cheap; the real cost only lands the first time
-    a route renders. The ``timeago`` filter is registered here so the
-    status partial can format ``checked_at`` without dragging in
-    humanize as a dependency.
-    """
-    global _templates
-    if _templates is None:
-        _templates = Jinja2Templates(
-            directory=str(Path(__file__).resolve().parent.parent / "templates")
-        )
-        _templates.env.filters["timeago"] = _timeago
-    return _templates
-
-
 @router.get("", response_class=HTMLResponse)
 async def status(request: Request) -> HTMLResponse:
     """Return the inline status partial for the Admin > Updates panel.
@@ -91,7 +70,7 @@ async def status(request: Request) -> HTMLResponse:
     off; the row renders down to just the button + cached timestamp.
     """
     snapshot = await get_update_status(force=False)
-    return _get_templates().TemplateResponse(
+    return get_templates().TemplateResponse(
         request=request,
         name="partials/admin/update_check_row.html",
         context={"s": snapshot, "show_result": False},
@@ -108,7 +87,7 @@ async def refresh(request: Request) -> HTMLResponse:
     lands with ``show_result=False`` and the message falls away.
     """
     snapshot = await get_update_status(force=True)
-    return _get_templates().TemplateResponse(
+    return get_templates().TemplateResponse(
         request=request,
         name="partials/admin/update_check_row.html",
         context={"s": snapshot, "show_result": True},
@@ -131,7 +110,7 @@ async def preferences(
     """
     await set_enabled(enabled == "on")
     snapshot = await load_cached_status()
-    return _get_templates().TemplateResponse(
+    return get_templates().TemplateResponse(
         request=request,
         name="partials/admin/update_check_row.html",
         context={"s": snapshot, "show_result": False},

@@ -20,16 +20,15 @@ from __future__ import annotations
 
 import re
 from html import escape
-from pathlib import Path
 from typing import Annotated
 
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse, Response
-from fastapi.templating import Jinja2Templates
 from markupsafe import Markup
 
 from houndarr import __version__
 from houndarr.database import get_setting, set_setting
+from houndarr.routes._templates import get_templates
 from houndarr.services.changelog import (
     ReleaseEntry,
     releases_between,
@@ -37,8 +36,6 @@ from houndarr.services.changelog import (
 )
 
 router = APIRouter(prefix="/settings/changelog", tags=["changelog"])
-
-_templates: Jinja2Templates | None = None
 
 _GITHUB_ISSUES_URL = "https://github.com/av1155/houndarr/issues"
 
@@ -117,15 +114,6 @@ def _render_changelog_bullet(raw: str) -> Markup:
     return Markup(safe)  # noqa: S704  # nosec B704
 
 
-def _get_templates() -> Jinja2Templates:
-    """Lazy Jinja2Templates singleton, matches ``routes/pages.py:get_templates``."""
-    global _templates  # noqa: PLW0603
-    if _templates is None:
-        _templates = Jinja2Templates(directory=str(Path(__file__).parent.parent / "templates"))
-        _templates.env.filters["changelog_bullet"] = _render_changelog_bullet
-    return _templates
-
-
 def _empty_slot_response() -> HTMLResponse:
     """Return a no-op placeholder that replaces ``#changelog-slot`` without a trigger."""
     return HTMLResponse(
@@ -190,7 +178,7 @@ async def popup(request: Request, force: int = 0) -> HTMLResponse:
     newest = releases[0]
     older = releases[1:]
 
-    response = _get_templates().TemplateResponse(
+    response = get_templates().TemplateResponse(
         request=request,
         name="partials/changelog_modal.html",
         context={

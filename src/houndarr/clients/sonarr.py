@@ -176,10 +176,6 @@ class SonarrClient(ArrClient):
         )
         return [_parse_library_episode(SonarrLibraryEpisode.model_validate(r)) for r in records]
 
-    async def search_episode(self, episode_id: int) -> None:
-        """Alias for :meth:`search` with a more descriptive name."""
-        await self.search(episode_id)
-
 
 # ---------------------------------------------------------------------------
 # Parsing helpers

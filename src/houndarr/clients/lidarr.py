@@ -3,10 +3,15 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import Literal
 
 import httpx
 
+from houndarr.clients._wire_models import (
+    LidarrLibraryAlbum,
+    LidarrWantedAlbum,
+    PaginatedResponse,
+)
 from houndarr.clients.base import ArrClient
 
 __all__ = ["LidarrClient", "LibraryAlbum", "MissingAlbum"]
@@ -60,7 +65,7 @@ class LidarrClient(ArrClient):
         Returns:
             List of :class:`MissingAlbum` dataclasses.
         """
-        data: dict[str, Any] = await self._get(
+        data = await self._get(
             "/api/v1/wanted/missing",
             page=page,
             pageSize=page_size,
@@ -69,8 +74,8 @@ class LidarrClient(ArrClient):
             includeArtist="true",
             monitored="true",
         )
-        records: list[dict[str, Any]] = data.get("records", [])
-        return [_parse_album(r) for r in records]
+        envelope = PaginatedResponse[LidarrWantedAlbum].model_validate(data)
+        return [_parse_album(w) for w in envelope.records]
 
     async def search(self, item_id: int) -> None:
         """Trigger an automatic album search in Lidarr.
@@ -115,19 +120,19 @@ class LidarrClient(ArrClient):
         Returns:
             List of :class:`MissingAlbum` dataclasses.
         """
-        data: dict[str, Any] = await self._get(
+        data = await self._get(
             "/api/v1/wanted/cutoff",
             page=page,
             pageSize=page_size,
             includeArtist="true",
             monitored="true",
         )
-        records: list[dict[str, Any]] = data.get("records", [])
-        return [_parse_album(r) for r in records]
+        envelope = PaginatedResponse[LidarrWantedAlbum].model_validate(data)
+        return [_parse_album(w) for w in envelope.records]
 
     async def get_wanted_total(self, kind: Literal["missing", "cutoff"]) -> int:
         """Return the totalRecords count for ``wanted/{kind}`` via a size-1 probe."""
-        data: dict[str, Any] = await self._get(
+        data = await self._get(
             f"/api/v1/wanted/{kind}",
             page=1,
             pageSize=1,
@@ -135,7 +140,8 @@ class LidarrClient(ArrClient):
             sortDirection="ascending",
             monitored="true",
         )
-        return int(data.get("totalRecords", 0) or 0)
+        envelope = PaginatedResponse[LidarrWantedAlbum].model_validate(data)
+        return envelope.total_records
 
     async def get_albums(self) -> list[LibraryAlbum]:
         """Return the full album library.
@@ -145,11 +151,11 @@ class LidarrClient(ArrClient):
         Returns:
             List of :class:`LibraryAlbum` dataclasses.
         """
-        records: list[dict[str, Any]] = await self._get(
+        records = await self._get(
             "/api/v1/album",
             includeArtist="true",
         )
-        return [_parse_library_album(r) for r in records]
+        return [_parse_library_album(LidarrLibraryAlbum.model_validate(r)) for r in records]
 
 
 # ---------------------------------------------------------------------------
@@ -157,29 +163,34 @@ class LidarrClient(ArrClient):
 # ---------------------------------------------------------------------------
 
 
-def _parse_library_album(record: dict[str, Any]) -> LibraryAlbum:
-    artist: dict[str, Any] = record.get("artist") or {}
-    stats: dict[str, Any] = record.get("statistics") or {}
-    track_file_count = stats.get("trackFileCount", 0)
+def _parse_library_album(wire: LidarrLibraryAlbum) -> LibraryAlbum:
+    track_file_count = (
+        wire.statistics.track_file_count or 0
+        if wire.statistics is not None and wire.statistics.track_file_count is not None
+        else 0
+    )
+    artist_id = wire.artist_id or (wire.artist.id if wire.artist else None) or 0
+    artist_name = (wire.artist.artist_name if wire.artist else None) or ""
     return LibraryAlbum(
-        album_id=record["id"],
-        artist_id=record.get("artistId") or artist.get("id") or 0,
-        artist_name=artist.get("artistName") or "",
-        title=record.get("title") or "",
-        monitored=bool(record.get("monitored", False)),
+        album_id=wire.id,
+        artist_id=artist_id,
+        artist_name=artist_name,
+        title=wire.title or "",
+        monitored=bool(wire.monitored),
         has_file=track_file_count > 0,
-        release_date=record.get("releaseDate"),
+        release_date=wire.release_date,
     )
 
 
-def _parse_album(record: dict[str, Any]) -> MissingAlbum:
-    artist: dict[str, Any] = record.get("artist") or {}
+def _parse_album(wire: LidarrWantedAlbum) -> MissingAlbum:
+    artist_id = wire.artist_id or (wire.artist.id if wire.artist else None) or 0
+    artist_name = (wire.artist.artist_name if wire.artist else None) or ""
     return MissingAlbum(
-        album_id=record["id"],
-        artist_id=record.get("artistId") or artist.get("id") or 0,
-        artist_name=artist.get("artistName") or "",
-        title=record.get("title") or "",
-        release_date=record.get("releaseDate"),
+        album_id=wire.id,
+        artist_id=artist_id,
+        artist_name=artist_name,
+        title=wire.title or "",
+        release_date=wire.release_date,
     )
 
 

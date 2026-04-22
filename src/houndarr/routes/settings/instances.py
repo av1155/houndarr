@@ -39,6 +39,7 @@ from houndarr.config import (
     DEFAULT_WHISPARR_SEARCH_MODE,
 )
 from houndarr.engine.supervisor import Supervisor
+from houndarr.errors import InstanceValidationError
 from houndarr.routes.settings._helpers import (
     API_KEY_UNCHANGED,
     active_error_instance_ids,
@@ -48,24 +49,19 @@ from houndarr.routes.settings._helpers import (
     connection_status_response,
     master_key,
     render,
-    resolve_search_modes,
     type_mismatch_message,
-    validate_cutoff_controls,
-    validate_upgrade_controls,
+)
+from houndarr.services.instance_submit import (
+    InstanceNotFoundError,
+    submit_create,
+    submit_update,
 )
 from houndarr.services.instances import (
     InstanceType,
-    SearchOrder,
-    create_instance,
     delete_instance,
     get_instance,
     list_instances,
     update_instance,
-)
-from houndarr.services.time_window import (
-    format_ranges,
-    parse_time_window,
-    validate_allowed_time_window,
 )
 from houndarr.services.url_validation import validate_instance_url
 
@@ -190,102 +186,40 @@ async def instance_create(
 ) -> HTMLResponse:
     """Create a new instance and return the updated instance table body."""
     try:
-        instance_type = InstanceType(type)
-    except ValueError:
-        return connection_guard_response("Invalid instance type.")
-
-    url_error = validate_instance_url(url)
-    if url_error is not None:
-        return connection_guard_response(url_error)
-
-    window_error = validate_allowed_time_window(allowed_time_window)
-    if window_error is not None:
-        return connection_guard_response(window_error)
-    canonical_window = format_ranges(parse_time_window(allowed_time_window))
-
-    validation_error = validate_cutoff_controls(
-        cutoff_batch_size,
-        cutoff_cooldown_days,
-        cutoff_hourly_cap,
-    )
-    if validation_error is not None:
-        return connection_guard_response(validation_error)
-
-    upgrade_validation_error = validate_upgrade_controls(
-        upgrade_batch_size,
-        upgrade_cooldown_days,
-        upgrade_hourly_cap,
-    )
-    if upgrade_validation_error is not None:
-        return connection_guard_response(upgrade_validation_error)
-
-    if connection_verified != "true":
-        return connection_guard_response("Test connection successfully before adding.")
-
-    create_check = await check_connection(instance_type, url.rstrip("/"), api_key)
-    if not create_check.reachable:
-        return connection_guard_response("Connection test failed. Re-test before adding.")
-    create_mismatch = type_mismatch_message(create_check, instance_type)
-    if create_mismatch is not None:
-        return connection_guard_response(create_mismatch)
-
-    search_modes = resolve_search_modes(
-        instance_type,
-        sonarr_search_mode,
-        lidarr_search_mode,
-        readarr_search_mode,
-        whisparr_search_mode,
-    )
-    if isinstance(search_modes, str):
-        return connection_guard_response(search_modes)
-
-    upgrade_modes = resolve_search_modes(
-        instance_type,
-        upgrade_sonarr_search_mode,
-        upgrade_lidarr_search_mode,
-        upgrade_readarr_search_mode,
-        upgrade_whisparr_search_mode,
-    )
-    if isinstance(upgrade_modes, str):
-        return connection_guard_response(upgrade_modes)
-
-    try:
-        parsed_search_order = SearchOrder(search_order)
-    except ValueError:
-        return connection_guard_response("Invalid search order.")
-
-    instance = await create_instance(
-        master_key=master_key(request),
-        name=name,
-        type=instance_type,
-        url=url.rstrip("/"),
-        api_key=api_key,
-        enabled=True,
-        batch_size=batch_size,
-        sleep_interval_mins=sleep_interval_mins,
-        hourly_cap=hourly_cap,
-        cooldown_days=cooldown_days,
-        post_release_grace_hrs=post_release_grace_hrs,
-        queue_limit=queue_limit,
-        cutoff_enabled=cutoff_enabled == "on",
-        cutoff_batch_size=cutoff_batch_size,
-        cutoff_cooldown_days=cutoff_cooldown_days,
-        cutoff_hourly_cap=cutoff_hourly_cap,
-        sonarr_search_mode=search_modes.sonarr,
-        lidarr_search_mode=search_modes.lidarr,
-        readarr_search_mode=search_modes.readarr,
-        whisparr_search_mode=search_modes.whisparr,
-        upgrade_enabled=upgrade_enabled == "on",
-        upgrade_batch_size=upgrade_batch_size,
-        upgrade_cooldown_days=upgrade_cooldown_days,
-        upgrade_hourly_cap=upgrade_hourly_cap,
-        upgrade_sonarr_search_mode=upgrade_modes.sonarr,
-        upgrade_lidarr_search_mode=upgrade_modes.lidarr,
-        upgrade_readarr_search_mode=upgrade_modes.readarr,
-        upgrade_whisparr_search_mode=upgrade_modes.whisparr,
-        allowed_time_window=canonical_window,
-        search_order=parsed_search_order,
-    )
+        instance = await submit_create(
+            master_key=master_key(request),
+            name=name,
+            type=type,
+            url=url,
+            api_key=api_key,
+            batch_size=batch_size,
+            sleep_interval_mins=sleep_interval_mins,
+            hourly_cap=hourly_cap,
+            cooldown_days=cooldown_days,
+            post_release_grace_hrs=post_release_grace_hrs,
+            queue_limit=queue_limit,
+            cutoff_enabled=cutoff_enabled == "on",
+            cutoff_batch_size=cutoff_batch_size,
+            cutoff_cooldown_days=cutoff_cooldown_days,
+            cutoff_hourly_cap=cutoff_hourly_cap,
+            sonarr_search_mode=sonarr_search_mode,
+            lidarr_search_mode=lidarr_search_mode,
+            readarr_search_mode=readarr_search_mode,
+            whisparr_search_mode=whisparr_search_mode,
+            upgrade_enabled=upgrade_enabled == "on",
+            upgrade_batch_size=upgrade_batch_size,
+            upgrade_cooldown_days=upgrade_cooldown_days,
+            upgrade_hourly_cap=upgrade_hourly_cap,
+            upgrade_sonarr_search_mode=upgrade_sonarr_search_mode,
+            upgrade_lidarr_search_mode=upgrade_lidarr_search_mode,
+            upgrade_readarr_search_mode=upgrade_readarr_search_mode,
+            upgrade_whisparr_search_mode=upgrade_whisparr_search_mode,
+            allowed_time_window=allowed_time_window,
+            search_order=search_order,
+            connection_verified=connection_verified == "true",
+        )
+    except InstanceValidationError as exc:
+        return connection_guard_response(str(exc))
 
     supervisor = getattr(request.app.state, "supervisor", None)
     if isinstance(supervisor, Supervisor):
@@ -359,124 +293,43 @@ async def instance_update(
     encrypted and stored.
     """
     try:
-        instance_type = InstanceType(type)
-    except ValueError:
-        return connection_guard_response("Invalid instance type.")
-
-    url_error = validate_instance_url(url)
-    if url_error is not None:
-        return connection_guard_response(url_error)
-
-    window_error = validate_allowed_time_window(allowed_time_window)
-    if window_error is not None:
-        return connection_guard_response(window_error)
-    canonical_window = format_ranges(parse_time_window(allowed_time_window))
-
-    validation_error = validate_cutoff_controls(
-        cutoff_batch_size,
-        cutoff_cooldown_days,
-        cutoff_hourly_cap,
-    )
-    if validation_error is not None:
-        return connection_guard_response(validation_error)
-
-    upgrade_validation_error = validate_upgrade_controls(
-        upgrade_batch_size,
-        upgrade_cooldown_days,
-        upgrade_hourly_cap,
-    )
-    if upgrade_validation_error is not None:
-        return connection_guard_response(upgrade_validation_error)
-
-    # Fetch the current instance early; needed for both key resolution and save
-    current = await get_instance(instance_id, master_key=master_key(request))
-    if current is None:
+        updated = await submit_update(
+            instance_id,
+            master_key=master_key(request),
+            name=name,
+            type=type,
+            url=url,
+            api_key=api_key,
+            batch_size=batch_size,
+            sleep_interval_mins=sleep_interval_mins,
+            hourly_cap=hourly_cap,
+            cooldown_days=cooldown_days,
+            post_release_grace_hrs=post_release_grace_hrs,
+            queue_limit=queue_limit,
+            cutoff_enabled=cutoff_enabled == "on",
+            cutoff_batch_size=cutoff_batch_size,
+            cutoff_cooldown_days=cutoff_cooldown_days,
+            cutoff_hourly_cap=cutoff_hourly_cap,
+            sonarr_search_mode=sonarr_search_mode,
+            lidarr_search_mode=lidarr_search_mode,
+            readarr_search_mode=readarr_search_mode,
+            whisparr_search_mode=whisparr_search_mode,
+            upgrade_enabled=upgrade_enabled == "on",
+            upgrade_batch_size=upgrade_batch_size,
+            upgrade_cooldown_days=upgrade_cooldown_days,
+            upgrade_hourly_cap=upgrade_hourly_cap,
+            upgrade_sonarr_search_mode=upgrade_sonarr_search_mode,
+            upgrade_lidarr_search_mode=upgrade_lidarr_search_mode,
+            upgrade_readarr_search_mode=upgrade_readarr_search_mode,
+            upgrade_whisparr_search_mode=upgrade_whisparr_search_mode,
+            allowed_time_window=allowed_time_window,
+            search_order=search_order,
+            connection_verified=connection_verified == "true",
+        )
+    except InstanceNotFoundError:
         return HTMLResponse(content="Not found", status_code=404)
-
-    # Resolve the actual API key to use (sentinel → keep existing)
-    resolved_api_key = current.api_key if api_key == API_KEY_UNCHANGED else api_key
-
-    if connection_verified != "true":
-        return connection_guard_response("Test connection successfully before saving changes.")
-
-    update_check = await check_connection(instance_type, url.rstrip("/"), resolved_api_key)
-    if not update_check.reachable:
-        return connection_guard_response("Connection test failed. Re-test before saving changes.")
-    update_mismatch = type_mismatch_message(update_check, instance_type)
-    if update_mismatch is not None:
-        return connection_guard_response(update_mismatch)
-
-    search_modes = resolve_search_modes(
-        instance_type,
-        sonarr_search_mode,
-        lidarr_search_mode,
-        readarr_search_mode,
-        whisparr_search_mode,
-    )
-    if isinstance(search_modes, str):
-        return connection_guard_response(search_modes)
-
-    upgrade_modes = resolve_search_modes(
-        instance_type,
-        upgrade_sonarr_search_mode,
-        upgrade_lidarr_search_mode,
-        upgrade_readarr_search_mode,
-        upgrade_whisparr_search_mode,
-    )
-    if isinstance(upgrade_modes, str):
-        return connection_guard_response(upgrade_modes)
-
-    try:
-        parsed_search_order = SearchOrder(search_order)
-    except ValueError:
-        return connection_guard_response("Invalid search order.")
-
-    # Reset offsets when upgrade is toggled off
-    new_upgrade_enabled = upgrade_enabled == "on"
-    upgrade_fields: dict[str, object] = {
-        "upgrade_enabled": new_upgrade_enabled,
-        "upgrade_batch_size": upgrade_batch_size,
-        "upgrade_cooldown_days": upgrade_cooldown_days,
-        "upgrade_hourly_cap": upgrade_hourly_cap,
-        "upgrade_sonarr_search_mode": upgrade_modes.sonarr,
-        "upgrade_lidarr_search_mode": upgrade_modes.lidarr,
-        "upgrade_readarr_search_mode": upgrade_modes.readarr,
-        "upgrade_whisparr_search_mode": upgrade_modes.whisparr,
-    }
-    if current.upgrade_enabled and not new_upgrade_enabled:
-        upgrade_fields["upgrade_item_offset"] = 0
-        upgrade_fields["upgrade_series_offset"] = 0
-
-    updated = await update_instance(
-        instance_id,
-        master_key=master_key(request),
-        name=name,
-        type=instance_type,
-        url=url.rstrip("/"),
-        api_key=resolved_api_key,
-        enabled=current.enabled,
-        batch_size=batch_size,
-        sleep_interval_mins=sleep_interval_mins,
-        hourly_cap=hourly_cap,
-        cooldown_days=cooldown_days,
-        post_release_grace_hrs=post_release_grace_hrs,
-        queue_limit=queue_limit,
-        cutoff_enabled=cutoff_enabled == "on",
-        cutoff_batch_size=cutoff_batch_size,
-        cutoff_cooldown_days=cutoff_cooldown_days,
-        cutoff_hourly_cap=cutoff_hourly_cap,
-        sonarr_search_mode=search_modes.sonarr,
-        lidarr_search_mode=search_modes.lidarr,
-        readarr_search_mode=search_modes.readarr,
-        whisparr_search_mode=search_modes.whisparr,
-        missing_page_offset=1,
-        cutoff_page_offset=1,
-        allowed_time_window=canonical_window,
-        search_order=parsed_search_order,
-        **upgrade_fields,
-    )
-    if updated is None:
-        return HTMLResponse(content="Not found", status_code=404)
+    except InstanceValidationError as exc:
+        return connection_guard_response(str(exc))
 
     # HTMX: return just the refreshed row
     error_ids = await active_error_instance_ids()

@@ -25,6 +25,7 @@ from houndarr.clients.whisparr_v2 import (
 )
 from houndarr.engine.adapters._common import (
     ContextOverride,
+    build_cutoff_candidate,
     build_missing_candidate,
 )
 from houndarr.engine.candidates import SearchCandidate
@@ -162,12 +163,11 @@ def adapt_cutoff(item: MissingWhisparrEpisode, instance: Instance) -> SearchCand
     if item.series_id is None and unreleased_reason is None:
         unreleased_reason = "no series linked"
 
-    return SearchCandidate(
-        item_id=item.episode_id,
+    return build_cutoff_candidate(
         item_type="whisparr_episode",
+        item_id=item.episode_id,
         label=_episode_label(item),
         unreleased_reason=unreleased_reason,
-        group_key=None,
         search_payload={
             "command": "EpisodeSearch",
             "episode_id": item.episode_id,

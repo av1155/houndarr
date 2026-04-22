@@ -15,6 +15,7 @@ from pydantic import ValidationError
 from houndarr.clients.lidarr import LibraryAlbum, LidarrClient, MissingAlbum
 from houndarr.engine.adapters._common import (
     ContextOverride,
+    build_cutoff_candidate,
     build_missing_candidate,
 )
 from houndarr.engine.candidates import (
@@ -121,16 +122,13 @@ def adapt_cutoff(item: MissingAlbum, instance: Instance) -> SearchCandidate:
     Returns:
         A fully populated :class:`SearchCandidate`.
     """
-    unreleased_reason = _lidarr_unreleased_reason(
-        item.release_date, instance.post_release_grace_hrs
-    )
-
-    return SearchCandidate(
-        item_id=item.album_id,
+    return build_cutoff_candidate(
         item_type="album",
+        item_id=item.album_id,
         label=_album_label(item),
-        unreleased_reason=unreleased_reason,
-        group_key=None,
+        unreleased_reason=_lidarr_unreleased_reason(
+            item.release_date, instance.post_release_grace_hrs
+        ),
         search_payload={
             "command": "AlbumSearch",
             "album_id": item.album_id,

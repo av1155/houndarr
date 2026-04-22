@@ -280,7 +280,7 @@ async def _recent_searches(db: aiosqlite.Connection, limit: int = 5) -> list[dic
 
 async def _cooldown_data(
     db: aiosqlite.Connection,
-    instances: list[Any],
+    instances: list[aiosqlite.Row],
 ) -> dict[int, dict[str, Any]]:
     """Return per-instance ``cooldown_breakdown`` and ``unlocking_next``.
 

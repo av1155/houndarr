@@ -208,7 +208,7 @@ async def _query_logs(
     limit = min(max(1, limit), _LOG_LIMIT_MAX)
 
     conditions: list[str] = []
-    params: list[Any] = []
+    params: list[str | int] = []
 
     if instance_id is not None:
         conditions.append("sl.instance_id = ?")

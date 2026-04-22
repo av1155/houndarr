@@ -46,6 +46,7 @@ from houndarr.config import (
     get_settings,
 )
 from houndarr.engine.supervisor import Supervisor
+from houndarr.routes._htmx import is_hx_request
 from houndarr.services.instances import (
     Instance,
     InstanceType,
@@ -76,11 +77,6 @@ router = APIRouter()
 _API_KEY_UNCHANGED = "__UNCHANGED__"
 
 _templates: Jinja2Templates | None = None
-
-
-def _is_hx_request(request: Request) -> bool:
-    """Return True when request is an HTMX request."""
-    return request.headers.get("HX-Request") == "true"
 
 
 def _get_templates() -> Jinja2Templates:
@@ -395,7 +391,7 @@ async def _render_settings_page(
     signed_in_as = await resolve_signed_in_as(request)
     changelog_popups_enabled = (await get_setting("changelog_popups_disabled")) != "1"
     template_name = (
-        "partials/pages/settings_content.html" if _is_hx_request(request) else "settings.html"
+        "partials/pages/settings_content.html" if is_hx_request(request) else "settings.html"
     )
     return _render(
         request,

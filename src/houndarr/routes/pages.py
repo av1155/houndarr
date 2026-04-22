@@ -21,17 +21,13 @@ from houndarr.auth import (
     validate_username,
 )
 from houndarr.database import set_setting
+from houndarr.routes._htmx import is_hx_request
 from houndarr.services.instances import list_instances
 
 router = APIRouter()
 
 # Templates are resolved relative to this file at runtime
 _templates: Jinja2Templates | None = None
-
-
-def _is_hx_request(request: Request) -> bool:
-    """Return True when request is an HTMX request."""
-    return request.headers.get("HX-Request") == "true"
 
 
 def get_templates() -> Jinja2Templates:
@@ -192,7 +188,7 @@ async def logout(request: Request) -> RedirectResponse:
 async def dashboard(request: Request) -> HTMLResponse:
     """Main dashboard page."""
     template_name = (
-        "partials/pages/dashboard_content.html" if _is_hx_request(request) else "dashboard.html"
+        "partials/pages/dashboard_content.html" if is_hx_request(request) else "dashboard.html"
     )
     return _render(request, template_name)
 
@@ -219,7 +215,7 @@ async def logs_page(request: Request) -> HTMLResponse:
         limit=50,
     )
     summary = _summarize_rows(rows)
-    template_name = "partials/pages/logs_content.html" if _is_hx_request(request) else "logs.html"
+    template_name = "partials/pages/logs_content.html" if is_hx_request(request) else "logs.html"
     return _render(
         request,
         template_name,
@@ -247,7 +243,7 @@ async def settings_help_page(request: Request) -> HTMLResponse:
     """Settings help page with guidance for instance controls."""
     template_name = (
         "partials/pages/settings_help_content.html"
-        if _is_hx_request(request)
+        if is_hx_request(request)
         else "settings_help.html"
     )
     return _render(request, template_name)

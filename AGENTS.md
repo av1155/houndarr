@@ -288,7 +288,8 @@ src/houndarr/
   session validation and CSRF enforcement; no per-route auth decorators
 - **HTMX:** SPA-like shell navigation; nav links use `hx-target="#app-content"`
   with `hx-swap="innerHTML"` and `hx-push-url="true"`. Routes check
-  `_is_hx_request(request)` and return either partial or full template.
+  `is_hx_request(request)` from `routes/_htmx.py` and return either partial
+  or full template.
   Templates are lazily initialised via a module-level singleton
 - **Supervisor:** One `asyncio.Task` per enabled instance; 10s shutdown timeout
 - **search_log:** Every search attempt writes a row with action

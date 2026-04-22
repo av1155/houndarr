@@ -11,6 +11,7 @@ import logging
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+import aiosqlite
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
 
@@ -160,7 +161,7 @@ WHERE c.instance_id IN ({placeholders})
 
 
 async def _all_instance_metrics(
-    db: Any,  # noqa: ANN401
+    db: aiosqlite.Connection,
     instance_ids: list[int],
 ) -> tuple[dict[int, dict[str, Any]], dict[int, tuple[str | None, str | None]]]:
     """Fetch aggregated search metrics and last-activity for all instances.
@@ -205,7 +206,7 @@ _EMPTY_METRICS: dict[str, Any] = {
 
 
 async def _lifetime_metrics(
-    db: Any,  # noqa: ANN401
+    db: aiosqlite.Connection,
     instance_ids: list[int],
 ) -> dict[int, dict[str, Any]]:
     """Return per-instance lifetime_searched + last_dispatch_at."""
@@ -225,7 +226,7 @@ async def _lifetime_metrics(
 
 
 async def _active_errors(
-    db: Any,  # noqa: ANN401
+    db: aiosqlite.Connection,
     instance_ids: list[int],
 ) -> dict[int, dict[str, Any]]:
     """Return ``{instance_id: {timestamp, message, failures_count}}`` for
@@ -253,12 +254,14 @@ async def _active_errors(
     # query per flagged instance keeps the common case (no errors) free.
     for iid in out:
         async with db.execute(_ERROR_STREAK_SQL, (iid, iid)) as cur:
-            row = await cur.fetchone()
-        out[iid]["failures_count"] = int(row["count"]) if row and row["count"] else 0
+            streak_row = await cur.fetchone()
+        out[iid]["failures_count"] = (
+            int(streak_row["count"]) if streak_row and streak_row["count"] else 0
+        )
     return out
 
 
-async def _recent_searches(db: Any, limit: int = 5) -> list[dict[str, Any]]:  # noqa: ANN401
+async def _recent_searches(db: aiosqlite.Connection, limit: int = 5) -> list[dict[str, Any]]:
     """Return last *limit* dispatches across all instances within 7 days."""
     out: list[dict[str, Any]] = []
     async with db.execute(_RECENT_SEARCHES_SQL, (limit,)) as cur:
@@ -276,7 +279,7 @@ async def _recent_searches(db: Any, limit: int = 5) -> list[dict[str, Any]]:  # 
 
 
 async def _cooldown_data(
-    db: Any,  # noqa: ANN401
+    db: aiosqlite.Connection,
     instances: list[Any],
 ) -> dict[int, dict[str, Any]]:
     """Return per-instance ``cooldown_breakdown`` and ``unlocking_next``.
@@ -344,9 +347,9 @@ async def _cooldown_data(
     for iid, rows in per_instance_rows.items():
         cfg = config[iid]
         enriched: list[dict[str, Any]] = []
-        for row in rows:
+        for entry in rows:
             try:
-                parsed = datetime.fromisoformat(row["searched_at"].replace("Z", "+00:00"))
+                parsed = datetime.fromisoformat(entry["searched_at"].replace("Z", "+00:00"))
             except ValueError:
                 continue
             if parsed.tzinfo is None:
@@ -354,7 +357,7 @@ async def _cooldown_data(
             # Unlock window keys off the pass that wrote the row so the
             # user sees the actual cooldown for that kind, not the min
             # across all enabled passes.
-            kind = row["last_search_kind"]
+            kind = entry["last_search_kind"]
             if kind == "cutoff":
                 days = cfg["cutoff_cooldown_days"]
             elif kind == "upgrade":
@@ -362,7 +365,7 @@ async def _cooldown_data(
             else:
                 days = cfg["cooldown_days"]
             unlock = parsed + timedelta(days=days)
-            enriched.append({**row, "unlock_at": unlock})
+            enriched.append({**entry, "unlock_at": unlock})
         enriched.sort(key=lambda r: r["unlock_at"])
         # Drop past-unlock rows so the panel is actually future-looking;
         # items whose unlock has already passed will be cleared the next

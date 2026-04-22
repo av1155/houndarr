@@ -10,6 +10,8 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Any
 
+import aiosqlite
+
 from houndarr.config import (
     DEFAULT_ALLOWED_TIME_WINDOW,
     DEFAULT_BATCH_SIZE,
@@ -138,7 +140,7 @@ class Instance:
 # ---------------------------------------------------------------------------
 
 
-def _row_to_instance(row: Any, master_key: bytes) -> Instance:
+def _row_to_instance(row: aiosqlite.Row, master_key: bytes) -> Instance:
     """Convert an aiosqlite Row to an :class:`Instance`, decrypting the key."""
     return Instance(
         id=row["id"],
@@ -183,7 +185,7 @@ def _row_to_instance(row: Any, master_key: bytes) -> Instance:
     )
 
 
-def _optional_row_int(row: Any, key: str) -> int:
+def _optional_row_int(row: aiosqlite.Row, key: str) -> int:
     """Return ``row[key]`` as int, or 0 when the column is absent.
 
     Tests sometimes insert minimal rows that pre-date the v13 columns;
@@ -196,7 +198,7 @@ def _optional_row_int(row: Any, key: str) -> int:
     return int(val) if val is not None else 0
 
 
-def _optional_row_str(row: Any, key: str) -> str:
+def _optional_row_str(row: aiosqlite.Row, key: str) -> str:
     """Return ``row[key]`` as str, or ``''`` when the column is absent."""
     try:
         val = row[key]

@@ -39,6 +39,7 @@ from houndarr.auth import (
     record_failed_login,
 )
 from houndarr.config import get_settings
+from houndarr.errors import ServiceError
 from houndarr.services.admin import (
     clear_all_search_logs,
     factory_reset,
@@ -213,11 +214,14 @@ async def admin_factory_reset(
 
     try:
         await factory_reset(app=request.app, data_dir=settings.data_dir)
-    except Exception:  # noqa: BLE001
+    except ServiceError:
         # Hybrid fallback: schedule a delayed process exit so this response
         # reaches the client before the container restarts. The orchestrator
         # brings Houndarr back up with a clean data_dir and the redirect
-        # target is reachable again.
+        # target is reachable again.  ServiceError covers every in-process
+        # failure the service can surface (file-deletion, init_db, master-
+        # key rotation, supervisor start, retention-loop respawn) because
+        # factory_reset wraps unhandled exceptions at its public boundary.
         logger.exception("Factory reset: in-process path failed; scheduling process exit")
 
         async def _delayed_exit() -> None:

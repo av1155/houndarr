@@ -62,6 +62,7 @@ from houndarr.database import (
     write_admin_audit,
 )
 from houndarr.engine.supervisor import Supervisor
+from houndarr.errors import ServiceError
 from houndarr.services.instances import (
     LidarrSearchMode,
     ReadarrSearchMode,
@@ -174,13 +175,16 @@ async def factory_reset(*, app: FastAPI, data_dir: str) -> None:
     schema, rotates the master key, resets the auth caches, and spins up
     a fresh supervisor with zero instances.
 
-    If any step after the file deletion raises, the exception is
-    re-raised so the route layer can fall back to a delayed process
-    exit. The orchestrator restarts the container and on next boot
-    ``init_db`` + ``ensure_master_key`` resume from the empty data
+    Track B.17: any failure raised by the in-process reset pipeline is
+    now surfaced to the caller as :class:`~houndarr.errors.ServiceError`
+    with the original on ``__cause__``; file-deletion failures and
+    post-deletion re-init failures both land on the same typed surface
+    so the route layer can catch it narrowly and fall back to a delayed
+    process exit.  The orchestrator restarts the container and on next
+    boot ``init_db`` + ``ensure_master_key`` resume from the empty data
     directory exactly as on first run, so no sentinel coordination is
-    required. On a successful in-process re-init the app is in the same
-    state as it is on first boot.
+    required.  On a successful in-process re-init the app is in the
+    same state as on first boot.
 
     Args:
         app: The FastAPI application; ``app.state.supervisor`` is replaced
@@ -188,6 +192,28 @@ async def factory_reset(*, app: FastAPI, data_dir: str) -> None:
         data_dir: Directory containing ``houndarr.db*`` and
             ``houndarr.masterkey``. Must match the path the app was
             launched with.
+
+    Raises:
+        ServiceError: Any failure raised by the in-process pipeline.
+            The original exception is attached on ``__cause__``.
+    """
+    try:
+        await _factory_reset_impl(app=app, data_dir=data_dir)
+    except ServiceError:
+        # Already typed by an inner boundary (e.g. file deletion); keep
+        # the richer message.
+        raise
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("Factory reset: unhandled error in re-init")
+        raise ServiceError(f"factory reset re-init failed: {exc}") from exc
+
+
+async def _factory_reset_impl(*, app: FastAPI, data_dir: str) -> None:
+    """Factory-reset pipeline; wrapped by :func:`factory_reset`.
+
+    Extracted so the public entrypoint can own the typed-error surface
+    without indenting the body inside a top-level try block.  Not
+    intended for direct callers outside this module.
     """
     data_path = Path(data_dir)
     db_path = data_path / "houndarr.db"
@@ -225,13 +251,14 @@ async def factory_reset(*, app: FastAPI, data_dir: str) -> None:
                 path.unlink()
             except FileNotFoundError:
                 continue
-    except Exception:  # noqa: BLE001
+    except Exception as exc:  # noqa: BLE001
         logger.exception("Factory reset: file deletion failed")
-        raise
+        raise ServiceError(f"factory reset file deletion failed: {exc}") from exc
 
-    # On-disk state is wiped at this point. If anything below raises, the
-    # route layer catches it and schedules a delayed process exit; the
-    # orchestrator's restart drops into first-run on the empty data dir.
+    # On-disk state is wiped at this point. Failures below are wrapped
+    # by the outer :func:`factory_reset` entrypoint into ServiceError
+    # for the route to catch; the orchestrator restart drops into
+    # first-run on the empty data dir.
     await init_db()
     new_key = ensure_master_key(str(data_path))
     app.state.master_key = new_key

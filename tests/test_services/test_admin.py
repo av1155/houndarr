@@ -290,12 +290,15 @@ async def test_factory_reset_deletes_files_and_reinits(
 async def test_factory_reset_propagates_reinit_failure(
     tmp_data_dir: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """If the in-process re-init raises, the exception bubbles to the
-    route layer. The route layer's hybrid fallback then schedules a
-    process exit so the orchestrator restarts the container; on next
-    boot the empty data dir drops into first-run. No sentinel file is
-    written: the container restart is the recovery mechanism.
+    """If the in-process re-init raises, the exception surfaces as a typed
+    :class:`~houndarr.errors.ServiceError` (Track B.17) with the original
+    on ``__cause__``.  The route layer's hybrid fallback then schedules a
+    process exit so the orchestrator restarts the container; on next boot
+    the empty data dir drops into first-run. No sentinel file is written:
+    the container restart is the recovery mechanism.
     """
+    from houndarr.errors import ServiceError
+
     db_path = os.path.join(tmp_data_dir, "houndarr.db")
     set_db_path(db_path)
     from houndarr.database import init_db as _real_init_db
@@ -310,8 +313,13 @@ async def test_factory_reset_propagates_reinit_failure(
 
     monkeypatch.setattr("houndarr.services.admin.init_db", _boom)
 
-    with pytest.raises(RuntimeError, match="init_db blew up"):
+    with pytest.raises(ServiceError) as exc_info:
         await factory_reset(app=fake_app, data_dir=tmp_data_dir)
+
+    # Typed wrap: the original RuntimeError lives on __cause__ so the
+    # observability hook still sees the underlying shape.
+    assert isinstance(exc_info.value.__cause__, RuntimeError)
+    assert "init_db blew up" in str(exc_info.value.__cause__)
 
     # The on-disk DB and masterkey are already wiped (the file-delete
     # step ran before init_db), so a container restart lands on first-run.

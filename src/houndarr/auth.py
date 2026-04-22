@@ -7,7 +7,6 @@ import os
 import re
 import secrets
 import time
-from collections.abc import Callable
 from hmac import compare_digest
 from typing import Any
 
@@ -15,7 +14,7 @@ import bcrypt
 from fastapi import Request, Response
 from fastapi.responses import HTMLResponse, RedirectResponse
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
-from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.types import ASGIApp
 
 from houndarr.config import get_settings
@@ -471,7 +470,16 @@ class AuthMiddleware(BaseHTTPMiddleware):
     def __init__(self, app: ASGIApp) -> None:
         super().__init__(app)
 
-    async def dispatch(self, request: Request, call_next: Callable[..., Any]) -> Any:
+    async def dispatch(
+        self,
+        request: Request,
+        call_next: RequestResponseEndpoint,
+    ) -> Response:
+        """Route each request to the proxy-auth or built-in auth path.
+
+        Per-request dispatch keeps the middleware thin and lets each
+        branch handle its own public-path and CSRF rules.
+        """
         path = request.url.path
 
         if _is_proxy_auth_mode():
@@ -485,9 +493,9 @@ class AuthMiddleware(BaseHTTPMiddleware):
     async def _dispatch_builtin(
         self,
         request: Request,
-        call_next: Callable[..., Any],
+        call_next: RequestResponseEndpoint,
         path: str,
-    ) -> Any:
+    ) -> Response:
         # Always allow logout so stale/broken sessions can be cleared
         if path == _LOGOUT_PATH and request.method == "POST":
             return await call_next(request)
@@ -525,9 +533,9 @@ class AuthMiddleware(BaseHTTPMiddleware):
     async def _dispatch_proxy(
         self,
         request: Request,
-        call_next: Callable[..., Any],
+        call_next: RequestResponseEndpoint,
         path: str,
-    ) -> Any:
+    ) -> Response:
         # Health check and static assets remain public
         if path.startswith("/api/health") or path.startswith("/static"):
             return await call_next(request)
@@ -536,9 +544,9 @@ class AuthMiddleware(BaseHTTPMiddleware):
         if path in _PROXY_DEAD_PATHS:
             return RedirectResponse(url="/", status_code=302)
         if path == _LOGOUT_PATH and request.method == "POST":
-            response = RedirectResponse(url="/", status_code=302)
-            response.delete_cookie(CSRF_COOKIE_NAME)
-            return response
+            logout_response = RedirectResponse(url="/", status_code=302)
+            logout_response.delete_cookie(CSRF_COOKIE_NAME)
+            return logout_response
 
         # --- IP trust gate ---
         direct_ip = request.client.host if request.client else "unknown"

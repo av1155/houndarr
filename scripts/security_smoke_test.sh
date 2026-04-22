@@ -209,33 +209,12 @@ else
 fi
 
 # -----------------------------------------------------------------------
-# 5. Rate limiting
+# 5. Rate limiting runs last among the HTTP-layer sections so it does not
+# poison the per-IP login bucket that the factory-reset checks in 6b rely
+# on (admin.py gates factory-reset through the same check_login_rate_limit
+# counter, so tripping the bucket here before running 6b makes wrong-
+# password -> 422 flake into wrong-password -> 429).
 # -----------------------------------------------------------------------
-
-_section "5. Rate limiting"
-
-# Acquire a CSRF token for login attempts (fresh jar)
-rm -f /tmp/houndarr_smoke_rl_cookies
-curl -s -c /tmp/houndarr_smoke_rl_cookies -b /tmp/houndarr_smoke_rl_cookies \
-    -o /dev/null "$HOST/login" >/dev/null 2>&1 || true
-RL_CSRF=$(grep "houndarr_csrf" /tmp/houndarr_smoke_rl_cookies 2>/dev/null | awk '{print $NF}' || true)
-
-LAST_SC="000"
-for i in $(seq 1 7); do
-    LAST_SC=$(curl -s -X POST -o /dev/null -w "%{http_code}" \
-        --max-redirs 0 \
-        -c /tmp/houndarr_smoke_rl_cookies \
-        -b /tmp/houndarr_smoke_rl_cookies \
-        -H "X-CSRF-Token: ${RL_CSRF}" \
-        -d "username=${USERNAME}&password=wrong_password_smoke_test" \
-        "$HOST/login" || true)
-done
-
-if [[ "$LAST_SC" == "429" ]]; then
-    _pass "7 rapid failed logins -> 429 (rate limit triggered)"
-else
-    _fail "7 rapid failed logins -> $LAST_SC (expected 429)"
-fi
 
 # -----------------------------------------------------------------------
 # 6. Authenticated checks (requires successful login above)
@@ -323,15 +302,21 @@ if [[ "$AUTHENTICATED" == "1" ]]; then
         _fail "POST /settings/admin/factory-reset with wrong phrase -> $SC (expected 422)"
     fi
 
-    # The full-changelog page is GET-only and should render for an authed user.
+    # /settings/changelog/full was retired in favour of the GitHub link
+    # on the Admin > Updates card; confirm the route stays removed so a
+    # future accidental re-add is caught. Authenticated routes redirect
+    # unknown paths through AuthMiddleware, so any of 302/303/404 is a
+    # valid "not a live page" signal; the test fails only if the body
+    # ever renders a recognisable Changelog heading again.
     SC=$(curl -s -o "$BODY" -w "%{http_code}" \
+        --max-redirs 0 \
         -c /tmp/houndarr_smoke_cookies \
         -b /tmp/houndarr_smoke_cookies \
         "$HOST/settings/changelog/full" || true)
-    if [[ "$SC" == "200" ]] && grep -q "Changelog" "$BODY"; then
-        _pass "GET /settings/changelog/full renders for authenticated user"
+    if [[ "$SC" == "404" || "$SC" == "302" || "$SC" == "303" ]] && ! grep -qi "<h1[^>]*>.*changelog" "$BODY"; then
+        _pass "GET /settings/changelog/full -> $SC (retired route stays retired)"
     else
-        _fail "GET /settings/changelog/full -> $SC (expected 200 with Changelog heading)"
+        _fail "GET /settings/changelog/full -> $SC; retired route should not render a Changelog page"
     fi
 
     # Rate limit regression guard: six wrong-password factory-reset
@@ -370,6 +355,36 @@ if [[ "$AUTHENTICATED" == "1" ]]; then
     fi
 else
     _warn "Admin endpoint CSRF checks skipped (login failed)"
+fi
+
+# -----------------------------------------------------------------------
+# 5. Rate limiting (runs last among HTTP tests: trips the per-IP login
+# bucket, so it must not precede the factory-reset checks in 6b).
+# -----------------------------------------------------------------------
+
+_section "5. Rate limiting"
+
+# Acquire a CSRF token for login attempts (fresh jar)
+rm -f /tmp/houndarr_smoke_rl_cookies
+curl -s -c /tmp/houndarr_smoke_rl_cookies -b /tmp/houndarr_smoke_rl_cookies \
+    -o /dev/null "$HOST/login" >/dev/null 2>&1 || true
+RL_CSRF=$(grep "houndarr_csrf" /tmp/houndarr_smoke_rl_cookies 2>/dev/null | awk '{print $NF}' || true)
+
+LAST_SC="000"
+for i in $(seq 1 7); do
+    LAST_SC=$(curl -s -X POST -o /dev/null -w "%{http_code}" \
+        --max-redirs 0 \
+        -c /tmp/houndarr_smoke_rl_cookies \
+        -b /tmp/houndarr_smoke_rl_cookies \
+        -H "X-CSRF-Token: ${RL_CSRF}" \
+        -d "username=${USERNAME}&password=wrong_password_smoke_test" \
+        "$HOST/login" || true)
+done
+
+if [[ "$LAST_SC" == "429" ]]; then
+    _pass "7 rapid failed logins -> 429 (rate limit triggered)"
+else
+    _fail "7 rapid failed logins -> $LAST_SC (expected 429)"
 fi
 
 # -----------------------------------------------------------------------

@@ -24,10 +24,10 @@ from houndarr.database import get_db
 from houndarr.engine.adapters import get_adapter
 from houndarr.engine.adapters.protocols import AppAdapterProto
 from houndarr.engine.candidates import SearchCandidate
-from houndarr.enums import CycleTrigger, SearchAction, SearchKind
+from houndarr.enums import CycleTrigger, ItemType, SearchAction, SearchKind
 from houndarr.services.cooldown import (
-    is_on_cooldown,
-    record_search,
+    is_on_cooldown_ref,
+    record_search_ref,
     should_log_skip,
 )
 from houndarr.services.instances import Instance, InstanceType, SearchOrder, update_instance
@@ -36,6 +36,7 @@ from houndarr.services.time_window import (
     is_within_window,
     parse_time_window,
 )
+from houndarr.value_objects import ItemRef
 
 logger = logging.getLogger(__name__)
 
@@ -103,6 +104,52 @@ async def _write_log(
         search_kind=str(search_kind) if search_kind is not None else None,
         cycle_id=cycle_id,
         cycle_trigger=str(cycle_trigger) if cycle_trigger is not None else None,
+        item_label=item_label,
+        reason=reason,
+        message=message,
+    )
+
+
+async def _write_item_log(
+    ref: ItemRef,
+    action: str,
+    *,
+    search_kind: SearchKind | str | None = None,
+    cycle_id: str | None = None,
+    cycle_trigger: CycleTrigger | str | None = None,
+    item_label: str | None = None,
+    reason: str | None = None,
+    message: str | None = None,
+) -> None:
+    """Write one ``search_log`` row tied to a specific item reference.
+
+    Thin wrapper over :func:`_write_log` that accepts :class:`ItemRef`
+    in place of the three positional ``(instance_id, item_id, item_type)``
+    arguments.  Used by the hot loops in :func:`_run_search_pass` and
+    :func:`_run_upgrade_pass` where every persisted row is tied to an
+    identified candidate.  Cycle-scope info / error rows (queue gate,
+    window gate, upgrade pool fetch failure, upgrade pool empty) have no
+    ``ItemRef`` and continue to call :func:`_write_log` directly with
+    ``None`` for ``item_id`` and ``item_type``.
+
+    Args:
+        ref: The item this log row pertains to.
+        action: One of the :class:`SearchAction` values (as ``str``).
+        search_kind: ``"missing"`` / ``"cutoff"`` / ``"upgrade"``.
+        cycle_id: Shared cycle identifier for all rows in one cycle.
+        cycle_trigger: ``"scheduled"`` / ``"run_now"`` / ``"system"``.
+        item_label: Human-readable label for the item.
+        reason: Structured skip reason for ``skipped`` rows.
+        message: Free-form detail for ``error`` / ``info`` rows.
+    """
+    await _write_log(
+        ref.instance_id,
+        ref.item_id,
+        ref.item_type.value,
+        action,
+        search_kind=search_kind,
+        cycle_id=cycle_id,
+        cycle_trigger=cycle_trigger,
         item_label=item_label,
         reason=reason,
         message=message,
@@ -179,6 +226,21 @@ async def _latest_missing_reason(
             row = await cur.fetchone()
 
     return str(row[0]) if row and row[0] is not None else None
+
+
+async def _latest_missing_reason_ref(ref: ItemRef) -> str | None:
+    """Return the latest logged missing-pass reason for *ref*, if any.
+
+    ItemRef-accepting variant of :func:`_latest_missing_reason`.  Used
+    by the release-timing retry branch in :func:`_run_search_pass` so
+    the call site stays symmetric with the adjacent cooldown-service
+    ``is_on_cooldown_ref`` call.
+    """
+    return await _latest_missing_reason(
+        ref.instance_id,
+        ref.item_id,
+        ref.item_type.value,
+    )
 
 
 def _is_release_timing_reason(reason: str | None) -> bool:
@@ -310,6 +372,11 @@ async def _run_search_pass(  # noqa: C901
                 break
 
             candidate = adapt_fn(item, instance)
+            ref = ItemRef(
+                instance.id,
+                candidate.item_id,
+                ItemType(candidate.item_type),
+            )
 
             # Item-level modes can dedup immediately. Context modes defer dedup
             # until after release-timing checks so a temporarily blocked record
@@ -325,10 +392,8 @@ async def _run_search_pass(  # noqa: C901
             if candidate.unreleased_reason is not None:
                 is_grace = candidate.unreleased_reason.startswith("post-release grace")
                 if not (is_grace and cycle_trigger == "run_now"):
-                    await _write_log(
-                        instance.id,
-                        candidate.item_id,
-                        candidate.item_type,
+                    await _write_item_log(
+                        ref,
                         SearchAction.skipped.value,
                         search_kind=search_kind,
                         cycle_id=cycle_id,
@@ -358,10 +423,8 @@ async def _run_search_pass(  # noqa: C901
                     else f"hourly cap reached ({hourly_cap})"
                 )
                 logger.info("[%s] %s%s: %s", instance.name, log_prefix, candidate.item_id, reason)
-                await _write_log(
-                    instance.id,
-                    candidate.item_id,
-                    candidate.item_type,
+                await _write_item_log(
+                    ref,
                     SearchAction.skipped.value,
                     search_kind=search_kind,
                     cycle_id=cycle_id,
@@ -373,13 +436,9 @@ async def _run_search_pass(  # noqa: C901
                 break
 
             # Cooldown.
-            if await is_on_cooldown(
-                instance.id, candidate.item_id, candidate.item_type, cooldown_days
-            ):
+            if await is_on_cooldown_ref(ref, cooldown_days):
                 if search_kind == "missing":
-                    latest_reason = await _latest_missing_reason(
-                        instance.id, candidate.item_id, candidate.item_type
-                    )
+                    latest_reason = await _latest_missing_reason_ref(ref)
                     if _is_release_timing_reason(latest_reason):
                         logger.info(
                             "[%s] allowing missing retry for %s after release-timing block",
@@ -399,10 +458,8 @@ async def _run_search_pass(  # noqa: C901
                                 candidate.item_id,
                                 msg,
                             )
-                            await _write_log(
-                                instance.id,
-                                candidate.item_id,
-                                candidate.item_type,
+                            await _write_item_log(
+                                ref,
                                 SearchAction.error.value,
                                 search_kind=search_kind,
                                 cycle_id=cycle_id,
@@ -412,16 +469,9 @@ async def _run_search_pass(  # noqa: C901
                             )
                             continue
 
-                        await record_search(
-                            instance.id,
-                            candidate.item_id,
-                            candidate.item_type,
-                            search_kind,
-                        )
-                        await _write_log(
-                            instance.id,
-                            candidate.item_id,
-                            candidate.item_type,
+                        await record_search_ref(ref, search_kind)
+                        await _write_item_log(
+                            ref,
                             SearchAction.searched.value,
                             search_kind=search_kind,
                             cycle_id=cycle_id,
@@ -455,10 +505,8 @@ async def _run_search_pass(  # noqa: C901
                         candidate.item_id,
                         reason,
                     )
-                    await _write_log(
-                        instance.id,
-                        candidate.item_id,
-                        candidate.item_type,
+                    await _write_item_log(
+                        ref,
                         SearchAction.skipped.value,
                         search_kind=search_kind,
                         cycle_id=cycle_id,
@@ -484,10 +532,8 @@ async def _run_search_pass(  # noqa: C901
                     candidate.item_id,
                     msg,
                 )
-                await _write_log(
-                    instance.id,
-                    candidate.item_id,
-                    candidate.item_type,
+                await _write_item_log(
+                    ref,
                     SearchAction.error.value,
                     search_kind=search_kind,
                     cycle_id=cycle_id,
@@ -497,16 +543,9 @@ async def _run_search_pass(  # noqa: C901
                 )
                 continue
 
-            await record_search(
-                instance.id,
-                candidate.item_id,
-                candidate.item_type,
-                search_kind,
-            )
-            await _write_log(
-                instance.id,
-                candidate.item_id,
-                candidate.item_type,
+            await record_search_ref(ref, search_kind)
+            await _write_item_log(
+                ref,
                 SearchAction.searched.value,
                 search_kind=search_kind,
                 cycle_id=cycle_id,
@@ -657,6 +696,11 @@ async def _run_upgrade_pass(
             break
 
         candidate = adapter.adapt_upgrade(item, instance)
+        ref = ItemRef(
+            instance.id,
+            candidate.item_id,
+            ItemType(candidate.item_type),
+        )
 
         # Dedup
         if candidate.group_key is None:
@@ -675,10 +719,8 @@ async def _run_upgrade_pass(
         if hourly_cap > 0 and searches_this_hour >= hourly_cap:
             reason = f"upgrade hourly cap reached ({hourly_cap})"
             logger.info("[%s] upgrade %s: %s", instance.name, candidate.item_id, reason)
-            await _write_log(
-                instance.id,
-                candidate.item_id,
-                candidate.item_type,
+            await _write_item_log(
+                ref,
                 SearchAction.skipped.value,
                 search_kind="upgrade",
                 cycle_id=cycle_id,
@@ -689,15 +731,13 @@ async def _run_upgrade_pass(
             break
 
         # Cooldown
-        if await is_on_cooldown(instance.id, candidate.item_id, candidate.item_type, cooldown_days):
+        if await is_on_cooldown_ref(ref, cooldown_days):
             reason = f"on upgrade cooldown ({cooldown_days}d)"
             skip_key = (instance.id, candidate.item_id, "upgrade", "upgrade_cd")
             if await should_log_skip(skip_key):
                 logger.debug("[%s] upgrade %s: %s", instance.name, candidate.item_id, reason)
-                await _write_log(
-                    instance.id,
-                    candidate.item_id,
-                    candidate.item_type,
+                await _write_item_log(
+                    ref,
                     SearchAction.skipped.value,
                     search_kind="upgrade",
                     cycle_id=cycle_id,
@@ -723,10 +763,8 @@ async def _run_upgrade_pass(
                 candidate.item_id,
                 msg,
             )
-            await _write_log(
-                instance.id,
-                candidate.item_id,
-                candidate.item_type,
+            await _write_item_log(
+                ref,
                 SearchAction.error.value,
                 search_kind="upgrade",
                 cycle_id=cycle_id,
@@ -737,16 +775,9 @@ async def _run_upgrade_pass(
             new_offset = (offset + scanned) % len(pool)
             continue
 
-        await record_search(
-            instance.id,
-            candidate.item_id,
-            candidate.item_type,
-            "upgrade",
-        )
-        await _write_log(
-            instance.id,
-            candidate.item_id,
-            candidate.item_type,
+        await record_search_ref(ref, "upgrade")
+        await _write_item_log(
+            ref,
             SearchAction.searched.value,
             search_kind="upgrade",
             cycle_id=cycle_id,

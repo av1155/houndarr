@@ -9,9 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime
-
-import httpx
-from pydantic import ValidationError
+from typing import ClassVar
 
 from houndarr.clients._wire_models import (
     ArrSeries,
@@ -20,11 +18,6 @@ from houndarr.clients._wire_models import (
     WhisparrV2WantedEpisode,
 )
 from houndarr.clients.base import ArrClient, WantedKind
-from houndarr.errors import (
-    ClientHTTPError,
-    ClientTransportError,
-    ClientValidationError,
-)
 
 __all__ = ["LibraryWhisparrEpisode", "MissingWhisparrEpisode", "WhisparrClient"]
 
@@ -58,7 +51,16 @@ class MissingWhisparrEpisode:
 
 
 class WhisparrClient(ArrClient):
-    """Async client for the Whisparr v3 REST API."""
+    """Async client for the Whisparr v2 REST API."""
+
+    # Whisparr v2 is Sonarr-shaped on the v3 API surface; sortKey is
+    # ``releaseDate`` (Sonarr uses ``airDateUtc``) and episodes embed a
+    # ``series`` parent like Sonarr does.
+    _WANTED_SORT_KEY: ClassVar[str] = "releaseDate"
+    _WANTED_INCLUDE_PARAM: ClassVar[str | None] = "includeSeries"
+    _WANTED_ENVELOPE: ClassVar[type[PaginatedResponse[WhisparrV2WantedEpisode]]] = (
+        PaginatedResponse[WhisparrV2WantedEpisode]
+    )
 
     async def get_missing(
         self,
@@ -78,16 +80,7 @@ class WhisparrClient(ArrClient):
         Returns:
             List of :class:`MissingWhisparrEpisode` dataclasses, oldest first.
         """
-        data = await self._get(
-            "/api/v3/wanted/missing",
-            page=page,
-            pageSize=page_size,
-            sortKey="releaseDate",
-            sortDirection="ascending",
-            includeSeries="true",
-            monitored="true",
-        )
-        envelope = PaginatedResponse[WhisparrV2WantedEpisode].model_validate(data)
+        envelope = await self._fetch_wanted_page("missing", page=page, page_size=page_size)
         return [_parse_episode(w) for w in envelope.records]
 
     async def search(self, item_id: int) -> None:
@@ -126,6 +119,8 @@ class WhisparrClient(ArrClient):
         """Return a page of monitored episodes that have not met their quality cutoff.
 
         Calls ``GET /api/v3/wanted/cutoff`` with ``includeSeries=true``.
+        Whisparr's cutoff endpoint historically omits the sort params,
+        so the call passes ``include_sort=False`` to suppress them.
 
         Args:
             page: 1-based page number.
@@ -134,22 +129,21 @@ class WhisparrClient(ArrClient):
         Returns:
             List of :class:`MissingWhisparrEpisode` dataclasses.
         """
-        data = await self._get(
-            "/api/v3/wanted/cutoff",
+        envelope = await self._fetch_wanted_page(
+            "cutoff",
             page=page,
-            pageSize=page_size,
-            includeSeries="true",
-            monitored="true",
+            page_size=page_size,
+            include_sort=False,
         )
-        envelope = PaginatedResponse[WhisparrV2WantedEpisode].model_validate(data)
         return [_parse_episode(w) for w in envelope.records]
 
     async def get_wanted_total(self, kind: WantedKind) -> int:
         """Return the totalRecords count for ``wanted/{kind}`` via a size-1 probe.
 
-        Raw ``httpx`` and ``pydantic`` failures are wrapped in typed
-        :class:`~houndarr.errors.ClientError` subclasses.  The original
-        exception is preserved on ``__cause__`` via ``raise ... from``.
+        Delegates to :meth:`ArrClient._fetch_wanted_total`, which wraps
+        raw ``httpx`` and ``pydantic`` failures in typed
+        :class:`~houndarr.errors.ClientError` subclasses with the
+        original exception preserved on ``__cause__``.
 
         Raises:
             ClientHTTPError: Non-2xx response.
@@ -158,29 +152,7 @@ class WhisparrClient(ArrClient):
             ClientValidationError: Response shape did not match the
                 paginated envelope schema.
         """
-        path = f"/api/v3/wanted/{kind}"
-        try:
-            data = await self._get(
-                path,
-                page=1,
-                pageSize=1,
-                sortKey="releaseDate",
-                sortDirection="ascending",
-                monitored="true",
-            )
-        except httpx.HTTPStatusError as exc:
-            raise ClientHTTPError(
-                f"wanted total: HTTP {exc.response.status_code} from {path}"
-            ) from exc
-        except (httpx.RequestError, httpx.InvalidURL) as exc:
-            raise ClientTransportError(
-                f"wanted total: transport error reaching {path}: {exc}"
-            ) from exc
-        try:
-            envelope = PaginatedResponse[WhisparrV2WantedEpisode].model_validate(data)
-        except ValidationError as exc:
-            raise ClientValidationError(f"wanted total: malformed payload from {path}") from exc
-        return envelope.total_records
+        return await self._fetch_wanted_total(kind)
 
     async def get_series(self) -> list[ArrSeries]:
         """Return the full series list.
@@ -215,9 +187,7 @@ class WhisparrClient(ArrClient):
         return [_parse_library_episode(WhisparrV2LibraryEpisode.model_validate(r)) for r in records]
 
 
-# ---------------------------------------------------------------------------
 # Parsing helpers
-# ---------------------------------------------------------------------------
 
 
 def _parse_library_episode(wire: WhisparrV2LibraryEpisode) -> LibraryWhisparrEpisode:

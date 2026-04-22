@@ -25,7 +25,12 @@ from houndarr.engine.adapters import get_adapter
 from houndarr.engine.adapters.protocols import AppAdapterProto
 from houndarr.engine.candidates import SearchCandidate
 from houndarr.enums import CycleTrigger, ItemType, SearchAction, SearchKind
-from houndarr.errors import ClientError, EngineError
+from houndarr.errors import (
+    ClientError,
+    EngineDispatchError,
+    EngineError,
+    EnginePoolFetchError,
+)
 from houndarr.services.cooldown import (
     is_on_cooldown_ref,
     record_search_ref,
@@ -239,6 +244,86 @@ def _is_release_timing_reason(reason: str | None) -> bool:
     )
 
 
+# Typed wrap helpers for adapter calls
+
+
+async def _dispatch_with_typed_wrap(
+    adapter: AppAdapterProto,
+    instance: Instance,
+    dispatch_fn: Callable[..., Awaitable[None]],
+    candidate: SearchCandidate,
+) -> None:
+    """Open a client, call *dispatch_fn*, and surface failures typed.
+
+    Track B.14 introduces this helper so the three dispatch call sites
+    in :func:`_run_search_pass` and :func:`_run_upgrade_pass` can each
+    narrow their ``except Exception`` to :class:`EngineDispatchError`.
+    The helper owns the whole ``adapter.make_client -> dispatch``
+    attempt boundary: client construction (``httpx.InvalidURL``),
+    context-manager entry / exit, and the dispatch call itself all
+    get typed into one surface.
+
+    Already-typed :class:`EngineError` and :class:`ClientError`
+    subclasses propagate unchanged so richer context from the client
+    layer (Track B.11 / B.12) is not flattened.  Track B.16 will
+    move the wrap into the adapter implementations; at that point
+    this helper becomes a thin passthrough.
+
+    The typed error message is ``str(exc)`` verbatim, which keeps the
+    ``search_log.message`` field byte-equal to the pre-refactor
+    ``message=str(exc)`` write and preserves the golden log shape.
+
+    Args:
+        adapter: The :class:`AppAdapterProto` for the instance.
+        instance: Fully-populated instance.
+        dispatch_fn: Adapter dispatch callable; takes ``(client,
+            candidate)`` and sends the search command.
+        candidate: Item to dispatch.
+
+    Raises:
+        EngineDispatchError: Any non-typed ``Exception``; the original
+            is preserved on ``__cause__``.
+    """
+    try:
+        async with adapter.make_client(instance) as client:
+            await dispatch_fn(client, candidate)
+    except (EngineError, ClientError):
+        raise
+    except Exception as exc:  # noqa: BLE001
+        raise EngineDispatchError(str(exc)) from exc
+
+
+async def _fetch_pool_with_typed_wrap(
+    adapter: AppAdapterProto,
+    instance: Instance,
+) -> list[Any]:
+    """Open a client, call ``adapter.fetch_upgrade_pool``, surface typed.
+
+    Sibling of :func:`_dispatch_with_typed_wrap` for the upgrade-pool
+    build path.  Owns the ``adapter.make_client -> fetch`` boundary so
+    construction + context entry + pool fetch all land in the same
+    :class:`EnginePoolFetchError` surface.
+
+    Args:
+        adapter: The :class:`AppAdapterProto` for the instance.
+        instance: Fully-populated instance.
+
+    Returns:
+        The raw upgrade-pool list produced by the adapter.
+
+    Raises:
+        EnginePoolFetchError: Any non-typed ``Exception``; the original
+            is preserved on ``__cause__``.
+    """
+    try:
+        async with adapter.make_client(instance) as client:
+            return await adapter.fetch_upgrade_pool(client, instance)
+    except (EngineError, ClientError):
+        raise
+    except Exception as exc:  # noqa: BLE001
+        raise EnginePoolFetchError(str(exc)) from exc
+
+
 # ---------------------------------------------------------------------------
 # Unified search pass
 # ---------------------------------------------------------------------------
@@ -436,9 +521,10 @@ async def _run_search_pass(  # noqa: C901
                         )
                         scanned += 1
                         try:
-                            async with adapter.make_client(instance) as dispatch_client:
-                                await dispatch_fn(dispatch_client, candidate)
-                        except Exception as exc:  # noqa: BLE001
+                            await _dispatch_with_typed_wrap(
+                                adapter, instance, dispatch_fn, candidate
+                            )
+                        except EngineDispatchError as exc:
                             msg = str(exc)
                             logger.warning(
                                 "[%s] %ssearch failed for %s: %s",
@@ -510,9 +596,8 @@ async def _run_search_pass(  # noqa: C901
 
             # Dispatch search via a fresh client context.
             try:
-                async with adapter.make_client(instance) as dispatch_client:
-                    await dispatch_fn(dispatch_client, candidate)
-            except Exception as exc:  # noqa: BLE001
+                await _dispatch_with_typed_wrap(adapter, instance, dispatch_fn, candidate)
+            except EngineDispatchError as exc:
                 msg = str(exc)
                 logger.warning(
                     "[%s] %ssearch failed for %s: %s",
@@ -603,9 +688,8 @@ async def _run_upgrade_pass(
 
     # Fetch upgrade-eligible pool via the adapter
     try:
-        async with adapter.make_client(instance) as client:
-            pool = await adapter.fetch_upgrade_pool(client, instance)
-    except Exception as exc:  # noqa: BLE001
+        pool = await _fetch_pool_with_typed_wrap(adapter, instance)
+    except EnginePoolFetchError as exc:
         msg = str(exc)
         logger.warning("[%s] upgrade pool fetch failed: %s", instance.name, msg)
         await _write_log(
@@ -742,9 +826,8 @@ async def _run_upgrade_pass(
 
         # Dispatch search
         try:
-            async with adapter.make_client(instance) as dispatch_client:
-                await adapter.dispatch_search(dispatch_client, candidate)
-        except Exception as exc:  # noqa: BLE001
+            await _dispatch_with_typed_wrap(adapter, instance, adapter.dispatch_search, candidate)
+        except EngineDispatchError as exc:
             msg = str(exc)
             logger.warning(
                 "[%s] upgrade search failed for %s: %s",
@@ -850,9 +933,7 @@ async def run_instance_search(
     except (EngineError, ClientError):
         raise
     except Exception as exc:  # noqa: BLE001
-        raise EngineError(
-            f"unhandled error in search cycle for {instance.name!r}: {exc}"
-        ) from exc
+        raise EngineError(f"unhandled error in search cycle for {instance.name!r}: {exc}") from exc
 
 
 async def _run_instance_search_impl(

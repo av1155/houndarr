@@ -10,6 +10,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 from houndarr.clients.radarr import LibraryMovie, MissingMovie, RadarrClient
+from houndarr.engine.adapters._common import fetch_movie_upgrade_pool
 from houndarr.engine.candidates import (
     SearchCandidate,
     _is_unreleased,
@@ -142,7 +143,7 @@ def adapt_upgrade(item: LibraryMovie, instance: Instance) -> SearchCandidate:
 
 async def fetch_upgrade_pool(
     client: RadarrClient,
-    instance: Instance,
+    instance: Instance,  # noqa: ARG001
 ) -> list[LibraryMovie]:
     """Fetch and filter Radarr library for upgrade-eligible movies.
 
@@ -150,13 +151,15 @@ async def fetch_upgrade_pool(
 
     Args:
         client: An open :class:`RadarrClient` context.
-        instance: The configured Radarr instance.
+        instance: The configured Radarr instance.  Unused at present;
+            kept for AppAdapter signature parity with the series /
+            album / book adapters whose pool builders consult instance
+            policy.
 
     Returns:
         List of upgrade-eligible :class:`LibraryMovie` items.
     """
-    library = await client.get_library()
-    return [m for m in library if m.monitored and m.has_file and m.cutoff_met]
+    return await fetch_movie_upgrade_pool(client.get_library)
 
 
 async def dispatch_search(client: RadarrClient, candidate: SearchCandidate) -> None:

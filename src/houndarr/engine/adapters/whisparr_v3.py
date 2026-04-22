@@ -18,6 +18,7 @@ from houndarr.clients.whisparr_v3 import (
     MissingWhisparrV3Movie,
     WhisparrV3Client,
 )
+from houndarr.engine.adapters._common import fetch_movie_upgrade_pool
 from houndarr.engine.candidates import (
     SearchCandidate,
     _is_unreleased,
@@ -147,7 +148,7 @@ def adapt_upgrade(item: LibraryWhisparrV3Movie, instance: Instance) -> SearchCan
 
 async def fetch_upgrade_pool(
     client: WhisparrV3Client,
-    instance: Instance,
+    instance: Instance,  # noqa: ARG001
 ) -> list[LibraryWhisparrV3Movie]:
     """Fetch and filter the Whisparr v3 library for upgrade-eligible movies/scenes.
 
@@ -155,13 +156,15 @@ async def fetch_upgrade_pool(
 
     Args:
         client: An open :class:`WhisparrV3Client` context.
-        instance: The configured Whisparr v3 instance.
+        instance: The configured Whisparr v3 instance.  Unused at
+            present; kept for AppAdapter signature parity with the
+            series / album / book adapters whose pool builders consult
+            instance policy.
 
     Returns:
         List of upgrade-eligible :class:`LibraryWhisparrV3Movie` items.
     """
-    library = await client.get_library()
-    return [m for m in library if m.monitored and m.has_file and m.cutoff_met]
+    return await fetch_movie_upgrade_pool(client.get_library)
 
 
 async def dispatch_search(client: WhisparrV3Client, candidate: SearchCandidate) -> None:

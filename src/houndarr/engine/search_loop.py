@@ -23,6 +23,7 @@ from houndarr.database import get_db
 from houndarr.engine.adapters import get_adapter
 from houndarr.engine.adapters.protocols import AppAdapterProto
 from houndarr.engine.candidates import SearchCandidate
+from houndarr.engine.config.search_pass import SearchPassConfig
 from houndarr.enums import CycleTrigger, ItemType, SearchAction, SearchKind
 from houndarr.errors import (
     ClientError,
@@ -367,57 +368,45 @@ async def _fetch_pool_with_typed_wrap(
 async def _run_search_pass(  # noqa: C901
     instance: Instance,
     adapter: AppAdapterProto,
-    *,
-    adapt_fn: Callable[..., SearchCandidate],
-    dispatch_fn: Callable[..., Awaitable[None]],
-    fetch_fn: Callable[..., Awaitable[list[Any]]],
-    search_kind: SearchKind | str,
-    batch_size: int,
-    hourly_cap: int,
-    cooldown_days: int,
-    page_size: int,
-    scan_budget: int,
-    cycle_id: str,
-    cycle_trigger: CycleTrigger | str,
-    start_page: int = 1,
-    total_fn: Callable[[], Awaitable[int]] | None = None,
+    config: SearchPassConfig,
 ) -> tuple[int, int]:
     """Execute a single search pass (missing or cutoff) using the adapter.
 
     This is the unified pipeline that replaces the previously duplicated
     missing-pass inline code and the bifurcated ``_run_cutoff_pass()``
     function.  It pages through items, converts each to a
-    :class:`SearchCandidate` via *adapt_fn*, applies eligibility checks
-    (unreleased delay, hourly cap, cooldown), and dispatches searches via
-    *dispatch_fn*.
+    :class:`SearchCandidate` via ``config.adapt_fn``, applies eligibility
+    checks (unreleased delay, hourly cap, cooldown), and dispatches
+    searches via ``config.dispatch_fn``.
 
     Args:
         instance: Fully-populated (decrypted) instance.
         adapter: The :class:`AppAdapterProto` implementation for this
             instance type.
-        adapt_fn: Converts a raw API item to a :class:`SearchCandidate`.
-        dispatch_fn: Sends the search command via the appropriate client.
-        fetch_fn: Bound method to fetch a page of items
-            (e.g. ``client.get_missing`` or ``client.get_cutoff_unmet``).
-        search_kind: ``"missing"`` or ``"cutoff"``.
-        batch_size: Maximum items to search in this pass.
-        hourly_cap: Hourly search limit for this pass kind (0 = unlimited).
-        cooldown_days: Cooldown window for this pass kind.
-        page_size: Number of items to request per page.
-        scan_budget: Maximum candidates to evaluate before stopping.
-        cycle_id: Shared cycle identifier for all log rows.
-        cycle_trigger: How this cycle was initiated.
-        start_page: 1-based page number to begin fetching from (for
-            offset rotation across cycles).
-        total_fn: Optional probe returning the total record count for this
-            pass.  When ``instance.schedule.search_order == SearchOrder.random`` the
-            probe is used to pick a random start page each cycle; the
-            persisted offset is then ignored.  Probe failure falls back to
-            *start_page* with a warning.
+        config: :class:`SearchPassConfig` carrying the adapter bindings,
+            rate-shape knobs, cycle metadata, and pagination / total
+            probe for this pass.  See the class docstring for the
+            per-field contract.  Random search order uses
+            ``config.total_fn`` to pick a random start page each cycle;
+            probe failure falls back to ``config.start_page`` with a
+            warning.
 
     Returns:
         Tuple of (items_searched, next_start_page).
     """
+    adapt_fn = config.adapt_fn
+    dispatch_fn = config.dispatch_fn
+    fetch_fn = config.fetch_fn
+    search_kind = config.search_kind
+    batch_size = config.batch_size
+    hourly_cap = config.hourly_cap
+    cooldown_days = config.cooldown_days
+    page_size = config.page_size
+    scan_budget = config.scan_budget
+    cycle_id = config.cycle_id
+    cycle_trigger = config.cycle_trigger
+    start_page = config.start_page
+    total_fn = config.total_fn
     target = max(0, batch_size)
     if target == 0:
         return 0, start_page
@@ -1089,19 +1078,21 @@ async def _run_instance_search_impl(
             missing_searched, next_missing_page = await _run_search_pass(
                 instance,
                 adapter,
-                adapt_fn=adapter.adapt_missing,
-                dispatch_fn=adapter.dispatch_search,
-                fetch_fn=client.get_missing,
-                search_kind="missing",
-                batch_size=instance.missing.batch_size,
-                hourly_cap=instance.missing.hourly_cap,
-                cooldown_days=instance.missing.cooldown_days,
-                page_size=_missing_page_size(missing_target),
-                scan_budget=_missing_scan_budget(missing_target),
-                cycle_id=cycle_id_value,
-                cycle_trigger=cycle_trigger,
-                start_page=instance.schedule.missing_page_offset,
-                total_fn=lambda: client.get_wanted_total("missing"),
+                SearchPassConfig(
+                    adapt_fn=adapter.adapt_missing,
+                    dispatch_fn=adapter.dispatch_search,
+                    fetch_fn=client.get_missing,
+                    search_kind="missing",
+                    batch_size=instance.missing.batch_size,
+                    hourly_cap=instance.missing.hourly_cap,
+                    cooldown_days=instance.missing.cooldown_days,
+                    page_size=_missing_page_size(missing_target),
+                    scan_budget=_missing_scan_budget(missing_target),
+                    cycle_id=cycle_id_value,
+                    cycle_trigger=cycle_trigger,
+                    start_page=instance.schedule.missing_page_offset,
+                    total_fn=lambda: client.get_wanted_total("missing"),
+                ),
             )
         searched += missing_searched
         # In random mode the "next page" returned by the pass is derived from
@@ -1134,19 +1125,21 @@ async def _run_instance_search_impl(
                 cutoff_searched, next_cutoff_page = await _run_search_pass(
                     instance,
                     adapter,
-                    adapt_fn=adapter.adapt_cutoff,
-                    dispatch_fn=adapter.dispatch_search,
-                    fetch_fn=cutoff_client.get_cutoff_unmet,
-                    search_kind="cutoff",
-                    batch_size=instance.cutoff.cutoff_batch_size,
-                    hourly_cap=instance.cutoff.cutoff_hourly_cap,
-                    cooldown_days=instance.cutoff.cutoff_cooldown_days,
-                    page_size=_cutoff_page_size(cutoff_target),
-                    scan_budget=_cutoff_scan_budget(cutoff_target),
-                    cycle_id=cycle_id_value,
-                    cycle_trigger=cycle_trigger,
-                    start_page=instance.schedule.cutoff_page_offset,
-                    total_fn=lambda: cutoff_client.get_wanted_total("cutoff"),
+                    SearchPassConfig(
+                        adapt_fn=adapter.adapt_cutoff,
+                        dispatch_fn=adapter.dispatch_search,
+                        fetch_fn=cutoff_client.get_cutoff_unmet,
+                        search_kind="cutoff",
+                        batch_size=instance.cutoff.cutoff_batch_size,
+                        hourly_cap=instance.cutoff.cutoff_hourly_cap,
+                        cooldown_days=instance.cutoff.cutoff_cooldown_days,
+                        page_size=_cutoff_page_size(cutoff_target),
+                        scan_budget=_cutoff_scan_budget(cutoff_target),
+                        cycle_id=cycle_id_value,
+                        cycle_trigger=cycle_trigger,
+                        start_page=instance.schedule.cutoff_page_offset,
+                        total_fn=lambda: cutoff_client.get_wanted_total("cutoff"),
+                    ),
                 )
             logger.info(
                 "[%s] cutoff pass complete: %d searched", instance.core.name, cutoff_searched

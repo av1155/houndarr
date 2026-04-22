@@ -11,9 +11,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from typing import Any, Literal
+from typing import Any
 
-ItemType = Literal["episode", "movie", "album", "book", "whisparr_episode", "whisparr_v3_movie"]
+from houndarr.enums import ItemType
+
+__all__ = ["ItemType", "SearchCandidate"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -40,7 +42,7 @@ class SearchCandidate:
     """
 
     item_id: int
-    item_type: ItemType
+    item_type: ItemType | str
     label: str
     unreleased_reason: str | None
     group_key: tuple[int, int] | None

@@ -30,7 +30,7 @@ def _iso(dt: datetime) -> str:
 async def is_on_cooldown(
     instance_id: int,
     item_id: int,
-    item_type: ItemType,
+    item_type: ItemType | str,
     cooldown_days: int,
 ) -> bool:
     """Return ``True`` if *item_id* was searched within *cooldown_days* days.
@@ -68,7 +68,7 @@ async def is_on_cooldown(
 async def record_search(
     instance_id: int,
     item_id: int,
-    item_type: ItemType,
+    item_type: ItemType | str,
 ) -> None:
     """Upsert a cooldown record for *item_id* with the current UTC timestamp.
 

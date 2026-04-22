@@ -20,6 +20,7 @@ import httpx
 from houndarr.engine.adapters import get_adapter
 from houndarr.engine.search_loop import _write_log, run_instance_search
 from houndarr.enums import CycleTrigger, SearchAction
+from houndarr.errors import ClientError, EngineError
 from houndarr.services.instances import (
     Instance,
     get_instance,
@@ -354,7 +355,13 @@ class Supervisor:
                     _CONNECT_RETRY_SECS,
                 )
                 return True
-            except Exception as exc:  # noqa: BLE001
+            except (EngineError, ClientError) as exc:
+                # Track B.13: run_instance_search now wraps every
+                # non-typed escape into EngineError before it reaches
+                # this handler, and the client layer (Track B.11/B.12)
+                # raises ClientError subclasses.  Both branches land
+                # here and produce the same search_log row shape the
+                # pre-refactor `except Exception` produced.
                 logger.error(
                     "Supervisor: unhandled error in search loop for %r: %s",
                     instance.name,

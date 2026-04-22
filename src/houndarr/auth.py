@@ -18,7 +18,7 @@ from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoin
 from starlette.types import ASGIApp
 
 from houndarr.config import get_settings
-from houndarr.database import get_setting, set_setting
+from houndarr.repositories.settings import get_setting, set_setting
 
 logger = logging.getLogger(__name__)
 

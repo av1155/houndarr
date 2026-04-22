@@ -423,31 +423,46 @@ def _is_proxy_auth_mode() -> bool:
     return get_settings().auth_mode == "proxy"
 
 
-def _validate_proxy_auth(request: Request) -> str | None:
-    """Extract the authenticated username from a proxy header.
+def _is_trusted_proxy(request: Request) -> bool:
+    """Return True when the direct connection IP is in the trusted proxy set.
 
-    Security: the header is ONLY read after verifying the direct connection
-    IP is in the configured trusted proxy set.  Untrusted IPs cannot spoof
-    the header because it is never read for untrusted connections.
-
-    Returns:
-        The username string if the request is authenticated, or ``None``
-        if authentication fails (untrusted IP, missing header, etc.).
+    Security: ``trusted_proxy_set()`` returning an empty set means the
+    operator has not configured any trusted proxy, in which case every
+    request is untrusted regardless of the direct IP.  This guards
+    against header spoofing by untrusted clients: callers that read the
+    auth header must gate the read behind this check.
     """
     settings = get_settings()
-    direct_ip = request.client.host if request.client else "unknown"
     trusted = settings.trusted_proxy_set()
+    if not trusted:
+        return False
+    direct_ip = request.client.host if request.client else "unknown"
+    return direct_ip in trusted
 
-    # Gate 1: direct connection MUST originate from a trusted proxy
-    if not trusted or direct_ip not in trusted:
-        return None
 
-    # Gate 2: the auth header must be present and non-empty
+def _extract_proxy_username(request: Request) -> str | None:
+    """Return the proxy-supplied username, or ``None`` if the header is absent.
+
+    Assumes the caller has already verified the direct IP is trusted via
+    :func:`_is_trusted_proxy`; this function does not re-check.
+    """
+    settings = get_settings()
     username = request.headers.get(settings.auth_proxy_header, "").strip()
-    if not username:
-        return None
+    return username or None
 
-    return username
+
+def _validate_proxy_auth(request: Request) -> str | None:
+    """Return the authenticated proxy username, or ``None`` on any failure.
+
+    Composes :func:`_is_trusted_proxy` (direct IP must be in the trusted
+    set) and :func:`_extract_proxy_username` (header must be present and
+    non-empty).  Both primitives are the single source of truth for the
+    middleware's ``_dispatch_proxy``; this helper is the convenience form
+    for callers that only need the binary "authenticated?" answer.
+    """
+    if not _is_trusted_proxy(request):
+        return None
+    return _extract_proxy_username(request)
 
 
 async def _validate_proxy_csrf(request: Request) -> bool:
@@ -597,11 +612,8 @@ class AuthMiddleware(BaseHTTPMiddleware):
             return logout_response
 
         # --- IP trust gate ---
-        direct_ip = request.client.host if request.client else "unknown"
-        settings = get_settings()
-        trusted = settings.trusted_proxy_set()
-
-        if not trusted or direct_ip not in trusted:
+        if not _is_trusted_proxy(request):
+            direct_ip = request.client.host if request.client else "unknown"
             logger.warning(
                 "Proxy auth: blocked request from untrusted IP %s to %s",
                 direct_ip,
@@ -617,11 +629,12 @@ class AuthMiddleware(BaseHTTPMiddleware):
             )
 
         # --- Auth header gate ---
-        username = request.headers.get(settings.auth_proxy_header, "").strip()
-        if not username:
+        username = _extract_proxy_username(request)
+        if username is None:
+            direct_ip = request.client.host if request.client else "unknown"
             logger.warning(
                 "Proxy auth: missing header '%s' from trusted proxy %s for %s",
-                settings.auth_proxy_header,
+                get_settings().auth_proxy_header,
                 direct_ip,
                 path,
             )

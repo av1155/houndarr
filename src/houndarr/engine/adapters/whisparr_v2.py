@@ -318,3 +318,21 @@ def make_client(instance: Instance) -> WhisparrClient:
         A new (unopened) :class:`WhisparrClient`.
     """
     return WhisparrClient(url=instance.url, api_key=instance.api_key)
+
+
+class WhisparrV2Adapter:
+    """Class-form Whisparr v2 adapter for the :data:`ADAPTERS` registry.
+
+    Conforms to :class:`~houndarr.engine.adapters.protocols.AppAdapterProto`
+    structurally via the six staticmethod attributes below; the
+    module-level functions remain importable for direct unit-test use.
+    Track C.10 introduces this class form to replace the prior
+    ``AppAdapter`` dataclass-of-callables registry shape.
+    """
+
+    adapt_missing = staticmethod(adapt_missing)
+    adapt_cutoff = staticmethod(adapt_cutoff)
+    adapt_upgrade = staticmethod(adapt_upgrade)
+    fetch_upgrade_pool = staticmethod(fetch_upgrade_pool)
+    dispatch_search = staticmethod(dispatch_search)
+    make_client = staticmethod(make_client)

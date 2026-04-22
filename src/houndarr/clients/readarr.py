@@ -3,9 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-
-import httpx
-from pydantic import ValidationError
+from typing import ClassVar
 
 from houndarr.clients._wire_models import (
     PaginatedResponse,
@@ -13,11 +11,6 @@ from houndarr.clients._wire_models import (
     ReadarrWantedBook,
 )
 from houndarr.clients.base import ArrClient, WantedKind
-from houndarr.errors import (
-    ClientHTTPError,
-    ClientTransportError,
-    ClientValidationError,
-)
 
 __all__ = ["LibraryBook", "MissingBook", "ReadarrClient"]
 
@@ -51,6 +44,14 @@ class ReadarrClient(ArrClient):
 
     _SYSTEM_STATUS_PATH: str = "/api/v1/system/status"
     _QUEUE_STATUS_PATH: str = "/api/v1/queue/status"
+    # Readarr is a v1 API; the override routes the /wanted template at
+    # /api/v1/wanted/{kind} (matches Lidarr's pattern).
+    _WANTED_BASE_PATH: ClassVar[str] = "/api/v1/wanted"
+    _WANTED_SORT_KEY: ClassVar[str] = "releaseDate"
+    _WANTED_INCLUDE_PARAM: ClassVar[str | None] = "includeAuthor"
+    _WANTED_ENVELOPE: ClassVar[type[PaginatedResponse[ReadarrWantedBook]]] = PaginatedResponse[
+        ReadarrWantedBook
+    ]
 
     async def get_missing(
         self,
@@ -70,16 +71,7 @@ class ReadarrClient(ArrClient):
         Returns:
             List of :class:`MissingBook` dataclasses.
         """
-        data = await self._get(
-            "/api/v1/wanted/missing",
-            page=page,
-            pageSize=page_size,
-            sortKey="releaseDate",
-            sortDirection="ascending",
-            includeAuthor="true",
-            monitored="true",
-        )
-        envelope = PaginatedResponse[ReadarrWantedBook].model_validate(data)
+        envelope = await self._fetch_wanted_page("missing", page=page, page_size=page_size)
         return [_parse_book(w) for w in envelope.records]
 
     async def search(self, item_id: int) -> None:
@@ -117,6 +109,8 @@ class ReadarrClient(ArrClient):
         """Return a page of monitored books that have not met their quality cutoff.
 
         Calls ``GET /api/v1/wanted/cutoff`` with ``includeAuthor=true``.
+        Readarr's cutoff endpoint historically omits the sort params, so
+        the call passes ``include_sort=False`` to suppress them.
 
         Args:
             page: 1-based page number.
@@ -125,22 +119,21 @@ class ReadarrClient(ArrClient):
         Returns:
             List of :class:`MissingBook` dataclasses.
         """
-        data = await self._get(
-            "/api/v1/wanted/cutoff",
+        envelope = await self._fetch_wanted_page(
+            "cutoff",
             page=page,
-            pageSize=page_size,
-            includeAuthor="true",
-            monitored="true",
+            page_size=page_size,
+            include_sort=False,
         )
-        envelope = PaginatedResponse[ReadarrWantedBook].model_validate(data)
         return [_parse_book(w) for w in envelope.records]
 
     async def get_wanted_total(self, kind: WantedKind) -> int:
         """Return the totalRecords count for ``wanted/{kind}`` via a size-1 probe.
 
-        Raw ``httpx`` and ``pydantic`` failures are wrapped in typed
-        :class:`~houndarr.errors.ClientError` subclasses.  The original
-        exception is preserved on ``__cause__`` via ``raise ... from``.
+        Delegates to :meth:`ArrClient._fetch_wanted_total`, which wraps
+        raw ``httpx`` and ``pydantic`` failures in typed
+        :class:`~houndarr.errors.ClientError` subclasses with the
+        original exception preserved on ``__cause__``.
 
         Raises:
             ClientHTTPError: Non-2xx response.
@@ -149,29 +142,7 @@ class ReadarrClient(ArrClient):
             ClientValidationError: Response shape did not match the
                 paginated envelope schema.
         """
-        path = f"/api/v1/wanted/{kind}"
-        try:
-            data = await self._get(
-                path,
-                page=1,
-                pageSize=1,
-                sortKey="releaseDate",
-                sortDirection="ascending",
-                monitored="true",
-            )
-        except httpx.HTTPStatusError as exc:
-            raise ClientHTTPError(
-                f"wanted total: HTTP {exc.response.status_code} from {path}"
-            ) from exc
-        except (httpx.RequestError, httpx.InvalidURL) as exc:
-            raise ClientTransportError(
-                f"wanted total: transport error reaching {path}: {exc}"
-            ) from exc
-        try:
-            envelope = PaginatedResponse[ReadarrWantedBook].model_validate(data)
-        except ValidationError as exc:
-            raise ClientValidationError(f"wanted total: malformed payload from {path}") from exc
-        return envelope.total_records
+        return await self._fetch_wanted_total(kind)
 
     async def get_books(self) -> list[LibraryBook]:
         """Return the full book library.
@@ -188,9 +159,7 @@ class ReadarrClient(ArrClient):
         return [_parse_library_book(ReadarrLibraryBook.model_validate(r)) for r in records]
 
 
-# ---------------------------------------------------------------------------
 # Parsing helpers
-# ---------------------------------------------------------------------------
 
 
 def _parse_library_book(wire: ReadarrLibraryBook) -> LibraryBook:

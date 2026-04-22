@@ -374,9 +374,15 @@ src/houndarr/
       whisparr_v2.py   # Whisparr v2 adapter: candidate conversion + dispatch
       whisparr_v3.py   # Whisparr v3 adapter: movie/scene candidate conversion + dispatch
   routes/
+    _htmx.py           # is_hx_request() shared helper for partial vs full renders
     pages.py           # Setup, Login, Dashboard, Logs, Settings page routes
-    settings.py        # Settings CRUD (instance add/edit/delete/toggle)
     health.py          # GET /api/health (Docker HEALTHCHECK)
+    settings/          # Settings surface split by concern
+      __init__.py      # composes the sub-routers into a single settings_router
+      _helpers.py      # template render, client build, connection check, validators
+      page.py          # GET /settings
+      account.py       # POST /settings/account/password
+      instances.py     # /settings/instances/* (CRUD, test-connection, toggle)
     api/
       logs.py          # GET /api/logs (JSON, with cursor-based pagination)
       status.py        # GET /api/status (JSON, dashboard polling)
@@ -395,23 +401,6 @@ src/houndarr/
   is a lazy singleton. Pydantic is used only at the *arr wire boundary
   (`src/houndarr/clients/_wire_models.py`), not for internal domain models or
   config
-- **Wire models:** every *arr HTTP response is validated with a Pydantic
-  model from `clients/_wire_models.py` before it reaches a parser.
-  `PaginatedResponse[T]` (generic, PEP 695 syntax) covers the shared
-  `/wanted/*` envelope; `SystemStatus` and `QueueStatus` back
-  `ArrClient.ping()` and `ArrClient.get_queue_status()`; per-app
-  `*WantedEpisode` / `*WantedMovie` / `*WantedAlbum` / `*WantedBook`
-  and `*LibraryEpisode` / `*LibraryMovie` / `*LibraryAlbum` / `*LibraryBook`
-  models name the record shapes.  `ArrSeries` / `ArrArtist` / `ArrAuthor`
-  type the parent-aggregate fetches.  All wire models extend an internal
-  `_ArrModel` that sets `populate_by_name=True` + `extra="ignore"` so
-  unknown fields from new *arr versions never raise.  Field names are
-  snake_case in Python and alias to the camelCase the APIs serialise.
-- **Domain models:** the parsed result types (`MissingEpisode`,
-  `LibraryMovie`, etc.) are frozen dataclasses, one per client file
-  next to the client that builds them.  Every frozen dataclass in the
-  codebase uses `slots=True`; `Instance` and `AppSettings` are the two
-  deliberately-mutable dataclasses (SQL row mapping and env overrides).
 - **Encryption:** Master key in `request.app.state.master_key`; passed
   explicitly to service functions as `master_key=` kwarg; never imported globally
 - **Auth:** Global `AuthMiddleware` (Starlette `BaseHTTPMiddleware`) handles

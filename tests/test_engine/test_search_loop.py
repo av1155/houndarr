@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from collections.abc import AsyncGenerator
-from dataclasses import replace
 from typing import Any
 from unittest.mock import AsyncMock, patch
 
@@ -1947,13 +1946,13 @@ async def test_inter_search_delay_fires_in_upgrade_pass(
     )
 
     sleep_mock = AsyncMock()
-    instance = replace(
-        _make_instance(itype=InstanceType.radarr, url=RADARR_URL, instance_id=2, batch_size=0),
-        upgrade_enabled=True,
-        upgrade_batch_size=1,
-        upgrade_cooldown_days=7,
-        upgrade_hourly_cap=5,
+    instance = _make_instance(
+        itype=InstanceType.radarr, url=RADARR_URL, instance_id=2, batch_size=0
     )
+    instance.upgrade_enabled = True
+    instance.upgrade_batch_size = 1
+    instance.upgrade_cooldown_days = 7
+    instance.upgrade_hourly_cap = 5
     with patch("houndarr.engine.search_loop.asyncio.sleep", sleep_mock):
         count = await run_instance_search(instance, MASTER_KEY)
 

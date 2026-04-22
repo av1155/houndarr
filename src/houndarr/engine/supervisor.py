@@ -18,6 +18,7 @@ from uuid import uuid4
 import httpx
 
 from houndarr.engine.adapters import get_adapter
+from houndarr.engine.adapters.protocols import AppAdapterProto
 from houndarr.engine.search_loop import _write_log, run_instance_search
 from houndarr.enums import CycleTrigger, SearchAction
 from houndarr.errors import ClientError, EngineError
@@ -419,7 +420,7 @@ class Supervisor:
         lock = self._run_locks.setdefault(instance.id, asyncio.Lock())
         async with lock:
             try:
-                adapter = get_adapter(instance.type)
+                adapter: AppAdapterProto = get_adapter(instance.type)
                 async with adapter.make_client(instance) as client:
                     snap = await client.get_instance_snapshot()
                 await update_instance_snapshot(

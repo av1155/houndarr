@@ -20,7 +20,8 @@ from uuid import uuid4
 import httpx
 
 from houndarr.database import get_db
-from houndarr.engine.adapters import AppAdapter, get_adapter
+from houndarr.engine.adapters import get_adapter
+from houndarr.engine.adapters.protocols import AppAdapterProto
 from houndarr.engine.candidates import SearchCandidate
 from houndarr.enums import CycleTrigger, ItemType, SearchAction, SearchKind
 from houndarr.errors import (
@@ -252,7 +253,7 @@ def _is_release_timing_reason(reason: str | None) -> bool:
 
 
 async def _dispatch_with_typed_wrap(
-    adapter: AppAdapter,
+    adapter: AppAdapterProto,
     instance: Instance,
     dispatch_fn: Callable[..., Awaitable[None]],
     candidate: SearchCandidate,
@@ -278,7 +279,7 @@ async def _dispatch_with_typed_wrap(
     ``message=str(exc)`` write and preserves the golden log shape.
 
     Args:
-        adapter: The :class:`AppAdapter` for the instance.
+        adapter: :class:`AppAdapterProto` for the instance.
         instance: Fully-populated instance.
         dispatch_fn: Adapter dispatch callable; takes ``(client,
             candidate)`` and sends the search command.
@@ -337,7 +338,7 @@ async def _persist_offset_with_typed_wrap(
 
 
 async def _fetch_pool_with_typed_wrap(
-    adapter: AppAdapter,
+    adapter: AppAdapterProto,
     instance: Instance,
 ) -> list[Any]:
     """Open a client, call ``adapter.fetch_upgrade_pool``, surface typed.
@@ -348,7 +349,7 @@ async def _fetch_pool_with_typed_wrap(
     :class:`EnginePoolFetchError` surface.
 
     Args:
-        adapter: The :class:`AppAdapter` for the instance.
+        adapter: :class:`AppAdapterProto` for the instance.
         instance: Fully-populated instance.
 
     Returns:
@@ -372,7 +373,7 @@ async def _fetch_pool_with_typed_wrap(
 
 async def _run_search_pass(  # noqa: C901
     instance: Instance,
-    adapter: AppAdapter,
+    adapter: AppAdapterProto,
     *,
     adapt_fn: Callable[..., SearchCandidate],
     dispatch_fn: Callable[..., Awaitable[None]],
@@ -399,7 +400,8 @@ async def _run_search_pass(  # noqa: C901
 
     Args:
         instance: Fully-populated (decrypted) instance.
-        adapter: The :class:`AppAdapter` for this instance type.
+        adapter: The :class:`AppAdapterProto` implementation for this
+            instance type.
         adapt_fn: Converts a raw API item to a :class:`SearchCandidate`.
         dispatch_fn: Sends the search command via the appropriate client.
         fetch_fn: Bound method to fetch a page of items
@@ -694,7 +696,7 @@ async def _run_search_pass(  # noqa: C901
 
 async def _run_upgrade_pass(
     instance: Instance,
-    adapter: AppAdapter,
+    adapter: AppAdapterProto,
     master_key: bytes,
     *,
     cycle_id: str,
@@ -707,7 +709,8 @@ async def _run_upgrade_pass(
 
     Args:
         instance: Fully-populated (decrypted) instance.
-        adapter: The :class:`AppAdapter` for this instance type.
+        adapter: The :class:`AppAdapterProto` implementation for this
+            instance type.
         master_key: Fernet key for persisting offset updates.
         cycle_id: Shared cycle identifier for all log rows.
         cycle_trigger: How this cycle was initiated.

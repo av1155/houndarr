@@ -16,6 +16,18 @@ logger = logging.getLogger(__name__)
 # Default timeouts (seconds): connect=5, read=30
 _DEFAULT_TIMEOUT = httpx.Timeout(30.0, connect=5.0)
 
+# Exceptions :meth:`ArrClient.ping` collapses to ``None``.  The contract
+# is "never raise on a ping failure"; this tuple enumerates every known
+# failure mode (transport, malformed URL, JSON-parse, schema-mismatch).
+# Callers that need a typed escalation wrap the ``None`` return
+# themselves.
+_PING_SAFE_ERRORS: tuple[type[BaseException], ...] = (
+    httpx.HTTPError,
+    httpx.InvalidURL,
+    ValueError,
+    ValidationError,
+)
+
 
 class ArrClient(ABC):
     """Thin async wrapper around an *arr REST API.
@@ -101,7 +113,7 @@ class ArrClient(ABC):
         try:
             result = await self._get(self._SYSTEM_STATUS_PATH)
             return SystemStatus.model_validate(result)
-        except (httpx.HTTPError, httpx.InvalidURL, ValueError, ValidationError):
+        except _PING_SAFE_ERRORS:
             return None
 
     # ------------------------------------------------------------------

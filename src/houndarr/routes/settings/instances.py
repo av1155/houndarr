@@ -127,7 +127,7 @@ async def instance_test_connection(
                 ok=False,
                 status_code=404,
             )
-        resolved_api_key = existing.api_key
+        resolved_api_key = existing.core.api_key
 
     check = await check_connection(instance_type, url.rstrip("/"), resolved_api_key)
     if not check.reachable:
@@ -223,7 +223,7 @@ async def instance_create(
 
     supervisor = getattr(request.app.state, "supervisor", None)
     if isinstance(supervisor, Supervisor):
-        await supervisor.reconcile_instance(instance.id)
+        await supervisor.reconcile_instance(instance.core.id)
 
     instances = await list_instances(master_key=master_key(request))
     error_ids = await active_error_instance_ids()
@@ -364,32 +364,32 @@ async def instance_toggle_enabled(request: Request, instance_id: int) -> HTMLRes
     updated = await update_instance(
         instance_id,
         master_key=master_key(request),
-        name=instance.name,
-        type=instance.type,
-        url=instance.url,
-        api_key=instance.api_key,
-        enabled=not instance.enabled,
-        batch_size=instance.batch_size,
-        sleep_interval_mins=instance.sleep_interval_mins,
-        hourly_cap=instance.hourly_cap,
-        cooldown_days=instance.cooldown_days,
-        post_release_grace_hrs=instance.post_release_grace_hrs,
-        queue_limit=instance.queue_limit,
-        cutoff_enabled=instance.cutoff_enabled,
-        cutoff_batch_size=instance.cutoff_batch_size,
-        cutoff_cooldown_days=instance.cutoff_cooldown_days,
-        cutoff_hourly_cap=instance.cutoff_hourly_cap,
-        sonarr_search_mode=instance.sonarr_search_mode,
-        lidarr_search_mode=instance.lidarr_search_mode,
-        readarr_search_mode=instance.readarr_search_mode,
-        whisparr_search_mode=instance.whisparr_search_mode,
+        name=instance.core.name,
+        type=instance.core.type,
+        url=instance.core.url,
+        api_key=instance.core.api_key,
+        enabled=not instance.core.enabled,
+        batch_size=instance.missing.batch_size,
+        sleep_interval_mins=instance.missing.sleep_interval_mins,
+        hourly_cap=instance.missing.hourly_cap,
+        cooldown_days=instance.missing.cooldown_days,
+        post_release_grace_hrs=instance.missing.post_release_grace_hrs,
+        queue_limit=instance.missing.queue_limit,
+        cutoff_enabled=instance.cutoff.cutoff_enabled,
+        cutoff_batch_size=instance.cutoff.cutoff_batch_size,
+        cutoff_cooldown_days=instance.cutoff.cutoff_cooldown_days,
+        cutoff_hourly_cap=instance.cutoff.cutoff_hourly_cap,
+        sonarr_search_mode=instance.missing.sonarr_search_mode,
+        lidarr_search_mode=instance.missing.lidarr_search_mode,
+        readarr_search_mode=instance.missing.readarr_search_mode,
+        whisparr_search_mode=instance.missing.whisparr_search_mode,
     )
     if updated is None:
         return HTMLResponse(content="Not found", status_code=404)
 
     supervisor = getattr(request.app.state, "supervisor", None)
     if isinstance(supervisor, Supervisor):
-        await supervisor.reconcile_instance(updated.id)
+        await supervisor.reconcile_instance(updated.core.id)
 
     error_ids = await active_error_instance_ids()
     return render(

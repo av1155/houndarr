@@ -400,8 +400,11 @@ def test_admin_factory_reset_phrase_gates_submit(logged_in_page: Page, houndarr_
     expect(confirm_go).to_be_disabled()
     page.locator("#confirm-phrase-input").fill("RESET")
     expect(confirm_go).to_be_enabled()
-    # Dismiss without submitting.
-    page.locator("[data-dismiss-confirm]").first.click()
+    # Dismiss without submitting. Target the Cancel button explicitly;
+    # the backdrop also carries data-dismiss-confirm but its bounding-box
+    # centre is occluded by the panel in grid-centred layouts, so
+    # .first.click() lands on the panel and gets intercepted.
+    page.locator("button[data-dismiss-confirm]").click()
     expect(page.locator("#confirm-dialog")).to_have_class(re.compile(r"hidden"))
 
 
@@ -634,9 +637,12 @@ def test_instance_toggle_and_delete_keeps_layout_stable(
     expect(toggle_btn).to_have_text(re.compile(r"Disable", re.I), timeout=5_000)
 
     delete_btn = row.locator("button[hx-delete]")
-    # hx-confirm triggers a window.confirm(); auto-accept it.
-    page.once("dialog", lambda dialog: dialog.accept())
+    # settings.js intercepts htmx:confirm and routes delete through the
+    # shared danger-tone dialog instead of window.confirm(); confirm via
+    # the dialog's primary button.
     delete_btn.click()
+    expect(page.locator("#confirm-dialog")).not_to_have_class(re.compile(r"hidden"))
+    page.locator("#confirm-go").click()
     expect(row).to_have_count(0, timeout=5_000)
 
 
@@ -670,6 +676,12 @@ def test_changelog_preferences_switch_rolls_back_on_error(
     checkbox = page.locator('form[hx-post="/settings/changelog/preferences"] input[name="enabled"]')
     initial_checked = checkbox.is_checked()
 
+    # The iOS-style switch layers a .switch__thumb span on top of the
+    # native <input>, so Playwright's element-centre click lands on the
+    # span and gets intercepted. Click the wrapping <label> so the
+    # browser forwards the click to the input natively.
+    toggle_label = page.locator('form[hx-post="/settings/changelog/preferences"] label').first
+
     # Force every /preferences call during this test to fail with 500.
     pattern = re.compile(r"/settings/changelog/preferences$")
     page.route(pattern, lambda route: route.fulfill(status=500, body=""))
@@ -678,7 +690,7 @@ def test_changelog_preferences_switch_rolls_back_on_error(
         with page.expect_response(
             lambda r: "/settings/changelog/preferences" in r.url and r.request.method == "POST"
         ) as resp_info:
-            checkbox.click()
+            toggle_label.click()
         assert resp_info.value.status == 500
 
         # The htmx:responseError handler flips the checkbox back; give it a

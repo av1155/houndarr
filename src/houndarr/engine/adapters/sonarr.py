@@ -14,6 +14,10 @@ import httpx
 from pydantic import ValidationError
 
 from houndarr.clients.sonarr import LibraryEpisode, MissingEpisode, SonarrClient
+from houndarr.engine.adapters._common import (
+    ContextOverride,
+    build_missing_candidate,
+)
 from houndarr.engine.candidates import (
     SearchCandidate,
     _is_unreleased,
@@ -100,40 +104,37 @@ def adapt_missing(item: MissingEpisode, instance: Instance) -> SearchCandidate:
     Returns:
         A fully populated :class:`SearchCandidate`.
     """
-    episode_mode = instance.sonarr_search_mode == SonarrSearchMode.episode
-
-    use_season_context = not episode_mode and item.series_id is not None and item.season > 0
-
-    if use_season_context:
-        assert item.series_id is not None  # noqa: S101
-        item_id = _season_item_id(item.series_id, item.season)
-        label = _season_context_label(item)
-        group_key: tuple[int, int] | None = (item.series_id, item.season)
-        search_payload = {
-            "command": "SeasonSearch",
-            "series_id": item.series_id,
-            "season_number": item.season,
-        }
-    else:
-        item_id = item.episode_id
-        label = _episode_label(item)
-        group_key = None
-        search_payload = {
-            "command": "EpisodeSearch",
-            "episode_id": item.episode_id,
-        }
-
     unreleased_reason = _sonarr_unreleased_reason(
         item.air_date_utc, instance.post_release_grace_hrs
     )
 
-    return SearchCandidate(
-        item_id=item_id,
+    context: ContextOverride | None = None
+    if (
+        instance.sonarr_search_mode != SonarrSearchMode.episode
+        and item.series_id is not None
+        and item.season > 0
+    ):
+        context = ContextOverride(
+            item_id=_season_item_id(item.series_id, item.season),
+            label=_season_context_label(item),
+            group_key=(item.series_id, item.season),
+            search_payload={
+                "command": "SeasonSearch",
+                "series_id": item.series_id,
+                "season_number": item.season,
+            },
+        )
+
+    return build_missing_candidate(
         item_type="episode",
-        label=label,
+        item_id=item.episode_id,
+        label=_episode_label(item),
         unreleased_reason=unreleased_reason,
-        group_key=group_key,
-        search_payload=search_payload,
+        search_payload={
+            "command": "EpisodeSearch",
+            "episode_id": item.episode_id,
+        },
+        context=context,
     )
 
 

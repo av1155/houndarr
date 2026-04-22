@@ -10,7 +10,10 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 from houndarr.clients.radarr import LibraryMovie, MissingMovie, RadarrClient
-from houndarr.engine.adapters._common import fetch_movie_upgrade_pool
+from houndarr.engine.adapters._common import (
+    build_missing_candidate,
+    fetch_movie_upgrade_pool,
+)
 from houndarr.engine.candidates import (
     SearchCandidate,
     _is_unreleased,
@@ -79,12 +82,11 @@ def adapt_missing(item: MissingMovie, instance: Instance) -> SearchCandidate:
     Returns:
         A fully populated :class:`SearchCandidate`.
     """
-    return SearchCandidate(
-        item_id=item.movie_id,
+    return build_missing_candidate(
         item_type="movie",
+        item_id=item.movie_id,
         label=_movie_label(item),
         unreleased_reason=_radarr_unreleased_reason(item, instance.post_release_grace_hrs),
-        group_key=None,
         search_payload={
             "command": "MoviesSearch",
             "movie_id": item.movie_id,

@@ -10,8 +10,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
-import httpx
-
 from houndarr.clients._wire_models import (
     ArrSeries,
     PaginatedResponse,
@@ -246,17 +244,3 @@ def _parse_episode(wire: WhisparrV2WantedEpisode) -> MissingWhisparrEpisode:
         absolute_episode_number=wire.absolute_episode_number,
         release_date=_parse_date_only(wire.release_date),
     )
-
-
-# ---------------------------------------------------------------------------
-# Convenience factory
-# ---------------------------------------------------------------------------
-
-
-def make_whisparr_client(
-    url: str,
-    api_key: str,
-    timeout: httpx.Timeout = httpx.Timeout(30.0, connect=5.0),
-) -> WhisparrClient:
-    """Return a :class:`WhisparrClient` ready for use as an async context manager."""
-    return WhisparrClient(url=url, api_key=api_key, timeout=timeout)

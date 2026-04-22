@@ -256,17 +256,3 @@ def _parse_movie(wire: WhisparrV3LibraryMovie) -> MissingWhisparrV3Movie:
         release_date=wire.release_date,
         digital_release=wire.digital_release,
     )
-
-
-# ---------------------------------------------------------------------------
-# Convenience factory
-# ---------------------------------------------------------------------------
-
-
-def make_whisparr_v3_client(
-    url: str,
-    api_key: str,
-    timeout: httpx.Timeout = httpx.Timeout(30.0, connect=5.0),
-) -> WhisparrV3Client:
-    """Return a :class:`WhisparrV3Client` ready for use as an async context manager."""
-    return WhisparrV3Client(url=url, api_key=api_key, timeout=timeout)

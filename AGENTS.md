@@ -40,7 +40,7 @@ Dev server: `http://localhost:8877`.
 
 ## Quality Gates
 
-Run **all five** before every commit. These are the core local gates; CI
+Run all five before every commit. These are the core local gates; CI
 also enforces them as part of the required checks, alongside additional
 security and container checks.
 
@@ -52,13 +52,42 @@ security and container checks.
 .venv/bin/pytest                                     # all tests
 ```
 
+### Shortcut: `just`
+
+A `justfile` at the repo root wraps the same five commands plus a few
+common workflows. Install `just` via `brew install just` (macOS) or
+`cargo install just`; without it, the commands above stay authoritative.
+
+```bash
+just            # list every recipe
+just check      # all five gates, CI order
+just quick      # lint + type + non-integration pytest (fast feedback loop)
+just fix        # ruff check --fix + ruff format, in place
+just test-quick # pytest -m "not integration"
+just test-integration  # pytest -m integration tests/test_e2e/
+just test-browser chromium  # Playwright e2e against a live stack
+just dev        # python -m houndarr --data-dir ./data-dev --dev
+```
+
 ---
 
 ## Running Tests
 
 ```bash
-# Full suite (949 tests, async; count includes parametrised expansions)
+# Full suite (~1325 tests; count includes parametrised expansions and
+# the 12 async engine-cycle tests tagged @pytest.mark.integration).
 .venv/bin/pytest
+
+# Fast feedback: unit tests only, skip integration + browser trees.
+.venv/bin/pytest -m "not integration"
+
+# Integration-only (the 12 async engine-cycle cases under tests/test_e2e/).
+.venv/bin/pytest -m integration tests/test_e2e/
+
+# Browser e2e (Playwright; needs a running Houndarr + mock *arr stack).
+# Not collected by default (norecursedirs skips tests/e2e_browser/);
+# invoke the tree explicitly:
+.venv/bin/pytest tests/e2e_browser/ --browser chromium
 
 # Single file
 .venv/bin/pytest tests/test_auth.py
@@ -75,6 +104,16 @@ security and container checks.
 # With coverage
 .venv/bin/pytest --cov=houndarr --cov-report=term-missing
 ```
+
+### `@pytest.mark.integration`
+
+The 12 cases under `tests/test_e2e/` and the 15 Playwright flows under
+`tests/e2e_browser/` carry the `integration` marker (registered in
+`[tool.pytest.ini_options]`).  Use `-m "not integration"` for the fast
+unit loop and `-m integration` when you need the engine-cycle coverage.
+The `integration` marker is orthogonal to `norecursedirs`: the browser
+tree is excluded from default collection entirely; the `test_e2e/` tree
+is collected and simply filterable by marker.
 
 **Pytest config** (from `pyproject.toml`):
 
@@ -303,10 +342,33 @@ src/houndarr/
   is a lazy singleton. Pydantic is used only at the *arr wire boundary
   (`src/houndarr/clients/_wire_models.py`), not for internal domain models or
   config
+- **Wire models:** every *arr HTTP response is validated with a Pydantic
+  model from `clients/_wire_models.py` before it reaches a parser.
+  `PaginatedResponse[T]` (generic, PEP 695 syntax) covers the shared
+  `/wanted/*` envelope; `SystemStatus` and `QueueStatus` back
+  `ArrClient.ping()` and `ArrClient.get_queue_status()`; per-app
+  `*WantedEpisode` / `*WantedMovie` / `*WantedAlbum` / `*WantedBook`
+  and `*LibraryEpisode` / `*LibraryMovie` / `*LibraryAlbum` / `*LibraryBook`
+  models name the record shapes.  `ArrSeries` / `ArrArtist` / `ArrAuthor`
+  type the parent-aggregate fetches.  All wire models extend an internal
+  `_ArrModel` that sets `populate_by_name=True` + `extra="ignore"` so
+  unknown fields from new *arr versions never raise.  Field names are
+  snake_case in Python and alias to the camelCase the APIs serialise.
+- **Domain models:** the parsed result types (`MissingEpisode`,
+  `LibraryMovie`, etc.) are frozen dataclasses, one per client file
+  next to the client that builds them.  Every frozen dataclass in the
+  codebase uses `slots=True`; `Instance` and `AppSettings` are the two
+  deliberately-mutable dataclasses (SQL row mapping and env overrides).
 - **Encryption:** Master key in `request.app.state.master_key`; passed
   explicitly to service functions as `master_key=` kwarg; never imported globally
 - **Auth:** Global `AuthMiddleware` (Starlette `BaseHTTPMiddleware`) handles
-  session validation and CSRF enforcement; no per-route auth decorators
+  session validation and CSRF enforcement; no per-route auth decorators.
+  Proxy-auth trust and header reads flow through two primitives in
+  `auth.py`: `_is_trusted_proxy(request)` (IP gate) and
+  `_extract_proxy_username(request)` (header read, assumes trust
+  already verified).  The middleware's `_dispatch_proxy` and the
+  standalone `_validate_proxy_auth` both compose these so the gate
+  logic lives in one place.
 - **HTMX:** SPA-like shell navigation; nav links use `hx-target="#app-content"`
   with `hx-swap="innerHTML"` and `hx-push-url="true"`. Routes check
   `is_hx_request(request)` from `routes/_htmx.py` and return either partial

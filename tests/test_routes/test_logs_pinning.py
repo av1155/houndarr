@@ -16,13 +16,17 @@ import pytest
 from fastapi import HTTPException
 
 from houndarr.routes.api.logs import (
-    _compute_load_more_limit,
     _parse_cycle_trigger,
     _parse_hide_system,
     _parse_instance_id,
     _parse_search_kind,
     _partial_validation_error,
-    _summarize_rows,
+)
+from houndarr.services.log_query import (
+    compute_load_more_limit as _compute_load_more_limit,
+)
+from houndarr.services.log_query import (
+    summarize_rows as _summarize_rows,
 )
 
 pytestmark = pytest.mark.pinning

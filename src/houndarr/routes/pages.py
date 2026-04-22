@@ -202,13 +202,15 @@ async def logs_page(
     instance/action rows.
     """
     from houndarr.routes.api.logs import (
-        _compute_load_more_limit,
         _parse_cycle_trigger,
         _parse_hide_system,
         _parse_instance_id,
         _parse_search_kind,
-        _query_logs,
-        _summarize_rows,
+    )
+    from houndarr.services.log_query import (
+        compute_load_more_limit,
+        query_logs,
+        summarize_rows,
     )
 
     try:
@@ -228,7 +230,7 @@ async def logs_page(
 
     master_key: bytes = request.app.state.master_key
     instances = await list_instances(master_key=master_key)
-    rows = await _query_logs(
+    rows = await query_logs(
         instance_id=parsed_instance_id,
         action=parsed_action,
         search_kind=parsed_search_kind,
@@ -237,7 +239,7 @@ async def logs_page(
         before=None,
         limit=50,
     )
-    summary = _summarize_rows(rows)
+    summary = summarize_rows(rows)
     template_name = "partials/pages/logs_content.html" if is_hx_request(request) else "logs.html"
     return _render(
         request,
@@ -246,7 +248,7 @@ async def logs_page(
         rows=rows,
         summary=summary,
         limit=50,
-        load_more_limit=_compute_load_more_limit(50),
+        load_more_limit=compute_load_more_limit(50),
         selected_instance_id=parsed_instance_id,
         selected_action=parsed_action,
         selected_search_kind=parsed_search_kind,

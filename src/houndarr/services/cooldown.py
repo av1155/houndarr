@@ -19,11 +19,9 @@ from __future__ import annotations
 import asyncio
 from collections import OrderedDict
 from datetime import UTC, datetime, timedelta
-from typing import Literal
 
 from houndarr.database import get_db
-
-ItemType = Literal["episode", "movie", "album", "book", "whisparr_episode", "whisparr_v3_movie"]
+from houndarr.engine.candidates import ItemType
 
 # ---------------------------------------------------------------------------
 # Skip-log throttle sentinel (single-process LRU with TTL)

@@ -11,11 +11,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any, Literal
+from typing import Any
 
 import httpx
 
-from houndarr.clients.base import ArrClient, InstanceSnapshot
+from houndarr.clients.base import ArrClient, InstanceSnapshot, WantedKind
 
 __all__ = ["LibraryWhisparrV3Movie", "MissingWhisparrV3Movie", "WhisparrV3Client"]
 
@@ -150,7 +150,7 @@ class WhisparrV3Client(ArrClient):
         start = (page - 1) * page_size
         return cutoff[start : start + page_size]
 
-    async def get_wanted_total(self, kind: Literal["missing", "cutoff"]) -> int:
+    async def get_wanted_total(self, kind: WantedKind) -> int:
         """Return the count of wanted items for *kind* from the cached library.
 
         Reuses :meth:`_get_all_movies` (one fetch per client lifetime) so the

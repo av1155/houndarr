@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import Any
 
 import httpx
 
-from houndarr.clients.base import ArrClient
+from houndarr.clients.base import ArrClient, WantedKind
 
 __all__ = ["LibraryBook", "MissingBook", "ReadarrClient"]
 
@@ -125,7 +125,7 @@ class ReadarrClient(ArrClient):
         records: list[dict[str, Any]] = data.get("records", [])
         return [_parse_book(r) for r in records]
 
-    async def get_wanted_total(self, kind: Literal["missing", "cutoff"]) -> int:
+    async def get_wanted_total(self, kind: WantedKind) -> int:
         """Return the totalRecords count for ``wanted/{kind}`` via a size-1 probe."""
         data: dict[str, Any] = await self._get(
             f"/api/v1/wanted/{kind}",

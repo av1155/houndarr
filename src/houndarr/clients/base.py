@@ -27,6 +27,9 @@ class InstanceSnapshot:
     unreleased_count: int
 
 
+WantedKind = Literal["missing", "cutoff"]
+
+
 # Default timeouts (seconds): connect=5, read=30
 _DEFAULT_TIMEOUT = httpx.Timeout(30.0, connect=5.0)
 
@@ -154,7 +157,7 @@ class ArrClient(ABC):
         """Trigger an automatic search for the item identified by *item_id*."""
 
     @abstractmethod
-    async def get_wanted_total(self, kind: Literal["missing", "cutoff"]) -> int:
+    async def get_wanted_total(self, kind: WantedKind) -> int:
         """Return the total number of records in the wanted/*kind* list.
 
         Used by the engine's random-start-page computation to size the

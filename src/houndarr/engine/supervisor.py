@@ -17,6 +17,7 @@ from uuid import uuid4
 
 import httpx
 
+from houndarr.engine.retry import ReconnectState, run_with_reconnect
 from houndarr.engine.search_loop import CycleTrigger, _write_log, run_instance_search
 from houndarr.services.instances import Instance, get_instance, list_instances
 
@@ -197,10 +198,11 @@ class Supervisor:
         A one-time startup grace delay gives co-located *arr services time
         to become ready before the first cycle fires.  Connection errors are
         logged to ``search_log`` only on state transitions (first failure and
-        recovery) to avoid inflating the dashboard error counter with retry noise.
+        recovery) to avoid inflating the dashboard error counter with retry
+        noise; the state machine lives in
+        :func:`houndarr.engine.retry.run_with_reconnect`.
         """
         logger.debug("Supervisor: loop started for instance id=%d", instance_id)
-        _in_connect_retry = False
 
         logger.info(
             "Supervisor: waiting %d s startup grace for instance id=%d",
@@ -208,6 +210,8 @@ class Supervisor:
             instance_id,
         )
         await asyncio.sleep(_STARTUP_GRACE_SECS + startup_offset)
+
+        state = ReconnectState()
 
         try:
             while True:
@@ -226,41 +230,18 @@ class Supervisor:
                     )
                     return
 
-                got_connect_error = await self._run_search_cycle(
-                    instance, cycle_trigger="scheduled"
+                sleep_secs = await run_with_reconnect(
+                    state,
+                    instance=instance,
+                    cycle=partial(
+                        self._run_search_cycle, instance, cycle_trigger="scheduled"
+                    ),
+                    cycle_trigger="scheduled",
+                    error_retry_secs=_CONNECT_RETRY_SECS,
+                    success_sleep_secs=instance.sleep_interval_mins * 60,
+                    write_log=_write_log,
                 )
-
-                if got_connect_error:
-                    if not _in_connect_retry:
-                        # First failure: write one error row and enter retry state.
-                        await _write_log(
-                            instance_id=instance.id,
-                            item_id=None,
-                            item_type=None,
-                            action="error",
-                            cycle_trigger="scheduled",
-                            message=f"Could not reach {instance.url}",
-                        )
-                    _in_connect_retry = True
-                    await asyncio.sleep(_CONNECT_RETRY_SECS)
-                else:
-                    if _in_connect_retry:
-                        # Recovery: write one info row and leave retry state.
-                        logger.info(
-                            "Supervisor: %r (%s) is reachable again",
-                            instance.name,
-                            instance.url,
-                        )
-                        await _write_log(
-                            instance_id=instance.id,
-                            item_id=None,
-                            item_type=None,
-                            action="info",
-                            cycle_trigger="scheduled",
-                            message=f"{instance.name!r} ({instance.url}) is reachable again",
-                        )
-                        _in_connect_retry = False
-                    await asyncio.sleep(instance.sleep_interval_mins * 60)
+                await asyncio.sleep(sleep_secs)
 
         except asyncio.CancelledError:
             logger.debug("Supervisor: loop cancelled for instance id=%d", instance_id)

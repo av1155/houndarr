@@ -11,6 +11,7 @@ import re
 import uuid
 from contextlib import suppress
 
+import pytest
 from playwright.sync_api import Locator, Page, expect
 
 
@@ -106,6 +107,7 @@ def _open_admin_dropdown(page: Page) -> None:
     expect(panel).to_have_attribute("data-open", "true")
 
 
+@pytest.mark.integration
 def test_full_instance_lifecycle(
     logged_in_page: Page, houndarr_url: str, mock_sonarr_url: str
 ) -> None:
@@ -191,6 +193,7 @@ _EXPECTED_422_CONSOLE_NOISE = [
 ]
 
 
+@pytest.mark.integration
 def test_save_instance_4xx_renders_error(
     logged_in_page: Page,
     houndarr_url: str,
@@ -228,6 +231,7 @@ def test_save_instance_4xx_renders_error(
     )
 
 
+@pytest.mark.integration
 def test_test_connection_4xx_renders_error(
     logged_in_page: Page, houndarr_url: str, console_guard
 ) -> None:
@@ -261,6 +265,7 @@ def test_test_connection_4xx_renders_error(
     )
 
 
+@pytest.mark.integration
 def test_password_change_4xx_renders_error(
     logged_in_page: Page, houndarr_url: str, console_guard
 ) -> None:
@@ -299,6 +304,7 @@ def test_password_change_4xx_renders_error(
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.integration
 def test_admin_dropdown_toggle_resets_on_reload(logged_in_page: Page, houndarr_url: str) -> None:
     """The Admin collapsible always starts collapsed. Opening it holds
     within the session, but a reload (or fresh navigation) returns it to
@@ -326,6 +332,7 @@ def test_admin_dropdown_toggle_resets_on_reload(logged_in_page: Page, houndarr_u
     assert stored is None
 
 
+@pytest.mark.integration
 def test_admin_security_confirm_password_match_indicator(
     logged_in_page: Page, houndarr_url: str
 ) -> None:
@@ -340,6 +347,7 @@ def test_admin_security_confirm_password_match_indicator(
     expect(page.locator(".pw-match")).to_have_class(re.compile(r"is-mismatch"))
 
 
+@pytest.mark.integration
 def test_admin_whats_new_button_opens_modal(logged_in_page: Page, houndarr_url: str) -> None:
     """The 'What's new' button force-opens the What's new modal."""
     page = logged_in_page
@@ -349,6 +357,7 @@ def test_admin_whats_new_button_opens_modal(logged_in_page: Page, houndarr_url: 
     expect(page.locator("dialog#changelog-modal[open]")).to_be_visible(timeout=4_000)
 
 
+@pytest.mark.integration
 def test_admin_clear_logs_flash(logged_in_page: Page, houndarr_url: str) -> None:
     """Clear logs surfaces a success flash; the dialog closes automatically."""
     page = logged_in_page
@@ -363,6 +372,7 @@ def test_admin_clear_logs_flash(logged_in_page: Page, houndarr_url: str) -> None
     expect(flash).to_contain_text(re.compile(r"Cleared|already empty", re.I), timeout=4_000)
 
 
+@pytest.mark.integration
 def test_admin_reset_instances_empty_state_flash(logged_in_page: Page, houndarr_url: str) -> None:
     """With no instances configured the reset button renders the 'nothing to reset' flash."""
     page = logged_in_page
@@ -377,6 +387,7 @@ def test_admin_reset_instances_empty_state_flash(logged_in_page: Page, houndarr_
     )
 
 
+@pytest.mark.integration
 def test_admin_factory_reset_phrase_gates_submit(logged_in_page: Page, houndarr_url: str) -> None:
     """Confirm button stays disabled until the typed phrase matches RESET."""
     page = logged_in_page
@@ -394,6 +405,7 @@ def test_admin_factory_reset_phrase_gates_submit(logged_in_page: Page, houndarr_
     expect(page.locator("#confirm-dialog")).to_have_class(re.compile(r"hidden"))
 
 
+@pytest.mark.integration
 def test_admin_factory_reset_wrong_password_flash(
     logged_in_page: Page, houndarr_url: str, console_guard
 ) -> None:
@@ -431,6 +443,7 @@ _EXPECTED_500_CONSOLE_NOISE = [
 ]
 
 
+@pytest.mark.integration
 def test_password_change_hx_refresh_recovers_csrf(logged_in_page: Page, houndarr_url: str) -> None:
     """After a successful password change the server sets HX-Refresh so the
     tab reloads and re-stamps hx-headers with the rotated CSRF cookie.
@@ -505,6 +518,7 @@ def test_password_change_hx_refresh_recovers_csrf(logged_in_page: Page, houndarr
             _submit_password_change(temp_password, original_password)
 
 
+@pytest.mark.integration
 def test_caps_lock_badge_toggles_with_modifier_state(
     logged_in_page: Page, houndarr_url: str
 ) -> None:
@@ -557,6 +571,7 @@ def test_caps_lock_badge_toggles_with_modifier_state(
     expect(caps_badge).not_to_have_class(re.compile(r"\bis-on\b"), timeout=2_000)
 
 
+@pytest.mark.integration
 def test_instance_toggle_and_delete_keeps_layout_stable(
     logged_in_page: Page, houndarr_url: str, mock_sonarr_url: str
 ) -> None:
@@ -625,6 +640,7 @@ def test_instance_toggle_and_delete_keeps_layout_stable(
     expect(row).to_have_count(0, timeout=5_000)
 
 
+@pytest.mark.integration
 def test_changelog_preferences_switch_rolls_back_on_error(
     logged_in_page: Page, houndarr_url: str, console_guard
 ) -> None:

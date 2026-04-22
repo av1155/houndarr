@@ -138,3 +138,6 @@ norecursedirs = ["e2e_browser"]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 addopts = "-q --tb=short"
+markers = [
+    "integration: end-to-end tests (live mock *arr containers or Playwright browser driving)",
+]

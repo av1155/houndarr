@@ -56,11 +56,14 @@ class InstanceRepository(Protocol):
     """Instance CRUD boundary backing the ``instances`` table.
 
     Track D.3 lands the read half under ``repositories/instances.py``;
-    D.4 lands the write half with concrete payload dataclasses.  The
-    read methods take the Fernet ``master_key`` so the repository can
-    decrypt ``encrypted_api_key`` before returning an :class:`Instance`;
-    the service layer in ``services/instances.py`` becomes a facade
-    over this boundary.
+    Track D.4 lands the write half, including the concrete
+    :class:`~houndarr.repositories.instances.InstanceInsert` and
+    :class:`~houndarr.repositories.instances.InstanceUpdate` payload
+    dataclasses the Protocol references below.  The read methods take
+    the Fernet ``master_key`` so the repository can decrypt
+    ``encrypted_api_key`` before returning an :class:`Instance`; the
+    service layer in ``services/instances.py`` becomes a facade over
+    this boundary.
     """
 
     def list_instances(self, *, master_key: bytes) -> Awaitable[list[Instance]]:
@@ -69,24 +72,46 @@ class InstanceRepository(Protocol):
     def get_instance(self, instance_id: int, *, master_key: bytes) -> Awaitable[Instance | None]:
         """Return the instance identified by *instance_id*, or ``None``."""
 
-    def insert_instance(self, payload: Any) -> Awaitable[int]:
+    def insert_instance(
+        self,
+        payload: Any,
+        *,
+        master_key: bytes,
+    ) -> Awaitable[int]:
         """Insert a new instance row and return the assigned primary key.
 
-        *payload* is intentionally typed as :class:`Any` here; Track
-        D.4 will replace it with the concrete ``InstanceInsert``
-        dataclass declared alongside the repository.
+        *payload* is structurally typed as :class:`Any` so consumers
+        do not import the concrete repository module just to satisfy
+        the Protocol; the concrete implementation takes an
+        :class:`~houndarr.repositories.instances.InstanceInsert`.
         """
 
-    def update_instance(self, instance_id: int, payload: Any) -> Awaitable[None]:
+    def update_instance(
+        self,
+        instance_id: int,
+        payload: Any,
+        *,
+        master_key: bytes,
+    ) -> Awaitable[None]:
         """Partially update the instance identified by *instance_id*.
 
-        *payload* is placeholder-typed for the same reason as
-        :meth:`insert_instance`; Track D.4 replaces it with the
-        concrete ``InstanceUpdate`` dataclass.
+        *payload* is structurally typed as :class:`Any` for the same
+        reason as :meth:`insert_instance`; the concrete implementation
+        takes an :class:`~houndarr.repositories.instances.InstanceUpdate`
+        and no-ops when every field is ``None``.
         """
 
-    def delete_instance(self, instance_id: int) -> Awaitable[None]:
-        """Delete the instance row and any FK-cascaded rows."""
+    def delete_instance(self, instance_id: int) -> Awaitable[bool]:
+        """Delete the instance row; return ``True`` iff a row was removed."""
+
+    def update_instance_snapshot(
+        self,
+        instance_id: int,
+        *,
+        monitored_total: int,
+        unreleased_count: int,
+    ) -> Awaitable[None]:
+        """Refresh the three v13 snapshot columns for *instance_id*."""
 
 
 @runtime_checkable

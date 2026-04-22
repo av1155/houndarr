@@ -16,12 +16,20 @@ import pytest
 import pytest_asyncio
 
 from houndarr.database import get_db
-from houndarr.routes.api.status import (
-    _active_errors,
-    _all_instance_metrics,
-    _cooldown_data,
-    _lifetime_metrics,
-    _recent_searches,
+from houndarr.services.metrics import (
+    gather_active_errors as _active_errors,
+)
+from houndarr.services.metrics import (
+    gather_cooldown_data as _cooldown_data,
+)
+from houndarr.services.metrics import (
+    gather_lifetime_metrics as _lifetime_metrics,
+)
+from houndarr.services.metrics import (
+    gather_recent_searches as _recent_searches,
+)
+from houndarr.services.metrics import (
+    gather_window_metrics as _all_instance_metrics,
 )
 
 pytestmark = pytest.mark.pinning

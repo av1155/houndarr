@@ -163,3 +163,46 @@ def build_missing_candidate(
         group_key=None,
         search_payload=search_payload,
     )
+
+
+def build_cutoff_candidate(
+    *,
+    item_type: str,
+    item_id: int,
+    label: str,
+    unreleased_reason: str | None,
+    search_payload: dict[str, Any],
+) -> SearchCandidate:
+    """Construct a :class:`SearchCandidate` for the cutoff pass.
+
+    The cutoff pass is single-mode for every *arr regardless of how the
+    missing pass dispatches, so this helper takes no
+    :class:`ContextOverride`.  Sonarr / Whisparr v2 / Lidarr / Readarr
+    can run their missing pass under parent-context dispatch
+    (``season_context``, ``artist_context``, ``author_context``) but
+    their cutoff pass always dispatches per-item; Radarr and Whisparr
+    v3 are single-mode end to end and delegate ``adapt_cutoff`` to
+    ``adapt_missing`` directly.
+
+    Args:
+        item_type: Per-adapter type string (``"movie"``,
+            ``"episode"``, ``"album"``, ``"book"``,
+            ``"whisparr_episode"``, ``"whisparr_v3_movie"``).
+        item_id: The DB-stable per-item id.
+        label: Human-readable per-item log label.
+        unreleased_reason: ``None`` when eligible; a skip-reason
+            string when the candidate should be treated as unreleased.
+        search_payload: Per-item dispatch payload.
+
+    Returns:
+        A fully populated :class:`SearchCandidate` with ``group_key``
+        always ``None``.
+    """
+    return SearchCandidate(
+        item_id=item_id,
+        item_type=item_type,
+        label=label,
+        unreleased_reason=unreleased_reason,
+        group_key=None,
+        search_payload=search_payload,
+    )

@@ -12,6 +12,7 @@ import logging
 from houndarr.clients.readarr import LibraryBook, MissingBook, ReadarrClient
 from houndarr.engine.adapters._common import (
     ContextOverride,
+    build_cutoff_candidate,
     build_missing_candidate,
 )
 from houndarr.engine.candidates import (
@@ -117,16 +118,13 @@ def adapt_cutoff(item: MissingBook, instance: Instance) -> SearchCandidate:
     Returns:
         A fully populated :class:`SearchCandidate`.
     """
-    unreleased_reason = _readarr_unreleased_reason(
-        item.release_date, instance.post_release_grace_hrs
-    )
-
-    return SearchCandidate(
-        item_id=item.book_id,
+    return build_cutoff_candidate(
         item_type="book",
+        item_id=item.book_id,
         label=_book_label(item),
-        unreleased_reason=unreleased_reason,
-        group_key=None,
+        unreleased_reason=_readarr_unreleased_reason(
+            item.release_date, instance.post_release_grace_hrs
+        ),
         search_payload={
             "command": "BookSearch",
             "book_id": item.book_id,

@@ -13,6 +13,7 @@ from typing import Any
 from houndarr.clients.sonarr import LibraryEpisode, MissingEpisode, SonarrClient
 from houndarr.engine.adapters._common import (
     ContextOverride,
+    build_cutoff_candidate,
     build_missing_candidate,
 )
 from houndarr.engine.candidates import (
@@ -149,16 +150,13 @@ def adapt_cutoff(item: MissingEpisode, instance: Instance) -> SearchCandidate:
     Returns:
         A fully populated :class:`SearchCandidate`.
     """
-    unreleased_reason = _sonarr_unreleased_reason(
-        item.air_date_utc, instance.post_release_grace_hrs
-    )
-
-    return SearchCandidate(
-        item_id=item.episode_id,
+    return build_cutoff_candidate(
         item_type="episode",
+        item_id=item.episode_id,
         label=_episode_label(item),
-        unreleased_reason=unreleased_reason,
-        group_key=None,
+        unreleased_reason=_sonarr_unreleased_reason(
+            item.air_date_utc, instance.post_release_grace_hrs
+        ),
         search_payload={
             "command": "EpisodeSearch",
             "episode_id": item.episode_id,

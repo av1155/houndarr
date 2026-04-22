@@ -20,16 +20,15 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from pathlib import Path
 from typing import Annotated
 
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse, Response
-from fastapi.templating import Jinja2Templates
 
 from houndarr import __version__
 from houndarr.auth import CSRF_COOKIE_NAME, _client_ip, check_password, clear_session
 from houndarr.config import get_settings
+from houndarr.routes._templates import get_templates
 from houndarr.services.admin import (
     clear_all_search_logs,
     factory_reset,
@@ -40,15 +39,6 @@ from houndarr.services.admin import (
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
-
-_templates: Jinja2Templates | None = None
-
-
-def _get_templates() -> Jinja2Templates:
-    global _templates  # noqa: PLW0603
-    if _templates is None:
-        _templates = Jinja2Templates(directory=str(Path(__file__).parent.parent / "templates"))
-    return _templates
 
 
 def _flash_response(
@@ -66,7 +56,7 @@ def _flash_response(
     meta in ``base.html``).
     """
     csrf_token = request.cookies.get(CSRF_COOKIE_NAME, "")
-    return _get_templates().TemplateResponse(
+    return get_templates().TemplateResponse(
         request=request,
         name="partials/admin/flash.html",
         context={

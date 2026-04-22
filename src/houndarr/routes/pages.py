@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
-from fastapi.templating import Jinja2Templates
 
 from houndarr import __version__
 from houndarr.auth import (
@@ -22,21 +21,10 @@ from houndarr.auth import (
 )
 from houndarr.database import set_setting
 from houndarr.routes._htmx import is_hx_request
+from houndarr.routes._templates import get_templates
 from houndarr.services.instances import list_instances
 
 router = APIRouter()
-
-# Templates are resolved relative to this file at runtime
-_templates: Jinja2Templates | None = None
-
-
-def get_templates() -> Jinja2Templates:
-    global _templates  # noqa: PLW0603
-    if _templates is None:
-        from pathlib import Path
-
-        _templates = Jinja2Templates(directory=str(Path(__file__).parent.parent / "templates"))
-    return _templates
 
 
 def _render(

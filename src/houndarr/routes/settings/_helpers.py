@@ -13,11 +13,9 @@ from __future__ import annotations
 import html
 import logging
 from dataclasses import dataclass
-from pathlib import Path
 
 from fastapi import Request
 from fastapi.responses import HTMLResponse
-from fastapi.templating import Jinja2Templates
 
 from houndarr import __version__
 from houndarr.auth import resolve_signed_in_as
@@ -47,6 +45,7 @@ from houndarr.config import (
     get_settings,
 )
 from houndarr.routes._htmx import is_hx_request
+from houndarr.routes._templates import get_templates
 from houndarr.services.instances import (
     Instance,
     InstanceType,
@@ -71,21 +70,6 @@ logger = logging.getLogger(__name__)
 
 API_KEY_UNCHANGED = "__UNCHANGED__"
 """Sentinel sent back in the edit form to indicate the stored key is kept."""
-
-_templates: Jinja2Templates | None = None
-
-
-def get_templates() -> Jinja2Templates:
-    """Return the lazy Jinja2Templates singleton for the settings routes."""
-    global _templates  # noqa: PLW0603
-    if _templates is None:
-        # This module lives at src/houndarr/routes/settings/_helpers.py.
-        # Templates live at src/houndarr/templates.  Three parents reach
-        # the houndarr package root regardless of where the package is
-        # installed.
-        templates_dir = Path(__file__).resolve().parent.parent.parent / "templates"
-        _templates = Jinja2Templates(directory=str(templates_dir))
-    return _templates
 
 
 def render(

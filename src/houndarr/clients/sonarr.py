@@ -5,8 +5,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal
 
-import httpx
-
 from houndarr.clients._wire_models import (
     ArrSeries,
     PaginatedResponse,
@@ -223,17 +221,3 @@ def _parse_episode(wire: SonarrWantedEpisode) -> MissingEpisode:
         episode=wire.episode_number or 0,
         air_date_utc=wire.air_date_utc,
     )
-
-
-# ---------------------------------------------------------------------------
-# Convenience factory (mirrors httpx.AsyncClient signature)
-# ---------------------------------------------------------------------------
-
-
-def make_sonarr_client(
-    url: str,
-    api_key: str,
-    timeout: httpx.Timeout = httpx.Timeout(30.0, connect=5.0),
-) -> SonarrClient:
-    """Return a :class:`SonarrClient` ready for use as an async context manager."""
-    return SonarrClient(url=url, api_key=api_key, timeout=timeout)

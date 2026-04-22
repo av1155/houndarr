@@ -5,8 +5,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal
 
-import httpx
-
 from houndarr.clients._wire_models import (
     PaginatedResponse,
     RadarrLibraryMovie,
@@ -187,17 +185,3 @@ def _parse_movie(wire: RadarrWantedMovie) -> MissingMovie:
         release_date=wire.release_date,
         digital_release=wire.digital_release,
     )
-
-
-# ---------------------------------------------------------------------------
-# Convenience factory
-# ---------------------------------------------------------------------------
-
-
-def make_radarr_client(
-    url: str,
-    api_key: str,
-    timeout: httpx.Timeout = httpx.Timeout(30.0, connect=5.0),
-) -> RadarrClient:
-    """Return a :class:`RadarrClient` ready for use as an async context manager."""
-    return RadarrClient(url=url, api_key=api_key, timeout=timeout)

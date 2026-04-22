@@ -5,8 +5,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal
 
-import httpx
-
 from houndarr.clients._wire_models import (
     PaginatedResponse,
     ReadarrLibraryBook,
@@ -192,17 +190,3 @@ def _parse_book(wire: ReadarrWantedBook) -> MissingBook:
         title=wire.title or "",
         release_date=wire.release_date,
     )
-
-
-# ---------------------------------------------------------------------------
-# Convenience factory
-# ---------------------------------------------------------------------------
-
-
-def make_readarr_client(
-    url: str,
-    api_key: str,
-    timeout: httpx.Timeout = httpx.Timeout(30.0, connect=5.0),
-) -> ReadarrClient:
-    """Return a :class:`ReadarrClient` ready for use as an async context manager."""
-    return ReadarrClient(url=url, api_key=api_key, timeout=timeout)

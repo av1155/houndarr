@@ -5,8 +5,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal
 
-import httpx
-
 from houndarr.clients._wire_models import (
     LidarrLibraryAlbum,
     LidarrWantedAlbum,
@@ -192,17 +190,3 @@ def _parse_album(wire: LidarrWantedAlbum) -> MissingAlbum:
         title=wire.title or "",
         release_date=wire.release_date,
     )
-
-
-# ---------------------------------------------------------------------------
-# Convenience factory
-# ---------------------------------------------------------------------------
-
-
-def make_lidarr_client(
-    url: str,
-    api_key: str,
-    timeout: httpx.Timeout = httpx.Timeout(30.0, connect=5.0),
-) -> LidarrClient:
-    """Return a :class:`LidarrClient` ready for use as an async context manager."""
-    return LidarrClient(url=url, api_key=api_key, timeout=timeout)

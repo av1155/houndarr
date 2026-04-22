@@ -218,10 +218,10 @@ async def factory_reset(*, app: FastAPI, data_dir: str) -> None:
             await retention_task
     app.state.retention_task = None
 
-    # NOTE: we deliberately do NOT null app.state.master_key here. Keeping
-    # the old key in memory keeps any inflight request that reads it (e.g.
-    # the dashboard poll) from hitting ``decrypt(None)`` during the few
-    # hundred ms the DB is being rebuilt. The key is atomically replaced
+    # app.state.master_key is deliberately not nulled here. Keeping the old
+    # key in memory prevents any inflight request that reads it (e.g. the
+    # dashboard poll) from hitting ``decrypt(None)`` during the few hundred
+    # milliseconds the DB is being rebuilt. The key is atomically replaced
     # once the new one is ready.
 
     try:

@@ -3,10 +3,15 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import Literal
 
 import httpx
 
+from houndarr.clients._wire_models import (
+    PaginatedResponse,
+    ReadarrLibraryBook,
+    ReadarrWantedBook,
+)
 from houndarr.clients.base import ArrClient
 
 __all__ = ["LibraryBook", "MissingBook", "ReadarrClient"]
@@ -60,7 +65,7 @@ class ReadarrClient(ArrClient):
         Returns:
             List of :class:`MissingBook` dataclasses.
         """
-        data: dict[str, Any] = await self._get(
+        data = await self._get(
             "/api/v1/wanted/missing",
             page=page,
             pageSize=page_size,
@@ -69,8 +74,8 @@ class ReadarrClient(ArrClient):
             includeAuthor="true",
             monitored="true",
         )
-        records: list[dict[str, Any]] = data.get("records", [])
-        return [_parse_book(r) for r in records]
+        envelope = PaginatedResponse[ReadarrWantedBook].model_validate(data)
+        return [_parse_book(w) for w in envelope.records]
 
     async def search(self, item_id: int) -> None:
         """Trigger an automatic book search in Readarr.
@@ -115,19 +120,19 @@ class ReadarrClient(ArrClient):
         Returns:
             List of :class:`MissingBook` dataclasses.
         """
-        data: dict[str, Any] = await self._get(
+        data = await self._get(
             "/api/v1/wanted/cutoff",
             page=page,
             pageSize=page_size,
             includeAuthor="true",
             monitored="true",
         )
-        records: list[dict[str, Any]] = data.get("records", [])
-        return [_parse_book(r) for r in records]
+        envelope = PaginatedResponse[ReadarrWantedBook].model_validate(data)
+        return [_parse_book(w) for w in envelope.records]
 
     async def get_wanted_total(self, kind: Literal["missing", "cutoff"]) -> int:
         """Return the totalRecords count for ``wanted/{kind}`` via a size-1 probe."""
-        data: dict[str, Any] = await self._get(
+        data = await self._get(
             f"/api/v1/wanted/{kind}",
             page=1,
             pageSize=1,
@@ -135,7 +140,8 @@ class ReadarrClient(ArrClient):
             sortDirection="ascending",
             monitored="true",
         )
-        return int(data.get("totalRecords", 0) or 0)
+        envelope = PaginatedResponse[ReadarrWantedBook].model_validate(data)
+        return envelope.total_records
 
     async def get_books(self) -> list[LibraryBook]:
         """Return the full book library.
@@ -145,11 +151,11 @@ class ReadarrClient(ArrClient):
         Returns:
             List of :class:`LibraryBook` dataclasses.
         """
-        records: list[dict[str, Any]] = await self._get(
+        records = await self._get(
             "/api/v1/book",
             includeAuthor="true",
         )
-        return [_parse_library_book(r) for r in records]
+        return [_parse_library_book(ReadarrLibraryBook.model_validate(r)) for r in records]
 
 
 # ---------------------------------------------------------------------------
@@ -157,29 +163,34 @@ class ReadarrClient(ArrClient):
 # ---------------------------------------------------------------------------
 
 
-def _parse_library_book(record: dict[str, Any]) -> LibraryBook:
-    author: dict[str, Any] = record.get("author") or {}
-    stats: dict[str, Any] = record.get("statistics") or {}
-    book_file_count = stats.get("bookFileCount", 0)
+def _parse_library_book(wire: ReadarrLibraryBook) -> LibraryBook:
+    book_file_count = (
+        wire.statistics.book_file_count or 0
+        if wire.statistics is not None and wire.statistics.book_file_count is not None
+        else 0
+    )
+    author_id = wire.author_id or (wire.author.id if wire.author else None) or 0
+    author_name = (wire.author.author_name if wire.author else None) or ""
     return LibraryBook(
-        book_id=record["id"],
-        author_id=record.get("authorId") or author.get("id") or 0,
-        author_name=author.get("authorName") or "",
-        title=record.get("title") or "",
-        monitored=bool(record.get("monitored", False)),
+        book_id=wire.id,
+        author_id=author_id,
+        author_name=author_name,
+        title=wire.title or "",
+        monitored=bool(wire.monitored),
         has_file=book_file_count > 0,
-        release_date=record.get("releaseDate"),
+        release_date=wire.release_date,
     )
 
 
-def _parse_book(record: dict[str, Any]) -> MissingBook:
-    author: dict[str, Any] = record.get("author") or {}
+def _parse_book(wire: ReadarrWantedBook) -> MissingBook:
+    author_id = wire.author_id or (wire.author.id if wire.author else None) or 0
+    author_name = (wire.author.author_name if wire.author else None) or ""
     return MissingBook(
-        book_id=record["id"],
-        author_id=record.get("authorId") or author.get("id") or 0,
-        author_name=author.get("authorName") or "",
-        title=record.get("title") or "",
-        release_date=record.get("releaseDate"),
+        book_id=wire.id,
+        author_id=author_id,
+        author_name=author_name,
+        title=wire.title or "",
+        release_date=wire.release_date,
     )
 
 

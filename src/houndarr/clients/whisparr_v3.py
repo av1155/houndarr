@@ -5,6 +5,28 @@ Its API mirrors Radarr's ``/api/v3/movie`` structure, but unlike Radarr it
 does not expose ``/api/v3/wanted/missing`` or ``/api/v3/wanted/cutoff``
 endpoints.  Missing and cutoff-unmet items are identified by fetching the
 full library via ``GET /api/v3/movie`` and filtering client-side.
+
+Outlier status (Track C.6).  Sonarr, Radarr, Lidarr, Readarr, and
+Whisparr v2 all collapsed onto the
+:meth:`~houndarr.clients.base.ArrClient._fetch_wanted_page` /
+:meth:`~houndarr.clients.base.ArrClient._fetch_wanted_total` template
+in C.1 - C.5; this module deliberately does not.  No paginated
+``/wanted`` endpoint exists upstream, so the four ``_WANTED_*`` hooks
+on the base ABC stay at their defaults (``_WANTED_ENVELOPE`` is
+``None``); calling :meth:`~ArrClient._fetch_wanted_page` here would
+raise :class:`NotImplementedError` by design.
+
+Instead, this client fetches the entire library once per client
+lifetime and filters in memory: missing = ``monitored and not
+hasFile``; cutoff = ``monitored and hasFile and qualityCutoffNotMet``.
+Pagination at the API surface (``page`` / ``page_size`` on
+:meth:`get_missing` / :meth:`get_cutoff_unmet`) slices the filtered
+list rather than triggering further network calls.
+
+The cache lives on ``self._movie_cache`` and survives for the
+context manager's lifetime (one search pass).  This keeps the
+missing pass, the cutoff pass, and the wanted-total probe from
+each issuing their own ``/api/v3/movie`` request.
 """
 
 from __future__ import annotations
@@ -54,11 +76,19 @@ class LibraryWhisparrV3Movie:
 class WhisparrV3Client(ArrClient):
     """Async client for the Whisparr v3 REST API.
 
-    Whisparr v3 has no ``wanted/missing`` or ``wanted/cutoff`` endpoints.
-    This client fetches the full library via ``GET /api/v3/movie`` and
-    filters client-side for missing and cutoff-unmet items.  The library
-    response is cached for the lifetime of the client instance (one search
-    pass) to avoid redundant fetches as pagination advances.
+    Whisparr v3 has no ``wanted/missing`` or ``wanted/cutoff`` endpoints,
+    so it does not use the shared ``/wanted`` template the other five
+    clients adopted in C.1 - C.5.  All four ``_WANTED_*`` class-level
+    hooks stay at the base defaults; ``_WANTED_ENVELOPE`` remains
+    ``None`` so an accidental call to
+    :meth:`~houndarr.clients.base.ArrClient._fetch_wanted_page` raises
+    :class:`NotImplementedError` rather than silently producing an
+    empty page.
+
+    Missing and cutoff-unmet items are computed from a one-shot
+    ``GET /api/v3/movie`` fetch, cached for the lifetime of the client
+    instance.  :meth:`get_wanted_total` reuses the same cache so a
+    single network call answers every per-pass query.
     """
 
     def __init__(
@@ -150,6 +180,11 @@ class WhisparrV3Client(ArrClient):
 
     async def get_wanted_total(self, kind: Literal["missing", "cutoff"]) -> int:
         """Return the count of wanted items for *kind* from the cached library.
+
+        Overrides the base default
+        (:meth:`~houndarr.clients.base.ArrClient._fetch_wanted_total`)
+        because there is no ``/wanted`` endpoint to probe here; the
+        total is derived from the cached ``/api/v3/movie`` payload.
 
         Reuses :meth:`_get_all_movies` (one fetch per client lifetime) so the
         probe does not trigger an extra network call during a pass.

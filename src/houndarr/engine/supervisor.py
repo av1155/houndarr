@@ -18,7 +18,8 @@ from uuid import uuid4
 import httpx
 
 from houndarr.engine.adapters import get_adapter
-from houndarr.engine.search_loop import CycleTrigger, _write_log, run_instance_search
+from houndarr.engine.search_loop import _write_log, run_instance_search
+from houndarr.enums import CycleTrigger
 from houndarr.services.instances import (
     Instance,
     get_instance,
@@ -330,7 +331,9 @@ class Supervisor:
 
         await self._run_search_cycle(instance, cycle_trigger="run_now")
 
-    async def _run_search_cycle(self, instance: Instance, *, cycle_trigger: CycleTrigger) -> bool:
+    async def _run_search_cycle(
+        self, instance: Instance, *, cycle_trigger: CycleTrigger | str
+    ) -> bool:
         """Run exactly one cycle for *instance* under the per-instance lock.
 
         Returns:

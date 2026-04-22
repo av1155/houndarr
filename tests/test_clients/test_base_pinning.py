@@ -233,6 +233,13 @@ class TestPing:
         finally:
             await client.aclose()
 
+
+# get_instance_snapshot default
+
+
+class TestInstanceSnapshotDefault:
+    """Pin the default get_instance_snapshot contract."""
+
     @pytest.mark.asyncio()
     @respx.mock
     async def test_ping_returns_none_on_redirect_to_blocked_target(self) -> None:

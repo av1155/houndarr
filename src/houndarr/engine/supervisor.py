@@ -102,9 +102,7 @@ class Supervisor:
         # completes.
         self._last_cycle_end: dict[int, datetime] = {}
 
-    # ------------------------------------------------------------------
     # Lifecycle
-    # ------------------------------------------------------------------
 
     async def start(self) -> None:
         """Load enabled instances and launch one loop-task per instance."""
@@ -280,9 +278,7 @@ class Supervisor:
         self._manual_runs[instance_id] = task
         return "accepted"
 
-    # ------------------------------------------------------------------
     # Internal
-    # ------------------------------------------------------------------
 
     async def _instance_loop(self, instance_id: int, startup_offset: int = 0) -> None:
         """Run search cycles for one instance until cancelled.

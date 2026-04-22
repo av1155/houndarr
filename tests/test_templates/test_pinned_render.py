@@ -20,9 +20,7 @@ import pytest
 pytestmark = pytest.mark.pinning
 
 
-# ---------------------------------------------------------------------------
 # instance_row.html
-# ---------------------------------------------------------------------------
 
 
 def _instance_stub(
@@ -114,9 +112,7 @@ class TestInstanceRowRender:
         assert "Error" in html or "error" in html.lower()
 
 
-# ---------------------------------------------------------------------------
 # log_rows.html
-# ---------------------------------------------------------------------------
 
 
 class TestLogRowsRender:
@@ -307,9 +303,7 @@ class TestLogRowsRender:
             assert f">{raw_type}<" not in html
 
 
-# ---------------------------------------------------------------------------
 # changelog_modal.html
-# ---------------------------------------------------------------------------
 
 
 def _release(version: str, date: str) -> Any:

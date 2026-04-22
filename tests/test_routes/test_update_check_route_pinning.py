@@ -1,7 +1,7 @@
 """Pin the route-level helpers for the Admin > Updates panel.
 
 Track A.9 of the refactor plan.  Focus is the ``_timeago`` filter and the
-three-route response shape (status, refresh, preferences) — the Python
+three-route response shape (status, refresh, preferences): the Python
 surface that the Jinja partial depends on.  The underlying
 ``services.update_check`` module already has its own tests; here we pin
 the route-level behaviour.

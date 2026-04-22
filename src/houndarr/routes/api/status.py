@@ -3,12 +3,20 @@
 GET  /api/status             -> JSON envelope
                                 ``{"instances": [...], "recent_searches": [...]}``
 POST /api/instances/{id}/run-now -> trigger an immediate search cycle (202)
+
+Route thinning (D.22) moved every SQL fetch and per-instance
+serialisation step into :mod:`houndarr.services.metrics`; the GET
+handler now opens a connection, delegates to
+:func:`houndarr.services.metrics.gather_dashboard_status`, and wraps
+the result in a :class:`JSONResponse`.  The POST handler stays as a
+thin :class:`~houndarr.protocols.SupervisorProto` dispatcher that
+maps the run-now status strings to HTTP status codes.
 """
 
 from __future__ import annotations
 
 import logging
-from typing import Annotated, Any
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
@@ -16,111 +24,30 @@ from fastapi.responses import JSONResponse
 from houndarr.database import get_db
 from houndarr.deps import get_supervisor
 from houndarr.protocols import SupervisorProto
-from houndarr.services.metrics import (
-    EMPTY_METRICS,
-    gather_active_errors,
-    gather_cooldown_data,
-    gather_lifetime_metrics,
-    gather_recent_searches,
-    gather_window_metrics,
-)
+from houndarr.services.metrics import gather_dashboard_status
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
 
-# Columns needed from the instances table for the status response.
-# Notably excludes encrypted_api_key to avoid Fernet decryption overhead.
-_INSTANCE_COLS = (
-    "id, name, type, enabled, batch_size, sleep_interval_mins, hourly_cap,"
-    " cooldown_days, cutoff_enabled, cutoff_batch_size,"
-    " cutoff_cooldown_days,"
-    " post_release_grace_hrs, queue_limit,"
-    " upgrade_enabled, upgrade_cooldown_days,"
-    " monitored_total, unreleased_count, snapshot_refreshed_at"
-)
-
-
 @router.get("/api/status")
 async def get_status(request: Request) -> JSONResponse:  # noqa: ARG001
     """Return the dashboard status envelope.
 
-    ``{"instances": [...], "recent_searches": [...]}``: each instance
+    ``{"instances": [...], "recent_searches": [...]}``.  Each instance
     carries per-card fields (``monitored_total``, ``unreleased_count``,
     ``lifetime_searched``, ``last_dispatch_at``, ``active_error``,
-    ``cooldown_breakdown``, ``unlocking_next``, plus the policy fields
-    used by the chip row).  ``recent_searches`` is the global last-5
-    dispatches over the past 7 days, joined against instances for the
-    type-color rendering.
+    ``cooldown_breakdown``, ``unlocking_next``) plus the policy fields
+    used by the chip row; ``recent_searches`` is the global last-five
+    dispatches over the past seven days, joined against instances for
+    the type-colour rendering.  See
+    :func:`houndarr.services.metrics.gather_dashboard_status` for the
+    per-field contract.
     """
     async with get_db() as db:
-        async with db.execute(
-            f"SELECT {_INSTANCE_COLS} FROM instances ORDER BY id ASC"  # noqa: S608  # nosec B608
-        ) as cur:
-            instances = await cur.fetchall()
-
-        if not instances:
-            return JSONResponse({"instances": [], "recent_searches": []})
-
-        instance_ids = [row["id"] for row in instances]
-        metrics_map, activity_map = await gather_window_metrics(db, instance_ids)
-        lifetime_map = await gather_lifetime_metrics(db, instance_ids)
-        error_map = await gather_active_errors(db, instance_ids)
-        cooldown_map = await gather_cooldown_data(db, list(instances))
-        recent = await gather_recent_searches(db, limit=5)
-
-    results: list[dict[str, Any]] = []
-    for inst in instances:
-        iid = inst["id"]
-        m = metrics_map.get(iid, EMPTY_METRICS)
-        act_action, act_at = activity_map.get(iid, (None, None))
-        lifetime = lifetime_map.get(iid, {"lifetime_searched": 0, "last_dispatch_at": None})
-        cooldown = cooldown_map.get(
-            iid,
-            {
-                "cooldown_breakdown": {"missing": 0, "cutoff": 0, "upgrade": 0},
-                "unlocking_next": [],
-                "cooldown_total": 0,
-            },
-        )
-        results.append(
-            {
-                "id": iid,
-                "name": inst["name"],
-                "type": inst["type"],
-                "enabled": bool(inst["enabled"]),
-                "last_search_at": m["last_search_at"],
-                "searched_24h": m["searched_24h"],
-                "skipped_24h": m["skipped_24h"],
-                "errors_24h": m["errors_24h"],
-                "last_activity_action": act_action,
-                "last_activity_at": act_at,
-                "batch_size": inst["batch_size"],
-                "sleep_interval_mins": inst["sleep_interval_mins"],
-                "hourly_cap": inst["hourly_cap"],
-                "cooldown_days": inst["cooldown_days"],
-                "cutoff_enabled": bool(inst["cutoff_enabled"]),
-                "cutoff_batch_size": inst["cutoff_batch_size"],
-                "post_release_grace_hrs": inst["post_release_grace_hrs"],
-                "queue_limit": inst["queue_limit"],
-                "lifetime_searched": lifetime["lifetime_searched"],
-                "last_dispatch_at": lifetime["last_dispatch_at"],
-                "active_error": error_map.get(iid),
-                "cooldown_breakdown": cooldown["cooldown_breakdown"],
-                "unlocking_next": cooldown["unlocking_next"],
-                "cooldown_total": cooldown["cooldown_total"],
-                "monitored_total": int(inst["monitored_total"]),
-                "unreleased_count": int(inst["unreleased_count"]),
-                "snapshot_refreshed_at": (
-                    str(inst["snapshot_refreshed_at"]) if inst["snapshot_refreshed_at"] else None
-                ),
-                "upgrade_enabled": bool(inst["upgrade_enabled"]),
-                "upgrade_cooldown_days": int(inst["upgrade_cooldown_days"]),
-            }
-        )
-
-    return JSONResponse({"instances": results, "recent_searches": recent})
+        envelope = await gather_dashboard_status(db)
+    return JSONResponse(envelope)
 
 
 @router.post("/api/instances/{instance_id}/run-now", status_code=202)

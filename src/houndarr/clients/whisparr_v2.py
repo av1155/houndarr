@@ -9,10 +9,16 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any, Literal
+from typing import Literal
 
 import httpx
 
+from houndarr.clients._wire_models import (
+    ArrSeries,
+    PaginatedResponse,
+    WhisparrV2LibraryEpisode,
+    WhisparrV2WantedEpisode,
+)
 from houndarr.clients.base import ArrClient
 
 __all__ = ["LibraryWhisparrEpisode", "MissingWhisparrEpisode", "WhisparrClient"]
@@ -67,7 +73,7 @@ class WhisparrClient(ArrClient):
         Returns:
             List of :class:`MissingWhisparrEpisode` dataclasses, oldest first.
         """
-        data: dict[str, Any] = await self._get(
+        data = await self._get(
             "/api/v3/wanted/missing",
             page=page,
             pageSize=page_size,
@@ -76,8 +82,8 @@ class WhisparrClient(ArrClient):
             includeSeries="true",
             monitored="true",
         )
-        records: list[dict[str, Any]] = data.get("records", [])
-        return [_parse_episode(r) for r in records]
+        envelope = PaginatedResponse[WhisparrV2WantedEpisode].model_validate(data)
+        return [_parse_episode(w) for w in envelope.records]
 
     async def search(self, item_id: int) -> None:
         """Trigger an automatic episode search in Whisparr.
@@ -123,19 +129,19 @@ class WhisparrClient(ArrClient):
         Returns:
             List of :class:`MissingWhisparrEpisode` dataclasses.
         """
-        data: dict[str, Any] = await self._get(
+        data = await self._get(
             "/api/v3/wanted/cutoff",
             page=page,
             pageSize=page_size,
             includeSeries="true",
             monitored="true",
         )
-        records: list[dict[str, Any]] = data.get("records", [])
-        return [_parse_episode(r) for r in records]
+        envelope = PaginatedResponse[WhisparrV2WantedEpisode].model_validate(data)
+        return [_parse_episode(w) for w in envelope.records]
 
     async def get_wanted_total(self, kind: Literal["missing", "cutoff"]) -> int:
         """Return the totalRecords count for ``wanted/{kind}`` via a size-1 probe."""
-        data: dict[str, Any] = await self._get(
+        data = await self._get(
             f"/api/v3/wanted/{kind}",
             page=1,
             pageSize=1,
@@ -143,19 +149,20 @@ class WhisparrClient(ArrClient):
             sortDirection="ascending",
             monitored="true",
         )
-        return int(data.get("totalRecords", 0) or 0)
+        envelope = PaginatedResponse[WhisparrV2WantedEpisode].model_validate(data)
+        return envelope.total_records
 
-    async def get_series(self) -> list[dict[str, Any]]:
+    async def get_series(self) -> list[ArrSeries]:
         """Return the full series list.
 
-        Calls ``GET /api/v3/series``.  Returns raw dicts; only ``id`` and
-        ``monitored`` are needed by the upgrade-pass adapter.
+        Calls ``GET /api/v3/series``.  The upgrade-pass adapter filters on
+        ``monitored`` and ``id``; other fields on the response are ignored.
 
         Returns:
-            List of series dicts from Whisparr.
+            List of :class:`ArrSeries` wire models.
         """
-        result: list[dict[str, Any]] = await self._get("/api/v3/series")
-        return result
+        result = await self._get("/api/v3/series")
+        return [ArrSeries.model_validate(r) for r in result]
 
     async def get_episodes(self, series_id: int) -> list[LibraryWhisparrEpisode]:
         """Return all episodes for a series with file and cutoff metadata.
@@ -169,13 +176,13 @@ class WhisparrClient(ArrClient):
         Returns:
             List of :class:`LibraryWhisparrEpisode` dataclasses.
         """
-        records: list[dict[str, Any]] = await self._get(
+        records = await self._get(
             "/api/v3/episode",
             seriesId=series_id,
             includeEpisodeFile="true",
             includeSeries="true",
         )
-        return [_parse_library_episode(r) for r in records]
+        return [_parse_library_episode(WhisparrV2LibraryEpisode.model_validate(r)) for r in records]
 
 
 # ---------------------------------------------------------------------------
@@ -183,25 +190,27 @@ class WhisparrClient(ArrClient):
 # ---------------------------------------------------------------------------
 
 
-def _parse_library_episode(record: dict[str, Any]) -> LibraryWhisparrEpisode:
-    series: dict[str, Any] = record.get("series") or {}
-    has_file = bool(record.get("hasFile", False))
-    ep_file: dict[str, Any] = record.get("episodeFile") or {}
-    cutoff_not_met = ep_file.get("qualityCutoffNotMet", True)
+def _parse_library_episode(wire: WhisparrV2LibraryEpisode) -> LibraryWhisparrEpisode:
+    has_file = bool(wire.has_file)
+    cutoff_not_met = True
+    if wire.episode_file is not None and wire.episode_file.quality_cutoff_not_met is not None:
+        cutoff_not_met = wire.episode_file.quality_cutoff_not_met
+    series_id = wire.series_id or (wire.series.id if wire.series else None) or 0
+    series_title = (wire.series.title if wire.series else None) or ""
     return LibraryWhisparrEpisode(
-        episode_id=record["id"],
-        series_id=record.get("seriesId") or series.get("id") or 0,
-        series_title=series.get("title") or "",
-        episode_title=record.get("title") or "",
-        season_number=record.get("seasonNumber", 0),
-        absolute_episode_number=record.get("absoluteEpisodeNumber"),
-        monitored=bool(record.get("monitored", False)),
+        episode_id=wire.id,
+        series_id=series_id,
+        series_title=series_title,
+        episode_title=wire.title or "",
+        season_number=wire.season_number or 0,
+        absolute_episode_number=wire.absolute_episode_number,
+        monitored=bool(wire.monitored),
         has_file=has_file,
         cutoff_met=not cutoff_not_met if has_file else False,
     )
 
 
-def _parse_date_only(obj: dict[str, Any] | str | None) -> datetime | None:
+def _parse_date_only(obj: dict[str, int] | str | None) -> datetime | None:
     """Convert a Whisparr release date to a UTC datetime.
 
     The v2 API serialises .NET's ``System.DateOnly`` as a plain ISO date
@@ -224,16 +233,19 @@ def _parse_date_only(obj: dict[str, Any] | str | None) -> datetime | None:
         return None
 
 
-def _parse_episode(record: dict[str, Any]) -> MissingWhisparrEpisode:
-    series: dict[str, Any] = record.get("series") or {}
+def _parse_episode(wire: WhisparrV2WantedEpisode) -> MissingWhisparrEpisode:
+    series_id = (
+        wire.series_id if wire.series_id is not None else (wire.series.id if wire.series else None)
+    )
+    series_title = (wire.series.title if wire.series else None) or wire.series_title or ""
     return MissingWhisparrEpisode(
-        episode_id=record["id"],
-        series_id=record.get("seriesId") or series.get("id"),
-        series_title=series.get("title") or record.get("seriesTitle") or "",
-        episode_title=record.get("title") or "",
-        season_number=record.get("seasonNumber", 0),
-        absolute_episode_number=record.get("absoluteEpisodeNumber"),
-        release_date=_parse_date_only(record.get("releaseDate")),
+        episode_id=wire.id,
+        series_id=series_id,
+        series_title=series_title,
+        episode_title=wire.title or "",
+        season_number=wire.season_number or 0,
+        absolute_episode_number=wire.absolute_episode_number,
+        release_date=_parse_date_only(wire.release_date),
     )
 
 

@@ -6,13 +6,12 @@ availability, CSRF enforcement, response body shape, and path-param validation.
 
 from __future__ import annotations
 
-from typing import Any
-
 import httpx
 import pytest
 import respx
 from fastapi.testclient import TestClient
 
+from houndarr.clients._wire_models import SystemStatus
 from houndarr.clients.base import ArrClient
 from houndarr.engine import supervisor as supervisor_module
 from tests.conftest import csrf_headers
@@ -34,9 +33,9 @@ _VALID_FORM = {
 
 @pytest.fixture(autouse=True)
 def _mock_connection_ping(monkeypatch: pytest.MonkeyPatch) -> None:
-    async def _always_ok(self: ArrClient) -> dict[str, Any] | None:
+    async def _always_ok(self: ArrClient) -> SystemStatus | None:
         name = type(self).__name__.replace("Client", "")
-        return {"appName": name, "version": "4.0.0"}
+        return SystemStatus(app_name=name, version="4.0.0")
 
     monkeypatch.setattr(ArrClient, "ping", _always_ok)
 

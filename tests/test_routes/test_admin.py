@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from collections.abc import AsyncGenerator, Generator
-from typing import Any
 from unittest.mock import AsyncMock
 
 import pytest
@@ -13,6 +12,7 @@ from fastapi.testclient import TestClient
 import houndarr.auth as _auth_mod
 import houndarr.config as _cfg
 from houndarr.auth import CSRF_COOKIE_NAME
+from houndarr.clients._wire_models import SystemStatus
 from houndarr.clients.base import ArrClient
 from houndarr.config import AppSettings
 from houndarr.database import get_db
@@ -31,9 +31,9 @@ _AUTH_USER = "alice"
 def _mock_connection_ping(monkeypatch: pytest.MonkeyPatch) -> None:
     """Instance creation below calls ArrClient.ping during the route flow."""
 
-    async def _always_ok(self: ArrClient) -> dict[str, Any] | None:
+    async def _always_ok(self: ArrClient) -> SystemStatus | None:
         name = type(self).__name__.replace("Client", "")
-        return {"appName": name, "version": "4.0.0"}
+        return SystemStatus(app_name=name, version="4.0.0")
 
     monkeypatch.setattr(ArrClient, "ping", _always_ok)
 

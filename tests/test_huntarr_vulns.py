@@ -16,7 +16,6 @@ updated in the same PR that changes the tests.
 from __future__ import annotations
 
 import inspect
-from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
@@ -28,6 +27,7 @@ from houndarr.auth import (
     SESSION_COOKIE_NAME,
     SESSION_MAX_AGE_SECONDS,
 )
+from houndarr.clients._wire_models import SystemStatus
 from houndarr.clients.base import ArrClient
 from tests.conftest import csrf_headers
 
@@ -253,9 +253,9 @@ class TestNoDangerousEndpoints:
     def _mock_ping(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Prevent real network calls during instance creation in this class."""
 
-        async def _always_ok(self: ArrClient) -> dict[str, Any] | None:
+        async def _always_ok(self: ArrClient) -> SystemStatus | None:
             name = type(self).__name__.replace("Client", "")
-            return {"appName": name, "version": "4.0.0"}
+            return SystemStatus(app_name=name, version="4.0.0")
 
         monkeypatch.setattr(ArrClient, "ping", _always_ok)
 
@@ -399,9 +399,9 @@ class TestAPIKeyNeverExposed:
     def _mock_ping(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Prevent real network calls for instance creation in this class."""
 
-        async def _always_ok(self: ArrClient) -> dict[str, Any] | None:
+        async def _always_ok(self: ArrClient) -> SystemStatus | None:
             name = type(self).__name__.replace("Client", "")
-            return {"appName": name, "version": "4.0.0"}
+            return SystemStatus(app_name=name, version="4.0.0")
 
         monkeypatch.setattr(ArrClient, "ping", _always_ok)
 

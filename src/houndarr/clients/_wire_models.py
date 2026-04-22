@@ -65,10 +65,14 @@ class PaginatedResponse[T](_ArrModel):
 class SystemStatus(_ArrModel):
     """Result of ``/system/status``; used by :meth:`ArrClient.ping` and the
     Test Connection flow on the Settings page.
+
+    Both fields are optional because *arr forks (Bookshelf, Reading Glasses)
+    sometimes omit ``appName`` or ``version`` from their status payload and
+    Houndarr must still report the instance as reachable.
     """
 
-    app_name: str = Field(alias="appName")
-    version: str
+    app_name: str | None = Field(default=None, alias="appName")
+    version: str | None = None
 
 
 class QueueStatus(_ArrModel):

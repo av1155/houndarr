@@ -29,7 +29,7 @@ async def test_sonarr_queue_status_success() -> None:
     )
     async with SonarrClient(url="http://sonarr:8989", api_key="test") as client:
         result = await client.get_queue_status()
-    assert result["totalCount"] == 5
+    assert result.total_count == 5
 
 
 @pytest.mark.asyncio()
@@ -54,7 +54,7 @@ async def test_radarr_queue_status_success() -> None:
     )
     async with RadarrClient(url="http://radarr:7878", api_key="test") as client:
         result = await client.get_queue_status()
-    assert result["totalCount"] == 3
+    assert result.total_count == 3
 
 
 @pytest.mark.asyncio()
@@ -67,7 +67,7 @@ async def test_lidarr_queue_status_uses_v1_path() -> None:
     async with LidarrClient(url="http://lidarr:8686", api_key="test") as client:
         result = await client.get_queue_status()
     assert route.called
-    assert result["totalCount"] == 2
+    assert result.total_count == 2
 
 
 @pytest.mark.asyncio()
@@ -80,7 +80,7 @@ async def test_readarr_queue_status_uses_v1_path() -> None:
     async with ReadarrClient(url="http://readarr:8787", api_key="test") as client:
         result = await client.get_queue_status()
     assert route.called
-    assert result["totalCount"] == 1
+    assert result.total_count == 1
 
 
 @pytest.mark.asyncio()
@@ -93,7 +93,7 @@ async def test_whisparr_queue_status_uses_v3_path() -> None:
     async with WhisparrClient(url="http://whisparr:6969", api_key="test") as client:
         result = await client.get_queue_status()
     assert route.called
-    assert result["totalCount"] == 0
+    assert result.total_count == 0
 
 
 # ---------------------------------------------------------------------------

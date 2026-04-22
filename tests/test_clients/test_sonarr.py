@@ -34,7 +34,7 @@ async def test_ping_success(client: SonarrClient) -> None:
     )
     result = await client.ping()
     assert result is not None
-    assert result["appName"] == "Sonarr"
+    assert result.app_name == "Sonarr"
 
 
 @pytest.mark.asyncio()

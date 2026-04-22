@@ -1,107 +1,52 @@
-"""Adapter registry mapping instance types to their adapter functions.
+"""Adapter registry mapping instance types to their adapter classes.
 
-Each :class:`AppAdapter` bundles the four functions the engine pipeline needs
-to work with a specific *arr application: candidate conversion (missing and
-cutoff), search dispatch, and client construction.
+Each per-app adapter module exposes an ``XAdapter`` class that
+structurally satisfies
+:class:`~houndarr.engine.adapters.protocols.AppAdapterProto` via six
+staticmethod attributes (``adapt_missing``, ``adapt_cutoff``,
+``adapt_upgrade``, ``fetch_upgrade_pool``, ``dispatch_search``,
+``make_client``).  The :data:`ADAPTERS` dict maps each
+:class:`~houndarr.services.instances.InstanceType` to a single
+process-lifetime instance of the matching adapter class; per-cycle
+state lives on the *arr clients themselves, not on the adapters.
 
-The :data:`ADAPTERS` dict is the single lookup table used by the pipeline.
+Track C.10 replaced the previous frozen ``AppAdapter`` dataclass-of-
+callables shape with these per-app classes.  ``AppAdapter`` remains as
+a backward-compatible alias for :class:`AppAdapterProto` so callers
+still type-hint or :func:`isinstance`-check with the historical name.
 """
 
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable
-from dataclasses import dataclass
-from typing import Any
-
-from houndarr.clients.base import ArrClient
 from houndarr.engine.adapters import lidarr, radarr, readarr, sonarr, whisparr_v2, whisparr_v3
-from houndarr.engine.candidates import SearchCandidate
-from houndarr.services.instances import Instance, InstanceType
+from houndarr.engine.adapters.protocols import AppAdapterProto
+from houndarr.services.instances import InstanceType
+
+# Backward-compatible alias for callers that type-hinted the registry
+# via ``AppAdapter``.  The dataclass form is gone; the structural
+# Protocol takes its place.
+AppAdapter = AppAdapterProto
 
 
-@dataclass(frozen=True)
-class AppAdapter:
-    """Bundle of adapter functions for a single *arr application.
-
-    Attributes:
-        adapt_missing: Convert a raw missing item into a :class:`SearchCandidate`.
-        adapt_cutoff: Convert a raw cutoff-unmet item into a :class:`SearchCandidate`.
-        adapt_upgrade: Convert a library item into a :class:`SearchCandidate`
-            for the upgrade pass.
-        fetch_upgrade_pool: Fetch and filter the library for upgrade-eligible
-            items.  Returns a list of app-specific library dataclasses.
-        dispatch_search: Send the search command via the appropriate client method.
-        make_client: Construct an (unopened) client for the application.
-    """
-
-    adapt_missing: Callable[..., SearchCandidate]
-    adapt_cutoff: Callable[..., SearchCandidate]
-    adapt_upgrade: Callable[..., SearchCandidate]
-    fetch_upgrade_pool: Callable[..., Awaitable[list[Any]]]
-    dispatch_search: Callable[..., Awaitable[None]]
-    make_client: Callable[[Instance], ArrClient]
-
-
-ADAPTERS: dict[InstanceType, AppAdapter] = {
-    InstanceType.radarr: AppAdapter(
-        adapt_missing=radarr.adapt_missing,
-        adapt_cutoff=radarr.adapt_cutoff,
-        adapt_upgrade=radarr.adapt_upgrade,
-        fetch_upgrade_pool=radarr.fetch_upgrade_pool,
-        dispatch_search=radarr.dispatch_search,
-        make_client=radarr.make_client,
-    ),
-    InstanceType.sonarr: AppAdapter(
-        adapt_missing=sonarr.adapt_missing,
-        adapt_cutoff=sonarr.adapt_cutoff,
-        adapt_upgrade=sonarr.adapt_upgrade,
-        fetch_upgrade_pool=sonarr.fetch_upgrade_pool,
-        dispatch_search=sonarr.dispatch_search,
-        make_client=sonarr.make_client,
-    ),
-    InstanceType.lidarr: AppAdapter(
-        adapt_missing=lidarr.adapt_missing,
-        adapt_cutoff=lidarr.adapt_cutoff,
-        adapt_upgrade=lidarr.adapt_upgrade,
-        fetch_upgrade_pool=lidarr.fetch_upgrade_pool,
-        dispatch_search=lidarr.dispatch_search,
-        make_client=lidarr.make_client,
-    ),
-    InstanceType.readarr: AppAdapter(
-        adapt_missing=readarr.adapt_missing,
-        adapt_cutoff=readarr.adapt_cutoff,
-        adapt_upgrade=readarr.adapt_upgrade,
-        fetch_upgrade_pool=readarr.fetch_upgrade_pool,
-        dispatch_search=readarr.dispatch_search,
-        make_client=readarr.make_client,
-    ),
-    InstanceType.whisparr_v2: AppAdapter(
-        adapt_missing=whisparr_v2.adapt_missing,
-        adapt_cutoff=whisparr_v2.adapt_cutoff,
-        adapt_upgrade=whisparr_v2.adapt_upgrade,
-        fetch_upgrade_pool=whisparr_v2.fetch_upgrade_pool,
-        dispatch_search=whisparr_v2.dispatch_search,
-        make_client=whisparr_v2.make_client,
-    ),
-    InstanceType.whisparr_v3: AppAdapter(
-        adapt_missing=whisparr_v3.adapt_missing,
-        adapt_cutoff=whisparr_v3.adapt_cutoff,
-        adapt_upgrade=whisparr_v3.adapt_upgrade,
-        fetch_upgrade_pool=whisparr_v3.fetch_upgrade_pool,
-        dispatch_search=whisparr_v3.dispatch_search,
-        make_client=whisparr_v3.make_client,
-    ),
+ADAPTERS: dict[InstanceType, AppAdapterProto] = {
+    InstanceType.radarr: radarr.RadarrAdapter(),
+    InstanceType.sonarr: sonarr.SonarrAdapter(),
+    InstanceType.lidarr: lidarr.LidarrAdapter(),
+    InstanceType.readarr: readarr.ReadarrAdapter(),
+    InstanceType.whisparr_v2: whisparr_v2.WhisparrV2Adapter(),
+    InstanceType.whisparr_v3: whisparr_v3.WhisparrV3Adapter(),
 }
 
 
-def get_adapter(instance_type: InstanceType) -> AppAdapter:
+def get_adapter(instance_type: InstanceType) -> AppAdapterProto:
     """Look up the adapter for *instance_type*.
 
     Args:
         instance_type: The :class:`InstanceType` to look up.
 
     Returns:
-        The matching :class:`AppAdapter`.
+        The matching adapter as an :class:`AppAdapterProto`-conforming
+        class instance.
 
     Raises:
         ValueError: If *instance_type* is not registered.

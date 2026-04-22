@@ -321,8 +321,8 @@
     >
       <option value="">All instances</option>
       {% for inst in instances %}
-      <option value="{{ inst.id }}" {% if selected_instance_id == inst.id %}selected{% endif %}>
-        {{ inst.name }}
+      <option value="{{ inst.core.id }}" {% if selected_instance_id == inst.core.id %}selected{% endif %}>
+        {{ inst.core.name }}
       </option>
       {% endfor %}
     </select>

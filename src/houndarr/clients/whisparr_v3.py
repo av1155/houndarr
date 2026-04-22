@@ -13,9 +13,15 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 
 import httpx
+from pydantic import ValidationError
 
 from houndarr.clients._wire_models import WhisparrV3LibraryMovie
 from houndarr.clients.base import ArrClient, InstanceSnapshot, WantedKind
+from houndarr.errors import (
+    ClientHTTPError,
+    ClientTransportError,
+    ClientValidationError,
+)
 
 __all__ = ["LibraryWhisparrV3Movie", "MissingWhisparrV3Movie", "WhisparrV3Client"]
 
@@ -151,10 +157,35 @@ class WhisparrV3Client(ArrClient):
     async def get_wanted_total(self, kind: WantedKind) -> int:
         """Return the count of wanted items for *kind* from the cached library.
 
-        Reuses :meth:`_get_all_movies` (one fetch per client lifetime) so the
-        probe does not trigger an extra network call during a pass.
+        Reuses :meth:`_get_all_movies` (one fetch per client lifetime) so
+        the probe does not trigger an extra network call during a pass.
+
+        Raw ``httpx`` and ``pydantic`` failures from the first (uncached)
+        ``_get_all_movies`` call are wrapped in typed
+        :class:`~houndarr.errors.ClientError` subclasses; once the cache
+        is populated subsequent calls are pure Python and cannot raise.
+
+        Raises:
+            ClientHTTPError: Non-2xx response from ``/api/v3/movie``.
+            ClientTransportError: Transport failure (connect, timeout,
+                malformed URL, etc.).
+            ClientValidationError: Any movie in the response failed
+                wire-model validation.
         """
-        movies = await self._get_all_movies()
+        path = "/api/v3/movie"
+        try:
+            movies = await self._get_all_movies()
+        except httpx.HTTPStatusError as exc:
+            raise ClientHTTPError(
+                f"wanted total: HTTP {exc.response.status_code} from {path}"
+            ) from exc
+        except (httpx.RequestError, httpx.InvalidURL) as exc:
+            raise ClientTransportError(
+                f"wanted total: transport error reaching {path}: {exc}"
+            ) from exc
+        except ValidationError as exc:
+            raise ClientValidationError(f"wanted total: malformed payload from {path}") from exc
+
         if kind == "missing":
             return sum(1 for m in movies if m.monitored and not m.has_file)
         count = 0

@@ -4,12 +4,20 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+import httpx
+from pydantic import ValidationError
+
 from houndarr.clients._wire_models import (
     PaginatedResponse,
     ReadarrLibraryBook,
     ReadarrWantedBook,
 )
 from houndarr.clients.base import ArrClient, WantedKind
+from houndarr.errors import (
+    ClientHTTPError,
+    ClientTransportError,
+    ClientValidationError,
+)
 
 __all__ = ["LibraryBook", "MissingBook", "ReadarrClient"]
 
@@ -128,16 +136,41 @@ class ReadarrClient(ArrClient):
         return [_parse_book(w) for w in envelope.records]
 
     async def get_wanted_total(self, kind: WantedKind) -> int:
-        """Return the totalRecords count for ``wanted/{kind}`` via a size-1 probe."""
-        data = await self._get(
-            f"/api/v1/wanted/{kind}",
-            page=1,
-            pageSize=1,
-            sortKey="releaseDate",
-            sortDirection="ascending",
-            monitored="true",
-        )
-        envelope = PaginatedResponse[ReadarrWantedBook].model_validate(data)
+        """Return the totalRecords count for ``wanted/{kind}`` via a size-1 probe.
+
+        Raw ``httpx`` and ``pydantic`` failures are wrapped in typed
+        :class:`~houndarr.errors.ClientError` subclasses.  The original
+        exception is preserved on ``__cause__`` via ``raise ... from``.
+
+        Raises:
+            ClientHTTPError: Non-2xx response.
+            ClientTransportError: Transport failure (connect, timeout,
+                malformed URL, etc.).
+            ClientValidationError: Response shape did not match the
+                paginated envelope schema.
+        """
+        path = f"/api/v1/wanted/{kind}"
+        try:
+            data = await self._get(
+                path,
+                page=1,
+                pageSize=1,
+                sortKey="releaseDate",
+                sortDirection="ascending",
+                monitored="true",
+            )
+        except httpx.HTTPStatusError as exc:
+            raise ClientHTTPError(
+                f"wanted total: HTTP {exc.response.status_code} from {path}"
+            ) from exc
+        except (httpx.RequestError, httpx.InvalidURL) as exc:
+            raise ClientTransportError(
+                f"wanted total: transport error reaching {path}: {exc}"
+            ) from exc
+        try:
+            envelope = PaginatedResponse[ReadarrWantedBook].model_validate(data)
+        except ValidationError as exc:
+            raise ClientValidationError(f"wanted total: malformed payload from {path}") from exc
         return envelope.total_records
 
     async def get_books(self) -> list[LibraryBook]:

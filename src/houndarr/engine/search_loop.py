@@ -18,12 +18,12 @@ from typing import Any
 from uuid import uuid4
 
 import httpx
-from pydantic import ValidationError
 
 from houndarr.database import get_db
 from houndarr.engine.adapters import AppAdapter, get_adapter
 from houndarr.engine.candidates import SearchCandidate
 from houndarr.enums import CycleTrigger, ItemType, SearchAction, SearchKind
+from houndarr.errors import ClientError
 from houndarr.services.cooldown import (
     is_on_cooldown_ref,
     record_search_ref,
@@ -904,11 +904,15 @@ async def run_instance_search(
                 total_queued,
                 instance.queue_limit,
             )
-        except (httpx.HTTPError, httpx.InvalidURL, KeyError, ValueError, ValidationError):
+        except (ClientError, httpx.InvalidURL):
             # If the queue check fails, log a warning and continue with the
             # search cycle; failing open avoids blocking searches when the
             # queue endpoint is temporarily unavailable or the payload
-            # shape drifts.
+            # shape drifts.  ``ClientError`` covers HTTP, transport, and
+            # validation failures from ``get_queue_status``; raw
+            # ``httpx.InvalidURL`` can still surface from client
+            # construction in ``adapter.make_client`` before the wrap
+            # boundary applies.
             logger.warning(
                 "[%s] queue status check failed; proceeding with search",
                 instance.name,

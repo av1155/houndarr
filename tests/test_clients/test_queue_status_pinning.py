@@ -6,6 +6,12 @@ queue-status fetches per app.  This module pins the Pydantic wire-model
 contract (``totalCount`` -> ``total_count`` alias, extra-fields ignored,
 missing-field rejection) so any future *arr upgrade that adds new
 fields to the ``QueueStatusResource`` payload does not break us.
+
+Track B.11 extends the module with pinning for the typed-error surface
+that :func:`ArrClient.get_queue_status` now presents: HTTP-status
+failures, transport failures, and wire-validation failures each raise
+a distinct :class:`~houndarr.errors.ClientError` subclass with the
+original ``httpx`` / ``pydantic`` exception preserved on ``__cause__``.
 """
 
 from __future__ import annotations
@@ -19,6 +25,11 @@ from houndarr.clients._wire_models import QueueStatus
 from houndarr.clients.lidarr import LidarrClient
 from houndarr.clients.readarr import ReadarrClient
 from houndarr.clients.sonarr import SonarrClient
+from houndarr.errors import (
+    ClientHTTPError,
+    ClientTransportError,
+    ClientValidationError,
+)
 
 pytestmark = pytest.mark.pinning
 
@@ -108,16 +119,90 @@ class TestQueueStatusPathDispatch:
 
     @pytest.mark.asyncio()
     @respx.mock
-    async def test_validation_error_bubbles_up(self) -> None:
-        """When the wire payload is malformed, get_queue_status raises.
+    async def test_validation_error_wraps_to_client_validation_error(self) -> None:
+        """Malformed wire payloads raise ``ClientValidationError``.
 
-        Pinning: unlike ``ping()`` which swallows every failure to None,
-        ``get_queue_status`` is contractually allowed to raise both
-        ``httpx.HTTPError`` and ``pydantic.ValidationError``.
+        Pinning: ``get_queue_status`` wraps the raw
+        :class:`pydantic.ValidationError` in
+        :class:`~houndarr.errors.ClientValidationError` so callers get
+        a Houndarr-specific surface.  The original validation error is
+        preserved on ``__cause__``.
         """
         respx.get("http://sonarr:8989/api/v3/queue/status").mock(
             return_value=httpx.Response(200, json={"errors": False}),  # no totalCount
         )
         async with SonarrClient(url="http://sonarr:8989", api_key="k") as client:
-            with pytest.raises(ValidationError):
+            with pytest.raises(ClientValidationError) as exc_info:
                 await client.get_queue_status()
+        assert isinstance(exc_info.value.__cause__, ValidationError)
+
+
+# Typed error wrap surface (Track B.11)
+
+
+class TestQueueStatusTypedErrorWrap:
+    """Pin the :class:`ClientError`-subclass wrap introduced in B.11."""
+
+    @pytest.mark.asyncio()
+    @respx.mock
+    async def test_http_500_wraps_to_client_http_error(self) -> None:
+        """Non-2xx responses raise ``ClientHTTPError`` with the status code."""
+        respx.get("http://sonarr:8989/api/v3/queue/status").mock(
+            return_value=httpx.Response(500),
+        )
+        async with SonarrClient(url="http://sonarr:8989", api_key="k") as client:
+            with pytest.raises(ClientHTTPError) as exc_info:
+                await client.get_queue_status()
+        assert "500" in str(exc_info.value)
+        assert isinstance(exc_info.value.__cause__, httpx.HTTPStatusError)
+
+    @pytest.mark.asyncio()
+    @respx.mock
+    async def test_http_404_wraps_to_client_http_error(self) -> None:
+        """4xx responses also raise ``ClientHTTPError`` (not transport)."""
+        respx.get("http://sonarr:8989/api/v3/queue/status").mock(
+            return_value=httpx.Response(404),
+        )
+        async with SonarrClient(url="http://sonarr:8989", api_key="k") as client:
+            with pytest.raises(ClientHTTPError) as exc_info:
+                await client.get_queue_status()
+        assert "404" in str(exc_info.value)
+        assert isinstance(exc_info.value.__cause__, httpx.HTTPStatusError)
+
+    @pytest.mark.asyncio()
+    @respx.mock
+    async def test_connect_error_wraps_to_client_transport_error(self) -> None:
+        """Network failures raise ``ClientTransportError``."""
+        respx.get("http://sonarr:8989/api/v3/queue/status").mock(
+            side_effect=httpx.ConnectError("connection refused"),
+        )
+        async with SonarrClient(url="http://sonarr:8989", api_key="k") as client:
+            with pytest.raises(ClientTransportError) as exc_info:
+                await client.get_queue_status()
+        assert isinstance(exc_info.value.__cause__, httpx.ConnectError)
+
+    @pytest.mark.asyncio()
+    @respx.mock
+    async def test_read_timeout_wraps_to_client_transport_error(self) -> None:
+        """Read timeouts raise ``ClientTransportError`` (another RequestError)."""
+        respx.get("http://sonarr:8989/api/v3/queue/status").mock(
+            side_effect=httpx.ReadTimeout("read timed out"),
+        )
+        async with SonarrClient(url="http://sonarr:8989", api_key="k") as client:
+            with pytest.raises(ClientTransportError) as exc_info:
+                await client.get_queue_status()
+        assert isinstance(exc_info.value.__cause__, httpx.ReadTimeout)
+
+    @pytest.mark.asyncio()
+    async def test_client_error_is_common_base(self) -> None:
+        """All three wrap classes share :class:`ClientError` as their base.
+
+        Callers that want to catch the full wrap surface in one except
+        clause rely on this hierarchy (see the queue-backpressure gate
+        in :func:`engine.search_loop.run_instance_search`).
+        """
+        from houndarr.errors import ClientError
+
+        assert issubclass(ClientHTTPError, ClientError)
+        assert issubclass(ClientTransportError, ClientError)
+        assert issubclass(ClientValidationError, ClientError)

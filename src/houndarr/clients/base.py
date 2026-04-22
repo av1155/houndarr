@@ -11,6 +11,11 @@ import httpx
 from pydantic import ValidationError
 
 from houndarr.clients._wire_models import QueueStatus, SystemStatus
+from houndarr.errors import (
+    ClientHTTPError,
+    ClientTransportError,
+    ClientValidationError,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -117,6 +122,10 @@ class ArrClient(ABC):
         ``version``; both are optional because *arr forks sometimes omit
         them.  Network failures and malformed payloads both collapse to
         ``None`` so callers can treat unreachable and unparseable alike.
+        Callers that need a typed escalation of the unreachable state
+        (for example the supervisor's reconnect loop) wrap the ``None``
+        return in :class:`~houndarr.errors.ClientUnreachableError`
+        themselves; this method intentionally does not raise.
         """
         try:
             result = await self._get(self._SYSTEM_STATUS_PATH)
@@ -139,13 +148,36 @@ class ArrClient(ABC):
         ``/api/v3/queue/status`` (Sonarr, Radarr, Whisparr) and is overridden
         to ``/api/v1/queue/status`` by Lidarr and Readarr.
 
+        Raw ``httpx`` and ``pydantic`` failures are wrapped in typed
+        :class:`~houndarr.errors.ClientError` subclasses so callers get
+        a Houndarr-specific surface they can catch.  The original
+        exception is preserved on ``__cause__`` via ``raise ... from``.
+
         Raises:
-            httpx.HTTPError: If the request fails or returns a non-2xx status.
-            pydantic.ValidationError: If the response is missing
-                ``totalCount`` or its shape cannot be validated.
+            ClientHTTPError: The server returned a non-2xx status.
+            ClientTransportError: The request failed before a response
+                arrived (connection refused, DNS failure, timeout,
+                malformed URL, etc.).
+            ClientValidationError: The response parsed as JSON but did
+                not match the :class:`QueueStatus` schema.
         """
-        result = await self._get(self._QUEUE_STATUS_PATH)
-        return QueueStatus.model_validate(result)
+        try:
+            result = await self._get(self._QUEUE_STATUS_PATH)
+        except httpx.HTTPStatusError as exc:
+            raise ClientHTTPError(
+                f"queue status: HTTP {exc.response.status_code} from {self._QUEUE_STATUS_PATH}"
+            ) from exc
+        except (httpx.RequestError, httpx.InvalidURL) as exc:
+            raise ClientTransportError(
+                f"queue status: transport error reaching {self._QUEUE_STATUS_PATH}: {exc}"
+            ) from exc
+
+        try:
+            return QueueStatus.model_validate(result)
+        except ValidationError as exc:
+            raise ClientValidationError(
+                f"queue status: malformed payload from {self._QUEUE_STATUS_PATH}"
+            ) from exc
 
     # ------------------------------------------------------------------
     # Abstract interface

@@ -947,28 +947,46 @@ async def _column_exists(db: aiosqlite.Connection, table_name: str, column_name:
     return any(row[1] == column_name for row in rows)
 
 
-# ---------------------------------------------------------------------------
-# Settings helpers
-# ---------------------------------------------------------------------------
-
-
 async def get_setting(key: str, default: str | None = None) -> str | None:
-    """Fetch a single setting value by key."""
-    async with get_db() as db:
-        async with db.execute("SELECT value FROM settings WHERE key = ?", (key,)) as cur:
-            row = await cur.fetchone()
-            return str(row["value"]) if row else default
+    """Fetch a single setting value by key.
+
+    Thin delegator over
+    :func:`houndarr.repositories.settings.get_setting`; kept here so
+    callers that still import from :mod:`houndarr.database` keep
+    working while the D batches migrate them one file at a time.  The
+    ``default=`` fallback is preserved because route-layer callers
+    rely on it; the repository contract has no default (see
+    :class:`houndarr.protocols.SettingsRepository`).
+
+    Args:
+        key: Setting key to look up.
+        default: Value to return when *key* has no row (the legacy
+            contract).  Defaults to ``None``.
+
+    Returns:
+        The stored string value, or *default* when the row is absent.
+    """
+    from houndarr.repositories.settings import get_setting as _repo_get_setting
+
+    value = await _repo_get_setting(key)
+    return value if value is not None else default
 
 
 async def set_setting(key: str, value: str) -> None:
-    """Upsert a setting."""
-    async with get_db() as db:
-        await db.execute(
-            "INSERT INTO settings (key, value) VALUES (?, ?)"
-            " ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-            (key, value),
-        )
-        await db.commit()
+    """Upsert a setting.
+
+    Thin delegator over
+    :func:`houndarr.repositories.settings.set_setting`.  Same rationale
+    as :func:`get_setting`: callers still importing from this module
+    see the previous signature; the SQL itself lives in the repository.
+
+    Args:
+        key: Setting key.
+        value: Raw string value to store.
+    """
+    from houndarr.repositories.settings import set_setting as _repo_set_setting
+
+    await _repo_set_setting(key, value)
 
 
 # ---------------------------------------------------------------------------

@@ -230,6 +230,91 @@ async def fetch_recent_searches(
     return int(row[0]) if row else 0
 
 
+async def fetch_latest_missing_reason(
+    instance_id: int,
+    item_id: int,
+    item_type: str,
+) -> str | None:
+    """Return the ``reason`` from the most recent missing-pass log for *ref*.
+
+    Used by the release-timing retry branch in the engine search loop
+    to decide whether an item currently on cooldown should be retried
+    (because the last logged skip reason was pre-release or
+    post-release-grace, both of which can now have elapsed) or left
+    alone.
+
+    Args:
+        instance_id: Owning instance primary key.
+        item_id: *arr per-type item identifier.
+        item_type: ``ItemType`` string value (``"episode"``,
+            ``"season"``, ``"movie"``, ``"album"``, ``"book"``,
+            ``"author"``, ``"series"``, ``"artist"``).
+
+    Returns:
+        The ``reason`` column value from the newest matching row, or
+        ``None`` when no missing-pass row exists or the row's reason
+        is NULL.
+    """
+    async with get_db() as db:
+        async with db.execute(
+            """
+            SELECT reason
+            FROM search_log
+            WHERE instance_id = ?
+              AND item_id = ?
+              AND item_type = ?
+              AND search_kind = 'missing'
+            ORDER BY timestamp DESC, id DESC
+            LIMIT 1
+            """,
+            (instance_id, item_id, item_type),
+        ) as cur:
+            row = await cur.fetchone()
+    return str(row[0]) if row and row[0] is not None else None
+
+
+async def fetch_active_error_instance_ids() -> set[int]:
+    """Return the set of instance IDs whose newest log row is an error.
+
+    Used by the settings page to paint the per-row status dot red and
+    by the dashboard banner to flag active failures.  The window is
+    narrowed to the last 48 hours so the ``ROW_NUMBER()`` partition
+    only scans recent rows: an error that has not re-surfaced in two
+    days is stale for the "is this instance healthy right now?"
+    question, and a genuinely stuck instance writes fresh error rows
+    well inside that window.
+
+    The cutoff uses ``strftime('%Y-%m-%dT%H:%M:%fZ', ...)`` so the
+    boundary matches the stored column format exactly.  SQLite
+    compares TEXT lexicographically, and ``datetime('now',
+    '-2 days')`` returns a space-separated value; at position 10 of
+    the comparison that space (0x20) sorts below the stored value's
+    ``T`` (0x54), which would let same-calendar-day rows older than
+    48 hours slip through.  Matching formats makes the comparison a
+    pure ISO-8601 string compare and restores the advertised window.
+
+    Returns:
+        Set of instance IDs whose newest ``search_log`` row (within
+        the 48h window) has ``action='error'``.  Empty set when no
+        instance is currently failing.
+    """
+    sql = """
+    SELECT instance_id FROM (
+        SELECT instance_id, action,
+               ROW_NUMBER() OVER (
+                   PARTITION BY instance_id ORDER BY timestamp DESC
+               ) AS rn
+        FROM search_log
+        WHERE timestamp >= strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-2 days')
+    )
+    WHERE rn = 1 AND action = 'error'
+    """
+    async with get_db() as db:
+        async with db.execute(sql) as cur:
+            rows = await cur.fetchall()
+    return {int(row["instance_id"]) for row in rows}
+
+
 async def delete_logs_for_instance(instance_id: int) -> int:
     """Delete every ``search_log`` row for *instance_id*.
 

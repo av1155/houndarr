@@ -306,17 +306,156 @@ async def test_delete_logs_for_instance_returns_zero_when_empty(
 
 @pytest.mark.pinning()
 @pytest.mark.asyncio()
+async def test_fetch_latest_missing_reason_returns_newest_reason(
+    seeded_instances: None,
+) -> None:
+    """fetch_latest_missing_reason returns the newest missing-pass reason."""
+    await repo.insert_log_row(
+        instance_id=1,
+        item_id=42,
+        item_type="episode",
+        action="skipped",
+        search_kind="missing",
+        reason="not yet released",
+    )
+    await repo.insert_log_row(
+        instance_id=1,
+        item_id=42,
+        item_type="episode",
+        action="skipped",
+        search_kind="missing",
+        reason="post-release grace (3h)",
+    )
+    assert await repo.fetch_latest_missing_reason(1, 42, "episode") == "post-release grace (3h)"
+
+
+@pytest.mark.pinning()
+@pytest.mark.asyncio()
+async def test_fetch_latest_missing_reason_returns_none_when_no_match(
+    seeded_instances: None,
+) -> None:
+    """fetch_latest_missing_reason returns None when no missing-pass rows exist."""
+    assert await repo.fetch_latest_missing_reason(1, 99, "episode") is None
+
+
+@pytest.mark.pinning()
+@pytest.mark.asyncio()
+async def test_fetch_latest_missing_reason_ignores_non_missing_rows(
+    seeded_instances: None,
+) -> None:
+    """fetch_latest_missing_reason only consults missing-pass rows."""
+    await repo.insert_log_row(
+        instance_id=1,
+        item_id=5,
+        item_type="episode",
+        action="skipped",
+        search_kind="cutoff",
+        reason="cutoff-only reason",
+    )
+    assert await repo.fetch_latest_missing_reason(1, 5, "episode") is None
+
+
+@pytest.mark.pinning()
+@pytest.mark.asyncio()
+async def test_fetch_active_error_instance_ids_includes_recent_error(
+    seeded_instances: None,
+) -> None:
+    """fetch_active_error_instance_ids flags instances whose newest row errored."""
+    await repo.insert_log_row(
+        instance_id=1, item_id=None, item_type=None, action="error", message="boom"
+    )
+    assert await repo.fetch_active_error_instance_ids() == {1}
+
+
+@pytest.mark.pinning()
+@pytest.mark.asyncio()
+async def test_fetch_active_error_instance_ids_excludes_when_error_is_superseded(
+    seeded_instances: None,
+) -> None:
+    """A non-error row newer than the error clears the flag."""
+    await repo.insert_log_row(
+        instance_id=1, item_id=None, item_type=None, action="error", message="boom"
+    )
+    await repo.insert_log_row(
+        instance_id=1,
+        item_id=1,
+        item_type="episode",
+        action="searched",
+    )
+    assert await repo.fetch_active_error_instance_ids() == set()
+
+
+@pytest.mark.pinning()
+@pytest.mark.asyncio()
+async def test_fetch_active_error_instance_ids_returns_empty_on_no_errors(
+    seeded_instances: None,
+) -> None:
+    """fetch_active_error_instance_ids returns the empty set when nothing errored."""
+    await repo.insert_log_row(instance_id=1, item_id=1, item_type="episode", action="searched")
+    assert await repo.fetch_active_error_instance_ids() == set()
+
+
+@pytest.mark.pinning()
+@pytest.mark.asyncio()
+async def test_engine_count_searches_last_hour_delegates_through_repo(
+    seeded_instances: None,
+) -> None:
+    """The engine's _count_searches_last_hour reads through fetch_recent_searches."""
+    from houndarr.engine.search_loop import _count_searches_last_hour
+
+    await repo.insert_log_row(
+        instance_id=1,
+        item_id=1,
+        item_type="episode",
+        action="searched",
+        search_kind="missing",
+    )
+    assert await _count_searches_last_hour(1, "missing") == 1
+
+
+@pytest.mark.pinning()
+@pytest.mark.asyncio()
+async def test_engine_latest_missing_reason_ref_delegates_through_repo(
+    seeded_instances: None,
+) -> None:
+    """The engine's _latest_missing_reason_ref reads through fetch_latest_missing_reason."""
+    from houndarr.engine.search_loop import _latest_missing_reason_ref
+    from houndarr.enums import ItemType
+    from houndarr.value_objects import ItemRef
+
+    await repo.insert_log_row(
+        instance_id=1,
+        item_id=7,
+        item_type="episode",
+        action="skipped",
+        search_kind="missing",
+        reason="not yet released",
+    )
+    ref = ItemRef(instance_id=1, item_id=7, item_type=ItemType.episode)
+    assert await _latest_missing_reason_ref(ref) == "not yet released"
+
+
+@pytest.mark.pinning()
+@pytest.mark.asyncio()
+async def test_services_active_error_instance_ids_delegates_through_repo(
+    seeded_instances: None,
+) -> None:
+    """services.instances.active_error_instance_ids delegates to the repo."""
+    from houndarr.services.instances import active_error_instance_ids
+
+    await repo.insert_log_row(
+        instance_id=2, item_id=None, item_type=None, action="error", message="broken"
+    )
+    assert await active_error_instance_ids() == {2}
+
+
+@pytest.mark.pinning()
+@pytest.mark.asyncio()
 async def test_delete_all_logs_wipes_every_row(seeded_instances: None) -> None:
     """delete_all_logs returns the pre-wipe count and empties the table."""
-    await repo.insert_log_row(
-        instance_id=1, item_id=1, item_type="episode", action="searched"
-    )
-    await repo.insert_log_row(
-        instance_id=2, item_id=2, item_type="movie", action="skipped"
-    )
-    await repo.insert_log_row(
-        instance_id=None, item_id=None, item_type=None, action="info"
-    )
+    await repo.insert_log_row(instance_id=1, item_id=1, item_type="episode", action="searched")
+    await repo.insert_log_row(instance_id=2, item_id=2, item_type="movie", action="skipped")
+    await repo.insert_log_row(instance_id=None, item_id=None, item_type=None, action="info")
 
     removed = await repo.delete_all_logs()
 
@@ -378,12 +517,8 @@ async def test_database_clear_all_search_logs_delegates_through_repo(
     """database.clear_all_search_logs is a thin delegator over delete_all_logs."""
     from houndarr.database import clear_all_search_logs as _db_clear
 
-    await repo.insert_log_row(
-        instance_id=1, item_id=1, item_type="episode", action="searched"
-    )
-    await repo.insert_log_row(
-        instance_id=2, item_id=2, item_type="movie", action="skipped"
-    )
+    await repo.insert_log_row(instance_id=1, item_id=1, item_type="episode", action="searched")
+    await repo.insert_log_row(instance_id=2, item_id=2, item_type="movie", action="skipped")
 
     removed = await _db_clear()
 

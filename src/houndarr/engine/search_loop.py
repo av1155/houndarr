@@ -13,13 +13,12 @@ import logging
 import math
 import random
 from collections.abc import Awaitable, Callable
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from typing import Any
 from uuid import uuid4
 
 import httpx
 
-from houndarr.database import get_db
 from houndarr.engine.adapters import get_adapter
 from houndarr.engine.adapters.protocols import AppAdapterProto
 from houndarr.engine.candidates import SearchCandidate
@@ -187,53 +186,40 @@ def _cutoff_scan_budget(batch_size: int) -> int:
 
 
 async def _count_searches_last_hour(instance_id: int, search_kind: SearchKind | str) -> int:
-    """Count successful searches in the last hour for one pass kind."""
-    cutoff = datetime.now(UTC) - timedelta(hours=1)
-    cutoff_iso = cutoff.strftime("%Y-%m-%dT%H:%M:%S.%f") + "Z"
+    """Count successful searches in the last hour for one pass kind.
 
-    async with get_db() as db:
-        async with db.execute(
-            """
-            SELECT COUNT(*)
-            FROM search_log
-            WHERE instance_id = ?
-              AND action = 'searched'
-              AND search_kind = ?
-              AND timestamp > ?
-            """,
-            (instance_id, search_kind, cutoff_iso),
-        ) as cur:
-            row = await cur.fetchone()
+    Thin delegator over
+    :func:`houndarr.repositories.search_log.fetch_recent_searches`
+    since D.27.  The hourly cap only ever passes a 3600-second window;
+    the repository surface takes the window as a parameter so the
+    engine can stay on that single contract.
+    """
+    from houndarr.repositories.search_log import fetch_recent_searches
 
-    return int(row[0]) if row else 0
+    return await fetch_recent_searches(
+        instance_id,
+        search_kind=str(search_kind),
+        within_seconds=3600,
+    )
 
 
 async def _latest_missing_reason_ref(ref: ItemRef) -> str | None:
     """Return the latest logged missing-pass reason for *ref*, if any.
 
-    Used by the release-timing retry branch in :func:`_run_search_pass`
-    to decide whether an item that is currently on cooldown should be
-    retried (because the last logged reason was a pre-release or
-    post-release-grace skip that has since elapsed) or left on
-    cooldown.
+    Thin delegator over
+    :func:`houndarr.repositories.search_log.fetch_latest_missing_reason`
+    since D.27.  Used by the release-timing retry branch in
+    :func:`_run_search_pass` to decide whether an item on cooldown
+    should be retried (because the last logged reason was a
+    pre-release or post-release-grace skip that has since elapsed).
     """
-    async with get_db() as db:
-        async with db.execute(
-            """
-            SELECT reason
-            FROM search_log
-            WHERE instance_id = ?
-              AND item_id = ?
-              AND item_type = ?
-              AND search_kind = 'missing'
-            ORDER BY timestamp DESC, id DESC
-            LIMIT 1
-            """,
-            (ref.instance_id, ref.item_id, ref.item_type.value),
-        ) as cur:
-            row = await cur.fetchone()
+    from houndarr.repositories.search_log import fetch_latest_missing_reason
 
-    return str(row[0]) if row and row[0] is not None else None
+    return await fetch_latest_missing_reason(
+        ref.instance_id,
+        ref.item_id,
+        ref.item_type.value,
+    )
 
 
 def _is_release_timing_reason(reason: str | None) -> bool:

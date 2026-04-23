@@ -35,7 +35,6 @@ from houndarr.config import (
     DEFAULT_UPGRADE_WHISPARR_SEARCH_MODE,
     DEFAULT_WHISPARR_SEARCH_MODE,
 )
-from houndarr.database import get_db
 
 
 class InstanceType(StrEnum):
@@ -451,43 +450,17 @@ async def list_instances(*, master_key: bytes) -> list[Instance]:
 async def active_error_instance_ids() -> set[int]:
     """Return the set of instance IDs whose newest ``search_log`` row is an error.
 
-    Used by the Settings page to paint the status dot red on a per-row
-    basis. Mirrors the signal the dashboard already keys off
-    (``enabled && active_error``); the dashboard just renders a banner
-    while Settings renders an inline dot.
-
-    The window is narrowed to the last 48 hours so the ROW_NUMBER()
-    partition only scans recent rows. An error that hasn't re-surfaced
-    in two days is stale for the "is this instance healthy right now?"
-    question the dot answers, and a genuinely stuck instance writes
-    fresh error rows well inside that window. Keeps the common case
-    (zero errors) cheap and bounds the cost on installs that bump
-    log retention.
-
-    The cutoff is formatted with ``strftime('%Y-%m-%dT%H:%M:%fZ', ...)``
-    so it matches the stored column format exactly. SQLite compares
-    TEXT lexicographically, and ``datetime('now', '-2 days')`` returns
-    a space-separated value; at position 10 of the comparison that
-    space (0x20) sorts below the stored value's 'T' (0x54), which lets
-    same-calendar-day rows older than 48 h slip through the filter.
-    Matching formats makes the comparison a pure ISO-8601 string
-    compare and restores the advertised window.
+    Thin delegator over
+    :func:`houndarr.repositories.search_log.fetch_active_error_instance_ids`
+    since D.27.  The service layer exposes this for the settings
+    page and dashboard consumers; the repository owns the windowed
+    ``ROW_NUMBER()`` SQL.  See the repository function's docstring
+    for the reasoning behind the 48-hour window and the
+    ``strftime`` cutoff format.
     """
-    sql = """
-    SELECT instance_id FROM (
-        SELECT instance_id, action,
-               ROW_NUMBER() OVER (
-                   PARTITION BY instance_id ORDER BY timestamp DESC
-               ) AS rn
-        FROM search_log
-        WHERE timestamp >= strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-2 days')
-    )
-    WHERE rn = 1 AND action = 'error'
-    """
-    async with get_db() as db:
-        async with db.execute(sql) as cur:
-            rows = await cur.fetchall()
-    return {int(row["instance_id"]) for row in rows}
+    from houndarr.repositories.search_log import fetch_active_error_instance_ids
+
+    return await fetch_active_error_instance_ids()
 
 
 async def update_instance(

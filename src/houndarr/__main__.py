@@ -127,7 +127,8 @@ def cli(
 
     import uvicorn
 
-    from houndarr.config import AppSettings, _parse_samesite
+    from houndarr.bootstrap import bootstrap_non_web
+    from houndarr.config import _parse_samesite
 
     # Configure the root logger so that application loggers (houndarr.*)
     # respect --log-level.  Without this, only uvicorn's own loggers are
@@ -138,7 +139,11 @@ def cli(
         format="%(levelname)s:     %(message)s",
     )
 
-    settings = AppSettings(
+    # Shared non-web bootstrap: pin AppSettings with CLI overrides, ensure
+    # the data dir, load the Fernet master key, and run init_db. The
+    # FastAPI lifespan re-runs the same idempotent primitives once uvicorn
+    # spawns (or reloads) the ASGI child, so running them here is safe.
+    settings, _db_path, _master_key = bootstrap_non_web(
         data_dir=data_dir,
         host=host,
         port=port,
@@ -163,15 +168,11 @@ def cli(
     else:
         logging.info("Auth mode: builtin")
 
-    # Store settings so the app factory can pick them up.
-    import houndarr.config as _cfg
-
-    _cfg._runtime_settings = settings  # noqa: SLF001
-
-    # Propagate resolved CLI values to env vars so that uvicorn's reload
-    # child process (which reimports modules fresh, losing _runtime_settings)
-    # gets the correct values from get_settings()'s env-var fallback.
-    os.environ["HOUNDARR_DATA_DIR"] = data_dir
+    # Propagate the remaining resolved CLI values to env vars so that
+    # uvicorn's reload child process (which reimports modules fresh,
+    # losing _runtime_settings) gets the correct values from
+    # get_settings()'s env-var fallback. bootstrap_non_web already
+    # exports HOUNDARR_DATA_DIR.
     os.environ["HOUNDARR_DEV"] = "1" if dev else ""
     os.environ["HOUNDARR_LOG_LEVEL"] = log_level.lower()
     os.environ["HOUNDARR_SECURE_COOKIES"] = "1" if secure_cookies else ""

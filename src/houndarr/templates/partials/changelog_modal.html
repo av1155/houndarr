@@ -132,27 +132,22 @@
       Latest on GitHub
     </a>
     <div class="flex items-center gap-2">
+      {%- import "_macros/buttons.html" as buttons -%}
       {% if not manual %}
-      <button
-        type="button"
-        data-changelog-disable="true"
-        hx-post="/settings/changelog/disable"
-        hx-swap="none"
-        class="btn btn-soft btn-neutral text-sm px-3 py-1.5"
-      >
-        Don't show again
-      </button>
+      {% call buttons.btn(variant="soft-neutral", size="md", attrs={
+          "type": "button",
+          "data-changelog-disable": "true",
+          "hx-post": "/settings/changelog/disable",
+          "hx-swap": "none",
+      }) %}Don't show again{% endcall %}
       {% endif %}
-      <button
-        type="button"
-        autofocus
-        data-changelog-dismiss="true"
-        hx-post="/settings/changelog/dismiss"
-        hx-swap="none"
-        class="btn btn-primary text-sm font-semibold px-3 py-1.5"
-      >
-        Got it
-      </button>
+      {% call buttons.btn(variant="primary", size="md", extra="font-semibold", attrs={
+          "type": "button",
+          "autofocus": true,
+          "data-changelog-dismiss": "true",
+          "hx-post": "/settings/changelog/dismiss",
+          "hx-swap": "none",
+      }) %}Got it{% endcall %}
     </div>
   </div>
 </dialog>

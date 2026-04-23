@@ -113,8 +113,22 @@ def render(
 
 
 def master_key(request: Request) -> bytes:
-    """Return the Fernet master key stored on ``app.state``."""
-    return request.app.state.master_key  # type: ignore[no-any-return]
+    """Return the Fernet master key stored on ``app.state``.
+
+    Thin wrapper over :func:`houndarr.deps.get_master_key` so the
+    legacy helper call site (``render_settings_page``) inherits the
+    same 503 "Master key unavailable" failure class that the
+    Depends-migrated routes already use.  The direct
+    ``request.app.state.master_key`` read this replaced would have
+    returned ``None`` or a wrongly-typed value during a lifespan
+    race (factory-reset window, misconfigured test harness) and
+    pushed the failure into the Fernet layer as a less actionable
+    error; routing through the shim keeps the behaviour
+    symmetrical across the routes tree.
+    """
+    from houndarr.deps import get_master_key
+
+    return get_master_key(request)
 
 
 def blank_instance() -> Instance:

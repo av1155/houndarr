@@ -41,10 +41,13 @@ token `badge-soft` prefix across the four macros is small enough
 that a component class does not pay back.
 
 The `.field-label` and `.status-pill` components promoted in G.2
-and G.3 do pay back because the bundles are 7 and 5 utilities long
-respectively and have no daisyUI analogue to ride on. Badges are
-genuinely different: daisyUI owns the primitive, Houndarr tunes the
-tokens, and the macro stays terse.
+and G.3 do pay back because both pre-refactor bundles were seven
+utilities long (`.field-label`: `block text-xs font-medium
+text-slate-400 mb-1.5 uppercase tracking-wide`; `.status-pill`:
+`inline-flex items-center justify-center gap-1 text-xs
+text-<state> min-w-[4.5rem]`) and have no daisyUI analogue to ride
+on. Badges are genuinely different: daisyUI owns the primitive,
+Houndarr tunes the tokens, and the macro stays terse.
 
 ## Macros touched in Track G
 
@@ -61,6 +64,29 @@ G.3 updates `status_pill` in `_macros/badges.html`: the three arms
 instead of the long inline flex bundle. The inner dot keeps its
 Tailwind utilities inline because dot colour tracks the variant and
 the `station-pulse-dot` animation toggle is per-variant.
+
+## Why `.status-pill` has no production callers yet
+
+Track G defines the `.status-pill` component and updates the
+`status_pill` macro, but the production surface that renders the
+pill (`partials/instance_row.html`, lines 15-30) still inlines the
+pre-refactor seven-utility bundle directly in three conditional
+branches. Migrating the inline block to call `badges.status_pill(
+'error' | 'active' | 'disabled')` is deliberately out of scope for
+Track G, whose template touches are capped at the six inline
+`style=` attributes migrated in G.5.
+
+The caller migration is owned by Track E.16, which wraps
+`instance_row.html` in a new `_macros/instances.html::instance_row`
+macro and picks up the `status_pill` call as part of the same
+pass (see `docs/refactor/track-e-notes.md` for the full E.16
+scope). Until E.16 lands, `.status-pill` ships in `app.built.css`
+with only test harnesses exercising it
+(`tests/test_templates/test_macros_badges.py` and
+`tests/test_tracks/test_track_g_gate.py`). That orphan window is
+intentional: the Strangler-Fig pattern decouples the component
+definition (this track) from caller migration (Track E), so each
+track lands in a single concern.
 
 Byte-equal render pinning for both macros lives at
 `tests/test_templates/test_macros_forms.py` and

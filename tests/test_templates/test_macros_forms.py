@@ -154,8 +154,7 @@ class TestFormField:
 
     def test_minimal_byte_equal(self, render_macro: Callable[[str], str]) -> None:
         expected = (
-            '<label class="block text-xs font-medium text-slate-400 mb-1.5 '
-            'uppercase tracking-wide" for="x">Z</label>\n'
+            '<label class="field-label" for="x">Z</label>\n'
             '<input id="x" name="y" type="text" class="station-input" />'
         )
         assert render_macro('form_field(id="x", name="y", label="Z")') == expected
@@ -164,8 +163,7 @@ class TestFormField:
         self, render_macro: Callable[[str], str]
     ) -> None:
         expected = (
-            '<label class="block text-xs font-medium text-slate-400 mb-1.5 '
-            'uppercase tracking-wide" for="edit-form-1-batch">Batch Size</label>\n'
+            '<label class="field-label" for="edit-form-1-batch">Batch Size</label>\n'
             '<input id="edit-form-1-batch" name="batch_size" type="number" '
             'min="1" max="250" value="2" data-default-value="5" '
             'class="station-input h-11 text-base text-white '
@@ -183,8 +181,7 @@ class TestFormField:
 
     def test_help_text_appends_paragraph(self, render_macro: Callable[[str], str]) -> None:
         expected = (
-            '<label class="block text-xs font-medium text-slate-400 mb-1.5 '
-            'uppercase tracking-wide" for="x">Post-Release Grace (hrs)</label>\n'
+            '<label class="field-label" for="x">Post-Release Grace (hrs)</label>\n'
             '<input id="x" name="y" type="number" min="0" value="6" '
             'data-default-value="6" class="mono" />\n'
             '<p class="mt-1.5 text-xs text-slate-600">'
@@ -585,8 +582,7 @@ class TestSelectField:
         self, render_macro: Callable[[str], str]
     ) -> None:
         expected = (
-            '<label class="block text-xs font-medium text-slate-400 mb-1.5 '
-            'uppercase tracking-wide" for="order">\n'
+            '<label class="field-label" for="order">\n'
             "  Search Order\n"
             "</label>\n"
             '<select id="order" name="search_order" data-default-value="random" '
@@ -612,8 +608,7 @@ class TestSelectField:
         self, render_macro: Callable[[str], str]
     ) -> None:
         expected = (
-            '<label class="block text-xs font-medium text-slate-400 mb-1.5 '
-            'uppercase tracking-wide" for="type">\n'
+            '<label class="field-label" for="type">\n'
             "  Mode\n"
             "</label>\n"
             '<select id="type" name="type" '

@@ -188,6 +188,17 @@
    reservation explicit avoids later batches having to guess cascade
    intent. */
 @layer components {
+  /* .field-label centralises the uppercase-tracking label treatment
+     used by every form_field / select_field call in the instance
+     form.  @apply emits the same utility bundle the macros used to
+     inline so the computed styles are byte-equal per cascade rules
+     (both `.field-label` and the utilities live at (0,1,0)).  Keeping
+     the definition in @layer components means the utilities layer
+     still wins if a caller passes extra Tailwind classes alongside
+     `field-label`. */
+  .field-label {
+    @apply block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide;
+  }
 }
 
 /* ── daisyUI component overrides (Station parity) ─────────────────────

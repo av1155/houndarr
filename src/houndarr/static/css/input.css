@@ -263,9 +263,9 @@
    register fast / base as custom utilities driven by CSS variables
    declared on :root in tokens.css.  Only the two durations with
    Tailwind consumers are registered; the 280ms `--dur-slow` token is
-   consumed directly by app.css (dash-page-in animation, collapsible
-   max-height transition) so the token survives without a matching
-   `duration-slow` utility. */
+   consumed directly by app.css + logs.css (collapsible max-height
+   transition, cycle__body expand/collapse) so the token survives
+   without a matching `duration-slow` utility. */
 @utility duration-fast { transition-duration: var(--dur-fast); }
 @utility duration-base { transition-duration: var(--dur-base); }
 

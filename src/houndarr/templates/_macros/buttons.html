@@ -5,10 +5,9 @@
   composite controls (split buttons, toggle pills, run-now triggers
   with embedded SVG and animations) to small affordances on the
   changelog modal, the admin maintenance / danger rows, and the
-  shared confirm dialog.  This macro covers ONLY the second group,
-  per the plan section 6 description: low-variance call sites that
-  share the daisyUI `btn`/`btn-soft`/`btn-primary` palette and one
-  of three sizes.
+  shared confirm dialog.  This macro covers ONLY the second group:
+  low-variance call sites that share the daisyUI
+  `btn`/`btn-soft`/`btn-primary` palette and one of three sizes.
 
   In scope (seven call sites across four templates):
     partials/changelog_modal.html      "Don't show again", "Got it"
@@ -19,8 +18,9 @@
   Out of scope: the dashboard's split-button copy controls, the
   search-status mini-buttons, the shell-nav anchors (already
   centralised in _macros/htmx.html), and any element styled via the
-  `.icon-btn` / `.btn-square` primitives.  Plan section 6 explicitly
-  flags these as "high-variance" and skips them.
+  `.icon-btn` / `.btn-square` primitives; those are high-variance
+  and routing them through a single macro would fork the class
+  strings more than it saves.
 
   The macro composes three concerns through three independent seams:
 
@@ -53,12 +53,11 @@
   tests/test_templates/test_macros_buttons.py: the opening
   `<button>` tag stays on one line; the call-block body sits
   indented two spaces; the closing `</button>` follows on its own
-  line.  Post-migration consumer HTML is not byte-equal to its
-  pre-refactor form (class string ordering shifts when `extra`
-  classes append after the size combo, e.g. font-semibold lands
-  after px-3 py-1.5 instead of before).  Tailwind utilities are
-  order-independent in the cascade so the rendered surface is
-  identical, but the byte string does move.
+  line.  The rendered class string emits the variant classes
+  before the size combo and the optional `extra` trailing; Tailwind
+  utilities are order-independent in the cascade so the rendered
+  surface stays identical even when the consumer's own class
+  ordering differs.
 -#}
 
 

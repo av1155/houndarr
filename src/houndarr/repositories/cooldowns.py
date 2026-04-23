@@ -1,7 +1,6 @@
 """Cooldowns aggregate: SQL boundary for the ``cooldowns`` table.
 
-Track D.5 moves the three cooldown queries out of
-:mod:`houndarr.services.cooldown`:
+Three functions cover the full surface:
 
 - :func:`exists_active_cooldown`: the SELECT that decides whether
   an item is still inside its cooldown window.
@@ -12,17 +11,16 @@ Track D.5 moves the three cooldown queries out of
 
 The in-memory LRU sentinel (``should_log_skip`` and
 ``_reset_skip_log_cache``) stays in the service module: it guards
-log writes, not the cooldowns table.  Per locked user decision #4
-the repository is function-based with no class.
+log writes, not the cooldowns table.  The repository is
+function-based with no class.
 
 Timestamps are serialised in the SQLite-native ISO-8601 format
-(``strftime('%Y-%m-%dT%H:%M:%S.%f') + 'Z'``) so the existing column
-contents and the :class:`~houndarr.value_objects.ItemRef`-addressed
-uniqueness constraint stay byte-equal through the migration.  The
-format is duplicated here intentionally: the ``search_log`` table
-uses a slightly different format (``%f`` is milliseconds there) and
-mixing the two is a debugging footgun when the column names are the
-same shape.
+(``strftime('%Y-%m-%dT%H:%M:%S.%f') + 'Z'``) so ``searched_at``
+values compare lexicographically against both existing rows and
+fresh writes.  The format string is duplicated here intentionally:
+the ``search_log`` table uses a slightly different format
+(``%f`` is milliseconds there) and mixing the two is a debugging
+footgun when the column names are the same shape.
 """
 
 from __future__ import annotations
@@ -46,8 +44,8 @@ def _now_utc() -> datetime:
 def _iso(dt: datetime) -> str:
     """Format a datetime in the cooldowns column's storage format.
 
-    Matches the pre-refactor output byte-for-byte so existing rows
-    continue to compare lexicographically against fresh writes.
+    The output is lexicographically comparable against existing
+    ``searched_at`` values stored in the same format.
 
     Args:
         dt: Datetime to render.  The caller is responsible for

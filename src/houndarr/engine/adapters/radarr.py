@@ -25,7 +25,7 @@ _RADARR_UNRELEASED_STATUSES = {"tba", "announced"}
 
 
 # ---------------------------------------------------------------------------
-# Helpers (copied from search_loop.py; originals removed in Phase 2)
+# Helpers
 # ---------------------------------------------------------------------------
 
 
@@ -192,8 +192,6 @@ class RadarrAdapter:
     Conforms to :class:`~houndarr.engine.adapters.protocols.AppAdapterProto`
     structurally via the six staticmethod attributes below; the
     module-level functions remain importable for direct unit-test use.
-    Track C.10 introduces this class form to replace the prior
-    ``AppAdapter`` dataclass-of-callables registry shape.
     """
 
     adapt_missing = staticmethod(adapt_missing)

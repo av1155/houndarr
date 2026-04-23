@@ -31,7 +31,7 @@ logger = logging.getLogger(__name__)
 _UPGRADE_MAX_SERIES_PER_CYCLE = 5
 
 # ---------------------------------------------------------------------------
-# Label builders (copied from search_loop.py; originals removed in Phase 2)
+# Label builders
 # ---------------------------------------------------------------------------
 
 
@@ -319,8 +319,6 @@ class SonarrAdapter:
     Conforms to :class:`~houndarr.engine.adapters.protocols.AppAdapterProto`
     structurally via the six staticmethod attributes below; the
     module-level functions remain importable for direct unit-test use.
-    Track C.10 introduces this class form to replace the prior
-    ``AppAdapter`` dataclass-of-callables registry shape.
     """
 
     adapt_missing = staticmethod(adapt_missing)

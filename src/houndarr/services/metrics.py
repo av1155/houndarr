@@ -1,23 +1,23 @@
 """Dashboard-metrics service: SQL aggregations for ``/api/status``.
 
-Track D.8 lifts the metrics SQL out of
-:mod:`houndarr.routes.api.status` so the route handler can stay
-short and the queries are testable without spinning up FastAPI.
-The functions live here, paired with the SQL constants that drive
-them; the route composes them and assembles the JSON envelope.
+The metrics SQL lives here, paired with the SQL constants that drive
+it; the :mod:`houndarr.routes.api.status` route composes the
+functions and assembles the JSON envelope.  Pulling the queries into
+a service keeps the route handler short and lets the queries be
+tested without spinning up FastAPI.
 
 Connection lifetime stays with the caller: every public function
 takes an open :class:`aiosqlite.Connection` (typically the route's
 ``async with get_db() as db:`` scope) so all five lookups run on the
 same SQLite handle.  That keeps the read-side consistent and lets
-the route batch its queries inside one ``BEGIN`` / connection close
-without crossing a service boundary mid-transaction.
+the route batch its queries inside one connection scope without
+crossing a service boundary mid-transaction.
 
 The Python-side aggregation in :func:`gather_cooldown_data` (per-row
 unlock-time computation, batch-clone spread for ``unlocking_next``)
-moves with the SQL: it has no useful lifetime apart from the rows
-the SQL produces, and pulling it apart would force the caller to
-re-derive the same per-row context.
+lives next to the SQL: it has no useful lifetime apart from the
+rows the SQL produces, and pulling it apart would force the caller
+to re-derive the same per-row context.
 """
 
 from __future__ import annotations

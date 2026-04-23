@@ -1,17 +1,12 @@
 """Validation helpers, form-output dataclasses, and the live probe.
 
-Track D.11 lifted the static validators and their data structures
-out of :mod:`houndarr.routes.settings._helpers` into this service
-module so the HTTP-shaped helpers in ``_helpers.py`` could stay
-focused on request plumbing (render, master_key lookup,
-connection-guard response shaping) and the pure logic became
-testable without the FastAPI machinery.  A follow-up to D.11 also
-moves the ``API_KEY_UNCHANGED`` form sentinel, the
-:func:`build_client` client factory, and the :func:`check_connection`
-live probe here so :mod:`houndarr.services.instance_submit` depends
-only on the service layer; previously it had to reach back into
-``_helpers.py`` to pick those up, inverting the expected
-service -> route dependency direction.
+Owns the pure validation logic and the live connection probe that
+:mod:`houndarr.services.instance_submit` composes into a single
+orchestration.  Keeping the pure logic here means it can be tested
+without the FastAPI machinery, and the HTTP-shaped helpers in
+:mod:`houndarr.routes.settings._helpers` stay focused on request
+plumbing (render, master_key lookup, connection-guard response
+shaping).
 
 Contents:
 
@@ -38,10 +33,10 @@ Validators return ``str | None`` where the string is the user-facing
 error message.  :mod:`houndarr.services.instance_submit` converts
 non-``None`` returns into :class:`~houndarr.errors.InstanceValidationError`
 so the route layer never sees the bare string contract.  The
-sentinel pattern survived the move intentionally: both D.10 (submit
-orchestration) and the pre-refactor route handlers lean on it, and
-raising early would have cascaded into the route's guard-banner
-logic that the service now owns.
+sentinel-not-raise convention is intentional: the submit service
+orchestrates multiple validators before rendering the guard banner,
+and raising on the first failure would cascade into the template
+flow the service owns.
 """
 
 from __future__ import annotations
@@ -121,7 +116,8 @@ def type_mismatch_message(check: ConnectionCheck, selected: InstanceType) -> str
     on the major-version number.  Any other app name is looked up
     against the lowercase map; an unknown app name (e.g. a Readarr
     fork that has renamed itself) is allowed through without a
-    mismatch, matching the pre-refactor behaviour.
+    mismatch so operators can still adopt forks that self-report a
+    novel name.
 
     Args:
         check: Result from a live :func:`check_connection` probe.
@@ -209,10 +205,11 @@ def validate_upgrade_controls(
 class SearchModes:
     """Resolved per-app search mode enum values.
 
-    Kept as a class with ``__slots__`` (rather than a ``@dataclass``)
-    to preserve the pre-refactor wire shape exactly; the four
-    per-app :class:`enum.StrEnum` fields are the only state the
-    instance-submit path reads back.
+    Kept as a plain class with ``__slots__`` (rather than a
+    ``@dataclass``) because the four per-app
+    :class:`enum.StrEnum` fields are the only state the
+    instance-submit path reads back; adding dataclass machinery
+    buys nothing here.
     """
 
     __slots__ = ("lidarr", "readarr", "sonarr", "whisparr")
@@ -440,10 +437,9 @@ async def run_connection_test(
     if mismatch is not None:
         return ConnectionTestOutcome(ok=False, message=mismatch, status_code=422)
 
-    # The save-versus-add distinction in the success message matches
-    # the pre-refactor route behaviour: "save changes" when editing an
-    # existing instance (instance_id set), "add this instance" when
-    # the form is creating a new one.
+    # "save changes" is shown when editing an existing instance
+    # (instance_id set); "add this instance" is shown when the form
+    # is creating a new one.
     action = "save changes" if instance_id else "add this instance"
     if check.app_name and check.version:
         message = f"Connected to {check.app_name} v{check.version}. You can now {action}."

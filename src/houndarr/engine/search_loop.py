@@ -240,23 +240,21 @@ async def _dispatch_with_typed_wrap(
 ) -> None:
     """Open a client, call *dispatch_fn*, and surface failures typed.
 
-    Track B.14 introduces this helper so the three dispatch call sites
-    in :func:`_run_search_pass` and :func:`_run_upgrade_pass` can each
-    narrow their ``except Exception`` to :class:`EngineDispatchError`.
-    The helper owns the whole ``adapter.make_client -> dispatch``
-    attempt boundary: client construction (``httpx.InvalidURL``),
-    context-manager entry / exit, and the dispatch call itself all
+    The three dispatch call sites in :func:`_run_search_pass` and
+    :func:`_run_upgrade_pass` share this helper so each one narrows
+    its ``except Exception`` to :class:`EngineDispatchError`.  The
+    helper owns the whole ``adapter.make_client -> dispatch`` attempt
+    boundary: client construction (``httpx.InvalidURL``),
+    context-manager entry and exit, and the dispatch call itself all
     get typed into one surface.
 
     Already-typed :class:`EngineError` and :class:`ClientError`
     subclasses propagate unchanged so richer context from the client
-    layer (Track B.11 / B.12) is not flattened.  Track B.16 will
-    move the wrap into the adapter implementations; at that point
-    this helper becomes a thin passthrough.
+    layer is not flattened.
 
-    The typed error message is ``str(exc)`` verbatim, which keeps the
-    ``search_log.message`` field byte-equal to the pre-refactor
-    ``message=str(exc)`` write and preserves the golden log shape.
+    The typed error message is ``str(exc)`` verbatim, which keeps
+    the ``search_log.message`` field stable against the golden-log
+    characterisation test.
 
     Args:
         adapter: :class:`AppAdapterProto` for the instance.
@@ -286,11 +284,12 @@ async def _persist_offset_with_typed_wrap(
 ) -> None:
     """Call :func:`update_instance` with offset kwargs, typing failures.
 
-    Track B.15 introduces this helper so the four offset-persist call
-    sites (upgrade series offset + upgrade item offset in
-    :func:`_run_upgrade_pass`; missing page offset + cutoff page offset
-    in :func:`_run_instance_search_impl`) can narrow their
-    ``except Exception`` to :class:`EngineOffsetPersistError`.
+    The four offset-persist call sites (upgrade series offset and
+    upgrade item offset in :func:`_run_upgrade_pass`; missing page
+    offset and cutoff page offset in
+    :func:`_run_instance_search_impl`) share this helper so each one
+    narrows its ``except Exception`` to
+    :class:`EngineOffsetPersistError`.
 
     These writes are non-fatal by design: callers swallow the typed
     error and the next cycle retries the persist.  The wrap keeps the
@@ -914,7 +913,7 @@ async def run_instance_search(
     3. Optionally run the cutoff pass via :func:`_run_search_pass`.
     4. Return the total number of items searched.
 
-    Error surface (Track B.13):
+    Error surface:
     Typed Houndarr errors (:class:`~houndarr.errors.EngineError` and
     :class:`~houndarr.errors.ClientError` subclasses) and
     :class:`httpx.TransportError` propagate unchanged; the supervisor's

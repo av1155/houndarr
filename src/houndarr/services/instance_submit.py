@@ -1,9 +1,9 @@
 """Instance submit service: orchestration for create + update routes.
 
-Track D.10 lifts the validation, connection-test, and persistence
-orchestration out of :mod:`houndarr.routes.settings.instances` so the
-route handlers become pure form-parse-and-render shells.  Each service
-function performs the same sequence of steps the route used to:
+Owns the full validation, connection-test, and persistence
+orchestration for :mod:`houndarr.routes.settings.instances` so the
+route handlers stay pure form-parse-and-render shells.  Each service
+function performs the same sequence of steps:
 
 1. Parse the raw ``type`` string into :class:`InstanceType`.
 2. Run the URL / time-window / cutoff-control / upgrade-control
@@ -25,11 +25,11 @@ the connection-status guard banner via
 :func:`connection_guard_response`.  The service raises rather than
 returning a tagged tuple so the caller's happy path stays linear.
 
-Track D.11 lifted the static validators into
-:mod:`houndarr.services.instance_validation`, and the follow-up to
-that batch moved ``API_KEY_UNCHANGED`` and :func:`check_connection`
-alongside them, so this service depends only on neighbouring
-services instead of back across the route boundary.
+The static validators, :data:`API_KEY_UNCHANGED`, and
+:func:`check_connection` live in
+:mod:`houndarr.services.instance_validation`; this module depends
+only on neighbouring services instead of reaching back across the
+route boundary.
 """
 
 from __future__ import annotations

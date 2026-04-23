@@ -173,16 +173,17 @@ async def factory_reset(*, app: FastAPI, data_dir: str) -> None:
     schema, rotates the master key, resets the auth caches, and spins up
     a fresh supervisor with zero instances.
 
-    Track B.17: any failure raised by the in-process reset pipeline is
-    now surfaced to the caller as :class:`~houndarr.errors.ServiceError`
-    with the original on ``__cause__``; file-deletion failures and
-    post-deletion re-init failures both land on the same typed surface
-    so the route layer can catch it narrowly and fall back to a delayed
-    process exit.  The orchestrator restarts the container and on next
-    boot ``init_db`` + ``ensure_master_key`` resume from the empty data
-    directory exactly as on first run, so no sentinel coordination is
-    required.  On a successful in-process re-init the app is in the
-    same state as on first boot.
+    Any failure raised by the in-process reset pipeline is surfaced
+    to the caller as :class:`~houndarr.errors.ServiceError` with the
+    original exception on ``__cause__``; file-deletion failures and
+    post-deletion re-init failures both land on the same typed
+    surface so the route layer can catch it narrowly and fall back
+    to a delayed process exit.  The orchestrator restarts the
+    container, and on next boot ``init_db`` plus ``ensure_master_key``
+    resume from the empty data directory exactly as on first run, so
+    no sentinel coordination is required.  On a successful
+    in-process re-init the app is in the same state as on first
+    boot.
 
     Args:
         app: The FastAPI application; ``app.state.supervisor`` is replaced

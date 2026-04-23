@@ -309,8 +309,9 @@ class ArrClient(ABC):
         each record (so the parser can read ``series.title`` /
         ``artist.artistName`` / ``author.authorName`` without an extra
         round trip).  :meth:`_fetch_wanted_total` flips it to ``False``
-        because the size-1 probe only needs ``totalRecords``, and
-        omitting the embed matches every per-app probe pre-refactor.
+        because the size-1 probe only needs ``totalRecords`` and
+        omitting the embed keeps that probe as cheap as the *arr APIs
+        allow.
 
         Subclasses without ``/wanted`` endpoints (Whisparr v3) leave the
         hooks unset and never call this method; calling it on a client
@@ -391,9 +392,10 @@ class ArrClient(ABC):
         """
         path = f"{self._WANTED_BASE_PATH}/{kind}"
         try:
-            # The probe omits the embed-parent param because totalRecords
-            # is independent of record shape; matches every per-app
-            # get_wanted_total override pre-refactor.
+            # The probe omits the embed-parent param because
+            # ``totalRecords`` is independent of record shape; keeping
+            # the probe payload minimal lowers the cost of the probe
+            # against the *arr APIs.
             envelope = await self._fetch_wanted_page(
                 kind,
                 page=1,

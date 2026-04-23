@@ -1,14 +1,12 @@
 """FastAPI :class:`Depends` shims shared across route modules.
 
-Track D.12 introduces this module.  The intent is a single place
-where ``app.state`` gets narrowed to a typed Protocol for route
-handlers so the handler can take a :class:`Annotated[...,
-Depends(...)]` parameter instead of a direct ``request.app.state``
-read.  D.12 migrates :func:`get_supervisor` (previously declared
-inline at :mod:`houndarr.routes.api.status`) to this module;
-later D batches migrate the master-key reader, the settings-route
-helpers that still reach into ``request.app.state``, and any other
-per-request state that benefits from a Protocol-typed gate.
+This module narrows ``app.state`` to typed Protocols for route
+handlers so each handler takes an :class:`Annotated[...,
+Depends(...)]` parameter instead of reading ``request.app.state``
+directly.  Keeping every shim in one place means the route layer
+imports a single module for every piece of lifespan wiring
+(supervisor, master key, and anything future that benefits from a
+Protocol-typed gate).
 
 The concrete :class:`~houndarr.engine.supervisor.Supervisor` instance
 lives on ``app.state.supervisor``; this shim narrows the route-facing

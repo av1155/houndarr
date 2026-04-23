@@ -1,12 +1,12 @@
 """Cooldown service: per-item search tracking and skip-log throttling.
 
-The ``cooldowns`` table SQL migrated into
-:mod:`houndarr.repositories.cooldowns` under Track D.5.  This module
-stays the service-layer facade over that boundary and retains
-exclusive ownership of the in-memory LRU throttle
-(:func:`should_log_skip`) that gates duplicate cooldown-reason skip
-rows in ``search_log``.  The throttle is single-process state, not
-SQL, so it does not belong in a repository.
+The ``cooldowns`` table SQL lives in
+:mod:`houndarr.repositories.cooldowns`; this module is the
+service-layer facade over that boundary and retains exclusive
+ownership of the in-memory LRU throttle (:func:`should_log_skip`)
+that gates duplicate cooldown-reason skip rows in ``search_log``.
+The throttle is single-process state, not SQL, so it does not
+belong in a repository.
 
 Public surface:
 
@@ -15,8 +15,8 @@ Public surface:
   engine code should build an :class:`~houndarr.value_objects.ItemRef`
   and call them.
 * :func:`is_on_cooldown` and :func:`record_search` are positional
-  compat shims kept for test seeds and any caller that predates the
-  :class:`ItemRef` migration.
+  compat shims kept for test seeds and any caller that still uses
+  the positional triple directly.
 * :func:`clear_cooldowns` delegates the admin reset to the repository.
 * :func:`should_log_skip` owns the LRU sentinel.
 """

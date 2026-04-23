@@ -1,20 +1,15 @@
-"""Structural Protocol mirroring the AppAdapter dataclass shape.
+"""Structural Protocol for the per-app adapter shape.
 
-Track B.18 declaration.  The :class:`AppAdapter` dataclass today
-holds six callables.  This Protocol captures the same shape so
-future Track C.10 can migrate the registry to Protocol-typed class
-instances without a call-site cascade.
-
-Runtime-checkable so tests can ``isinstance(adapter, AppAdapterProto)``
-as a conformance check when the registry is rewired.
+Every adapter (per-app class with six staticmethod attributes) must
+satisfy this Protocol.  Runtime-checkable so tests can
+``isinstance(adapter, AppAdapterProto)`` as a conformance check
+against the :data:`ADAPTERS` registry.
 
 Each member is declared via ``@property`` so the Protocol advertises
-read-only attributes.  That matters because :class:`AppAdapter` is a
-frozen dataclass: its slots are read-only at runtime, and a
-bare-attribute Protocol would reject frozen instances as
-non-conforming.  Future class-based adapters can expose the same
-callables as plain attributes or as properties; either form
-satisfies this Protocol.
+read-only attributes.  That shape accepts both class-based adapters
+(staticmethod attributes on the class) and future frozen-dataclass
+forms whose slots are read-only at runtime; a bare-attribute
+Protocol would reject the latter as non-conforming.
 """
 
 from __future__ import annotations

@@ -1,4 +1,5 @@
 {# Log table rows partial: rendered by GET /api/logs/partial and swapped into #log-tbody #}
+{%- import "_macros/badges.html" as badges -%}
 {% if rows %}
   {% set ns = namespace(previous_cycle_id='') %}
   {% for row in rows %}
@@ -41,15 +42,7 @@
 
     {# Action badge #}
     <td class="px-3 py-2.5" data-col="action">
-      {% if row.action == "searched" %}
-        <span class="badge badge-soft badge-success">searched</span>
-      {% elif row.action == "skipped" %}
-        <span class="badge badge-soft badge-warning">skipped</span>
-      {% elif row.action == "error" %}
-        <span class="badge badge-soft badge-error">error</span>
-      {% else %}
-        <span class="badge badge-soft badge-neutral">info</span>
-      {% endif %}
+      {{ badges.log_action_badge(row.action) }}
     </td>
 
     {# Type #}
@@ -59,18 +52,7 @@
 
     {# Search kind #}
     <td class="px-3 py-2.5" data-col="kind">
-      {% if row.search_kind == "missing" %}
-        <span class="badge badge-soft badge-info">missing</span>
-      {% elif row.search_kind == "cutoff" %}
-        <span class="badge badge-soft badge-warning">cutoff</span>
-      {% elif row.search_kind == "upgrade" %}
-        {# Violet (upgrade cooldown) is outside daisyUI's state palette; keep as
-           explicit utilities so the badge stays on the Station seg-upgrade-cd
-           token instead of collapsing to a generic state color. #}
-        <span class="badge badge-soft text-seg-upgrade-cd border-seg-upgrade-cd bg-seg-upgrade-cd/15">upgrade</span>
-      {% else %}
-        <span class="text-slate-600">-</span>
-      {% endif %}
+      {{ badges.log_kind_badge(row.search_kind) }}
     </td>
 
     {# Cycle trigger #}

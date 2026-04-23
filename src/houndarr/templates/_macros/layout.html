@@ -30,10 +30,9 @@
   tests/test_templates/test_macros_layout.py: the section opening
   tag, the header div, and the heading each sit on their own line;
   the call-block body drops in unindented after the header div;
-  the closing tags follow on their own lines.  Post-migration
-  consumer HTML is not byte-equal to its pre-refactor form;
-  structural parity (section id, header class string, h3 colour)
-  is enforced by the assertions in test_macros_layout.py.
+  the closing tags follow on their own lines.  Structural parity
+  (section id, header class string, h3 colour) is also enforced
+  there; update the macro and the test together.
 -#}
 
 

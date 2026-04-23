@@ -27,11 +27,10 @@
   tests/test_templates/test_macros_modals.py: the opening tag
   attributes sit one-per-line; the call-block body drops in
   unindented after the opening tag; the closing tag follows on its
-  own line.  Post-migration consumer HTML is not byte-equal to its
-  pre-refactor form; structural parity (every wrapper class,
-  every aria attribute, the backdrop-before-panel ordering) is
-  enforced by the assertions in test_macros_modals.py and by the
-  Track A.22 render harness.
+  own line.  Structural parity (every wrapper class, every aria
+  attribute, the backdrop-before-panel ordering) is enforced
+  there and by the render-pinning suite; update the macro, the
+  pin, and the render tests together.
 -#}
 
 

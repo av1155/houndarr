@@ -6,9 +6,9 @@
   four wire attributes (`hx-get`, `hx-target`, `hx-swap`,
   `hx-push-url`), plus an `href` fallback so native full-page
   navigation still works when HTMX is absent (first paint, JS
-  disabled, copy-link).  Track F.1 centralises the wire shape here;
-  F.2 migrates the two consumers (`partials/shell_nav_links.html`,
-  base.html's header logo) without changing the rendered markup.
+  disabled, copy-link).  Centralising the wire shape here keeps
+  `partials/shell_nav_links.html` and base.html's header logo
+  emitting identical HTMX attribute sets.
 
   `shell_nav_link` extends the base with the `data-shell-*` hooks
   app.js uses for active-state management, and encodes the

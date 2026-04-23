@@ -260,11 +260,11 @@
 /* Named duration utilities.  Tailwind v4 has no `--duration-*` theme
    namespace (durations normally go via numeric arbitrary values), so
    register fast / base as custom utilities driven by CSS variables
-   declared on :root in tokens.css.  A third step `duration-slow`
-   existed pre-Track-G but had zero template consumers; the 280ms
-   `--dur-slow` token itself is still consumed directly by app.css
-   (dash-page-in animation, collapsible max-height transition) so the
-   token survives while the Tailwind utility does not. */
+   declared on :root in tokens.css.  Only the two durations with
+   Tailwind consumers are registered; the 280ms `--dur-slow` token is
+   consumed directly by app.css (dash-page-in animation, collapsible
+   max-height transition) so the token survives without a matching
+   `duration-slow` utility. */
 @utility duration-fast { transition-duration: var(--dur-fast); }
 @utility duration-base { transition-duration: var(--dur-base); }
 
@@ -289,15 +289,12 @@
 @utility shadow-modal       { box-shadow: 0 30px 80px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(30, 38, 56, 0.8); }
 @utility border-l-brand-rule { border-left: 3px solid var(--color-brand-500); }
 
-/* Component reservation.
-   Empty block that later Track G batches fill with Houndarr-specific
-   component classes (.field-label in G.2, .status-pill variants in
-   G.3). Positioned between the @utility duration rules and the
-   unlayered daisyUI overrides so custom components compose into
-   Tailwind's components layer while daisyUI's own layered rules still
-   sit above them and unlayered overrides below beat both. Keeping the
-   reservation explicit avoids later batches having to guess cascade
-   intent. */
+/* Component layer.  Houses the Houndarr-specific component classes
+   (.field-label, .status-pill variants).  Positioned between the
+   @utility duration rules and the unlayered daisyUI overrides so
+   custom components compose into Tailwind's components layer while
+   daisyUI's own layered rules still sit above them and unlayered
+   overrides below beat both. */
 @layer components {
   /* .field-label centralises the uppercase-tracking label treatment
      used by every form_field / select_field call in the instance

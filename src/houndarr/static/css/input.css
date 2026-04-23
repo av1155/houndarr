@@ -257,6 +257,7 @@
    are added back when those files land. */
 @import "./tokens.css";
 @import "./app.css";
+@import "./logs.css";
 
 /* Named duration utilities.  Tailwind v4 has no `--duration-*` theme
    namespace (durations normally go via numeric arbitrary values), so

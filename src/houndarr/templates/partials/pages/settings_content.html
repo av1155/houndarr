@@ -1,4 +1,5 @@
 {%- import "_macros/alerts.html" as alerts -%}
+{%- import "_macros/modals.html" as modals -%}
 <div class="sr-only" data-page-key="settings" data-page-title="Settings | Houndarr" aria-hidden="true"></div>
 
 <style>
@@ -572,10 +573,7 @@
 
   {% include "partials/admin/confirm_dialog.html" %}
 
-  <dialog
-    id="add-instance-modal"
-    class="m-auto p-0 w-[min(94vw,52rem)] rounded-container border border-border-subtle bg-surface-1 text-slate-100 shadow-modal"
-  >
+  {% call modals.dialog_shell(id="add-instance-modal", width="52rem") %}
     <div class="flex items-start justify-between border-b border-border-subtle px-6 py-5">
       <div>
         <h3 id="add-instance-modal-title" class="text-xl font-semibold tracking-tight text-white">
@@ -614,6 +612,6 @@
       data-modal-scroll
       class="max-h-[min(calc(100dvh-12rem),44rem)] overflow-y-auto px-6 py-5"
     ></div>
-  </dialog>
+  {% endcall %}
 </section>
 

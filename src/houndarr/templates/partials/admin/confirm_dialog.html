@@ -10,15 +10,8 @@
 #}
 {%- import "_macros/forms.html" as forms -%}
 {%- import "_macros/buttons.html" as buttons -%}
-<div
-  id="confirm-dialog"
-  class="confirm-dialog hidden"
-  role="dialog"
-  aria-modal="true"
-  aria-labelledby="confirm-title"
->
-  <div class="confirm-dialog__backdrop" data-dismiss-confirm></div>
-  <div class="confirm-dialog__panel rounded-container border border-border-default bg-surface-1">
+{%- import "_macros/modals.html" as modals -%}
+{% call modals.confirm_dialog_shell() %}
     <form
       id="confirm-form"
       data-confirm-form
@@ -105,5 +98,4 @@
         }) %}Confirm{% endcall %}
       </div>
     </form>
-  </div>
-</div>
+{% endcall %}

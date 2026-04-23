@@ -1,9 +1,10 @@
-<dialog
-  id="changelog-modal"
-  class="m-auto p-0 w-[min(94vw,38rem)] rounded-container border border-border-subtle bg-surface-1 text-slate-100 shadow-modal"
-  aria-labelledby="changelog-modal-title"
-  {% if range_label %}aria-describedby="changelog-modal-subtitle"{% endif %}
->
+{%- import "_macros/modals.html" as modals -%}
+{% call modals.dialog_shell(
+    id="changelog-modal",
+    width="38rem",
+    aria_labelledby="changelog-modal-title",
+    aria_describedby="changelog-modal-subtitle" if range_label else none,
+) %}
   <style>
     #changelog-modal {
       opacity: 0;
@@ -150,4 +151,4 @@
       }) %}Got it{% endcall %}
     </div>
   </div>
-</dialog>
+{% endcall %}

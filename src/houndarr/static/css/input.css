@@ -269,14 +269,21 @@
 @utility duration-base { transition-duration: var(--dur-base); }
 
 /* Inline-shadow + brand-rule utilities.  Six inline `style=` attributes
-   in the templates previously carried these exact declarations; moving
-   them into named utilities means a future token change (e.g. tuning
-   --shadow-4 or --glow-logo in tokens.css) propagates to every call
-   site without rewriting the HTML.  The nine JS-toggled
-   `style="display:none"` attributes in partials/instance_form.html
-   deliberately stay inline because the toggle is driven by runtime JS
-   that writes element.style.display directly, and a utility class
-   cannot be toggled by mutating a style string. */
+   in the templates previously carried these exact declarations; three
+   of the four utilities below reference a token (--glow-logo,
+   --shadow-4, --color-brand-500), so a token retune in tokens.css
+   propagates everywhere without touching the HTML.  shadow-modal is
+   intentionally literal: no `--shadow-modal` token exists and the
+   modal drop-shadow is not a reuse of --shadow-4 (different
+   magnitudes), so a future retune would edit the declaration body
+   directly.  Add a --shadow-modal token if a second modal surface
+   ever needs to share the value.
+
+   The ten JS-toggled `style="display:none"` attributes in
+   partials/instance_form.html deliberately stay inline because the
+   toggle is driven by runtime JS that writes element.style.display
+   directly, and a utility class cannot be toggled by mutating a
+   style string. */
 @utility logo-glow          { filter: drop-shadow(var(--glow-logo)); }
 @utility shadow-4           { box-shadow: var(--shadow-4); }
 @utility shadow-modal       { box-shadow: 0 30px 80px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(30, 38, 56, 0.8); }

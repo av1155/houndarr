@@ -26,6 +26,7 @@ from houndarr.services.log_query import (
     LIMIT_MAX,
     compute_load_more_limit,
     head_snapshot,
+    instance_accent_by_name,
     query_logs,
 )
 
@@ -257,6 +258,7 @@ async def get_logs_partial(
         return _partial_validation_error(str(exc.detail))
 
     rows = await _fetch_filtered_rows(filters)
+    accent_map = await instance_accent_by_name()
     return get_templates().TemplateResponse(
         request=request,
         name="partials/log_rows.html",
@@ -272,6 +274,10 @@ async def get_logs_partial(
             "before": filters.before,
             "limit": filters.limit,
             "load_more_limit": compute_load_more_limit(filters.limit),
+            # Cycle accent colours must survive the HTMX append on
+            # "Load older"; omitting this context key falls the
+            # template through to the default gray fallback.
+            "instance_accent_by_name": accent_map,
         },
     )
 

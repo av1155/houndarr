@@ -14,16 +14,21 @@ import logging
 import os
 import re
 import secrets
-import time
+
+# time is re-imported here so tests can monkeypatch ``houndarr.auth.time.time``
+# to freeze the clock across every call site (the ``time`` module is a
+# singleton, so patching via the auth namespace still affects
+# ``houndarr.auth.rate_limit``'s usage).
+import time  # noqa: F401
 from hmac import compare_digest
 from typing import Any
 
 from fastapi import Request, Response
 from fastapi.responses import HTMLResponse, RedirectResponse
-from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.types import ASGIApp
 
+from houndarr.auth import session as _session
 from houndarr.auth.password import BCRYPT_COST, hash_password, verify_password
 
 # Rate-limit seam: re-exported for consumer stability.  Underscore-prefixed
@@ -41,31 +46,68 @@ from houndarr.auth.rate_limit import (
     record_failed_login,
     reset_login_attempts,
 )
+
+# Session seam: re-exported from the session submodule.  ``_serializer``
+# deliberately stays OUT of this import list and is resolved through the
+# module-level ``__getattr__`` below so ``houndarr.auth._serializer``
+# always reads the current value in ``houndarr.auth.session`` instead of
+# a stale None bound at package-import time.
+from houndarr.auth.session import (
+    CSRF_COOKIE_NAME,
+    SESSION_COOKIE_NAME,
+    SESSION_MAX_AGE_SECONDS,
+    _get_serializer,
+    clear_session,
+    create_session,
+    get_session_csrf_token,
+    validate_session,
+)
 from houndarr.config import get_settings
 from houndarr.repositories.settings import get_setting, set_setting
 
 __all__ = [
     "BCRYPT_COST",
+    "CSRF_COOKIE_NAME",
+    "SESSION_COOKIE_NAME",
+    "SESSION_MAX_AGE_SECONDS",
     "_LOGIN_MAX_ATTEMPTS",
     "_LOGIN_WINDOW_SECONDS",
     "_client_ip",
+    "_get_serializer",
     "_login_attempts",
     "check_login_rate_limit",
     "clear_login_attempts",
+    "clear_session",
+    "create_session",
+    "get_session_csrf_token",
     "hash_password",
     "record_failed_login",
     "reset_login_attempts",
+    "validate_session",
     "verify_password",
 ]
+
+
+def __getattr__(name: str) -> Any:
+    """Resolve ``_serializer`` live from the session submodule.
+
+    Package-level ``from .session import _serializer`` would bind the
+    name at import time and miss every later re-assignment inside
+    ``session.py`` (``_get_serializer`` sets it; ``reset_serializer``
+    clears it).  Routing attribute access through ``__getattr__``
+    keeps ``houndarr.auth._serializer`` showing the authoritative
+    value every time a test or caller inspects it.
+    """
+    if name == "_serializer":
+        return _session._serializer
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
 
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# Constants
+# Constants (remaining; SESSION_* constants live in session.py)
 # ---------------------------------------------------------------------------
-SESSION_COOKIE_NAME = "houndarr_session"
-CSRF_COOKIE_NAME = "houndarr_csrf"
-SESSION_MAX_AGE_SECONDS = 86400  # 24 hours
 USERNAME_MIN_LENGTH = 3
 USERNAME_MAX_LENGTH = 32
 _USERNAME_PATTERN = re.compile(r"^[a-z0-9_.-]+$")
@@ -89,106 +131,7 @@ _PUBLIC_PATHS = frozenset(
 _LOGOUT_PATH = "/logout"
 
 
-# ---------------------------------------------------------------------------
-# Session serializer (lazy-initialized from DB secret)
-# ---------------------------------------------------------------------------
-
-_serializer: URLSafeTimedSerializer | None = None
 _setup_complete: bool | None = None
-
-
-async def _get_serializer() -> URLSafeTimedSerializer:
-    global _serializer  # noqa: PLW0603
-    if _serializer is None:
-        secret = await get_setting("session_secret")
-        if not secret:
-            secret = os.urandom(32).hex()
-            await set_setting("session_secret", secret)
-        _serializer = URLSafeTimedSerializer(secret, salt="session")
-    return _serializer
-
-
-# ---------------------------------------------------------------------------
-# Session helpers
-# ---------------------------------------------------------------------------
-
-
-async def create_session(response: Response) -> str:
-    """Create a new session, set the session cookie, and return a CSRF token.
-
-    The session cookie is ``HttpOnly`` (JS cannot read it).  A separate
-    CSRF cookie (``houndarr_csrf``) is set without ``HttpOnly`` so that
-    JavaScript / HTMX can read it and include it in request headers.
-
-    Args:
-        response: The outgoing HTTP response to attach cookies to.
-
-    Returns:
-        The CSRF token string (also stored in the CSRF cookie).
-    """
-    settings = get_settings()
-    serializer = await _get_serializer()
-    csrf_token = secrets.token_hex(32)
-    payload = {"ts": int(time.time()), "csrf": csrf_token}
-    token = serializer.dumps(payload)
-
-    cookie_kwargs: dict[str, Any] = {
-        "max_age": SESSION_MAX_AGE_SECONDS,
-        "httponly": True,
-        "samesite": settings.cookie_samesite,
-        "secure": settings.secure_cookies,
-    }
-
-    response.set_cookie(key=SESSION_COOKIE_NAME, value=token, **cookie_kwargs)
-
-    # CSRF cookie: readable by JS/HTMX, NOT httponly
-    response.set_cookie(
-        key=CSRF_COOKIE_NAME,
-        value=csrf_token,
-        max_age=SESSION_MAX_AGE_SECONDS,
-        httponly=False,
-        samesite=settings.cookie_samesite,
-        secure=settings.secure_cookies,
-    )
-
-    return csrf_token
-
-
-async def validate_session(request: Request) -> bool:
-    """Return True if the request has a valid, non-expired session."""
-    token = request.cookies.get(SESSION_COOKIE_NAME)
-    if not token:
-        return False
-    try:
-        serializer = await _get_serializer()
-        serializer.loads(token, max_age=SESSION_MAX_AGE_SECONDS)
-        return True
-    except (SignatureExpired, BadSignature):
-        return False
-
-
-async def get_session_csrf_token(request: Request) -> str | None:
-    """Extract the CSRF token embedded in the signed session cookie.
-
-    Returns:
-        The CSRF token string, or ``None`` if the session is invalid/missing.
-    """
-    token = request.cookies.get(SESSION_COOKIE_NAME)
-    if not token:
-        return None
-    try:
-        serializer = await _get_serializer()
-        payload: dict[str, Any] = serializer.loads(token, max_age=SESSION_MAX_AGE_SECONDS)
-        csrf: str | None = payload.get("csrf")
-        return csrf
-    except (SignatureExpired, BadSignature):
-        return None
-
-
-def clear_session(response: Response) -> None:
-    """Delete the session and CSRF cookies."""
-    response.delete_cookie(SESSION_COOKIE_NAME)
-    response.delete_cookie(CSRF_COOKIE_NAME)
 
 
 # ---------------------------------------------------------------------------
@@ -269,9 +212,8 @@ async def rotate_session_secret() -> None:
     :func:`create_session` cookie on the outgoing response so the password
     change does not also sign them out of the tab they made it from.
     """
-    global _serializer  # noqa: PLW0603
     await set_setting("session_secret", os.urandom(32).hex())
-    _serializer = None
+    _session.reset_serializer()
 
 
 def normalize_username(username: str) -> str:
@@ -342,8 +284,8 @@ def reset_auth_caches() -> None:
     decisions, but resetting them keeps the module honest if the operator
     later switches modes.
     """
-    global _serializer, _setup_complete  # noqa: PLW0603
-    _serializer = None
+    global _setup_complete  # noqa: PLW0603
+    _session.reset_serializer()
     _setup_complete = None
     reset_login_attempts()
 

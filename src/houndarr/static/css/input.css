@@ -199,6 +199,20 @@
   .field-label {
     @apply block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide;
   }
+
+  /* .status-pill centralises the instance-row status indicator (dot +
+     label) used on the settings page.  The base class captures the
+     shared flex shell; BEM-style `--active / --error / --disabled`
+     modifiers layer on the state colour.  The inner dot keeps its
+     Tailwind utilities inline because its colour is tied to the
+     variant and the `station-pulse-dot` animation toggle only applies
+     to active + error (disabled is intentionally unanimated). */
+  .status-pill {
+    @apply inline-flex items-center justify-center gap-1 text-xs min-w-[4.5rem];
+  }
+  .status-pill--active   { @apply text-success; }
+  .status-pill--error    { @apply text-danger; }
+  .status-pill--disabled { @apply text-slate-500; }
 }
 
 /* ── daisyUI component overrides (Station parity) ─────────────────────

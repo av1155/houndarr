@@ -194,8 +194,7 @@ class TestLogCycleOutcomeBadge:
 class TestStatusPill:
     def test_active_byte_equal(self, render_macro: Callable[[str], str]) -> None:
         expected = (
-            '<span class="inline-flex items-center justify-center gap-1 '
-            'text-xs text-success min-w-[4.5rem]">'
+            '<span class="status-pill status-pill--active">'
             '<span class="w-1.5 h-1.5 rounded-full bg-success inline-block '
             'station-pulse-dot" title="Search enabled" '
             'aria-label="Search enabled"></span>'
@@ -206,8 +205,7 @@ class TestStatusPill:
 
     def test_error_byte_equal(self, render_macro: Callable[[str], str]) -> None:
         expected = (
-            '<span class="inline-flex items-center justify-center gap-1 '
-            'text-xs text-danger min-w-[4.5rem]">'
+            '<span class="status-pill status-pill--error">'
             '<span class="w-1.5 h-1.5 rounded-full bg-danger inline-block '
             'station-pulse-dot" title="Instance is reporting errors" '
             'aria-label="Instance is reporting errors"></span>'
@@ -218,8 +216,7 @@ class TestStatusPill:
 
     def test_disabled_byte_equal(self, render_macro: Callable[[str], str]) -> None:
         expected = (
-            '<span class="inline-flex items-center justify-center gap-1 '
-            'text-xs text-slate-500 min-w-[4.5rem]">'
+            '<span class="status-pill status-pill--disabled">'
             '<span class="w-1.5 h-1.5 rounded-full bg-slate-600 inline-block" '
             'title="Search disabled" aria-label="Search disabled"></span>'
             '<span class="hidden sm:inline">Disabled</span>'
@@ -229,8 +226,7 @@ class TestStatusPill:
 
     def test_unknown_state_falls_back_to_disabled(self, render_macro: Callable[[str], str]) -> None:
         expected = (
-            '<span class="inline-flex items-center justify-center gap-1 '
-            'text-xs text-slate-500 min-w-[4.5rem]">'
+            '<span class="status-pill status-pill--disabled">'
             '<span class="w-1.5 h-1.5 rounded-full bg-slate-600 inline-block" '
             'title="Search disabled" aria-label="Search disabled"></span>'
             '<span class="hidden sm:inline">Disabled</span>'

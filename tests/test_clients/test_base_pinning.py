@@ -92,6 +92,20 @@ class TestConstructor:
         assert timeout.read == 30.0
         assert timeout.connect == 5.0
 
+    def test_arrclient_follow_redirects_is_false_by_default(self) -> None:
+        """The client must never follow redirects automatically.
+
+        SSRF posture: an ``*arr`` response that redirects to a blocked
+        target (loopback, link-local, metadata service) must reach the
+        caller as a 3xx, not as a followed 200 from the blocked host.
+        httpx's own default is ``False``; Phase 3a makes the kwarg
+        explicit at `base.py:99`.  This pin stays green before and
+        after the explicit flip so a future httpx upgrade that flips
+        the default cannot silently weaken the posture.
+        """
+        stub = _StubClient(url="http://sonarr:8989", api_key="k")
+        assert stub._client.follow_redirects is False
+
 
 # _get + _post
 

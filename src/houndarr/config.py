@@ -1,4 +1,39 @@
-"""Application configuration and runtime settings."""
+"""Application configuration and runtime settings.
+
+Houndarr keeps two config surfaces and this module owns one of them.
+
+Ops config lives on :class:`AppSettings` and is resolved from environment
+variables at boot.  The CLI in :mod:`houndarr.__main__` propagates its
+flags into ``HOUNDARR_*`` env vars before :func:`bootstrap_settings` pins
+an :class:`AppSettings`, so uvicorn reload children that re-import the
+module pick up the same values via :func:`get_settings`.  Once pinned,
+every field is fixed for the life of the process: the operator changes
+it by editing ``docker-compose.yml`` (or the systemd unit env) and
+restarting the container.  ``HOUNDARR_AUTH_MODE`` is the canonical
+example.  Switching from ``builtin`` to ``proxy`` rewires the auth
+middleware, which only happens at app construction time;
+``HOUNDARR_DATA_DIR``, ``HOUNDARR_TRUSTED_PROXIES``, and
+``HOUNDARR_SECURE_COOKIES`` behave the same way for the same reason.
+
+User config lives in SQLite and is editable at runtime through the web
+UI without any restart.  The key-value ``settings`` table holds
+singletons read and written through
+:mod:`houndarr.repositories.settings`; canonical examples are the
+authenticated ``username`` and bcrypt ``password_hash`` (changed from
+the admin account UI), the boolean ``update_check_enabled`` flag
+(Settings > Maintenance), and the ``schema_version`` migration cursor.
+The ``instances`` table holds per-instance policy (``batch_size``,
+``sleep_interval_mins``, ``hourly_cap``, ``cooldown_days``, the per-app
+search-mode columns) read through
+:mod:`houndarr.repositories.instances`; the engine picks up new values
+on the next supervisor cycle, so the operator can retune the search rate
+from ``/settings/instances/<id>`` and see it take effect within minutes.
+
+The two surfaces never overlap.  Anything that needs a process boot to
+take effect (network bind, cookie attributes, auth wiring, log level)
+lives here as an :class:`AppSettings` field.  Anything an operator
+should be able to retune without redeploying lives in the database.
+"""
 
 from __future__ import annotations
 

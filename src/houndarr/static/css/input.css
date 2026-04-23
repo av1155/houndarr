@@ -264,8 +264,8 @@
    declared on :root in tokens.css.  A third step `duration-slow`
    existed pre-Track-G but had zero template consumers; the 280ms
    `--dur-slow` token itself is still consumed directly by app.css
-   (dash-page-in animation, collapsible max-height transition) so the
-   token survives while the Tailwind utility does not. */
+   (collapsible max-height transition) so the token survives while
+   the Tailwind utility does not. */
 @utility duration-fast { transition-duration: var(--dur-fast); }
 @utility duration-base { transition-duration: var(--dur-base); }
 

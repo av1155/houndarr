@@ -274,25 +274,6 @@ button:focus-visible {
   text-decoration: none;
 }
 
-/* ── Dashboard page-in stagger ──────────────────────────────────────────── */
-@keyframes dash-page-in {
-  to {
-    opacity: 1;
-    transform: none;
-  }
-}
-.dash-main > * {
-  opacity: 0;
-  transform: translateY(6px);
-  animation: dash-page-in var(--dur-slow) var(--ease-station) forwards;
-}
-.dash-main > *:nth-child(1) { animation-delay: 0ms; }
-.dash-main > *:nth-child(2) { animation-delay: 60ms; }
-.dash-main > *:nth-child(3) { animation-delay: 120ms; }
-.dash-main > *:nth-child(4) { animation-delay: 180ms; }
-.dash-main > *:nth-child(5) { animation-delay: 240ms; }
-.dash-main > *:nth-child(6) { animation-delay: 300ms; }
-
 /* ── Dashboard active-pill pulse (preview parity) ───────────────────────── */
 @keyframes dash-pulse-dot {
   0%, 100% { box-shadow: 0 0 0 0 rgba(74, 222, 128, 0); }
@@ -578,7 +559,6 @@ body > nav {
   }
   .status-dot--active,
   .status-dot--error,
-  .dash-main > *,
   .dash-pill--active .dash-pill__dot {
     animation: none;
     box-shadow: none;

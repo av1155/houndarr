@@ -1,6 +1,29 @@
-{# Log rows partial.  Rendered by GET /api/logs/partial and by the
-   initial /logs page render; swapped into #log-feed.  Groups flat
-   search_log rows into cycle cards.
+{# Log table rows partial: rendered by GET /api/logs/partial and swapped into #log-tbody #}
+{%- import "_macros/badges.html" as badges -%}
+{% if rows %}
+  {% set ns = namespace(previous_cycle_id='') %}
+  {% for row in rows %}
+  {% if row.cycle_id and row.cycle_id != ns.previous_cycle_id %}
+  <tr class="border-b border-border-subtle bg-surface-base/80" data-cycle-group="{{ row.cycle_id }}" data-cycle-outcome="{{ row.cycle_progress or 'unknown' }}">
+    <td colspan="10" class="px-3 py-2">
+      <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-[0.625rem] text-slate-500">
+        <span class="font-mono text-slate-400" title="{{ row.cycle_id }}">Cycle {{ row.cycle_id[:8] }}</span>
+        <span class="text-slate-500 log-instance-label">instance {{ row.instance_name }}</span>
+        <span class="text-slate-500">trigger {{ row.cycle_trigger or 'unknown' }}</span>
+        {% if row.cycle_progress == "progress" %}
+        <span class="text-success">outcome searched</span>
+        {% elif row.cycle_progress == "no_progress" %}
+        <span class="text-slate-400">outcome skips only</span>
+        {% else %}
+        <span class="text-slate-600">outcome unknown</span>
+        {% endif %}
+        <span class="text-slate-600 font-mono">
+          searched {{ row.cycle_searched_count or 0 }} · skipped {{ row.cycle_skipped_count or 0 }} · error {{ row.cycle_error_count or 0 }}
+        </span>
+      </div>
+    </td>
+  </tr>
+  {% endif %}
 
    query_logs emits rows cycle-contiguous with all four cycle-aggregate
    columns (cycle_progress, cycle_searched_count, cycle_skipped_count,

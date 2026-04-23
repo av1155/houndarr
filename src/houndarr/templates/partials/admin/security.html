@@ -12,11 +12,8 @@
 #}
 {%- import "_macros/forms.html" as forms -%}
 {%- import "_macros/alerts.html" as alerts -%}
-<section id="admin-security" class="space-y-3">
-  <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
-    <h3 class="text-base font-semibold text-slate-200">Security</h3>
-  </div>
-
+{%- import "_macros/layout.html" as layout -%}
+{% call layout.admin_section(id="admin-security", title="Security") %}
   <div class="rounded-container border border-border-subtle bg-surface-1 p-5 sm:p-6">
     <div
       class="inline-flex items-center gap-2 rounded-inset border border-border-subtle bg-surface-2/70 px-3 py-1.5 text-xs text-slate-400 font-sans mb-5"
@@ -209,4 +206,4 @@
     </form>
     {% endif %}
   </div>
-</section>
+{% endcall %}

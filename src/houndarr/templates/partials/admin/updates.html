@@ -10,10 +10,8 @@
   The form and section share the #admin-updates id so the preferences
   endpoint can outerHTML-swap this whole block after a toggle.
 #}
-<section id="admin-updates" class="space-y-3">
-  <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
-    <h3 class="text-base font-semibold text-slate-200">Updates</h3>
-  </div>
+{%- import "_macros/layout.html" as layout -%}
+{% call layout.admin_section(id="admin-updates", title="Updates") %}
   <div class="rounded-container border border-border-subtle bg-surface-1 p-5 sm:p-6 space-y-3">
     <form
       hx-post="/settings/changelog/preferences"
@@ -61,4 +59,4 @@
       </a>
     </div>
   </div>
-</section>
+{% endcall %}

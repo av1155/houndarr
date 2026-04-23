@@ -13,6 +13,19 @@
 /* which is still the source of truth for design decisions.                */
 /* ─────────────────────────────────────────────────────────────────────── */
 
+/* Permanent-dark posture.
+   Houndarr has no theme toggle and no light-mode stylesheet; the
+   application shell renders against #07080f (--color-surface-base) at
+   all times and there is no plan to add a `prefers-color-scheme: light`
+   branch.  Every @theme token below, every --color-*-bg tint in
+   tokens.css, and every daisyUI override in this file is calibrated
+   against that dark surface: soft-badge bg tokens use rgba values
+   tuned to read over #07080f, the daisyUI theme sets
+   `color-scheme: dark` + `prefersdark: true`, and the login / setup
+   forms rely on auth.css rules that assume a dark card.  Authors
+   editing this file should pick colours with that context in mind
+   and not hedge the palette for a light variant that does not exist. */
+
 /* Google Fonts @import must precede all other rules per CSS spec. Inlined
    from the former fonts.css so the compiled output keeps the import at the
    top of the generated stylesheet. */

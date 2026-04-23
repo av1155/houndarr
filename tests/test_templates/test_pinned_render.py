@@ -121,14 +121,10 @@ class TestInstanceRowRender:
 
 class TestLogRowsRender:
     @pytest.mark.parametrize(
-        "action,badge_class",
-        [
-            ("searched", "badge-success"),
-            ("skipped", "badge-warning"),
-            ("error", "badge-error"),
-        ],
+        "action",
+        ["searched", "skipped", "error"],
     )
-    def test_action_badge_class(self, render, action: str, badge_class: str) -> None:
+    def test_action_chip_class(self, render, action: str) -> None:
         rows = [
             {
                 "id": 1,
@@ -141,6 +137,9 @@ class TestLogRowsRender:
                 "cycle_trigger": "scheduled",
                 "cycle_id": None,
                 "cycle_progress": None,
+                "cycle_searched_count": 1 if action == "searched" else 0,
+                "cycle_skipped_count": 1 if action == "skipped" else 0,
+                "cycle_error_count": 1 if action == "error" else 0,
                 "item_id": 100,
                 "item_type": "episode",
                 "item_label": "Show - S01E01",
@@ -153,7 +152,7 @@ class TestLogRowsRender:
             rows=rows,
             limit=50,
         )
-        assert f"badge-soft {badge_class}" in html
+        assert f"entry__action--{action}" in html
 
     def test_empty_rows_branch_renders_quietly(self, render) -> None:
         html = render(

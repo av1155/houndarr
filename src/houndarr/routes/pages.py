@@ -27,6 +27,20 @@ from houndarr.services.instances import list_instances
 router = APIRouter()
 
 
+# Map InstanceType enum value to the accent slug used in --inst-* CSS tokens.
+# The cycle-card template reads instance_accent_by_name[name] and emits a
+# --cycle-accent CSS variable; this dispatch keeps the slug resolution in
+# Python so the template stays declarative.
+_INSTANCE_TYPE_TO_ACCENT_SLUG = {
+    "sonarr": "sonarr",
+    "radarr": "radarr",
+    "lidarr": "lidarr",
+    "readarr": "readarr",
+    "whisparr_v2": "whisparr-v2",
+    "whisparr_v3": "whisparr-v3",
+}
+
+
 def _render(
     request: Request,
     template_name: str,
@@ -235,11 +249,7 @@ async def logs_page(
         _parse_instance_id,
         _parse_search_kind,
     )
-    from houndarr.services.log_query import (
-        compute_load_more_limit,
-        query_logs,
-        summarize_rows,
-    )
+    from houndarr.services.log_query import compute_load_more_limit, query_logs
 
     try:
         parsed_instance_id = _parse_instance_id(instance_id)
@@ -267,14 +277,22 @@ async def logs_page(
         before=None,
         limit=50,
     )
-    summary = summarize_rows(rows)
+
+    # Precompute the name -> accent-slug lookup the cycle-card template
+    # uses to set --cycle-accent.  Doing it here (once, server-side)
+    # avoids a per-row dict rebuild inside the Jinja loop.
+    instance_accent_by_name = {
+        inst.name: _INSTANCE_TYPE_TO_ACCENT_SLUG.get(inst.type.value, "")
+        for inst in instances
+    }
+
     template_name = "partials/pages/logs_content.html" if is_hx_request(request) else "logs.html"
     return _render(
         request,
         template_name,
         instances=instances,
         rows=rows,
-        summary=summary,
+        instance_accent_by_name=instance_accent_by_name,
         limit=50,
         load_more_limit=compute_load_more_limit(50),
         selected_instance_id=parsed_instance_id,

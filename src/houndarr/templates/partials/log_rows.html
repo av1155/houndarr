@@ -1,130 +1,150 @@
-{# Log table rows partial: rendered by GET /api/logs/partial and swapped into #log-tbody #}
-{%- import "_macros/badges.html" as badges -%}
-{% if rows %}
-  {% set ns = namespace(previous_cycle_id='') %}
-  {% for row in rows %}
-  {% if row.cycle_id and row.cycle_id != ns.previous_cycle_id %}
-  <tr class="border-b border-border-subtle bg-surface-base/80" data-cycle-group="{{ row.cycle_id }}" data-cycle-outcome="{{ row.cycle_progress or 'unknown' }}">
-    <td colspan="10" class="px-3 py-2">
-      <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-[0.625rem] text-slate-500">
-        <span class="font-mono text-slate-400" title="{{ row.cycle_id }}">Cycle {{ row.cycle_id[:8] }}</span>
-        <span class="text-slate-500 log-instance-label">instance {{ row.instance_name }}</span>
-        <span class="text-slate-500">trigger {{ row.cycle_trigger or 'unknown' }}</span>
-        {% if row.cycle_progress == "progress" %}
-        <span class="text-success">outcome searched</span>
-        {% elif row.cycle_progress == "no_progress" %}
-        <span class="text-slate-400">outcome skips only</span>
-        {% else %}
-        <span class="text-slate-600">outcome unknown</span>
-        {% endif %}
-        <span class="text-slate-600 font-mono">
-          searched {{ row.cycle_searched_count or 0 }} · skipped {{ row.cycle_skipped_count or 0 }} · error {{ row.cycle_error_count or 0 }}
-        </span>
+{# Log rows partial.  Rendered by GET /api/logs/partial and by the
+   initial /logs page render; swapped into #log-feed.  Groups flat
+   search_log rows into cycle cards.
+
+   query_logs emits rows cycle-contiguous with all four cycle-aggregate
+   columns (cycle_progress, cycle_searched_count, cycle_skipped_count,
+   cycle_error_count) stamped identically across every row of a group.
+   This partial reads them off the first row per group instead of
+   recomputing, so the template stays O(n) with the row count. #}
+{%- set _accents = instance_accent_by_name | default({}) -%}
+
+{%- macro _render_cycle(cycle_id, group, accents) -%}
+{%- set first = group[0] -%}
+{%- set last = group[-1] -%}
+{%- set searched_count = first.cycle_searched_count or 0 -%}
+{%- set skipped_count = first.cycle_skipped_count or 0 -%}
+{%- set error_count = first.cycle_error_count or 0 -%}
+{%- if error_count > 0 -%}
+{%- set outcome = 'error' -%}
+{%- elif searched_count > 0 -%}
+{%- set outcome = 'searched' -%}
+{%- elif skipped_count > 0 -%}
+{%- set outcome = 'skip-only' -%}
+{%- else -%}
+{%- set outcome = 'info' -%}
+{%- endif -%}
+{%- set instance_name = first.instance_name -%}
+{%- set slug = accents.get(instance_name, '') -%}
+{%- set is_system = cycle_id is none -%}
+{%- set is_skip_only = outcome == 'skip-only' -%}
+{%- set trigger_label = 'run now' if first.cycle_trigger == 'run_now' else (first.cycle_trigger or 'scheduled') -%}
+{%- set started_at = last.timestamp -%}
+{%- set default_expanded = not (is_skip_only or is_system) -%}
+<article class="cycle{% if is_skip_only %} cycle--skip-only{% endif %}{% if is_system %} cycle--system{% endif %}"
+         data-cycle-id="{{ cycle_id or '' }}"
+         data-cycle-trigger="{{ first.cycle_trigger or '' }}"
+         data-outcome="{{ outcome }}"
+         data-expanded="{{ 'true' if default_expanded else 'false' }}"
+         {%- if slug %} style="--cycle-accent: var(--inst-{{ slug }}); --cycle-accent-bg: var(--inst-{{ slug }}-bg); --cycle-accent-border: var(--inst-{{ slug }}-border);"{% endif %}
+>
+  <header class="cycle__header" role="button" tabindex="0" aria-expanded="{{ 'true' if default_expanded else 'false' }}">
+    <div class="cycle__lead">
+      <span class="cycle__expand" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="9 18 15 12 9 6"/>
+        </svg>
+      </span>
+      <span class="cycle__instance"><span class="cycle__instance-dot" aria-hidden="true"></span>{{ instance_name }}</span>
+      <div class="cycle__meta">
+        <span class="cycle__meta-ts" data-ts="{{ started_at or '' }}">{{ started_at[:19].replace('T', ' ') if started_at else '-' }}</span>
+        <span class="cycle__meta-sep" aria-hidden="true">·</span>
+        <span class="cycle__trigger">{{ trigger_label }}</span>
       </div>
-    </td>
-  </tr>
-  {% endif %}
+    </div>
+    <span></span>
+    <div class="cycle__outcome">
+      {%- if searched_count > 0 %}
+      <span class="outcome-pill outcome-pill--searched"><span class="outcome-pill__n">{{ searched_count }}</span> searched</span>
+      {%- endif %}
+      {%- if error_count > 0 %}
+      <span class="outcome-pill outcome-pill--error"><span class="outcome-pill__n">{{ error_count }}</span> error{% if error_count > 1 %}s{% endif %}</span>
+      {%- endif %}
+      {%- if skipped_count > 0 and searched_count == 0 and error_count == 0 %}
+      <span class="outcome-pill outcome-pill--skipped"><span class="outcome-pill__n">{{ skipped_count }}</span> on cooldown</span>
+      <span class="health-pill">Healthy</span>
+      {%- elif skipped_count > 0 %}
+      <span class="outcome-pill outcome-pill--skipped"><span class="outcome-pill__n">{{ skipped_count }}</span> skipped</span>
+      {%- endif %}
+      {%- if is_system and searched_count == 0 and error_count == 0 and skipped_count == 0 %}
+      <span class="outcome-pill outcome-pill--info">system</span>
+      {%- endif %}
+    </div>
+    {%- if is_skip_only %}
+    <div class="cycle__summary">
+      <strong>{{ instance_name }}</strong> checked
+      <strong>{{ skipped_count }}</strong> item{% if skipped_count > 1 %}s{% endif %}:
+      all <span class="cycle__summary-reason">on cooldown or not yet released</span>.
+      No dispatches needed.
+    </div>
+    {%- endif %}
+  </header>
+  <div class="cycle__body">
+    <div class="entries">
+      {%- for row in group %}
+      <div class="entry entry--{{ row.action or 'info' }}"
+           data-action="{{ row.action or '' }}"
+           data-cycle-id="{{ row.cycle_id or '' }}"
+           data-cycle-progress="{{ row.cycle_progress or '' }}"
+      >
+        <div class="entry__time" data-ts="{{ row.timestamp or '' }}" data-log-ts="{{ row.timestamp or '' }}">{{ row.timestamp[:19].replace('T', ' ') if row.timestamp else '-' }}</div>
+        <div class="entry__action entry__action--{{ row.action or 'info' }}">{{ row.action or '-' }}</div>
+        <div class="entry__kind{% if row.search_kind %} entry__kind--{{ row.search_kind }}{% endif %}">{{ row.search_kind or '—' }}</div>
+        <div class="entry__media">
+          <div class="entry__title">{% if row.item_label %}{{ row.item_label }}{% elif row.item_type and row.item_id is not none %}{{ row.item_type|capitalize }} {{ row.item_id }}{% else %}-{% endif %}</div>
+          {%- if row.item_type or row.item_id is not none %}
+          <div class="entry__sub">{{ row.item_type or '' }}{% if row.item_type and row.item_id is not none %} · {% endif %}{% if row.item_id is not none %}id:{{ row.item_id }}{% endif %}</div>
+          {%- endif %}
+        </div>
+        <div class="entry__reason">{{ row.reason or row.message or '' }}</div>
+      </div>
+      {%- endfor %}
+    </div>
+  </div>
+</article>
+{%- endmacro -%}
 
-  <tr class="border-b border-border-subtle hover:bg-surface-2 transition-colors duration-fast ease-station"
-      data-log-row="true"
-      data-action="{{ row.action or '' }}"
-      data-cycle-id="{{ row.cycle_id or '' }}"
-      data-cycle-progress="{{ row.cycle_progress or '' }}">
-    {# Timestamp #}
-    <td class="px-3 py-2.5 text-xs text-slate-400 whitespace-nowrap font-mono" data-log-ts="{{ row.timestamp or '' }}" data-col="timestamp">
-      {{ row.timestamp[:19].replace("T", " ") if row.timestamp else "-" }}
-    </td>
+{% if rows %}
+{%- set ns = namespace(current=none, buf=[], started=false) -%}
+{%- for row in rows -%}
+{%- if ns.started and row.cycle_id != ns.current -%}
+{{ _render_cycle(ns.current, ns.buf, _accents) }}
+{%- set ns.buf = [] -%}
+{%- endif -%}
+{%- set _ = ns.buf.append(row) -%}
+{%- set ns.current = row.cycle_id -%}
+{%- set ns.started = true -%}
+{%- endfor -%}
+{%- if ns.buf -%}
+{{ _render_cycle(ns.current, ns.buf, _accents) }}
+{%- endif %}
 
-    {# Instance #}
-    <td class="px-3 py-2.5 text-xs text-slate-300 max-w-[8.75rem] truncate font-sans" title="{{ row.instance_name }}" data-col="instance">
-      {{ row.instance_name }}
-    </td>
-
-    {# Action badge #}
-    <td class="px-3 py-2.5" data-col="action">
-      {{ badges.log_action_badge(row.action) }}
-    </td>
-
-    {# Type #}
-    <td class="px-3 py-2.5 text-xs text-slate-400 capitalize font-sans" data-col="type">
-      {{ row.item_type or "-" }}
-    </td>
-
-    {# Search kind #}
-    <td class="px-3 py-2.5" data-col="kind">
-      {{ badges.log_kind_badge(row.search_kind) }}
-    </td>
-
-    {# Cycle trigger #}
-    <td class="px-3 py-2.5" data-col="trigger">
-      {{ badges.log_trigger_badge(row.cycle_trigger) }}
-    </td>
-
-    {# Cycle id #}
-    <td class="px-3 py-2.5 text-xs text-slate-400 font-mono" data-col="cycle" title="{{ row.cycle_id or '' }}">
-      {% if row.cycle_id %}
-        {{ row.cycle_id[:8] }}
-      {% else %}
-        <span class="text-slate-600">-</span>
-      {% endif %}
-    </td>
-
-    {# Cycle outcome #}
-    <td class="px-3 py-2.5" data-col="outcome">
-      {{ badges.log_cycle_outcome_badge(row.cycle_progress) }}
-    </td>
-
-    {# Media label + ID fallback #}
-    <td class="px-3 py-2.5 text-xs text-slate-300 font-sans"
-        data-col="media"
-        title="{{ row.item_label or '' }}">
-      {% if row.item_label %}
-        <div class="truncate">{{ row.item_label }}</div>
-      {% elif row.item_type and row.item_id is not none %}
-        <div class="truncate text-slate-400">{{ row.item_type|capitalize }} {{ row.item_id }}</div>
-      {% else %}
-        <div class="truncate text-slate-600">-</div>
-      {% endif %}
-      {% if row.item_id is not none %}
-        <div class="text-[0.625rem] text-slate-600 font-mono">id:{{ row.item_id }}</div>
-      {% endif %}
-    </td>
-
-    {# Reason / Message #}
-    <td class="px-3 py-2.5 text-xs text-slate-400 font-sans"
-        data-col="reason"
-        title="{{ (row.reason or row.message or '') }}">
-      {{ row.reason or row.message or "-" }}
-    </td>
-  </tr>
-  {% if row.cycle_id %}
-    {% set ns.previous_cycle_id = row.cycle_id %}
-  {% else %}
-    {% set ns.previous_cycle_id = '' %}
-  {% endif %}
-  {% endfor %}
-
-  {# Pagination: "Load older" link; only show if we got a full page #}
+  {# Self-replacing pagination button.  Emits when the first page is
+     full enough that the service may still have older rows.  Swap
+     target is the button itself so a single click replaces it with
+     more cycle articles plus a new button if more remain. #}
   {% if rows | length >= limit %}
   {% set next_limit = load_more_limit if load_more_limit is defined else limit %}
-  <tr id="pagination-row">
-    <td colspan="10" class="px-3 py-3 text-center">
-      <button
-        hx-get="/api/logs/partial?limit={{ next_limit }}{% if instance_id %}&instance_id={{ instance_id }}{% endif %}{% if action %}&action={{ action }}{% endif %}{% if search_kind %}&search_kind={{ search_kind }}{% endif %}{% if cycle_trigger %}&cycle_trigger={{ cycle_trigger }}{% endif %}&hide_system={{ 'true' if hide_system else 'false' }}&before={{ rows[-1].timestamp }}"
-        hx-target="#pagination-row"
-        hx-swap="outerHTML"
-        class="text-xs text-brand-400 hover:text-brand-300 transition-colors duration-base ease-station underline-offset-2 hover:underline font-sans">
-        Load older entries ↓
-      </button>
-    </td>
-  </tr>
+  <div id="pagination-row" class="feed-foot">
+    <button
+      type="button"
+      class="load-older"
+      hx-get="/api/logs/partial?limit={{ next_limit }}{% if instance_id %}&instance_id={{ instance_id }}{% endif %}{% if action %}&action={{ action }}{% endif %}{% if search_kind %}&search_kind={{ search_kind }}{% endif %}{% if cycle_trigger %}&cycle_trigger={{ cycle_trigger }}{% endif %}&hide_system={{ 'true' if hide_system else 'false' }}&hide_skipped={{ 'true' if hide_skipped else 'false' }}&before={{ rows[-1].timestamp }}"
+      hx-target="#pagination-row"
+      hx-swap="outerHTML"
+    >
+      Load older entries
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M12 5v14" />
+        <path d="m19 12-7 7-7-7" />
+      </svg>
+    </button>
+  </div>
   {% endif %}
 
 {% else %}
-  <tr id="log-empty-row">
-    <td colspan="10" class="px-3 py-14 text-center">
-      <p class="text-sm font-medium text-slate-500 font-sans">No log entries found.</p>
-      <p class="mt-1 text-xs text-slate-600 font-sans">Adjust filters or wait for search activity to appear here.</p>
-    </td>
-  </tr>
+<div class="empty" id="log-empty-row">
+  <p class="empty__title">No entries match those filters.</p>
+  <p>Try clearing a filter or waiting for new activity.</p>
+</div>
 {% endif %}

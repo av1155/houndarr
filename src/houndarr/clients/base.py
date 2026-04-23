@@ -204,17 +204,12 @@ class ArrClient(ABC):
         # services/url_validation.py threat model.  ``follow_redirects``
         # is stated explicitly (httpx's own default is False) so a
         # future dependency upgrade that flips the default cannot
-        # silently weaken the posture.  The response event_hook below
-        # is the defense-in-depth layer: even if follow_redirects ever
-        # goes True, any 3xx ``Location`` that resolves to a blocked
-        # target (loopback, link-local, unspecified) raises before the
-        # transport would chase it.
+        # silently weaken the posture.
         self._client = httpx.AsyncClient(
             base_url=base,
             headers={"X-Api-Key": api_key, "Accept": "application/json"},
             timeout=timeout,
             follow_redirects=False,
-            event_hooks={"response": [_redirect_guard]},
         )
 
     # Context-manager support

@@ -28,6 +28,7 @@ from starlette.types import ASGIApp
 
 from houndarr.auth import session as _session
 from houndarr.auth import setup as _setup
+from houndarr.auth.csrf import _CSRF_PROTECTED_METHODS, validate_csrf
 from houndarr.auth.password import BCRYPT_COST, hash_password, verify_password
 
 # Rate-limit seam: re-exported for consumer stability.  Underscore-prefixed
@@ -89,6 +90,7 @@ __all__ = [
     "SESSION_MAX_AGE_SECONDS",
     "USERNAME_MAX_LENGTH",
     "USERNAME_MIN_LENGTH",
+    "_CSRF_PROTECTED_METHODS",
     "_LOGIN_MAX_ATTEMPTS",
     "_LOGIN_WINDOW_SECONDS",
     "_client_ip",
@@ -111,6 +113,7 @@ __all__ = [
     "rotate_session_secret",
     "set_password",
     "set_username",
+    "validate_csrf",
     "validate_session",
     "validate_username",
     "verify_password",
@@ -139,12 +142,9 @@ def __getattr__(name: str) -> Any:
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# Constants (middleware-facing; USERNAME_* and SESSION_* constants live
-# in their owning submodules)
+# Constants (middleware-facing; USERNAME_*, SESSION_* and
+# _CSRF_PROTECTED_METHODS live in their owning submodules)
 # ---------------------------------------------------------------------------
-
-# HTTP methods that mutate state and require CSRF protection.
-_CSRF_PROTECTED_METHODS = frozenset(["POST", "PUT", "PATCH", "DELETE"])
 
 # Routes that don't require authentication
 _PUBLIC_PATHS = frozenset(
@@ -160,48 +160,6 @@ _PUBLIC_PATHS = frozenset(
 # allow it without CSRF/session validation so stale legacy sessions can always
 # be cleared after upgrades.
 _LOGOUT_PATH = "/logout"
-
-
-# ---------------------------------------------------------------------------
-# CSRF validation
-# ---------------------------------------------------------------------------
-
-
-async def validate_csrf(request: Request) -> bool:
-    """Return True if the request carries a valid CSRF token.
-
-    Accepts the token from either:
-    - ``X-CSRF-Token`` request header (HTMX sends this when configured via
-      ``hx-headers``), or
-    - ``csrf_token`` form field (plain HTML form submissions).
-
-    The token is compared against the one embedded in the signed session
-    cookie using a constant-time comparison to prevent timing attacks.
-
-    Args:
-        request: The incoming HTTP request.
-
-    Returns:
-        ``True`` if the CSRF token is present and valid; ``False`` otherwise.
-    """
-    expected = await get_session_csrf_token(request)
-    if not expected:
-        return False
-
-    # Try header first (HTMX), then form body
-    submitted = request.headers.get("X-CSRF-Token")
-    if not submitted:
-        # Form data requires us to peek at the body; HTMX always uses the header
-        try:
-            form = await request.form()
-            submitted = form.get("csrf_token")  # type: ignore[assignment]
-        except Exception:
-            return False
-
-    if not submitted:
-        return False
-
-    return compare_digest(str(submitted), expected)
 
 
 async def resolve_signed_in_as(request: Request) -> str:

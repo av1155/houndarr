@@ -7,12 +7,49 @@ errors are caught by an autouse fixture in ``conftest.py``.
 
 from __future__ import annotations
 
+import os
 import re
 import uuid
 from contextlib import suppress
 
 from playwright.sync_api import Locator, Page, expect
 
+from pathlib import Path
+
+_SCREENSHOTS_DIR = Path(__file__).resolve().parent / "_screenshots"
+
+
+def _assert_screenshot(page: Page, name: str) -> None:
+    """Byte-compare a page screenshot against the committed baseline.
+
+    Baselines live at ``tests/e2e_browser/_screenshots/<name>``.  When the
+    ``HOUNDARR_E2E_CAPTURE=1`` environment variable is set (the
+    capture script sets it on the first pytest invocation pass), the
+    current screenshot is written to disk instead of compared.  On a
+    verification run the env var stays unset and any pixel diff fails
+    the test.  On mismatch, the actual bytes are saved alongside as
+    ``<name>.actual.png`` so the maintainer can open both files in any
+    image viewer and eyeball the delta before deciding whether to
+    re-capture.
+    """
+    path = _SCREENSHOTS_DIR / name
+    actual = page.screenshot(full_page=True, type="png")
+    if os.environ.get("HOUNDARR_E2E_CAPTURE") == "1":
+        _SCREENSHOTS_DIR.mkdir(exist_ok=True)
+        path.write_bytes(actual)
+        return
+    if not path.exists():
+        raise AssertionError(
+            f"baseline missing: {path}.  Run `just capture-baselines` to create it."
+        )
+    expected = path.read_bytes()
+    if actual == expected:
+        return
+    actual_path = path.with_suffix(".actual.png")
+    actual_path.write_bytes(actual)
+    raise AssertionError(
+        f"pixel diff vs {path.name}; actual saved to {actual_path.name} for inspection"
+    )
 
 def _wait_for_connection_ui_idle(page: Page) -> None:
     """Drain the 80 ms setTimeout scheduled by the field-change handler.
@@ -673,3 +710,50 @@ def test_changelog_preferences_switch_rolls_back_on_error(
         )
     finally:
         page.unroute(pattern)
+
+
+# ---------------------------------------------------------------------------
+# Visual baselines for /login and /setup
+#
+# Phase 7a of the final refactor wave routed three hardcoded rgba values
+# in auth-fields.css through named tokens.  The computed rgba on every
+# consuming element is byte-equal to the pre-refactor literal, so the
+# rendered output of /login and /setup is pixel-identical to pre-7a.
+# These two tests capture pytest-playwright snapshot baselines; first
+# capture runs via ``just capture-baselines``, which drives
+# ``scripts/e2e_browser/capture_baselines.sh`` inside a Linux Playwright
+# container so the PNGs match CI's ubuntu-latest font rendering.
+# ``just verify-baselines`` and ``just test-browser chromium`` compare
+# the live render against the committed baseline on every run.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.integration
+def test_login_page_visual(logged_in_page: Page, houndarr_url: str) -> None:
+    """Pixel-compare the /login page after the Phase 7a token routing.
+
+    ``logged_in_page`` puts the browser through setup + login, so by
+    the time we reach here the admin account exists.  Drop the auth
+    cookies client-side (``/logout`` only accepts POST, so
+    ``page.goto('/logout')`` would trigger a 405 under HTTP GET) and
+    navigate to ``/login`` for the capture.
+    """
+    page = logged_in_page
+    page.context.clear_cookies()
+    page.goto(f"{houndarr_url}/login")
+    page.wait_for_load_state("networkidle")
+    _assert_screenshot(page, "login_page_visual.png")
+
+
+@pytest.mark.integration
+def test_setup_page_visual(page: Page, houndarr_url: str) -> None:
+    """Pixel-compare the /setup page after the Phase 7a token routing.
+
+    Requires Houndarr in a pre-setup state (no ``password_hash``
+    setting).  ``just capture-baselines`` handles that by booting the
+    stack with a fresh ``/tmp/houndarr-e2e-data`` volume and running
+    this test BEFORE the admin-creation step.
+    """
+    page.goto(f"{houndarr_url}/setup")
+    page.wait_for_load_state("networkidle")
+    _assert_screenshot(page, "setup_page_visual.png")

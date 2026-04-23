@@ -192,10 +192,16 @@ _teardown() {
 }
 
 _run_pytest() {
-    # Args: -k test_selector (plus optional --update-snapshots)
-    local selector="$1"; shift
-    local extra_args=("$@")
-    _info "pytest inside ${PLAYWRIGHT_IMAGE} (-k ${selector})"
+    # Args:
+    #   $1 selector    pytest -k expression
+    #   $2 update_mode "update" (captures baselines) or "verify" (compares)
+    local selector="$1"
+    local update_mode="${2:-verify}"
+    local update_env=""
+    if [ "${update_mode}" = "update" ]; then
+        update_env="-e HOUNDARR_E2E_CAPTURE=1"
+    fi
+    _info "pytest inside ${PLAYWRIGHT_IMAGE} (-k ${selector}, mode=${update_mode})"
     docker run --rm --network "${NETWORK}" \
         -v "${REPO_ROOT}:/workspace" \
         -w /workspace \
@@ -204,10 +210,11 @@ _run_pytest() {
         -e MOCK_RADARR_URL="http://mock-radarr:7878" \
         -e HOUNDARR_E2E_USER="${HOUNDARR_ADMIN_USER}" \
         -e HOUNDARR_E2E_PASS="${HOUNDARR_ADMIN_PASS}" \
+        ${update_env} \
         "${PLAYWRIGHT_IMAGE}" \
         bash -lc "pip install --quiet --disable-pip-version-check -r tests/e2e_browser/requirements.txt \
             && pytest tests/e2e_browser/ --confcutdir tests/e2e_browser \
-               -k '${selector}' --browser chromium -v ${extra_args[*]:-}"
+               -k '${selector}' --browser chromium -v"
 }
 
 _up() {
@@ -234,11 +241,11 @@ _capture() {
     _up
     # Setup baseline first: fresh /data means is_setup_complete is False
     # and /setup renders the first-run form.
-    _run_pytest test_setup_page_visual --update-snapshots
+    _run_pytest test_setup_page_visual update
     _create_admin
     # Login baseline: admin now exists; logged_in_page fixture logs in,
     # the test logs out and navigates to /login.
-    _run_pytest test_login_page_visual --update-snapshots
+    _run_pytest test_login_page_visual update
     _info "baselines captured under tests/e2e_browser/_screenshots/"
 }
 
@@ -246,11 +253,11 @@ _verify() {
     _require_docker
     trap _teardown EXIT
     _up
-    # Same two-pytest flow, without --update-snapshots.  The captured
-    # baselines must satisfy the assertion; otherwise pytest fails.
-    _run_pytest test_setup_page_visual
+    # Same two-pytest flow in verify mode.  The captured baselines
+    # must satisfy the byte-equal assertion; otherwise pytest fails.
+    _run_pytest test_setup_page_visual verify
     _create_admin
-    _run_pytest test_login_page_visual
+    _run_pytest test_login_page_visual verify
     _info "baselines verified"
 }
 

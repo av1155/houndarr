@@ -28,8 +28,7 @@ import os
 from pathlib import Path
 from typing import Literal, TypedDict, Unpack
 
-from houndarr import config as _cfg
-from houndarr.config import AppSettings, get_settings
+from houndarr.config import AppSettings, bootstrap_settings
 from houndarr.crypto import ensure_master_key
 from houndarr.database import init_db, set_db_path
 
@@ -89,25 +88,30 @@ def bootstrap_non_web(
         ``RuntimeError: asyncio.run() cannot be called from a running
         event loop``.
 
-        Every call clears ``_runtime_settings`` before resolving the new
-        one and, when ``overrides`` are supplied, pins a fresh
-        :class:`AppSettings` into the singleton. Back-to-back calls with
-        different overrides therefore leave the singleton pinned to the
-        last call; callers holding an :class:`AppSettings` reference
-        returned by an earlier call keep their own object but disagree
-        with the process-wide singleton.
+        Both branches funnel through :func:`~houndarr.config.bootstrap_settings`,
+        which clears any prior pin first and then either pins a fresh
+        :class:`AppSettings` (override branch) or returns env-resolved
+        settings without pinning (no-override branch). Back-to-back
+        calls with different overrides therefore leave the singleton
+        pinned to the last call; callers holding an :class:`AppSettings`
+        reference returned by an earlier call keep their own object but
+        disagree with the process-wide singleton.
     """
-    # Drop any prior pin so tests and repeated script invocations cannot
-    # leak stale settings from a previous run (seed_demo_data + serve_demo
-    # ship-rebuild the singleton deliberately; the CLI re-pins below).
-    _cfg._runtime_settings = None  # noqa: SLF001
+    # Export data_dir to the environment first so the no-override branch's
+    # env-resolved fallback (and any uvicorn reload child that reimports
+    # houndarr fresh, losing the singleton pin) sees the right path.
     os.environ["HOUNDARR_DATA_DIR"] = data_dir
 
+    # bootstrap_settings owns the pin lifecycle: with overrides it builds
+    # AppSettings(data_dir=..., **overrides) and pins it; without overrides
+    # it clears the pin and returns env-resolved (data_dir comes from the
+    # env export above). seed_demo_data + serve_demo deliberately go
+    # through the no-override branch so later get_settings() calls keep
+    # honouring any HOUNDARR_* changes the script makes after bootstrap.
     if overrides:
-        settings = AppSettings(data_dir=data_dir, **overrides)
-        _cfg._runtime_settings = settings  # noqa: SLF001
+        settings = bootstrap_settings(data_dir=data_dir, **overrides)
     else:
-        settings = get_settings()
+        settings = bootstrap_settings()
 
     Path(settings.data_dir).mkdir(parents=True, exist_ok=True)
 

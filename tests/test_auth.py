@@ -149,21 +149,17 @@ def test_client_ip_honours_xff_for_cidr_trusted_proxy(
     """_client_ip honours X-Forwarded-For when direct IP is in a trusted subnet."""
     from unittest.mock import MagicMock
 
-    import houndarr.config as _cfg
     from houndarr.auth import _client_ip  # noqa: SLF001
-    from houndarr.config import AppSettings
+    from houndarr.config import bootstrap_settings
 
-    original = _cfg._runtime_settings  # noqa: SLF001
     try:
-        _cfg._runtime_settings = AppSettings(  # noqa: SLF001
-            data_dir=tmp_data_dir, trusted_proxies="172.18.0.0/16"
-        )
+        bootstrap_settings(data_dir=tmp_data_dir, trusted_proxies="172.18.0.0/16")
         request = MagicMock()
         request.client.host = "172.18.0.5"
         request.headers.get.return_value = "203.0.113.50, 172.18.0.5"
         assert _client_ip(request) == "203.0.113.50"
     finally:
-        _cfg._runtime_settings = original  # noqa: SLF001
+        bootstrap_settings()
 
 
 def test_client_ip_ignores_xff_when_not_in_trusted_subnet(
@@ -172,21 +168,17 @@ def test_client_ip_ignores_xff_when_not_in_trusted_subnet(
     """_client_ip ignores X-Forwarded-For when direct IP is NOT in trusted subnet."""
     from unittest.mock import MagicMock
 
-    import houndarr.config as _cfg
     from houndarr.auth import _client_ip  # noqa: SLF001
-    from houndarr.config import AppSettings
+    from houndarr.config import bootstrap_settings
 
-    original = _cfg._runtime_settings  # noqa: SLF001
     try:
-        _cfg._runtime_settings = AppSettings(  # noqa: SLF001
-            data_dir=tmp_data_dir, trusted_proxies="172.18.0.0/16"
-        )
+        bootstrap_settings(data_dir=tmp_data_dir, trusted_proxies="172.18.0.0/16")
         request = MagicMock()
         request.client.host = "10.0.0.5"
         request.headers.get.return_value = "203.0.113.50"
         assert _client_ip(request) == "10.0.0.5"
     finally:
-        _cfg._runtime_settings = original  # noqa: SLF001
+        bootstrap_settings()
 
 
 # ---------------------------------------------------------------------------
@@ -299,34 +291,31 @@ async def test_resolve_signed_in_as_builtin_falls_back_to_admin(
 @pytest.mark.asyncio()
 async def test_resolve_signed_in_as_proxy_returns_header_user(
     tmp_data_dir: str,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from fastapi import Request
 
-    import houndarr.config as _cfg
     from houndarr.auth import resolve_signed_in_as
-    from houndarr.config import AppSettings
+    from houndarr.config import bootstrap_settings
 
-    monkeypatch.setattr(
-        _cfg,
-        "_runtime_settings",
-        AppSettings(
+    try:
+        bootstrap_settings(
             data_dir=tmp_data_dir,
             auth_mode="proxy",
             auth_proxy_header="Remote-User",
             trusted_proxies="127.0.0.1",
-        ),
-    )
-    scope = {
-        "type": "http",
-        "method": "GET",
-        "path": "/",
-        "headers": [],
-        "query_string": b"",
-    }
-    request = Request(scope)
-    request.state.proxy_auth_user = "alice"
-    assert await resolve_signed_in_as(request) == "alice"
+        )
+        scope = {
+            "type": "http",
+            "method": "GET",
+            "path": "/",
+            "headers": [],
+            "query_string": b"",
+        }
+        request = Request(scope)
+        request.state.proxy_auth_user = "alice"
+        assert await resolve_signed_in_as(request) == "alice"
+    finally:
+        bootstrap_settings()
 
 
 # ---------------------------------------------------------------------------

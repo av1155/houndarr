@@ -16,7 +16,7 @@ import pytest
 
 from houndarr import config as _cfg
 from houndarr.bootstrap import bootstrap_non_web
-from houndarr.config import AppSettings
+from houndarr.config import AppSettings, bootstrap_settings
 
 pytestmark = pytest.mark.pinning
 
@@ -31,7 +31,8 @@ def _reset_config_singleton(monkeypatch: pytest.MonkeyPatch) -> None:
     isolation for the env-fallback branch.
     """
     monkeypatch.delenv("HOUNDARR_DATA_DIR", raising=False)
-    _cfg._runtime_settings = None  # noqa: SLF001
+    # bootstrap_settings() with no overrides clears the pin (see config.py).
+    bootstrap_settings()
 
 
 class TestReturnShape:
@@ -184,7 +185,7 @@ class TestRuntimeSettingsPinning:
 
     def test_prior_pin_is_cleared_before_resolving(self, tmp_path: Path) -> None:
         # A stale pin from a previous run must not leak into the new one.
-        _cfg._runtime_settings = AppSettings(data_dir="/stale", port=1234)  # noqa: SLF001
+        bootstrap_settings(data_dir="/stale", port=1234)
         settings, _db_path, _key = bootstrap_non_web(data_dir=str(tmp_path))
         assert settings.data_dir == str(tmp_path)
         assert settings.port != 1234

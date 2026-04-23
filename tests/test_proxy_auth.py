@@ -20,13 +20,12 @@ import pytest
 from fastapi.testclient import TestClient
 
 import houndarr.auth as _auth_mod
-import houndarr.config as _cfg
 from houndarr.auth import (
     CSRF_COOKIE_NAME,
     _is_proxy_auth_mode,
     _validate_proxy_auth,
 )
-from houndarr.config import AppSettings
+from houndarr.config import AppSettings, bootstrap_settings
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -46,13 +45,12 @@ _AUTH_USER = "alice"
 @pytest.fixture()
 def proxy_settings(tmp_data_dir: str) -> AppSettings:
     """Configure proxy auth mode with a trusted IP."""
-    settings = AppSettings(
+    settings = bootstrap_settings(
         data_dir=tmp_data_dir,
         auth_mode="proxy",
         auth_proxy_header=_AUTH_HEADER,
         trusted_proxies=_TRUSTED_IP,
     )
-    _cfg._runtime_settings = settings  # noqa: SLF001
     _auth_mod._serializer = None  # noqa: SLF001
     _auth_mod._login_attempts.clear()  # noqa: SLF001
     return settings

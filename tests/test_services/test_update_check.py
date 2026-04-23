@@ -290,14 +290,11 @@ async def test_update_available_false_for_dev_build_newer_than_latest(db: None) 
 async def test_repo_override_env_var(db: None, monkeypatch: pytest.MonkeyPatch) -> None:
     """HOUNDARR_UPDATE_CHECK_REPO redirects the check to a different
     owner/repo without any code change."""
-    from houndarr import config
+    from houndarr.config import bootstrap_settings
 
-    monkeypatch.setattr(
-        config,
-        "_runtime_settings",
-        None,
-    )
     monkeypatch.setenv("HOUNDARR_UPDATE_CHECK_REPO", "someone-else/fork")
+    # Clear any pinned settings so get_settings re-reads the env var above.
+    bootstrap_settings()
 
     respx.get(_url("someone-else/fork")).mock(return_value=httpx.Response(200, json=_LATEST_BODY))
     await uc.set_enabled(True)
@@ -315,11 +312,12 @@ async def test_repo_override_invalid_falls_back_to_default(
     """Malformed HOUNDARR_UPDATE_CHECK_REPO values fall back to the
     default upstream repo rather than sending a garbage path to the
     GitHub API."""
-    from houndarr import config
+    from houndarr.config import bootstrap_settings
 
-    monkeypatch.setattr(config, "_runtime_settings", None)
     # Missing slash, query-string injection, absolute URL: all rejected.
     monkeypatch.setenv("HOUNDARR_UPDATE_CHECK_REPO", "not-a-valid-slug")
+    # Clear any pinned settings so get_settings re-reads the env var above.
+    bootstrap_settings()
 
     # If the validator didn't fall back, the request would land on this
     # malformed URL and the default-repo mock would never be hit.

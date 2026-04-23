@@ -25,12 +25,36 @@ from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoin
 from starlette.types import ASGIApp
 
 from houndarr.auth.password import BCRYPT_COST, hash_password, verify_password
+
+# Rate-limit seam: re-exported for consumer stability.  Underscore-prefixed
+# names are module-private by convention but are consumed by tests
+# (``houndarr.auth._login_attempts``) and by routes that display client
+# IPs (``_client_ip``).  Keeping them in ``__all__`` keeps mypy's
+# explicit-export check green without updating every caller.
+from houndarr.auth.rate_limit import (
+    _LOGIN_MAX_ATTEMPTS,
+    _LOGIN_WINDOW_SECONDS,
+    _client_ip,
+    _login_attempts,
+    check_login_rate_limit,
+    clear_login_attempts,
+    record_failed_login,
+    reset_login_attempts,
+)
 from houndarr.config import get_settings
 from houndarr.repositories.settings import get_setting, set_setting
 
 __all__ = [
     "BCRYPT_COST",
+    "_LOGIN_MAX_ATTEMPTS",
+    "_LOGIN_WINDOW_SECONDS",
+    "_client_ip",
+    "_login_attempts",
+    "check_login_rate_limit",
+    "clear_login_attempts",
     "hash_password",
+    "record_failed_login",
+    "reset_login_attempts",
     "verify_password",
 ]
 
@@ -321,7 +345,7 @@ def reset_auth_caches() -> None:
     global _serializer, _setup_complete  # noqa: PLW0603
     _serializer = None
     _setup_complete = None
-    _login_attempts.clear()
+    reset_login_attempts()
 
 
 async def resolve_signed_in_as(request: Request) -> str:
@@ -339,69 +363,6 @@ async def resolve_signed_in_as(request: Request) -> str:
             return str(proxy_user)
     stored = await get_username()
     return stored or "admin"
-
-
-# ---------------------------------------------------------------------------
-# Brute-force rate limiter (in-memory, resets on restart)
-# ---------------------------------------------------------------------------
-
-_login_attempts: dict[str, list[float]] = {}
-_LOGIN_MAX_ATTEMPTS = 5
-_LOGIN_WINDOW_SECONDS = 60
-
-
-def _client_ip(request: Request) -> str:
-    """Return the real client IP, honouring ``X-Forwarded-For`` only from
-    configured trusted proxies.
-
-    When ``HOUNDARR_TRUSTED_PROXIES`` is set (a comma-separated list of
-    proxy IPs or CIDR subnets), and the direct connection IP matches one
-    of those proxies or falls within a trusted subnet, the left-most IP
-    in ``X-Forwarded-For`` is used as the client IP.
-
-    When no trusted proxies are configured (the default), only
-    ``request.client.host`` is used, preventing header spoofing.
-
-    Args:
-        request: The incoming HTTP request.
-
-    Returns:
-        The best-effort client IP string, or ``"unknown"`` as a fallback.
-    """
-    direct_ip = request.client.host if request.client else "unknown"
-    settings = get_settings()
-    trusted = settings.trusted_proxy_set()
-    if trusted and direct_ip in trusted:
-        forwarded = request.headers.get("X-Forwarded-For")
-        if forwarded:
-            return forwarded.split(",")[0].strip()
-    return direct_ip
-
-
-def check_login_rate_limit(request: Request) -> bool:
-    """Return True if the client is allowed to attempt login."""
-    ip = _client_ip(request)
-    now = time.time()
-    attempts = _login_attempts.get(ip, [])
-    # Remove attempts outside the window
-    attempts = [t for t in attempts if now - t < _LOGIN_WINDOW_SECONDS]
-    _login_attempts[ip] = attempts
-    return len(attempts) < _LOGIN_MAX_ATTEMPTS
-
-
-def record_failed_login(request: Request) -> None:
-    """Record a failed login attempt for rate limiting."""
-    ip = _client_ip(request)
-    now = time.time()
-    attempts = _login_attempts.get(ip, [])
-    attempts.append(now)
-    _login_attempts[ip] = attempts
-
-
-def clear_login_attempts(request: Request) -> None:
-    """Clear login attempts on successful login."""
-    ip = _client_ip(request)
-    _login_attempts.pop(ip, None)
 
 
 # ---------------------------------------------------------------------------

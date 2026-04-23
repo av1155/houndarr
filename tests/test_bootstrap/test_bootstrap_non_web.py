@@ -10,6 +10,7 @@ init_db, and the Fernet master-key persistence contract.
 from __future__ import annotations
 
 import base64
+from collections.abc import Generator
 from pathlib import Path
 
 import pytest
@@ -22,16 +23,28 @@ pytestmark = pytest.mark.pinning
 
 
 @pytest.fixture(autouse=True)
-def _reset_config_singleton(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Each test starts with a clean singleton and no HOUNDARR_DATA_DIR env.
+def _reset_config_singleton(
+    monkeypatch: pytest.MonkeyPatch,
+) -> Generator[None, None, None]:
+    """Clear the pinned singleton + HOUNDARR_DATA_DIR before and after each test.
 
     The config module caches resolved settings in ``_runtime_settings``;
     without this reset, test ordering would determine which path inside
-    :func:`bootstrap_non_web` runs. The env delete mirrors the same
-    isolation for the env-fallback branch.
+    :func:`bootstrap_non_web` runs. ``test_update_check_repo_override``
+    in particular leaves the pin set to a non-default ``update_check_repo``
+    that would otherwise leak into downstream test files (the
+    ``test_services/test_update_check.py`` mocks would miss the leaked
+    repo URL and respx would raise ``AllMockedAssertionError``). The
+    teardown ``bootstrap_settings()`` mirrors the ``_isolate_pin``
+    pattern in ``tests/test_config.py``: clear before to defend against
+    upstream pollution, clear after to defend downstream tests against
+    ours. The env delete provides the same isolation for the
+    env-fallback branch.
     """
     monkeypatch.delenv("HOUNDARR_DATA_DIR", raising=False)
     # bootstrap_settings() with no overrides clears the pin (see config.py).
+    bootstrap_settings()
+    yield
     bootstrap_settings()
 
 

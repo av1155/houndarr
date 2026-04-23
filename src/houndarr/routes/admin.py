@@ -23,7 +23,7 @@ import hmac
 import logging
 from typing import Annotated
 
-from fastapi import APIRouter, Form, Request
+from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, Response
 
 from houndarr import __version__
@@ -37,6 +37,7 @@ from houndarr.auth import (
     record_failed_login,
 )
 from houndarr.config import get_settings
+from houndarr.deps import get_master_key
 from houndarr.errors import ServiceError
 from houndarr.routes._templates import get_templates
 from houndarr.services.admin import (
@@ -85,10 +86,12 @@ def _flash_response(
 
 
 @router.post("/settings/admin/reset-instances", response_class=HTMLResponse)
-async def admin_reset_instances(request: Request) -> HTMLResponse:
+async def admin_reset_instances(
+    request: Request,
+    master_key: Annotated[bytes, Depends(get_master_key)],
+) -> HTMLResponse:
     """Revert every instance's policy columns back to :mod:`config` defaults."""
     supervisor = getattr(request.app.state, "supervisor", None)
-    master_key: bytes = request.app.state.master_key
     count = await reset_all_instance_policy(master_key=master_key, supervisor=supervisor)
 
     if count == 0:

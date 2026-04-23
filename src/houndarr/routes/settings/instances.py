@@ -11,7 +11,7 @@ from __future__ import annotations
 import logging
 from typing import Annotated
 
-from fastapi import APIRouter, Form, Request
+from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, Response
 
 from houndarr.config import (
@@ -38,13 +38,13 @@ from houndarr.config import (
     DEFAULT_UPGRADE_WHISPARR_SEARCH_MODE,
     DEFAULT_WHISPARR_SEARCH_MODE,
 )
+from houndarr.deps import get_master_key
 from houndarr.engine.supervisor import Supervisor
 from houndarr.errors import InstanceValidationError
 from houndarr.routes.settings._helpers import (
     blank_instance,
     connection_guard_response,
     connection_status_response,
-    master_key,
     render,
 )
 from houndarr.services.instance_submit import (
@@ -81,7 +81,7 @@ async def instance_add_form(request: Request) -> HTMLResponse:
 
 @router.post("/settings/instances/test-connection", response_class=HTMLResponse)
 async def instance_test_connection(
-    request: Request,
+    master_key: Annotated[bytes, Depends(get_master_key)],
     type: Annotated[str, Form()],  # noqa: A002
     url: Annotated[str, Form()],
     api_key: Annotated[str, Form()],
@@ -97,7 +97,7 @@ async def instance_test_connection(
     up the stored key before the probe.
     """
     outcome = await run_connection_test(
-        master_key=master_key(request),
+        master_key=master_key,
         type_value=type,
         url=url,
         api_key=api_key,
@@ -111,6 +111,7 @@ async def instance_test_connection(
 @router.post("/settings/instances", response_class=HTMLResponse)
 async def instance_create(
     request: Request,
+    master_key: Annotated[bytes, Depends(get_master_key)],
     name: Annotated[str, Form()],
     type: Annotated[str, Form()],  # noqa: A002
     url: Annotated[str, Form()],
@@ -144,7 +145,7 @@ async def instance_create(
     """Create a new instance and return the updated instance table body."""
     try:
         instance = await submit_create(
-            master_key=master_key(request),
+            master_key=master_key,
             name=name,
             type=type,
             url=url,
@@ -182,7 +183,7 @@ async def instance_create(
     if isinstance(supervisor, Supervisor):
         await supervisor.reconcile_instance(instance.core.id)
 
-    instances = await list_instances(master_key=master_key(request))
+    instances = await list_instances(master_key=master_key)
     error_ids = await active_error_instance_ids()
     # HTMX: return just the refreshed table body partial
     return render(
@@ -194,9 +195,13 @@ async def instance_create(
 
 
 @router.get("/settings/instances/{instance_id}/edit", response_class=HTMLResponse)
-async def instance_edit_get(request: Request, instance_id: int) -> HTMLResponse:
+async def instance_edit_get(
+    request: Request,
+    master_key: Annotated[bytes, Depends(get_master_key)],
+    instance_id: int,
+) -> HTMLResponse:
     """Return the edit form partial for an existing instance."""
-    instance = await get_instance(instance_id, master_key=master_key(request))
+    instance = await get_instance(instance_id, master_key=master_key)
     if instance is None:
         return HTMLResponse(content="Not found", status_code=404)
     return render(
@@ -211,6 +216,7 @@ async def instance_edit_get(request: Request, instance_id: int) -> HTMLResponse:
 @router.post("/settings/instances/{instance_id}", response_class=HTMLResponse)
 async def instance_update(
     request: Request,
+    master_key: Annotated[bytes, Depends(get_master_key)],
     instance_id: int,
     name: Annotated[str, Form()],
     type: Annotated[str, Form()],  # noqa: A002
@@ -252,7 +258,7 @@ async def instance_update(
     try:
         updated = await submit_update(
             instance_id,
-            master_key=master_key(request),
+            master_key=master_key,
             name=name,
             type=type,
             url=url,
@@ -312,7 +318,11 @@ async def instance_delete(request: Request, instance_id: int) -> Response:
 
 
 @router.post("/settings/instances/{instance_id}/toggle-enabled", response_class=HTMLResponse)
-async def instance_toggle_enabled(request: Request, instance_id: int) -> HTMLResponse:
+async def instance_toggle_enabled(
+    request: Request,
+    master_key: Annotated[bytes, Depends(get_master_key)],
+    instance_id: int,
+) -> HTMLResponse:
     """Toggle enabled state for an instance and return the refreshed row partial.
 
     The partial update relies on :func:`update_instance`'s ``**fields``
@@ -321,13 +331,13 @@ async def instance_toggle_enabled(request: Request, instance_id: int) -> HTMLRes
     fields) is untouched.  That also skips the Fernet re-encryption
     round trip the pre-D.24 pass-through caused on every toggle.
     """
-    instance = await get_instance(instance_id, master_key=master_key(request))
+    instance = await get_instance(instance_id, master_key=master_key)
     if instance is None:
         return HTMLResponse(content="Not found", status_code=404)
 
     updated = await update_instance(
         instance_id,
-        master_key=master_key(request),
+        master_key=master_key,
         enabled=not instance.core.enabled,
     )
     if updated is None:

@@ -111,13 +111,12 @@ async def test_reconnect_default_path_is_deterministic_on_error() -> None:
     assert log_calls[0]["action"] == "error"
 
 
-def test_run_with_reconnect_signature_matches_pre_jitter_shape() -> None:
-    """Pin the signature so Phase 5b's kwarg addition is the only diff.
+def test_run_with_reconnect_signature_includes_jitter_secs() -> None:
+    """Pin the signature shape after Phase 5b added the jitter_secs kwarg.
 
-    Phase 5b must add ``jitter_secs: float | None = None`` as a
-    keyword-only parameter.  If the signature drifts in any other way
-    (rename, default change, positional promotion) this pin fails and
-    the cause is made visible before Phase 5b picks up the diff.
+    ``jitter_secs`` must be keyword-only with a ``None`` default so
+    the supervisor's zero-jitter call site stays byte-stable.  A
+    future rename or default flip trips this pin.
     """
     signature = inspect.signature(run_with_reconnect)
     names = list(signature.parameters)
@@ -132,7 +131,48 @@ def test_run_with_reconnect_signature_matches_pre_jitter_shape() -> None:
         "error_retry_secs",
         "success_sleep_secs",
         "write_log",
+        "jitter_secs",
     }
-    # Phase 1 pin: keyword-only set matches pre-jitter shape exactly.
-    # Phase 5b updates this test to expand the set with ``jitter_secs``.
     assert keyword_only == expected_keyword_only
+
+    jitter_param = signature.parameters["jitter_secs"]
+    assert jitter_param.default is None
+
+
+@pytest.mark.asyncio()
+async def test_reconnect_jitter_respects_bound() -> None:
+    """With ``jitter_secs`` set the return value stays inside ``[secs - j, secs + j]``.
+
+    We sample enough iterations that a symmetric ``uniform(-j, j)``
+    covers a spread wider than the ``nominal == returned`` case a
+    missing jitter path would yield.  Asserting the bound rather
+    than a specific value keeps the pin deterministic without
+    reaching into the SystemRandom state.
+    """
+
+    async def cycle_ok() -> bool:
+        return False
+
+    async def log(**_: object) -> None:
+        return None
+
+    observed: list[float] = []
+    for _ in range(128):
+        state = ReconnectState()
+        delay = await run_with_reconnect(
+            state,
+            instance=_make_instance(),
+            cycle=cycle_ok,
+            cycle_trigger="scheduled",
+            error_retry_secs=30,
+            success_sleep_secs=1800,
+            write_log=log,
+            jitter_secs=10.0,
+        )
+        observed.append(delay)
+
+    assert all(1790.0 <= d <= 1810.0 for d in observed), sorted(observed)[:5]
+    # At least one sample must drift from the nominal value so the
+    # default-path determinism pin above cannot accidentally pass
+    # under a jittered call.
+    assert any(d != 1800.0 for d in observed)

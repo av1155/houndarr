@@ -189,22 +189,6 @@ async def dashboard(request: Request) -> HTMLResponse:
 # ---------------------------------------------------------------------------
 
 
-# Map from Instance.core.type.value to the CSS --inst-<slug> token
-# suffix the Logs page cycle cards consume.  Collapses the two
-# Whisparr variants to slugs Tailwind accepts without an underscore
-# (--inst-whisparr / --inst-whisparr-v3).  Instances whose type is
-# unknown to this map (future *arr families, legacy rows) are handled
-# by the template's default in `instance_accent_by_name.get(name, '')`.
-_INSTANCE_TYPE_TO_ACCENT_SLUG = {
-    "sonarr": "sonarr",
-    "radarr": "radarr",
-    "lidarr": "lidarr",
-    "readarr": "readarr",
-    "whisparr_v2": "whisparr",
-    "whisparr_v3": "whisparr-v3",
-}
-
-
 @router.get("/logs", response_class=HTMLResponse)
 async def logs_page(
     request: Request,
@@ -229,7 +213,11 @@ async def logs_page(
         parse_instance_id,
         parse_search_kind,
     )
-    from houndarr.services.log_query import compute_load_more_limit, query_logs
+    from houndarr.services.log_query import (
+        compute_load_more_limit,
+        instance_accent_by_name,
+        query_logs,
+    )
 
     try:
         parsed_instance_id = parse_instance_id(instance_id)
@@ -263,12 +251,11 @@ async def logs_page(
     )
 
     # Precompute the name -> accent-slug lookup the cycle-card template
-    # uses to set --cycle-accent.  Doing it here (once, server-side)
-    # avoids a per-row dict rebuild inside the Jinja loop.
-    instance_accent_by_name = {
-        inst.core.name: _INSTANCE_TYPE_TO_ACCENT_SLUG.get(inst.core.type.value, "")
-        for inst in instances
-    }
+    # uses to set --cycle-accent.  Queries the instances table once,
+    # server-side, so the Jinja loop does not rebuild per-row.  The
+    # partial route calls the same helper on every HTMX append so
+    # paginated pages get identical accents.
+    accent_map = await instance_accent_by_name()
 
     template_name = "partials/pages/logs_content.html" if is_hx_request(request) else "logs.html"
     return _render(
@@ -291,7 +278,7 @@ async def logs_page(
         hide_system=parsed_hide_system,
         hide_skipped=parsed_hide_skipped,
         before=None,
-        instance_accent_by_name=instance_accent_by_name,
+        instance_accent_by_name=accent_map,
     )
 
 

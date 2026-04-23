@@ -4,6 +4,7 @@
   swapped back after a successful save.  When adding (editing=False / unset)
   the form POSTs to /settings/instances and the table body is refreshed.
 #}
+{%- import "_macros/forms.html" as forms -%}
 {% set is_edit = editing is defined and editing %}
 {% set form_id = "edit-form-" ~ instance.core.id if is_edit else "add-instance-form" %}
 {% set post_url = "/settings/instances/" ~ instance.core.id if is_edit else "/settings/instances" %}
@@ -112,69 +113,106 @@
       </div>
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
-          <label class="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide" for="{{ form_id }}-batch">Batch Size</label>
-          <input id="{{ form_id }}-batch" name="batch_size" type="number" min="1" max="250"
-                 value="{{ instance.missing.batch_size }}"
-                 data-default-value="{{ defaults.missing.batch_size }}"
-                 class="{{ mono_input_cls }}" />
+          {{ forms.form_field(
+              id=form_id ~ "-batch",
+              name="batch_size",
+              type="number",
+              min=1, max=250,
+              value=instance.missing.batch_size,
+              data_default_value=defaults.missing.batch_size,
+              input_class=mono_input_cls,
+              label="Batch Size",
+          ) }}
         </div>
         <div>
-          <label class="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide" for="{{ form_id }}-sleep">Sleep (minutes)</label>
-          <input id="{{ form_id }}-sleep" name="sleep_interval_mins" type="number" min="1"
-                 value="{{ instance.missing.sleep_interval_mins }}"
-                 data-default-value="{{ defaults.missing.sleep_interval_mins }}"
-                 class="{{ mono_input_cls }}" />
+          {{ forms.form_field(
+              id=form_id ~ "-sleep",
+              name="sleep_interval_mins",
+              type="number",
+              min=1,
+              value=instance.missing.sleep_interval_mins,
+              data_default_value=defaults.missing.sleep_interval_mins,
+              input_class=mono_input_cls,
+              label="Sleep (minutes)",
+          ) }}
         </div>
         <div>
-          <label class="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide" for="{{ form_id }}-hcap">Hourly Cap</label>
-          <input id="{{ form_id }}-hcap" name="hourly_cap" type="number" min="0"
-                 value="{{ instance.missing.hourly_cap }}"
-                 data-default-value="{{ defaults.missing.hourly_cap }}"
-                 class="{{ mono_input_cls }}" />
+          {{ forms.form_field(
+              id=form_id ~ "-hcap",
+              name="hourly_cap",
+              type="number",
+              min=0,
+              value=instance.missing.hourly_cap,
+              data_default_value=defaults.missing.hourly_cap,
+              input_class=mono_input_cls,
+              label="Hourly Cap",
+          ) }}
         </div>
         <div>
-          <label class="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide" for="{{ form_id }}-cool">Cooldown (days)</label>
-          <input id="{{ form_id }}-cool" name="cooldown_days" type="number" min="0"
-                 value="{{ instance.missing.cooldown_days }}"
-                 data-default-value="{{ defaults.missing.cooldown_days }}"
-                 class="{{ mono_input_cls }}" />
+          {{ forms.form_field(
+              id=form_id ~ "-cool",
+              name="cooldown_days",
+              type="number",
+              min=0,
+              value=instance.missing.cooldown_days,
+              data_default_value=defaults.missing.cooldown_days,
+              input_class=mono_input_cls,
+              label="Cooldown (days)",
+          ) }}
         </div>
         <div>
-          <label class="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide" for="{{ form_id }}-delay">Post-Release Grace (hrs)</label>
-          <input id="{{ form_id }}-delay" name="post_release_grace_hrs" type="number" min="0"
-                 value="{{ instance.missing.post_release_grace_hrs }}"
-                 data-default-value="{{ defaults.missing.post_release_grace_hrs }}"
-                 class="{{ mono_input_cls }}" />
-          <p class="mt-1.5 text-xs text-slate-600">Hours to wait after release date. Unreleased items are always skipped.</p>
+          {{ forms.form_field(
+              id=form_id ~ "-delay",
+              name="post_release_grace_hrs",
+              type="number",
+              min=0,
+              value=instance.missing.post_release_grace_hrs,
+              data_default_value=defaults.missing.post_release_grace_hrs,
+              input_class=mono_input_cls,
+              label="Post-Release Grace (hrs)",
+              help_text="Hours to wait after release date. Unreleased items are always skipped.",
+          ) }}
         </div>
         <div>
-          <label class="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide" for="{{ form_id }}-qlimit">Queue Limit</label>
-          <input id="{{ form_id }}-qlimit" name="queue_limit" type="number" min="0"
-                 value="{{ instance.missing.queue_limit }}"
-                 data-default-value="{{ defaults.missing.queue_limit }}"
-                 class="{{ mono_input_cls }}" />
-          <p class="mt-1.5 text-xs text-slate-600">Skip searches when the queue exceeds this. 0 = disabled.</p>
+          {{ forms.form_field(
+              id=form_id ~ "-qlimit",
+              name="queue_limit",
+              type="number",
+              min=0,
+              value=instance.missing.queue_limit,
+              data_default_value=defaults.missing.queue_limit,
+              input_class=mono_input_cls,
+              label="Queue Limit",
+              help_text="Skip searches when the queue exceeds this. 0 = disabled.",
+          ) }}
         </div>
         <div class="sm:col-span-2">
-          <label class="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide" for="{{ form_id }}-window">Allowed Search Window</label>
-          <input id="{{ form_id }}-window" name="allowed_time_window" type="text"
-                 value="{{ instance.schedule.allowed_time_window }}"
-                 data-default-value="{{ defaults.schedule.allowed_time_window }}"
-                 placeholder="e.g. 09:00-23:00 or 09:00-12:00,18:00-22:00"
-                 class="{{ mono_input_cls }}" />
+          {{ forms.form_field(
+              id=form_id ~ "-window",
+              name="allowed_time_window",
+              type="text",
+              value=instance.schedule.allowed_time_window,
+              data_default_value=defaults.schedule.allowed_time_window,
+              placeholder="e.g. 09:00-23:00 or 09:00-12:00,18:00-22:00",
+              input_class=mono_input_cls,
+              label="Allowed Search Window",
+          ) }}
           <p class="mt-1.5 text-xs text-slate-600">Restrict scheduled cycles to one or more <code>HH:MM-HH:MM</code> windows (container local time via <code>TZ</code>). Blank = always allowed. Run Now bypasses the window.</p>
         </div>
         <div class="sm:col-span-2">
-          <label class="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide" for="{{ form_id }}-order">
-            Search Order
-          </label>
-          <select id="{{ form_id }}-order" name="search_order"
-                  data-default-value="{{ defaults.schedule.search_order.value }}"
-                  class="{{ select_cls }}">
-            <option value="chronological" {% if instance.schedule.search_order.value == 'chronological' %}selected{% endif %}>Chronological</option>
-            <option value="random"        {% if instance.schedule.search_order.value == 'random'        %}selected{% endif %}>Random (default)</option>
-          </select>
-          <p class="mt-1.5 text-xs text-slate-600">Chronological walks the library oldest-first in small rotations. Random picks a different slice of the library each cycle, so searches feel spread across the catalogue instead of clustered by release date.</p>
+          {{ forms.select_field(
+              id=form_id ~ "-order",
+              name="search_order",
+              options=[
+                  ("chronological", "Chronological"),
+                  ("random", "Random (default)"),
+              ],
+              selected=instance.schedule.search_order.value,
+              data_default_value=defaults.schedule.search_order.value,
+              select_class=select_cls,
+              label="Search Order",
+              help_text="Chronological walks the library oldest-first in small rotations. Random picks a different slice of the library each cycle, so searches feel spread across the catalogue instead of clustered by release date.",
+          ) }}
         </div>
         <div class="sm:col-span-2" data-sonarr-only="true"
              {% if instance.core.type.value != 'sonarr' %}style="display:none;"{% endif %}>
@@ -248,25 +286,40 @@
       </div>
       <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div>
-          <label class="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide" for="{{ form_id }}-cbatch">Cutoff Batch</label>
-          <input id="{{ form_id }}-cbatch" name="cutoff_batch_size" type="number" min="1" max="250"
-                 value="{{ instance.cutoff.cutoff_batch_size }}"
-                 data-default-value="{{ defaults.cutoff.cutoff_batch_size }}"
-                 class="{{ mono_input_cls }}" />
+          {{ forms.form_field(
+              id=form_id ~ "-cbatch",
+              name="cutoff_batch_size",
+              type="number",
+              min=1, max=250,
+              value=instance.cutoff.cutoff_batch_size,
+              data_default_value=defaults.cutoff.cutoff_batch_size,
+              input_class=mono_input_cls,
+              label="Cutoff Batch",
+          ) }}
         </div>
         <div>
-          <label class="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide" for="{{ form_id }}-ccool">Cutoff Cooldown</label>
-          <input id="{{ form_id }}-ccool" name="cutoff_cooldown_days" type="number" min="0"
-                 value="{{ instance.cutoff.cutoff_cooldown_days }}"
-                 data-default-value="{{ defaults.cutoff.cutoff_cooldown_days }}"
-                 class="{{ mono_input_cls }}" />
+          {{ forms.form_field(
+              id=form_id ~ "-ccool",
+              name="cutoff_cooldown_days",
+              type="number",
+              min=0,
+              value=instance.cutoff.cutoff_cooldown_days,
+              data_default_value=defaults.cutoff.cutoff_cooldown_days,
+              input_class=mono_input_cls,
+              label="Cutoff Cooldown",
+          ) }}
         </div>
         <div>
-          <label class="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide" for="{{ form_id }}-chcap">Cutoff Cap</label>
-          <input id="{{ form_id }}-chcap" name="cutoff_hourly_cap" type="number" min="0"
-                 value="{{ instance.cutoff.cutoff_hourly_cap }}"
-                 data-default-value="{{ defaults.cutoff.cutoff_hourly_cap }}"
-                 class="{{ mono_input_cls }}" />
+          {{ forms.form_field(
+              id=form_id ~ "-chcap",
+              name="cutoff_hourly_cap",
+              type="number",
+              min=0,
+              value=instance.cutoff.cutoff_hourly_cap,
+              data_default_value=defaults.cutoff.cutoff_hourly_cap,
+              input_class=mono_input_cls,
+              label="Cutoff Cap",
+          ) }}
         </div>
       </div>
     </section>
@@ -288,28 +341,43 @@
       </div>
       <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div>
-          <label class="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide" for="{{ form_id }}-ubatch">Upgrade Batch</label>
-          <input id="{{ form_id }}-ubatch" name="upgrade_batch_size" type="number" min="1" max="250"
-                 value="{{ instance.upgrade.upgrade_batch_size }}"
-                 data-default-value="{{ defaults.upgrade.upgrade_batch_size }}"
-                 class="{{ mono_input_cls }}" />
-          <p class="mt-1.5 text-xs text-slate-600">Hard cap: 5 per cycle.</p>
+          {{ forms.form_field(
+              id=form_id ~ "-ubatch",
+              name="upgrade_batch_size",
+              type="number",
+              min=1, max=250,
+              value=instance.upgrade.upgrade_batch_size,
+              data_default_value=defaults.upgrade.upgrade_batch_size,
+              input_class=mono_input_cls,
+              label="Upgrade Batch",
+              help_text="Hard cap: 5 per cycle.",
+          ) }}
         </div>
         <div>
-          <label class="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide" for="{{ form_id }}-ucool">Upgrade Cooldown (days)</label>
-          <input id="{{ form_id }}-ucool" name="upgrade_cooldown_days" type="number" min="7"
-                 value="{{ instance.upgrade.upgrade_cooldown_days }}"
-                 data-default-value="{{ defaults.upgrade.upgrade_cooldown_days }}"
-                 class="{{ mono_input_cls }}" />
-          <p class="mt-1.5 text-xs text-slate-600">Minimum: 7 days.</p>
+          {{ forms.form_field(
+              id=form_id ~ "-ucool",
+              name="upgrade_cooldown_days",
+              type="number",
+              min=7,
+              value=instance.upgrade.upgrade_cooldown_days,
+              data_default_value=defaults.upgrade.upgrade_cooldown_days,
+              input_class=mono_input_cls,
+              label="Upgrade Cooldown (days)",
+              help_text="Minimum: 7 days.",
+          ) }}
         </div>
         <div>
-          <label class="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide" for="{{ form_id }}-uhcap">Upgrade Hourly Cap</label>
-          <input id="{{ form_id }}-uhcap" name="upgrade_hourly_cap" type="number" min="0"
-                 value="{{ instance.upgrade.upgrade_hourly_cap }}"
-                 data-default-value="{{ defaults.upgrade.upgrade_hourly_cap }}"
-                 class="{{ mono_input_cls }}" />
-          <p class="mt-1.5 text-xs text-slate-600">Hard cap: 5. 0 = unlimited.</p>
+          {{ forms.form_field(
+              id=form_id ~ "-uhcap",
+              name="upgrade_hourly_cap",
+              type="number",
+              min=0,
+              value=instance.upgrade.upgrade_hourly_cap,
+              data_default_value=defaults.upgrade.upgrade_hourly_cap,
+              input_class=mono_input_cls,
+              label="Upgrade Hourly Cap",
+              help_text="Hard cap: 5. 0 = unlimited.",
+          ) }}
         </div>
       </div>
       {# Per-app upgrade search mode selectors #}

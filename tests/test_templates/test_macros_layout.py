@@ -55,8 +55,7 @@ class TestAdminSectionDefault:
 
     def test_default_byte_equal(self, render_macro: Callable[[str], str]) -> None:
         src = (
-            _IMPORT
-            + '{% call layout.admin_section(id="admin-x", title="Title") %}'
+            _IMPORT + '{% call layout.admin_section(id="admin-x", title="Title") %}'
             "BODY{% endcall %}"
         )
         expected = (
@@ -75,8 +74,7 @@ class TestAdminSectionConsumerCallSites:
 
     def test_security_byte_equal(self, render_macro: Callable[[str], str]) -> None:
         src = (
-            _IMPORT
-            + '{% call layout.admin_section(id="admin-security", title="Security") %}'
+            _IMPORT + '{% call layout.admin_section(id="admin-security", title="Security") %}'
             "B{% endcall %}"
         )
         expected = (
@@ -91,8 +89,7 @@ class TestAdminSectionConsumerCallSites:
 
     def test_updates_byte_equal(self, render_macro: Callable[[str], str]) -> None:
         src = (
-            _IMPORT
-            + '{% call layout.admin_section(id="admin-updates", title="Updates") %}'
+            _IMPORT + '{% call layout.admin_section(id="admin-updates", title="Updates") %}'
             "B{% endcall %}"
         )
         expected = (
@@ -105,12 +102,9 @@ class TestAdminSectionConsumerCallSites:
         )
         assert render_macro(src) == expected
 
-    def test_maintenance_byte_equal(
-        self, render_macro: Callable[[str], str]
-    ) -> None:
+    def test_maintenance_byte_equal(self, render_macro: Callable[[str], str]) -> None:
         src = (
-            _IMPORT
-            + '{% call layout.admin_section(id="admin-maintenance", '
+            _IMPORT + '{% call layout.admin_section(id="admin-maintenance", '
             'title="Maintenance") %}B{% endcall %}'
         )
         expected = (
@@ -127,8 +121,7 @@ class TestAdminSectionConsumerCallSites:
         self, render_macro: Callable[[str], str]
     ) -> None:
         src = (
-            _IMPORT
-            + '{% call layout.admin_section(id="admin-danger", '
+            _IMPORT + '{% call layout.admin_section(id="admin-danger", '
             'title="Danger zone", title_color="text-danger/90") %}B{% endcall %}'
         )
         expected = (
@@ -145,40 +138,27 @@ class TestAdminSectionConsumerCallSites:
 class TestAdminSectionStructuralInvariants:
     """The wrapper structure HTMX swap targets and the JS controller depend on."""
 
-    def test_section_id_placed_on_outer_section(
-        self, render_macro: Callable[[str], str]
-    ) -> None:
-        src = (
-            _IMPORT
-            + '{% call layout.admin_section(id="admin-z", title="Z") %}body{% endcall %}'
-        )
+    def test_section_id_placed_on_outer_section(self, render_macro: Callable[[str], str]) -> None:
+        src = _IMPORT + '{% call layout.admin_section(id="admin-z", title="Z") %}body{% endcall %}'
         result = render_macro(src)
         # The id must sit on the OUTER <section>, not on the header div,
         # so HTMX hx-target="#admin-z" picks the correct swap target.
         assert result.startswith('<section id="admin-z"')
 
-    def test_caller_body_lands_after_header(
-        self, render_macro: Callable[[str], str]
-    ) -> None:
-        src = (
-            _IMPORT
-            + '{% call layout.admin_section(id="admin-z", title="Z") %}MARK{% endcall %}'
-        )
+    def test_caller_body_lands_after_header(self, render_macro: Callable[[str], str]) -> None:
+        src = _IMPORT + '{% call layout.admin_section(id="admin-z", title="Z") %}MARK{% endcall %}'
         result = render_macro(src)
         header_close = result.index("</div>")
         marker = result.index("MARK")
         section_close = result.index("</section>")
         assert header_close < marker < section_close
 
-    def test_h3_renders_with_full_class_string(
-        self, render_macro: Callable[[str], str]
-    ) -> None:
+    def test_h3_renders_with_full_class_string(self, render_macro: Callable[[str], str]) -> None:
         # The heading class string is text-base + font-semibold + colour.
         # Drop one of the three and the visual surface differs even if the
         # tests pass other assertions; pin the full string.
         src = (
-            _IMPORT
-            + '{% call layout.admin_section(id="x", title="T", title_color="text-x") %}'
+            _IMPORT + '{% call layout.admin_section(id="x", title="T", title_color="text-x") %}'
             "b{% endcall %}"
         )
         result = render_macro(src)

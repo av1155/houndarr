@@ -54,10 +54,7 @@ class TestDialogShellAriaCombinations:
     """dialog_shell renders aria-labelledby and aria-describedby conditionally."""
 
     def test_no_aria_attrs_byte_equal(self, render_macro: Callable[[str], str]) -> None:
-        src = (
-            _IMPORT
-            + '{% call modals.dialog_shell(id="m", width="40rem") %}body{% endcall %}'
-        )
+        src = _IMPORT + '{% call modals.dialog_shell(id="m", width="40rem") %}body{% endcall %}'
         expected = (
             "<dialog\n"
             '  id="m"\n'
@@ -69,12 +66,9 @@ class TestDialogShellAriaCombinations:
         )
         assert render_macro(src) == expected
 
-    def test_aria_labelledby_only_byte_equal(
-        self, render_macro: Callable[[str], str]
-    ) -> None:
+    def test_aria_labelledby_only_byte_equal(self, render_macro: Callable[[str], str]) -> None:
         src = (
-            _IMPORT
-            + '{% call modals.dialog_shell(id="m", width="40rem", '
+            _IMPORT + '{% call modals.dialog_shell(id="m", width="40rem", '
             'aria_labelledby="title") %}body{% endcall %}'
         )
         expected = (
@@ -89,12 +83,9 @@ class TestDialogShellAriaCombinations:
         )
         assert render_macro(src) == expected
 
-    def test_both_aria_attrs_byte_equal(
-        self, render_macro: Callable[[str], str]
-    ) -> None:
+    def test_both_aria_attrs_byte_equal(self, render_macro: Callable[[str], str]) -> None:
         src = (
-            _IMPORT
-            + '{% call modals.dialog_shell(id="m", width="40rem", '
+            _IMPORT + '{% call modals.dialog_shell(id="m", width="40rem", '
             'aria_labelledby="title", aria_describedby="sub") %}body{% endcall %}'
         )
         expected = (
@@ -114,8 +105,7 @@ class TestDialogShellAriaCombinations:
         self, render_macro: Callable[[str], str]
     ) -> None:
         src = (
-            _IMPORT
-            + '{% call modals.dialog_shell(id="m", width="40rem", '
+            _IMPORT + '{% call modals.dialog_shell(id="m", width="40rem", '
             'aria_describedby="sub") %}body{% endcall %}'
         )
         expected = (
@@ -139,10 +129,7 @@ class TestDialogShellWidth:
         self, render_macro: Callable[[str], str], width: str
     ) -> None:
         src = (
-            _IMPORT
-            + '{% call modals.dialog_shell(id="m", width="'
-            + width
-            + '") %}b{% endcall %}'
+            _IMPORT + '{% call modals.dialog_shell(id="m", width="' + width + '") %}b{% endcall %}'
         )
         result = render_macro(src)
         assert f"w-[min(94vw,{width})]" in result
@@ -155,8 +142,7 @@ class TestDialogShellConsumerCallSites:
         self, render_macro: Callable[[str], str]
     ) -> None:
         src = (
-            _IMPORT
-            + '{% call modals.dialog_shell(id="changelog-modal", width="38rem", '
+            _IMPORT + '{% call modals.dialog_shell(id="changelog-modal", width="38rem", '
             'aria_labelledby="changelog-modal-title", '
             'aria_describedby="changelog-modal-subtitle") %}BODY{% endcall %}'
         )
@@ -177,8 +163,7 @@ class TestDialogShellConsumerCallSites:
         self, render_macro: Callable[[str], str]
     ) -> None:
         src = (
-            _IMPORT
-            + '{% call modals.dialog_shell(id="changelog-modal", width="38rem", '
+            _IMPORT + '{% call modals.dialog_shell(id="changelog-modal", width="38rem", '
             'aria_labelledby="changelog-modal-title") %}BODY{% endcall %}'
         )
         expected = (
@@ -193,12 +178,9 @@ class TestDialogShellConsumerCallSites:
         )
         assert render_macro(src) == expected
 
-    def test_add_instance_modal_byte_equal(
-        self, render_macro: Callable[[str], str]
-    ) -> None:
+    def test_add_instance_modal_byte_equal(self, render_macro: Callable[[str], str]) -> None:
         src = (
-            _IMPORT
-            + '{% call modals.dialog_shell(id="add-instance-modal", '
+            _IMPORT + '{% call modals.dialog_shell(id="add-instance-modal", '
             'width="52rem") %}BODY{% endcall %}'
         )
         expected = (
@@ -217,10 +199,7 @@ class TestConfirmDialogShell:
     """confirm_dialog_shell wraps a backdrop + panel around the call body."""
 
     def test_default_args_byte_equal(self, render_macro: Callable[[str], str]) -> None:
-        src = (
-            _IMPORT
-            + "{% call modals.confirm_dialog_shell() %}FORM{% endcall %}"
-        )
+        src = _IMPORT + "{% call modals.confirm_dialog_shell() %}FORM{% endcall %}"
         expected = (
             "<div\n"
             '  id="confirm-dialog"\n'
@@ -238,12 +217,9 @@ class TestConfirmDialogShell:
         )
         assert render_macro(src) == expected
 
-    def test_custom_id_and_aria_byte_equal(
-        self, render_macro: Callable[[str], str]
-    ) -> None:
+    def test_custom_id_and_aria_byte_equal(self, render_macro: Callable[[str], str]) -> None:
         src = (
-            _IMPORT
-            + '{% call modals.confirm_dialog_shell(id="other-confirm", '
+            _IMPORT + '{% call modals.confirm_dialog_shell(id="other-confirm", '
             'aria_labelledby="other-title") %}X{% endcall %}'
         )
         expected = (
@@ -264,22 +240,14 @@ class TestConfirmDialogShell:
         assert render_macro(src) == expected
 
     def test_backdrop_precedes_panel(self, render_macro: Callable[[str], str]) -> None:
-        src = (
-            _IMPORT
-            + "{% call modals.confirm_dialog_shell() %}body{% endcall %}"
-        )
+        src = _IMPORT + "{% call modals.confirm_dialog_shell() %}body{% endcall %}"
         result = render_macro(src)
         backdrop_at = result.index("confirm-dialog__backdrop")
         panel_at = result.index("confirm-dialog__panel")
         assert backdrop_at < panel_at
 
-    def test_caller_body_lands_inside_panel(
-        self, render_macro: Callable[[str], str]
-    ) -> None:
-        src = (
-            _IMPORT
-            + "{% call modals.confirm_dialog_shell() %}MARKER{% endcall %}"
-        )
+    def test_caller_body_lands_inside_panel(self, render_macro: Callable[[str], str]) -> None:
+        src = _IMPORT + "{% call modals.confirm_dialog_shell() %}MARKER{% endcall %}"
         result = render_macro(src)
         panel_open = result.index('class="confirm-dialog__panel')
         marker = result.index("MARKER")

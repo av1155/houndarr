@@ -68,26 +68,14 @@ class TestBtnVariants:
         variant: str,
         variant_classes: str,
     ) -> None:
-        src = (
-            _IMPORT
-            + '{% call buttons.btn(variant="'
-            + variant
-            + '") %}label{% endcall %}'
-        )
-        expected = (
-            f'<button class="{variant_classes} text-sm px-3 py-1.5">\n'
-            "  label\n"
-            "</button>"
-        )
+        src = _IMPORT + '{% call buttons.btn(variant="' + variant + '") %}label{% endcall %}'
+        expected = f'<button class="{variant_classes} text-sm px-3 py-1.5">\n  label\n</button>'
         assert render_macro(src) == expected
 
     def test_unknown_variant_falls_back_to_primary(
         self, render_macro: Callable[[str], str]
     ) -> None:
-        src = (
-            _IMPORT
-            + '{% call buttons.btn(variant="not-a-variant") %}x{% endcall %}'
-        )
+        src = _IMPORT + '{% call buttons.btn(variant="not-a-variant") %}x{% endcall %}'
         result = render_macro(src)
         assert "btn btn-primary" in result
 
@@ -109,26 +97,12 @@ class TestBtnSizes:
         size: str,
         size_classes: str,
     ) -> None:
-        src = (
-            _IMPORT
-            + '{% call buttons.btn(size="'
-            + size
-            + '") %}label{% endcall %}'
-        )
-        expected = (
-            f'<button class="btn btn-primary {size_classes}">\n'
-            "  label\n"
-            "</button>"
-        )
+        src = _IMPORT + '{% call buttons.btn(size="' + size + '") %}label{% endcall %}'
+        expected = f'<button class="btn btn-primary {size_classes}">\n  label\n</button>'
         assert render_macro(src) == expected
 
-    def test_unknown_size_falls_back_to_md(
-        self, render_macro: Callable[[str], str]
-    ) -> None:
-        src = (
-            _IMPORT
-            + '{% call buttons.btn(size="not-a-size") %}x{% endcall %}'
-        )
+    def test_unknown_size_falls_back_to_md(self, render_macro: Callable[[str], str]) -> None:
+        src = _IMPORT + '{% call buttons.btn(size="not-a-size") %}x{% endcall %}'
         result = render_macro(src)
         assert "text-sm px-3 py-1.5" in result
 
@@ -136,34 +110,19 @@ class TestBtnSizes:
 class TestBtnAttrs:
     """attrs is iterated in insertion order; bool / None / scalar branches each render."""
 
-    def test_no_attrs_renders_no_extra_attributes(
-        self, render_macro: Callable[[str], str]
-    ) -> None:
+    def test_no_attrs_renders_no_extra_attributes(self, render_macro: Callable[[str], str]) -> None:
         src = _IMPORT + "{% call buttons.btn() %}label{% endcall %}"
+        expected = '<button class="btn btn-primary text-sm px-3 py-1.5">\n  label\n</button>'
+        assert render_macro(src) == expected
+
+    def test_scalar_attr_renders_with_value(self, render_macro: Callable[[str], str]) -> None:
+        src = _IMPORT + '{% call buttons.btn(attrs={"type": "submit"}) %}x{% endcall %}'
         expected = (
-            '<button class="btn btn-primary text-sm px-3 py-1.5">\n'
-            "  label\n"
-            "</button>"
+            '<button type="submit" class="btn btn-primary text-sm px-3 py-1.5">\n  x\n</button>'
         )
         assert render_macro(src) == expected
 
-    def test_scalar_attr_renders_with_value(
-        self, render_macro: Callable[[str], str]
-    ) -> None:
-        src = (
-            _IMPORT
-            + '{% call buttons.btn(attrs={"type": "submit"}) %}x{% endcall %}'
-        )
-        expected = (
-            '<button type="submit" class="btn btn-primary text-sm px-3 py-1.5">\n'
-            "  x\n"
-            "</button>"
-        )
-        assert render_macro(src) == expected
-
-    def test_boolean_true_renders_attr_name_only(
-        self, render_macro: Callable[[str], str]
-    ) -> None:
+    def test_boolean_true_renders_attr_name_only(self, render_macro: Callable[[str], str]) -> None:
         src = (
             _IMPORT
             + "{% call buttons.btn(attrs={"
@@ -177,9 +136,7 @@ class TestBtnAttrs:
         )
         assert render_macro(src) == expected
 
-    def test_boolean_false_omits_attr(
-        self, render_macro: Callable[[str], str]
-    ) -> None:
+    def test_boolean_false_omits_attr(self, render_macro: Callable[[str], str]) -> None:
         src = (
             _IMPORT
             + "{% call buttons.btn(attrs={"
@@ -190,9 +147,7 @@ class TestBtnAttrs:
         assert " autofocus" not in result
         assert ' type="button"' in result
 
-    def test_none_value_omits_attr(
-        self, render_macro: Callable[[str], str]
-    ) -> None:
+    def test_none_value_omits_attr(self, render_macro: Callable[[str], str]) -> None:
         src = (
             _IMPORT
             + "{% call buttons.btn(attrs={"
@@ -203,9 +158,7 @@ class TestBtnAttrs:
         assert "data-x" not in result
         assert ' type="button"' in result
 
-    def test_attr_order_preserved(
-        self, render_macro: Callable[[str], str]
-    ) -> None:
+    def test_attr_order_preserved(self, render_macro: Callable[[str], str]) -> None:
         src = (
             _IMPORT
             + "{% call buttons.btn(attrs={"
@@ -223,13 +176,8 @@ class TestBtnAttrs:
 class TestBtnExtra:
     """extra is appended after the variant and size class strings."""
 
-    def test_extra_appended_after_size(
-        self, render_macro: Callable[[str], str]
-    ) -> None:
-        src = (
-            _IMPORT
-            + '{% call buttons.btn(extra="font-semibold shrink-0") %}x{% endcall %}'
-        )
+    def test_extra_appended_after_size(self, render_macro: Callable[[str], str]) -> None:
+        src = _IMPORT + '{% call buttons.btn(extra="font-semibold shrink-0") %}x{% endcall %}'
         expected = (
             '<button class="btn btn-primary text-sm px-3 py-1.5 '
             'font-semibold shrink-0">\n'
@@ -270,9 +218,7 @@ class TestBtnConsumerCallSites:
         )
         assert render_macro(src) == expected
 
-    def test_changelog_modal_got_it_byte_equal(
-        self, render_macro: Callable[[str], str]
-    ) -> None:
+    def test_changelog_modal_got_it_byte_equal(self, render_macro: Callable[[str], str]) -> None:
         src = (
             _IMPORT
             + '{% call buttons.btn(variant="primary", size="md", '
@@ -293,9 +239,7 @@ class TestBtnConsumerCallSites:
         )
         assert render_macro(src) == expected
 
-    def test_confirm_dialog_cancel_byte_equal(
-        self, render_macro: Callable[[str], str]
-    ) -> None:
+    def test_confirm_dialog_cancel_byte_equal(self, render_macro: Callable[[str], str]) -> None:
         src = (
             _IMPORT
             + '{% call buttons.btn(variant="soft-neutral", size="lg", attrs={'
@@ -311,9 +255,7 @@ class TestBtnConsumerCallSites:
         )
         assert render_macro(src) == expected
 
-    def test_confirm_dialog_confirm_byte_equal(
-        self, render_macro: Callable[[str], str]
-    ) -> None:
+    def test_confirm_dialog_confirm_byte_equal(self, render_macro: Callable[[str], str]) -> None:
         src = (
             _IMPORT
             + '{% call buttons.btn(variant="soft-error", size="lg", '
@@ -350,9 +292,7 @@ class TestBtnConsumerCallSites:
         )
         assert render_macro(src) == expected
 
-    def test_maintenance_clear_logs_byte_equal(
-        self, render_macro: Callable[[str], str]
-    ) -> None:
+    def test_maintenance_clear_logs_byte_equal(self, render_macro: Callable[[str], str]) -> None:
         src = (
             _IMPORT
             + '{% call buttons.btn(variant="soft-neutral", size="sm", '
@@ -370,9 +310,7 @@ class TestBtnConsumerCallSites:
         )
         assert render_macro(src) == expected
 
-    def test_danger_factory_reset_byte_equal(
-        self, render_macro: Callable[[str], str]
-    ) -> None:
+    def test_danger_factory_reset_byte_equal(self, render_macro: Callable[[str], str]) -> None:
         src = (
             _IMPORT
             + '{% call buttons.btn(variant="soft-error", size="sm", '

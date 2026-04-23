@@ -66,17 +66,8 @@ class TestAlertVariants:
         variant: str,
         alert_class: str,
     ) -> None:
-        src = (
-            _IMPORT
-            + '{% call alerts.alert("'
-            + variant
-            + '") %}body{% endcall %}'
-        )
-        expected = (
-            f'<div class="alert alert-soft {alert_class} text-sm">\n'
-            "  body\n"
-            "</div>"
-        )
+        src = _IMPORT + '{% call alerts.alert("' + variant + '") %}body{% endcall %}'
+        expected = f'<div class="alert alert-soft {alert_class} text-sm">\n  body\n</div>'
         assert render_macro(src) == expected
 
 
@@ -85,8 +76,7 @@ class TestAlertConsumerCallSites:
 
     def test_base_flash_error_byte_equal(self, render_macro: Callable[[str], str]) -> None:
         src = (
-            _IMPORT
-            + '{% call alerts.alert("error", extra="text-slate-100 text-sm", '
+            _IMPORT + '{% call alerts.alert("error", extra="text-slate-100 text-sm", '
             'id="flash-error", role="alert") %}Error message{% endcall %}'
         )
         expected = (
@@ -99,8 +89,7 @@ class TestAlertConsumerCallSites:
 
     def test_base_flash_success_byte_equal(self, render_macro: Callable[[str], str]) -> None:
         src = (
-            _IMPORT
-            + '{% call alerts.alert("success", extra="text-slate-100 text-sm", '
+            _IMPORT + '{% call alerts.alert("success", extra="text-slate-100 text-sm", '
             'id="flash-success", role="alert") %}Success message{% endcall %}'
         )
         expected = (
@@ -115,14 +104,11 @@ class TestAlertConsumerCallSites:
         self, render_macro: Callable[[str], str]
     ) -> None:
         src = (
-            _IMPORT
-            + '{% call alerts.alert("error", prefix="mb-3") %}'
+            _IMPORT + '{% call alerts.alert("error", prefix="mb-3") %}'
             "Connection failed{% endcall %}"
         )
         expected = (
-            '<div class="mb-3 alert alert-soft alert-error text-sm">\n'
-            "  Connection failed\n"
-            "</div>"
+            '<div class="mb-3 alert alert-soft alert-error text-sm">\n  Connection failed\n</div>'
         )
         assert render_macro(src) == expected
 
@@ -130,8 +116,7 @@ class TestAlertConsumerCallSites:
         self, render_macro: Callable[[str], str]
     ) -> None:
         src = (
-            _IMPORT
-            + '{% call alerts.alert("error", prefix="mb-4", extra="text-sm font-sans") %}'
+            _IMPORT + '{% call alerts.alert("error", prefix="mb-4", extra="text-sm font-sans") %}'
             "Invalid input{% endcall %}"
         )
         expected = (
@@ -145,8 +130,7 @@ class TestAlertConsumerCallSites:
         self, render_macro: Callable[[str], str]
     ) -> None:
         src = (
-            _IMPORT
-            + '{% call alerts.alert("error", prefix="min-[971px]:col-span-3", '
+            _IMPORT + '{% call alerts.alert("error", prefix="min-[971px]:col-span-3", '
             'extra="text-sm font-sans") %}Wrong password{% endcall %}'
         )
         expected = (
@@ -161,8 +145,7 @@ class TestAlertConsumerCallSites:
         self, render_macro: Callable[[str], str]
     ) -> None:
         src = (
-            _IMPORT
-            + '{% call alerts.alert("success", prefix="min-[971px]:col-span-3", '
+            _IMPORT + '{% call alerts.alert("success", prefix="min-[971px]:col-span-3", '
             'extra="text-sm font-sans") %}Password updated{% endcall %}'
         )
         expected = (

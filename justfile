@@ -91,6 +91,33 @@ mock-arr port='9100' items='500' seed='42':
 test-browser browser="chromium":
     {{pytest}} tests/e2e_browser/ --confcutdir tests/e2e_browser --browser {{browser}} -q
 
+# Build the houndarr:e2e image (idempotent), create the arr-net docker
+# network, start mock-sonarr + mock-radarr + houndarr-e2e, and wait for
+# Houndarr health.  Leaves the stack running so a maintainer can iterate
+# manually (pytest, curl, browser inspection).  Tear down with `just e2e-down`.
+e2e-up:
+    bash scripts/e2e_browser/capture_baselines.sh up
+
+# Tear the e2e stack down: docker rm -f the three containers, remove the
+# arr-net network, delete /tmp/houndarr-e2e-data.  Idempotent.
+e2e-down:
+    bash scripts/e2e_browser/capture_baselines.sh down
+
+# Capture the Phase 7b visual baselines under
+# tests/e2e_browser/_screenshots/.  Runs pytest inside a Linux Playwright
+# container so fonts antialias the way CI's ubuntu-latest renders them;
+# captures /setup first (pre-admin), creates the admin, then captures
+# /login.  Cleans up the stack on exit.  Re-run when the login or setup
+# templates or auth CSS change.
+capture-baselines:
+    bash scripts/e2e_browser/capture_baselines.sh capture
+
+# Verify the committed Phase 7b visual baselines without `--update-snapshots`.
+# Same two-pytest flow as `capture-baselines` but the PNGs on disk must
+# satisfy the assertions; any pixel diff fails the run.
+verify-baselines:
+    bash scripts/e2e_browser/capture_baselines.sh verify
+
 # Print the commit history since the branch last matched main.
 log:
     git log --oneline main..HEAD

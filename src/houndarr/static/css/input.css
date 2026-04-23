@@ -256,6 +256,7 @@
 @import "./app.css";
 @import "./auth.css";
 @import "./auth-fields.css";
+@import "./logs.css";
 
 /* Named duration utilities.  Tailwind v4 has no `--duration-*` theme
    namespace (durations normally go via numeric arbitrary values), so

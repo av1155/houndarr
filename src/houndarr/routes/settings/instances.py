@@ -41,29 +41,25 @@ from houndarr.config import (
 from houndarr.engine.supervisor import Supervisor
 from houndarr.errors import InstanceValidationError
 from houndarr.routes.settings._helpers import (
-    API_KEY_UNCHANGED,
     blank_instance,
-    check_connection,
     connection_guard_response,
     connection_status_response,
     master_key,
     render,
-    type_mismatch_message,
 )
 from houndarr.services.instance_submit import (
     InstanceNotFoundError,
     submit_create,
     submit_update,
 )
+from houndarr.services.instance_validation import run_connection_test
 from houndarr.services.instances import (
-    InstanceType,
     active_error_instance_ids,
     delete_instance,
     get_instance,
     list_instances,
     update_instance,
 )
-from houndarr.services.url_validation import validate_instance_url
 
 router = APIRouter()
 
@@ -93,62 +89,23 @@ async def instance_test_connection(
 ) -> HTMLResponse:
     """Test *arr instance connectivity and return a status snippet.
 
-    When testing from the edit form, ``api_key`` may be the unchanged sentinel
-    value (``__UNCHANGED__``).  In that case the existing stored key is
-    retrieved from the database and used for the connection test.
+    The route is a thin dispatch over
+    :func:`houndarr.services.instance_validation.run_connection_test`;
+    the service owns the sentinel-resolution, SSRF gate, live probe,
+    type-mismatch check, and message shaping.  When ``api_key`` is the
+    edit-form sentinel and ``instance_id`` is set, the service looks
+    up the stored key before the probe.
     """
-    try:
-        instance_type = InstanceType(type)
-    except ValueError:
-        return connection_status_response(
-            "Invalid instance type.",
-            ok=False,
-            status_code=422,
-        )
-
-    url_error = validate_instance_url(url)
-    if url_error is not None:
-        return connection_status_response(url_error, ok=False, status_code=422)
-
-    resolved_api_key = api_key
-    if api_key == API_KEY_UNCHANGED and instance_id:
-        try:
-            iid = int(instance_id)
-        except ValueError:
-            return connection_status_response(
-                "Invalid instance ID for key lookup.",
-                ok=False,
-                status_code=422,
-            )
-        existing = await get_instance(iid, master_key=master_key(request))
-        if existing is None:
-            return connection_status_response(
-                "Instance not found.",
-                ok=False,
-                status_code=404,
-            )
-        resolved_api_key = existing.core.api_key
-
-    check = await check_connection(instance_type, url.rstrip("/"), resolved_api_key)
-    if not check.reachable:
-        return connection_status_response(
-            "Connection failed. Check URL/API key and try again.",
-            ok=False,
-            status_code=422,
-        )
-
-    mismatch = type_mismatch_message(check, instance_type)
-    if mismatch is not None:
-        return connection_status_response(mismatch, ok=False, status_code=422)
-
-    action = "save changes" if instance_id else "add this instance"
-    if check.app_name and check.version:
-        msg = f"Connected to {check.app_name} v{check.version}. You can now {action}."
-    elif check.app_name:
-        msg = f"Connected to {check.app_name}. You can now {action}."
-    else:
-        msg = f"Connection successful. You can now {action}."
-    return connection_status_response(msg, ok=True, status_code=200)
+    outcome = await run_connection_test(
+        master_key=master_key(request),
+        type_value=type,
+        url=url,
+        api_key=api_key,
+        instance_id=instance_id,
+    )
+    return connection_status_response(
+        outcome.message, ok=outcome.ok, status_code=outcome.status_code
+    )
 
 
 @router.post("/settings/instances", response_class=HTMLResponse)
@@ -356,7 +313,14 @@ async def instance_delete(request: Request, instance_id: int) -> Response:
 
 @router.post("/settings/instances/{instance_id}/toggle-enabled", response_class=HTMLResponse)
 async def instance_toggle_enabled(request: Request, instance_id: int) -> HTMLResponse:
-    """Toggle enabled state for an instance and return refreshed row partial."""
+    """Toggle enabled state for an instance and return the refreshed row partial.
+
+    The partial update relies on :func:`update_instance`'s ``**fields``
+    contract: only the non-``None`` keyword argument lands on the SQL
+    write, so every other column (url, api_key, all the policy
+    fields) is untouched.  That also skips the Fernet re-encryption
+    round trip the pre-D.24 pass-through caused on every toggle.
+    """
     instance = await get_instance(instance_id, master_key=master_key(request))
     if instance is None:
         return HTMLResponse(content="Not found", status_code=404)
@@ -364,25 +328,7 @@ async def instance_toggle_enabled(request: Request, instance_id: int) -> HTMLRes
     updated = await update_instance(
         instance_id,
         master_key=master_key(request),
-        name=instance.core.name,
-        type=instance.core.type,
-        url=instance.core.url,
-        api_key=instance.core.api_key,
         enabled=not instance.core.enabled,
-        batch_size=instance.missing.batch_size,
-        sleep_interval_mins=instance.missing.sleep_interval_mins,
-        hourly_cap=instance.missing.hourly_cap,
-        cooldown_days=instance.missing.cooldown_days,
-        post_release_grace_hrs=instance.missing.post_release_grace_hrs,
-        queue_limit=instance.missing.queue_limit,
-        cutoff_enabled=instance.cutoff.cutoff_enabled,
-        cutoff_batch_size=instance.cutoff.cutoff_batch_size,
-        cutoff_cooldown_days=instance.cutoff.cutoff_cooldown_days,
-        cutoff_hourly_cap=instance.cutoff.cutoff_hourly_cap,
-        sonarr_search_mode=instance.missing.sonarr_search_mode,
-        lidarr_search_mode=instance.missing.lidarr_search_mode,
-        readarr_search_mode=instance.missing.readarr_search_mode,
-        whisparr_search_mode=instance.missing.whisparr_search_mode,
     )
     if updated is None:
         return HTMLResponse(content="Not found", status_code=404)

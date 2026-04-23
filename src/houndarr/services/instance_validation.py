@@ -61,7 +61,9 @@ from houndarr.services.instances import (
     ReadarrSearchMode,
     SonarrSearchMode,
     WhisparrSearchMode,
+    get_instance,
 )
+from houndarr.services.url_validation import validate_instance_url
 
 API_KEY_UNCHANGED = "__UNCHANGED__"
 """Sentinel sent back in the edit form to indicate the stored key is kept."""
@@ -331,6 +333,111 @@ def build_client(instance_type: InstanceType, url: str, api_key: str) -> ArrClie
         msg = f"No client for instance type: {instance_type!r}"
         raise ValueError(msg)
     return client_cls(url=url, api_key=api_key)
+
+
+@dataclass(frozen=True, slots=True)
+class ConnectionTestOutcome:
+    """Route-shaped result of the full test-connection orchestration.
+
+    The three fields map 1:1 to what the settings route's status
+    snippet renders: a reachable-or-not flag, the user-facing message,
+    and the HTTP status code.  Wrapping them in a frozen dataclass
+    lets the route stay a pure dispatch (one call, one render) without
+    branching inside the handler body.
+    """
+
+    ok: bool
+    message: str
+    status_code: int
+
+
+async def run_connection_test(
+    *,
+    master_key: bytes,
+    type_value: str,
+    url: str,
+    api_key: str,
+    instance_id: str = "",
+) -> ConnectionTestOutcome:
+    """Orchestrate the full test-connection flow, including the sentinel path.
+
+    Wraps the four concerns the ``POST /settings/instances/test-connection``
+    route used to carry inline: parse the form's type string into
+    :class:`InstanceType`; SSRF-gate the URL via
+    :func:`houndarr.services.url_validation.validate_instance_url`;
+    resolve the edit-form ``__UNCHANGED__`` sentinel against the
+    stored api_key (look up by ``instance_id`` and pull the already-
+    decrypted value); call :func:`check_connection`; check type
+    mismatch.
+
+    Args:
+        master_key: Fernet key used to decrypt the stored api_key
+            when the sentinel path applies.
+        type_value: Raw instance-type string from the form
+            (``"sonarr"``, ``"radarr"``, ``"lidarr"``, ``"readarr"``,
+            ``"whisparr_v2"``, ``"whisparr_v3"``).
+        url: Raw URL string from the form.  Trailing slashes are
+            stripped before the live probe so the client's base URL
+            never double-joins.
+        api_key: Raw api_key string from the form.  The
+            :data:`API_KEY_UNCHANGED` sentinel triggers the stored-
+            key lookup; any other value is used verbatim.
+        instance_id: Optional raw instance_id string from the form.
+            Required only when ``api_key`` is the sentinel; empty or
+            non-numeric means the sentinel resolves to a 422.
+
+    Returns:
+        :class:`ConnectionTestOutcome` with the three fields the route
+        plugs straight into :func:`connection_status_response`.
+    """
+    try:
+        instance_type = InstanceType(type_value)
+    except ValueError:
+        return ConnectionTestOutcome(ok=False, message="Invalid instance type.", status_code=422)
+
+    url_error = validate_instance_url(url)
+    if url_error is not None:
+        return ConnectionTestOutcome(ok=False, message=url_error, status_code=422)
+
+    resolved_api_key = api_key
+    if api_key == API_KEY_UNCHANGED and instance_id:
+        try:
+            iid = int(instance_id)
+        except ValueError:
+            return ConnectionTestOutcome(
+                ok=False,
+                message="Invalid instance ID for key lookup.",
+                status_code=422,
+            )
+        existing = await get_instance(iid, master_key=master_key)
+        if existing is None:
+            return ConnectionTestOutcome(ok=False, message="Instance not found.", status_code=404)
+        resolved_api_key = existing.core.api_key
+
+    check = await check_connection(instance_type, url.rstrip("/"), resolved_api_key)
+    if not check.reachable:
+        return ConnectionTestOutcome(
+            ok=False,
+            message="Connection failed. Check URL/API key and try again.",
+            status_code=422,
+        )
+
+    mismatch = type_mismatch_message(check, instance_type)
+    if mismatch is not None:
+        return ConnectionTestOutcome(ok=False, message=mismatch, status_code=422)
+
+    # The save-versus-add distinction in the success message matches
+    # the pre-refactor route behaviour: "save changes" when editing an
+    # existing instance (instance_id set), "add this instance" when
+    # the form is creating a new one.
+    action = "save changes" if instance_id else "add this instance"
+    if check.app_name and check.version:
+        message = f"Connected to {check.app_name} v{check.version}. You can now {action}."
+    elif check.app_name:
+        message = f"Connected to {check.app_name}. You can now {action}."
+    else:
+        message = f"Connection successful. You can now {action}."
+    return ConnectionTestOutcome(ok=True, message=message, status_code=200)
 
 
 async def check_connection(

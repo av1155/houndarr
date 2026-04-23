@@ -14,7 +14,7 @@ import httpx
 import pytest
 import respx
 
-from houndarr.database import get_setting, set_setting
+from houndarr.repositories.settings import get_setting, set_setting
 from houndarr.services import update_check as uc
 
 _LATEST_BODY = {

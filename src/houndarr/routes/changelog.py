@@ -27,7 +27,7 @@ from fastapi.responses import HTMLResponse, Response
 from markupsafe import Markup
 
 from houndarr import __version__
-from houndarr.database import get_setting, set_setting
+from houndarr.repositories.settings import get_setting, set_setting
 from houndarr.routes._htmx import hx_trigger_after_swap
 from houndarr.routes._templates import get_templates
 from houndarr.services.changelog import (

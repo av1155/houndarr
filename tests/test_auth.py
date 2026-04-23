@@ -20,7 +20,7 @@ from houndarr.auth import (
     is_setup_complete,
     verify_password,
 )
-from houndarr.database import get_setting
+from houndarr.repositories.settings import get_setting
 from tests.conftest import csrf_headers
 
 # ---------------------------------------------------------------------------

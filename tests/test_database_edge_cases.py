@@ -6,7 +6,8 @@ import asyncio
 
 import pytest
 
-from houndarr.database import get_db, get_setting, purge_old_logs, set_setting
+from houndarr.database import get_db, purge_old_logs
+from houndarr.repositories.settings import get_setting, set_setting
 
 # ---------------------------------------------------------------------------
 # purge_old_logs
@@ -102,17 +103,15 @@ async def test_purge_old_logs_returns_count(db: None) -> None:
 
 
 @pytest.mark.asyncio()
-async def test_get_setting_missing_key_returns_default(db: None) -> None:
-    """A missing key returns the provided default."""
-    result = await get_setting("nonexistent", default="fallback")
-    assert result == "fallback"
+async def test_get_setting_missing_key_returns_none(db: None) -> None:
+    """A missing key returns ``None``; callers compose any fallback themselves.
 
-
-@pytest.mark.asyncio()
-async def test_get_setting_missing_key_no_default_returns_none(db: None) -> None:
-    """A missing key with no default returns None."""
-    result = await get_setting("nonexistent")
-    assert result is None
+    Phase 6a of the final refactor wave removed the ``default=`` kwarg
+    the legacy ``database.get_setting`` shim offered.  The repository
+    contract is ``str | None`` and route callers already use the
+    ``(await get_setting(key)) == "1"`` / ``or <fallback>`` idiom.
+    """
+    assert await get_setting("nonexistent") is None
 
 
 @pytest.mark.asyncio()

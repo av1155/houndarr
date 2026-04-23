@@ -42,10 +42,18 @@ def tmp_data_dir() -> Generator[str, None, None]:
 
 @pytest_asyncio.fixture()
 async def db(tmp_data_dir: str) -> AsyncGenerator[None, None]:
-    """Initialize a fresh in-memory-style SQLite DB for each test."""
+    """Initialize a fresh in-memory-style SQLite DB for each test.
+
+    Also resets the auth-package caches so tests that request only
+    ``db`` (not ``test_settings``) cannot see a ``_setup_complete`` /
+    ``_serializer`` / ``_login_attempts`` state from a prior test.
+    """
+    from houndarr.auth import reset_auth_caches
+
     db_path = os.path.join(tmp_data_dir, "test.db")
     set_db_path(db_path)
     await init_db()
+    reset_auth_caches()
     yield
 
 

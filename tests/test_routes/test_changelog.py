@@ -8,7 +8,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from houndarr import __version__
-from houndarr.database import get_setting, set_setting
+from houndarr.repositories.settings import get_setting, set_setting
 from houndarr.services import changelog as cl
 from tests.conftest import csrf_headers
 

@@ -21,8 +21,8 @@ from houndarr.auth import (
     set_username,
     validate_username,
 )
-from houndarr.database import set_setting
 from houndarr.deps import get_master_key
+from houndarr.repositories.settings import set_setting
 from houndarr.routes._htmx import is_hx_request
 from houndarr.routes._templates import get_templates
 from houndarr.services.instances import list_instances

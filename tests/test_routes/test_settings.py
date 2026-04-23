@@ -142,7 +142,7 @@ def test_settings_page_includes_changelog_section(app: TestClient) -> None:
 
 
 async def test_settings_page_reflects_disabled_changelog(app: TestClient) -> None:
-    from houndarr.database import set_setting
+    from houndarr.repositories.settings import set_setting
 
     _login(app)
     await set_setting("changelog_popups_disabled", "1")

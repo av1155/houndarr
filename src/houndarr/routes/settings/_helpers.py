@@ -211,7 +211,7 @@ async def render_settings_page(
     account_success: str | None = None,
 ) -> HTMLResponse:
     """Render the settings page with common account and instance context."""
-    from houndarr.database import get_setting
+    from houndarr.repositories.settings import get_setting
 
     instances = await list_instances(master_key=master_key(request))
     error_ids = await active_error_instance_ids()

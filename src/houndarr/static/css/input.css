@@ -178,6 +178,18 @@
 @utility duration-base { transition-duration: var(--dur-base); }
 @utility duration-slow { transition-duration: var(--dur-slow); }
 
+/* Component reservation.
+   Empty block that later Track G batches fill with Houndarr-specific
+   component classes (.field-label in G.2, .status-pill variants in
+   G.3). Positioned between the @utility duration rules and the
+   unlayered daisyUI overrides so custom components compose into
+   Tailwind's components layer while daisyUI's own layered rules still
+   sit above them and unlayered overrides below beat both. Keeping the
+   reservation explicit avoids later batches having to guess cascade
+   intent. */
+@layer components {
+}
+
 /* ── daisyUI component overrides (Station parity) ─────────────────────
    daisyUI's defaults produce 40px-tall buttons, pill-shaped sans-serif
    badges, and full-border alerts. Houndarr's aesthetic is tighter: 32px

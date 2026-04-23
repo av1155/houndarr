@@ -1,11 +1,11 @@
 """Pin the /api/status SQL rollups at the function boundary.
 
-Track A.15 of the refactor plan.  Track D.8 will extract these seven
-SQL queries into ``services/metrics.py``.  These tests lock each
-helper's output shape and semantics via seeded search_log rows so
-the extraction cannot drift.  Every test seeds its own rows to keep
-scenarios independent; the existing ``tests/test_routes/test_status.py``
-covers the full endpoint via TestClient.
+The seven SQL rollups live in :mod:`houndarr.services.metrics`;
+these tests lock each helper's output shape and semantics via
+seeded ``search_log`` rows.  Every test seeds its own rows to keep
+scenarios independent; the existing
+``tests/test_routes/test_status.py`` covers the full endpoint via
+TestClient.
 """
 
 from __future__ import annotations

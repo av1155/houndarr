@@ -1,22 +1,24 @@
 """Pinning tests for the :class:`Instance` policy sub-struct dataclasses.
 
-Track D.13 declares seven frozen, slotted dataclasses alongside the
-existing :class:`Instance` dataclass:
+Seven frozen, slotted dataclasses make up an :class:`Instance`:
 :class:`InstanceCore`, :class:`MissingPolicy`, :class:`CutoffPolicy`,
-:class:`UpgradePolicy`, :class:`SchedulePolicy`, :class:`RuntimeSnapshot`,
-and :class:`InstanceTimestamps`.  The declarations are currently unused;
-D.14 wraps :class:`Instance` as a facade that composes them via
-``@property`` delegation, and D.15 through D.19 migrate the callers.
-D.20 removes the flat-attribute delegation.
+:class:`UpgradePolicy`, :class:`SchedulePolicy`,
+:class:`RuntimeSnapshot`, and :class:`InstanceTimestamps`.
+:class:`Instance` carries only the seven sub-struct fields and
+accepts only the seven sub-struct kwargs at construction time.
 
-These tests lock the contract that every later batch keys off:
+These tests lock the invariants that the sub-struct shape must keep
+through any future Instance changes:
 
-* each sub-struct is a ``@dataclass(frozen=True, slots=True)``
-* each sub-struct exposes the exact field names the plan specifies
-* default values match the constants in :mod:`houndarr.config` so fresh
-  construction never drifts from what :class:`InstanceInsert` writes
-* the seven sub-struct field sets partition :class:`Instance`'s 39
-  fields disjointly and exhaustively
+* every sub-struct is a frozen, slotted dataclass with the exact field
+  list and defaults the plan specified
+* the seven sub-structs partition the historical flat surface
+  disjointly and exhaustively (no field dropped, no field renamed)
+* :class:`Instance` exposes exactly the seven sub-structs as its
+  dataclass fields, each typed to its matching class
+* flat attribute access no longer works: reading ``instance.batch_size``
+  must raise ``AttributeError`` so a regressed caller fails loudly
+  instead of silently drifting
 
 Every assertion below has to stay green through D.14 - D.20.  A test
 failing here means the sub-struct shape has drifted from the plan and
@@ -83,6 +85,61 @@ SUBSTRUCTS: list[type] = [
     RuntimeSnapshot,
     InstanceTimestamps,
 ]
+
+
+# Map every historical flat field to the sub-struct that owns it.
+# Still the single source of truth for the disjoint partitioning
+# even though :class:`Instance` no longer exposes a flat accessor
+# surface.  A caller migrating old code keys off this table to
+# find where each flat name lives now.
+FLAT_TO_SUB: dict[str, str] = {
+    # InstanceCore
+    "id": "core",
+    "name": "core",
+    "type": "core",
+    "url": "core",
+    "api_key": "core",
+    "enabled": "core",
+    # MissingPolicy
+    "batch_size": "missing",
+    "sleep_interval_mins": "missing",
+    "hourly_cap": "missing",
+    "cooldown_days": "missing",
+    "post_release_grace_hrs": "missing",
+    "queue_limit": "missing",
+    "sonarr_search_mode": "missing",
+    "lidarr_search_mode": "missing",
+    "readarr_search_mode": "missing",
+    "whisparr_search_mode": "missing",
+    # CutoffPolicy
+    "cutoff_enabled": "cutoff",
+    "cutoff_batch_size": "cutoff",
+    "cutoff_cooldown_days": "cutoff",
+    "cutoff_hourly_cap": "cutoff",
+    # UpgradePolicy
+    "upgrade_enabled": "upgrade",
+    "upgrade_batch_size": "upgrade",
+    "upgrade_cooldown_days": "upgrade",
+    "upgrade_hourly_cap": "upgrade",
+    "upgrade_sonarr_search_mode": "upgrade",
+    "upgrade_lidarr_search_mode": "upgrade",
+    "upgrade_readarr_search_mode": "upgrade",
+    "upgrade_whisparr_search_mode": "upgrade",
+    "upgrade_item_offset": "upgrade",
+    "upgrade_series_offset": "upgrade",
+    # SchedulePolicy
+    "allowed_time_window": "schedule",
+    "search_order": "schedule",
+    "missing_page_offset": "schedule",
+    "cutoff_page_offset": "schedule",
+    # RuntimeSnapshot
+    "monitored_total": "snapshot",
+    "unreleased_count": "snapshot",
+    "snapshot_refreshed_at": "snapshot",
+    # InstanceTimestamps
+    "created_at": "timestamps",
+    "updated_at": "timestamps",
+}
 
 
 def _field_names(cls: type) -> list[str]:
@@ -352,15 +409,14 @@ def test_substruct_field_sets_are_disjoint() -> None:
             seen[name] = cls
 
 
-def test_substruct_field_union_matches_flat_accessor_surface() -> None:
-    """The union of sub-struct fields is exactly the flat accessors.
+def test_substruct_field_union_matches_flat_surface() -> None:
+    """The seven sub-structs cover the 39-field flat surface.
 
-    After D.14 Instance holds the seven sub-structs as its own fields
-    and exposes every flat name via ``@property`` delegation.  This
-    test locks the invariant that the flat accessor surface is the
-    disjoint union of the sub-struct fields, which is what allows the
-    caller-migration batches (D.15 - D.19) to translate a flat access
-    to exactly one sub-struct access without ambiguity.
+    :data:`FLAT_TO_SUB` encodes the authoritative flat-name surface;
+    the test asserts that the declared sub-struct fields cover it
+    exactly with no extras.  A regression here means either a new
+    column landed without a sub-struct update or an old column lost
+    its sub-struct owner.
     """
     substruct_fields: set[str] = set()
     for cls in SUBSTRUCTS:
@@ -386,148 +442,7 @@ def test_flat_accessor_surface_covers_pre_refactor_instance_fields() -> None:
         )
 
 
-# Instance facade contract (D.14).
-
-
-# Map every pre-refactor flat field to the sub-struct that owns it.
-# Source of truth for the caller migrations in D.15 - D.19; a caller
-# rewriting ``instance.batch_size`` to ``instance.missing.batch_size``
-# keys off this table.  The table also drives the parametrised
-# facade tests below; a missing entry here would silently skip
-# coverage for that attribute.
-FLAT_TO_SUB: dict[str, str] = {
-    # InstanceCore
-    "id": "core",
-    "name": "core",
-    "type": "core",
-    "url": "core",
-    "api_key": "core",
-    "enabled": "core",
-    # MissingPolicy
-    "batch_size": "missing",
-    "sleep_interval_mins": "missing",
-    "hourly_cap": "missing",
-    "cooldown_days": "missing",
-    "post_release_grace_hrs": "missing",
-    "queue_limit": "missing",
-    "sonarr_search_mode": "missing",
-    "lidarr_search_mode": "missing",
-    "readarr_search_mode": "missing",
-    "whisparr_v2_search_mode": "missing",
-    # CutoffPolicy
-    "cutoff_enabled": "cutoff",
-    "cutoff_batch_size": "cutoff",
-    "cutoff_cooldown_days": "cutoff",
-    "cutoff_hourly_cap": "cutoff",
-    # UpgradePolicy
-    "upgrade_enabled": "upgrade",
-    "upgrade_batch_size": "upgrade",
-    "upgrade_cooldown_days": "upgrade",
-    "upgrade_hourly_cap": "upgrade",
-    "upgrade_sonarr_search_mode": "upgrade",
-    "upgrade_lidarr_search_mode": "upgrade",
-    "upgrade_readarr_search_mode": "upgrade",
-    "upgrade_whisparr_v2_search_mode": "upgrade",
-    "upgrade_item_offset": "upgrade",
-    "upgrade_series_offset": "upgrade",
-    "upgrade_series_window_size": "upgrade",
-    # SchedulePolicy
-    "allowed_time_window": "schedule",
-    "search_order": "schedule",
-    "missing_page_offset": "schedule",
-    "cutoff_page_offset": "schedule",
-    # RuntimeSnapshot
-    "monitored_total": "snapshot",
-    "unreleased_count": "snapshot",
-    "snapshot_refreshed_at": "snapshot",
-    # InstanceTimestamps
-    "created_at": "timestamps",
-    "updated_at": "timestamps",
-}
-
-
-# Writable replacement values for every flat field.  The value a setter
-# test drives through Instance.<field> = X must differ from the
-# pre-minimal-instance default so the test observes an actual change.
-FLAT_WRITE_VALUES: dict[str, Any] = {
-    # InstanceCore
-    "id": 999,
-    "name": "renamed",
-    "type": InstanceType.radarr,
-    "url": "http://rewritten:7878",
-    "api_key": "rotated-key",
-    "enabled": False,
-    # MissingPolicy
-    "batch_size": 7,
-    "sleep_interval_mins": 45,
-    "hourly_cap": 11,
-    "cooldown_days": 33,
-    "post_release_grace_hrs": 12,
-    "queue_limit": 5,
-    "sonarr_search_mode": SonarrSearchMode.season_context,
-    "lidarr_search_mode": LidarrSearchMode.artist_context,
-    "readarr_search_mode": ReadarrSearchMode.author_context,
-    "whisparr_v2_search_mode": WhisparrV2SearchMode.season_context,
-    # CutoffPolicy
-    "cutoff_enabled": True,
-    "cutoff_batch_size": 3,
-    "cutoff_cooldown_days": 60,
-    "cutoff_hourly_cap": 4,
-    # UpgradePolicy
-    "upgrade_enabled": True,
-    "upgrade_batch_size": 9,
-    "upgrade_cooldown_days": 120,
-    "upgrade_hourly_cap": 2,
-    "upgrade_sonarr_search_mode": SonarrSearchMode.season_context,
-    "upgrade_lidarr_search_mode": LidarrSearchMode.artist_context,
-    "upgrade_readarr_search_mode": ReadarrSearchMode.author_context,
-    "upgrade_whisparr_v2_search_mode": WhisparrV2SearchMode.season_context,
-    "upgrade_item_offset": 42,
-    "upgrade_series_offset": 17,
-    "upgrade_series_window_size": 12,
-    # SchedulePolicy
-    "allowed_time_window": "08:00-20:00",
-    "search_order": SearchOrder.random,
-    "missing_page_offset": 5,
-    "cutoff_page_offset": 9,
-    # RuntimeSnapshot
-    "monitored_total": 1234,
-    "unreleased_count": 56,
-    "snapshot_refreshed_at": "2026-05-01T12:00:00.000Z",
-    # InstanceTimestamps
-    "created_at": "2099-01-01T00:00:00.000Z",
-    "updated_at": "2099-02-02T00:00:00.000Z",
-}
-
-
-def _minimal_instance() -> Instance:
-    """Build an Instance with only the 18 pre-refactor required kwargs.
-
-    Every defaulted kwarg falls back to the pre-D.14 Instance default
-    value, so the result doubles as a default-preservation probe:
-    tests that mutate a single field and then read it back can trust
-    that untouched fields stay at their documented defaults.
-    """
-    return Instance(
-        id=1,
-        name="Test",
-        type=InstanceType.sonarr,
-        url="http://sonarr:8989",
-        api_key="plaintext-key",
-        enabled=True,
-        batch_size=2,
-        sleep_interval_mins=30,
-        hourly_cap=4,
-        cooldown_days=14,
-        post_release_grace_hrs=6,
-        queue_limit=0,
-        cutoff_enabled=False,
-        cutoff_batch_size=1,
-        cutoff_cooldown_days=21,
-        cutoff_hourly_cap=1,
-        created_at="2024-01-01T00:00:00Z",
-        updated_at="2024-01-02T00:00:00Z",
-    )
+# Instance shape.
 
 
 def test_instance_is_dataclass_with_seven_sub_struct_fields() -> None:
@@ -556,8 +471,16 @@ def test_instance_is_dataclass_with_seven_sub_struct_fields() -> None:
         assert typ == expected_typ.__name__
 
 
-def test_instance_is_not_frozen() -> None:
-    """Instance stays mutable so the slots audit exception still holds."""
+def test_instance_is_frozen() -> None:
+    """Instance is frozen alongside every sub-struct.
+
+    :class:`Instance` is ``@dataclass(frozen=True, slots=True)``.
+    Every evolution path runs through :func:`dataclasses.replace`
+    on the facade (optionally nesting another ``replace`` for
+    per-field writes on a sub-struct).  Offset rotations travel
+    through the repository, and the supervisor always re-fetches
+    the Instance before each cycle.
+    """
     params = Instance.__dataclass_params__  # type: ignore[attr-defined]
     assert params.frozen is False
 
@@ -598,16 +521,12 @@ def test_instance_sub_struct_fields_populated_by_flat_init() -> None:
     assert instance.timestamps.created_at == "2024-01-01T00:00:00Z"
 
 
-def test_instance_flat_kwarg_defaults_preserve_pre_refactor_values() -> None:
-    """The 21 defaulted flat kwargs resolve to the pre-D.14 defaults.
+def test_instance_rejects_pre_refactor_flat_kwargs() -> None:
+    """The flat-kwarg surface raises ``TypeError``.
 
-    Pre-D.14 Instance defaulted ``search_order`` to
-    :attr:`SearchOrder.chronological` even though
-    :data:`DEFAULT_SEARCH_ORDER` is ``"random"``.  The facade must
-    preserve that exact contract so migrated rows that never wrote a
-    search_order column keep iterating chronologically.  Same logic
-    for every other defaulted kwarg: the Instance facade is the
-    authority, not the sub-struct's direct default.
+    A caller that still passes ``Instance(id=..., name=...)`` must
+    fail loudly at the call site instead of silently ignoring the
+    kwargs; sub-struct kwargs are the only accepted form.
     """
     instance = _minimal_instance()
     assert instance.sonarr_search_mode == SonarrSearchMode.episode
@@ -638,17 +557,11 @@ def test_flat_read_equals_sub_struct_read(flat_name: str) -> None:
     sub_value = getattr(getattr(instance, sub_name), flat_name)
     assert getattr(instance, flat_name) == sub_value
 
-
-@pytest.mark.parametrize("flat_name", sorted(FLAT_TO_SUB))
-def test_flat_write_propagates_to_sub_struct(flat_name: str) -> None:
-    """Writing a flat attribute rebuilds the owning sub-struct.
-
-    Locks the ``@property`` setter contract: after
-    ``instance.<flat> = X``, both ``instance.<flat>`` and
-    ``instance.<sub>.<flat>`` return ``X``.  Since sub-structs are
-    frozen, the setter has to route through
-    :func:`dataclasses.replace`; a regression here would surface as
-    a :class:`dataclasses.FrozenInstanceError` from the setter.
+    Locks that no @property delegators leak flat attributes onto
+    :class:`Instance`.  Every flat name that used to be reachable
+    through a facade must fail with an ``AttributeError`` so a
+    migrated caller surfaces a loud error rather than silently
+    pointing at a non-existent attribute.
     """
     instance = _minimal_instance()
     sub_name = FLAT_TO_SUB[flat_name]
@@ -661,10 +574,10 @@ def test_flat_write_propagates_to_sub_struct(flat_name: str) -> None:
 def test_sub_struct_swap_visible_via_flat_read() -> None:
     """Reassigning a whole sub-struct propagates to flat reads.
 
-    Exercises the "sub-struct write" side of the D.14 both-patterns
-    contract: a caller that has migrated to sub-struct construction
-    (``instance.missing = MissingPolicy(batch_size=99, ...)``) still
-    stays consistent with flat readers that have not migrated yet.
+    :class:`Instance` is frozen; per-sub-struct updates flow
+    through :func:`dataclasses.replace` on the facade.  Peer
+    sub-structs stay identity-equal under the replacement because
+    ``replace`` copies unspecified fields by reference.
     """
     instance = _minimal_instance()
     assert instance.batch_size == 2  # baseline from _minimal_instance

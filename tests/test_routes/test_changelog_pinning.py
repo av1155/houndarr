@@ -1,16 +1,15 @@
 """Pin the changelog route helper functions: bullet renderer and safe URLs.
 
-Track A.8 of the refactor plan.
-
-The ``_render_changelog_bullet`` Jinja filter and ``_is_safe_url`` helper
-in ``routes/changelog.py`` implement a small, hand-rolled markdown
-vocabulary (inline code, bold, ``[text](url)`` links, ``(#issue)``
-refs).  They are the only place in the codebase where user-authored
-changelog text turns into raw HTML, so they sit on a trust boundary.
+The ``_render_changelog_bullet`` Jinja filter and ``_is_safe_url``
+helper in ``routes/changelog.py`` implement a small, hand-rolled
+markdown vocabulary (inline code, bold, ``[text](url)`` links,
+``(#issue)`` refs).  They are the only place in the codebase where
+user-authored changelog text turns into raw HTML, so they sit on a
+trust boundary.
 
 These pinning tests lock the exact output shape and the URL-scheme
-allowlist so any refactor that moves or rewrites the helpers cannot
-silently change the rendered HTML or widen the scheme surface.
+allowlist so any edit to the helpers cannot silently change the
+rendered HTML or widen the scheme surface.
 """
 
 from __future__ import annotations

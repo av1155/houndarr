@@ -1,11 +1,11 @@
 """Pin the pure validation helpers behind /settings/instances.
 
-Track A.13 of the refactor plan.  The ``settings/_helpers.py`` module
-owns the validators that every 422 path in ``settings/instances.py``
-delegates to.  These tests lock the exact error messages, return
-shapes, and branch logic so Track D.10 / D.11 can extract the form
-handling into ``services/instances.submit_*`` and
-``services/instance_validation.py`` without drift.
+The ``settings/_helpers.py`` module is the thin request-shaping
+layer over :mod:`houndarr.services.instance_validation`.  These
+tests lock the exact error messages, return shapes, and branch
+logic the 422 paths in ``settings/instances.py`` depend on so
+later edits to the service or helper layers cannot drift them
+apart.
 """
 
 from __future__ import annotations

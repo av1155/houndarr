@@ -1,6 +1,6 @@
 """Pin the pure helpers in routes/api/logs.py.
 
-Locks the parser helpers (``parse_instance_ids`` /
+Locks the parser helpers (``parse_instance_id`` /
 ``parse_search_kind`` / ``parse_cycle_trigger`` /
 ``parse_hide_system``), the summary builder (``summarize_rows``),
 the limit clamp (``compute_load_more_limit``), and the HTMX 422

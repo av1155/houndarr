@@ -1,20 +1,18 @@
 """Byte-equal output pinning for the macro in `_macros/buttons.html`.
 
-The btn macro covers the four named low-variance call sites listed
-in plan section 6: changelog_modal, confirm_dialog, admin/maintenance,
-and admin/danger.  Each test invokes the macro in isolation and
-asserts the exact bytes Jinja emits.
+The btn macro covers four low-variance call sites: the changelog
+modal, the confirm dialog, admin/maintenance, and admin/danger.
+Each test invokes the macro in isolation and asserts the exact
+bytes Jinja emits.
 
-Like the other macro pinning suites under tests/test_templates/, the
-macro output is not the same as the full post-migration consumer
-HTML (consumers carry ambient template indentation that the macro
-does not).  Consumer-level integration is asserted via the Track E
-gate and via the Track A.22 render harness.  What this suite locks
-down is every variant, every size, the boolean / scalar / None
-attribute branches, the extra class slot, and the variant / size
-fallback paths so a future edit cannot silently drop a class, swap
-an attribute order, or flip a default that input.css or the JS
-controllers rely on.
+Consumer-level integration (the full rendered HTML including
+ambient template indentation) is asserted via the macro inventory
+gate and the render harness in ``test_pinned_render.py``.  What
+this suite locks down is every variant, every size, the boolean /
+scalar / None attribute branches, the extra class slot, and the
+variant / size fallback paths so a future edit cannot silently
+drop a class, swap an attribute order, or flip a default that
+input.css or the JS controllers rely on.
 """
 
 from __future__ import annotations

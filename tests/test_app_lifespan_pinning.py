@@ -1,9 +1,10 @@
 """Pin app.py lifespan + RequestValidationError handler contract.
 
-Track A.18 of the refactor plan.  Locks the startup-order sequence
-(validate -> master_key -> set_db_path -> init_db -> purge_old_logs ->
-Supervisor.start) and the HTMX-vs-JSON split on the validation-error
-handler so Track D / H migrations do not silently shift them.
+Locks the startup-order sequence (validate -> master_key ->
+set_db_path -> init_db -> purge_old_logs -> Supervisor.start) and
+the HTMX-vs-JSON split on the validation-error handler so later
+changes to the lifespan wiring do not silently shift either
+contract.
 """
 
 from __future__ import annotations

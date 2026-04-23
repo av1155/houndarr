@@ -1,10 +1,9 @@
 """Pin the compiled Tailwind bundle hash.
 
-Track A.25 of the refactor plan.  Tracks E / F / G will modify the
-templates and the CSS input files; any intentional change to the
-compiled `app.built.css` must land together with an update to
-`tests/_artifacts/app.built.css.sha256`.  This test is the guardrail
-that forces the reference update to be explicit.
+Any intentional change to ``src/houndarr/static/css/app.built.css``
+must land together with an update to
+``tests/_artifacts/app.built.css.sha256``.  This test is the
+guardrail that forces the reference update to be explicit.
 
 The test is a soft guard: it skips when the bundle is missing (dev
 checkouts that have not run the Tailwind build).  CI runs the build

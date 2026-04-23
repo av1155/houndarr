@@ -1,12 +1,12 @@
 """Pinning tests for the search_log-repository SQL boundary.
 
-Locks the Track D.6 contract of ``insert_log_row``,
-``fetch_log_rows``, ``fetch_recent_searches``, and
-``delete_logs_for_instance``.  The golden-log characterisation test
-(``tests/test_engine/test_golden_search_log.py``) pins the engine's
-``_write_log`` byte shape; these tests pin the repository primitives
-the engine delegator now rests on, plus the fetch surface D.9 will
-consume.
+Locks the contract of ``insert_log_row``, ``fetch_log_rows``,
+``fetch_recent_searches``, ``delete_logs_for_instance``, and
+``purge_old_logs``.  The golden-log characterisation test in
+``tests/test_engine/test_golden_search_log.py`` pins the engine's
+``_write_log`` byte shape; these tests pin the repository
+primitives the delegator rests on plus the fetch surface that
+:mod:`houndarr.services.log_query` composes.
 """
 
 from __future__ import annotations
@@ -337,7 +337,7 @@ async def test_engine_write_log_delegates_through_repo(seeded_instances: None) -
 @pytest.mark.pinning()
 @pytest.mark.asyncio()
 async def test_purge_old_logs_lives_on_repository(db: None) -> None:
-    """``purge_old_logs`` lives on the search-log repository post-Phase 6b.
+    """``purge_old_logs`` lives on the search-log repository.
 
     The function's disable-on-zero semantics and the empty-table
     return shape are pinned here; detailed row-deletion coverage

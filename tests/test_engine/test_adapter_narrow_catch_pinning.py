@@ -1,4 +1,4 @@
-"""Pin the narrow adapter fallback catches introduced in Track B.16.
+"""Pin the narrow adapter fallback catches in ``fetch_upgrade_pool``.
 
 Each of Sonarr, Lidarr, Readarr, and Whisparr v2 has a per-iteration
 ``try`` inside ``fetch_upgrade_pool`` that swallows transient client
@@ -10,14 +10,12 @@ failures so pool building can continue:
   ``client.get_cutoff_unmet(page, page_size)`` failures while
   building the exclusion set.
 
-Track B.16 narrows each of these from ``except Exception`` to
-``except (httpx.HTTPError, httpx.InvalidURL, ValidationError)``.  The
-catch still logs + continues for the three expected failure shapes
-so pool building stays resilient to transient network or wire-
-validation noise, but anything else (KeyError, RuntimeError,
-AttributeError, etc.) now propagates to the search_loop wrap
-(``_fetch_pool_with_typed_wrap`` from B.14) which converts it to
-:class:`~houndarr.errors.EnginePoolFetchError`.
+Each catch is ``except (httpx.HTTPError, httpx.InvalidURL,
+ValidationError)`` so pool building stays resilient to transient
+network or wire-validation noise.  Anything else (``KeyError``,
+``RuntimeError``, ``AttributeError``, etc.) propagates to the
+search_loop wrap (:func:`_fetch_pool_with_typed_wrap`), which
+converts it to :class:`~houndarr.errors.EnginePoolFetchError`.
 
 These tests lock both sides of the narrow-catch contract per
 adapter.

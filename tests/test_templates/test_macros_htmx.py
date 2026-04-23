@@ -261,10 +261,10 @@ class TestHxShellFetch:
         self,
         render_macro: Callable[[str], str],
     ) -> None:
-        # The Track F.2 consumer (base.html header logo) wraps an img
-        # plus a trailing text label.  This test pins that the macro
-        # passes multi-line caller content through unchanged; byte drift
-        # here would risk an alignment shift in the nav shell.
+        # The base.html header-logo consumer wraps an img plus a
+        # trailing text label; this test pins that the macro passes
+        # multi-line caller content through unchanged, since byte
+        # drift here would risk an alignment shift in the nav shell.
         expected = (
             '<a href="/"\n'
             '   hx-get="/"\n'

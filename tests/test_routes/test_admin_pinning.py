@@ -1,14 +1,15 @@
 """Pin the admin bulk-destructive endpoints' response contract.
 
-Track A.11 of the refactor plan.  Locks the response tone/status/phrase
-on ``/settings/admin/reset-instances``, ``/settings/admin/clear-logs``,
-and ``/settings/admin/factory-reset`` so Track D.25's repository-port
-cannot silently change what the user sees.
+Locks the response tone, status, and phrasing on
+``/settings/admin/reset-instances``,
+``/settings/admin/clear-logs``, and
+``/settings/admin/factory-reset`` so later edits to the routes or
+the underlying service cannot silently change what the user sees.
 
-These are end-to-end route tests driven through ``TestClient``.  The
-existing ``tests/test_routes/test_admin.py`` has thorough coverage of
-the happy paths; this file adds the narrow pinning subset that every
-refactor batch in Track D must keep byte-stable.
+These are end-to-end route tests driven through ``TestClient``.
+The existing ``tests/test_routes/test_admin.py`` has thorough
+coverage of the happy paths; this file adds the narrow pinning
+subset that must stay byte-stable.
 """
 
 from __future__ import annotations

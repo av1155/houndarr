@@ -1,11 +1,10 @@
 """Pin the typed-error wrap helpers for dispatch + upgrade pool fetch.
 
-Track B.14 replaces search_loop's broad ``except Exception`` branches
-around ``dispatch_fn`` (3 sites) and ``adapter.fetch_upgrade_pool`` (1
-site) with narrow catches on the typed
+The search loop narrows the dispatch and pool-fetch
+``except Exception`` branches onto the typed
 :class:`~houndarr.errors.EngineDispatchError` /
-:class:`~houndarr.errors.EnginePoolFetchError` surface.  The wrap
-itself lives in two small helpers in :mod:`houndarr.engine.search_loop`:
+:class:`~houndarr.errors.EnginePoolFetchError` surface via two
+helpers in :mod:`houndarr.engine.search_loop`:
 
 * :func:`_dispatch_with_typed_wrap`: owns the
   ``adapter.make_client`` -> dispatch attempt boundary.
@@ -13,10 +12,7 @@ itself lives in two small helpers in :mod:`houndarr.engine.search_loop`:
   ``adapter.make_client`` -> fetch_upgrade_pool boundary.
 
 These tests lock the wrap contract end-to-end: message preservation,
-``__cause__`` chain, and passthrough of already-typed errors.  Track
-B.16 will eventually move the wrap into each adapter; at that point
-the helpers become thin passthroughs and these tests continue to
-pass.
+``__cause__`` chain, and passthrough of already-typed errors.
 """
 
 from __future__ import annotations
@@ -90,7 +86,7 @@ def _adapter_with_fake_client(side_effect: Any = None, return_value: Any = None)
 
 
 class TestDispatchTypedWrap:
-    """Pin the dispatch-side wrap helper (Track B.14)."""
+    """Pin the dispatch-side wrap helper."""
 
     @pytest.mark.asyncio()
     async def test_http_status_error_wraps_to_engine_dispatch_error(self) -> None:
@@ -177,7 +173,7 @@ class TestDispatchTypedWrap:
 
 
 class TestFetchPoolTypedWrap:
-    """Pin the upgrade-pool-fetch-side wrap helper (Track B.14)."""
+    """Pin the upgrade-pool-fetch-side wrap helper."""
 
     @pytest.mark.asyncio()
     async def test_http_status_error_wraps_to_engine_pool_fetch_error(self) -> None:

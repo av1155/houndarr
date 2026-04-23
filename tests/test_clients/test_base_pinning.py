@@ -1,16 +1,16 @@
 """Characterisation tests for the shared ArrClient base behaviour.
 
-Track A.5 of the refactor plan.  The Track C refactor will introduce a
-``_fetch_wanted_page`` template method on ``ArrClient`` and the per-app
-subclasses will switch to class-level hook attributes.  These pinning
-tests lock the pre-refactor contract of ``_get``, ``_post``, ``ping``,
-``__aenter__``, ``__aexit__``, ``aclose``, and the constructor side-effects
-(base-URL normalisation, header injection, default timeout) so the
-template extraction cannot silently drift their observable behaviour.
+Locks the observable contract of ``_get``, ``_post``, ``ping``,
+``__aenter__``, ``__aexit__``, ``aclose``, and the constructor
+side-effects (base-URL normalisation, header injection, default
+timeout) so the ``_fetch_wanted_page`` template method and the
+class-level hook attributes on per-app subclasses cannot silently
+drift any of them.
 
-We drive the contract via a minimal concrete subclass that satisfies the
-abstract interface without adding any behaviour of its own; the existing
-SonarrClient / RadarrClient tests exercise the concrete overrides.
+The contract is driven through a minimal concrete subclass that
+satisfies the abstract interface without adding any behaviour of
+its own; the per-client test modules exercise each subclass's
+concrete overrides.
 """
 
 from __future__ import annotations
@@ -98,10 +98,10 @@ class TestConstructor:
         SSRF posture: an ``*arr`` response that redirects to a blocked
         target (loopback, link-local, metadata service) must reach the
         caller as a 3xx, not as a followed 200 from the blocked host.
-        httpx's own default is ``False``; Phase 3a makes the kwarg
-        explicit at `base.py:99`.  This pin stays green before and
-        after the explicit flip so a future httpx upgrade that flips
-        the default cannot silently weaken the posture.
+        httpx's own default is ``False`` and ``base.py`` sets the
+        kwarg explicitly; this pin catches a future httpx upgrade
+        that flips the default or a regression that drops the
+        explicit flag.
         """
         stub = _StubClient(url="http://sonarr:8989", api_key="k")
         assert stub._client.follow_redirects is False
@@ -314,7 +314,7 @@ class TestContextManager:
         assert client._client.is_closed is True
 
 
-# Redirect-guard event hook (Phase 3b)
+# Redirect-guard event hook
 
 
 class TestRedirectGuard:

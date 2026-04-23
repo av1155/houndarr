@@ -1,15 +1,15 @@
-"""Render-harness fixtures used by Track A.22 pinning tests.
+"""Render-harness fixtures for the consumer-level template pinning tests.
 
-Track E (Jinja macros) will rewrite every partial listed here.  The
-pinning harness renders the partial against a stable context and
-returns the raw HTML so callers can assert structural markers survive
-the macro extraction.
+The pinning harness renders each partial under a stable context
+and returns the raw HTML so callers can assert that structural
+markers survive any macro or template edit.
 
-Rendering is intentionally loose: we compare on HTML substrings, not
-byte equality, because Jinja whitespace is sensitive to adjacent
-changes that Track E may legitimately introduce.  The markers we pin
-are the class names, data-* attributes, and visible text labels that
-the HTMX client and CSS rely on.
+Rendering is intentionally loose: assertions compare HTML
+substrings rather than byte equality because Jinja whitespace is
+sensitive to adjacent changes that a macro touch-up may
+legitimately introduce.  The markers that are pinned are the
+class names, data-* attributes, and visible text labels that the
+HTMX client and CSS depend on.
 """
 
 from __future__ import annotations

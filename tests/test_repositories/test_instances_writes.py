@@ -1,12 +1,12 @@
 """Pinning tests for the instances-repository write boundary.
 
-Locks the Track D.4 contract: the ``InstanceInsert`` /
-``InstanceUpdate`` payload dataclasses, ``insert_instance``,
-``update_instance``, ``delete_instance``, and
-``update_instance_snapshot``.  Every case below has to stay
-byte-equal through the D.10 + D.24 + D.25 route and service
-migrations that push business logic outward while the SQL stays
-here.
+Locks the contract of the :class:`InstanceInsert` /
+:class:`InstanceUpdate` payload dataclasses and the five write
+functions (``insert_instance``, ``update_instance``,
+``delete_instance``, ``update_instance_snapshot``, and the service
+delegator path).  Every case below pins one boundary the
+repository has to preserve so business logic in the service and
+route layers can evolve without drifting the SQL below them.
 """
 
 from __future__ import annotations
@@ -360,7 +360,7 @@ async def test_service_update_instance_filters_unrecognized_kwargs(
 async def test_service_update_instance_returns_none_for_missing_id(
     db: None, master_key: bytes
 ) -> None:
-    """Updating a non-existent id returns None, matching pre-refactor behaviour."""
+    """Updating a non-existent id returns None rather than raising."""
     from houndarr.services.instances import update_instance as svc_update
 
     result = await svc_update(999, master_key=master_key, name="Nope")

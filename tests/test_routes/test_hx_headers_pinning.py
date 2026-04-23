@@ -1,10 +1,10 @@
 """Pin the HX-* response headers every route emits today.
 
-Track A.23 of the refactor plan.  Track F.3 will move the ``HX-Trigger
-/ HX-Retarget / HX-Reswap / HX-Redirect / HX-Refresh`` emission into
-typed helpers in ``routes/_htmx.py``.  These tests snapshot the exact
-header names and values each route emits in every branch so the
-extraction cannot silently drop or rename a header.
+The typed helpers in :mod:`houndarr.routes._htmx` emit
+``HX-Trigger / HX-Retarget / HX-Reswap / HX-Redirect /
+HX-Refresh``; these tests snapshot the exact header names and
+values each route emits in every branch so a helper edit cannot
+silently drop or rename a header.
 """
 
 from __future__ import annotations

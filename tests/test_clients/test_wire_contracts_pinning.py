@@ -1,13 +1,13 @@
 """Pin the exact query strings emitted by every *arr client's wanted probes.
 
-Track A.20 of the refactor plan.  Track C.1-C.5 will migrate
-Sonarr / Radarr / Lidarr / Readarr / Whisparr v2 to a shared
-``_fetch_wanted_page`` template method on ``ArrClient``; Whisparr v3
-stays as a documented outlier (no ``/wanted`` endpoint).
+Sonarr, Radarr, Lidarr, Readarr, and Whisparr v2 all route through
+the shared ``_fetch_wanted_page`` template method on ``ArrClient``;
+Whisparr v3 stays a documented outlier (no ``/wanted`` endpoint).
 
 These tests capture the exact HTTP request each concrete client
 issues today for ``get_missing``, ``get_cutoff_unmet``, and
-``get_wanted_total`` so the template extraction cannot silently drop
+``get_wanted_total`` so a future template edit cannot silently
+drop
 or reorder a query param or change the sort key.
 """
 

@@ -1,10 +1,10 @@
 """Characterisation (pinning) tests for engine/candidates.py pure functions.
 
-Track A.2 of the refactor plan.  These tests LOCK the current behaviour of
-``_parse_iso_utc``, ``_is_unreleased``, and ``_is_within_post_release_grace``
-so subsequent refactor batches that touch the engine pipeline cannot drift
-their semantics.  They capture what the code does today, including edge
-cases that round-trip through ``datetime.fromisoformat``; they are not
+These tests LOCK the current behaviour of ``_parse_iso_utc``,
+``_is_unreleased``, and ``_is_within_post_release_grace`` so later
+edits to the engine pipeline cannot drift their semantics.  They
+capture what the code does today, including edge cases that
+round-trip through ``datetime.fromisoformat``; they are not
 assertions of what the code ought to do.
 
 The existing ``tests/test_engine/test_candidates.py`` covers the happy

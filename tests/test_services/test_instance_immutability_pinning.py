@@ -1,17 +1,16 @@
 """Characterisation pins for the Instance dataclass immutability contract.
 
-Phase 1 lands two pins here:
+Two invariants are locked here:
 
-1. ``test_instance_is_mutable_before_freeze`` exercises the current
-   ``@dataclass(slots=True)`` surface.  It is green today and will be
-   replaced by ``test_instance_is_frozen_after_freeze`` inside Phase 5a's
-   commit, which flips the dataclass to ``frozen=True``.
-2. ``test_offset_advancement_persisted_via_repository_only`` walks the
-   production tree and asserts no source file writes to
-   ``instance.schedule.*`` or ``instance.upgrade.*``.  The freeze in
-   Phase 5a cannot ship until every production writer is gone, so this
-   pin guards against the session landing a freeze that breaks a
-   forgotten mutation path.
+1. ``test_instance_is_frozen_after_freeze`` asserts that
+   :class:`Instance` is ``@dataclass(frozen=True, slots=True)`` and
+   that per-attribute assignment raises ``FrozenInstanceError``.
+2. ``test_offset_advancement_persisted_via_repository_only`` walks
+   the production tree and asserts no source file writes to
+   ``instance.schedule.*`` or ``instance.upgrade.*``.  Any such
+   write would be silently shadowed by the next ``get_instance``
+   and would turn into ``FrozenInstanceError`` at runtime; catching
+   it here keeps the repository as the single write path.
 """
 
 from __future__ import annotations
@@ -64,10 +63,10 @@ def _make_instance() -> Instance:
 def test_instance_is_frozen_after_freeze() -> None:
     """Instance is ``@dataclass(frozen=True, slots=True)``.
 
-    Phase 5a of the final refactor wave flipped the facade to frozen.
-    Any per-attribute assignment must raise ``FrozenInstanceError`` and
-    the seven sub-struct names must appear in ``__slots__``.  Callers
-    that need a modified Instance compose :func:`dataclasses.replace`.
+    Any per-attribute assignment must raise
+    ``FrozenInstanceError`` and the seven sub-struct names must
+    appear in ``__slots__``.  Callers that need a modified Instance
+    compose :func:`dataclasses.replace`.
     """
     assert dataclasses.is_dataclass(Instance)
     assert Instance.__dataclass_params__.frozen is True
@@ -140,12 +139,12 @@ class _ForbiddenWriteVisitor(ast.NodeVisitor):
 def test_offset_advancement_persisted_via_repository_only() -> None:
     """No production source may write to Instance offset sub-struct fields.
 
-    Engine and adapter code must advance offsets exclusively through the
-    repository ``update_instance`` payload.  A production-side write
-    would survive a round trip only until the next ``get_instance``,
-    silently shadowing the repository's authoritative value; the Phase 5a
-    freeze would then turn that write into a ``FrozenInstanceError``
-    at runtime.
+    Engine and adapter code must advance offsets exclusively through
+    the repository ``update_instance`` payload.  A production-side
+    write would survive a round trip only until the next
+    ``get_instance``, silently shadowing the repository's
+    authoritative value, and would also raise
+    ``FrozenInstanceError`` at runtime against the frozen facade.
     """
     offenders: list[tuple[Path, int, str]] = []
     for path in _SRC_ROOT.rglob("*.py"):

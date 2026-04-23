@@ -1,10 +1,9 @@
 """Pin the typed-error wrap on :func:`_persist_offset_with_typed_wrap`.
 
-Track B.15 replaces the four broad ``except Exception`` branches
-around ``update_instance(...)`` in the engine's offset-persist paths
-with narrow catches on the typed
-:class:`~houndarr.errors.EngineOffsetPersistError` surface.  The
-wrap itself lives in :func:`_persist_offset_with_typed_wrap` in
+The engine narrows the four offset-persist ``except Exception``
+branches around ``update_instance(...)`` onto the typed
+:class:`~houndarr.errors.EngineOffsetPersistError` surface via
+:func:`_persist_offset_with_typed_wrap` in
 :mod:`houndarr.engine.search_loop`.
 
 These tests lock:
@@ -44,7 +43,7 @@ _MASTER_KEY = b"0123456789abcdef0123456789abcdef_"
 
 
 class TestPersistOffsetTypedWrap:
-    """Pin the offset-persist wrap helper (Track B.15)."""
+    """Pin the offset-persist wrap helper."""
 
     @pytest.mark.asyncio()
     async def test_arbitrary_exception_wraps_to_engine_offset_persist_error(

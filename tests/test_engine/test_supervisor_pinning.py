@@ -1,11 +1,10 @@
 """Pin the Supervisor public-API lifecycle contract.
 
-Track A.17 of the refactor plan.  Track C.11 will extract the reconnect
-loop into ``engine/retry.py`` and Track D.16 will migrate the public
-methods to the policy sub-structs.  These tests lock idempotency,
-return values, and task-bookkeeping invariants on ``start``, ``stop``,
-``start_instance_task``, ``stop_instance_task``, ``reconcile_instance``,
-and ``trigger_run_now`` so the Track C/D migrations cannot drift them.
+Locks idempotency, return values, and task-bookkeeping invariants
+on ``start``, ``stop``, ``start_instance_task``,
+``stop_instance_task``, ``reconcile_instance``, and
+``trigger_run_now`` so later edits to the supervisor cannot drift
+any of them.
 """
 
 from __future__ import annotations

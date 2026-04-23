@@ -1,10 +1,11 @@
 """Pinning tests for the centralised Jinja2Templates singleton.
 
-Locks the Track D.7 contract: the five route packages that render
-HTML now share a single :class:`fastapi.templating.Jinja2Templates`
-instance (built lazily by :func:`houndarr.routes._templates.get_templates`)
-with both custom filters (``timeago``, ``changelog_bullet``) wired
-in.  These tests fence:
+Locks the shared-singleton contract: the five route packages that
+render HTML share a single
+:class:`fastapi.templating.Jinja2Templates` instance (built lazily
+by :func:`houndarr.routes._templates.get_templates`) with both
+custom filters (``timeago``, ``changelog_bullet``) wired in.
+These tests fence:
 
 - The singleton invariant: every route package returns the same
   underlying templates object.

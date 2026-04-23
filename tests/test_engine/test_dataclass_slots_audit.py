@@ -1,17 +1,14 @@
 """Regression test: every frozen dataclass under ``src/houndarr`` uses slots.
 
-Track C.13 audit.  AGENTS.md records the convention: every frozen
-dataclass in the codebase uses ``slots=True`` for the small memory
-win and to make attribute typos surface as ``AttributeError`` rather
-than silently writing a new instance attribute.
+AGENTS.md records the convention: every frozen dataclass in the
+codebase uses ``slots=True`` for the small memory win and to make
+attribute typos surface as ``AttributeError`` rather than silently
+writing a new instance attribute.
 
-Three dataclasses are deliberately mutable and unslotted:
+Two dataclasses are deliberately mutable and unslotted:
 
 - :class:`houndarr.config.AppSettings` (env overrides applied
     in-place).
-- :class:`houndarr.services.instances.Instance` (SQL row mapping with
-    in-place page-offset rotation; locked decision #8 keeps the
-    facade until D.20).
 - :class:`houndarr.engine.retry.ReconnectState` (one-field state
     flipped by the supervisor's reconnect helper).
 

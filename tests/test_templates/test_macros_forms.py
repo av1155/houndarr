@@ -1,15 +1,14 @@
 """Byte-equal output pinning for each macro in `_macros/forms.html`.
 
 Each test invokes a single macro in isolation and asserts the exact
-bytes Jinja emits.  Like the badges-macro pinning, this is not the
-same as the full post-migration consumer HTML: the macros use
-whitespace control that ambient template indentation does not have,
-so consumer-level behaviour is asserted via the CSS / JS markers
-(class strings, data-* attributes, id pairings) that auth.js and the
-auth-fields stylesheet read.  What the assertions here lock down is
-every class string, data-* attribute, label wrapper, and optional
-feature toggle of every macro so a future edit cannot silently drop
-or rename a marker that the browser relies on.
+bytes Jinja emits.  The macros use whitespace control that ambient
+template indentation does not, so consumer-level behaviour is
+asserted via the CSS / JS markers (class strings, data-*
+attributes, id pairings) that auth.js and the auth-fields
+stylesheet read.  What the assertions here lock down is every
+class string, data-* attribute, label wrapper, and optional feature
+toggle of every macro so a future edit cannot silently drop or
+rename a marker that the browser relies on.
 """
 
 from __future__ import annotations

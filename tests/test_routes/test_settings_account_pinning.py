@@ -1,9 +1,9 @@
 """Pin the /settings/account/password endpoint contract.
 
-Track A.12 of the refactor plan.  Locks the validation-error matrix,
-the rate-limit response, the success response shape, and the
-HX-Refresh behaviour so the settings page can be migrated through
-Tracks D / F without drift.
+Locks the validation-error matrix, the rate-limit response, the
+success response shape, and the HX-Refresh behaviour so later
+edits to the settings page or its service layer cannot silently
+drift any of them.
 """
 
 from __future__ import annotations

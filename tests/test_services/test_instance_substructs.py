@@ -1,24 +1,19 @@
 """Pinning tests for :class:`Instance` and its seven policy sub-structs.
 
-Track D.13 declared seven frozen, slotted dataclasses alongside the
-existing :class:`Instance` dataclass:
+Seven frozen, slotted dataclasses make up an :class:`Instance`:
 :class:`InstanceCore`, :class:`MissingPolicy`, :class:`CutoffPolicy`,
-:class:`UpgradePolicy`, :class:`SchedulePolicy`, :class:`RuntimeSnapshot`,
-and :class:`InstanceTimestamps`.  D.14 wrapped :class:`Instance` as a
-mutable facade that composed the sub-structs via ``@property``
-delegation while still accepting the pre-refactor 39-flat-kwarg
-``__init__``.  D.15 through D.19 migrated every caller to sub-struct
-access.  D.20 removed the facade: :class:`Instance` now carries only
-the seven sub-struct fields and accepts only the seven sub-struct
-kwargs at construction time.
+:class:`UpgradePolicy`, :class:`SchedulePolicy`,
+:class:`RuntimeSnapshot`, and :class:`InstanceTimestamps`.
+:class:`Instance` carries only the seven sub-struct fields and
+accepts only the seven sub-struct kwargs at construction time.
 
-These tests lock the invariants that the facade-free shape must keep
+These tests lock the invariants that the sub-struct shape must keep
 through any future Instance changes:
 
 * every sub-struct is a frozen, slotted dataclass with the exact field
   list and defaults the plan specified
-* the seven sub-structs partition the pre-D.20 flat surface disjointly
-  and exhaustively (no field dropped, no field renamed)
+* the seven sub-structs partition the historical flat surface
+  disjointly and exhaustively (no field dropped, no field renamed)
 * :class:`Instance` exposes exactly the seven sub-structs as its
   dataclass fields, each typed to its matching class
 * flat attribute access no longer works: reading ``instance.batch_size``
@@ -93,11 +88,11 @@ SUBSTRUCTS: list[type] = [
 ]
 
 
-# Map every pre-D.20 flat field to the sub-struct that owns it.
-# Still the single source of truth for the disjoint partitioning even
-# though :class:`Instance` no longer exposes a flat accessor surface.
-# A caller migrating old code keys off this table to find where each
-# pre-refactor name lives now.
+# Map every historical flat field to the sub-struct that owns it.
+# Still the single source of truth for the disjoint partitioning
+# even though :class:`Instance` no longer exposes a flat accessor
+# surface.  A caller migrating old code keys off this table to
+# find where each flat name lives now.
 FLAT_TO_SUB: dict[str, str] = {
     # InstanceCore
     "id": "core",
@@ -417,13 +412,13 @@ def test_substruct_field_sets_are_disjoint() -> None:
 
 
 def test_substruct_field_union_matches_flat_surface() -> None:
-    """The seven sub-structs cover the 39-field pre-D.20 flat surface.
+    """The seven sub-structs cover the 39-field flat surface.
 
-    :data:`FLAT_TO_SUB` encodes the pre-D.20 authoritative flat-name
-    surface; the test asserts that the declared sub-struct fields cover
-    it exactly with no extras.  A regression here means either a new
-    column landed without a sub-struct update or an old column lost its
-    sub-struct owner.
+    :data:`FLAT_TO_SUB` encodes the authoritative flat-name surface;
+    the test asserts that the declared sub-struct fields cover it
+    exactly with no extras.  A regression here means either a new
+    column landed without a sub-struct update or an old column lost
+    its sub-struct owner.
     """
     substruct_fields: set[str] = set()
     for cls in SUBSTRUCTS:
@@ -444,7 +439,7 @@ def test_substruct_field_union_count_matches_pre_refactor_surface() -> None:
     assert len(FLAT_TO_SUB) == 39
 
 
-# Instance shape (post-D.20).
+# Instance shape.
 
 
 def test_instance_is_dataclass_with_seven_sub_struct_fields() -> None:
@@ -475,13 +470,12 @@ def test_instance_is_dataclass_with_seven_sub_struct_fields() -> None:
 def test_instance_is_frozen() -> None:
     """Instance is frozen alongside every sub-struct.
 
-    Phase 5a of the final refactor wave flipped the facade to
-    ``@dataclass(frozen=True, slots=True)``.  Every evolution path
-    now runs through :func:`dataclasses.replace` on the facade
-    (optionally nesting another ``replace`` for per-field writes on
-    a sub-struct).  Production code has been shaped for this since
-    Track D: offset rotations travel through the repository, and
-    the supervisor always re-fetches the Instance before each cycle.
+    :class:`Instance` is ``@dataclass(frozen=True, slots=True)``.
+    Every evolution path runs through :func:`dataclasses.replace`
+    on the facade (optionally nesting another ``replace`` for
+    per-field writes on a sub-struct).  Offset rotations travel
+    through the repository, and the supervisor always re-fetches
+    the Instance before each cycle.
     """
     params = Instance.__dataclass_params__  # type: ignore[attr-defined]
     assert params.frozen is True
@@ -501,11 +495,11 @@ def test_instance_accepts_only_sub_struct_kwargs() -> None:
 
 
 def test_instance_rejects_pre_refactor_flat_kwargs() -> None:
-    """The pre-D.14 flat-kwarg surface raises ``TypeError`` now.
+    """The flat-kwarg surface raises ``TypeError``.
 
-    Regression guard for D.20's removal of the flat ``__init__``.  A
-    caller that still passes ``Instance(id=..., name=...)`` must fail
-    loudly at the call site instead of silently ignoring the kwargs.
+    A caller that still passes ``Instance(id=..., name=...)`` must
+    fail loudly at the call site instead of silently ignoring the
+    kwargs; sub-struct kwargs are the only accepted form.
     """
     with pytest.raises(TypeError):
         Instance(  # type: ignore[call-arg]
@@ -522,11 +516,11 @@ def test_instance_rejects_pre_refactor_flat_kwargs() -> None:
 def test_flat_attribute_access_no_longer_works(flat_name: str) -> None:
     """Reading ``instance.<flat>`` raises ``AttributeError``.
 
-    Locks that the D.14 @property delegators are gone.  Every flat name
-    that the facade previously exposed must now fail with an
-    ``AttributeError``, guaranteeing a migrated caller surfaces a
-    loud error rather than silently pointing at a non-existent
-    attribute.
+    Locks that no @property delegators leak flat attributes onto
+    :class:`Instance`.  Every flat name that used to be reachable
+    through a facade must fail with an ``AttributeError`` so a
+    migrated caller surfaces a loud error rather than silently
+    pointing at a non-existent attribute.
     """
     instance = _minimal_instance()
     with pytest.raises(AttributeError):
@@ -536,11 +530,10 @@ def test_flat_attribute_access_no_longer_works(flat_name: str) -> None:
 def test_sub_struct_reassignment_replaces_via_dataclass_replace() -> None:
     """Facade-level ``dataclasses.replace`` substitutes a sub-struct wholesale.
 
-    The Instance facade is frozen since Phase 5a of the final refactor
-    wave; per-sub-struct updates flow through
-    :func:`dataclasses.replace` on the facade.  Peer sub-structs stay
-    identity-equal under the replacement because ``replace`` copies
-    unspecified fields by reference.
+    :class:`Instance` is frozen; per-sub-struct updates flow
+    through :func:`dataclasses.replace` on the facade.  Peer
+    sub-structs stay identity-equal under the replacement because
+    ``replace`` copies unspecified fields by reference.
     """
     instance = _minimal_instance()
     original_schedule = instance.schedule

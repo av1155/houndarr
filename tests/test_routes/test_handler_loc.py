@@ -1,18 +1,19 @@
-"""Route-handler LOC cap (Track D.28).
+"""Route-handler LOC cap.
 
-Walks every file under ``src/houndarr/routes/``, finds every function
-decorated with ``@router.<verb>(...)``, and asserts the body LOC stays
-under the 200-line soft cap declared in the refactor plan's section 5.
+Walks every file under ``src/houndarr/routes/``, finds every
+function decorated with ``@router.<verb>(...)``, and asserts the
+body LOC stays under a 200-line soft cap.  Crossing the cap
+signals that a handler should lift logic into a service instead of
+growing further.
 
-Body LOC here means the count of source lines inside the ``def ...``
-block, excluding the leading docstring and trailing blank tail.
-Decorator lines, the signature, and closing parens of multi-line
-argument lists are not counted.
+Body LOC here means the count of source lines inside the ``def
+...`` block, excluding the leading docstring and trailing blank
+tail.  Decorator lines, the signature, and closing parens of
+multi-line argument lists are not counted.
 
 If this test fails, either the handler genuinely needs a service
-extraction or the cap needs lifting.  Lifting the cap requires a
-commit message explaining why and an update to
-``docs/refactor/track-d-route-loc-histogram.md``.
+extraction or the cap needs lifting; lifting the cap requires a
+commit message explaining why.
 """
 
 from __future__ import annotations
@@ -87,11 +88,11 @@ def _walk_handlers() -> list[tuple[str, str, int]]:
 
 
 def test_handler_count_matches_audit_snapshot() -> None:
-    """The handler inventory matches the D.28 audit snapshot (32 handlers).
+    """The handler inventory count matches the current snapshot (32 handlers).
 
-    A regression here means a handler was added or removed without an
-    accompanying audit refresh.  Fix the audit doc or update this
-    count together with the route change.
+    A regression here means a handler was added or removed without
+    an accompanying update to this count.  Update this count
+    together with the route change so the audit stays honest.
     """
     assert len(_walk_handlers()) == 32
 
@@ -116,7 +117,7 @@ def test_audit_max_handler_is_admin_factory_reset() -> None:
     handlers = _walk_handlers()
     top = max(handlers, key=lambda h: h[2])
     assert top[1] == "admin_factory_reset"
-    # Snapshot at D.28 close: 95 body LOC.  Drift by more than 20 lines
-    # either way flags a meaningful behaviour change the audit doc
-    # should pick up.
+    # Current snapshot: 95 body LOC.  Drift by more than 20 lines
+    # either way flags a meaningful behaviour change the audit
+    # doc should pick up.
     assert 75 <= top[2] <= 115

@@ -107,10 +107,9 @@ async def test_purge_old_logs_returns_count(db: None) -> None:
 async def test_get_setting_missing_key_returns_none(db: None) -> None:
     """A missing key returns ``None``; callers compose any fallback themselves.
 
-    Phase 6a of the final refactor wave removed the ``default=`` kwarg
-    the legacy ``database.get_setting`` shim offered.  The repository
-    contract is ``str | None`` and route callers already use the
-    ``(await get_setting(key)) == "1"`` / ``or <fallback>`` idiom.
+    The repository contract is ``str | None``; route callers use the
+    ``(await get_setting(key)) == "1"`` / ``or <fallback>`` idiom
+    when they need a default value.
     """
     assert await get_setting("nonexistent") is None
 

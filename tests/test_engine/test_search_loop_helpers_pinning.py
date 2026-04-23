@@ -1,11 +1,9 @@
 """Pin the pure helpers in engine/search_loop.py.
 
-Track A.16 of the refactor plan.  Track D.21 will collapse the 21-param
-signature of ``_run_search_pass`` into a ``SearchPassConfig`` dataclass,
-and Track B.14/B.15 will wrap dispatch errors into typed exceptions.
-These tests lock the pre-refactor behaviour of the pure helpers
-(``_clamp``, the four page-size / scan-budget bounders, and
-``_is_release_timing_reason``) so nothing drifts silently.
+Locks the behaviour of ``_clamp``, the four page-size /
+scan-budget bounders, and ``_is_release_timing_reason`` so later
+refactors cannot drift any of the pure helpers the search pipeline
+depends on.
 """
 
 from __future__ import annotations

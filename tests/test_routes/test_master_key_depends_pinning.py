@@ -1,4 +1,4 @@
-"""Pin the get_master_key Depends shim introduced in Track D.26a.
+"""Pin the get_master_key Depends shim.
 
 :func:`houndarr.deps.get_master_key` resolves the Fernet master key
 from ``app.state.master_key`` so route handlers can take it as a
@@ -71,10 +71,10 @@ def test_get_master_key_rejects_missing_state_slot() -> None:
 def test_logs_page_route_reads_master_key_through_shim(app: TestClient) -> None:
     """The /logs page renders a 200 after login, proving the shim wired up.
 
-    Pre-D.26a the logs page read ``request.app.state.master_key``
-    inline; after D.26a it takes a ``Depends(get_master_key)``
-    parameter.  A successful render under the test client confirms
-    FastAPI resolved the dependency correctly.
+    The logs page takes a ``Depends(get_master_key)`` parameter
+    rather than reading ``request.app.state.master_key`` directly;
+    a successful render under the test client confirms FastAPI
+    resolved the dependency correctly.
     """
     app.post(
         "/setup",

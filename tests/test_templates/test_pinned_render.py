@@ -1,13 +1,12 @@
-"""Render-byte pinning for Track E's migration targets.
+"""Render-byte pinning for the partials that compose with macros.
 
-Track A.22 of the refactor plan.  Track E.1-E.17 will extract macros
-from the partials exercised here.  These tests pin the structural
-markers (class names, data-* attributes, visible text) so the macro
-extraction cannot silently drop or rename an attribute that the HTMX
-client or CSS depends on.
+Each test pins the structural markers (class names, data-*
+attributes, visible text) on one partial under a representative
+context so a macro touch-up or template edit cannot silently drop
+or rename an attribute that the HTMX client or CSS depends on.
 
-Coverage is narrow by design: we render each partial under a couple of
-representative contexts and assert the structural markers survive.
+Coverage is narrow by design: one partial per test, one or two
+contexts each, markers only.
 """
 
 from __future__ import annotations
@@ -30,14 +29,13 @@ def _instance_stub(
     name: str = "Sonarr",
     enabled: bool = True,
 ) -> Any:
-    """Build a MagicMock shaped like the D.14 Instance facade.
+    """Build a MagicMock shaped like the Instance sub-struct facade.
 
-    Templates migrated in D.19 now read ``instance.core.<field>``,
+    Templates read ``instance.core.<field>``,
     ``instance.missing.<field>``, ``instance.cutoff.<field>``,
     ``instance.upgrade.<field>``, ``instance.schedule.<field>``, and
-    ``instance.snapshot.<field>``.  The stub mirrors that shape so a
-    partial render produces the same HTML fragments the pre-facade
-    Instance produced.
+    ``instance.snapshot.<field>``.  The stub mirrors that shape so
+    each attribute read resolves to a deterministic value.
     """
     type_mock = MagicMock()
     type_mock.value = type_value
@@ -220,12 +218,12 @@ class TestChangelogModalRender:
 class TestAuthPagesRender:
     """Pin the structural markers on /login and /setup.
 
-    The auth CSS (auth.css + auth-fields.css) is explicitly off-limits
-    for structural refactor, but the CSS class hooks and auth.js data
-    attributes must survive Phase 2's seam split and Phase 7a's token
-    routing.  A single missing class or id would break the caps-lock
-    badge, the strength meter, the submit-button loading state, or the
-    Settings > Security show-hide parity.
+    The auth CSS (auth.css + auth-fields.css) is explicitly
+    off-limits for structural refactor, but the CSS class hooks and
+    auth.js data attributes are exercised here: a single missing
+    class or id would break the caps-lock badge, the strength meter,
+    the submit-button loading state, or the Settings > Security
+    show-hide parity.
     """
 
     def test_login_html_structural_markers(self, render) -> None:

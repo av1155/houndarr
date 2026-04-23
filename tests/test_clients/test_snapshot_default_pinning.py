@@ -1,10 +1,10 @@
 """Pin the default get_instance_snapshot contract across subclass overrides.
 
-Track A.6 of the refactor plan.  The default implementation on
-``ArrClient`` sums ``get_wanted_total('missing')`` and
-``get_wanted_total('cutoff')`` to produce ``monitored_total`` and
-defers ``unreleased_count`` to ``_count_unreleased_default`` (currently
-``0`` for /wanted-based clients).
+The default implementation on ``ArrClient`` sums
+``get_wanted_total('missing')`` and ``get_wanted_total('cutoff')``
+to produce ``monitored_total`` and defers ``unreleased_count`` to
+``_count_unreleased_default`` (currently ``0`` for /wanted-based
+clients).
 
 ``WhisparrV3Client`` overrides ``get_instance_snapshot`` entirely
 because it has no ``/wanted`` endpoint; we pin that the override

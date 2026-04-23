@@ -1,9 +1,8 @@
-"""Pin the :class:`SearchPassConfig` dataclass from Track B.22.
+"""Pin the :class:`SearchPassConfig` dataclass shape.
 
-This module is declaration-only today; the consumer switch in
-:func:`~houndarr.engine.search_loop._run_search_pass` lands in
-Track D.21.  These tests lock the fields, defaults, and invariants
-the consumer will rely on.
+Locks the fields, defaults, and invariants every consumer of the
+config relies on so a field rename or default flip fails here
+loudly.
 """
 
 from __future__ import annotations
@@ -45,7 +44,7 @@ async def _total() -> int:
 
 
 class TestSearchPassConfigDeclaration:
-    """Pin the dataclass shape so Track D.21's consumer switch is mechanical."""
+    """Pin the dataclass shape so consumers can read ``config.foo`` safely."""
 
     def test_is_frozen(self) -> None:
         """``frozen=True`` prevents in-place mutation at the pass boundary."""
@@ -124,9 +123,9 @@ class TestSearchPassConfigDeclaration:
     def test_field_order_matches_current_kwargs(self) -> None:
         """Field order is the same as ``_run_search_pass``'s kwarg order.
 
-        Track D.21 will consume ``config.<field>`` at every call site,
-        so locking the order here guards against an accidental swap
-        that would change default-value semantics.
+        Call sites read ``config.<field>`` so an accidental reorder
+        would change default-value semantics; locking the order here
+        catches it.
         """
         assert [f.name for f in dataclasses.fields(SearchPassConfig)] == [
             "search_kind",

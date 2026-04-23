@@ -1,16 +1,17 @@
 """Pin the header dict each `_htmx.py` response helper emits.
 
-Track F.3 moves the ``HX-Refresh / HX-Redirect / HX-Trigger /
-HX-Trigger-After-Swap / HX-Retarget / HX-Reswap`` wire names into
-one-line helpers.  ``test_hx_headers_pinning.py`` already pins each
-consumer route end-to-end; these tests pin the helpers in isolation
-so a typo in the header name, a renamed kwarg, or a dropped optional
-branch surfaces without having to spin up the full app.
+One-line helpers in :mod:`houndarr.routes._htmx` own the
+``HX-Refresh / HX-Redirect / HX-Trigger /
+HX-Trigger-After-Swap / HX-Retarget / HX-Reswap`` wire names.
+``test_hx_headers_pinning.py`` pins each consumer route end-to-end;
+these tests pin the helpers in isolation so a typo in a header
+name, a renamed kwarg, or a dropped optional branch surfaces
+without having to spin up the full app.
 
 The helpers mutate the response in place and return the same
 instance (TypeVar-preserved), so each test constructs a fresh
-``Response`` subclass, feeds it through the helper, and inspects the
-resulting ``MutableHeaders``.
+``Response`` subclass, feeds it through the helper, and inspects
+the resulting ``MutableHeaders``.
 """
 
 from __future__ import annotations

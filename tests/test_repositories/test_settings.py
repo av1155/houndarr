@@ -1,11 +1,8 @@
 """Pinning tests for the settings-repository SQL boundary.
 
-Locks the Track D.2 contract of
-:mod:`houndarr.repositories.settings` and the transitional
-delegation from :mod:`houndarr.database`: every case below has to
-stay byte-equal through later D batches so route callers and the
-``database`` module can be migrated one file at a time without
-regressing behaviour at the edges.
+Locks the contract of :mod:`houndarr.repositories.settings`: every
+case below pins one boundary behaviour that route and service
+callers rely on.
 """
 
 from __future__ import annotations
@@ -86,13 +83,12 @@ async def test_delete_setting_only_removes_named_key(db: None) -> None:
 
 @pytest.mark.pinning()
 def test_database_no_longer_exposes_settings_shim() -> None:
-    """Phase 6a removed the legacy ``database.get_setting`` / ``set_setting``.
+    """``database.get_setting`` / ``set_setting`` are not re-exported.
 
-    Callers migrated to :mod:`houndarr.repositories.settings`; the
-    shim at ``src/houndarr/database.py`` is gone.  If either name
-    reappears on the database module a future contributor is
-    re-introducing the indirection this phase deleted; this pin
-    catches that drift.
+    Callers import from :mod:`houndarr.repositories.settings`; if
+    either name reappears on the database module a future
+    contributor is re-introducing the indirection intentionally
+    dropped, and this pin catches it.
     """
     import houndarr.database as _database_mod
 

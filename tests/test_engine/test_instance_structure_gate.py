@@ -1,29 +1,26 @@
-"""Track D gate: consolidated invariants for the service + repository refactor.
+"""Consolidated invariant: the Instance sub-struct layout stays whole.
 
-Landing at the end of Track D (D.29).  Per-batch pinning already
-covers each migration; this module locks the structural shape
-Track D established so later tracks (E, F, G, H, I) cannot
-accidentally regress it.
+Per-module pinning tests cover each service and repository
+individually; this gate locks the structural shape above them.
 
 Locked invariants:
 
 * :class:`~houndarr.services.instances.Instance` is a plain dataclass
   with exactly seven sub-struct fields (``core``, ``missing``,
   ``cutoff``, ``upgrade``, ``schedule``, ``snapshot``,
-  ``timestamps``); the D.14 facade is gone.
-* Every pre-D.20 flat attribute name raises ``AttributeError`` when
-  accessed on an Instance; the D.20 cutover is permanent.
-* The four D-track service modules (``metrics``, ``log_query``,
-  ``instance_submit``, ``instance_validation``) expose their D-batch
-  public API surfaces.
-* The four D-track repository modules (``settings``, ``instances``,
-  ``cooldowns``, ``search_log``) expose their D-batch public API
-  surfaces.
-* :mod:`houndarr.deps` exports both :func:`get_supervisor` (D.12) and
-  :func:`get_master_key` (D.26a).
-* The ``Instance`` facade-flat surface (39 pre-refactor attribute
-  names) is covered exhaustively by the seven sub-structs' field
-  sets; no pre-refactor column name is orphaned.
+  ``timestamps``); no flat-attribute facade wraps them.
+* Every retired flat attribute name raises ``AttributeError`` when
+  accessed on an Instance; callers must reach through the sub-struct.
+* The four policy service modules (``metrics``, ``log_query``,
+  ``instance_submit``, ``instance_validation``) expose their public
+  API surfaces.
+* The four repository modules (``settings``, ``instances``,
+  ``cooldowns``, ``search_log``) expose their public API surfaces.
+* :mod:`houndarr.deps` exports both :func:`get_supervisor` and
+  :func:`get_master_key`.
+* The 39-name flat attribute surface an Instance used to expose is
+  covered exhaustively by the seven sub-structs' field sets; no
+  historical column name is orphaned.
 """
 
 from __future__ import annotations
@@ -53,9 +50,9 @@ pytestmark = pytest.mark.pinning
 def test_instance_is_plain_dataclass_with_seven_sub_struct_fields() -> None:
     """Instance's declared dataclass fields are the seven sub-structs.
 
-    The facade was flipped to ``frozen=True`` in the final refactor
-    wave's Phase 5a; the seven sub-struct field list and their types
-    remain the Track D contract.
+    Instance is now ``@dataclass(frozen=True, slots=True)`` and its
+    field surface is the seven sub-structs listed below; any
+    future field add or rename surfaces here.
     """
     assert dataclasses.is_dataclass(Instance)
     params = Instance.__dataclass_params__  # type: ignore[attr-defined]
@@ -78,7 +75,7 @@ def test_instance_is_plain_dataclass_with_seven_sub_struct_fields() -> None:
 
 
 def test_instance_rejects_pre_refactor_flat_kwargs() -> None:
-    """The pre-D.14 flat-kwarg __init__ surface is gone."""
+    """The flat-kwarg __init__ surface raises ``TypeError``."""
     with pytest.raises(TypeError):
         Instance(  # type: ignore[call-arg]
             id=1,
@@ -100,9 +97,9 @@ def test_flat_attribute_access_raises_attribute_error() -> None:
 def test_flat_attribute_write_raises() -> None:
     """Writing to any name on a frozen Instance fails.
 
-    Post-Phase 5a the facade is ``@dataclass(frozen=True, slots=True)``.
-    Writes to a declared sub-struct raise ``FrozenInstanceError``;
-    writes to a non-slot name hit a different rejection path
+    Instance is ``@dataclass(frozen=True, slots=True)``.  Writes to
+    a declared sub-struct raise ``FrozenInstanceError``; writes to
+    a non-slot name hit a different rejection path
     (CPython issue: frozen + slots synthesizes a ``__setattr__`` whose
     ``super().__setattr__`` fall-through raises ``TypeError``).  The
     test accepts every rejection shape so a future CPython fix does
@@ -251,7 +248,7 @@ def test_cooldowns_repository_public_api() -> None:
 
 
 def test_search_log_repository_public_api() -> None:
-    """repositories.search_log exposes the D-batch surface plus the D.27 adds."""
+    """repositories.search_log exposes the full search-log write + fetch surface."""
     from houndarr.repositories import search_log
 
     expected = {
@@ -259,10 +256,8 @@ def test_search_log_repository_public_api() -> None:
         "fetch_log_rows",
         "fetch_recent_searches",
         "delete_logs_for_instance",
-        # D.25 additions
         "delete_all_logs",
         "insert_admin_audit",
-        # D.27 additions
         "fetch_latest_missing_reason",
         "fetch_active_error_instance_ids",
     }
@@ -274,7 +269,7 @@ def test_search_log_repository_public_api() -> None:
 
 
 def test_deps_module_exports_both_shims() -> None:
-    """houndarr.deps exports get_supervisor (D.12) and get_master_key (D.26a)."""
+    """houndarr.deps exports both ``get_supervisor`` and ``get_master_key``."""
     from houndarr import deps
 
     assert hasattr(deps, "get_supervisor")
@@ -283,7 +278,7 @@ def test_deps_module_exports_both_shims() -> None:
     assert callable(deps.get_master_key)
 
 
-# Sub-struct coverage of the pre-refactor surface
+# Sub-struct coverage of the historical flat surface
 
 
 _PRE_REFACTOR_FLAT_FIELDS = {
@@ -337,7 +332,7 @@ _PRE_REFACTOR_FLAT_FIELDS = {
 
 
 def test_sub_struct_field_union_covers_pre_refactor_surface() -> None:
-    """The seven sub-structs together own every pre-refactor flat column."""
+    """The seven sub-structs together own every historical flat column."""
     substructs = (
         InstanceCore,
         MissingPolicy,

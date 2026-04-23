@@ -1,14 +1,12 @@
 """Pin the typed-error surface on ``factory_reset``.
 
-Track B.17 converts :func:`~houndarr.services.admin.factory_reset`
-from a function whose public behaviour was "re-raises anything that
-escapes the in-process re-init pipeline" to one whose public
-behaviour is "raises :class:`~houndarr.errors.ServiceError` for any
-failure, with the original on ``__cause__``".  The cycle body now
-lives in :func:`_factory_reset_impl`; the public entrypoint wraps it
-in a top-level ``try`` that converts any non-typed ``Exception`` into
-``ServiceError`` and passes already-typed ``ServiceError`` through
-unchanged.
+:func:`~houndarr.services.admin.factory_reset` raises
+:class:`~houndarr.errors.ServiceError` for any failure, with the
+original exception preserved on ``__cause__``.  The cycle body
+lives in :func:`_factory_reset_impl`; the public entrypoint wraps
+it in a top-level ``try`` that converts any non-typed ``Exception``
+into ``ServiceError`` and passes already-typed ``ServiceError``
+through unchanged.
 
 Two wrap paths are pinned here:
 
@@ -17,9 +15,9 @@ Two wrap paths are pinned here:
 * The outer top-level wrap surfaces ``ServiceError`` for any other
   failure shape (e.g. ``RuntimeError`` from a mocked ``init_db``).
 
-The narrowed route catch (``routes/admin.py``) covers both, so the
-hybrid delayed-exit fallback continues to engage on every failure
-mode the pre-refactor ``except Exception`` handled.
+The route catch in :mod:`houndarr.routes.admin` covers both so the
+hybrid delayed-exit fallback engages on every failure mode the
+service layer can raise.
 """
 
 from __future__ import annotations
@@ -62,7 +60,7 @@ def tmp_data_dir_factory(tmp_path: Path) -> Path:
 
 
 class TestFactoryResetTypedSurface:
-    """Pin the Track B.17 typed wrap on :func:`factory_reset`."""
+    """Pin the typed wrap on :func:`factory_reset`."""
 
     @pytest.mark.asyncio()
     async def test_file_deletion_failure_raises_service_error(

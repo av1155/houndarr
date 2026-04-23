@@ -1,14 +1,13 @@
-"""Track H gate: bootstrap_non_web is importable and wired into every caller.
+"""Consolidated invariant: bootstrap_non_web is importable and wired everywhere.
 
-The per-batch pinning tests in ``tests/test_bootstrap/`` cover
-:func:`bootstrap_non_web`'s own behavioural contract. This gate locks
-the Strangler-Fig invariant that every migration actually landed:
-the three pre-existing non-web entry points (the ``python -m
-houndarr`` CLI, ``scripts/marketing/seed_demo_data.py``, and
-``scripts/marketing/serve_demo.py``) all import the shared primitive,
-and the primitive itself keeps the signature shape the plan agreed
-on.  Later tracks cannot silently drop back to inline compositions
-without this test failing.
+The pinning tests in ``tests/test_bootstrap/`` cover
+:func:`bootstrap_non_web`'s own behavioural contract.  This gate
+locks the layer above them: the three non-web entry points (the
+``python -m houndarr`` CLI, ``scripts/marketing/seed_demo_data.py``,
+``scripts/marketing/serve_demo.py``) all import the shared
+primitive, and the primitive itself keeps its expected signature
+shape.  A caller that drops back to an inline composition fails
+here loudly.
 """
 
 from __future__ import annotations
@@ -50,7 +49,7 @@ class TestImportability:
 
 
 class TestSignatureShape:
-    """Pin the public signature extracted in H.1."""
+    """Pin the public signature of :func:`bootstrap_non_web`."""
 
     def test_data_dir_is_first_positional(self) -> None:
         sig = inspect.signature(bootstrap_non_web)
@@ -131,8 +130,9 @@ class TestMigratedCallSites:
         assert "bootstrap_non_web(" in source, f"{call_site} must invoke bootstrap_non_web"
 
     def test_main_no_longer_hand_constructs_appsettings(self) -> None:
-        # The plan's exit condition for H.4 is that __main__.py stops
-        # constructing AppSettings directly; bootstrap_non_web owns that.
+        # ``bootstrap_non_web`` owns ``AppSettings`` construction;
+        # ``__main__.py`` delegates to it instead of instantiating
+        # ``AppSettings`` directly.
         source = (_REPO_ROOT / "src" / "houndarr" / "__main__.py").read_text()
         assert "AppSettings(" not in source, (
             "__main__.py must delegate AppSettings construction to bootstrap_non_web"

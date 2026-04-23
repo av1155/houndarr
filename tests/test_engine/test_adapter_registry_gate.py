@@ -1,15 +1,14 @@
-"""Track C gate: consolidated invariants for the client + adapter refactor.
+"""Consolidated invariant: the client + adapter registry stays whole.
 
-Landing at the end of Track C (C.14).  The per-batch pinning and
-characterisation tests already cover each migration in detail; this
-module locks the structural shape Track C established so later
-tracks cannot accidentally regress it.
+Per-module pinning and characterisation tests cover each adapter
+and each *arr client in detail; this gate locks the structural
+shape above them.
 
 Locked invariants:
 
 * :data:`~houndarr.engine.adapters.ADAPTERS` registers exactly six
-  instance types and each value is a class instance (the C.10
-  Protocol-class shape, not the pre-refactor frozen dataclass).
+  instance types and each value is a class instance that conforms
+  to :class:`AppAdapterProto`.
 * The five paginated clients (Sonarr / Radarr / Lidarr / Readarr /
   Whisparr v2) each declare the four ``_WANTED_*`` template hooks;
   Whisparr v3 leaves ``_WANTED_ENVELOPE`` as ``None`` because it
@@ -50,7 +49,7 @@ pytestmark = pytest.mark.pinning
 
 
 class TestAdaptersRegistry:
-    """Pin the ADAPTERS dict shape established in C.10."""
+    """Pin the ADAPTERS dict shape."""
 
     def test_count_is_six(self) -> None:
         """The plan's exit criterion: exactly six adapters registered."""
@@ -61,11 +60,10 @@ class TestAdaptersRegistry:
         assert set(ADAPTERS.keys()) == set(InstanceType)
 
     def test_app_adapter_is_protocol_alias(self) -> None:
-        """``AppAdapter`` resolves to ``AppAdapterProto`` after C.10.
+        """``AppAdapter`` is kept as an alias for ``AppAdapterProto``.
 
-        The dataclass form is gone; ``AppAdapter`` is kept as an
-        alias so historical type hints and ``MagicMock(spec=...)``
-        sites still resolve to the structural Protocol.
+        Historical type hints and ``MagicMock(spec=...)`` sites
+        still resolve to the structural Protocol through this alias.
         """
         assert AppAdapter is AppAdapterProto
 
@@ -121,7 +119,7 @@ class TestGetAdapter:
 
 
 class TestPaginatedClientHooks:
-    """Pin the four _WANTED_* hooks on every paginated client (C.1 - C.5)."""
+    """Pin the four _WANTED_* hooks on every paginated client."""
 
     @pytest.mark.parametrize(
         ("client_cls", "expected_base", "expected_sort", "expected_include"),
@@ -148,7 +146,7 @@ class TestPaginatedClientHooks:
 
 
 class TestWhisparrV3Outlier:
-    """Pin the documented outlier shape on Whisparr v3 (C.6)."""
+    """Pin the documented outlier shape on Whisparr v3."""
 
     def test_wanted_envelope_unset(self) -> None:
         """Whisparr v3 leaves _WANTED_ENVELOPE as None (no /wanted endpoint)."""

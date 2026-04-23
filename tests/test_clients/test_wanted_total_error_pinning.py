@@ -1,10 +1,8 @@
 """Pin the typed-error surface on every ``ArrClient.get_wanted_total`` override.
 
-Track B.12 extends the B.11 ``get_queue_status`` wrap to the six per-app
-implementations of :meth:`ArrClient.get_wanted_total`.  Each client wraps
-raw ``httpx`` and ``pydantic`` failures into the typed
-:class:`~houndarr.errors.ClientError` hierarchy and preserves the
-original exception on ``__cause__``.
+Every client wraps raw ``httpx`` and ``pydantic`` failures into the
+typed :class:`~houndarr.errors.ClientError` hierarchy and preserves
+the original exception on ``__cause__``.
 
 The five paginated clients (Sonarr, Radarr, Lidarr, Readarr, Whisparr v2)
 share a structurally identical wrap around a size-1 ``/wanted/{kind}``

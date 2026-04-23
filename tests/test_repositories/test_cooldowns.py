@@ -1,6 +1,6 @@
 """Pinning tests for the cooldowns-repository SQL boundary.
 
-Locks the Track D.5 contract of ``exists_active_cooldown``,
+Locks the contract of ``exists_active_cooldown``,
 ``upsert_cooldown``, and ``delete_cooldowns_for_instance`` plus the
 service-layer delegators that keep
 :mod:`houndarr.services.cooldown` as the stable import path for the

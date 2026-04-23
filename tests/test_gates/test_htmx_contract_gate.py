@@ -1,14 +1,12 @@
-"""Track F gate: HTMX macros + helpers landed and HX parity suite is present.
+"""Consolidated invariant: the HTMX helper and macro contract stays whole.
 
-The per-batch pinning tests cover each individual helper's and
-macro's byte-equal contract.  This gate locks the Strangler-Fig
-invariant that every F batch actually landed: the shared macros
-file exists with both macros defined, routes/_htmx.py exports the
-five response helpers (plus the pre-existing is_hx_request
-request-side check), and the HX-header parity suite that pins
-consumer routes is still in place.  A later track cannot silently
-delete a helper, rename a macro, or drop the parity suite without
-this test failing.
+Each per-helper pinning test covers one response helper's
+byte-equal contract.  This gate locks the layer above them: the
+shared HTMX macros file declares the two macros the shell
+navigation depends on, :mod:`houndarr.routes._htmx` exports the
+five response helpers plus the request-side ``is_hx_request``
+check, and the HX-header parity suite that pins consumer routes
+is in place.
 """
 
 from __future__ import annotations
@@ -31,9 +29,9 @@ _HX_HEADERS_PIN = _REPO_ROOT / "tests" / "test_routes" / "test_hx_headers_pinnin
 _HX_HELPERS_PIN = _REPO_ROOT / "tests" / "test_routes" / "test_hx_helpers_pinning.py"
 _MACROS_PIN = _REPO_ROOT / "tests" / "test_templates" / "test_macros_htmx.py"
 
-# Every F.3 consumer route has to pull the helper from the shared module,
-# not reimplement it locally.  If one of these imports disappears the
-# consumer has regressed to hand-rolling the header.
+# Every consumer route has to pull the HX helper from the shared
+# module, not reimplement it locally.  If one of these imports
+# disappears the consumer has regressed to hand-rolling the header.
 _F3_CONSUMERS: tuple[tuple[Path, str], ...] = (
     (
         _REPO_ROOT / "src" / "houndarr" / "routes" / "settings" / "_helpers.py",
@@ -55,11 +53,11 @@ _F3_CONSUMERS: tuple[tuple[Path, str], ...] = (
 
 
 class TestMacrosFile:
-    """_macros/htmx.html exists and declares the two macros F.2 migrated to."""
+    """_macros/htmx.html exists and declares the two shell-nav macros."""
 
     def test_file_exists(self) -> None:
         assert _MACROS_FILE.is_file(), (
-            f"Track F.1 macro file missing at {_MACROS_FILE.relative_to(_REPO_ROOT)}"
+            f"HTMX macros file missing at {_MACROS_FILE.relative_to(_REPO_ROOT)}"
         )
 
     def test_shell_nav_link_defined(self) -> None:
@@ -86,9 +84,7 @@ class TestHtmxHelperExports:
         ],
     )
     def test_symbol_importable(self, name: str) -> None:
-        assert hasattr(htmx_module, name), (
-            f"routes/_htmx.py missing symbol {name!r}; Track F.3 did not land cleanly"
-        )
+        assert hasattr(htmx_module, name), f"routes/_htmx.py missing symbol {name!r}"
 
     @pytest.mark.parametrize(
         "name",
@@ -105,28 +101,26 @@ class TestHtmxHelperExports:
 
 
 class TestHxParitySuite:
-    """The HX-header parity test suite is still present, along with the
-    helper-level pinning the plan asked for in F.3.
-    """
+    """Every HX pinning suite the gate depends on is present."""
 
     def test_hx_headers_pinning_file_exists(self) -> None:
         assert _HX_HEADERS_PIN.is_file(), (
-            f"A.23 parity suite missing at {_HX_HEADERS_PIN.relative_to(_REPO_ROOT)}"
+            f"HX-header parity suite missing at {_HX_HEADERS_PIN.relative_to(_REPO_ROOT)}"
         )
 
     def test_hx_helpers_pinning_file_exists(self) -> None:
         assert _HX_HELPERS_PIN.is_file(), (
-            f"F.3 helper pinning missing at {_HX_HELPERS_PIN.relative_to(_REPO_ROOT)}"
+            f"HX helper pinning missing at {_HX_HELPERS_PIN.relative_to(_REPO_ROOT)}"
         )
 
     def test_macros_pinning_file_exists(self) -> None:
         assert _MACROS_PIN.is_file(), (
-            f"F.1 macro pinning missing at {_MACROS_PIN.relative_to(_REPO_ROOT)}"
+            f"HTMX macro pinning missing at {_MACROS_PIN.relative_to(_REPO_ROOT)}"
         )
 
 
-class TestF3ConsumersImportHelpers:
-    """Each F.3 consumer route imports from the shared helper module."""
+class TestConsumersImportHelpers:
+    """Each HX-helper consumer route imports from the shared helper module."""
 
     @pytest.mark.parametrize(
         ("consumer_path", "expected_import"),
@@ -146,7 +140,7 @@ class TestF3ConsumersImportHelpers:
     def test_helpers_consumer_imports_retarget_and_trigger(self) -> None:
         # settings/_helpers.py is the only consumer using two helpers;
         # the parametrised import check above only asserts the bare
-        # prefix, so pin the full pair here to prevent a half-rollback.
+        # prefix, so pin the full pair here to prevent a partial revert.
         source = _F3_CONSUMERS[0][0].read_text()
         assert "hx_retarget_response" in source
         assert "hx_trigger_response" in source

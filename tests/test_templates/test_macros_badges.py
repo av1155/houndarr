@@ -1,13 +1,11 @@
 """Byte-equal output pinning for each macro in `_macros/badges.html`.
 
 Each test invokes a single macro in isolation and asserts the exact
-bytes Jinja emits.  That output is not the same as the full
-post-migration consumer HTML: the macros use ``{%- ... -%}``
-whitespace control, while the pre-refactor inline blocks carried
-ambient template indentation.  Consumer-level pinning therefore
-lives in ``test_pinned_render.py`` and matches on class-string
-substrings, which is what CSS and the HTMX client actually depend
-on.
+bytes Jinja emits.  The macros use ``{%- ... -%}`` whitespace
+control that ambient template indentation does not have, so
+consumer-level pinning lives in ``test_pinned_render.py`` and
+matches on class-string substrings, which is what CSS and the
+HTMX client actually depend on.
 
 What the assertions here lock down is every class string, label,
 and branch of every macro, including unmapped strings and ``None``,

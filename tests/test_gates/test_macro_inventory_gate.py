@@ -1,12 +1,11 @@
-"""Track E gate: every Jinja macro file landed and the A.22 pinning suite is present.
+"""Consolidated invariant: the Jinja macro inventory stays whole.
 
-The per-batch pinning tests cover each individual macro's
-byte-equal contract.  This gate locks the Strangler-Fig
-invariant that every E batch actually landed: each `_macros/*.html`
-file exists with the right macros declared, and the Track A.22
-render-pinning suite that pins consumer-level structural markers
-is still in place.  A later track cannot silently delete a macro,
-rename one, or drop the parity suite without this test failing.
+Each per-macro pinning test covers one macro's byte-equal render.
+This gate locks the layer above them: each ``_macros/*.html`` file
+exists, the expected macro names are declared inside, and the
+render-pinning harness that pins consumer-level structural markers
+is still in place.  A silent macro deletion, rename, or harness
+removal fails here loudly.
 """
 
 from __future__ import annotations
@@ -27,9 +26,9 @@ _MACROS_DIR = _REPO_ROOT / "src" / "houndarr" / "templates" / "_macros"
 _PINNING_DIR = _REPO_ROOT / "tests" / "test_templates"
 _RENDER_HARNESS = _PINNING_DIR / "test_pinned_render.py"
 
-# Track E delivers seven macro files.  The Track F batch landed an
-# eighth (htmx.html), but it has its own gate; this one only enforces
-# the Track E surface.
+# Seven macro files make up the shared template surface.  An
+# eighth file (``htmx.html``) is covered by the HTMX contract gate,
+# so this gate only enforces these seven.
 _E_MACROS: tuple[tuple[str, tuple[str, ...]], ...] = (
     (
         "badges.html",
@@ -58,9 +57,9 @@ _E_MACROS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("layout.html", ("admin_section",)),
 )
 
-# Pinning files for each Track E batch.  test_pinned_render.py is the
-# A.22 render harness; the rest are the byte-equal macro pinning
-# suites added by E.1, E.6, E.13, E.14, E.15, E.16, E.17.
+# Pinning files for the macro surface.  ``test_pinned_render.py`` is
+# the consumer-level render harness; the rest are per-macro
+# byte-equal pinning suites.
 _E_PINNING_FILES: tuple[str, ...] = (
     "test_pinned_render.py",
     "test_macros_badges.py",
@@ -74,7 +73,7 @@ _E_PINNING_FILES: tuple[str, ...] = (
 
 
 class TestMacroFilesPresent:
-    """Every Track E macro file lives at the expected path."""
+    """Every declared macro file lives at the expected path."""
 
     @pytest.mark.parametrize(
         "filename",
@@ -82,7 +81,7 @@ class TestMacroFilesPresent:
     )
     def test_macro_file_exists(self, filename: str) -> None:
         path = _MACROS_DIR / filename
-        assert path.is_file(), f"Track E macro file missing at {path.relative_to(_REPO_ROOT)}"
+        assert path.is_file(), f"Macro file missing at {path.relative_to(_REPO_ROOT)}"
 
 
 class TestMacroDefinitions:
@@ -105,24 +104,24 @@ class TestMacroDefinitions:
 
 
 class TestPinningSuitesPresent:
-    """The A.22 render harness and every per-macro pinning suite is in place."""
+    """The render harness and every per-macro pinning suite is in place."""
 
     @pytest.mark.parametrize("filename", _E_PINNING_FILES)
     def test_pinning_file_exists(self, filename: str) -> None:
         path = _PINNING_DIR / filename
-        assert path.is_file(), f"Track E pinning file missing at {path.relative_to(_REPO_ROOT)}"
+        assert path.is_file(), f"Pinning file missing at {path.relative_to(_REPO_ROOT)}"
 
     def test_render_harness_imports_jinja_environment(self) -> None:
         # The harness drives every consumer-level pinning test in
         # test_pinned_render.py; if the harness changes shape, the
-        # pinning tests stop matching the post-migration HTML.
+        # pinning tests stop matching the rendered HTML.
         source = (_PINNING_DIR / "conftest.py").read_text()
         assert "FileSystemLoader" in source
         assert 'env.filters["changelog_bullet"]' in source
 
 
 class TestNoDecorativeBannerComments:
-    """Track E macro files use informative comment blocks, not decorative banners.
+    """Macro files use informative comment blocks, not decorative banners.
 
     The commenting standard forbids ASCII section banners
     (`# ====` / `# ----`).  Each macro file ships a single

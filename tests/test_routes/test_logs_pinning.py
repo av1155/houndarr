@@ -1,11 +1,12 @@
 """Pin the pure helpers in routes/api/logs.py.
 
-Track A.14 of the refactor plan.  Track D.9 extracted the dynamic SQL
-builder into ``services/log_query.py``.  These tests lock the parser
-helpers (parse_instance_id / parse_search_kind / parse_cycle_trigger
-/ parse_hide_system), the summary builder (summarize_rows), the
-limit clamp (compute_load_more_limit), and the HTMX 422 partial shape
-(_partial_validation_error) so the extraction cannot drift them.
+Locks the parser helpers (``parse_instance_id`` /
+``parse_search_kind`` / ``parse_cycle_trigger`` /
+``parse_hide_system``), the summary builder (``summarize_rows``),
+the limit clamp (``compute_load_more_limit``), and the HTMX 422
+partial shape (``_partial_validation_error``) so the dynamic SQL
+builder in :mod:`houndarr.services.log_query` and the helpers in
+the route cannot drift apart.
 """
 
 from __future__ import annotations

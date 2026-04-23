@@ -1,9 +1,9 @@
 """Characterisation tests for services/time_window.py boundary behaviour.
 
-Track A.4 of the refactor plan.  The existing
-``tests/test_services/test_time_window.py`` covers the happy paths, format
-errors, and wraparound cases exhaustively.  This module pins the remaining
-boundary edges a refactor could drift:
+The existing ``tests/test_services/test_time_window.py`` covers
+the happy paths, format errors, and wraparound cases exhaustively.
+This module pins the remaining boundary edges a refactor could
+drift:
 
 * ``parse_time_window(None)`` and ``validate_allowed_time_window(None)``
   both short-circuit without raising (pinning quirk: the runtime type

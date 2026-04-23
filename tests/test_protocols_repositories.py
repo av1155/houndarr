@@ -1,17 +1,13 @@
-"""Pin the repository + factory Protocol declarations from Track B.20.
+"""Pin the repository + factory Protocol declarations.
 
-These Protocols have no concrete implementations yet (Track D lands
-those).  This file locks three invariants the declarations must keep:
+The declarations in :mod:`houndarr.protocols` must keep three
+invariants for the rest of the codebase to rely on them:
 
-* Every Protocol is ``@runtime_checkable``, so Track D / Track C
-  conformance tests can use ``isinstance(obj, Proto)``.
+* Every Protocol is ``@runtime_checkable``, so consumers can use
+  ``isinstance(obj, Proto)`` as a conformance check.
 * Every Protocol can be imported from ``houndarr.protocols``
   without pulling in any runtime-heavy modules (e.g. FastAPI).
 * The module's ``__all__`` re-exports the five Protocol names.
-
-A future conformance test will replace this with
-``isinstance(concrete, Proto)`` once Track D.3-D.6 lands the
-concrete repositories.
 """
 
 from __future__ import annotations
@@ -30,7 +26,7 @@ pytestmark = pytest.mark.pinning
 
 
 class TestRepositoryProtocolsDeclared:
-    """Pin the Track B.20 Protocol declarations."""
+    """Pin the repository + factory Protocol declarations."""
 
     @pytest.mark.parametrize(
         "proto",
@@ -56,9 +52,9 @@ class TestRepositoryProtocolsDeclared:
     def test_module_all_exports_every_protocol(self) -> None:
         """``houndarr.protocols.__all__`` must list every declared symbol.
 
-        Covers the five repository + factory Protocols from B.20 plus
+        Covers the five repository + factory Protocols plus
         the :class:`SupervisorProto` and the :data:`RunNowStatus`
-        Literal that landed in B.21.
+        Literal declared in :mod:`houndarr.protocols`.
         """
         import houndarr.protocols as module
 
@@ -88,7 +84,7 @@ class TestRepositoryProtocolsDeclared:
         """A stub implementing every SettingsRepository method conforms.
 
         Exercises the positive side of the runtime_checkable contract
-        so Track D's concrete class can rely on the same check.
+        so concrete repositories can rely on the same check.
         """
 
         class Stub:

@@ -5,14 +5,13 @@ the base.html flash toasts and the inline form-error / account-status
 banners.  Each test invokes the macro in isolation and asserts the
 exact bytes Jinja emits.
 
-Like the other macro pinning suites under tests/test_templates/, the
-macro output is not the same as the full post-migration consumer HTML
-(consumers carry ambient template indentation that the macro does not).
-Consumer-level integration is asserted via class-string substring tests
-in test_pinned_render.py and via the Track E gate.  What this suite
-locks down is every class string, attribute, and branch of the macro
-so a future edit cannot silently drop a class, swap an attribute, or
-flip a default that the css component layer relies on.
+Consumer-level integration (the full rendered HTML including
+ambient template indentation) is asserted via class-string
+substring tests in ``test_pinned_render.py`` and the macro
+inventory gate.  What this suite locks down is every class string,
+attribute, and branch of the macro so a future edit cannot silently
+drop a class, swap an attribute, or flip a default that the CSS
+component layer relies on.
 """
 
 from __future__ import annotations

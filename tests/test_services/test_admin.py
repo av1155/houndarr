@@ -291,11 +291,12 @@ async def test_factory_reset_propagates_reinit_failure(
     tmp_data_dir: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """If the in-process re-init raises, the exception surfaces as a typed
-    :class:`~houndarr.errors.ServiceError` (Track B.17) with the original
-    on ``__cause__``.  The route layer's hybrid fallback then schedules a
-    process exit so the orchestrator restarts the container; on next boot
-    the empty data dir drops into first-run. No sentinel file is written:
-    the container restart is the recovery mechanism.
+    :class:`~houndarr.errors.ServiceError` with the original on
+    ``__cause__``.  The route layer's hybrid fallback then schedules
+    a process exit so the orchestrator restarts the container; on
+    next boot the empty data dir drops into first-run.  No sentinel
+    file is written: the container restart is the recovery
+    mechanism.
     """
     from houndarr.errors import ServiceError
 

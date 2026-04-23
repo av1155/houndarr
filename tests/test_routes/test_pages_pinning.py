@@ -1,9 +1,9 @@
 """Pin the HTML page routes: setup / login / logout / dashboard / logs / settings help.
 
-Track A.10 of the refactor plan.  Locks the auth redirect rules, HX vs
-full-page branching, validation error shapes, and status codes that the
-Jinja templates and HTMX client rely on.  These are end-to-end tests
-driven by TestClient against a fresh TestClient fixture.
+Locks the auth redirect rules, HX-vs-full-page branching,
+validation-error shapes, and status codes that the Jinja templates
+and HTMX client rely on.  These are end-to-end tests driven by
+TestClient against a fresh TestClient fixture.
 """
 
 from __future__ import annotations

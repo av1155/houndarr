@@ -750,22 +750,21 @@ def test_changelog_preferences_switch_rolls_back_on_error(
 # ---------------------------------------------------------------------------
 # Visual baselines for /login and /setup
 #
-# Phase 7a of the final refactor wave routed three hardcoded rgba values
-# in auth-fields.css through named tokens.  The computed rgba on every
-# consuming element is byte-equal to the pre-refactor literal, so the
-# rendered output of /login and /setup is pixel-identical to pre-7a.
-# These two tests capture pytest-playwright snapshot baselines; first
-# capture runs via ``just capture-baselines``, which drives
-# ``scripts/e2e_browser/capture_baselines.sh`` inside a Linux Playwright
-# container so the PNGs match CI's ubuntu-latest font rendering.
-# ``just verify-baselines`` and ``just test-browser chromium`` compare
-# the live render against the committed baseline on every run.
+# These two tests capture pytest-playwright snapshot baselines for the
+# auth-card surface so an auth-fields.css edit that drifts the computed
+# rgba on any consuming element fails loudly.  First capture runs via
+# ``just capture-baselines``, which drives
+# ``scripts/e2e_browser/capture_baselines.sh`` inside a Linux
+# Playwright container so the PNGs match CI's ubuntu-latest font
+# rendering.  ``just verify-baselines`` and
+# ``just test-browser chromium`` compare the live render against the
+# committed baseline on every run.
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.integration
 def test_login_page_visual(logged_in_page: Page, houndarr_url: str) -> None:
-    """Pixel-compare the /login page after the Phase 7a token routing.
+    """Pixel-compare the /login page against the committed baseline.
 
     ``logged_in_page`` puts the browser through setup + login, so by
     the time we reach here the admin account exists.  Drop the auth
@@ -884,7 +883,7 @@ def _recreate_admin(page: Page, base_url: str) -> None:
 
 @pytest.mark.integration
 def test_setup_page_visual(page: Page, browser, houndarr_url: str) -> None:
-    """Pixel-compare the /setup page after the Phase 7a token routing.
+    """Pixel-compare the /setup page against the committed baseline.
 
     Self-healing: works whether the stack entered in a pre-admin state
     (``just capture-baselines`` fresh-data path) or with admin already

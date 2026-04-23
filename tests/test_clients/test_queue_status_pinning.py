@@ -1,17 +1,17 @@
 """Pin the QueueStatus wire contract and per-API-version path dispatch.
 
-Track A.7 of the refactor plan.  The existing
-``tests/test_clients/test_client_edge_cases.py`` covers happy-path
-queue-status fetches per app.  This module pins the Pydantic wire-model
-contract (``totalCount`` -> ``total_count`` alias, extra-fields ignored,
-missing-field rejection) so any future *arr upgrade that adds new
-fields to the ``QueueStatusResource`` payload does not break us.
+The Pydantic wire-model contract (``totalCount`` -> ``total_count``
+alias, extra-fields ignored, missing-field rejection) is locked
+here so any future *arr upgrade that adds new fields to the
+``QueueStatusResource`` payload does not break us.
+``tests/test_clients/test_client_edge_cases.py`` covers the
+happy-path queue-status fetches per app.
 
-Track B.11 extends the module with pinning for the typed-error surface
-that :func:`ArrClient.get_queue_status` now presents: HTTP-status
-failures, transport failures, and wire-validation failures each raise
-a distinct :class:`~houndarr.errors.ClientError` subclass with the
-original ``httpx`` / ``pydantic`` exception preserved on ``__cause__``.
+The typed-error surface on :func:`ArrClient.get_queue_status` is
+also pinned: HTTP-status failures, transport failures, and
+wire-validation failures each raise a distinct
+:class:`~houndarr.errors.ClientError` subclass with the original
+``httpx`` / ``pydantic`` exception preserved on ``__cause__``.
 """
 
 from __future__ import annotations
@@ -137,11 +137,11 @@ class TestQueueStatusPathDispatch:
         assert isinstance(exc_info.value.__cause__, ValidationError)
 
 
-# Typed error wrap surface (Track B.11)
+# Typed error wrap surface
 
 
 class TestQueueStatusTypedErrorWrap:
-    """Pin the :class:`ClientError`-subclass wrap introduced in B.11."""
+    """Pin the :class:`ClientError`-subclass wrap on get_queue_status."""
 
     @pytest.mark.asyncio()
     @respx.mock

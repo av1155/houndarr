@@ -1,10 +1,10 @@
 """Characterisation pins for run_with_reconnect timing semantics.
 
-Phase 1 locks the deterministic pre-jitter contract; Phase 5b appends a
-second pin (``test_reconnect_jitter_respects_bound``) that exercises the
-new ``jitter_secs`` kwarg once it lands.  Keeping the deterministic
-assertion in the pinning suite guards against a future kwarg default
-drift that would silently introduce randomness on the default path.
+The deterministic default-path contract and the opt-in
+``jitter_secs`` kwarg behaviour are both pinned here.  Keeping the
+deterministic assertion in the pinning suite guards against a
+future kwarg default drift that would silently introduce randomness
+on the default path.
 """
 
 from __future__ import annotations
@@ -54,9 +54,9 @@ def _make_instance() -> Instance:
 async def test_reconnect_default_path_is_deterministic_on_success() -> None:
     """A successful cycle must return exactly ``success_sleep_secs``.
 
-    Locks the pre-jitter contract: zero randomness on the success
-    branch.  Phase 5b will add an opt-in ``jitter_secs`` kwarg; the
-    default path must stay deterministic after the kwarg lands.
+    Locks the deterministic contract: zero randomness on the
+    default success branch.  The opt-in ``jitter_secs`` kwarg is
+    exercised by :func:`test_reconnect_jitter_respects_bound`.
     """
     state = ReconnectState()
     log_calls: list[dict[str, object]] = []
@@ -112,7 +112,7 @@ async def test_reconnect_default_path_is_deterministic_on_error() -> None:
 
 
 def test_run_with_reconnect_signature_includes_jitter_secs() -> None:
-    """Pin the signature shape after Phase 5b added the jitter_secs kwarg.
+    """Pin the signature shape of run_with_reconnect.
 
     ``jitter_secs`` must be keyword-only with a ``None`` default so
     the supervisor's zero-jitter call site stays byte-stable.  A

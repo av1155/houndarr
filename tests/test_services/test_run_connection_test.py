@@ -1,14 +1,13 @@
 """Pinning tests for services.instance_validation.run_connection_test.
 
-Track D.24 extracted the full test-connection orchestration from
-routes/settings/instances.py into
-:func:`houndarr.services.instance_validation.run_connection_test`.
-The route is now a thin dispatch: it calls the service, gets a
-:class:`ConnectionTestOutcome`, and feeds the three fields straight
-into :func:`connection_status_response`.
+:func:`houndarr.services.instance_validation.run_connection_test`
+owns the full test-connection orchestration.  The route is a thin
+dispatch: it calls the service, gets a :class:`ConnectionTestOutcome`,
+and feeds the three fields straight into
+:func:`connection_status_response`.
 
 These tests lock the per-branch behaviour of the service so later
-batches can not silently drift it.  Every branch of the orchestration
+edits cannot silently drift it.  Every branch of the orchestration
 has one test:
 
 * Invalid type string -> 422, "Invalid instance type."

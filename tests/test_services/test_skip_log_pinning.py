@@ -1,9 +1,9 @@
 """Characterisation tests for the skip-log LRU sentinel in services.cooldown.
 
-Track A.3 of the refactor plan.  The existing ``tests/test_services/
-test_cooldown.py`` covers the first-call, within-TTL, after-TTL, distinct-
-keys, simple-eviction, and concurrent-serialisation cases.  This module pins
-the remaining boundary behaviour that a refactor could silently drift:
+The existing ``tests/test_services/test_cooldown.py`` covers the
+first-call, within-TTL, after-TTL, distinct-keys, simple-eviction,
+and concurrent-serialisation cases.  This module pins the remaining
+boundary behaviour that a refactor could silently drift:
 
 * ``_reset_skip_log_cache`` empties the cache and restores first-call
   semantics to any previously-seen key.

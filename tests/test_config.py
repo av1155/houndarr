@@ -207,9 +207,9 @@ def test_bootstrap_settings_unsupplied_keys_take_dataclass_defaults(
 ) -> None:
     """Unsupplied override keys take the dataclass default, not the env var.
 
-    The override path matches the pre-refactor ``AppSettings(**overrides)``
-    construction shape: env vars are only consulted on the no-override
-    fallback through get_settings.
+    The override path builds :class:`AppSettings` from overrides
+    alone; env vars are only consulted on the no-override fallback
+    through :func:`get_settings`.
     """
     monkeypatch.setenv("HOUNDARR_PORT", "7777")
     bootstrap_settings(data_dir="/tmp/test")

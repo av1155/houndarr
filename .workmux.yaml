@@ -5,9 +5,15 @@ merge_strategy: squash
 
 files:
     copy:
+        # Each worktree gets its own SQLite dev database plus the Fernet
+        # master key that encrypted the instance rows inside it. The two
+        # files are meaningful only as a pair; copying one without the
+        # other yields rows that cannot be decrypted.
         - data-dev/houndarr.db
         - data-dev/houndarr.masterkey
     symlink:
+        # Share Claude Code local permissions / hook allowlist across
+        # every worktree so an edit in one propagates immediately.
         - .claude/settings.local.json
 
 panes:
@@ -16,14 +22,38 @@ panes:
     - split: horizontal
 
 post_create:
+    # Per-worktree virtualenv: `uv pip install -e .` writes the worktree's
+    # absolute src/ path into a .pth file, so a shared venv would break
+    # the editable install the moment a second worktree was created.
     - uv venv
     - uv pip install -r requirements-dev.txt
     - uv pip install -e .
+    # bandit + pytest-xdist are used by `just sec` / `just check` and
+    # `just test-parallel` respectively, but neither is declared in
+    # requirements-dev.txt yet (CI installs bandit ad-hoc in
+    # security.yml). Install them explicitly so the worktree's
+    # pre_merge `just check` actually runs.
+    - uv pip install "bandit[toml]" pytest-xdist
+    # Node workspaces: root drives the Tailwind build, website/ runs
+    # Docusaurus. pnpm hardlinks from the global store so isolated
+    # node_modules stays fast.
     - pnpm install --frozen-lockfile
     - pnpm --dir website install --frozen-lockfile
+    # Tailwind build artifact (src/houndarr/static/css/app.built.css) is
+    # gitignored and generated at Docker build time in production; base.html
+    # loads it unconditionally, so a dev server without this step serves
+    # unstyled pages.
+    - pnpm run build-css
 
 pre_merge:
     - just check
+
+pre_remove:
+    # The default pre_remove fast-deletes node_modules for Node projects.
+    # .venv carries similar bulk (hundreds of MB with playwright pulled in
+    # transitively) and needs its own line; without this, `wm rm` / `wm merge`
+    # can stall for tens of seconds per worktree.
+    - rm -rf .venv
 
 dashboard:
     commit: "Commit all changes with a descriptive conventional commit message"

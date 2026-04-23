@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Orchestrate the Playwright browser-e2e stack locally and (optionally)
-# capture / verify the Phase 7b visual baselines under
+# capture / verify the login + setup visual baselines under
 # tests/e2e_browser/_screenshots/.
 #
 # Usage:

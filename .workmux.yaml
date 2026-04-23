@@ -28,12 +28,6 @@ post_create:
     - uv venv
     - uv pip install -r requirements-dev.txt
     - uv pip install -e .
-    # bandit + pytest-xdist are used by `just sec` / `just check` and
-    # `just test-parallel` respectively, but neither is declared in
-    # requirements-dev.txt yet (CI installs bandit ad-hoc in
-    # security.yml). Install them explicitly so the worktree's
-    # pre_merge `just check` actually runs.
-    - uv pip install "bandit[toml]" pytest-xdist
     # Node workspaces: root drives the Tailwind build, website/ runs
     # Docusaurus. pnpm hardlinks from the global store so isolated
     # node_modules stays fast.

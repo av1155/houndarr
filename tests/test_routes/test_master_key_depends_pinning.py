@@ -18,7 +18,7 @@ These tests lock:
 from __future__ import annotations
 
 import pytest
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 from starlette.requests import Request
 
@@ -43,15 +43,29 @@ def test_get_master_key_returns_stored_bytes() -> None:
 
 
 def test_get_master_key_rejects_non_bytes() -> None:
-    """A non-bytes master_key triggers the in-shim assertion.
+    """A non-bytes master_key raises HTTPException 503.
 
-    AssertionError surfaces the wiring bug at the dependency boundary
-    instead of letting the Fernet layer raise a less descriptive
-    error mid-request.  The assert is load-bearing.
+    Matches :func:`get_supervisor`'s failure-class so a misconfigured
+    lifespan surfaces a deterministic 503 at the dependency boundary
+    instead of letting the Fernet layer raise a less actionable
+    error mid-request.  Using ``HTTPException`` rather than ``assert``
+    keeps the check alive under ``python -O`` /
+    ``PYTHONOPTIMIZE=1``, which strips asserts.
     """
     request = _fake_request("not-bytes")
-    with pytest.raises(AssertionError):
+    with pytest.raises(HTTPException) as exc_info:
         get_master_key(request)
+    assert exc_info.value.status_code == 503
+
+
+def test_get_master_key_rejects_missing_state_slot() -> None:
+    """A request whose app.state has no master_key slot raises 503."""
+    app = FastAPI()
+    scope = {"type": "http", "app": app, "headers": []}
+    request = Request(scope)
+    with pytest.raises(HTTPException) as exc_info:
+        get_master_key(request)
+    assert exc_info.value.status_code == 503
 
 
 def test_logs_page_route_reads_master_key_through_shim(app: TestClient) -> None:

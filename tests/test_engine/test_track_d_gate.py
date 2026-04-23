@@ -87,7 +87,27 @@ def test_instance_rejects_pre_refactor_flat_kwargs() -> None:
 
 def test_flat_attribute_access_raises_attribute_error() -> None:
     """Reading Instance.batch_size on a facade-free Instance fails loudly."""
-    inst = Instance(
+    inst = _make_instance()
+    with pytest.raises(AttributeError):
+        _ = inst.batch_size  # type: ignore[attr-defined]
+
+
+def test_flat_attribute_write_raises_attribute_error() -> None:
+    """Writing a flat name also fails: ``slots=True`` closes the write path.
+
+    Pre-slots, ``inst.batch_size = 5`` would silently create a new
+    per-object attribute and shadow the sub-struct read, defeating
+    the D.20 cutover.  The ``slots=True`` on the parent dataclass
+    forces every write through the seven declared sub-struct slots.
+    """
+    inst = _make_instance()
+    with pytest.raises(AttributeError):
+        inst.batch_size = 5  # type: ignore[attr-defined]
+
+
+def _make_instance() -> Instance:
+    """Return a default Instance for the shape tests."""
+    return Instance(
         core=InstanceCore(
             id=1,
             name="t",
@@ -105,8 +125,6 @@ def test_flat_attribute_access_raises_attribute_error() -> None:
             updated_at="2024-01-02T00:00:00Z",
         ),
     )
-    with pytest.raises(AttributeError):
-        _ = inst.batch_size  # type: ignore[attr-defined]
 
 
 # Service-layer public APIs

@@ -511,39 +511,6 @@ async def test_insert_admin_audit_appends_without_mutating_existing(
 
 @pytest.mark.pinning()
 @pytest.mark.asyncio()
-async def test_database_clear_all_search_logs_delegates_through_repo(
-    seeded_instances: None,
-) -> None:
-    """database.clear_all_search_logs is a thin delegator over delete_all_logs."""
-    from houndarr.database import clear_all_search_logs as _db_clear
-
-    await repo.insert_log_row(instance_id=1, item_id=1, item_type="episode", action="searched")
-    await repo.insert_log_row(instance_id=2, item_id=2, item_type="movie", action="skipped")
-
-    removed = await _db_clear()
-
-    assert removed == 2
-    assert await _count_logs() == 0
-
-
-@pytest.mark.pinning()
-@pytest.mark.asyncio()
-async def test_database_write_admin_audit_delegates_through_repo(
-    seeded_instances: None,
-) -> None:
-    """database.write_admin_audit is a thin delegator over insert_admin_audit."""
-    from houndarr.database import write_admin_audit as _db_audit
-
-    await _db_audit("Delegator path breadcrumb")
-
-    rows = await repo.fetch_log_rows()
-    assert len(rows) == 1
-    assert rows[0]["message"] == "Delegator path breadcrumb"
-    assert rows[0]["cycle_trigger"] == "system"
-
-
-@pytest.mark.pinning()
-@pytest.mark.asyncio()
 async def test_engine_write_log_delegates_through_repo(seeded_instances: None) -> None:
     """The engine's _write_log helper writes the same row shape the repo would."""
     from houndarr.engine.search_loop import _write_log

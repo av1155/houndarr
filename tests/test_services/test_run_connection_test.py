@@ -83,6 +83,29 @@ async def test_ssrf_gate_blocks_loopback_literal() -> None:
 
 
 @pytest.mark.asyncio()
+async def test_sentinel_without_instance_id_returns_422() -> None:
+    """Sentinel api_key with no instance_id produces the 'Provide an API key.' error.
+
+    The add-instance form never submits the sentinel; the edit form
+    always populates instance_id.  A hand-crafted POST that sends
+    ``api_key=__UNCHANGED__`` with no instance_id used to fall
+    through and probe the remote with the literal sentinel string,
+    producing a generic "Connection failed" message.  The guard
+    surfaces the specific error instead.
+    """
+    outcome = await run_connection_test(
+        master_key=b"",
+        type_value="sonarr",
+        url="http://sonarr:8989",
+        api_key=API_KEY_UNCHANGED,
+        instance_id="",
+    )
+    assert outcome == ConnectionTestOutcome(
+        ok=False, message="Provide an API key.", status_code=422
+    )
+
+
+@pytest.mark.asyncio()
 async def test_sentinel_with_non_numeric_instance_id_returns_422() -> None:
     """Sentinel path with a malformed instance_id fails fast."""
     outcome = await run_connection_test(

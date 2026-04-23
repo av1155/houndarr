@@ -56,13 +56,16 @@ def get_master_key(request: Request) -> bytes:
     read close to the supervisor shim so the route layer imports one
     module for both pieces of lifespan wiring.
 
-    The function does not validate the key shape.  A missing or
-    malformed key surfaces later as a ``cryptography.fernet.Fernet``
-    or :class:`~houndarr.repositories.instances` error, which the
-    existing caller paths already handle.  Raising here would push
-    the failure mode into the Depends resolver and hide the
-    underlying cause under a generic 500.
+    Raises :class:`HTTPException` 503 when ``app.state.master_key``
+    is missing or is not ``bytes``.  Matches the :func:`get_supervisor`
+    failure-class so a misconfigured lifespan (pre-init window,
+    mid-factory-reset pause, or a test harness that never wired the
+    key) surfaces a deterministic 503 at the dependency boundary.
+    An earlier revision used ``assert isinstance(...)``; that check
+    disappears under ``python -O`` / ``PYTHONOPTIMIZE=1`` and left
+    the Fernet layer to raise a less actionable error mid-request.
     """
-    key = request.app.state.master_key
-    assert isinstance(key, bytes)  # noqa: S101
+    key = getattr(request.app.state, "master_key", None)
+    if not isinstance(key, bytes):
+        raise HTTPException(status_code=503, detail="Master key unavailable")
     return key

@@ -215,12 +215,16 @@ async def test_update_sonarr_search_mode(db: None, master_key: bytes) -> None:
 
 
 @pytest.mark.asyncio()
-async def test_update_unknown_fields_ignored(db: None, master_key: bytes) -> None:
+async def test_update_unknown_fields_raise_type_error(db: None, master_key: bytes) -> None:
+    """Unknown kwargs raise TypeError with the offending key set named.
+
+    Review-adversarial fix: silent drops used to hide rename drift.
+    The service now raises so the caller site sees the drift.
+    """
     inst = await _make(master_key)
-    # Should not raise even with unrecognised keys
-    updated = await update_instance(inst.core.id, master_key=master_key, nonexistent_col="x")
-    assert updated is not None
-    assert updated.core.name == inst.core.name
+    with pytest.raises(TypeError) as exc_info:
+        await update_instance(inst.core.id, master_key=master_key, nonexistent_col="x")
+    assert "nonexistent_col" in str(exc_info.value)
 
 
 @pytest.mark.asyncio()

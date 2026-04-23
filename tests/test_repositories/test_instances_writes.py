@@ -334,10 +334,18 @@ async def test_service_create_instance_delegates_to_repo(db: None, master_key: b
 
 @pytest.mark.pinning()
 @pytest.mark.asyncio()
-async def test_service_update_instance_filters_unrecognized_kwargs(
+async def test_service_update_instance_raises_on_unknown_kwargs(
     db: None, master_key: bytes
 ) -> None:
-    """Unknown kwargs on services.update_instance are silently dropped."""
+    """Unknown kwargs on services.update_instance raise TypeError.
+
+    Review-adversarial fix: an earlier revision silently dropped
+    unrecognised field names "for safety", which turned rename drift
+    (either a repository column rename or a caller-side typo) into a
+    silent bug farm where the SQL update ran with fewer fields than
+    the caller expected.  The service now surfaces the drift at the
+    call site with the offending key set named explicitly.
+    """
     from houndarr.services.instances import update_instance as svc_update
 
     created = await create_instance(
@@ -348,15 +356,17 @@ async def test_service_update_instance_filters_unrecognized_kwargs(
         api_key="k",
     )
 
-    inst = await svc_update(
-        created.core.id,
-        master_key=master_key,
-        name="Renamed",
-        nonexistent_field="ignored",
-        another_bogus_kwarg=123,
-    )
-    assert inst is not None
-    assert inst.core.name == "Renamed"
+    with pytest.raises(TypeError) as exc_info:
+        await svc_update(
+            created.core.id,
+            master_key=master_key,
+            name="Renamed",
+            nonexistent_field="ignored",
+            another_bogus_kwarg=123,
+        )
+    message = str(exc_info.value)
+    assert "another_bogus_kwarg" in message
+    assert "nonexistent_field" in message
 
 
 @pytest.mark.pinning()

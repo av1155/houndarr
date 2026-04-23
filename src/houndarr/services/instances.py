@@ -248,7 +248,7 @@ class InstanceTimestamps:
     updated_at: str
 
 
-@dataclass
+@dataclass(slots=True)
 class Instance:
     """In-memory representation of a configured *arr instance.
 
@@ -267,6 +267,14 @@ class Instance:
     sub-struct is itself frozen, so field-level writes through the
     facade are not possible; callers either replace a sub-struct
     wholesale or call :func:`dataclasses.replace` on it.
+
+    ``slots=True`` closes the last flat-write escape hatch.  Without
+    it a stray ``instance.batch_size = 5`` would silently create a
+    new per-object attribute and shadow the sub-struct read,
+    defeating the D.20 cutover.  With slots the same assignment
+    raises :class:`AttributeError` because ``batch_size`` is not a
+    declared slot; the only legitimate writes are the seven sub-
+    struct fields.
 
     API keys are always decrypted at this layer:
     ``instance.core.api_key`` returns plaintext; the encrypted form
@@ -472,35 +480,49 @@ async def update_instance(
     """Partially update an instance and return the refreshed :class:`Instance`.
 
     Thin delegator over
-    :func:`houndarr.repositories.instances.update_instance`.  Accepts
-    any subset of the mutable columns as kwargs to preserve the
-    pre-D.4 call sites; unrecognised field names are silently ignored
-    for safety and the remainder are packed into an
-    :class:`~houndarr.repositories.instances.InstanceUpdate` payload.
-    Payloads with no non-``None`` fields cause the repository to
-    no-op, at which point this function still re-fetches and returns
-    the current :class:`Instance` so the pre-refactor
-    empty-update-returns-state contract stays intact.
+    :func:`houndarr.repositories.instances.update_instance`.  Kwargs
+    are packed into an
+    :class:`~houndarr.repositories.instances.InstanceUpdate` payload
+    and forwarded.  Payloads with no non-``None`` fields cause the
+    repository to no-op, at which point this function still re-
+    fetches and returns the current :class:`Instance` so the pre-
+    refactor empty-update-returns-state contract stays intact.
+
+    Unknown kwargs raise :class:`TypeError`.  Until the review-
+    adversarial pass that landed with this change the surface
+    silently dropped unrecognised names "for safety"; that made
+    rename drift (either a repository column rename or a caller-
+    side typo) a silent bug farm where the SQL update ran with
+    fewer fields than the caller expected.  Raising surfaces the
+    drift at the call site instead, and every production caller
+    already passes only valid column names.
 
     Args:
         id: Primary key of the instance to update.
         master_key: Fernet key used to re-encrypt ``api_key`` when
             that field is part of the update, and to decrypt on the
             return-value round trip.
-        **fields: Column-value pairs to update.  See
-            :class:`~houndarr.repositories.instances.InstanceUpdate`
-            for the accepted keys; values that do not appear there
-            are silently dropped.
+        **fields: Column-value pairs to update.  Every key must be a
+            field name on
+            :class:`~houndarr.repositories.instances.InstanceUpdate`;
+            unknown names raise :class:`TypeError` with the offending
+            key set named explicitly.
 
     Returns:
         Updated :class:`Instance`, or ``None`` if *id* does not exist.
+
+    Raises:
+        TypeError: When *fields* contains a key that is not a valid
+            :class:`InstanceUpdate` column.
     """
     from houndarr.repositories.instances import InstanceUpdate
     from houndarr.repositories.instances import update_instance as _repo_update_instance
 
     allowed_field_names = {f.name for f in dataclass_fields(InstanceUpdate)}
-    payload_kwargs = {name: value for name, value in fields.items() if name in allowed_field_names}
-    payload = InstanceUpdate(**payload_kwargs)
+    unknown = fields.keys() - allowed_field_names
+    if unknown:
+        raise TypeError("update_instance received unknown field(s): " + ", ".join(sorted(unknown)))
+    payload = InstanceUpdate(**fields)
 
     await _repo_update_instance(id, payload, master_key=master_key)
     return await get_instance(id, master_key=master_key)

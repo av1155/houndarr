@@ -400,7 +400,21 @@ async def run_connection_test(
         return ConnectionTestOutcome(ok=False, message=url_error, status_code=422)
 
     resolved_api_key = api_key
-    if api_key == API_KEY_UNCHANGED and instance_id:
+    if api_key == API_KEY_UNCHANGED:
+        # A sentinel submission requires an instance_id so the service
+        # can pull the stored plaintext key.  The add-instance form
+        # never sends the sentinel; the edit form always populates
+        # instance_id.  A hand-crafted POST that sends the sentinel
+        # with no instance_id used to fall through and probe the
+        # remote with the literal string, which the *arr rejected as
+        # an invalid key and the user saw a generic "Connection
+        # failed" message.  Return a specific 422 instead.
+        if not instance_id:
+            return ConnectionTestOutcome(
+                ok=False,
+                message="Provide an API key.",
+                status_code=422,
+            )
         try:
             iid = int(instance_id)
         except ValueError:

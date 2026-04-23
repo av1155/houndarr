@@ -13,9 +13,8 @@ import pytest_asyncio
 from fastapi.testclient import TestClient
 from httpx import ASGITransport, AsyncClient
 
-from houndarr import config as _cfg
 from houndarr.auth import CSRF_COOKIE_NAME
-from houndarr.config import AppSettings
+from houndarr.config import AppSettings, bootstrap_settings
 from houndarr.database import init_db, set_db_path
 
 # ---------------------------------------------------------------------------
@@ -72,8 +71,7 @@ async def db(tmp_data_dir: str) -> AsyncGenerator[None, None]:
 @pytest.fixture()
 def test_settings(tmp_data_dir: str) -> AppSettings:
     """Return AppSettings pointing at tmp data dir."""
-    settings = AppSettings(data_dir=tmp_data_dir)
-    _cfg._runtime_settings = settings  # noqa: SLF001
+    settings = bootstrap_settings(data_dir=tmp_data_dir)
     # Reset auth module singletons so each test starts with a clean state.
     # - _serializer: re-initialized with the new test DB's session_secret.
     # - _login_attempts: cleared so rate-limit counters don't bleed between tests.

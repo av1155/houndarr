@@ -8,7 +8,7 @@ import os
 from dataclasses import dataclass, field
 from ipaddress import IPv4Address, IPv4Network, IPv6Address, IPv6Network
 from pathlib import Path
-from typing import Literal
+from typing import Literal, TypedDict, Unpack
 
 logger = logging.getLogger(__name__)
 
@@ -133,6 +133,70 @@ def get_settings() -> AppSettings:
         auth_mode=os.environ.get("HOUNDARR_AUTH_MODE", "builtin").lower(),
         auth_proxy_header=os.environ.get("HOUNDARR_AUTH_PROXY_HEADER", ""),
     )
+
+
+class BootstrapOverrides(TypedDict, total=False):
+    """Optional :class:`AppSettings` field overrides accepted by ``bootstrap_settings``.
+
+    Every key is optional. Supplied keys are forwarded directly to the
+    :class:`AppSettings` constructor; unsupplied keys take whatever default
+    the dataclass declares (the env-var fallback in :func:`get_settings`
+    is only consulted on the no-override branch, never on the explicit
+    override path).
+    """
+
+    data_dir: str
+    host: str
+    port: int
+    dev: bool
+    log_level: str
+    secure_cookies: bool
+    cookie_samesite: SameSitePolicy
+    trusted_proxies: str
+    auth_mode: str
+    auth_proxy_header: str
+
+
+def bootstrap_settings(**overrides: Unpack[BootstrapOverrides]) -> AppSettings:
+    """Resolve, pin, and return the runtime ``AppSettings`` honouring overrides.
+
+    This is the single entry point for installing :class:`AppSettings` into
+    the module-level singleton. CLI boot, scripts, and tests all funnel
+    through it instead of reaching into ``_runtime_settings`` directly,
+    so the pin lifecycle is observable in one place.
+
+    With at least one override supplied, an :class:`AppSettings` is
+    constructed from the kwargs and pinned. Subsequent
+    :func:`get_settings` calls return the same instance until the next
+    ``bootstrap_settings`` call (or process restart). Any prior pin is
+    replaced; any env var for an *unsupplied* key is ignored (the kwarg
+    path matches the pre-refactor ``AppSettings(data_dir=..., **overrides)``
+    shape, where missing fields take the dataclass default rather than the
+    env value).
+
+    With no overrides supplied, any prior pin is cleared and the result of
+    :func:`get_settings` (env-var resolved) is returned *without* pinning.
+    Callers that subsequently change env vars therefore still see those
+    changes through :func:`get_settings`.
+
+    Args:
+        **overrides: Optional :class:`AppSettings` field values.
+
+    Returns:
+        The :class:`AppSettings` now visible to subsequent
+        :func:`get_settings` calls. With overrides this is the freshly
+        pinned instance; without overrides this is an unpinned
+        env-resolved instance.
+    """
+    global _runtime_settings  # noqa: PLW0603
+
+    if not overrides:
+        _runtime_settings = None
+        return get_settings()
+
+    settings = AppSettings(**overrides)
+    _runtime_settings = settings
+    return settings
 
 
 @dataclass

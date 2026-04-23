@@ -149,21 +149,17 @@ def test_client_ip_honours_xff_for_cidr_trusted_proxy(
     """_client_ip honours X-Forwarded-For when direct IP is in a trusted subnet."""
     from unittest.mock import MagicMock
 
-    import houndarr.config as _cfg
     from houndarr.auth import _client_ip  # noqa: SLF001
-    from houndarr.config import AppSettings
+    from houndarr.config import bootstrap_settings
 
-    original = _cfg._runtime_settings  # noqa: SLF001
     try:
-        _cfg._runtime_settings = AppSettings(  # noqa: SLF001
-            data_dir=tmp_data_dir, trusted_proxies="172.18.0.0/16"
-        )
+        bootstrap_settings(data_dir=tmp_data_dir, trusted_proxies="172.18.0.0/16")
         request = MagicMock()
         request.client.host = "172.18.0.5"
         request.headers.get.return_value = "203.0.113.50, 172.18.0.5"
         assert _client_ip(request) == "203.0.113.50"
     finally:
-        _cfg._runtime_settings = original  # noqa: SLF001
+        bootstrap_settings()
 
 
 def test_client_ip_ignores_xff_when_not_in_trusted_subnet(
@@ -172,21 +168,17 @@ def test_client_ip_ignores_xff_when_not_in_trusted_subnet(
     """_client_ip ignores X-Forwarded-For when direct IP is NOT in trusted subnet."""
     from unittest.mock import MagicMock
 
-    import houndarr.config as _cfg
     from houndarr.auth import _client_ip  # noqa: SLF001
-    from houndarr.config import AppSettings
+    from houndarr.config import bootstrap_settings
 
-    original = _cfg._runtime_settings  # noqa: SLF001
     try:
-        _cfg._runtime_settings = AppSettings(  # noqa: SLF001
-            data_dir=tmp_data_dir, trusted_proxies="172.18.0.0/16"
-        )
+        bootstrap_settings(data_dir=tmp_data_dir, trusted_proxies="172.18.0.0/16")
         request = MagicMock()
         request.client.host = "10.0.0.5"
         request.headers.get.return_value = "203.0.113.50"
         assert _client_ip(request) == "10.0.0.5"
     finally:
-        _cfg._runtime_settings = original  # noqa: SLF001
+        bootstrap_settings()
 
 
 # ---------------------------------------------------------------------------

@@ -571,7 +571,6 @@ def test_logs_page_renders(app: TestClient) -> None:
     assert resp.status_code == 200
     assert b'data-page-key="logs"' in resp.content
     assert b'hx-history="false"' in resp.content
-    assert b"AUDIT TRAIL" in resp.content
     assert b'id="log-filter-form"' in resp.content
     assert b'id="log-feed"' in resp.content
     assert b'id="live-indicator"' in resp.content

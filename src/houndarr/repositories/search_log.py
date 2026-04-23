@@ -254,3 +254,34 @@ async def delete_logs_for_instance(instance_id: int) -> int:
         )
         await db.commit()
         return cur.rowcount or 0
+
+
+async def purge_old_logs(retention_days: int) -> int:
+    """Delete ``search_log`` rows older than *retention_days* days.
+
+    Called by the app lifespan at startup and by
+    ``_periodic_log_retention`` on a 24-hour cadence to prevent
+    unbounded log growth on long-running instances.  Living in the
+    repository layer (alongside every other ``search_log`` SQL writer)
+    keeps the table's SQL entirely owned here.
+
+    Args:
+        retention_days: Rows with a ``timestamp`` older than this many
+            days are deleted.  Pass ``0`` or a negative value to
+            disable purging; the function then returns ``0`` without
+            issuing any SQL.
+
+    Returns:
+        Number of rows deleted (``0`` when retention is disabled or
+        nothing matched the cut-off).
+    """
+    if retention_days <= 0:
+        return 0
+
+    async with get_db() as db:
+        cur = await db.execute(
+            "DELETE FROM search_log WHERE timestamp < datetime('now', ? || ' days')",
+            (f"-{retention_days}",),
+        )
+        await db.commit()
+        return cur.rowcount or 0

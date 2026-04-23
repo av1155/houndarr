@@ -7,7 +7,9 @@ from pathlib import Path
 import aiosqlite
 import pytest
 
-from houndarr.database import get_db, get_setting, init_db, purge_old_logs, set_db_path, set_setting
+from houndarr.database import get_db, init_db, set_db_path
+from houndarr.repositories.search_log import purge_old_logs
+from houndarr.repositories.settings import get_setting, set_setting
 
 
 @pytest.mark.asyncio()
@@ -1077,10 +1079,10 @@ async def test_set_and_get_setting(db: None) -> None:
 
 
 @pytest.mark.asyncio()
-async def test_get_setting_default(db: None) -> None:
-    """get_setting returns default when key not found."""
-    value = await get_setting("nonexistent_key", default="fallback")
-    assert value == "fallback"
+async def test_get_setting_missing_key_returns_none(db: None) -> None:
+    """get_setting returns None when key not found; callers compose any fallback."""
+    value = await get_setting("nonexistent_key")
+    assert value is None
 
 
 @pytest.mark.asyncio()

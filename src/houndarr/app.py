@@ -17,8 +17,9 @@ from houndarr import __version__
 from houndarr.auth import AuthMiddleware
 from houndarr.config import DEFAULT_LOG_RETENTION_DAYS, get_settings
 from houndarr.crypto import ensure_master_key
-from houndarr.database import init_db, purge_old_logs, set_db_path
+from houndarr.database import init_db, set_db_path
 from houndarr.engine.supervisor import Supervisor
+from houndarr.repositories.search_log import purge_old_logs
 from houndarr.services.instances import list_instances
 
 logger = logging.getLogger(__name__)

@@ -41,6 +41,8 @@ import bcrypt  # noqa: E402
 from cryptography.fernet import Fernet  # noqa: E402
 from demo_cycles import build_realistic_cycles  # noqa: E402
 
+from houndarr.bootstrap import bootstrap_non_web  # noqa: E402
+
 _TITLES_DIR = Path(__file__).resolve().parent / "demo_titles"
 
 
@@ -58,28 +60,6 @@ def _load_titles() -> dict[str, list[tuple[int, str]]]:
         "lidarr": [(int(i), s) for i, s in albums["lidarr"]],
         "readarr": [(int(i), s) for i, s in books["readarr"]],
     }
-
-
-async def _init_schema(data_dir: Path) -> Path:
-    """Prepare the data dir + master key, then run the migration to v13."""
-    import os
-
-    data_dir.mkdir(parents=True, exist_ok=True)
-
-    master_path = data_dir / "houndarr.masterkey"
-    if not master_path.exists():
-        master_path.write_bytes(Fernet.generate_key())
-
-    # Point houndarr.config at the scratch dir before first import.
-    os.environ["HOUNDARR_DATA_DIR"] = str(data_dir)
-    from houndarr import config as config_mod
-    from houndarr import database as db_mod
-
-    config_mod._runtime_settings = None  # noqa: SLF001
-    settings = config_mod.get_settings()
-    db_mod.set_db_path(str(settings.db_path))
-    await db_mod.init_db()
-    return Path(settings.db_path)
 
 
 async def _seed_admin(conn: aiosqlite.Connection, password: str) -> None:
@@ -368,11 +348,10 @@ async def _seed_cooldowns_and_logs(
     return len(cooldown_rows), len(log_rows)
 
 
-async def _run(mode: str, data_dir: Path, admin_password: str) -> None:
-    """Orchestrate schema init + mode-specific seeding."""
-    db_path = await _init_schema(data_dir)
-
-    master_key = (data_dir / "houndarr.masterkey").read_bytes()
+async def _run(
+    mode: str, data_dir: Path, db_path: Path, master_key: bytes, admin_password: str
+) -> None:
+    """Orchestrate mode-specific seeding against an already-bootstrapped DB."""
     fernet = Fernet(master_key)
     enc_key = fernet.encrypt(b"demo-api-key-for-marketing").decode()
 
@@ -418,7 +397,13 @@ def main() -> None:
         help="Admin password the capture script will use to log in.",
     )
     args = parser.parse_args()
-    asyncio.run(_run(args.mode, args.data_dir.resolve(), args.admin_password))
+    data_dir = args.data_dir.resolve()
+    # bootstrap_non_web is the shared sync composition: create data_dir,
+    # ensure the Fernet master key, and run init_db to v13. It must be
+    # called before asyncio.run() because it spins up its own event loop
+    # internally via asyncio.run(init_db()).
+    _settings, db_path, master_key = bootstrap_non_web(data_dir=str(data_dir))
+    asyncio.run(_run(args.mode, data_dir, db_path, master_key, args.admin_password))
 
 
 if __name__ == "__main__":

@@ -158,7 +158,36 @@
   --color-whisparr-v3:    #e879f9;
   --color-whisparr-v3-bg: rgba(86, 19, 88, 0.50);
 
-  /* ── Border-radius scale (Station three-tier system) ──────────────── */
+  /* Border-radius scale (Station four-tier system).
+     Each step halves the visual softness as the element gets smaller,
+     so nested elements always read as tighter than their parents:
+
+       --radius-container (6px)  Use for rounded-container.  Cards,
+                                 modals, tablet-width panels, section
+                                 shells.  The app's outermost radii.
+       --radius-inset     (4px)  Use for rounded-inset.  Inputs,
+                                 buttons, inline-flex pills inside a
+                                 container.  Matches daisyUI's
+                                 --radius-field so .btn / .input
+                                 round consistently.
+       --radius-chip      (3px)  Use for rounded-chip.  Badges,
+                                 pill-shaped log markers, dash-pill
+                                 dot chrome.  Matches daisyUI badge
+                                 override (.badge { border-radius:
+                                 var(--radius-chip) }).
+       --radius-bar       (2px)  Accessed only through var(--radius-bar)
+                                 (e.g. dashboard legend swatches,
+                                 auth.css strength-meter segs, app.css
+                                 status bars).  No template uses the
+                                 Tailwind utility `rounded-bar`
+                                 directly; the token still earns its
+                                 place so the var() consumers share
+                                 the same scale step.
+
+     Tailwind v4 generates `rounded-container`, `rounded-inset`,
+     `rounded-chip`, and `rounded-bar` utilities automatically from
+     these --radius-* keys; templates should prefer those utilities
+     over arbitrary values so retuning a tier propagates everywhere. */
   --radius-container: 6px;
   --radius-inset:     4px;
   --radius-chip:      3px;

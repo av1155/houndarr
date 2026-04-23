@@ -237,8 +237,7 @@ class TestFormField:
 
     def test_placeholder_renders_attribute(self, render_macro: Callable[[str], str]) -> None:
         result = render_macro(
-            'form_field(id="w", name="w", type="text", label="W", '
-            'placeholder="e.g. 09:00-23:00")'
+            'form_field(id="w", name="w", type="text", label="W", placeholder="e.g. 09:00-23:00")'
         )
         assert ' placeholder="e.g. 09:00-23:00"' in result
 
@@ -276,23 +275,16 @@ class TestPasswordInputAuth:
             == _login_expected()
         )
 
-    def test_login_with_aria_invalid_byte_equal(
-        self, render_macro: Callable[[str], str]
-    ) -> None:
-        assert (
-            render_macro(
-                'password_input(id="login-password", name="password", '
-                'label="Password", variant="auth", leading="padlock", '
-                'autocomplete="current-password", '
-                'placeholder="••••••••", '
-                "aria_invalid=true)"
-            )
-            == _login_expected(aria_invalid=True)
-        )
+    def test_login_with_aria_invalid_byte_equal(self, render_macro: Callable[[str], str]) -> None:
+        assert render_macro(
+            'password_input(id="login-password", name="password", '
+            'label="Password", variant="auth", leading="padlock", '
+            'autocomplete="current-password", '
+            'placeholder="••••••••", '
+            "aria_invalid=true)"
+        ) == _login_expected(aria_invalid=True)
 
-    def test_setup_new_password_byte_equal(
-        self, render_macro: Callable[[str], str]
-    ) -> None:
+    def test_setup_new_password_byte_equal(self, render_macro: Callable[[str], str]) -> None:
         expected = (
             '<label class="field__label" for="setup-password">\n'
             "  <span>Password</span>\n"
@@ -319,9 +311,7 @@ class TestPasswordInputAuth:
             == expected
         )
 
-    def test_setup_confirm_checkmark_byte_equal(
-        self, render_macro: Callable[[str], str]
-    ) -> None:
+    def test_setup_confirm_checkmark_byte_equal(self, render_macro: Callable[[str], str]) -> None:
         expected = (
             '<label class="field__label" for="setup-password-confirm">\n'
             "  <span>Confirm password</span>\n"
@@ -387,9 +377,7 @@ def _admin_current_expected() -> str:
 class TestPasswordInputAdmin:
     """password_input renders the Tailwind-utility admin variant."""
 
-    def test_admin_current_password_byte_equal(
-        self, render_macro: Callable[[str], str]
-    ) -> None:
+    def test_admin_current_password_byte_equal(self, render_macro: Callable[[str], str]) -> None:
         assert (
             render_macro(
                 'password_input(id="current-password", name="current_password", '
@@ -529,9 +517,7 @@ class TestPasswordInputAdmin:
             'text-white placeholder:text-slate-600 font-mono"'
         ) in result
 
-    def test_unknown_variant_falls_back_to_admin(
-        self, render_macro: Callable[[str], str]
-    ) -> None:
+    def test_unknown_variant_falls_back_to_admin(self, render_macro: Callable[[str], str]) -> None:
         result = render_macro(
             'password_input(id="x", name="y", label="Z", variant="not-a-real-variant", '
             'autocomplete="current-password", placeholder="ab")'
@@ -543,9 +529,7 @@ class TestPasswordInputAdmin:
 class TestCheckbox:
     """checkbox renders the bordered-label toggle for instance_form cutoff / upgrade."""
 
-    def test_unchecked_with_default_byte_equal(
-        self, render_macro: Callable[[str], str]
-    ) -> None:
+    def test_unchecked_with_default_byte_equal(self, render_macro: Callable[[str], str]) -> None:
         expected = (
             '<label class="inline-flex items-center gap-2 cursor-pointer '
             "select-none rounded-inset border border-border-default "
@@ -567,9 +551,7 @@ class TestCheckbox:
             == expected
         )
 
-    def test_checked_with_default_byte_equal(
-        self, render_macro: Callable[[str], str]
-    ) -> None:
+    def test_checked_with_default_byte_equal(self, render_macro: Callable[[str], str]) -> None:
         expected = (
             '<label class="inline-flex items-center gap-2 cursor-pointer '
             "select-none rounded-inset border border-border-default "
@@ -651,29 +633,16 @@ class TestSelectField:
             == expected
         )
 
-    def test_no_selected_marks_no_option(
-        self, render_macro: Callable[[str], str]
-    ) -> None:
+    def test_no_selected_marks_no_option(self, render_macro: Callable[[str], str]) -> None:
         result = render_macro(
-            'select_field(id="x", name="x", '
-            'options=[("a", "A"), ("b", "B")], label="X")'
+            'select_field(id="x", name="x", options=[("a", "A"), ("b", "B")], label="X")'
         )
         assert " selected>" not in result
 
-    def test_no_data_default_omits_attribute(
-        self, render_macro: Callable[[str], str]
-    ) -> None:
-        result = render_macro(
-            'select_field(id="x", name="x", '
-            'options=[("a", "A")], label="X")'
-        )
+    def test_no_data_default_omits_attribute(self, render_macro: Callable[[str], str]) -> None:
+        result = render_macro('select_field(id="x", name="x", options=[("a", "A")], label="X")')
         assert "data-default-value" not in result
 
-    def test_no_help_text_omits_paragraph(
-        self, render_macro: Callable[[str], str]
-    ) -> None:
-        result = render_macro(
-            'select_field(id="x", name="x", '
-            'options=[("a", "A")], label="X")'
-        )
+    def test_no_help_text_omits_paragraph(self, render_macro: Callable[[str], str]) -> None:
+        result = render_macro('select_field(id="x", name="x", options=[("a", "A")], label="X")')
         assert '<p class="mt-1.5 text-xs text-slate-600">' not in result

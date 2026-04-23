@@ -125,7 +125,7 @@
 }
 .icon-btn:hover {
   color: var(--color-brand-300);
-  background: rgba(34, 211, 238, 0.08);
+  background: var(--glow-brand-soft);
 }
 .icon-btn:focus-visible {
   outline: none;
@@ -138,7 +138,7 @@
    reads as on at a glance. */
 .icon-btn[aria-pressed="true"] {
   color: var(--color-brand-300);
-  background: rgba(34, 211, 238, 0.14);
+  background: var(--glow-brand-medium);
 }
 .icon-btn[aria-pressed="true"]:hover {
   background: rgba(34, 211, 238, 0.22);
@@ -312,7 +312,7 @@
   width: 0.875rem;
   height: 0.875rem;
   border: 2px solid rgba(255, 255, 255, 0.28);
-  border-top-color: #fff;
+  border-top-color: var(--color-text-inverse);
   border-radius: 50%;
   display: none;
   animation: auth-spin 700ms linear infinite;

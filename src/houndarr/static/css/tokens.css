@@ -126,6 +126,13 @@
   --glow-danger:       0 0 8px  rgba(248, 113, 113, 0.20);
   --glow-logo:         0 0 18px rgba(34, 211, 238, 0.22);
 
+  /* Brand-cyan hover tints used as solid background colors (not
+     box-shadows).  auth-fields.css reaches for these on the
+     password-toggle icon button; keeping them next to the glow
+     family keeps every brand-alpha variant in one place. */
+  --glow-brand-soft:   rgba(34, 211, 238, 0.08);
+  --glow-brand-medium: rgba(34, 211, 238, 0.14);
+
   /* ── Motion ─────────────────────────────────────────────────────────── */
   --ease-station: cubic-bezier(0.16, 1, 0.3, 1);    /* precise settle */
   --ease-spring:  cubic-bezier(0.34, 1.56, 0.64, 1);/* subtle spring */

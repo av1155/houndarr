@@ -162,11 +162,15 @@ def _parse_update_check_repo(raw: str) -> str:
 
     The value is interpolated into ``https://api.github.com/repos/{repo}/...``
     so the GitHub URL parser already keeps the host pinned. This guard is
-    defence in depth: catch typos (missing slash, accidental query strings)
-    when :func:`get_settings` first constructs ``AppSettings`` (the CLI
-    entry point in ``houndarr.__main__`` does this once at boot and
-    caches the result in ``_runtime_settings``), and log a warning
-    instead of letting a garbled request hit the GitHub API.
+    defence in depth: every :func:`get_settings` call that reads env
+    (the no-pin fallback, including the no-override branch of
+    :func:`bootstrap_settings`) flows through here, so a typo (missing
+    slash, accidental query string, absolute URL) is caught before a
+    garbled request hits the GitHub API. CLI overrides bypass this path
+    entirely because :func:`bootstrap_settings` constructs ``AppSettings``
+    from kwargs directly; ``HOUNDARR_UPDATE_CHECK_REPO`` only affects
+    the env-fallback callers (scripts, tests, and any caller that
+    invokes :func:`bootstrap_settings` with no overrides).
     """
     value = raw.strip()
     if not value:

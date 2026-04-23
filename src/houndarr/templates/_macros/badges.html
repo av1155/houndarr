@@ -60,6 +60,30 @@
 {%- endmacro %}
 
 
+{%- macro log_trigger_badge(trigger) -%}
+{%- if trigger == "scheduled" -%}
+<span class="badge badge-soft badge-primary">scheduled</span>
+{%- elif trigger == "run_now" -%}
+<span class="badge badge-soft badge-success">run_now</span>
+{%- elif trigger == "system" -%}
+<span class="badge badge-soft badge-neutral">system</span>
+{%- else -%}
+<span class="text-slate-600">-</span>
+{%- endif -%}
+{%- endmacro %}
+
+
+{%- macro log_cycle_outcome_badge(progress) -%}
+{%- if progress == "progress" -%}
+<span class="badge badge-soft badge-success">searched</span>
+{%- elif progress == "no_progress" -%}
+<span class="badge badge-soft badge-neutral">skips only</span>
+{%- else -%}
+<span class="text-[0.625rem] text-slate-600 font-mono">unknown</span>
+{%- endif -%}
+{%- endmacro %}
+
+
 {%- macro status_pill(state) -%}
 {%- if state == "error" -%}
 <span class="inline-flex items-center justify-center gap-1 text-xs text-danger min-w-[4.5rem]"><span class="w-1.5 h-1.5 rounded-full bg-danger inline-block station-pulse-dot" title="Instance is reporting errors" aria-label="Instance is reporting errors"></span><span class="hidden sm:inline">Error</span></span>

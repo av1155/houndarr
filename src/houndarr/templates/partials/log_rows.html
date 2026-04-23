@@ -57,15 +57,7 @@
 
     {# Cycle trigger #}
     <td class="px-3 py-2.5" data-col="trigger">
-      {% if row.cycle_trigger == "scheduled" %}
-        <span class="badge badge-soft badge-primary">scheduled</span>
-      {% elif row.cycle_trigger == "run_now" %}
-        <span class="badge badge-soft badge-success">run_now</span>
-      {% elif row.cycle_trigger == "system" %}
-        <span class="badge badge-soft badge-neutral">system</span>
-      {% else %}
-        <span class="text-slate-600">-</span>
-      {% endif %}
+      {{ badges.log_trigger_badge(row.cycle_trigger) }}
     </td>
 
     {# Cycle id #}
@@ -79,13 +71,7 @@
 
     {# Cycle outcome #}
     <td class="px-3 py-2.5" data-col="outcome">
-      {% if row.cycle_progress == "progress" %}
-        <span class="badge badge-soft badge-success">searched</span>
-      {% elif row.cycle_progress == "no_progress" %}
-        <span class="badge badge-soft badge-neutral">skips only</span>
-      {% else %}
-        <span class="text-[0.625rem] text-slate-600 font-mono">unknown</span>
-      {% endif %}
+      {{ badges.log_cycle_outcome_badge(row.cycle_progress) }}
     </td>
 
     {# Media label + ID fallback #}

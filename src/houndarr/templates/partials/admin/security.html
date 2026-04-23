@@ -14,6 +14,7 @@
 {%- import "_macros/alerts.html" as alerts -%}
 {%- import "_macros/layout.html" as layout -%}
 {% call layout.admin_section(id="admin-security", title="Security") %}
+
   <div class="rounded-container border border-border-subtle bg-surface-1 p-5 sm:p-6">
     <div
       class="inline-flex items-center gap-2 rounded-inset border border-border-subtle bg-surface-2/70 px-3 py-1.5 text-xs text-slate-400 font-sans mb-5"
@@ -51,156 +52,40 @@
       autocomplete="off"
     >
       <div class="field">
-        <label
-          class="block text-xs font-medium text-slate-400 mb-1.5"
-          for="current-password"
-        >
-          Current password
-        </label>
-        <div class="input-wrap">
-          <input
-            id="current-password"
-            name="current_password"
-            type="password"
-            required
-            autocomplete="current-password"
-            placeholder="••••••••"
-            data-pw-input
-            class="station-input has-trailing h-10 px-3 text-sm text-white placeholder:text-slate-600 font-mono"
-          />
-          <div class="input-trailing">
-            <span class="caps-badge" role="status" aria-label="Caps Lock is on">
-              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <path d="M8 3.2 3.6 7.6h2.5v4h3.8v-4h2.5z"/>
-                <line x1="5.6" y1="13.3" x2="10.4" y2="13.3"/>
-              </svg>
-            </span>
-            <button
-              type="button"
-              class="icon-btn"
-              data-pw-toggle
-              aria-label="Show password"
-              aria-pressed="false"
-              tabindex="-1"
-            >
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/>
-                <circle cx="12" cy="12" r="3"/>
-              </svg>
-            </button>
-          </div>
-        </div>
+        {{ forms.password_input(
+            id="current-password",
+            name="current_password",
+            label="Current password",
+            autocomplete="current-password",
+            placeholder="••••••••",
+        ) }}
       </div>
 
       <div class="field">
-        <label
-          class="block text-xs font-medium text-slate-400 mb-1.5"
-          for="new-password"
-        >
-          New password
-        </label>
-        <div class="input-wrap">
-          <input
-            id="new-password"
-            name="new_password"
-            type="password"
-            required
-            minlength="8"
-            autocomplete="new-password"
-            placeholder="Minimum 8 characters"
-            data-pw-input
-            data-strength-source
-            class="station-input has-trailing h-10 px-3 text-sm text-white placeholder:text-slate-600 font-mono"
-          />
-          <div class="input-trailing">
-            <span class="caps-badge" role="status" aria-label="Caps Lock is on">
-              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <path d="M8 3.2 3.6 7.6h2.5v4h3.8v-4h2.5z"/>
-                <line x1="5.6" y1="13.3" x2="10.4" y2="13.3"/>
-              </svg>
-            </span>
-            <button
-              type="button"
-              class="icon-btn"
-              data-pw-toggle
-              aria-label="Show password"
-              aria-pressed="false"
-              tabindex="-1"
-            >
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/>
-                <circle cx="12" cy="12" r="3"/>
-              </svg>
-            </button>
-          </div>
-        </div>
-        <div
-          class="strength"
-          data-strength
-          role="meter"
-          aria-label="Password strength"
-          aria-valuemin="0"
-          aria-valuemax="4"
-          aria-valuenow="0"
-          aria-valuetext="—"
-        >
-          <div class="strength__track">
-            <div class="strength__seg"></div>
-            <div class="strength__seg"></div>
-            <div class="strength__seg"></div>
-            <div class="strength__seg"></div>
-          </div>
-          <div class="strength__meta">
-            <span>Strength</span>
-            <span class="strength__label">—</span>
-          </div>
-        </div>
+        {{ forms.password_input(
+            id="new-password",
+            name="new_password",
+            label="New password",
+            autocomplete="new-password",
+            placeholder="Minimum 8 characters",
+            minlength=8,
+            strength_meter=true,
+            data_strength_source=true,
+        ) }}
       </div>
 
       <div class="field">
-        <label
-          class="block text-xs font-medium text-slate-400 mb-1.5"
-          for="confirm-password"
-        >
-          Confirm password
-        </label>
-        <div class="input-wrap">
-          <input
-            id="confirm-password"
-            name="new_password_confirm"
-            type="password"
-            required
-            minlength="8"
-            autocomplete="new-password"
-            placeholder="Repeat new password"
-            data-pw-input
-            data-pw-confirm="new-password"
-            aria-describedby="pw-match"
-            class="station-input has-trailing h-10 px-3 text-sm text-white placeholder:text-slate-600 font-mono"
-          />
-          <div class="input-trailing">
-            <span class="caps-badge" role="status" aria-label="Caps Lock is on">
-              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <path d="M8 3.2 3.6 7.6h2.5v4h3.8v-4h2.5z"/>
-                <line x1="5.6" y1="13.3" x2="10.4" y2="13.3"/>
-              </svg>
-            </span>
-            <button
-              type="button"
-              class="icon-btn"
-              data-pw-toggle
-              aria-label="Show password"
-              aria-pressed="false"
-              tabindex="-1"
-            >
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/>
-                <circle cx="12" cy="12" r="3"/>
-              </svg>
-            </button>
-          </div>
-        </div>
-        <p id="pw-match" class="pw-match" aria-live="polite">&nbsp;</p>
+        {{ forms.password_input(
+            id="confirm-password",
+            name="new_password_confirm",
+            label="Confirm password",
+            autocomplete="new-password",
+            placeholder="Repeat new password",
+            minlength=8,
+            data_pw_confirm="new-password",
+            aria_describedby="pw-match",
+            pw_match=true,
+        ) }}
       </div>
 
       <div class="min-[971px]:col-span-3 flex flex-wrap items-center gap-3 pt-1">

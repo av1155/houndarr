@@ -122,7 +122,32 @@
   --color-border-default: #2a3448;
   --color-border-strong:  #3d4f6b;
 
-  /* ── Semantic state colors + -bg / -border variants ───────────────── */
+  /* Semantic state colours.
+     Each state (danger / success / warning / info) ships as a family
+     of up to three tokens:
+
+       --color-<state>         Opaque hex (e.g. #f87171 danger).
+                               Use for foreground: text, icon fills,
+                               left-rules on soft alerts.
+       --color-<state>-bg      Low-alpha rgba tuned to layer over
+                               --color-surface-base (#07080f).  Use
+                               for soft-badge / soft-alert / soft-btn
+                               backgrounds; pairs with the `-border`
+                               sibling.  daisyUI's own `badge-soft` /
+                               `alert-soft` defaults mix the state
+                               against --color-base-100 at 8%, which
+                               disappears on Houndarr's near-black
+                               surface: the `-bg` tokens are the
+                               replacement.
+       --color-<state>-border  rgba stroke calibrated to read against
+                               the same dark surface without a
+                               hairline vanishing.
+
+     Use `*-bg` for UI chrome that needs a state tint behind text;
+     pair with `--color-<state>` for the foreground.  Info currently
+     ships only the foreground colour because no surface uses a
+     standalone info tint; when one does, add --color-info-bg at
+     ~15% alpha to match the pattern. */
   --color-danger:        #f87171;
   --color-danger-bg:     rgba(153, 27, 27, 0.30);
   --color-danger-border: rgba(248, 113, 113, 0.35);
@@ -137,14 +162,34 @@
 
   --color-info: #67e8f9;
 
-  /* ── Library-health segment colors (match --seg-*) ────────────────── */
+  /* Library-health segment colours.
+     Distinct from --color-<state>-bg: these are solid opaque hex
+     values designed to render as chart segment fills on the
+     dashboard's library-health bar.  A segment pixel IS the colour,
+     so transparency would muddy the rendering against the surface
+     behind it.  When adding a new `seg-*` token, pick a hex that
+     reads clearly next to the adjacent segments; do not reuse a
+     `*-bg` rgba because the dashboard bar composites segments on a
+     panel, not on --color-surface-base.
+
+     Naming suffix convention: `*-cd` means "cooldown" (cutoff-cd =
+     cutoff cooldown, upgrade-cd = upgrade cooldown).  The five
+     segments map directly to the five tick states tracked in
+     services/metrics.py. */
   --color-seg-eligible:    #4ade80;
   --color-seg-cooldown:    #22d3ee;
   --color-seg-cutoff-cd:   #fcd34d;
   --color-seg-upgrade-cd:  #a78bfa;
   --color-seg-unreleased:  #64748b;
 
-  /* ── Instance-type signature colors ───────────────────────────────── */
+  /* Instance-type signature colours.
+     Per-`*arr` family palette: each entry ships a foreground
+     (`--color-<app>`) and a dark-tinted background
+     (`--color-<app>-bg`) used by `instance_type_badge` in
+     _macros/badges.html.  The `-bg` rgba uses the same
+     layer-over-#07080f calibration as the semantic `*-bg` tokens
+     above, which is why the alpha values sit around 0.50 (Station's
+     branded chip wants more saturation than a success badge). */
   --color-sonarr:       #7dd3fc;
   --color-sonarr-bg:    rgba(8, 47, 73, 0.50);
   --color-radarr:       #fcd34d;

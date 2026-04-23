@@ -840,31 +840,27 @@ async def purge_old_logs(retention_days: int) -> int:
 async def clear_all_search_logs() -> int:
     """Delete every row in ``search_log`` and return the count that was removed.
 
-    Backs the Admin > Maintenance > Clear all logs action.  The audit
-    breadcrumb row ("Audit log cleared by admin…") is written by the
-    caller after this returns so the DELETE + INSERT aren't racy with
-    concurrent search_loop writes; this helper stays a pure truncate.
+    Thin delegator over :func:`houndarr.repositories.search_log.delete_all_logs`
+    since D.25; kept here so route-layer imports that reach into
+    ``database`` for the truncate keep working.  The audit breadcrumb
+    row is written by the caller after this returns so the DELETE +
+    INSERT are two separate statements and do not race concurrent
+    search_loop writes.
     """
-    async with get_db() as db:
-        cur = await db.execute("DELETE FROM search_log")
-        await db.commit()
-        return cur.rowcount or 0
+    from houndarr.repositories.search_log import delete_all_logs
+
+    return await delete_all_logs()
 
 
 async def write_admin_audit(message: str) -> None:
     """Insert a single system-audit row into ``search_log``.
 
-    Used by Admin operations to leave a breadcrumb on the Activity logs
-    page (e.g. "Policy settings reset to defaults by admin"). The row is
-    attributed to ``cycle_trigger='system'`` and ``action='info'`` so it
-    sorts alongside the scheduler's lifecycle events rather than a real
-    search result.  ``instance_id`` is NULL because these are
-    library-wide operations, not per-instance.
+    Thin delegator over :func:`houndarr.repositories.search_log.insert_admin_audit`
+    since D.25; kept here so route-layer imports that reach into
+    ``database`` for the admin-audit write keep working.  Admin
+    operations leave a breadcrumb on the Activity logs page (e.g.
+    "Policy settings reset to defaults by admin") via this wrapper.
     """
-    async with get_db() as db:
-        await db.execute(
-            "INSERT INTO search_log (instance_id, cycle_trigger, action, message)"
-            " VALUES (NULL, 'system', 'info', ?)",
-            (message,),
-        )
-        await db.commit()
+    from houndarr.repositories.search_log import insert_admin_audit
+
+    await insert_admin_audit(message)

@@ -306,6 +306,109 @@ async def test_delete_logs_for_instance_returns_zero_when_empty(
 
 @pytest.mark.pinning()
 @pytest.mark.asyncio()
+async def test_delete_all_logs_wipes_every_row(seeded_instances: None) -> None:
+    """delete_all_logs returns the pre-wipe count and empties the table."""
+    await repo.insert_log_row(
+        instance_id=1, item_id=1, item_type="episode", action="searched"
+    )
+    await repo.insert_log_row(
+        instance_id=2, item_id=2, item_type="movie", action="skipped"
+    )
+    await repo.insert_log_row(
+        instance_id=None, item_id=None, item_type=None, action="info"
+    )
+
+    removed = await repo.delete_all_logs()
+
+    assert removed == 3
+    assert await _count_logs() == 0
+
+
+@pytest.mark.pinning()
+@pytest.mark.asyncio()
+async def test_delete_all_logs_returns_zero_on_empty_table(seeded_instances: None) -> None:
+    """delete_all_logs returns 0 when the table is already empty."""
+    assert await repo.delete_all_logs() == 0
+
+
+@pytest.mark.pinning()
+@pytest.mark.asyncio()
+async def test_insert_admin_audit_writes_system_info_row(seeded_instances: None) -> None:
+    """insert_admin_audit writes a NULL-instance system/info breadcrumb."""
+    await repo.insert_admin_audit("Audit log cleared by admin (5 rows removed)")
+
+    rows = await repo.fetch_log_rows()
+    assert len(rows) == 1
+    row = rows[0]
+    assert row["instance_id"] is None
+    assert row["cycle_trigger"] == "system"
+    assert row["action"] == "info"
+    assert row["message"] == "Audit log cleared by admin (5 rows removed)"
+
+
+@pytest.mark.pinning()
+@pytest.mark.asyncio()
+async def test_insert_admin_audit_appends_without_mutating_existing(
+    seeded_instances: None,
+) -> None:
+    """insert_admin_audit is append-only; it does not disturb existing rows."""
+    await repo.insert_log_row(
+        instance_id=1,
+        item_id=101,
+        item_type="episode",
+        action="searched",
+        item_label="Show S01E01",
+    )
+    await repo.insert_admin_audit("Policy reset by admin")
+
+    rows = await repo.fetch_log_rows()
+    assert len(rows) == 2
+    # fetch_log_rows orders newest first; the audit row is newest.
+    assert rows[0]["cycle_trigger"] == "system"
+    assert rows[0]["action"] == "info"
+    assert rows[1]["action"] == "searched"
+    assert rows[1]["item_label"] == "Show S01E01"
+
+
+@pytest.mark.pinning()
+@pytest.mark.asyncio()
+async def test_database_clear_all_search_logs_delegates_through_repo(
+    seeded_instances: None,
+) -> None:
+    """database.clear_all_search_logs is a thin delegator over delete_all_logs."""
+    from houndarr.database import clear_all_search_logs as _db_clear
+
+    await repo.insert_log_row(
+        instance_id=1, item_id=1, item_type="episode", action="searched"
+    )
+    await repo.insert_log_row(
+        instance_id=2, item_id=2, item_type="movie", action="skipped"
+    )
+
+    removed = await _db_clear()
+
+    assert removed == 2
+    assert await _count_logs() == 0
+
+
+@pytest.mark.pinning()
+@pytest.mark.asyncio()
+async def test_database_write_admin_audit_delegates_through_repo(
+    seeded_instances: None,
+) -> None:
+    """database.write_admin_audit is a thin delegator over insert_admin_audit."""
+    from houndarr.database import write_admin_audit as _db_audit
+
+    await _db_audit("Delegator path breadcrumb")
+
+    rows = await repo.fetch_log_rows()
+    assert len(rows) == 1
+    assert rows[0]["message"] == "Delegator path breadcrumb"
+    assert rows[0]["cycle_trigger"] == "system"
+
+
+@pytest.mark.pinning()
+@pytest.mark.asyncio()
 async def test_engine_write_log_delegates_through_repo(seeded_instances: None) -> None:
     """The engine's _write_log helper writes the same row shape the repo would."""
     from houndarr.engine.search_loop import _write_log

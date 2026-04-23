@@ -54,15 +54,13 @@ from houndarr.config import (
     DEFAULT_WHISPARR_SEARCH_MODE,
 )
 from houndarr.crypto import ensure_master_key
-from houndarr.database import (
-    clear_all_search_logs as _db_clear_all_search_logs,
-)
-from houndarr.database import (
-    init_db,
-    write_admin_audit,
-)
+from houndarr.database import init_db
 from houndarr.engine.supervisor import Supervisor
 from houndarr.errors import ServiceError
+from houndarr.repositories.search_log import (
+    delete_all_logs,
+    insert_admin_audit,
+)
 from houndarr.services.instances import (
     LidarrSearchMode,
     ReadarrSearchMode,
@@ -150,7 +148,7 @@ async def reset_all_instance_policy(
         if supervisor is not None:
             await supervisor.reconcile_instance(instance.core.id)
 
-    await write_admin_audit(
+    await insert_admin_audit(
         f"Policy settings reset to defaults for {len(instances)} instance(s) by admin",
     )
     return len(instances)
@@ -162,8 +160,8 @@ async def clear_all_search_logs() -> int:
     Returns:
         Number of rows that were removed (excluding the breadcrumb).
     """
-    removed = await _db_clear_all_search_logs()
-    await write_admin_audit(f"Audit log cleared by admin ({removed} rows removed)")
+    removed = await delete_all_logs()
+    await insert_admin_audit(f"Audit log cleared by admin ({removed} rows removed)")
     return removed
 
 

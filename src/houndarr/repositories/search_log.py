@@ -254,3 +254,48 @@ async def delete_logs_for_instance(instance_id: int) -> int:
         )
         await db.commit()
         return cur.rowcount or 0
+
+
+async def delete_all_logs() -> int:
+    """Truncate the ``search_log`` table and return the removed row count.
+
+    Backs the Admin > Maintenance > Clear all logs action.  The audit
+    breadcrumb row ("Audit log cleared by admin ...") is written by
+    :func:`insert_admin_audit` after this returns, so the DELETE and
+    the follow-up INSERT are two separate statements against two
+    separate connections; that keeps the truncate a pure wipe and
+    lets concurrent supervisor writes interleave without corrupting
+    the breadcrumb row.
+
+    Returns:
+        Number of rows that were removed (excluding the breadcrumb,
+        which is written by the caller afterwards).
+    """
+    async with get_db() as db:
+        cur = await db.execute("DELETE FROM search_log")
+        await db.commit()
+        return cur.rowcount or 0
+
+
+async def insert_admin_audit(message: str) -> None:
+    """Insert a single system-audit row into ``search_log``.
+
+    Used by admin operations (policy reset, log clear, factory reset)
+    to leave a breadcrumb on the Activity logs page
+    (e.g. "Policy settings reset to defaults by admin").  The row is
+    attributed to ``cycle_trigger='system'`` and ``action='info'`` so
+    it sorts alongside the scheduler's lifecycle events rather than a
+    real search result.  ``instance_id`` is NULL because these are
+    library-wide operations, not per-instance.
+
+    Args:
+        message: Free-text audit message written to the ``message``
+            column verbatim.
+    """
+    async with get_db() as db:
+        await db.execute(
+            "INSERT INTO search_log (instance_id, cycle_trigger, action, message)"
+            " VALUES (NULL, 'system', 'info', ?)",
+            (message,),
+        )
+        await db.commit()

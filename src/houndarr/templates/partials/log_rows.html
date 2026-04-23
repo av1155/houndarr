@@ -86,6 +86,7 @@
            data-action="{{ row.action or '' }}"
            data-cycle-id="{{ row.cycle_id or '' }}"
            data-cycle-progress="{{ row.cycle_progress or '' }}"
+           data-item-type="{{ row.item_type or '' }}"
       >
         <div class="entry__time" data-ts="{{ row.timestamp or '' }}" data-log-ts="{{ row.timestamp or '' }}">{{ row.timestamp[:19].replace('T', ' ') if row.timestamp else '-' }}</div>
         <div class="entry__action entry__action--{{ row.action or 'info' }}">{{ row.action or '-' }}</div>

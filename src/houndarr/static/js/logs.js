@@ -1,4 +1,4 @@
-// Logs page controller. initLogsPage() re-runs every time HTMX
+// Logs page controller.  initLogsPage() re-runs every time HTMX
 // swaps the Logs partial into #app-content; the outer AbortController
 // aborts the previous binding so listeners don't linger on the
 // detached DOM between navigations.
@@ -9,588 +9,508 @@ function initLogsPage() {
   window.__houndarrLogsPageController = controller;
   const { signal } = controller;
 
-    // -------------------------------------------------------------------------
-    // Timestamp formatting
-    // -------------------------------------------------------------------------
+  const FEED = document.getElementById('log-feed');
+  const FORM = document.getElementById('log-filter-form');
+  const LIVE = document.getElementById('live-indicator');
+  const LIVE_META = document.getElementById('live-meta');
+  const BANNER = document.getElementById('new-entries');
+  const BANNER_COUNT = document.getElementById('new-entries-count');
+  const TOAST = document.getElementById('toast');
 
-    const formatLocalTimestamp =
-      window.houndarrClientHelpers?.formatLocalTimestamp ||
-      function (isoTimestamp) {
-        if (!isoTimestamp) {
-          return 'N/A';
-        }
+  if (!FEED || !FORM) {
+    return;
+  }
 
-        const parsed = new Date(isoTimestamp);
-        if (Number.isNaN(parsed.getTime())) {
-          return isoTimestamp;
-        }
+  // Expand/collapse state persists on window across HTMX swaps so a
+  // filter change that re-renders the feed keeps the user's intent.
+  // expandedOverrides wins over the default when both are clear; the
+  // default comes from article[data-expanded] which the template
+  // computes per-cycle (open for activity cycles, closed for
+  // skip-only and system).
+  window.__houndarrLogsExpandedOverrides ||= new Set();
+  window.__houndarrLogsCollapsedOverrides ||= new Set();
+  const expandedOverrides = window.__houndarrLogsExpandedOverrides;
+  const collapsedOverrides = window.__houndarrLogsCollapsedOverrides;
 
-        return new Intl.DateTimeFormat(undefined, {
-          year: 'numeric',
-          month: '2-digit',
-          day: '2-digit',
-          hour: '2-digit',
-          minute: '2-digit',
-          second: '2-digit',
-          hour12: false,
-          timeZoneName: 'short',
-        }).format(parsed);
-      };
-
-    function formatVisibleLogTimestamps(root = document) {
-      root.querySelectorAll('[data-log-ts]').forEach((el) => {
-        if (el.getAttribute('data-ts-formatted') === 'true') {
-          return;
-        }
-        const ts = el.getAttribute('data-log-ts') || '';
-        el.textContent = formatLocalTimestamp(ts);
-        el.setAttribute('data-ts-formatted', 'true');
-      });
-    }
-
-    // -------------------------------------------------------------------------
-    // Row data extraction helpers
-    // -------------------------------------------------------------------------
-
-    function getRowCells(row) {
-      return {
-        timestamp: row.querySelector('[data-col="timestamp"]')?.textContent?.trim() || '',
-        instance: row.querySelector('[data-col="instance"]')?.textContent?.trim() || '',
-        action: row.querySelector('[data-col="action"]')?.textContent?.trim() || '',
-        type: row.querySelector('[data-col="type"]')?.textContent?.trim() || '',
-        kind: row.querySelector('[data-col="kind"]')?.textContent?.trim() || '',
-        trigger: row.querySelector('[data-col="trigger"]')?.textContent?.trim() || '',
-        cycle: row.querySelector('[data-col="cycle"]')?.textContent?.trim() || '',
-        cycle_outcome: row.querySelector('[data-col="outcome"]')?.textContent?.trim() || '',
-        media: row.querySelector('[data-col="media"]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
-        reason: row.querySelector('[data-col="reason"]')?.textContent?.trim() || '',
-      };
-    }
-
-    // -------------------------------------------------------------------------
-    // Copy format implementations
-    // -------------------------------------------------------------------------
-
-    const _COPY_HEADERS = [
-      'Timestamp (Local)', 'Instance', 'Action', 'Type', 'Kind',
-      'Trigger', 'Cycle', 'Cycle outcome', 'Media', 'Reason / Message',
-    ];
-
-    function _tsvCell(value) {
-      // Replace tabs and newlines with spaces; preserve other content as-is.
-      return String(value).replaceAll('\t', ' ').replaceAll('\n', ' ').replaceAll('\r', ' ');
-    }
-
-    function buildTsv(rows) {
-      const lines = [_COPY_HEADERS.map(_tsvCell).join('\t')];
-      rows.forEach((row) => {
-        const c = getRowCells(row);
-        lines.push([
-          c.timestamp, c.instance, c.action, c.type, c.kind,
-          c.trigger, c.cycle, c.cycle_outcome, c.media, c.reason,
-        ].map(_tsvCell).join('\t'));
-      });
-      return lines.join('\n');
-    }
-
-    function _escapePipes(value) {
-      return String(value).replaceAll('|', '\\|').replaceAll('\n', ' ');
-    }
-
-    function _mdCell(value) {
-      // Use a hyphen for blank cells.
-      const str = String(value);
-      return _escapePipes(str || '-');
-    }
-
-    function buildMarkdown(rows) {
-      const divider = _COPY_HEADERS.map(() => '---');
-      const lines = [
-        `| ${_COPY_HEADERS.join(' | ')} |`,
-        `| ${divider.join(' | ')} |`,
-      ];
-      rows.forEach((row) => {
-        const c = getRowCells(row);
-        const values = [
-          c.timestamp, c.instance, c.action, c.type, c.kind,
-          c.trigger, c.cycle, c.cycle_outcome, c.media, c.reason,
-        ].map(_mdCell);
-        lines.push(`| ${values.join(' | ')} |`);
-      });
-      return lines.join('\n');
-    }
-
-    function buildJson(rows) {
-      const data = rows.map((row) => {
-        const c = getRowCells(row);
-        return {
-          timestamp: c.timestamp || null,
-          instance: c.instance || null,
-          action: c.action || null,
-          type: c.type || null,
-          kind: c.kind || null,
-          trigger: c.trigger || null,
-          cycle: c.cycle || null,
-          cycle_outcome: c.cycle_outcome || null,
-          media: c.media || null,
-          reason: c.reason || null,
-        };
-      });
-      return JSON.stringify(data, null, 2);
-    }
-
-    function buildPlainText(rows) {
-      const lines = [];
-      rows.forEach((row) => {
-        const c = getRowCells(row);
-        const parts = [];
-        if (c.timestamp) parts.push(c.timestamp);
-        if (c.instance) parts.push(`[${c.instance}]`);
-        if (c.action) parts.push(c.action.toUpperCase());
-        if (c.type) parts.push(c.type);
-        if (c.kind) parts.push(`kind:${c.kind}`);
-        if (c.trigger) parts.push(`trigger:${c.trigger}`);
-        if (c.cycle) parts.push(`cycle:${c.cycle}`);
-        if (c.cycle_outcome) parts.push(`outcome:${c.cycle_outcome}`);
-        if (c.media) parts.push(c.media);
-        if (c.reason) parts.push(`reason: ${c.reason}`);
-        lines.push(parts.join('  '));
-      });
-      return lines.join('\n');
-    }
-
-    function buildCopyText(format) {
-      const rows = Array.from(document.querySelectorAll('#log-tbody tr[data-log-row="true"]'));
-      if (rows.length === 0) {
-        return null;
-      }
-      if (format === 'tsv') return buildTsv(rows);
-      if (format === 'markdown') return buildMarkdown(rows);
-      if (format === 'json') return buildJson(rows);
-      if (format === 'text') return buildPlainText(rows);
-      return buildTsv(rows);
-    }
-
-    // -------------------------------------------------------------------------
-    // Summary state
-    // -------------------------------------------------------------------------
-
-    function setSummaryValue(id, value) {
-      const el = document.getElementById(id);
-      if (!el) {
-        return;
-      }
-      el.textContent = String(value);
-    }
-
-    const summaryState = {
-      totalRows: 0,
-      searchedRows: 0,
-      skippedRows: 0,
-      errorRows: 0,
-      infoRows: 0,
-      totalCycles: 0,
-      searchedCycles: 0,
-      skipOnlyCycles: 0,
-      cycleProgressById: new Map(),
+  const formatLocalTimestamp =
+    window.houndarrClientHelpers?.formatLocalTimestamp ||
+    function fallbackFormat(isoTs) {
+      return isoTs || '';
     };
 
-    function mergeCycleProgress(current, incoming) {
-      if (current === 'progress' || incoming === 'progress') {
-        return 'progress';
+  const reducedMotionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+
+  // ---------------------------------------------------------------------
+  // Timestamp formatting
+  // ---------------------------------------------------------------------
+
+  function formatRelTime(isoTs) {
+    if (!isoTs) return '';
+    const then = Date.parse(isoTs);
+    if (Number.isNaN(then)) return '';
+    const secs = Math.max(0, Math.floor((Date.now() - then) / 1000));
+    if (secs < 5) return 'just now';
+    if (secs < 60) return `${secs}s ago`;
+    const mins = Math.floor(secs / 60);
+    if (mins < 60) return `${mins}m ago`;
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24) return `${hrs}h ago`;
+    return `${Math.floor(hrs / 24)}d ago`;
+  }
+
+  function formatVisibleTimestamps(root) {
+    root.querySelectorAll('[data-ts]:not([data-ts-formatted])').forEach((el) => {
+      const ts = el.getAttribute('data-ts') || '';
+      if (ts) {
+        el.textContent = formatLocalTimestamp(ts);
       }
-      if (current) {
-        return current;
-      }
-      return incoming || 'unknown';
+      el.setAttribute('data-ts-formatted', 'true');
+    });
+  }
+
+  // ---------------------------------------------------------------------
+  // Expand / collapse with JS-driven max-height.  Matches the admin
+  // panel pattern in settings.js: measure scrollHeight on open, pin
+  // the value inline, flip to max-height:none after transitionend so
+  // the card can grow on window resize without a second JS pass.
+  // ---------------------------------------------------------------------
+
+  function applyExpand(article, open, animate = true) {
+    const body = article.querySelector('.cycle__body');
+    const header = article.querySelector('.cycle__header');
+    if (!body) return;
+
+    if (!animate || reducedMotionQuery.matches) {
+      article.dataset.expanded = open ? 'true' : 'false';
+      header?.setAttribute('aria-expanded', open ? 'true' : 'false');
+      body.style.maxHeight = open ? 'none' : '0px';
+      return;
     }
 
-    function adjustCycleBucket(status, delta) {
-      if (status === 'progress') {
-        summaryState.searchedCycles += delta;
-        return;
-      }
-      if (status === 'no_progress') {
-        summaryState.skipOnlyCycles += delta;
-        return;
-      }
-    }
-
-    function accountSummaryRow(row) {
-      if (row.getAttribute('data-summary-accounted') === 'true') {
-        return;
-      }
-
-      row.setAttribute('data-summary-accounted', 'true');
-      summaryState.totalRows += 1;
-
-      const action = (row.getAttribute('data-action') || '').toLowerCase();
-      if (action === 'searched') {
-        summaryState.searchedRows += 1;
-      } else if (action === 'skipped') {
-        summaryState.skippedRows += 1;
-      } else if (action === 'error') {
-        summaryState.errorRows += 1;
-      } else if (action === 'info') {
-        summaryState.infoRows += 1;
-      }
-
-      const cycleId = row.getAttribute('data-cycle-id') || '';
-      const cycleProgress = row.getAttribute('data-cycle-progress') || '';
-      if (!cycleId) {
-        return;
-      }
-
-      const previous = summaryState.cycleProgressById.get(cycleId) || '';
-      const next = mergeCycleProgress(previous, cycleProgress);
-      if (!previous) {
-        summaryState.totalCycles += 1;
-        summaryState.cycleProgressById.set(cycleId, next);
-        adjustCycleBucket(next, 1);
-        return;
-      }
-
-      if (previous !== next) {
-        summaryState.cycleProgressById.set(cycleId, next);
-        adjustCycleBucket(previous, -1);
-        adjustCycleBucket(next, 1);
-      }
-    }
-
-    function renderSummaryState() {
-      setSummaryValue('summary-total-rows', summaryState.totalRows);
-      setSummaryValue('summary-total-cycles', summaryState.totalCycles);
-      setSummaryValue('summary-searched-cycles', summaryState.searchedCycles);
-      setSummaryValue('summary-skip-cycles', summaryState.skipOnlyCycles);
-      setSummaryValue('summary-searched-rows', summaryState.searchedRows);
-      setSummaryValue('summary-skipped-rows', summaryState.skippedRows);
-      setSummaryValue('summary-error-rows', summaryState.errorRows);
-      setSummaryValue('summary-info-rows', summaryState.infoRows);
-    }
-
-    function resetSummaryState() {
-      summaryState.totalRows = 0;
-      summaryState.searchedRows = 0;
-      summaryState.skippedRows = 0;
-      summaryState.errorRows = 0;
-      summaryState.infoRows = 0;
-      summaryState.totalCycles = 0;
-      summaryState.searchedCycles = 0;
-      summaryState.skipOnlyCycles = 0;
-      summaryState.cycleProgressById.clear();
-    }
-
-    function rebuildSummaryFromVisibleRows() {
-      resetSummaryState();
-      document.querySelectorAll('#log-tbody tr[data-log-row="true"]').forEach((row) => {
-        row.removeAttribute('data-summary-accounted');
-        accountSummaryRow(row);
-      });
-      renderSummaryState();
-    }
-
-    function updateSummaryForAppendedRows(rows) {
-      rows.forEach((row) => {
-        accountSummaryRow(row);
-      });
-      renderSummaryState();
-    }
-
-    // -------------------------------------------------------------------------
-    // Split-button copy dropdown controller
-    // -------------------------------------------------------------------------
-
-    // Collect all main buttons and all label spans across both placements.
-    const copyMainBtns = Array.from(document.querySelectorAll('[data-copy-main="true"]'));
-    const copyLabels = Array.from(document.querySelectorAll('.copy-visible-logs-label'));
-    const copyChevronBtns = Array.from(document.querySelectorAll('[data-copy-chevron="true"]'));
-    const copyDropdownMenus = Array.from(document.querySelectorAll('.copy-dropdown-menu'));
-    const copyGroups = Array.from(document.querySelectorAll('[data-copy-group]'));
-
-    let copyButtonTimer = null;
-    let copyLabelSwapTimer = null;
-    let dropdownOpen = false;
-
-    function setCopyButtonLabel(nextLabel) {
-      if (!copyLabels.length) {
-        return;
-      }
-
-      if (copyLabels[0].textContent === nextLabel) {
-        return;
-      }
-
-      if (copyLabelSwapTimer) {
-        window.clearTimeout(copyLabelSwapTimer);
-        copyLabelSwapTimer = null;
-      }
-
-      copyLabels.forEach((el) => el.classList.add('opacity-0'));
-      copyLabelSwapTimer = window.setTimeout(() => {
-        copyLabels.forEach((el) => {
-          el.textContent = nextLabel;
-          el.classList.remove('opacity-0');
-        });
-        copyLabelSwapTimer = null;
-      }, 120);
-    }
-
-    function flashCopyButtonState(state) {
-      if (!copyMainBtns.length) {
-        return;
-      }
-
-      if (copyButtonTimer) {
-        window.clearTimeout(copyButtonTimer);
-        copyButtonTimer = null;
-      }
-
-      copyMainBtns.forEach((btn) => {
-        btn.classList.remove('is-copy-success', 'is-copy-error');
-      });
-
-      if (state === 'success') {
-        setCopyButtonLabel('Copied');
-        copyMainBtns.forEach((btn) => btn.classList.add('is-copy-success'));
-      } else if (state === 'error') {
-        setCopyButtonLabel('Copy failed');
-        copyMainBtns.forEach((btn) => btn.classList.add('is-copy-error'));
-      } else {
-        setCopyButtonLabel('Copy as TSV');
-        return;
-      }
-
-      copyButtonTimer = window.setTimeout(() => {
-        flashCopyButtonState('idle');
-      }, 1200);
-    }
-
-    function closeDropdown() {
-      dropdownOpen = false;
-      copyDropdownMenus.forEach((menu) => menu.classList.add('hidden'));
-      copyChevronBtns.forEach((btn) => {
-        btn.setAttribute('aria-expanded', 'false');
-        btn.querySelectorAll('.copy-chevron-icon').forEach((icon) => {
-          icon.style.transform = '';
-        });
-      });
-    }
-
-    function openDropdown() {
-      dropdownOpen = true;
-      copyDropdownMenus.forEach((menu) => menu.classList.remove('hidden'));
-      copyChevronBtns.forEach((btn) => {
-        btn.setAttribute('aria-expanded', 'true');
-        btn.querySelectorAll('.copy-chevron-icon').forEach((icon) => {
-          icon.style.transform = 'rotate(180deg)';
-        });
-      });
-      // Focus the first menu item in the first visible menu.
-      const firstMenu = copyDropdownMenus.find((m) => !m.classList.contains('hidden'));
-      if (firstMenu) {
-        const firstItem = firstMenu.querySelector('[data-copy-format]');
-        if (firstItem) firstItem.focus();
-      }
-    }
-
-    function toggleDropdown() {
-      if (dropdownOpen) {
-        closeDropdown();
-      } else {
-        openDropdown();
-      }
-    }
-
-    function performCopy(format) {
-      const text = buildCopyText(format);
-      if (text === null) {
-        return;
-      }
-      // navigator.clipboard is only available in secure contexts (HTTPS or localhost).
-      // Fall back to the legacy textarea + execCommand approach for plain HTTP access.
-      if (navigator.clipboard) {
-        navigator.clipboard
-          .writeText(text)
-          .then(() => {
-            flashCopyButtonState('success');
-          })
-          .catch(() => {
-            flashCopyButtonState('error');
-          });
-      } else {
-        try {
-          const ta = document.createElement('textarea');
-          ta.value = text;
-          ta.style.position = 'fixed';
-          ta.style.opacity = '0';
-          document.body.appendChild(ta);
-          ta.focus();
-          ta.select();
-          document.execCommand('copy');
-          document.body.removeChild(ta);
-          flashCopyButtonState('success');
-        } catch {
-          flashCopyButtonState('error');
+    if (open) {
+      const target = body.scrollHeight;
+      article.dataset.expanded = 'true';
+      header?.setAttribute('aria-expanded', 'true');
+      body.style.maxHeight = `${target}px`;
+      const onDone = (ev) => {
+        if (ev.propertyName !== 'max-height') return;
+        body.removeEventListener('transitionend', onDone);
+        if (article.dataset.expanded === 'true') {
+          body.style.maxHeight = 'none';
         }
+      };
+      body.addEventListener('transitionend', onDone, { signal });
+    } else {
+      // Pin a concrete max-height first so the transition has a
+      // from-value, force a reflow, then animate to 0.
+      body.style.maxHeight = `${body.scrollHeight}px`;
+      // eslint-disable-next-line no-unused-expressions
+      body.offsetHeight;
+      article.dataset.expanded = 'false';
+      header?.setAttribute('aria-expanded', 'false');
+      requestAnimationFrame(() => {
+        body.style.maxHeight = '0px';
+      });
+    }
+  }
+
+  function toggleCycle(article) {
+    if (!article) return;
+    const isOpen = article.dataset.expanded === 'true';
+    const cycleId = article.dataset.cycleId || '';
+    if (isOpen) {
+      if (cycleId) {
+        collapsedOverrides.add(cycleId);
+        expandedOverrides.delete(cycleId);
       }
+      applyExpand(article, false);
+    } else {
+      if (cycleId) {
+        expandedOverrides.add(cycleId);
+        collapsedOverrides.delete(cycleId);
+      }
+      applyExpand(article, true);
+    }
+  }
+
+  // animate=false on initial mount and after HTMX swaps so newly
+  // rendered cards appear at their final state instead of sliding
+  // open over 280ms.  User toggles use animate=true.
+  function applyExpandState(root) {
+    root.querySelectorAll('.cycle').forEach((article) => {
+      const cycleId = article.dataset.cycleId || '';
+      const defaultOpen = article.dataset.expanded === 'true';
+      let open = defaultOpen;
+      if (cycleId) {
+        if (expandedOverrides.has(cycleId)) open = true;
+        else if (collapsedOverrides.has(cycleId)) open = false;
+      }
+      applyExpand(article, open, false);
+    });
+  }
+
+  FEED.addEventListener(
+    'click',
+    (ev) => {
+      const header = ev.target.closest('.cycle__header');
+      if (!header) return;
+      toggleCycle(header.closest('.cycle'));
+    },
+    { signal },
+  );
+
+  FEED.addEventListener(
+    'keydown',
+    (ev) => {
+      if (ev.key !== 'Enter' && ev.key !== ' ') return;
+      const header = ev.target.closest('.cycle__header');
+      if (!header) return;
+      ev.preventDefault();
+      toggleCycle(header.closest('.cycle'));
+    },
+    { signal },
+  );
+
+  // ---------------------------------------------------------------------
+  // Copy split button
+  // ---------------------------------------------------------------------
+
+  const COPY_COLS = [
+    'timestamp',
+    'instance',
+    'action',
+    'kind',
+    'type',
+    'title',
+    'reason',
+    'cycle',
+    'trigger',
+  ];
+  const COPY_MARKDOWN_HEADERS = ['Timestamp', 'Instance', 'Action', 'Kind', 'Title', 'Reason'];
+
+  function extractRowData() {
+    const rows = [];
+    FEED.querySelectorAll('.cycle').forEach((article) => {
+      const instance = article.querySelector('.cycle__instance')?.textContent.trim() || '';
+      const trigger = article.dataset.cycleTrigger || '';
+      const cycleId = article.dataset.cycleId || '';
+      article.querySelectorAll('.entry').forEach((entry) => {
+        const tsEl = entry.querySelector('[data-ts]');
+        const rawTs = tsEl?.getAttribute('data-ts') || '';
+        rows.push({
+          timestamp: rawTs ? formatLocalTimestamp(rawTs) : '',
+          instance,
+          action: entry.querySelector('.entry__action')?.textContent.trim() || '',
+          kind: entry.querySelector('.entry__kind')?.textContent.trim() || '',
+          type: entry.dataset.itemType || '',
+          title: entry.querySelector('.entry__title')?.textContent.trim() || '',
+          reason: entry.querySelector('.entry__reason')?.textContent.trim() || '',
+          cycle: cycleId,
+          trigger,
+        });
+      });
+    });
+    return rows;
+  }
+
+  function safeTsv(value) {
+    return String(value).replaceAll('\t', ' ').replaceAll('\n', ' ').replaceAll('\r', ' ');
+  }
+
+  function safeMarkdown(value) {
+    return String(value).replaceAll('|', '\\|').replaceAll('\n', ' ');
+  }
+
+  function buildCopyText(format) {
+    const rows = extractRowData();
+    if (rows.length === 0) return null;
+
+    if (format === 'markdown') {
+      const divider = COPY_MARKDOWN_HEADERS.map(() => '---');
+      const lines = [
+        `| ${COPY_MARKDOWN_HEADERS.join(' | ')} |`,
+        `| ${divider.join(' | ')} |`,
+      ];
+      rows.forEach((r) => {
+        const cells = [r.timestamp, r.instance, r.action, r.kind, r.title, r.reason].map(safeMarkdown);
+        lines.push(`| ${cells.join(' | ')} |`);
+      });
+      return lines.join('\n');
     }
 
-    // Main button: copy TSV immediately, also close dropdown if open.
-    copyMainBtns.forEach((btn) => {
-      btn.addEventListener(
+    if (format === 'json') {
+      return JSON.stringify(rows, null, 2);
+    }
+
+    if (format === 'text') {
+      return rows
+        .map((r) => {
+          const parts = [];
+          if (r.timestamp) parts.push(`[${r.timestamp}]`);
+          if (r.instance) parts.push(r.instance);
+          if (r.action) parts.push(r.action.toUpperCase());
+          if (r.kind) parts.push(`kind:${r.kind}`);
+          if (r.title) parts.push(r.title);
+          if (r.reason) parts.push(`- ${r.reason}`);
+          return parts.join(' ');
+        })
+        .join('\n');
+    }
+
+    // Default: tsv
+    const header = COPY_COLS.map(safeTsv).join('\t');
+    const body = rows.map((r) => COPY_COLS.map((c) => safeTsv(r[c] || '')).join('\t'));
+    return [header, ...body].join('\n');
+  }
+
+  let toastTimer = null;
+
+  function showToast(message) {
+    if (!TOAST) return;
+    const label = TOAST.querySelector('.toast__label');
+    if (label) label.textContent = message;
+    TOAST.hidden = false;
+    if (toastTimer !== null) {
+      clearTimeout(toastTimer);
+    }
+    toastTimer = window.setTimeout(() => {
+      TOAST.hidden = true;
+      toastTimer = null;
+    }, 2400);
+  }
+
+  async function writeClipboard(text) {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+      return;
+    }
+    // Fallback for http:// contexts (non-secure): textarea + execCommand.
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    try {
+      document.execCommand('copy');
+    } finally {
+      document.body.removeChild(ta);
+    }
+  }
+
+  function performCopy(format) {
+    const text = buildCopyText(format);
+    if (text === null) {
+      showToast('Nothing to copy');
+      return;
+    }
+    writeClipboard(text)
+      .then(() => {
+        const rowCount = extractRowData().length;
+        const labelByFormat = {
+          tsv: 'TSV',
+          markdown: 'Markdown',
+          json: 'JSON',
+          text: 'plain text',
+        };
+        const label = labelByFormat[format] || 'text';
+        showToast(`Copied ${rowCount} ${rowCount === 1 ? 'entry' : 'entries'} as ${label}`);
+      })
+      .catch(() => showToast('Copy failed'));
+  }
+
+  let openMenu = null;
+
+  function closeMenu() {
+    if (!openMenu) return;
+    openMenu.hidden = true;
+    const group = openMenu.closest('[data-copy-group]');
+    group?.querySelector('[data-copy-chevron]')?.setAttribute('aria-expanded', 'false');
+    openMenu = null;
+  }
+
+  function openMenuFor(menu) {
+    closeMenu();
+    menu.hidden = false;
+    const group = menu.closest('[data-copy-group]');
+    group?.querySelector('[data-copy-chevron]')?.setAttribute('aria-expanded', 'true');
+    openMenu = menu;
+  }
+
+  document.querySelectorAll('[data-copy-group]').forEach((group) => {
+    const mainBtn = group.querySelector('[data-copy-main]');
+    const chevronBtn = group.querySelector('[data-copy-chevron]');
+    const menu = group.querySelector('.copy-menu');
+
+    mainBtn?.addEventListener(
+      'click',
+      () => {
+        closeMenu();
+        performCopy('tsv');
+      },
+      { signal },
+    );
+
+    chevronBtn?.addEventListener(
+      'click',
+      (ev) => {
+        ev.stopPropagation();
+        if (!menu) return;
+        if (menu.hidden) openMenuFor(menu);
+        else closeMenu();
+      },
+      { signal },
+    );
+
+    menu?.querySelectorAll('[data-copy-format]').forEach((item) => {
+      item.addEventListener(
         'click',
         () => {
-          if (dropdownOpen) {
-            closeDropdown();
-          }
-          performCopy('tsv');
+          const fmt = item.getAttribute('data-copy-format') || 'tsv';
+          closeMenu();
+          performCopy(fmt);
         },
         { signal },
       );
     });
+  });
 
-    // Chevron: toggle dropdown.
-    copyChevronBtns.forEach((btn) => {
-      btn.addEventListener('click', toggleDropdown, { signal });
-    });
+  document.addEventListener(
+    'click',
+    (ev) => {
+      if (openMenu && !ev.target.closest('[data-copy-group]')) {
+        closeMenu();
+      }
+    },
+    { signal },
+  );
 
-    // Format menu items: copy in selected format, close dropdown.
-    copyDropdownMenus.forEach((menu) => {
-      menu.querySelectorAll('[data-copy-format]').forEach((item) => {
-        item.addEventListener(
-          'click',
-          () => {
-            const fmt = item.getAttribute('data-copy-format') || 'tsv';
-            closeDropdown();
-            performCopy(fmt);
-          },
-          { signal },
-        );
-      });
+  document.addEventListener(
+    'keydown',
+    (ev) => {
+      if (ev.key === 'Escape' && openMenu) {
+        closeMenu();
+      }
+    },
+    { signal },
+  );
 
-      // Keyboard navigation within the menu.
-      menu.addEventListener(
-        'keydown',
-        (evt) => {
-          const items = Array.from(menu.querySelectorAll('[data-copy-format]'));
-          const focused = document.activeElement;
-          const idx = items.indexOf(focused);
+  // ---------------------------------------------------------------------
+  // Head-poll + new-entries banner
+  // ---------------------------------------------------------------------
 
-          if (evt.key === 'ArrowDown') {
-            evt.preventDefault();
-            const next = items[(idx + 1) % items.length];
-            if (next) next.focus();
-          } else if (evt.key === 'ArrowUp') {
-            evt.preventDefault();
-            const prev = items[(idx - 1 + items.length) % items.length];
-            if (prev) prev.focus();
-          } else if (evt.key === 'Escape' || evt.key === 'Tab') {
-            evt.preventDefault();
-            closeDropdown();
-            // Return focus to the chevron of the group that owns this menu.
-            const groupEl = menu.closest('[data-copy-group]');
-            if (groupEl) {
-              const chevron = groupEl.querySelector('[data-copy-chevron="true"]');
-              if (chevron) chevron.focus();
-            }
-          }
-        },
-        { signal },
-      );
-    });
+  const SCROLL_THRESHOLD = 240;
+  const POLL_MS = 30000;
 
-    // Close on Esc globally or outside click.
-    document.addEventListener(
-      'keydown',
-      (evt) => {
-        if (evt.key === 'Escape' && dropdownOpen) {
-          closeDropdown();
-        }
-      },
-      { signal },
-    );
+  function firstCycleId() {
+    const first = FEED.querySelector('.cycle[data-cycle-id]:not([data-cycle-id=""])');
+    return first?.getAttribute('data-cycle-id') || '';
+  }
 
-    document.addEventListener(
-      'pointerdown',
-      (evt) => {
-        if (!dropdownOpen) {
-          return;
-        }
-        const isInsideGroup = copyGroups.some((g) => g.contains(evt.target));
-        if (!isInsideGroup) {
-          closeDropdown();
-        }
-      },
-      { signal },
-    );
+  let newestCycleId = firstCycleId();
+  let pendingCount = 0;
 
-    // -------------------------------------------------------------------------
-    // HTMX event handlers
-    // -------------------------------------------------------------------------
+  function updateBannerVisibility() {
+    if (!BANNER) return;
+    const scrolledAway = window.scrollY > SCROLL_THRESHOLD;
+    const show = pendingCount > 0 && scrolledAway;
+    if (show) {
+      if (BANNER_COUNT) BANNER_COUNT.textContent = String(pendingCount);
+      BANNER.hidden = false;
+      BANNER.dataset.visible = 'true';
+      LIVE?.setAttribute('data-state', 'paused');
+      const label = LIVE?.querySelector('.live-label');
+      if (label) label.textContent = 'Paused';
+    } else {
+      BANNER.dataset.visible = 'false';
+      // Keep hidden once no pending entries remain.
+      if (pendingCount === 0) {
+        BANNER.hidden = true;
+      }
+      LIVE?.setAttribute('data-state', 'live');
+      const label = LIVE?.querySelector('.live-label');
+      if (label) label.textContent = 'Live';
+    }
+  }
 
-    formatVisibleLogTimestamps(document);
-    rebuildSummaryFromVisibleRows();
+  function updateLiveMeta(isoTs) {
+    if (!LIVE_META) return;
+    LIVE_META.textContent = isoTs ? `updated ${formatRelTime(isoTs)}` : 'updated just now';
+  }
 
-    document.body.addEventListener(
-      'htmx:afterSwap',
-      (evt) => {
-        const target = evt.detail && evt.detail.target;
-        if (!target) {
-          return;
-        }
+  async function pollHead() {
+    if (signal.aborted) return;
+    try {
+      const qs = newestCycleId
+        ? `?since_cycle_id=${encodeURIComponent(newestCycleId)}`
+        : '';
+      const res = await fetch(`/api/logs/head${qs}`, { signal });
+      if (!res.ok) return;
+      const data = await res.json();
+      pendingCount = Number(data.count_newer_than) || 0;
+      if (data.newest_timestamp) updateLiveMeta(data.newest_timestamp);
+      updateBannerVisibility();
+    } catch (err) {
+      if (err.name !== 'AbortError') {
+        // Head poll is best-effort; silently suppress transient
+        // network errors and retry on the next tick.
+      }
+    }
+  }
 
-        if (target.id === 'log-tbody') {
-          formatVisibleLogTimestamps(target);
-          rebuildSummaryFromVisibleRows();
-          return;
-        }
+  const pollTimer = window.setInterval(pollHead, POLL_MS);
+  signal.addEventListener('abort', () => {
+    window.clearInterval(pollTimer);
+  });
+  pollHead();
 
-        if (target.id === 'pagination-row') {
-          const appendedRows = Array.from(
-            document.querySelectorAll('#log-tbody tr[data-log-row="true"].htmx-added'),
-          );
-          formatVisibleLogTimestamps(document);
-          if (appendedRows.length > 0) {
-            updateSummaryForAppendedRows(appendedRows);
-          } else {
-            rebuildSummaryFromVisibleRows();
-          }
-        }
-      },
-      { signal },
-    );
+  window.addEventListener('scroll', updateBannerVisibility, {
+    signal,
+    passive: true,
+  });
 
-    document.body.addEventListener(
-      'htmx:beforeRequest',
-      (evt) => {
-        const requestPath = evt.detail?.pathInfo?.requestPath || '';
-        if (!requestPath.includes('/api/logs/partial')) {
-          return;
-        }
+  BANNER?.addEventListener(
+    'click',
+    () => {
+      pendingCount = 0;
+      updateBannerVisibility();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      // Force a refetch so the newest cycles land in the feed.
+      if (window.htmx && FORM) {
+        window.htmx.trigger(FORM, 'submit');
+      }
+    },
+    { signal },
+  );
 
-        const shell = document.getElementById('logs-table-shell');
-        if (shell) {
-          shell.classList.add('is-loading');
-        }
-      },
-      { signal },
-    );
+  // ---------------------------------------------------------------------
+  // HTMX lifecycle
+  // ---------------------------------------------------------------------
 
-    document.body.addEventListener(
-      'htmx:afterRequest',
-      (evt) => {
-        const requestPath = evt.detail?.pathInfo?.requestPath || '';
-        if (!requestPath.includes('/api/logs/partial')) {
-          return;
-        }
+  document.body.addEventListener(
+    'htmx:afterSwap',
+    (ev) => {
+      const target = ev.detail?.target;
+      if (!target) return;
+      const touchesFeed =
+        target.id === 'log-feed' ||
+        target.id === 'pagination-row' ||
+        target.closest?.('#log-feed') !== null;
+      if (!touchesFeed) return;
+      formatVisibleTimestamps(FEED);
+      applyExpandState(FEED);
+      newestCycleId = firstCycleId() || newestCycleId;
+      pendingCount = 0;
+      updateBannerVisibility();
+    },
+    { signal },
+  );
 
-        const shell = document.getElementById('logs-table-shell');
-        if (shell) {
-          shell.classList.remove('is-loading');
-        }
-      },
-      { signal },
-    );
+  // Initial apply
+  formatVisibleTimestamps(document);
+  applyExpandState(FEED);
+  updateLiveMeta(null);
 }
 
 if (document.querySelector('[data-page-key="logs"]')) {

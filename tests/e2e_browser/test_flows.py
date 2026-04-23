@@ -773,23 +773,47 @@ def _ensure_pre_setup_state(page: Page, base_url: str) -> None:
     state we need.  Clear cookies so the old session cookie (now
     signed against a rotated secret) does not linger.
     """
+    # State probe: a pre-admin Houndarr renders /setup directly; an
+    # already-seeded Houndarr 302s to /login (src/houndarr/routes/pages.py:64).
+    # The post-redirect URL tells us which branch to take.  wait_until=
+    # networkidle avoids racing the redirect response.
     page.goto(f"{base_url}/setup", wait_until="networkidle")
     if page.url.rstrip("/").endswith("/setup"):
-        return  # already pre-admin
+        return  # already pre-admin; capture can run directly
 
-    # Admin exists: log in, then call factory-reset via the API.
+    # --- admin-present branch -------------------------------------------
+    # Need to wipe admin state so /setup renders again.  The factory-reset
+    # route requires a logged-in session plus CSRF, so drive the login
+    # flow first.  Selectors mirror the `logged_in_page` fixture in
+    # conftest.py so any login-form refactor updates both call sites in
+    # the same commit.
     page.goto(f"{base_url}/login", wait_until="networkidle")
     page.get_by_role("textbox", name="Username").fill(_ADMIN_USER)
     page.get_by_role("textbox", name="Password").fill(_ADMIN_PASS)
     page.get_by_role("button", name="Sign In").click()
+    # Explicit redirect target: /login succeeds by bouncing to /.
+    # Waiting for the URL (not networkidle) avoids flakes on slow CI
+    # runners where post-login HTMX fetches keep the network busy past
+    # the redirect.
     page.wait_for_url(re.compile(rf"^{re.escape(base_url)}/?$"))
 
+    # The houndarr_csrf cookie is readable (not HttpOnly) precisely so
+    # HTMX can echo it back; auth/csrf.py's validate_csrf rejects
+    # mutating POSTs without it, so we pull it off the context and echo
+    # it in BOTH the header (HTMX path) and form body (classic path).
     csrf = next(
         (c.get("value", "") for c in page.context.cookies() if c.get("name") == "houndarr_csrf"),
         "",
     )
     assert csrf, "houndarr_csrf cookie missing after login"
 
+    # Drive the API directly instead of the UI (admin dropdown ->
+    # typed-RESET-phrase dialog -> click confirm).  factory_reset is
+    # synchronous server-side: the POST returns only after the db wipe,
+    # master-key file delete, and reset_auth_caches() finish, so no
+    # post-call wait is needed before the next request sees pristine
+    # state.  page.request.post reuses the browser context's cookies so
+    # the session cookie travels automatically.
     response = page.request.post(
         f"{base_url}/settings/admin/factory-reset",
         form={
@@ -803,6 +827,9 @@ def _ensure_pre_setup_state(page: Page, base_url: str) -> None:
     assert response.status in (200, 303), (
         f"factory-reset returned {response.status}: {response.text()}"
     )
+    # Clear cookies: the session secret rotated during reset so the old
+    # cookie would fail signature verification on the next request.
+    # Dropping it now avoids a spurious middleware log warning.
     page.context.clear_cookies()
 
 

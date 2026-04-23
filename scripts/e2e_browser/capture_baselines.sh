@@ -188,7 +188,15 @@ _teardown() {
     _info "tearing down e2e stack"
     docker rm -f houndarr-e2e mock-sonarr mock-radarr >/dev/null 2>&1 || true
     docker network rm "${NETWORK}" >/dev/null 2>&1 || true
-    rm -rf "${DATA_DIR}"
+    # Only rm the default ``/tmp/houndarr-e2e-data`` location.  An
+    # operator who overrode ``DATA_DIR`` (e.g. to iterate against a
+    # specific dataset in their home dir) should not have that
+    # directory wiped on teardown; leave it in place and warn instead.
+    if [ "${DATA_DIR}" = "/tmp/houndarr-e2e-data" ]; then
+        rm -rf "${DATA_DIR}"
+    else
+        _warn "DATA_DIR override detected (${DATA_DIR}); leaving contents intact"
+    fi
 }
 
 _run_pytest() {
@@ -242,6 +250,11 @@ _capture() {
     # Setup baseline first: fresh /data means is_setup_complete is False
     # and /setup renders the first-run form.
     _run_pytest test_setup_page_visual update
+    # test_setup_page_visual's ``finally`` block already calls
+    # ``_recreate_admin`` to restore admin state.  The curl below is a
+    # belt-and-braces re-confirmation: POST /setup is idempotent
+    # server-side (returns 200/303 on a second call; see
+    # src/houndarr/routes/pages.py:77), so running it again is a no-op.
     _create_admin
     # Login baseline: admin now exists; logged_in_page fixture logs in,
     # the test logs out and navigates to /login.
@@ -256,6 +269,7 @@ _verify() {
     # Same two-pytest flow in verify mode.  The captured baselines
     # must satisfy the byte-equal assertion; otherwise pytest fails.
     _run_pytest test_setup_page_visual verify
+    # Idempotent re-confirmation; see _capture for rationale.
     _create_admin
     _run_pytest test_login_page_visual verify
     _info "baselines verified"

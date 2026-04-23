@@ -14,6 +14,7 @@ from pydantic import ValidationError
 
 from houndarr.clients._wire_models import PaginatedResponse, QueueStatus, SystemStatus
 from houndarr.errors import (
+    ClientError,
     ClientHTTPError,
     ClientRedirectError,
     ClientTransportError,
@@ -94,14 +95,17 @@ _DEFAULT_TIMEOUT = httpx.Timeout(30.0, connect=5.0)
 
 # Exceptions :meth:`ArrClient.ping` collapses to ``None``.  The contract
 # is "never raise on a ping failure"; this tuple enumerates every known
-# failure mode (transport, malformed URL, JSON-parse, schema-mismatch).
-# Callers that need a typed escalation wrap the ``None`` return
-# themselves.
+# failure mode (transport, malformed URL, JSON-parse, schema-mismatch,
+# and any ``ClientError`` raised by the response event_hook such as
+# ``ClientRedirectError`` when a 3xx ``Location`` targets a blocked
+# address range).  Callers that need a typed escalation wrap the
+# ``None`` return themselves.
 _PING_SAFE_ERRORS: tuple[type[BaseException], ...] = (
     httpx.HTTPError,
     httpx.InvalidURL,
     ValueError,
     ValidationError,
+    ClientError,
 )
 
 # HTTP status codes that carry a redirect target in the Location header.

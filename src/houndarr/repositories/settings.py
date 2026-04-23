@@ -1,10 +1,10 @@
 """Key-value settings aggregate: SQL boundary for the ``settings`` table.
 
-Track D.2 introduces this module.  The previous incarnation lived as
+Track D.2 introduced this module.  The previous incarnation lived as
 two helpers (``get_setting`` / ``set_setting``) inside
-:mod:`houndarr.database`; this repository owns the SQL now and the
-database-module wrappers delegate here so callers migrate one file
-at a time.  ``delete_setting`` is added to match the full
+:mod:`houndarr.database`; the final refactor wave's Phase 6a removed
+those delegators outright and migrated every caller to import from
+here directly.  ``delete_setting`` rounds out the full
 :class:`houndarr.protocols.SettingsRepository` contract; the previous
 code path had no delete at all because removing a setting was never
 required by any caller, but the contract calls for the symmetry.
@@ -13,10 +13,7 @@ Function shape matches the Protocol (no ``default`` argument on
 ``get_setting``).  Callers that need a default fall back at their own
 call site: ``(await get_setting(key)) or "default"`` for the truthy
 case, or ``(await get_setting(key)) if value is not None else default``
-for the strict ``None``-only fallback.  The legacy
-:func:`houndarr.database.get_setting` wrapper preserves the explicit
-``default=`` kwarg for the route call sites that still import from
-there; later D batches thin those callers out.
+for the strict ``None``-only fallback.
 """
 
 from __future__ import annotations

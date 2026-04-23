@@ -302,7 +302,7 @@ async def fetch_active_error_instance_ids() -> set[int]:
     SELECT instance_id FROM (
         SELECT instance_id, action,
                ROW_NUMBER() OVER (
-                   PARTITION BY instance_id ORDER BY timestamp DESC
+                   PARTITION BY instance_id ORDER BY timestamp DESC, id DESC
                ) AS rn
         FROM search_log
         WHERE timestamp >= strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-2 days')

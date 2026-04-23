@@ -13,13 +13,9 @@
   gap: 24px;
   flex-wrap: wrap;
 }
-.logs-head__h1 {
-  font-size: 28px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-  margin: 0;
-  color: var(--color-text-heading);
-}
+/* .logs-head__h1 removed: the Logs page heading now reuses Tailwind
+   utilities (text-xl font-bold text-white tracking-tight) so it
+   matches the Settings page h1 exactly. */
 
 @keyframes logs-pulse {
   0%, 100% { opacity: 1; box-shadow: 0 0 0 3px var(--glow-brand-medium); }
@@ -757,7 +753,6 @@
 }
 
 @media (max-width: 760px) {
-  .logs-head__h1 { font-size: 22px; }
   .controls { padding: 14px; gap: 14px; }
   .filter-bar { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .field--switches { grid-column: span 2; }

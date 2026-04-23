@@ -86,6 +86,28 @@
 
 {%- macro status_pill(state) -%}
 {%- if state == "error" -%}
+<span class="inline-flex items-center justify-center gap-1 text-xs text-danger min-w-[4.5rem]"><span class="w-1.5 h-1.5 rounded-full bg-danger inline-block station-pulse-dot" title="Instance is reporting errors" aria-label="Instance is reporting errors"></span><span class="hidden sm:inline">Error</span></span>
+{%- elif state == "active" -%}
+<span class="inline-flex items-center justify-center gap-1 text-xs text-success min-w-[4.5rem]"><span class="w-1.5 h-1.5 rounded-full bg-success inline-block station-pulse-dot" title="Search enabled" aria-label="Search enabled"></span><span class="hidden sm:inline">Active</span></span>
+{%- else -%}
+<span class="text-slate-600">-</span>
+{%- endif -%}
+{%- endmacro %}
+
+
+{%- macro log_cycle_outcome_badge(progress) -%}
+{%- if progress == "progress" -%}
+<span class="badge badge-soft badge-success">searched</span>
+{%- elif progress == "no_progress" -%}
+<span class="badge badge-soft badge-neutral">skips only</span>
+{%- else -%}
+<span class="text-[0.625rem] text-slate-600 font-mono">unknown</span>
+{%- endif -%}
+{%- endmacro %}
+
+
+{%- macro status_pill(state) -%}
+{%- if state == "error" -%}
 <span class="status-pill status-pill--error"><span class="status-dot status-dot--error" title="Instance is reporting errors" aria-label="Instance is reporting errors"></span><span class="hidden sm:inline">Error</span></span>
 {%- elif state == "active" -%}
 <span class="status-pill status-pill--active"><span class="status-dot status-dot--active" title="Search enabled" aria-label="Search enabled"></span><span class="hidden sm:inline">Active</span></span>

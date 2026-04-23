@@ -17,6 +17,7 @@ helper.
 from __future__ import annotations
 
 import logging
+import secrets
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 
@@ -24,6 +25,23 @@ from houndarr.enums import CycleTrigger, SearchAction
 from houndarr.services.instances import Instance
 
 logger = logging.getLogger(__name__)
+
+
+def _apply_jitter(secs: int, jitter_secs: float | None) -> float:
+    """Return ``secs`` with up to ``jitter_secs`` seconds of symmetric jitter.
+
+    Uses :mod:`secrets` so there is no seeded reproducibility footgun;
+    tests that need determinism pass ``jitter_secs=None`` (the
+    default) to keep the returned value exactly equal to ``secs``.
+    Negative results are clamped to ``0.0`` so a large jitter band
+    never pushes the sleep below zero.
+    """
+    if jitter_secs is None or jitter_secs <= 0.0:
+        return float(secs)
+    # ``secrets.SystemRandom().uniform`` is the documented unseeded
+    # spelling; ``secrets.randbelow`` is integer-only.
+    delta = secrets.SystemRandom().uniform(-jitter_secs, jitter_secs)
+    return max(0.0, float(secs) + delta)
 
 
 @dataclass
@@ -51,7 +69,8 @@ async def run_with_reconnect(
     error_retry_secs: int,
     success_sleep_secs: int,
     write_log: Callable[..., Awaitable[None]],
-) -> int:
+    jitter_secs: float | None = None,
+) -> float:
     """Run *cycle* and apply per-instance reconnect-state transitions.
 
     *cycle* is a zero-arg awaitable that runs one search cycle and
@@ -93,9 +112,19 @@ async def run_with_reconnect(
             writer in keeps this module free of any direct dependency
             on ``engine.search_loop`` and lets tests substitute a
             spy.
+        jitter_secs: Optional symmetric jitter window in seconds
+            applied to the returned sleep duration (uniform random
+            in ``[-jitter_secs, +jitter_secs]``, clamped to ``>= 0``).
+            ``None`` (the default) keeps the sleep exactly equal to
+            the nominal value so the supervisor's pre-jitter
+            behaviour is preserved.  Opt-in jitter de-synchronises
+            re-ping storms when several instances come back online
+            at the same moment.
 
     Returns:
-        Number of seconds to sleep before the next cycle.
+        Number of seconds to sleep before the next cycle.  ``float``
+        even when ``jitter_secs`` is ``None`` so the return shape is
+        stable across both call modes.
     """
     got_connect_error = await cycle()
 
@@ -110,7 +139,7 @@ async def run_with_reconnect(
                 message=f"Could not reach {instance.url}",
             )
         state.in_retry = True
-        return error_retry_secs
+        return _apply_jitter(error_retry_secs, jitter_secs)
 
     if state.in_retry:
         logger.info(
@@ -127,4 +156,4 @@ async def run_with_reconnect(
             message=f"{instance.name!r} ({instance.url}) is reachable again",
         )
         state.in_retry = False
-    return success_sleep_secs
+    return _apply_jitter(success_sleep_secs, jitter_secs)

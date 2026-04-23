@@ -87,14 +87,24 @@
           </svg>
         </button>
 
-        <!-- Desktop nav links -->
-        <div class="hidden sm:flex items-center gap-1">
-          {% include "partials/shell_nav_links.html" %}
-          <form action="/logout" method="post" class="ml-2">
+        <!-- Desktop nav: pill-container tabs + icon logout -->
+        <div class="hidden sm:flex items-center gap-3">
+          <div class="pill-nav">
+            {% with nav_variant = 'pill' %}
+              {% include "partials/shell_nav_links.html" %}
+            {% endwith %}
+          </div>
+          <form action="/logout" method="post">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
             <button type="submit"
-                    class="px-3 py-2 rounded-container text-sm font-medium text-slate-400 hover:text-white hover:bg-surface-2 transition-colors duration-base ease-station">
-              Logout
+                    class="nav-iconbtn nav-logout"
+                    aria-label="Log out"
+                    title="Log out">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/>
+                <polyline points="10 17 15 12 10 7"/>
+                <line x1="15" y1="12" x2="3" y2="12"/>
+              </svg>
             </button>
           </form>
         </div>
@@ -103,7 +113,9 @@
       <!-- Mobile nav menu -->
       <div id="mobile-nav-menu" class="sm:hidden mobile-nav-menu border-t border-surface-3">
         <div class="flex flex-col gap-0.5 py-2 px-1">
-          {% include "partials/shell_nav_links.html" %}
+          {% with nav_variant = 'mobile' %}
+            {% include "partials/shell_nav_links.html" %}
+          {% endwith %}
           <div class="mt-1 pt-1 border-t border-surface-3">
             <form action="/logout" method="post">
               <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />

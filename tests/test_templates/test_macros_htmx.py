@@ -47,6 +47,108 @@ def render_macro(jinja_env: Environment) -> Callable[[str], str]:
 
 
 class TestShellNavLink:
+    """Pin the default pill variant output (desktop header)."""
+
+    @pytest.mark.parametrize(
+        ("route", "label"),
+        [
+            ("/", "Dashboard"),
+            ("/logs", "Logs"),
+            ("/settings", "Settings"),
+        ],
+    )
+    def test_active_byte_equal(
+        self,
+        render_macro: Callable[[str], str],
+        route: str,
+        label: str,
+    ) -> None:
+        expected = (
+            f'<a href="{route}"\n'
+            f'   data-shell-nav="true"\n'
+            f'   data-shell-route="{route}"\n'
+            f'   hx-get="{route}"\n'
+            f'   hx-target="#app-content"\n'
+            f'   hx-swap="innerHTML"\n'
+            f'   hx-push-url="true"\n'
+            f'   class="shell-nav-link pill-nav__tab pill-nav__tab--active">\n'
+            f"  {label}\n"
+            f"</a>"
+        )
+        got = render_macro(
+            "{{ hx.shell_nav_link(" + repr(route) + ", " + repr(label) + ", True) }}"
+        )
+        assert got == expected
+
+    @pytest.mark.parametrize(
+        ("route", "label"),
+        [
+            ("/", "Dashboard"),
+            ("/logs", "Logs"),
+            ("/settings", "Settings"),
+        ],
+    )
+    def test_inactive_byte_equal(
+        self,
+        render_macro: Callable[[str], str],
+        route: str,
+        label: str,
+    ) -> None:
+        expected = (
+            f'<a href="{route}"\n'
+            f'   data-shell-nav="true"\n'
+            f'   data-shell-route="{route}"\n'
+            f'   hx-get="{route}"\n'
+            f'   hx-target="#app-content"\n'
+            f'   hx-swap="innerHTML"\n'
+            f'   hx-push-url="true"\n'
+            f'   class="shell-nav-link pill-nav__tab">\n'
+            f"  {label}\n"
+            f"</a>"
+        )
+        got = render_macro(
+            "{{ hx.shell_nav_link(" + repr(route) + ", " + repr(label) + ", False) }}"
+        )
+        assert got == expected
+
+    def test_active_class_differs_from_inactive(
+        self,
+        render_macro: Callable[[str], str],
+    ) -> None:
+        active = render_macro("{{ hx.shell_nav_link('/', 'Dashboard', True) }}")
+        inactive = render_macro("{{ hx.shell_nav_link('/', 'Dashboard', False) }}")
+        assert "pill-nav__tab--active" in active
+        assert "pill-nav__tab--active" not in inactive
+        assert "pill-nav__tab" in inactive
+        assert "pill-nav__tab" in active
+
+    def test_hx_wire_attributes_always_present(
+        self,
+        render_macro: Callable[[str], str],
+    ) -> None:
+        got = render_macro("{{ hx.shell_nav_link('/logs', 'Logs', False) }}")
+        assert 'hx-get="/logs"' in got
+        assert 'hx-target="#app-content"' in got
+        assert 'hx-swap="innerHTML"' in got
+        assert 'hx-push-url="true"' in got
+
+    def test_data_shell_hooks_always_present(
+        self,
+        render_macro: Callable[[str], str],
+    ) -> None:
+        got = render_macro("{{ hx.shell_nav_link('/settings', 'Settings', True) }}")
+        assert 'data-shell-nav="true"' in got
+        assert 'data-shell-route="/settings"' in got
+
+
+class TestShellNavLinkMobileVariant:
+    """Pin the drawer-row variant output used inside #mobile-nav-menu.
+
+    Wire attributes stay identical to the pill variant; only the class
+    string diverges so the drawer keeps its slate-row treatment instead
+    of rendering cramped pills on a narrow viewport.
+    """
+
     @pytest.mark.parametrize(
         ("route", "label"),
         [
@@ -75,7 +177,11 @@ class TestShellNavLink:
             f"</a>"
         )
         got = render_macro(
-            "{{ hx.shell_nav_link(" + repr(route) + ", " + repr(label) + ", True) }}"
+            "{{ hx.shell_nav_link("
+            + repr(route)
+            + ", "
+            + repr(label)
+            + ", True, variant='mobile') }}"
         )
         assert got == expected
 
@@ -107,38 +213,13 @@ class TestShellNavLink:
             f"</a>"
         )
         got = render_macro(
-            "{{ hx.shell_nav_link(" + repr(route) + ", " + repr(label) + ", False) }}"
+            "{{ hx.shell_nav_link("
+            + repr(route)
+            + ", "
+            + repr(label)
+            + ", False, variant='mobile') }}"
         )
         assert got == expected
-
-    def test_active_class_differs_from_inactive(
-        self,
-        render_macro: Callable[[str], str],
-    ) -> None:
-        active = render_macro("{{ hx.shell_nav_link('/', 'Dashboard', True) }}")
-        inactive = render_macro("{{ hx.shell_nav_link('/', 'Dashboard', False) }}")
-        assert "bg-surface-3 text-white" in active
-        assert "bg-surface-3 text-white" not in inactive
-        assert "text-slate-400 hover:text-white hover:bg-surface-2" in inactive
-        assert "text-slate-400 hover:text-white hover:bg-surface-2" not in active
-
-    def test_hx_wire_attributes_always_present(
-        self,
-        render_macro: Callable[[str], str],
-    ) -> None:
-        got = render_macro("{{ hx.shell_nav_link('/logs', 'Logs', False) }}")
-        assert 'hx-get="/logs"' in got
-        assert 'hx-target="#app-content"' in got
-        assert 'hx-swap="innerHTML"' in got
-        assert 'hx-push-url="true"' in got
-
-    def test_data_shell_hooks_always_present(
-        self,
-        render_macro: Callable[[str], str],
-    ) -> None:
-        got = render_macro("{{ hx.shell_nav_link('/settings', 'Settings', True) }}")
-        assert 'data-shell-nav="true"' in got
-        assert 'data-shell-route="/settings"' in got
 
 
 class TestHxShellFetch:

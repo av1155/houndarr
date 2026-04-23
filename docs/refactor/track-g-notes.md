@@ -83,7 +83,7 @@ pass (see `docs/refactor/track-e-notes.md` for the full E.16
 scope). Until E.16 lands, `.status-pill` ships in `app.built.css`
 with only test harnesses exercising it
 (`tests/test_templates/test_macros_badges.py` and
-`tests/test_tracks/test_track_g_gate.py`). That orphan window is
+`tests/test_gates/test_css_component_gate.py`). That orphan window is
 intentional: the Strangler-Fig pattern decouples the component
 definition (this track) from caller migration (Track E), so each
 track lands in a single concern.

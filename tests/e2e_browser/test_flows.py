@@ -10,9 +10,24 @@ from __future__ import annotations
 import re
 import uuid
 from contextlib import suppress
+from pathlib import Path
 
 import pytest
 from playwright.sync_api import Locator, Page, expect
+
+_SCREENSHOTS_DIR = Path(__file__).resolve().parent / "_screenshots"
+
+
+def _baseline_missing(filename: str) -> bool:
+    """Return True when no baseline PNG exists for ``filename`` yet.
+
+    The two visual tests below point at an explicit filename under
+    ``_screenshots/`` so the skip guard can cheaply inspect the
+    filesystem.  On first run the maintainer populates the baseline
+    via ``just test-browser chromium --update-snapshots``, commits
+    the PNG, and the guard flips to active on every subsequent run.
+    """
+    return not (_SCREENSHOTS_DIR / filename).exists()
 
 
 def _wait_for_connection_ui_idle(page: Page) -> None:
@@ -702,3 +717,59 @@ def test_changelog_preferences_switch_rolls_back_on_error(
         )
     finally:
         page.unroute(pattern)
+
+
+# ---------------------------------------------------------------------------
+# Visual baselines for /login and /setup
+#
+# Phase 7a of the final refactor wave routed three hardcoded rgba values
+# in auth-fields.css through named tokens.  The computed rgba on every
+# consuming element is byte-equal to the pre-refactor literal, so the
+# rendered output of /login and /setup should be pixel-identical.
+# These two tests capture the baseline on first invocation via
+# ``just test-browser chromium --update-snapshots`` and compare against
+# the committed PNG on every subsequent run.
+#
+# The skip guard is filesystem-based: absent baselines skip cleanly so
+# `just test-browser chromium` stays green before the maintainer
+# captures baselines.  Once the PNG is committed under
+# _screenshots/, the guard becomes inactive and the assertion is live.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.integration
+@pytest.mark.skipif(
+    _baseline_missing("login_page_visual.png"),
+    reason=(
+        "Baseline PNG absent; run `just test-browser chromium --update-snapshots` "
+        "with the mock *arr stack up to capture it, then commit the PNG."
+    ),
+)
+def test_login_page_visual(logged_in_page: Page, houndarr_url: str) -> None:
+    """Pixel-compare the /login page after the Phase 7a token routing."""
+    page = logged_in_page
+    page.goto(f"{houndarr_url}/logout")
+    page.wait_for_load_state("networkidle")
+    page.goto(f"{houndarr_url}/login")
+    page.wait_for_load_state("networkidle")
+    expect(page).to_have_screenshot(str(_SCREENSHOTS_DIR / "login_page_visual.png"))
+
+
+@pytest.mark.integration
+@pytest.mark.skipif(
+    _baseline_missing("setup_page_visual.png"),
+    reason=(
+        "Baseline PNG absent; run `just test-browser chromium --update-snapshots` "
+        "against a Houndarr with setup pending to capture it."
+    ),
+)
+def test_setup_page_visual(page: Page, houndarr_url: str) -> None:
+    """Pixel-compare the /setup page after the Phase 7a token routing.
+
+    Requires Houndarr in a pre-setup state (no ``password_hash``
+    setting); the workflow's factory-reset step runs before this
+    test when capturing baselines.
+    """
+    page.goto(f"{houndarr_url}/setup")
+    page.wait_for_load_state("networkidle")
+    expect(page).to_have_screenshot(str(_SCREENSHOTS_DIR / "setup_page_visual.png"))

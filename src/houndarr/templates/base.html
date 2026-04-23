@@ -58,6 +58,8 @@
 </head>
 <body class="text-slate-100 min-h-dvh flex flex-col font-sans{% if show_nav is defined and not show_nav %} is-auth{% endif %}">
 
+  {%- import "_macros/htmx.html" as hx -%}
+
   {% if show_nav is not defined or show_nav %}
   <!-- Navigation -->
   <header class="sticky top-0 z-50">
@@ -65,14 +67,7 @@
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
       <div class="flex items-center justify-between h-16 sm:h-14">
         <!-- Logo / wordmark -->
-        <a
-          href="/"
-          hx-get="/"
-          hx-target="#app-content"
-          hx-swap="innerHTML"
-          hx-push-url="true"
-          class="-ml-1 flex items-center gap-2 text-brand-400 font-semibold text-lg leading-none hover:text-brand-300 transition-colors"
-        >
+        {% call hx.hx_shell_fetch('/', class_='-ml-1 flex items-center gap-2 text-brand-400 font-semibold text-lg leading-none hover:text-brand-300 transition-colors') -%}
           <img
             src="/static/img/houndarr-logo-dark.png"
             alt="Houndarr logo"
@@ -80,7 +75,7 @@
             style="filter: drop-shadow(var(--glow-logo));"
           />
           Houndarr
-        </a>
+        {%- endcall %}
 
         <button id="mobile-nav-toggle"
                 type="button"

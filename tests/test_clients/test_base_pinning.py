@@ -296,3 +296,80 @@ class TestContextManager:
         await client.aclose()
         await client.aclose()  # second close is a no-op on httpx.AsyncClient
         assert client._client.is_closed is True
+
+
+# Redirect-guard event hook (Phase 3b)
+
+
+class TestRedirectGuard:
+    """Pin the response event_hook that re-validates 3xx Location targets.
+
+    ``follow_redirects=False`` is the primary defense; this hook is
+    defense-in-depth.  It catches a blocked target BEFORE any hypothetical
+    future flip of that kwarg could cause httpx to chase the redirect.
+    """
+
+    @pytest.mark.asyncio()
+    @respx.mock
+    async def test_redirect_to_blocked_target_raises(self) -> None:
+        """A 302 pointing at 127.0.0.1 must raise ClientRedirectError."""
+        from houndarr.errors import ClientRedirectError
+
+        respx.get("http://sonarr:8989/ping").mock(
+            return_value=httpx.Response(302, headers={"Location": "http://127.0.0.1/admin"}),
+        )
+        async with _StubClient(url="http://sonarr:8989", api_key="k") as client:
+            with pytest.raises(ClientRedirectError) as exc_info:
+                await client._get("/ping")
+        assert "127.0.0.1" in str(exc_info.value)
+
+    @pytest.mark.asyncio()
+    @respx.mock
+    async def test_redirect_to_link_local_raises(self) -> None:
+        """A 307 pointing at 169.254.169.254 (cloud metadata) must raise."""
+        from houndarr.errors import ClientRedirectError
+
+        respx.get("http://sonarr:8989/ping").mock(
+            return_value=httpx.Response(
+                307, headers={"Location": "http://169.254.169.254/latest/meta-data/"}
+            ),
+        )
+        async with _StubClient(url="http://sonarr:8989", api_key="k") as client:
+            with pytest.raises(ClientRedirectError):
+                await client._get("/ping")
+
+    @pytest.mark.asyncio()
+    @respx.mock
+    async def test_relative_redirect_does_not_raise(self) -> None:
+        """A relative Location (same host) is harmless and must not raise.
+
+        Relative redirects inherit the *arr URL we already validated at
+        connect time; the guard only matters for absolute targets that
+        could change the destination host.
+        """
+        respx.get("http://sonarr:8989/ping").mock(
+            return_value=httpx.Response(302, headers={"Location": "/other-endpoint"}),
+        )
+        async with _StubClient(url="http://sonarr:8989", api_key="k") as client:
+            # The non-2xx still fails raise_for_status inside _get; we
+            # only care that the guard does not fire first.
+            with pytest.raises(httpx.HTTPStatusError):
+                await client._get("/ping")
+
+    @pytest.mark.asyncio()
+    @respx.mock
+    async def test_redirect_to_routable_target_does_not_raise(self) -> None:
+        """A 3xx pointing at a routable public IP must NOT be blocked.
+
+        The guard is narrow: only loopback, link-local, and unspecified
+        addresses trip it.  Private ranges (10.*, 172.16.*, 192.168.*)
+        are legitimate Docker / LAN destinations and must pass.
+        """
+        respx.get("http://sonarr:8989/ping").mock(
+            return_value=httpx.Response(302, headers={"Location": "http://10.0.0.5/new"}),
+        )
+        async with _StubClient(url="http://sonarr:8989", api_key="k") as client:
+            with pytest.raises(httpx.HTTPStatusError):
+                # 302 without follow_redirects fails raise_for_status;
+                # the guard allowed the response through.
+                await client._get("/ping")

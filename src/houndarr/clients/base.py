@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import ipaddress
 import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Any, ClassVar, Literal
+from urllib.parse import urlparse
 
 import httpx
 from pydantic import ValidationError
@@ -13,9 +15,11 @@ from pydantic import ValidationError
 from houndarr.clients._wire_models import PaginatedResponse, QueueStatus, SystemStatus
 from houndarr.errors import (
     ClientHTTPError,
+    ClientRedirectError,
     ClientTransportError,
     ClientValidationError,
 )
+from houndarr.services.url_validation import is_blocked_address
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +56,59 @@ _PING_SAFE_ERRORS: tuple[type[BaseException], ...] = (
     ValueError,
     ValidationError,
 )
+
+# HTTP status codes that carry a redirect target in the Location header.
+# The AsyncClient is configured with ``follow_redirects=False`` so httpx
+# surfaces these as a normal response.  The response event_hook below
+# re-validates the Location target against the SSRF guard as defense-in-
+# depth against a future accidental ``follow_redirects=True`` flip.
+_REDIRECT_STATUS_CODES: frozenset[int] = frozenset({301, 302, 303, 307, 308})
+
+
+async def _redirect_guard(response: httpx.Response) -> None:
+    """Reject redirect targets that resolve to a blocked address range.
+
+    Invoked by httpx on every response (``event_hooks["response"]``).
+    Only 3xx responses with a ``Location`` header are inspected; relative
+    locations are treated as same-host (the *arr URL already validated)
+    and left alone.  Absolute targets are parsed and the host (IP
+    literal or resolved hostname) is checked via
+    :func:`houndarr.services.url_validation.is_blocked_address`.
+
+    Raises:
+        ClientRedirectError: The Location header names a blocked target.
+    """
+    if response.status_code not in _REDIRECT_STATUS_CODES:
+        return
+    location = response.headers.get("Location", "").strip()
+    if not location:
+        return
+    # Parse the Location; urlparse tolerates scheme-relative URLs via the
+    # `scheme=` fallback.  A relative location (no scheme, no netloc) is
+    # same-host and inherits the *arr URL we already validated at
+    # connect time, so nothing to check.
+    parsed = urlparse(location)
+    if not parsed.scheme and not parsed.netloc:
+        return
+    host = parsed.hostname or ""
+    if not host:
+        return
+    try:
+        addr = ipaddress.ip_address(host)
+    except ValueError:
+        # Hostname: hand off to the DNS-resolving validator so any A / AAAA
+        # record that resolves to a blocked range trips the guard.  We
+        # import late to avoid a circular import during module load.
+        from houndarr.services.url_validation import validate_instance_url
+
+        error = validate_instance_url(location)
+        if error is not None:
+            raise ClientRedirectError(
+                f"refusing redirect to blocked target {location!r}: {error}"
+            ) from None
+        return
+    if is_blocked_address(addr):
+        raise ClientRedirectError(f"refusing redirect to blocked target {location!r}") from None
 
 
 class ArrClient(ABC):
@@ -100,12 +157,17 @@ class ArrClient(ABC):
         # services/url_validation.py threat model.  ``follow_redirects``
         # is stated explicitly (httpx's own default is False) so a
         # future dependency upgrade that flips the default cannot
-        # silently weaken the posture.
+        # silently weaken the posture.  The response event_hook below
+        # is the defense-in-depth layer: even if follow_redirects ever
+        # goes True, any 3xx ``Location`` that resolves to a blocked
+        # target (loopback, link-local, unspecified) raises before the
+        # transport would chase it.
         self._client = httpx.AsyncClient(
             base_url=base,
             headers={"X-Api-Key": api_key, "Accept": "application/json"},
             timeout=timeout,
             follow_redirects=False,
+            event_hooks={"response": [_redirect_guard]},
         )
 
     # Context-manager support

@@ -31,6 +31,7 @@ from houndarr.errors import (
     AuthRejectedError,
     ClientError,
     ClientHTTPError,
+    ClientRedirectError,
     ClientTransportError,
     ClientUnreachableError,
     ClientValidationError,
@@ -61,6 +62,7 @@ class HierarchyEntry(NamedTuple):
 _HIERARCHY: tuple[HierarchyEntry, ...] = (
     # Client layer
     HierarchyEntry(ClientHTTPError, ClientError),
+    HierarchyEntry(ClientRedirectError, ClientHTTPError),
     HierarchyEntry(ClientTransportError, ClientError),
     HierarchyEntry(ClientValidationError, ClientError),
     HierarchyEntry(ClientUnreachableError, ClientError),
@@ -127,6 +129,7 @@ class TestErrorHierarchyShape:
             "AuthRejectedError",
             "ClientError",
             "ClientHTTPError",
+            "ClientRedirectError",
             "ClientTransportError",
             "ClientUnreachableError",
             "ClientValidationError",

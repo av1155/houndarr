@@ -8,6 +8,8 @@
   The <form> inside is what actually POSTs on confirm; hx-post is set
   dynamically by the JS so the same dialog serves all three actions.
 #}
+{%- import "_macros/forms.html" as forms -%}
+{%- import "_macros/buttons.html" as buttons -%}
 <div
   id="confirm-dialog"
   class="confirm-dialog hidden"
@@ -120,20 +122,14 @@
       <div
         class="mt-5 px-5 py-4 border-t border-border-subtle bg-surface-2/40 flex items-center justify-end gap-2 rounded-b-container"
       >
-        <button
-          type="button"
-          data-dismiss-confirm
-          class="btn btn-soft btn-neutral px-3 py-2 text-sm"
-        >
-          Cancel
-        </button>
-        <button
-          id="confirm-go"
-          type="submit"
-          class="btn btn-soft btn-error px-3 py-2 text-sm font-medium"
-        >
-          Confirm
-        </button>
+        {% call buttons.btn(variant="soft-neutral", size="lg", attrs={
+            "type": "button",
+            "data-dismiss-confirm": true,
+        }) %}Cancel{% endcall %}
+        {% call buttons.btn(variant="soft-error", size="lg", extra="font-medium", attrs={
+            "id": "confirm-go",
+            "type": "submit",
+        }) %}Confirm{% endcall %}
       </div>
     </form>
   </div>

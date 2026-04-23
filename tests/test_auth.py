@@ -1096,8 +1096,8 @@ async def test_dispatch_proxy_calls_trust_gate_before_header_read(
     """
     from unittest.mock import AsyncMock, MagicMock
 
-    import houndarr.auth as _auth
     from houndarr.auth import AuthMiddleware
+    from houndarr.auth import proxy_auth as _proxy_auth
     from houndarr.config import bootstrap_settings
 
     try:
@@ -1117,8 +1117,11 @@ async def test_dispatch_proxy_calls_trust_gate_before_header_read(
             calls.append("extract")
             return "never-seen"
 
-        monkeypatch.setattr(_auth, "_is_trusted_proxy", fake_is_trusted)
-        monkeypatch.setattr(_auth, "_extract_proxy_username", fake_extract)
+        # Patch the proxy_auth module directly: the middleware resolves
+        # each helper via ``proxy_auth.<name>`` at call time so the patch
+        # propagates without also having to update the import site.
+        monkeypatch.setattr(_proxy_auth, "_is_trusted_proxy", fake_is_trusted)
+        monkeypatch.setattr(_proxy_auth, "_extract_proxy_username", fake_extract)
 
         middleware = AuthMiddleware(app=MagicMock())
         request = MagicMock()

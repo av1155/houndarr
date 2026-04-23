@@ -27,6 +27,7 @@ from starlette.types import ASGIApp
 from houndarr.auth import session as _session
 from houndarr.auth import setup as _setup
 from houndarr.auth.csrf import _CSRF_PROTECTED_METHODS, validate_csrf
+from houndarr.auth.identity import resolve_signed_in_as
 from houndarr.auth.password import BCRYPT_COST, hash_password, verify_password
 
 # Proxy-auth seam: re-exported for the middleware's _dispatch_proxy
@@ -127,6 +128,7 @@ __all__ = [
     "record_failed_login",
     "reset_auth_caches",
     "reset_login_attempts",
+    "resolve_signed_in_as",
     "rotate_session_secret",
     "set_password",
     "set_username",
@@ -177,23 +179,6 @@ _PUBLIC_PATHS = frozenset(
 # allow it without CSRF/session validation so stale legacy sessions can always
 # be cleared after upgrades.
 _LOGOUT_PATH = "/logout"
-
-
-async def resolve_signed_in_as(request: Request) -> str:
-    """Return the identity label for the signed-in admin.
-
-    In proxy auth mode this is the username the upstream proxy forwarded
-    (stashed on ``request.state.proxy_auth_user`` by the middleware); in
-    builtin mode it is the configured single-admin username. Falls back to
-    ``"admin"`` when no other value is available, so templates always have
-    something meaningful to render.
-    """
-    if _is_proxy_auth_mode():
-        proxy_user = getattr(request.state, "proxy_auth_user", None)
-        if proxy_user:
-            return str(proxy_user)
-    stored = await get_username()
-    return stored or "admin"
 
 
 # ---------------------------------------------------------------------------

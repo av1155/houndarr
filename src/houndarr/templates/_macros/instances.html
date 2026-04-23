@@ -32,7 +32,13 @@
   saves us from whitespace drift but a renamed attribute or a
   dropped class would fail loudly.
 
-  Whitespace is pinned by tests/test_templates/test_macros_instances.py.
+  Macro-internal whitespace is pinned byte-equal by
+  tests/test_templates/test_macros_instances.py.  Post-migration
+  consumer HTML is not byte-equal to its pre-refactor form (the
+  status pill collapses from inline multi-line spans to the
+  single-line badges.status_pill output); browsers collapse
+  inter-tag whitespace between inline elements so the rendered
+  surface is identical.
 -#}
 
 

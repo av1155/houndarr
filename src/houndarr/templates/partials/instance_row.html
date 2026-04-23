@@ -1,3 +1,12 @@
-{# Single instance row: used by both initial render and HTMX swap after update. #}
+{# Single instance row: used by both initial render and HTMX swap
+   after update.  The `instances` import alias intentionally shadows
+   the loop variable named `instances` in
+   partials/instance_table_body.html and the `{% for instance in
+   instances %}` loop in partials/pages/settings_content.html: Jinja
+   import scoping confines the alias to this file, and the loop's
+   per-iteration `instance` variable is inherited via the include's
+   default with-context behaviour.  Removing the import or switching
+   the include to `without context` would break this; keep the
+   import inside this partial. #}
 {%- import "_macros/instances.html" as instances -%}
 {{ instances.instance_row(instance, active_error_ids) }}

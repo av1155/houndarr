@@ -23,10 +23,15 @@
   scoped by the dialog id (`#changelog-modal`, `#add-instance-modal`)
   and would not be reusable from the macro.
 
-  Whitespace is pinned by tests/test_templates/test_macros_modals.py:
-  the opening tag attributes sit one-per-line; the call-block body
-  drops in unindented after the opening tag; the closing tag
-  follows on its own line.
+  Macro-internal whitespace is pinned byte-equal by
+  tests/test_templates/test_macros_modals.py: the opening tag
+  attributes sit one-per-line; the call-block body drops in
+  unindented after the opening tag; the closing tag follows on its
+  own line.  Post-migration consumer HTML is not byte-equal to its
+  pre-refactor form; structural parity (every wrapper class,
+  every aria attribute, the backdrop-before-panel ordering) is
+  enforced by the assertions in test_macros_modals.py and by the
+  Track A.22 render harness.
 -#}
 
 

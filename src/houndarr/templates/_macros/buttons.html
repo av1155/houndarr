@@ -49,10 +49,16 @@
   order on Python 3.7+ and Jinja2 mirrors that ordering, so callers
   control attribute order site-by-site.
 
-  Whitespace is pinned by tests/test_templates/test_macros_buttons.py:
-  the opening `<button>` tag stays on one line; the call-block body
-  sits indented two spaces; the closing `</button>` follows on its
-  own line.
+  Macro-internal whitespace is pinned byte-equal by
+  tests/test_templates/test_macros_buttons.py: the opening
+  `<button>` tag stays on one line; the call-block body sits
+  indented two spaces; the closing `</button>` follows on its own
+  line.  Post-migration consumer HTML is not byte-equal to its
+  pre-refactor form (class string ordering shifts when `extra`
+  classes append after the size combo, e.g. font-semibold lands
+  after px-3 py-1.5 instead of before).  Tailwind utilities are
+  order-independent in the cascade so the rendered surface is
+  identical, but the byte string does move.
 -#}
 
 

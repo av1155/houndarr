@@ -217,10 +217,10 @@ class TestPartialValidationError:
         assert "&lt;script&gt;" in body
         assert "<script>" not in body
 
-    def test_response_is_tr_tbody_compatible(self) -> None:
-        """Pin the shape so HTMX swap into #log-tbody keeps table structure."""
+    def test_response_is_feed_shaped(self) -> None:
+        """Pin the shape so HTMX swap into #log-feed keeps feed structure."""
         resp = _partial_validation_error("bad input")
         body = resp.body.decode("utf-8")
-        assert body.startswith('<tr id="log-error-row">')
-        assert 'colspan="10"' in body
-        assert body.endswith("</tr>")
+        assert body.startswith('<div id="log-error-row"')
+        assert 'class="empty empty--error"' in body
+        assert body.endswith("</div>")

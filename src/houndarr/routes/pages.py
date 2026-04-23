@@ -229,11 +229,7 @@ async def logs_page(
         parse_instance_id,
         parse_search_kind,
     )
-    from houndarr.services.log_query import (
-        compute_load_more_limit,
-        query_logs,
-        summarize_rows,
-    )
+    from houndarr.services.log_query import compute_load_more_limit, query_logs
 
     try:
         parsed_instance_id = parse_instance_id(instance_id)
@@ -265,9 +261,6 @@ async def logs_page(
         before=None,
         limit=50,
     )
-    # `summary` is still consumed by the legacy table template; dropped
-    # together with partials/log_summary.html in the redesign commit.
-    summary = summarize_rows(rows)
 
     # Precompute the name -> accent-slug lookup the cycle-card template
     # uses to set --cycle-accent.  Doing it here (once, server-side)
@@ -283,7 +276,6 @@ async def logs_page(
         template_name,
         instances=instances,
         rows=rows,
-        summary=summary,
         limit=50,
         load_more_limit=compute_load_more_limit(50),
         selected_instance_id=parsed_instance_id,

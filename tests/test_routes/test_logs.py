@@ -570,18 +570,21 @@ def test_logs_page_renders(app: TestClient) -> None:
     resp = app.get("/logs")
     assert resp.status_code == 200
     assert b'data-page-key="logs"' in resp.content
-    assert b"log-filter-form" in resp.content
-    assert b"log-tbody" in resp.content
-    assert b"Media" in resp.content
-    assert b"Timestamp (Local)" in resp.content
+    assert b'hx-history="false"' in resp.content
+    assert b"AUDIT TRAIL" in resp.content
+    assert b'id="log-filter-form"' in resp.content
+    assert b'id="log-feed"' in resp.content
+    assert b'id="live-indicator"' in resp.content
+    # Filter labels (still present, just no longer column headers).
     assert b"Kind" in resp.content
     assert b"Trigger" in resp.content
-    assert b"Cycle" in resp.content
-    assert b"Cycle outcome" in resp.content
-    assert b"Hide system rows" in resp.content
-    assert b'id="summary-total-rows"' in resp.content
+    # Noise switches (hide_system default on, hide_skipped default off).
     assert b'id="filter-hide-system"' in resp.content
+    assert b'id="filter-hide-skipped"' in resp.content
+    assert b"Hide system" in resp.content
+    assert b"Hide skipped" in resp.content
     assert b"checked" in resp.content
+    # Rows selector: full option set preserved from the legacy page.
     assert b'<option value="500">500</option>' in resp.content
     assert b'<option value="1000">1000</option>' in resp.content
     assert b'<option value="5000">All</option>' in resp.content
@@ -603,6 +606,9 @@ def test_logs_page_renders(app: TestClient) -> None:
     assert b'id="copy-visible-logs-btn"' not in resp.content
     assert b'id="copy-visible-logs-btn-mobile"' not in resp.content
     assert b"Copy visible rows" not in resp.content
+    # Legacy summary bar and table shell must not leak back in.
+    assert b"log-tbody" not in resp.content
+    assert b'id="summary-total-rows"' not in resp.content
 
 
 def test_logs_page_hx_request_returns_content_fragment(app: TestClient) -> None:
@@ -666,11 +672,12 @@ def test_logs_page_copy_dropdown_aria_attributes(app: TestClient) -> None:
 
 
 def test_logs_partial_empty(app: TestClient) -> None:
-    """The HTMX partial returns the empty-state row when no logs exist."""
+    """The HTMX partial returns the empty-state card when no logs exist."""
     _login(app)
     resp = app.get("/api/logs/partial")
     assert resp.status_code == 200
-    assert b"No log entries found" in resp.content
+    assert b'class="empty"' in resp.content
+    assert b"No entries match those filters" in resp.content
 
 
 @pytest.mark.asyncio()
@@ -689,14 +696,15 @@ async def test_logs_partial_returns_rows(seeded_log: None, async_client: object)
     resp = await async_client.get("/api/logs/partial?limit=200")
     assert resp.status_code == 200
     content = resp.text
-    assert "<tr" in content
-    assert 'data-cycle-group="cycle-b"' in content
-    # Should contain action badges
-    assert "searched" in content or "skipped" in content
+    assert 'class="cycle' in content
+    assert 'data-cycle-id="cycle-b"' in content
+    # Cycle cards expose the trigger as a data attribute and render it
+    # as the lowercased label in the meta line.
+    assert 'data-cycle-trigger="run_now"' in content
+    assert "run now" in content
+    # Entry chips + titles.
+    assert 'class="entry' in content
     assert "My Show - S01E01 - Pilot" in content
-    assert "run_now" in content
-    assert "skips only" in content
-    assert "unknown" in content
 
 
 @pytest.mark.asyncio()
@@ -716,7 +724,7 @@ async def test_logs_partial_empty_instance_id_treated_as_all(
 
     resp = await async_client.get("/api/logs/partial?instance_id=&limit=200")
     assert resp.status_code == 200
-    assert "<tr" in resp.text
+    assert 'class="cycle' in resp.text
 
 
 @pytest.mark.asyncio()
@@ -844,10 +852,15 @@ async def test_logs_partial_cycle_group_headers_include_cycle_context(
 
     resp = await async_client.get("/api/logs/partial?limit=200")
     assert resp.status_code == 200
-    assert "Cycle cycle-b" in resp.text
-    assert "trigger run_now" in resp.text
-    assert "searched 1" in resp.text
-    assert "skipped 1" in resp.text
+    # Cycle identity + trigger live on data attributes; counts render
+    # as outcome pills whose inner span carries the number.  The " N"
+    # label text sits outside the span so the exact byte sequence is
+    # `outcome-pill__n">1</span> searched`.
+    assert 'data-cycle-id="cycle-b"' in resp.text
+    assert 'data-cycle-trigger="run_now"' in resp.text
+    assert "outcome-pill--searched" in resp.text
+    assert "outcome-pill--error" in resp.text
+    assert 'outcome-pill__n">1</span>' in resp.text
 
 
 # ---------------------------------------------------------------------------
@@ -912,13 +925,15 @@ async def test_logs_limit_above_max_rejected(seeded_log: None, async_client: obj
 async def test_logs_partial_returns_html_422_on_bad_filter(
     seeded_log: None, async_client: object
 ) -> None:
-    """``/api/logs/partial`` must return an HTML ``<tr>`` error row on
+    """``/api/logs/partial`` must return a feed-shaped error card on
     validation failure, not FastAPI's default JSON body.
 
-    Rationale: the partial is swapped into ``#log-tbody`` via HTMX.
-    With the ``422 -> swap`` config override in ``base.html``, a JSON
-    response would render as raw ``{"detail": ...}`` inside the
-    ``<tbody>``.  The endpoint shapes the error as a ``<tr>`` instead.
+    Rationale: the partial is swapped into ``#log-feed`` (a
+    ``<section>``) via HTMX.  With the ``422 -> swap`` config
+    override in ``base.html``, a JSON response would render as raw
+    ``{"detail": ...}`` inside the section.  The endpoint shapes
+    the error as a ``<div class="empty empty--error">`` card to
+    match the feed's visual language.
     """
     from httpx import AsyncClient
 
@@ -934,7 +949,7 @@ async def test_logs_partial_returns_html_422_on_bad_filter(
     assert resp.status_code == 422
     assert resp.headers["content-type"].startswith("text/html"), resp.headers
     body = resp.text
-    assert "<tr" in body and 'colspan="10"' in body, body
+    assert 'class="empty' in body and "empty--error" in body, body
     assert "Invalid filter value" in body, body
     # The specific detail string is surfaced so operators can see what failed.
     assert "search_kind" in body, body

@@ -177,21 +177,20 @@ async def _fetch_filtered_rows(filters: _ParsedLogFilters) -> list[dict[str, Any
 
 
 def _partial_validation_error(detail: str) -> HTMLResponse:
-    """Render a tbody-shaped 422 error for ``/api/logs/partial``.
+    """Render a feed-shaped 422 error for ``/api/logs/partial``.
 
-    ``#log-tbody`` is the HTMX target; swapping FastAPI's default JSON
-    error body into a ``<tbody>`` would render as raw ``{"detail":...}``
-    text.  Shape the response as a single ``<tr>`` that matches the
-    existing empty-state row (``colspan="10"``) so the swap preserves
-    table structure.
+    ``#log-feed`` is the HTMX target; swapping FastAPI's default JSON
+    error body into a ``<section>`` would render as raw
+    ``{"detail":...}`` text.  Shape the response as a ``<div
+    class="empty">`` card that matches the zero-results branch of
+    log_rows.html so the swap preserves the feed's visual language.
     """
     safe = html.escape(detail)
     content = (
-        '<tr id="log-error-row">'
-        '<td colspan="10" class="px-3 py-14 text-center">'
-        '<p class="text-sm font-medium text-red-300 font-sans">Invalid filter value.</p>'
-        f'<p class="mt-1 text-xs text-red-400/80 font-sans">{safe}</p>'
-        "</td></tr>"
+        '<div id="log-error-row" class="empty empty--error" role="alert">'
+        '<p class="empty__title">Invalid filter value.</p>'
+        f"<p>{safe}</p>"
+        "</div>"
     )
     return HTMLResponse(content=content, status_code=422)
 

@@ -213,13 +213,16 @@
 @import "./tokens.css";
 @import "./app.css";
 
-/* Named duration utilities. Tailwind v4 has no `--duration-*` theme
+/* Named duration utilities.  Tailwind v4 has no `--duration-*` theme
    namespace (durations normally go via numeric arbitrary values), so
-   register fast/base/slow as custom utilities driven by CSS variables
-   declared on :root in tokens.css. */
+   register fast / base as custom utilities driven by CSS variables
+   declared on :root in tokens.css.  A third step `duration-slow`
+   existed pre-Track-G but had zero template consumers; the 280ms
+   `--dur-slow` token itself is still consumed directly by app.css
+   (dash-page-in animation, collapsible max-height transition) so the
+   token survives while the Tailwind utility does not. */
 @utility duration-fast { transition-duration: var(--dur-fast); }
 @utility duration-base { transition-duration: var(--dur-base); }
-@utility duration-slow { transition-duration: var(--dur-slow); }
 
 /* Inline-shadow + brand-rule utilities.  Six inline `style=` attributes
    in the templates previously carried these exact declarations; moving

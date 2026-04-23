@@ -26,16 +26,27 @@
   }
 
   function syncShellNavState() {
+    // Two variants share the same data-shell-nav selector but use
+    // different active-state class sets: the pill tabs in the desktop
+    // header flip a single BEM modifier, while the mobile drawer rows
+    // keep the original Tailwind utility swap. Branch on the nearest
+    // .pill-nav ancestor so a single pass handles both.
     const path = window.location.pathname;
     navLinks().forEach((link) => {
       const route = link.getAttribute('data-shell-route') || '';
       const isActive = routeIsActive(route, path);
+      const isPill = link.closest('.pill-nav') !== null;
 
-      link.classList.toggle('bg-surface-3', isActive);
-      link.classList.toggle('text-white', isActive);
-      link.classList.toggle('text-slate-400', !isActive);
-      link.classList.toggle('hover:text-white', !isActive);
-      link.classList.toggle('hover:bg-surface-2', !isActive);
+      if (isPill) {
+        link.classList.toggle('pill-nav__tab--active', isActive);
+      } else {
+        link.classList.toggle('bg-surface-3', isActive);
+        link.classList.toggle('text-white', isActive);
+        link.classList.toggle('text-slate-400', !isActive);
+        link.classList.toggle('hover:text-white', !isActive);
+        link.classList.toggle('hover:bg-surface-2', !isActive);
+      }
+
       if (isActive) {
         link.setAttribute('aria-current', 'page');
       } else {

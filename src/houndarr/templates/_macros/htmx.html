@@ -24,7 +24,14 @@
 -#}
 
 
-{%- macro shell_nav_link(route, label, is_active) -%}
+{#- shell_nav_link renders one of two visual variants.
+     variant='pill':    desktop header pill-container tab (default).
+     variant='mobile':  drawer row used inside #mobile-nav-menu.
+     The wire attributes (data-shell-*, hx-*, href) stay identical
+     across variants so app.js::syncShellNavState targets both sets
+     with the same selector. -#}
+{%- macro shell_nav_link(route, label, is_active, variant='pill') -%}
+{%- if variant == 'mobile' -%}
 <a href="{{ route }}"
    data-shell-nav="true"
    data-shell-route="{{ route }}"
@@ -35,6 +42,18 @@
    class="shell-nav-link px-3 py-2 rounded-container text-sm font-medium {% if is_active %}bg-surface-3 text-white{% else %}text-slate-400 hover:text-white hover:bg-surface-2{% endif %}">
   {{ label }}
 </a>
+{%- else -%}
+<a href="{{ route }}"
+   data-shell-nav="true"
+   data-shell-route="{{ route }}"
+   hx-get="{{ route }}"
+   hx-target="#app-content"
+   hx-swap="innerHTML"
+   hx-push-url="true"
+   class="shell-nav-link pill-nav__tab{% if is_active %} pill-nav__tab--active{% endif %}">
+  {{ label }}
+</a>
+{%- endif -%}
 {%- endmacro %}
 
 

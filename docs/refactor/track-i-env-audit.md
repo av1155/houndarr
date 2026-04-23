@@ -28,11 +28,17 @@ boundary is intact; no consumer migration is required for I.2.
 
 Listed so future audits can spot drift quickly.
 
-### `src/houndarr/config.py` (reads; 10 call sites, 11 environment variables)
+### `src/houndarr/config.py` (reads; 10 direct call sites, 11 environment variables)
+
+The table lists one row per environment variable plus one row for the
+`_parse_bool_env` helper body itself (line 113).  The two rows marked
+*via `_parse_bool_env`* are not additional `os.environ` call sites;
+their values are resolved through the shared helper at line 113, which
+is why the direct-call-site count (10) is one below the row count (12).
 
 | Line | Env var                        | `AppSettings` field   |
 | ---- | ------------------------------ | --------------------- |
-| 113  | (generic, used by `_parse_bool_env`) | n/a             |
+| 113  | (helper body; `_parse_bool_env`) | n/a                 |
 | 154  | `HOUNDARR_DATA_DIR`            | `data_dir`            |
 | 155  | `HOUNDARR_HOST`                | `host`                |
 | 156  | `HOUNDARR_PORT`                | `port`                |

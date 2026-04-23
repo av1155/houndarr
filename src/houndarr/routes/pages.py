@@ -189,6 +189,22 @@ async def dashboard(request: Request) -> HTMLResponse:
 # ---------------------------------------------------------------------------
 
 
+# Map from Instance.core.type.value to the CSS --inst-<slug> token
+# suffix the Logs page cycle cards consume.  Collapses the two
+# Whisparr variants to slugs Tailwind accepts without an underscore
+# (--inst-whisparr / --inst-whisparr-v3).  Instances whose type is
+# unknown to this map (future *arr families, legacy rows) are handled
+# by the template's default in `instance_accent_by_name.get(name, '')`.
+_INSTANCE_TYPE_TO_ACCENT_SLUG = {
+    "sonarr": "sonarr",
+    "radarr": "radarr",
+    "lidarr": "lidarr",
+    "readarr": "readarr",
+    "whisparr_v2": "whisparr",
+    "whisparr_v3": "whisparr-v3",
+}
+
+
 @router.get("/logs", response_class=HTMLResponse)
 async def logs_page(
     request: Request,
@@ -198,6 +214,7 @@ async def logs_page(
     search_kind: str | None = Query(default=None),
     cycle_trigger: str | None = Query(default=None),
     hide_system: str | None = Query(default=None),
+    hide_skipped: str | None = Query(default=None),
 ) -> HTMLResponse:
     """Search log viewer page.
 
@@ -207,6 +224,7 @@ async def logs_page(
     """
     from houndarr.routes.api.logs import (
         parse_cycle_trigger,
+        parse_hide_skipped,
         parse_hide_system,
         parse_instance_id,
         parse_search_kind,
@@ -222,6 +240,9 @@ async def logs_page(
         parsed_search_kind = parse_search_kind(search_kind)
         parsed_cycle_trigger = parse_cycle_trigger(cycle_trigger)
         parsed_hide_system = parse_hide_system(hide_system) if hide_system is not None else True
+        parsed_hide_skipped = (
+            parse_hide_skipped(hide_skipped) if hide_skipped is not None else False
+        )
     except HTTPException:
         # Malformed query string: fall back to unfiltered view so the
         # page still loads rather than bubbling a 422 JSON response.
@@ -229,6 +250,7 @@ async def logs_page(
         parsed_search_kind = None
         parsed_cycle_trigger = None
         parsed_hide_system = True
+        parsed_hide_skipped = False
 
     parsed_action = action or None
 
@@ -239,10 +261,22 @@ async def logs_page(
         search_kind=parsed_search_kind,
         cycle_trigger=parsed_cycle_trigger,
         hide_system=parsed_hide_system,
+        hide_skipped=parsed_hide_skipped,
         before=None,
         limit=50,
     )
+    # `summary` is still consumed by the legacy table template; dropped
+    # together with partials/log_summary.html in the redesign commit.
     summary = summarize_rows(rows)
+
+    # Precompute the name -> accent-slug lookup the cycle-card template
+    # uses to set --cycle-accent.  Doing it here (once, server-side)
+    # avoids a per-row dict rebuild inside the Jinja loop.
+    instance_accent_by_name = {
+        inst.core.name: _INSTANCE_TYPE_TO_ACCENT_SLUG.get(inst.core.type.value, "")
+        for inst in instances
+    }
+
     template_name = "partials/pages/logs_content.html" if is_hx_request(request) else "logs.html"
     return _render(
         request,
@@ -257,12 +291,15 @@ async def logs_page(
         selected_search_kind=parsed_search_kind,
         selected_cycle_trigger=parsed_cycle_trigger,
         selected_hide_system=parsed_hide_system,
+        selected_hide_skipped=parsed_hide_skipped,
         instance_id=parsed_instance_id,
         action=parsed_action,
         search_kind=parsed_search_kind,
         cycle_trigger=parsed_cycle_trigger,
         hide_system=parsed_hide_system,
+        hide_skipped=parsed_hide_skipped,
         before=None,
+        instance_accent_by_name=instance_accent_by_name,
     )
 
 

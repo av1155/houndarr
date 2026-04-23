@@ -22,6 +22,7 @@ does not need to share a handle with sibling reads, so the simpler
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from typing import Any
 
 from houndarr.database import get_db
@@ -127,6 +128,7 @@ async def query_logs(
     search_kind: str | None = None,
     cycle_trigger: str | None = None,
     hide_system: bool = False,
+    hide_skipped: bool = False,
     before: str | None = None,
     limit: int = LIMIT_DEFAULT,
 ) -> list[dict[str, Any]]:
@@ -189,6 +191,9 @@ async def query_logs(
             "NOT (COALESCE(sl.cycle_trigger, '') = 'system' "
             "OR (sl.instance_id IS NULL AND sl.action = 'info'))"
         )
+
+    if hide_skipped:
+        conditions.append("sl.action != 'skipped'")
 
     if before is not None:
         conditions.append("sl.timestamp < ?")
@@ -282,3 +287,64 @@ async def query_logs(
             reordered.extend(groups[cid])
 
     return reordered
+
+
+async def head_snapshot(since_cycle_id: str | None) -> dict[str, Any]:
+    """Return newest cycle identifier + delta count since a cursor.
+
+    Powers the Logs page live-tail banner.  Two reads: the newest cycle
+    anywhere in ``search_log`` (ordered by row timestamp + id DESC), and
+    a count of distinct cycles whose latest row is strictly newer than
+    the since-cursor's latest row.  When ``since_cycle_id`` is missing
+    from the DB (purged by the 30-day retention, or never seen), the
+    count falls through to zero; the client recovers on the next full
+    page refresh.
+
+    Args:
+        since_cycle_id: Top-of-feed cycle id the client last rendered.
+            ``None`` on first poll before any cycles have been shown.
+
+    Returns:
+        Dict with keys ``newest_cycle_id`` (str | None),
+        ``newest_timestamp`` (ISO string | None),
+        ``count_newer_than`` (int), and ``at`` (server-side UTC ISO
+        timestamp).  ``newest_*`` are ``None`` when the search_log has
+        no cycle rows yet.
+    """
+    async with get_db() as db:
+        async with db.execute(
+            "SELECT cycle_id, timestamp FROM search_log "
+            "WHERE cycle_id IS NOT NULL "
+            "ORDER BY timestamp DESC, id DESC "
+            "LIMIT 1"
+        ) as cur:
+            newest = await cur.fetchone()
+
+        count_newer_than = 0
+        if since_cycle_id:
+            # The inner subquery returns the latest row timestamp of the
+            # cursor cycle; when the cursor has been purged (or never
+            # existed) the subquery yields NULL and the `> NULL`
+            # comparison excludes every row, so count_newer_than stays
+            # at 0.  That's the intentional fallback: a stale client is
+            # told nothing is newer and recovers on refresh.
+            async with db.execute(
+                "SELECT COUNT(DISTINCT cycle_id) AS n FROM search_log "
+                "WHERE cycle_id IS NOT NULL "
+                "AND cycle_id != ? "
+                "AND timestamp > ("
+                "  SELECT timestamp FROM search_log "
+                "  WHERE cycle_id = ? "
+                "  ORDER BY timestamp DESC LIMIT 1"
+                ")",
+                (since_cycle_id, since_cycle_id),
+            ) as cur:
+                count_row = await cur.fetchone()
+                count_newer_than = int(count_row["n"]) if count_row else 0
+
+    return {
+        "newest_cycle_id": newest["cycle_id"] if newest else None,
+        "newest_timestamp": newest["timestamp"] if newest else None,
+        "count_newer_than": count_newer_than,
+        "at": datetime.now(UTC).isoformat(),
+    }

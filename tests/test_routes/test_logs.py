@@ -405,6 +405,49 @@ async def test_logs_hide_system_rows_filter(seeded_log: None, async_client: obje
 
 
 @pytest.mark.asyncio()
+async def test_logs_hide_skipped_filter(seeded_log: None, async_client: object) -> None:
+    """hide_skipped=true should remove action='skipped' rows from results."""
+    from httpx import AsyncClient
+
+    assert isinstance(async_client, AsyncClient)
+
+    await async_client.post(
+        "/setup",
+        data={"username": "admin", "password": "ValidPass1!", "password_confirm": "ValidPass1!"},
+    )
+    await async_client.post("/login", data={"username": "admin", "password": "ValidPass1!"})
+
+    resp = await async_client.get("/api/logs?hide_skipped=true&limit=200")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert all(row["action"] != "skipped" for row in data)
+
+
+@pytest.mark.asyncio()
+async def test_logs_partial_hide_skipped_excludes_skipped_rows(
+    seeded_log: None, async_client: object
+) -> None:
+    """Partial endpoint honours hide_skipped=true and round-trips it in pagination."""
+    from httpx import AsyncClient
+
+    assert isinstance(async_client, AsyncClient)
+
+    await async_client.post(
+        "/setup",
+        data={"username": "admin", "password": "ValidPass1!", "password_confirm": "ValidPass1!"},
+    )
+    await async_client.post("/login", data={"username": "admin", "password": "ValidPass1!"})
+
+    resp = await async_client.get("/api/logs/partial?hide_skipped=true&limit=200")
+    assert resp.status_code == 200
+    content = resp.content.decode()
+    # data-action is stamped on every row in both the legacy table and
+    # the redesigned cycle feed, so the filter's effect is visible as
+    # the absence of the skipped value regardless of template shape.
+    assert 'data-action="skipped"' not in content
+
+
+@pytest.mark.asyncio()
 async def test_logs_filters_compose_with_existing_filters(
     seeded_log: None, async_client: object
 ) -> None:

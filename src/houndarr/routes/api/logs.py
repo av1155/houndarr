@@ -25,6 +25,7 @@ from houndarr.services.log_query import (
     LIMIT_DEFAULT,
     LIMIT_MAX,
     compute_load_more_limit,
+    head_snapshot,
     query_logs,
 )
 
@@ -94,6 +95,23 @@ def parse_hide_system(raw: str | None) -> bool:
     raise HTTPException(status_code=422, detail="hide_system must be a boolean")
 
 
+def parse_hide_skipped(raw: str | None) -> bool:
+    """Parse hide_skipped checkbox/select values from query params.
+
+    Mirrors :func:`parse_hide_system` so both filter toggles accept the
+    same truthy / falsy vocabulary the HTMX form serialises from the
+    Noise chip-switches.
+    """
+    if raw is None or raw == "":
+        return False
+    normalized = raw.strip().lower()
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "off"}:
+        return False
+    raise HTTPException(status_code=422, detail="hide_skipped must be a boolean")
+
+
 @dataclass(frozen=True, slots=True)
 class _ParsedLogFilters:
     """Validated filter bundle shared by both log route handlers.
@@ -110,6 +128,7 @@ class _ParsedLogFilters:
     search_kind: str | None
     cycle_trigger: str | None
     hide_system: bool
+    hide_skipped: bool
     before: str | None
     limit: int
 
@@ -120,6 +139,7 @@ def _resolve_filters(
     search_kind: str | None = Query(default=None),
     cycle_trigger: str | None = Query(default=None),
     hide_system: str | None = Query(default=None),
+    hide_skipped: str | None = Query(default=None),
     before: str | None = Query(default=None),
     limit: int = Query(default=LIMIT_DEFAULT, ge=1, le=LIMIT_MAX),
 ) -> _ParsedLogFilters:
@@ -136,6 +156,7 @@ def _resolve_filters(
         search_kind=parse_search_kind(search_kind),
         cycle_trigger=parse_cycle_trigger(cycle_trigger),
         hide_system=parse_hide_system(hide_system),
+        hide_skipped=parse_hide_skipped(hide_skipped),
         before=before,
         limit=limit,
     )
@@ -149,6 +170,7 @@ async def _fetch_filtered_rows(filters: _ParsedLogFilters) -> list[dict[str, Any
         search_kind=filters.search_kind,
         cycle_trigger=filters.cycle_trigger,
         hide_system=filters.hide_system,
+        hide_skipped=filters.hide_skipped,
         before=filters.before,
         limit=filters.limit,
     )
@@ -191,15 +213,16 @@ async def get_logs_partial(
     search_kind: str | None = Query(default=None),
     cycle_trigger: str | None = Query(default=None),
     hide_system: str | None = Query(default=None),
+    hide_skipped: str | None = Query(default=None),
     before: str | None = Query(default=None),
     limit: int = Query(default=LIMIT_DEFAULT, ge=1, le=LIMIT_MAX),
 ) -> HTMLResponse:
-    """Return a server-rendered <tbody> partial for HTMX swaps.
+    """Return a server-rendered partial for HTMX swaps.
 
     The partial endpoint does not use the ``Depends(_resolve_filters)``
     shortcut the JSON endpoint uses because a validation failure has
-    to render as a tbody-shaped HTML row instead of FastAPI's default
-    JSON 422 body; intercepting :class:`HTTPException` from inside the
+    to render as feed-shaped HTML instead of FastAPI's default JSON
+    422 body; intercepting :class:`HTTPException` from inside the
     dependency is not a supported FastAPI pattern.  The query-param
     wiring therefore stays on the handler and the parser is called
     inline inside a ``try`` block.
@@ -211,6 +234,7 @@ async def get_logs_partial(
             search_kind=search_kind,
             cycle_trigger=cycle_trigger,
             hide_system=hide_system,
+            hide_skipped=hide_skipped,
             before=before,
             limit=limit,
         )
@@ -229,8 +253,29 @@ async def get_logs_partial(
             "search_kind": filters.search_kind,
             "cycle_trigger": filters.cycle_trigger,
             "hide_system": filters.hide_system,
+            "hide_skipped": filters.hide_skipped,
             "before": filters.before,
             "limit": filters.limit,
             "load_more_limit": compute_load_more_limit(filters.limit),
         },
     )
+
+
+@router.get("/api/logs/head")
+async def get_logs_head(
+    since_cycle_id: str | None = Query(default=None),
+) -> JSONResponse:
+    """Return the newest cycle identifier plus a delta count since a cursor.
+
+    Powers the Logs page live-tail banner.  The client polls this on the
+    same 30 s cadence the dashboard uses against ``/api/status``, passing
+    its top-of-feed ``cycle_id`` as ``since_cycle_id``; the response tells
+    the page whether new cycles landed so it can render the "N new entries"
+    banner without forcing a full partial swap while the user is scrolled.
+    Filter-unaware in v1: the count does not honour the active filter
+    chips, so a "new" banner can surface cycles the user has filtered out.
+    Switching to filter-aware counts is a post-release iteration if the
+    naive count misleads.
+    """
+    snapshot = await head_snapshot(since_cycle_id)
+    return JSONResponse(snapshot)

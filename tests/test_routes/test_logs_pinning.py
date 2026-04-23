@@ -19,6 +19,7 @@ from fastapi import HTTPException
 from houndarr.routes.api.logs import (
     _partial_validation_error,
     parse_cycle_trigger,
+    parse_hide_skipped,
     parse_hide_system,
     parse_instance_id,
     parse_search_kind,
@@ -98,6 +99,27 @@ class TestParseHideSystem:
     def test_garbage_raises_422(self) -> None:
         with pytest.raises(HTTPException) as exc:
             parse_hide_system("maybe")
+        assert exc.value.status_code == 422
+
+
+class TestParseHideSkipped:
+    @pytest.mark.parametrize("raw", ["1", "true", "True", "TRUE", "yes", "on", " On "])
+    def test_truthy_values(self, raw: str) -> None:
+        assert parse_hide_skipped(raw) is True
+
+    @pytest.mark.parametrize("raw", ["0", "false", "False", "no", "off"])
+    def test_falsy_values(self, raw: str) -> None:
+        assert parse_hide_skipped(raw) is False
+
+    def test_none_returns_false(self) -> None:
+        assert parse_hide_skipped(None) is False
+
+    def test_empty_returns_false(self) -> None:
+        assert parse_hide_skipped("") is False
+
+    def test_garbage_raises_422(self) -> None:
+        with pytest.raises(HTTPException) as exc:
+            parse_hide_skipped("maybe")
         assert exc.value.status_code == 422
 
 

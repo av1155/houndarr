@@ -5,10 +5,8 @@
   typed proxy username in proxy mode).
 #}
 {%- import "_macros/buttons.html" as buttons -%}
-<section id="admin-danger" class="space-y-3">
-  <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
-    <h3 class="text-base font-semibold text-danger/90">Danger zone</h3>
-  </div>
+{%- import "_macros/layout.html" as layout -%}
+{% call layout.admin_section(id="admin-danger", title="Danger zone", title_color="text-danger/90") %}
   <div class="space-y-2.5">
     <div class="danger-row">
       <div class="min-w-0">
@@ -25,4 +23,4 @@
       }) %}Factory reset{% endcall %}
     </div>
   </div>
-</section>
+{% endcall %}

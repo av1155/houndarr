@@ -1,3 +1,17 @@
+/* OFF-LIMITS: auth form controls are frozen.
+ *
+ * Paired with auth.css, this file covers every interactive element
+ * inside the login + setup card: input wrappers, caps-lock badge,
+ * icon buttons (show-password toggle), inline field error messages,
+ * and the password-strength meter.  Every rule here is load-bearing
+ * for the auth experience users see before the app authenticates
+ * them; a change would propagate to every fresh install.
+ *
+ * Changes must land with an updated Playwright baseline under
+ * tests/e2e_browser/ and a recorded rationale in the commit body.
+ * The Tailwind refactor does not restructure these selectors; the
+ * only admissible changes are small cosmetic comment additions. */
+
 /* Houndarr auth pages form controls: inputs, icon buttons, caps badge,
  * field messages, password-strength meter, submit button. */
 

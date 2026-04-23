@@ -1,3 +1,18 @@
+/* OFF-LIMITS: auth visual language is frozen.
+ *
+ * This file + auth-fields.css define every pixel the unauthenticated
+ * user sees before the dashboard takes over.  The card, the brand
+ * glow, the field grid, the caps-lock badge, the strength meter, and
+ * the submit button all compose into a visual language that ships on
+ * fresh installs and gets screenshotted into marketing material.
+ *
+ * Changes here must land with an updated Playwright baseline under
+ * tests/e2e_browser/ and a recorded rationale in the commit body.
+ * Drive-by tweaks to selectors, colour tokens, spacing, or typography
+ * must not ride along with unrelated work.  The Tailwind refactor
+ * deliberately does not restructure these rules; the only admissible
+ * changes are small cosmetic comment additions like this one. */
+
 /* Houndarr auth pages (login + setup) layout + card chrome.
  * Scoped under body.is-auth; form controls live in auth-fields.css. */
 

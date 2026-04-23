@@ -21,26 +21,6 @@
   color: var(--color-text-heading);
 }
 
-.eyebrow {
-  font-family: var(--font-mono);
-  font-size: 0.625rem;
-  letter-spacing: 0.18em;
-  color: var(--color-text-muted);
-  text-transform: uppercase;
-  margin: 0 0 6px;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  font-weight: 500;
-}
-.eyebrow__dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 999px;
-  background: var(--color-brand-400);
-  box-shadow: 0 0 0 3px var(--glow-brand-medium);
-  animation: logs-pulse 2.4s ease-in-out infinite;
-}
 @keyframes logs-pulse {
   0%, 100% { opacity: 1; box-shadow: 0 0 0 3px var(--glow-brand-medium); }
   50%      { opacity: 0.55; box-shadow: 0 0 0 6px transparent; }

@@ -11,8 +11,6 @@ remains importable from ``houndarr.auth`` for consumer stability.
 from __future__ import annotations
 
 import logging
-import os
-import re
 import secrets
 
 # time is re-imported here so tests can monkeypatch ``houndarr.auth.time.time``
@@ -29,6 +27,7 @@ from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoin
 from starlette.types import ASGIApp
 
 from houndarr.auth import session as _session
+from houndarr.auth import setup as _setup
 from houndarr.auth.password import BCRYPT_COST, hash_password, verify_password
 
 # Rate-limit seam: re-exported for consumer stability.  Underscore-prefixed
@@ -62,55 +61,87 @@ from houndarr.auth.session import (
     get_session_csrf_token,
     validate_session,
 )
+
+# Setup seam: re-exported from the setup submodule.  ``_setup_complete``
+# and ``_USERNAME_PATTERN`` pass through ``__getattr__`` alongside
+# ``_serializer`` so tests that inspect the module's state always read
+# the authoritative value.
+from houndarr.auth.setup import (
+    USERNAME_MAX_LENGTH,
+    USERNAME_MIN_LENGTH,
+    check_credentials,
+    check_password,
+    get_username,
+    is_setup_complete,
+    normalize_username,
+    reset_auth_caches,
+    rotate_session_secret,
+    set_password,
+    set_username,
+    validate_username,
+)
 from houndarr.config import get_settings
-from houndarr.repositories.settings import get_setting, set_setting
 
 __all__ = [
     "BCRYPT_COST",
     "CSRF_COOKIE_NAME",
     "SESSION_COOKIE_NAME",
     "SESSION_MAX_AGE_SECONDS",
+    "USERNAME_MAX_LENGTH",
+    "USERNAME_MIN_LENGTH",
     "_LOGIN_MAX_ATTEMPTS",
     "_LOGIN_WINDOW_SECONDS",
     "_client_ip",
     "_get_serializer",
     "_login_attempts",
+    "check_credentials",
     "check_login_rate_limit",
+    "check_password",
     "clear_login_attempts",
     "clear_session",
     "create_session",
     "get_session_csrf_token",
+    "get_username",
     "hash_password",
+    "is_setup_complete",
+    "normalize_username",
     "record_failed_login",
+    "reset_auth_caches",
     "reset_login_attempts",
+    "rotate_session_secret",
+    "set_password",
+    "set_username",
     "validate_session",
+    "validate_username",
     "verify_password",
 ]
 
 
 def __getattr__(name: str) -> Any:
-    """Resolve ``_serializer`` live from the session submodule.
+    """Resolve state-bearing globals live from their owning submodule.
 
-    Package-level ``from .session import _serializer`` would bind the
-    name at import time and miss every later re-assignment inside
-    ``session.py`` (``_get_serializer`` sets it; ``reset_serializer``
-    clears it).  Routing attribute access through ``__getattr__``
-    keeps ``houndarr.auth._serializer`` showing the authoritative
-    value every time a test or caller inspects it.
+    Package-level ``from X import Y`` binds Y at import time and misses
+    later re-assignments inside the owning submodule.  For the globals
+    tests and external callers inspect (``_serializer``,
+    ``_setup_complete``, ``_USERNAME_PATTERN``), routing attribute
+    access through ``__getattr__`` keeps ``houndarr.auth.<name>``
+    showing the authoritative value every time.
     """
     if name == "_serializer":
         return _session._serializer
+    if name == "_setup_complete":
+        return _setup._setup_complete
+    if name == "_USERNAME_PATTERN":
+        return _setup._USERNAME_PATTERN
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# Constants (remaining; SESSION_* constants live in session.py)
+# Constants (middleware-facing; USERNAME_* and SESSION_* constants live
+# in their owning submodules)
 # ---------------------------------------------------------------------------
-USERNAME_MIN_LENGTH = 3
-USERNAME_MAX_LENGTH = 32
-_USERNAME_PATTERN = re.compile(r"^[a-z0-9_.-]+$")
 
 # HTTP methods that mutate state and require CSRF protection.
 _CSRF_PROTECTED_METHODS = frozenset(["POST", "PUT", "PATCH", "DELETE"])
@@ -129,9 +160,6 @@ _PUBLIC_PATHS = frozenset(
 # allow it without CSRF/session validation so stale legacy sessions can always
 # be cleared after upgrades.
 _LOGOUT_PATH = "/logout"
-
-
-_setup_complete: bool | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -174,120 +202,6 @@ async def validate_csrf(request: Request) -> bool:
         return False
 
     return compare_digest(str(submitted), expected)
-
-
-# ---------------------------------------------------------------------------
-# Setup state helpers
-# ---------------------------------------------------------------------------
-
-
-async def is_setup_complete() -> bool:
-    """Return True if the initial password has been set.
-
-    The result is cached once True because the password_hash setting is
-    monotonic: it transitions from absent to present and is never deleted.
-    """
-    global _setup_complete  # noqa: PLW0603
-    if _setup_complete is True:
-        return True
-    result = (await get_setting("password_hash")) is not None
-    if result:
-        _setup_complete = True
-    return result
-
-
-async def set_password(password: str) -> None:
-    """Hash and persist the application password."""
-    global _setup_complete  # noqa: PLW0603
-    await set_setting("password_hash", hash_password(password))
-    _setup_complete = True
-
-
-async def rotate_session_secret() -> None:
-    """Regenerate the session signing secret and drop the serializer cache.
-
-    Every cookie signed with the previous secret fails signature verification
-    afterwards, so a stolen cookie cannot outlive a password change. The
-    caller is responsible for issuing the current admin a fresh
-    :func:`create_session` cookie on the outgoing response so the password
-    change does not also sign them out of the tab they made it from.
-    """
-    await set_setting("session_secret", os.urandom(32).hex())
-    _session.reset_serializer()
-
-
-def normalize_username(username: str) -> str:
-    """Return a normalized username for storage and comparison."""
-    return username.strip().lower()
-
-
-def validate_username(username: str) -> str | None:
-    """Return an error message if username is invalid, else None."""
-    normalized = normalize_username(username)
-    if not normalized:
-        return "Username is required."
-    if len(normalized) < USERNAME_MIN_LENGTH or len(normalized) > USERNAME_MAX_LENGTH:
-        return "Username must be 3-32 characters."
-    if _USERNAME_PATTERN.fullmatch(normalized) is None:
-        return "Username may only contain lowercase letters, numbers, dots, dashes, or underscores."
-    return None
-
-
-async def set_username(username: str) -> None:
-    """Persist the normalized single-admin username."""
-    await set_setting("username", normalize_username(username))
-
-
-async def get_username() -> str | None:
-    """Return the configured single-admin username."""
-    return await get_setting("username")
-
-
-async def check_password(password: str) -> bool:
-    """Return True if password matches the stored hash."""
-    stored = await get_setting("password_hash")
-    if not stored:
-        return False
-    return verify_password(password, stored)
-
-
-async def check_credentials(username: str, password: str) -> bool:
-    """Return True if the provided username and password are valid.
-
-    If a legacy install has a password hash but no username yet, the first
-    successful password login claims the submitted username.
-    """
-    normalized_username = normalize_username(username)
-    username_error = validate_username(normalized_username)
-    if username_error is not None:
-        return False
-
-    if not await check_password(password):
-        return False
-
-    stored_username = await get_username()
-    if stored_username is None:
-        await set_username(normalized_username)
-        return True
-
-    return compare_digest(normalized_username, normalize_username(stored_username))
-
-
-def reset_auth_caches() -> None:
-    """Clear every module-level auth cache used by the builtin flow.
-
-    Called by :func:`houndarr.services.admin.factory_reset` after the
-    database is wiped so a subsequent ``/setup`` request is not short-
-    circuited by a stale ``_setup_complete=True`` (or a serializer keyed
-    to the old session_secret) and so brute-force counters start fresh.
-    In proxy-mode installs these caches are not consulted for routing
-    decisions, but resetting them keeps the module honest if the operator
-    later switches modes.
-    """
-    global _setup_complete  # noqa: PLW0603
-    _session.reset_serializer()
-    _setup_complete = None
-    reset_login_attempts()
 
 
 async def resolve_signed_in_as(request: Request) -> str:

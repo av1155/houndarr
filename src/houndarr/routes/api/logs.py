@@ -2,14 +2,22 @@
 
 GET /api/logs         → JSON list of log rows (used by tests and external consumers)
 GET /api/logs/partial → server-rendered <tbody> HTMX partial (used by the /logs page)
+
+Route thinning (D.23).  The duplicated query-param parsing collapsed
+into one :class:`_ParsedLogFilters` value object resolved via a
+FastAPI ``Depends`` injection, and the shared service call moved to a
+single helper.  Each handler is now three statements: take the
+parsed filters, fetch the rows, wrap the response.
 """
 
 from __future__ import annotations
 
 import html
 import logging
+from dataclasses import dataclass
+from typing import Annotated, Any
 
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 
 from houndarr.routes._templates import get_templates
@@ -17,6 +25,7 @@ from houndarr.services.log_query import (
     LIMIT_DEFAULT,
     LIMIT_MAX,
     compute_load_more_limit,
+    head_snapshot,
     query_logs,
 )
 
@@ -86,63 +95,113 @@ def _parse_hide_system(raw: str | None) -> bool:
     raise HTTPException(status_code=422, detail="hide_system must be a boolean")
 
 
-def _partial_validation_error(detail: str) -> HTMLResponse:
-    """Render a feed-shaped 422 error for ``/api/logs/partial``.
+def parse_hide_skipped(raw: str | None) -> bool:
+    """Parse hide_skipped checkbox/select values from query params.
 
-    ``#log-feed`` is the HTMX target; swapping FastAPI's default JSON
-    error body into a ``<section>`` would render as raw
-    ``{"detail":...}`` text.  Shape the response as a ``<div
-    class="empty">`` card that matches the zero-results branch of
-    log_rows.html so the swap preserves the feed's visual language.
+    Mirrors :func:`parse_hide_system` so both filter toggles accept the
+    same truthy / falsy vocabulary the HTMX form serialises from the
+    Noise chip-switches.
+    """
+    if raw is None or raw == "":
+        return False
+    normalized = raw.strip().lower()
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "off"}:
+        return False
+    raise HTTPException(status_code=422, detail="hide_skipped must be a boolean")
+
+
+@dataclass(frozen=True, slots=True)
+class _ParsedLogFilters:
+    """Validated filter bundle shared by both log route handlers.
+
+    Populated by :func:`_resolve_filters` via a FastAPI ``Depends``
+    injection; unpacked by :func:`_fetch_filtered_rows` into the
+    service-level :func:`query_logs` call.  The dataclass kept private
+    because its field set mirrors the service kwargs one-for-one and
+    is not part of any public contract.
+    """
+
+    instance_id: int | None
+    action: str | None
+    search_kind: str | None
+    cycle_trigger: str | None
+    hide_system: bool
+    hide_skipped: bool
+    before: str | None
+    limit: int
+
+
+def _resolve_filters(
+    instance_id: str | None = Query(default=None),
+    action: str | None = Query(default=None),
+    search_kind: str | None = Query(default=None),
+    cycle_trigger: str | None = Query(default=None),
+    hide_system: str | None = Query(default=None),
+    hide_skipped: str | None = Query(default=None),
+    before: str | None = Query(default=None),
+    limit: int = Query(default=LIMIT_DEFAULT, ge=1, le=LIMIT_MAX),
+) -> _ParsedLogFilters:
+    """FastAPI dependency: bind + validate the log-filter query params.
+
+    Raises :class:`HTTPException` 422 on any individual parser failure.
+    The JSON endpoint lets FastAPI surface the default 422 body; the
+    HTMX partial endpoint catches the exception and renders a tbody
+    error row instead (see :func:`_partial_validation_error`).
+    """
+    return _ParsedLogFilters(
+        instance_id=_parse_instance_id(instance_id),
+        action=action or None,
+        search_kind=_parse_search_kind(search_kind),
+        cycle_trigger=_parse_cycle_trigger(cycle_trigger),
+        hide_system=_parse_hide_system(hide_system),
+        hide_skipped=parse_hide_skipped(hide_skipped),
+        before=before,
+        limit=limit,
+    )
+
+
+async def _fetch_filtered_rows(filters: _ParsedLogFilters) -> list[dict[str, Any]]:
+    """Dispatch the parsed filter bundle to :func:`query_logs`."""
+    return await query_logs(
+        instance_id=filters.instance_id,
+        action=filters.action,
+        search_kind=filters.search_kind,
+        cycle_trigger=filters.cycle_trigger,
+        hide_system=filters.hide_system,
+        hide_skipped=filters.hide_skipped,
+        before=filters.before,
+        limit=filters.limit,
+    )
+
+
+def _partial_validation_error(detail: str) -> HTMLResponse:
+    """Render a tbody-shaped 422 error for ``/api/logs/partial``.
+
+    ``#log-tbody`` is the HTMX target; swapping FastAPI's default JSON
+    error body into a ``<tbody>`` would render as raw ``{"detail":...}``
+    text.  Shape the response as a single ``<tr>`` that matches the
+    existing empty-state row (``colspan="10"``) so the swap preserves
+    table structure.
     """
     safe = html.escape(detail)
     content = (
-        '<div id="log-error-row" class="empty empty--error" role="alert">'
-        '<p class="empty__title">Invalid filter value.</p>'
-        f"<p>{safe}</p>"
-        "</div>"
+        '<tr id="log-error-row">'
+        '<td colspan="10" class="px-3 py-14 text-center">'
+        '<p class="text-sm font-medium text-red-300 font-sans">Invalid filter value.</p>'
+        f'<p class="mt-1 text-xs text-red-400/80 font-sans">{safe}</p>'
+        "</td></tr>"
     )
     return HTMLResponse(content=content, status_code=422)
 
 
 @router.get("/api/logs")
 async def get_logs(
-    instance_id: str | None = Query(default=None),
-    action: str | None = Query(default=None),
-    search_kind: str | None = Query(default=None),
-    cycle_trigger: str | None = Query(default=None),
-    hide_system: str | None = Query(default=None),
-    before: str | None = Query(default=None),
-    limit: int = Query(default=LIMIT_DEFAULT, ge=1, le=LIMIT_MAX),
+    filters: Annotated[_ParsedLogFilters, Depends(_resolve_filters)],
 ) -> JSONResponse:
-    """Return paginated log rows as JSON.
-
-    Args:
-        instance_id: Filter to a specific instance ID.
-        action: Filter by action (``searched``, ``skipped``, ``error``, ``info``).
-        search_kind: Filter by search pass kind (``missing`` or ``cutoff``).
-        cycle_trigger: Filter by cycle trigger (``scheduled``, ``run_now``, ``system``).
-        hide_system: When true, hide system lifecycle rows.
-        before: Timestamp cursor; only return rows older than this ISO-8601 value.
-        limit: Max rows (1–500, default 50).
-
-    Returns:
-        JSON array of log-row objects.
-    """
-    parsed_instance_id = _parse_instance_id(instance_id)
-    parsed_action = action or None
-    parsed_search_kind = _parse_search_kind(search_kind)
-    parsed_cycle_trigger = _parse_cycle_trigger(cycle_trigger)
-    parsed_hide_system = _parse_hide_system(hide_system)
-    rows = await query_logs(
-        instance_id=parsed_instance_id,
-        action=parsed_action,
-        search_kind=parsed_search_kind,
-        cycle_trigger=parsed_cycle_trigger,
-        hide_system=parsed_hide_system,
-        before=before,
-        limit=limit,
-    )
+    """Return paginated log rows as JSON."""
+    rows = await _fetch_filtered_rows(filters)
     return JSONResponse(rows)
 
 
@@ -154,59 +213,69 @@ async def get_logs_partial(
     search_kind: str | None = Query(default=None),
     cycle_trigger: str | None = Query(default=None),
     hide_system: str | None = Query(default=None),
+    hide_skipped: str | None = Query(default=None),
     before: str | None = Query(default=None),
     limit: int = Query(default=LIMIT_DEFAULT, ge=1, le=LIMIT_MAX),
 ) -> HTMLResponse:
-    """Return a server-rendered <tbody> partial for HTMX swaps.
+    """Return a server-rendered partial for HTMX swaps.
 
-    Args:
-        request: FastAPI request (required for template rendering).
-        instance_id: Filter to a specific instance ID.
-        action: Filter by action.
-        search_kind: Filter by search pass kind.
-        cycle_trigger: Filter by trigger type.
-        hide_system: Whether to hide system lifecycle rows.
-        before: Timestamp cursor.
-        limit: Max rows.
-
-    Returns:
-        HTML fragment containing ``<tbody>`` rows.  On a validation
-        failure, returns a ``<tr>`` error row with status 422 instead
-        of FastAPI's default JSON ``{"detail": ...}`` body so the HTMX
-        swap preserves the table structure.
+    The partial endpoint does not use the ``Depends(_resolve_filters)``
+    shortcut the JSON endpoint uses because a validation failure has
+    to render as feed-shaped HTML instead of FastAPI's default JSON
+    422 body; intercepting :class:`HTTPException` from inside the
+    dependency is not a supported FastAPI pattern.  The query-param
+    wiring therefore stays on the handler and the parser is called
+    inline inside a ``try`` block.
     """
     try:
-        parsed_instance_id = _parse_instance_id(instance_id)
-        parsed_search_kind = _parse_search_kind(search_kind)
-        parsed_cycle_trigger = _parse_cycle_trigger(cycle_trigger)
-        parsed_hide_system = _parse_hide_system(hide_system)
+        filters = _resolve_filters(
+            instance_id=instance_id,
+            action=action,
+            search_kind=search_kind,
+            cycle_trigger=cycle_trigger,
+            hide_system=hide_system,
+            hide_skipped=hide_skipped,
+            before=before,
+            limit=limit,
+        )
     except HTTPException as exc:
         return _partial_validation_error(str(exc.detail))
 
-    parsed_action = action or None
-    load_more_limit = compute_load_more_limit(limit)
-    rows = await query_logs(
-        instance_id=parsed_instance_id,
-        action=parsed_action,
-        search_kind=parsed_search_kind,
-        cycle_trigger=parsed_cycle_trigger,
-        hide_system=parsed_hide_system,
-        before=before,
-        limit=limit,
-    )
+    rows = await _fetch_filtered_rows(filters)
     return get_templates().TemplateResponse(
         request=request,
         name="partials/log_rows.html",
         context={
             "rows": rows,
-            # Pass back current filter values so the partial can render pagination
-            "instance_id": parsed_instance_id,
-            "action": parsed_action,
-            "search_kind": parsed_search_kind,
-            "cycle_trigger": parsed_cycle_trigger,
-            "hide_system": parsed_hide_system,
-            "before": before,
-            "limit": limit,
-            "load_more_limit": load_more_limit,
+            # Pass back current filter values so the partial can render pagination.
+            "instance_id": filters.instance_id,
+            "action": filters.action,
+            "search_kind": filters.search_kind,
+            "cycle_trigger": filters.cycle_trigger,
+            "hide_system": filters.hide_system,
+            "hide_skipped": filters.hide_skipped,
+            "before": filters.before,
+            "limit": filters.limit,
+            "load_more_limit": compute_load_more_limit(filters.limit),
         },
     )
+
+
+@router.get("/api/logs/head")
+async def get_logs_head(
+    since_cycle_id: str | None = Query(default=None),
+) -> JSONResponse:
+    """Return the newest cycle identifier plus a delta count since a cursor.
+
+    Powers the Logs page live-tail banner.  The client polls this on the
+    same 30 s cadence the dashboard uses against ``/api/status``, passing
+    its top-of-feed ``cycle_id`` as ``since_cycle_id``; the response tells
+    the page whether new cycles landed so it can render the "N new entries"
+    banner without forcing a full partial swap while the user is scrolled.
+    Filter-unaware in v1: the count does not honour the active filter
+    chips, so a "new" banner can surface cycles the user has filtered out.
+    Switching to filter-aware counts is a post-release iteration if the
+    naive count misleads.
+    """
+    snapshot = await head_snapshot(since_cycle_id)
+    return JSONResponse(snapshot)

@@ -617,6 +617,54 @@ function initDashboardPage() {
       }
     }
 
+    // Shared empty-dashboard markup, reused by both the inline
+    // hydrate path and the HTMX beforeSwap path.
+    const EMPTY_DASHBOARD_MARKUP = `
+<section class="dash-empty-state" aria-label="No instances">
+  <span class="dash-empty-state__icon" aria-hidden="true"></span>
+  <p class="dash-empty-state__title">No instances configured</p>
+  <p class="dash-empty-state__body">
+    Add a Sonarr, Radarr, Lidarr, Readarr, or Whisparr instance to start patrolling
+    your library for missing and cutoff-unmet media.
+  </p>
+  <a class="dash-empty-state__cta" href="/settings"
+     hx-get="/settings" hx-target="#app-content" hx-swap="innerHTML" hx-push-url="true">
+    + Add your first instance
+  </a>
+</section>`;
+
+    // Translate an /api/status envelope into the pair of markup
+    // strings the page renders: the top section and the instance
+    // grid (or the empty-state card when no instances exist).
+    function renderEnvelope(payload) {
+      const instances = (payload && Array.isArray(payload.instances)) ? payload.instances : [];
+      const recentSearches = (payload && Array.isArray(payload.recent_searches))
+        ? payload.recent_searches
+        : [];
+      const topMarkup = renderTopSection(instances, recentSearches);
+      const gridMarkup = instances.length === 0
+        ? EMPTY_DASHBOARD_MARKUP
+        : `<div class="dash-grid">${instances.map(renderCard).join('')}</div>`;
+      return { topMarkup, gridMarkup };
+    }
+
+    // Initial hydration from the inline <script id="dash-initial-status">
+    // blob the dashboard page ships.  Writes both hosts synchronously
+    // so the shell-content-enter animation fires with content already
+    // in place, matching the logs and settings entrance.
+    const initialStatusNode = document.getElementById('dash-initial-status');
+    if (initialStatusNode) {
+      let initialPayload = null;
+      try { initialPayload = JSON.parse(initialStatusNode.textContent || '{}'); } catch { initialPayload = null; }
+      if (initialPayload) {
+        const { topMarkup, gridMarkup } = renderEnvelope(initialPayload);
+        const topHost = document.getElementById('dash-top');
+        const gridHost = document.getElementById('instance-grid');
+        if (topHost) mountTopSection(topHost, topMarkup);
+        if (gridHost) mountTopSection(gridHost, gridMarkup);
+      }
+    }
+
     document.body.addEventListener(
       'htmx:beforeSwap',
       function (evt) {
@@ -633,36 +681,10 @@ function initDashboardPage() {
 
         let payload;
         try { payload = JSON.parse(evt.detail.serverResponse); } catch { return; }
-        const instances = (payload && Array.isArray(payload.instances)) ? payload.instances : [];
-        const recentSearches = (payload && Array.isArray(payload.recent_searches))
-          ? payload.recent_searches
-          : [];
-
-        // Write the top section as a side effect regardless of grid state.
+        const { topMarkup, gridMarkup } = renderEnvelope(payload);
         const topHost = document.getElementById('dash-top');
-        if (topHost) mountTopSection(topHost, renderTopSection(instances, recentSearches));
-
-        // ── Empty-dashboard state (State C: no instances configured) ───
-        if (instances.length === 0) {
-          evt.detail.serverResponse = `
-<section class="dash-empty-state" aria-label="No instances">
-  <span class="dash-empty-state__icon" aria-hidden="true"></span>
-  <p class="dash-empty-state__title">No instances configured</p>
-  <p class="dash-empty-state__body">
-    Add a Sonarr, Radarr, Lidarr, Readarr, or Whisparr instance to start patrolling
-    your library for missing and cutoff-unmet media.
-  </p>
-  <a class="dash-empty-state__cta" href="/settings"
-     hx-get="/settings" hx-target="#app-content" hx-swap="innerHTML" hx-push-url="true">
-    + Add your first instance
-  </a>
-</section>`;
-          return;
-        }
-
-        // Render one card per instance; escHtml is applied inside renderCard.
-        const cards = instances.map(renderCard).join('');
-        evt.detail.serverResponse = `<div class="dash-grid">${cards}</div>`;
+        if (topHost) mountTopSection(topHost, topMarkup);
+        evt.detail.serverResponse = gridMarkup;
       },
       { signal },
     );

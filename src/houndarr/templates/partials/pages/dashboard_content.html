@@ -28,28 +28,6 @@
     flex-direction: column;
     gap: 1.75rem;
   }
-  /* Dashboard content lands via HTMX /api/status, ~100-200ms after the
-     shell-content-enter animation has already fired on #app-content.
-     Without this fade, content pops in after the shell has finished
-     settling, which reads as a "flash" next to the logs and settings
-     pages whose content ships server-side with the shell.  Holding
-     the containers at opacity 0 while they match :empty and letting
-     the computed value flip to 1 once HTMX injects the response
-     synchronises both motions into one smooth entrance. */
-  #dash-top,
-  #instance-grid {
-    transition: opacity var(--dur-base) var(--ease-station);
-  }
-  #dash-top:empty,
-  #instance-grid:empty {
-    opacity: 0;
-  }
-  @media (prefers-reduced-motion: reduce) {
-    #dash-top,
-    #instance-grid {
-      transition: none;
-    }
-  }
 
   .dash-sub__eyebrow {
     display: flex;
@@ -730,15 +708,24 @@
        recent hunts, section heading. -->
   <section id="dash-top" aria-live="polite"></section>
 
-  <!-- Instance grid: polled every 30 s via HTMX against /api/status?v=2.
-       The beforeSwap listener below parses the envelope, writes the top
-       section into #dash-top as a side effect, and replaces this element
-       with the card grid markup. -->
+  <!-- Instance grid: hydrated on first paint from the inline JSON blob
+       below so the shell animation ships with content already in place
+       (matching how logs and settings render).  HTMX polls every 30 s
+       for subsequent updates; the beforeSwap listener parses those
+       responses and rewrites the grid + top section. -->
   <div
     id="instance-grid"
     hx-get="/api/status"
-    hx-trigger="load, every 30s"
+    hx-trigger="every 30s"
     hx-swap="innerHTML"
     hx-target="#instance-grid"
   ></div>
 </main>
+
+{# Inline /api/status envelope consumed by dashboard.js on init.  Using
+   <script type="application/json"> keeps the payload out of any HTML
+   parser path; `tojson` escapes `</script>` sequences.  Letting the
+   page ship with data avoids the ~100-200 ms HTMX round-trip gap that
+   used to make the dashboard entrance pop in a beat after the shell
+   animation had already settled. #}
+<script id="dash-initial-status" type="application/json">{{ initial_status_envelope | tojson }}</script>

@@ -177,11 +177,27 @@ async def logout(request: Request) -> RedirectResponse:
 
 @router.get("/", response_class=HTMLResponse)
 async def dashboard(request: Request) -> HTMLResponse:
-    """Main dashboard page."""
+    """Main dashboard page.
+
+    Renders the /api/status envelope inline as a ``<script
+    type="application/json">`` so dashboard.js can hydrate the
+    top section and instance grid on first paint without waiting
+    on a round-trip.  The HTMX ``every 30s`` trigger takes over
+    for subsequent polls.
+    """
+    from houndarr.database import get_db
+    from houndarr.services.metrics import gather_dashboard_status
+
+    async with get_db() as db:
+        initial_status_envelope = await gather_dashboard_status(db)
     template_name = (
         "partials/pages/dashboard_content.html" if is_hx_request(request) else "dashboard.html"
     )
-    return _render(request, template_name)
+    return _render(
+        request,
+        template_name,
+        initial_status_envelope=initial_status_envelope,
+    )
 
 
 # ---------------------------------------------------------------------------

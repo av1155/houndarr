@@ -15,6 +15,7 @@ function initLogsPage() {
   const LIVE_META = document.getElementById('live-meta');
   const BANNER = document.getElementById('new-entries');
   const BANNER_COUNT = document.getElementById('new-entries-count');
+  const BANNER_NOUN = document.getElementById('new-entries-noun');
   const TOAST = document.getElementById('toast');
 
   if (!FEED || !FORM) {
@@ -417,6 +418,7 @@ function initLogsPage() {
     const show = pendingCount > 0 && scrolledAway;
     if (show) {
       if (BANNER_COUNT) BANNER_COUNT.textContent = String(pendingCount);
+      if (BANNER_NOUN) BANNER_NOUN.textContent = pendingCount === 1 ? 'cycle' : 'cycles';
       BANNER.hidden = false;
       BANNER.dataset.visible = 'true';
       LIVE?.setAttribute('data-state', 'paused');

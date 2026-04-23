@@ -178,7 +178,19 @@ function initDashboardPage() {
         const whenPart = recent
           ? `Last dispatch ${escHtml(formatTimeAgo(recent))}.`
           : 'No recent dispatches.';
-        sentence = `All ${active} hounds on patrol. <span class="muted">${whenPart}</span>`;
+        // At active=0 (all instances disabled) and active=1 (exactly
+        // one on patrol) the "All N hounds on patrol" phrasing reads
+        // wrong; swap to count-specific sentences before falling back
+        // to the plural default.
+        let patrolLead;
+        if (active === 0) {
+          patrolLead = 'No hounds on patrol.';
+        } else if (active === 1) {
+          patrolLead = '1 hound on patrol.';
+        } else {
+          patrolLead = `All ${active} hounds on patrol.`;
+        }
+        sentence = `${patrolLead} <span class="muted">${whenPart}</span>`;
       }
       return `
 <section class="dash-sub">
@@ -444,7 +456,7 @@ function initDashboardPage() {
       chips.push({
         label: 'Every',
         value: `${sleep}m`,
-        tip:   `Cycle interval: runs every ${sleep} minutes`,
+        tip:   `Cycle interval: runs every ${sleep} minute${sleep === 1 ? '' : 's'}`,
       });
       chips.push({
         label: 'Batch',
@@ -459,7 +471,7 @@ function initDashboardPage() {
       chips.push({
         label: 'CD',
         value: `${cd}d`,
-        tip:   `Missing cooldown: ${cd} days after a search before the same item can be re-searched`,
+        tip:   `Missing cooldown: ${cd} day${cd === 1 ? '' : 's'} after a search before the same item can be re-searched`,
       });
       chips.push({
         label: 'Grace',

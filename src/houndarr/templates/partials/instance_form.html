@@ -6,11 +6,8 @@
 #}
 {%- import "_macros/forms.html" as forms -%}
 {%- import "_macros/alerts.html" as alerts -%}
+{%- import "_macros/instances.html" as instances -%}
 {% set is_edit = editing is defined and editing %}
-{% set form_id = "edit-form-" ~ instance.core.id if is_edit else "add-instance-form" %}
-{% set post_url = "/settings/instances/" ~ instance.core.id if is_edit else "/settings/instances" %}
-{% set target  = "#instance-row-" ~ instance.core.id if is_edit else "#instance-tbody" %}
-{% set swap    = "outerHTML" if is_edit else "innerHTML" %}
 
 {# Shared input class: Station style. Reuses the .station-input helper
    from app.css so every form on the site shares the exact same token-
@@ -28,13 +25,11 @@
   {% call alerts.alert("error", prefix="mb-3") %}{{ error }}{% endcall %}
   {% endif %}
 
-  <form id="{{ form_id }}"
-        data-form-mode="{{ 'edit' if is_edit else 'add' }}"
-        data-instance-name="{{ instance.core.name if is_edit else '' }}"
-        hx-post="{{ post_url }}"
-        hx-target="{{ target }}"
-        hx-swap="{{ swap }}"
-        class="space-y-4">
+  {% call(form_id) instances.form_context(
+      is_edit=is_edit,
+      instance_id=instance.core.id if is_edit else none,
+      instance_name=instance.core.name if is_edit else "",
+  ) %}
     <input type="hidden"
            id="instance-connection-verified"
            name="connection_verified"
@@ -407,5 +402,5 @@
         {{ 'Test connection before saving changes.' if is_edit else 'Test connection before adding this instance.' }}
       </div>
     </div>
-  </form>
+  {% endcall %}
 </div>

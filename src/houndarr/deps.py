@@ -42,3 +42,27 @@ def get_supervisor(request: Request) -> SupervisorProto:
     if not isinstance(supervisor, Supervisor):
         raise HTTPException(status_code=503, detail="Supervisor unavailable")
     return supervisor
+
+
+def get_master_key(request: Request) -> bytes:
+    """Return the Fernet master key from ``app.state.master_key``.
+
+    FastAPI ``Depends(get_master_key)`` replaces the bare
+    ``request.app.state.master_key`` read in route handlers.  The lift
+    into this module does three things: it centralises the state
+    access so the eventual move to a real Protocol-typed key provider
+    only touches one site; it gives mypy a single typed entry point
+    (routes see ``bytes`` instead of ``Any``); and it keeps the state
+    read close to the supervisor shim so the route layer imports one
+    module for both pieces of lifespan wiring.
+
+    The function does not validate the key shape.  A missing or
+    malformed key surfaces later as a ``cryptography.fernet.Fernet``
+    or :class:`~houndarr.repositories.instances` error, which the
+    existing caller paths already handle.  Raising here would push
+    the failure mode into the Depends resolver and hide the
+    underlying cause under a generic 500.
+    """
+    key = request.app.state.master_key
+    assert isinstance(key, bytes)  # noqa: S101
+    return key

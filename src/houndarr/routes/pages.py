@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Form, HTTPException, Query, Request
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
 from houndarr import __version__
@@ -20,6 +22,7 @@ from houndarr.auth import (
     validate_username,
 )
 from houndarr.database import set_setting
+from houndarr.deps import get_master_key
 from houndarr.routes._htmx import is_hx_request
 from houndarr.routes._templates import get_templates
 from houndarr.services.instances import list_instances
@@ -189,6 +192,7 @@ async def dashboard(request: Request) -> HTMLResponse:
 @router.get("/logs", response_class=HTMLResponse)
 async def logs_page(
     request: Request,
+    master_key: Annotated[bytes, Depends(get_master_key)],
     instance_id: str | None = Query(default=None),
     action: str | None = Query(default=None),
     search_kind: str | None = Query(default=None),
@@ -228,7 +232,6 @@ async def logs_page(
 
     parsed_action = action or None
 
-    master_key: bytes = request.app.state.master_key
     instances = await list_instances(master_key=master_key)
     rows = await query_logs(
         instance_id=parsed_instance_id,

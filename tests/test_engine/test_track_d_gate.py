@@ -51,10 +51,15 @@ pytestmark = pytest.mark.pinning
 
 
 def test_instance_is_plain_dataclass_with_seven_sub_struct_fields() -> None:
-    """Instance's declared dataclass fields are the seven sub-structs."""
+    """Instance's declared dataclass fields are the seven sub-structs.
+
+    The facade was flipped to ``frozen=True`` in the final refactor
+    wave's Phase 5a; the seven sub-struct field list and their types
+    remain the Track D contract.
+    """
     assert dataclasses.is_dataclass(Instance)
     params = Instance.__dataclass_params__  # type: ignore[attr-defined]
-    assert params.frozen is False
+    assert params.frozen is True
 
     expected = [
         ("core", InstanceCore),
@@ -92,17 +97,23 @@ def test_flat_attribute_access_raises_attribute_error() -> None:
         _ = inst.batch_size  # type: ignore[attr-defined]
 
 
-def test_flat_attribute_write_raises_attribute_error() -> None:
-    """Writing a flat name also fails: ``slots=True`` closes the write path.
+def test_flat_attribute_write_raises() -> None:
+    """Writing to any name on a frozen Instance fails.
 
-    Pre-slots, ``inst.batch_size = 5`` would silently create a new
-    per-object attribute and shadow the sub-struct read, defeating
-    the D.20 cutover.  The ``slots=True`` on the parent dataclass
-    forces every write through the seven declared sub-struct slots.
+    Post-Phase 5a the facade is ``@dataclass(frozen=True, slots=True)``.
+    Writes to a declared sub-struct raise ``FrozenInstanceError``;
+    writes to a non-slot name hit a different rejection path
+    (CPython issue: frozen + slots synthesizes a ``__setattr__`` whose
+    ``super().__setattr__`` fall-through raises ``TypeError``).  The
+    test accepts every rejection shape so a future CPython fix does
+    not cause a spurious failure; what matters is that no write path
+    silently succeeds.
     """
+    import dataclasses
+
     inst = _make_instance()
-    with pytest.raises(AttributeError):
-        inst.batch_size = 5  # type: ignore[attr-defined]
+    with pytest.raises((AttributeError, TypeError, dataclasses.FrozenInstanceError)):
+        inst.batch_size = 5  # type: ignore[attr-defined,misc]
 
 
 def _make_instance() -> Instance:

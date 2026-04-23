@@ -472,17 +472,19 @@ def test_instance_is_dataclass_with_seven_sub_struct_fields() -> None:
         assert typ == expected_typ.__name__
 
 
-def test_instance_is_not_frozen() -> None:
-    """Instance stays mutable so callers can swap one sub-struct at a time.
+def test_instance_is_frozen() -> None:
+    """Instance is frozen alongside every sub-struct.
 
-    The seven sub-structs themselves are frozen (the slots audit locks
-    that), so per-field writes still need :func:`dataclasses.replace` on
-    the owning sub-struct.  Instance-level mutability exists only so
-    ``instance.missing = replace(instance.missing, batch_size=1)``
-    works without reconstructing the whole record.
+    Phase 5a of the final refactor wave flipped the facade to
+    ``@dataclass(frozen=True, slots=True)``.  Every evolution path
+    now runs through :func:`dataclasses.replace` on the facade
+    (optionally nesting another ``replace`` for per-field writes on
+    a sub-struct).  Production code has been shaped for this since
+    Track D: offset rotations travel through the repository, and
+    the supervisor always re-fetches the Instance before each cycle.
     """
     params = Instance.__dataclass_params__  # type: ignore[attr-defined]
-    assert params.frozen is False
+    assert params.frozen is True
 
 
 def test_instance_accepts_only_sub_struct_kwargs() -> None:
@@ -531,28 +533,36 @@ def test_flat_attribute_access_no_longer_works(flat_name: str) -> None:
         getattr(instance, flat_name)
 
 
-def test_sub_struct_reassignment_works() -> None:
-    """Assigning a new sub-struct replaces the field wholesale."""
-    instance = _minimal_instance()
-    original_schedule = instance.schedule
-    instance.missing = MissingPolicy(batch_size=99)
-    assert instance.missing.batch_size == 99
-    # Peer sub-structs stay untouched under the reassignment.
-    assert instance.schedule is original_schedule
+def test_sub_struct_reassignment_replaces_via_dataclass_replace() -> None:
+    """Facade-level ``dataclasses.replace`` substitutes a sub-struct wholesale.
 
-
-def test_sub_struct_partial_update_via_replace() -> None:
-    """``replace(instance.missing, batch_size=99)`` is the canonical per-field write.
-
-    The sub-structs are frozen so the only legitimate per-field write
-    on Instance is a :func:`dataclasses.replace` round trip on the
-    owning sub-struct.  A caller that wrote via the removed facade
-    setter would fail; a caller using :func:`dataclasses.replace`
-    keeps working.
+    The Instance facade is frozen since Phase 5a of the final refactor
+    wave; per-sub-struct updates flow through
+    :func:`dataclasses.replace` on the facade.  Peer sub-structs stay
+    identity-equal under the replacement because ``replace`` copies
+    unspecified fields by reference.
     """
     instance = _minimal_instance()
-    instance.missing = dataclasses.replace(instance.missing, batch_size=7)
-    assert instance.missing.batch_size == 7
+    original_schedule = instance.schedule
+    rebuilt = dataclasses.replace(instance, missing=MissingPolicy(batch_size=99))
+    assert rebuilt.missing.batch_size == 99
+    # Peer sub-structs stay untouched under the reassignment.
+    assert rebuilt.schedule is original_schedule
+
+
+def test_sub_struct_partial_update_via_nested_replace() -> None:
+    """Nested ``replace`` is the canonical per-field write on a frozen facade.
+
+    The sub-structs are frozen and the facade is frozen; the only
+    legitimate per-field write is a :func:`dataclasses.replace` round
+    trip on the owning sub-struct, wrapped in another ``replace`` on
+    the facade.
+    """
+    instance = _minimal_instance()
+    rebuilt = dataclasses.replace(
+        instance, missing=dataclasses.replace(instance.missing, batch_size=7)
+    )
+    assert rebuilt.missing.batch_size == 7
 
 
 def _minimal_instance() -> Instance:

@@ -61,19 +61,35 @@ def _make_instance() -> Instance:
     )
 
 
-def test_instance_is_mutable_before_freeze() -> None:
-    """Instance is `@dataclass(slots=True)` but not frozen today.
+def test_instance_is_frozen_after_freeze() -> None:
+    """Instance is ``@dataclass(frozen=True, slots=True)``.
 
-    Replaced by ``test_instance_is_frozen_after_freeze`` in Phase 5a.
-    Until then, sub-struct rebinds must succeed and `frozen` must be
-    False so Phase 5a's flip is observable.
+    Phase 5a of the final refactor wave flipped the facade to frozen.
+    Any per-attribute assignment must raise ``FrozenInstanceError`` and
+    the seven sub-struct names must appear in ``__slots__``.  Callers
+    that need a modified Instance compose :func:`dataclasses.replace`.
     """
     assert dataclasses.is_dataclass(Instance)
-    assert Instance.__dataclass_params__.frozen is False
+    assert Instance.__dataclass_params__.frozen is True
+    assert set(Instance.__slots__) == {
+        "core",
+        "missing",
+        "cutoff",
+        "upgrade",
+        "schedule",
+        "snapshot",
+        "timestamps",
+    }
 
     instance = _make_instance()
-    instance.missing = dataclasses.replace(instance.missing, batch_size=99)
-    assert instance.missing.batch_size == 99
+    with pytest.raises(dataclasses.FrozenInstanceError):
+        instance.missing = MissingPolicy()  # type: ignore[misc]
+
+    # ``dataclasses.replace`` is the supported evolution path.
+    rebuilt = dataclasses.replace(
+        instance, missing=dataclasses.replace(instance.missing, batch_size=99)
+    )
+    assert rebuilt.missing.batch_size == 99
 
 
 _FORBIDDEN_ATTR_PREFIXES: tuple[str, ...] = (

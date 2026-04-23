@@ -422,7 +422,9 @@ async def test_missing_pass_reaches_deeper_page_when_top_items_are_ineligible(
     )
 
     # Use a small target to ensure we stop once we find one eligible candidate.
-    sonarr_instance.missing = replace(sonarr_instance.missing, batch_size=1)
+    sonarr_instance = replace(
+        sonarr_instance, missing=replace(sonarr_instance.missing, batch_size=1)
+    )
     count = await run_instance_search(sonarr_instance, master_key)
 
     assert count == 1
@@ -460,10 +462,11 @@ async def test_missing_list_calls_are_bounded_per_cycle(
     # This test measures the ``_MAX_LIST_PAGES_PER_PASS`` page-fetch bound.
     # Random mode adds one probe call which would muddy the assertion, so
     # pin the instance to chronological for this specific check.
-    sonarr_instance.schedule = replace(
-        sonarr_instance.schedule, search_order=SearchOrder.chronological
+    sonarr_instance = replace(
+        sonarr_instance,
+        schedule=replace(sonarr_instance.schedule, search_order=SearchOrder.chronological),
+        missing=replace(sonarr_instance.missing, batch_size=2),
     )
-    sonarr_instance.missing = replace(sonarr_instance.missing, batch_size=2)
     count = await run_instance_search(sonarr_instance, master_key)
 
     assert count == 0

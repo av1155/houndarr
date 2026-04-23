@@ -248,7 +248,7 @@ class InstanceTimestamps:
     updated_at: str
 
 
-@dataclass(slots=True)
+@dataclass(frozen=True, slots=True)
 class Instance:
     """In-memory representation of a configured *arr instance.
 
@@ -260,21 +260,22 @@ class Instance:
     runs, :class:`RuntimeSnapshot` for dashboard telemetry, and
     :class:`InstanceTimestamps` for audit metadata.
 
-    :class:`Instance` stays mutable (non-frozen) so callers that need
-    to advance a single sub-struct at a time can do
-    ``instance.missing = dataclasses.replace(instance.missing,
-    batch_size=1)`` without reconstructing the whole record.  Each
-    sub-struct is itself frozen, so field-level writes through the
-    facade are not possible; callers either replace a sub-struct
-    wholesale or call :func:`dataclasses.replace` on it.
+    :class:`Instance` is frozen.  Offset rotations and snapshot
+    updates travel through the repository (``update_instance`` or
+    ``update_instance_snapshot``) and surface as a freshly-fetched
+    :class:`Instance`; no call site mutates the in-memory record in
+    place.  Each sub-struct is itself frozen, so field-level writes
+    are also blocked.  Callers that need a modified copy compose
+    :func:`dataclasses.replace`::
 
-    ``slots=True`` closes the last flat-write escape hatch.  Without
-    it a stray ``instance.batch_size = 5`` would silently create a
-    new per-object attribute and shadow the sub-struct read,
-    defeating the D.20 cutover.  With slots the same assignment
-    raises :class:`AttributeError` because ``batch_size`` is not a
-    declared slot; the only legitimate writes are the seven sub-
-    struct fields.
+        instance = dataclasses.replace(
+            instance, missing=dataclasses.replace(instance.missing, batch_size=1)
+        )
+
+    ``slots=True`` keeps per-instance memory tight and blocks stray
+    attribute assignment on the facade.  Combined with ``frozen=True``
+    the only way to evolve state is by constructing a new value
+    object, which makes the repository the single mutation authority.
 
     API keys are always decrypted at this layer:
     ``instance.core.api_key`` returns plaintext; the encrypted form

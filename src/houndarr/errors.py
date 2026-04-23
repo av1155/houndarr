@@ -40,6 +40,18 @@ class ClientHTTPError(ClientError):
     """
 
 
+class ClientRedirectError(ClientHTTPError):
+    """The *arr response redirected to a target blocked by SSRF rules.
+
+    Raised by the ArrClient response event_hook when a 3xx response
+    carries a ``Location`` header that resolves to a loopback,
+    link-local, or unspecified address range.  Subclass of
+    :class:`ClientHTTPError` so callers that handle broader HTTP
+    status failures still catch redirects; callers that want redirect-
+    specific telemetry can catch this class directly.
+    """
+
+
 class ClientTransportError(ClientError):
     """TCP / DNS / TLS failure talking to an ``*arr`` instance.
 

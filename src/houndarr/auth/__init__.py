@@ -1,4 +1,12 @@
-"""Authentication: password hashing, session management, login middleware."""
+"""Authentication package: password hashing, session, CSRF, proxy auth, middleware.
+
+The auth surface is intentionally wide: password hashing, session
+serialization, CSRF enforcement, first-run setup, proxy-auth trust
+gate, rate limiting, and the ASGI middleware that composes them.
+Each concern is being lifted out of this ``__init__.py`` into its
+own submodule over the seven Phase 2 commits; every public name
+remains importable from ``houndarr.auth`` for consumer stability.
+"""
 
 from __future__ import annotations
 
@@ -10,15 +18,21 @@ import time
 from hmac import compare_digest
 from typing import Any
 
-import bcrypt
 from fastapi import Request, Response
 from fastapi.responses import HTMLResponse, RedirectResponse
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.types import ASGIApp
 
+from houndarr.auth.password import BCRYPT_COST, hash_password, verify_password
 from houndarr.config import get_settings
 from houndarr.repositories.settings import get_setting, set_setting
+
+__all__ = [
+    "BCRYPT_COST",
+    "hash_password",
+    "verify_password",
+]
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +42,6 @@ logger = logging.getLogger(__name__)
 SESSION_COOKIE_NAME = "houndarr_session"
 CSRF_COOKIE_NAME = "houndarr_csrf"
 SESSION_MAX_AGE_SECONDS = 86400  # 24 hours
-BCRYPT_COST = 12
 USERNAME_MIN_LENGTH = 3
 USERNAME_MAX_LENGTH = 32
 _USERNAME_PATTERN = re.compile(r"^[a-z0-9_.-]+$")
@@ -50,25 +63,6 @@ _PUBLIC_PATHS = frozenset(
 # allow it without CSRF/session validation so stale legacy sessions can always
 # be cleared after upgrades.
 _LOGOUT_PATH = "/logout"
-
-
-# ---------------------------------------------------------------------------
-# Password hashing
-# ---------------------------------------------------------------------------
-
-
-def hash_password(password: str) -> str:
-    """Hash a plain-text password with bcrypt cost 12."""
-    salt = bcrypt.gensalt(rounds=BCRYPT_COST)
-    return bcrypt.hashpw(password.encode(), salt).decode()
-
-
-def verify_password(password: str, hashed: str) -> bool:
-    """Return True if password matches the bcrypt hash."""
-    try:
-        return bool(bcrypt.checkpw(password.encode(), hashed.encode()))
-    except Exception:
-        return False
 
 
 # ---------------------------------------------------------------------------

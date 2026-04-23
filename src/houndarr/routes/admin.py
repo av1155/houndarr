@@ -39,6 +39,7 @@ from houndarr.auth import (
 from houndarr.config import get_settings
 from houndarr.deps import get_master_key
 from houndarr.errors import ServiceError
+from houndarr.routes._htmx import hx_redirect_response
 from houndarr.routes._templates import get_templates
 from houndarr.services.admin import (
     clear_all_search_logs,
@@ -201,8 +202,7 @@ async def admin_factory_reset(
 
     redirect_target = "/" if is_proxy else "/setup"
 
-    response = Response(status_code=200)
-    response.headers["HX-Redirect"] = redirect_target
+    response = hx_redirect_response(Response(status_code=200), redirect_target)
     clear_session(response)
 
     try:

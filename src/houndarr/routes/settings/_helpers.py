@@ -36,7 +36,11 @@ from houndarr.config import (
     DEFAULT_WHISPARR_SEARCH_MODE,
     get_settings,
 )
-from houndarr.routes._htmx import is_hx_request
+from houndarr.routes._htmx import (
+    hx_retarget_response,
+    hx_trigger_response,
+    is_hx_request,
+)
 from houndarr.routes._templates import get_templates
 from houndarr.services.instance_validation import (
     API_KEY_UNCHANGED,
@@ -177,23 +181,25 @@ def connection_status_response(message: str, ok: bool, status_code: int) -> HTML
     """Render the inline connection-test status snippet for HTMX swap."""
     trigger = "houndarr-connection-test-success" if ok else "houndarr-connection-test-failure"
     color = "text-green-400" if ok else "text-red-400"
-    return HTMLResponse(
-        content=f'<span class="text-xs {color}">{html.escape(message)}</span>',
-        status_code=status_code,
-        headers={"HX-Trigger": trigger},
+    return hx_trigger_response(
+        HTMLResponse(
+            content=f'<span class="text-xs {color}">{html.escape(message)}</span>',
+            status_code=status_code,
+        ),
+        trigger,
     )
 
 
 def connection_guard_response(message: str) -> HTMLResponse:
     """Re-target an error to the connection status span when a save is blocked."""
-    return HTMLResponse(
-        content=f'<span class="text-xs text-red-400">{html.escape(message)}</span>',
-        status_code=422,
-        headers={
-            "HX-Retarget": "#instance-connection-status",
-            "HX-Reswap": "innerHTML",
-            "HX-Trigger": "houndarr-connection-test-failure",
-        },
+    return hx_retarget_response(
+        HTMLResponse(
+            content=f'<span class="text-xs text-red-400">{html.escape(message)}</span>',
+            status_code=422,
+        ),
+        target="#instance-connection-status",
+        reswap="innerHTML",
+        trigger="houndarr-connection-test-failure",
     )
 
 

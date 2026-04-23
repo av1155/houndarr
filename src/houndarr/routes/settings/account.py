@@ -23,6 +23,7 @@ from houndarr.auth import (
     rotate_session_secret,
     set_password,
 )
+from houndarr.routes._htmx import hx_refresh_response
 from houndarr.routes.settings._helpers import render_settings_page
 
 router = APIRouter()
@@ -104,5 +105,4 @@ async def account_password_update(
     # renders with the new csrf_token; without this, the next mutating
     # HTMX request from the tab would 403 until the admin manually
     # refreshed.
-    response.headers["HX-Refresh"] = "true"
-    return response
+    return hx_refresh_response(response)

@@ -19,6 +19,7 @@ from houndarr.config import DEFAULT_LOG_RETENTION_DAYS, get_settings
 from houndarr.crypto import ensure_master_key
 from houndarr.database import init_db, purge_old_logs, set_db_path
 from houndarr.engine.supervisor import Supervisor
+from houndarr.routes._htmx import is_hx_request
 from houndarr.services.instances import list_instances
 
 logger = logging.getLogger(__name__)
@@ -141,7 +142,7 @@ def create_app() -> FastAPI:
         Non-HTMX clients keep FastAPI's default JSON response so API
         consumers and tests are unaffected.
         """
-        if request.headers.get("HX-Request") == "true":
+        if is_hx_request(request):
             logger.warning(
                 "HTMX validation error on %s %s: %s",
                 request.method,

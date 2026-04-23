@@ -763,33 +763,3 @@ async def _column_exists(db: aiosqlite.Connection, table_name: str, column_name:
     async with db.execute(f"PRAGMA table_info({table_name})") as cur:  # noqa: S608  # nosec B608
         rows = await cur.fetchall()
     return any(row[1] == column_name for row in rows)
-
-
-# ---------------------------------------------------------------------------
-# Log retention
-# ---------------------------------------------------------------------------
-
-
-async def purge_old_logs(retention_days: int) -> int:
-    """Delete ``search_log`` rows older than *retention_days* days.
-
-    Called at startup (and optionally on a schedule) to prevent unbounded
-    log growth on long-running instances.
-
-    Args:
-        retention_days: Rows with a ``timestamp`` older than this many days
-            are deleted.  Pass ``0`` or a negative value to disable purging.
-
-    Returns:
-        Number of rows deleted (0 if retention is disabled or nothing to purge).
-    """
-    if retention_days <= 0:
-        return 0
-
-    async with get_db() as db:
-        cur = await db.execute(
-            "DELETE FROM search_log WHERE timestamp < datetime('now', ? || ' days')",
-            (f"-{retention_days}",),
-        )
-        await db.commit()
-        return cur.rowcount or 0

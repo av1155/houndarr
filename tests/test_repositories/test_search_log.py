@@ -537,3 +537,23 @@ async def test_engine_write_log_delegates_through_repo(seeded_instances: None) -
     assert row["cycle_id"] == "c-eng"
     assert row["cycle_trigger"] == "scheduled"
     assert row["item_label"] == "Delegated Episode"
+
+
+@pytest.mark.pinning()
+@pytest.mark.asyncio()
+async def test_purge_old_logs_lives_on_repository(db: None) -> None:
+    """``purge_old_logs`` lives on the search-log repository post-Phase 6b.
+
+    The function's disable-on-zero semantics and the empty-table
+    return shape are pinned here; detailed row-deletion coverage
+    stays in tests/test_database_edge_cases.py.  A companion
+    assertion catches a future re-introduction of a shim on
+    :mod:`houndarr.database`.
+    """
+    import houndarr.database as _database_mod
+    from houndarr.repositories.search_log import purge_old_logs
+
+    assert await purge_old_logs(0) == 0
+    assert await purge_old_logs(-5) == 0
+    assert await purge_old_logs(30) == 0
+    assert not hasattr(_database_mod, "purge_old_logs")

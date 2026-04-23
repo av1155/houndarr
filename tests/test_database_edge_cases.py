@@ -6,7 +6,8 @@ import asyncio
 
 import pytest
 
-from houndarr.database import get_db, purge_old_logs
+from houndarr.database import get_db
+from houndarr.repositories.search_log import purge_old_logs
 from houndarr.repositories.settings import get_setting, set_setting
 
 # ---------------------------------------------------------------------------

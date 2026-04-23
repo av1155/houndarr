@@ -7,7 +7,8 @@ from pathlib import Path
 import aiosqlite
 import pytest
 
-from houndarr.database import get_db, init_db, purge_old_logs, set_db_path
+from houndarr.database import get_db, init_db, set_db_path
+from houndarr.repositories.search_log import purge_old_logs
 from houndarr.repositories.settings import get_setting, set_setting
 
 

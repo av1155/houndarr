@@ -233,6 +233,24 @@ class TestPing:
         finally:
             await client.aclose()
 
+    @pytest.mark.asyncio()
+    @respx.mock
+    async def test_ping_returns_none_on_redirect_to_blocked_target(self) -> None:
+        """A 3xx with a blocked Location still collapses to None.
+
+        The response event_hook re-validates the Location header on
+        every 3xx; targets that resolve to a blocked range raise
+        ``ClientRedirectError``.  ``ping`` promises never to raise, so
+        the error type is explicitly covered by ``_PING_SAFE_ERRORS``
+        (via the common ``ClientError`` parent) and collapses to
+        ``None`` alongside every other ping failure mode.
+        """
+        respx.get("http://sonarr:8989/api/v3/system/status").mock(
+            return_value=httpx.Response(302, headers={"Location": "http://127.0.0.1/"}),
+        )
+        async with _StubClient(url="http://sonarr:8989", api_key="k") as client:
+            assert await client.ping() is None
+
 
 # get_instance_snapshot default
 

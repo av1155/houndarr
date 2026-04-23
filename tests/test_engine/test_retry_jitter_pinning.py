@@ -176,3 +176,47 @@ async def test_reconnect_jitter_respects_bound() -> None:
     # default-path determinism pin above cannot accidentally pass
     # under a jittered call.
     assert any(d != 1800.0 for d in observed)
+
+
+@pytest.mark.asyncio()
+async def test_reconnect_jitter_clamps_to_non_negative() -> None:
+    """``jitter_secs`` larger than the nominal sleep must not push the
+    returned duration below zero.
+
+    ``_apply_jitter`` clamps via ``max(0.0, secs + delta)``.  With
+    ``error_retry_secs=5`` and ``jitter_secs=60``, ``uniform(-60, +60)``
+    can land as low as ``-55`` pre-clamp, which would be a
+    nonsensical ``asyncio.sleep`` argument.  The clamp must catch it.
+    128 iterations give ~99.99% coverage of the negative-draw branch.
+    """
+
+    async def cycle_fail() -> bool:
+        return True  # error branch exercises error_retry_secs
+
+    async def log(**_: object) -> None:
+        return None
+
+    observed: list[float] = []
+    for _ in range(128):
+        state = ReconnectState()
+        delay = await run_with_reconnect(
+            state,
+            instance=_make_instance(),
+            cycle=cycle_fail,
+            cycle_trigger="scheduled",
+            error_retry_secs=5,
+            success_sleep_secs=1800,
+            write_log=log,
+            jitter_secs=60.0,
+        )
+        observed.append(delay)
+
+    assert all(d >= 0.0 for d in observed), sorted(observed)[:5]
+    # Upper bound stays finite: nominal + jitter_secs.
+    assert all(d <= 65.0 for d in observed), sorted(observed, reverse=True)[:5]
+    # The clamp MUST fire on at least one sample (otherwise the test
+    # is not exercising the branch it claims to pin).
+    assert any(d == 0.0 for d in observed), (
+        "jitter_secs=60 against error_retry_secs=5 should produce "
+        "clamped-to-zero samples in ~50% of draws; none observed"
+    )

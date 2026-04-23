@@ -11,14 +11,12 @@ remains importable from ``houndarr.auth`` for consumer stability.
 from __future__ import annotations
 
 import logging
-import secrets
 
 # time is re-imported here so tests can monkeypatch ``houndarr.auth.time.time``
 # to freeze the clock across every call site (the ``time`` module is a
 # singleton, so patching via the auth namespace still affects
 # ``houndarr.auth.rate_limit``'s usage).
 import time  # noqa: F401
-from hmac import compare_digest
 from typing import Any
 
 from fastapi import Request, Response
@@ -30,6 +28,18 @@ from houndarr.auth import session as _session
 from houndarr.auth import setup as _setup
 from houndarr.auth.csrf import _CSRF_PROTECTED_METHODS, validate_csrf
 from houndarr.auth.password import BCRYPT_COST, hash_password, verify_password
+
+# Proxy-auth seam: re-exported for the middleware's _dispatch_proxy
+# path and for tests that monkeypatch the trust-gate composition.
+from houndarr.auth.proxy_auth import (
+    _PROXY_DEAD_PATHS,
+    _ensure_proxy_csrf_cookie,
+    _extract_proxy_username,
+    _is_proxy_auth_mode,
+    _is_trusted_proxy,
+    _validate_proxy_auth,
+    _validate_proxy_csrf,
+)
 
 # Rate-limit seam: re-exported for consumer stability.  Underscore-prefixed
 # names are module-private by convention but are consumed by tests
@@ -93,9 +103,16 @@ __all__ = [
     "_CSRF_PROTECTED_METHODS",
     "_LOGIN_MAX_ATTEMPTS",
     "_LOGIN_WINDOW_SECONDS",
+    "_PROXY_DEAD_PATHS",
     "_client_ip",
+    "_ensure_proxy_csrf_cookie",
+    "_extract_proxy_username",
     "_get_serializer",
+    "_is_proxy_auth_mode",
+    "_is_trusted_proxy",
     "_login_attempts",
+    "_validate_proxy_auth",
+    "_validate_proxy_csrf",
     "check_credentials",
     "check_login_rate_limit",
     "check_password",
@@ -177,101 +194,6 @@ async def resolve_signed_in_as(request: Request) -> str:
             return str(proxy_user)
     stored = await get_username()
     return stored or "admin"
-
-
-# ---------------------------------------------------------------------------
-# Proxy authentication helpers
-# ---------------------------------------------------------------------------
-
-# Paths that serve no purpose in proxy mode and redirect to the dashboard.
-_PROXY_DEAD_PATHS = frozenset(["/setup", "/login"])
-
-
-def _is_proxy_auth_mode() -> bool:
-    """Return True if proxy-header authentication is active."""
-    return get_settings().auth_mode == "proxy"
-
-
-def _is_trusted_proxy(request: Request) -> bool:
-    """Return True when the direct connection IP is in the trusted proxy set.
-
-    Security: ``trusted_proxy_set()`` returning an empty set means the
-    operator has not configured any trusted proxy, in which case every
-    request is untrusted regardless of the direct IP.  This guards
-    against header spoofing by untrusted clients: callers that read the
-    auth header must gate the read behind this check.
-    """
-    settings = get_settings()
-    trusted = settings.trusted_proxy_set()
-    if not trusted:
-        return False
-    direct_ip = request.client.host if request.client else "unknown"
-    return direct_ip in trusted
-
-
-def _extract_proxy_username(request: Request) -> str | None:
-    """Return the proxy-supplied username, or ``None`` if the header is absent.
-
-    Assumes the caller has already verified the direct IP is trusted via
-    :func:`_is_trusted_proxy`; this function does not re-check.
-    """
-    settings = get_settings()
-    username = request.headers.get(settings.auth_proxy_header, "").strip()
-    return username or None
-
-
-def _validate_proxy_auth(request: Request) -> str | None:
-    """Return the authenticated proxy username, or ``None`` on any failure.
-
-    Composes :func:`_is_trusted_proxy` (direct IP must be in the trusted
-    set) and :func:`_extract_proxy_username` (header must be present and
-    non-empty).  Both primitives are the single source of truth for the
-    middleware's ``_dispatch_proxy``; this helper is the convenience form
-    for callers that only need the binary "authenticated?" answer.
-    """
-    if not _is_trusted_proxy(request):
-        return None
-    return _extract_proxy_username(request)
-
-
-async def _validate_proxy_csrf(request: Request) -> bool:
-    """Validate CSRF for proxy auth mode using double-submit cookie pattern.
-
-    The CSRF cookie value must match the value submitted in the
-    ``X-CSRF-Token`` header or ``csrf_token`` form field.
-    """
-    cookie_token = request.cookies.get(CSRF_COOKIE_NAME)
-    if not cookie_token:
-        return False
-
-    # Try header first (HTMX), then form body
-    submitted = request.headers.get("X-CSRF-Token")
-    if not submitted:
-        try:
-            form = await request.form()
-            submitted = form.get("csrf_token")  # type: ignore[assignment]
-        except Exception:
-            return False
-
-    if not submitted:
-        return False
-
-    return compare_digest(str(submitted), cookie_token)
-
-
-def _ensure_proxy_csrf_cookie(request: Request, response: Response) -> None:
-    """Set the CSRF cookie on an authenticated proxy-mode response if absent."""
-    if request.cookies.get(CSRF_COOKIE_NAME):
-        return
-    settings = get_settings()
-    response.set_cookie(
-        key=CSRF_COOKIE_NAME,
-        value=secrets.token_hex(32),
-        max_age=SESSION_MAX_AGE_SECONDS,
-        httponly=False,
-        samesite=settings.cookie_samesite,
-        secure=settings.secure_cookies,
-    )
 
 
 # ---------------------------------------------------------------------------

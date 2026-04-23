@@ -143,6 +143,50 @@ class TestLogKindBadge:
         assert render_macro("log_kind_badge(None)") == expected
 
 
+class TestLogTriggerBadge:
+    @pytest.mark.parametrize(
+        ("trigger", "expected"),
+        [
+            ("scheduled", '<span class="badge badge-soft badge-primary">scheduled</span>'),
+            ("run_now", '<span class="badge badge-soft badge-success">run_now</span>'),
+            ("system", '<span class="badge badge-soft badge-neutral">system</span>'),
+        ],
+    )
+    def test_known_trigger_byte_equal(
+        self,
+        render_macro: Callable[[str], str],
+        trigger: str,
+        expected: str,
+    ) -> None:
+        assert render_macro(f"log_trigger_badge({trigger!r})") == expected
+
+    def test_unknown_trigger_renders_dash(self, render_macro: Callable[[str], str]) -> None:
+        expected = '<span class="text-slate-600">-</span>'
+        assert render_macro("log_trigger_badge('unmapped')") == expected
+
+    def test_none_trigger_renders_dash(self, render_macro: Callable[[str], str]) -> None:
+        expected = '<span class="text-slate-600">-</span>'
+        assert render_macro("log_trigger_badge(None)") == expected
+
+
+class TestLogCycleOutcomeBadge:
+    def test_progress_byte_equal(self, render_macro: Callable[[str], str]) -> None:
+        expected = '<span class="badge badge-soft badge-success">searched</span>'
+        assert render_macro("log_cycle_outcome_badge('progress')") == expected
+
+    def test_no_progress_byte_equal(self, render_macro: Callable[[str], str]) -> None:
+        expected = '<span class="badge badge-soft badge-neutral">skips only</span>'
+        assert render_macro("log_cycle_outcome_badge('no_progress')") == expected
+
+    def test_unknown_outcome_renders_unknown_span(self, render_macro: Callable[[str], str]) -> None:
+        expected = '<span class="text-[0.625rem] text-slate-600 font-mono">unknown</span>'
+        assert render_macro("log_cycle_outcome_badge('partial')") == expected
+
+    def test_none_outcome_renders_unknown_span(self, render_macro: Callable[[str], str]) -> None:
+        expected = '<span class="text-[0.625rem] text-slate-600 font-mono">unknown</span>'
+        assert render_macro("log_cycle_outcome_badge(None)") == expected
+
+
 class TestStatusPill:
     def test_active_byte_equal(self, render_macro: Callable[[str], str]) -> None:
         expected = (

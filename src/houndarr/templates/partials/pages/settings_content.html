@@ -1,3 +1,4 @@
+{%- import "_macros/alerts.html" as alerts -%}
 <div class="sr-only" data-page-key="settings" data-page-title="Settings | Houndarr" aria-hidden="true"></div>
 
 <style>
@@ -481,9 +482,7 @@
 </div>
 
 {% if error is defined and error %}
-<div class="mb-4 alert alert-soft alert-error text-sm font-sans">
-  {{ error }}
-</div>
+{% call alerts.alert("error", prefix="mb-4", extra="text-sm font-sans") %}{{ error }}{% endcall %}
 {% endif %}
 
 <section class="mb-10">

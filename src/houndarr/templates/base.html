@@ -123,19 +123,12 @@
   {% endif %}
 
   <!-- Flash messages: Station left-border style -->
+  {%- import "_macros/alerts.html" as alerts -%}
   {% if flash_error %}
-  <div id="flash-error"
-       class="alert alert-soft alert-error text-slate-100 text-sm"
-       role="alert">
-    {{ flash_error }}
-  </div>
+  {% call alerts.alert("error", extra="text-slate-100 text-sm", id="flash-error", role="alert") %}{{ flash_error }}{% endcall %}
   {% endif %}
   {% if flash_success %}
-  <div id="flash-success"
-       class="alert alert-soft alert-success text-slate-100 text-sm"
-       role="alert">
-    {{ flash_success }}
-  </div>
+  {% call alerts.alert("success", extra="text-slate-100 text-sm", id="flash-success", role="alert") %}{{ flash_success }}{% endcall %}
   {% endif %}
 
   <!-- Main content -->

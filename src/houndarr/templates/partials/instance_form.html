@@ -4,6 +4,8 @@
   swapped back after a successful save.  When adding (editing=False / unset)
   the form POSTs to /settings/instances and the table body is refreshed.
 #}
+{%- import "_macros/forms.html" as forms -%}
+{%- import "_macros/alerts.html" as alerts -%}
 {% set is_edit = editing is defined and editing %}
 {% set form_id = "edit-form-" ~ instance.core.id if is_edit else "add-instance-form" %}
 {% set post_url = "/settings/instances/" ~ instance.core.id if is_edit else "/settings/instances" %}
@@ -23,9 +25,7 @@
 
 <div id="{{ 'edit-instance-form-shell-' ~ instance.core.id if is_edit else 'add-instance-form-shell' }}">
   {% if error is defined and error %}
-  <div class="mb-3 alert alert-soft alert-error text-sm">
-    {{ error }}
-  </div>
+  {% call alerts.alert("error", prefix="mb-3") %}{{ error }}{% endcall %}
   {% endif %}
 
   <form id="{{ form_id }}"

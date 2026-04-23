@@ -179,6 +179,20 @@
 @utility duration-base { transition-duration: var(--dur-base); }
 @utility duration-slow { transition-duration: var(--dur-slow); }
 
+/* Inline-shadow + brand-rule utilities.  Six inline `style=` attributes
+   in the templates previously carried these exact declarations; moving
+   them into named utilities means a future token change (e.g. tuning
+   --shadow-4 or --glow-logo in tokens.css) propagates to every call
+   site without rewriting the HTML.  The nine JS-toggled
+   `style="display:none"` attributes in partials/instance_form.html
+   deliberately stay inline because the toggle is driven by runtime JS
+   that writes element.style.display directly, and a utility class
+   cannot be toggled by mutating a style string. */
+@utility logo-glow          { filter: drop-shadow(var(--glow-logo)); }
+@utility shadow-4           { box-shadow: var(--shadow-4); }
+@utility shadow-modal       { box-shadow: 0 30px 80px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(30, 38, 56, 0.8); }
+@utility border-l-brand-rule { border-left: 3px solid var(--color-brand-500); }
+
 /* Component reservation.
    Empty block that later Track G batches fill with Houndarr-specific
    component classes (.field-label in G.2, .status-pill variants in

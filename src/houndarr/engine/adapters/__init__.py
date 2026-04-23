@@ -11,10 +11,9 @@ staticmethod attributes (``adapt_missing``, ``adapt_cutoff``,
 process-lifetime instance of the matching adapter class; per-cycle
 state lives on the *arr clients themselves, not on the adapters.
 
-Track C.10 replaced the previous frozen ``AppAdapter`` dataclass-of-
-callables shape with these per-app classes.  ``AppAdapter`` remains as
-a backward-compatible alias for :class:`AppAdapterProto` so callers
-still type-hint or :func:`isinstance`-check with the historical name.
+``AppAdapter`` is a backward-compatible alias for
+:class:`AppAdapterProto` so callers can type-hint or
+:func:`isinstance`-check against either name.
 """
 
 from __future__ import annotations

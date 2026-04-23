@@ -1,19 +1,15 @@
 """Key-value settings aggregate: SQL boundary for the ``settings`` table.
 
-Track D.2 introduced this module.  The previous incarnation lived as
-two helpers (``get_setting`` / ``set_setting``) inside
-:mod:`houndarr.database`; the final refactor wave's Phase 6a removed
-those delegators outright and migrated every caller to import from
-here directly.  ``delete_setting`` rounds out the full
-:class:`houndarr.protocols.SettingsRepository` contract; the previous
-code path had no delete at all because removing a setting was never
-required by any caller, but the contract calls for the symmetry.
-
-Function shape matches the Protocol (no ``default`` argument on
-``get_setting``).  Callers that need a default fall back at their own
-call site: ``(await get_setting(key)) or "default"`` for the truthy
-case, or ``(await get_setting(key)) if value is not None else default``
-for the strict ``None``-only fallback.
+Implements the :class:`houndarr.protocols.SettingsRepository`
+contract with three functions: :func:`get_setting`,
+:func:`set_setting`, :func:`delete_setting`.  ``get_setting`` has no
+``default`` argument; callers that need a default fall back at their
+own call site (``(await get_setting(key)) or "default"`` for the
+truthy case, or ``(await get_setting(key)) if value is not None else
+default`` for the strict ``None``-only fallback).  The symmetry of a
+dedicated delete entry point (versus calling ``set_setting`` with
+``""``) keeps the semantics of "absent" distinct from "empty string"
+for callers that rely on that difference.
 """
 
 from __future__ import annotations

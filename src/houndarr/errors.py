@@ -1,14 +1,11 @@
 """Houndarr's exception hierarchy.
 
-Previously the codebase had zero custom exceptions; error handling
-relied on ``except Exception  # noqa: BLE001`` at 12+ sites.  This
-module introduces a single root (``HoundarrError``) plus four layer-
-specific branches so call sites can switch to named exceptions
-incrementally in Tracks B.11-B.17.
-
-The hierarchy is declaration-only in this batch; no raise site is
-migrated yet.  Each concrete class documents which existing
-``except Exception`` block it will eventually replace.
+A single root (:class:`HoundarrError`) plus four layer-specific
+branches (:class:`ClientError`, :class:`EngineError`,
+:class:`ServiceError`, :class:`RouteError`) let call sites catch
+Houndarr-originated failures by layer without rewrapping third-party
+exceptions.  Each concrete subclass documents the surface it covers so
+callers pick the narrowest useful base.
 """
 
 from __future__ import annotations
@@ -130,8 +127,9 @@ class InstanceValidationError(ServiceError):
 class CooldownStateError(ServiceError):
     """Cooldown state is inconsistent (e.g. negative days).
 
-    Defensive: the service should never raise this today, but adding
-    it gives Track B.17 a target for the ``except Exception`` guard.
+    Defensive: the service should never raise this today.  Keeping
+    the class lets the service-wide ``except Exception`` guard narrow
+    to a named subclass without losing coverage.
     """
 
 

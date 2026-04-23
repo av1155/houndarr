@@ -244,6 +244,124 @@ def _is_release_timing_reason(reason: str | None) -> bool:
     )
 
 
+# Typed wrap helpers for adapter calls
+
+
+async def _dispatch_with_typed_wrap(
+    adapter: AppAdapterProto,
+    instance: Instance,
+    dispatch_fn: Callable[..., Awaitable[None]],
+    candidate: SearchCandidate,
+) -> None:
+    """Open a client, call *dispatch_fn*, and surface failures typed.
+
+    The three dispatch call sites in :func:`_run_search_pass` and
+    :func:`_run_upgrade_pass` share this helper so each one narrows
+    its ``except Exception`` to :class:`EngineDispatchError`.  The
+    helper owns the whole ``adapter.make_client -> dispatch`` attempt
+    boundary: client construction (``httpx.InvalidURL``),
+    context-manager entry and exit, and the dispatch call itself all
+    get typed into one surface.
+
+    Already-typed :class:`EngineError` and :class:`ClientError`
+    subclasses propagate unchanged so richer context from the client
+    layer is not flattened.
+
+    The typed error message is ``str(exc)`` verbatim, which keeps
+    the ``search_log.message`` field stable against the golden-log
+    characterisation test.
+
+    Args:
+        adapter: :class:`AppAdapterProto` for the instance.
+        instance: Fully-populated instance.
+        dispatch_fn: Adapter dispatch callable; takes ``(client,
+            candidate)`` and sends the search command.
+        candidate: Item to dispatch.
+
+    Raises:
+        EngineDispatchError: Any non-typed ``Exception``; the original
+            is preserved on ``__cause__``.
+    """
+    try:
+        async with adapter.make_client(instance) as client:
+            await dispatch_fn(client, candidate)
+    except (EngineError, ClientError):
+        raise
+    except Exception as exc:  # noqa: BLE001
+        raise EngineDispatchError(str(exc)) from exc
+
+
+async def _persist_offset_with_typed_wrap(
+    instance_id: int,
+    *,
+    master_key: bytes,
+    **offsets: int,
+) -> None:
+    """Call :func:`update_instance` with offset kwargs, typing failures.
+
+    The four offset-persist call sites (upgrade series offset and
+    upgrade item offset in :func:`_run_upgrade_pass`; missing page
+    offset and cutoff page offset in
+    :func:`_run_instance_search_impl`) share this helper so each one
+    narrows its ``except Exception`` to
+    :class:`EngineOffsetPersistError`.
+
+    These writes are non-fatal by design: callers swallow the typed
+    error and the next cycle retries the persist.  The wrap keeps the
+    log line identical (``"failed to persist ..."``) while giving
+    observability a typed surface to key on.
+
+    Args:
+        instance_id: Primary key of the row being updated.
+        master_key: Fernet key required by :func:`update_instance`.
+        **offsets: Integer columns to update, e.g.
+            ``missing_page_offset=7``.  Non-integer columns are not a
+            valid shape for this helper; callers should use
+            :func:`update_instance` directly for those.
+
+    Raises:
+        EngineOffsetPersistError: Any non-typed ``Exception``; the
+            original is preserved on ``__cause__``.
+    """
+    try:
+        await update_instance(instance_id, master_key=master_key, **offsets)
+    except (EngineError, ClientError):
+        raise
+    except Exception as exc:  # noqa: BLE001
+        raise EngineOffsetPersistError(str(exc)) from exc
+
+
+async def _fetch_pool_with_typed_wrap(
+    adapter: AppAdapterProto,
+    instance: Instance,
+) -> list[Any]:
+    """Open a client, call ``adapter.fetch_upgrade_pool``, surface typed.
+
+    Sibling of :func:`_dispatch_with_typed_wrap` for the upgrade-pool
+    build path.  Owns the ``adapter.make_client -> fetch`` boundary so
+    construction + context entry + pool fetch all land in the same
+    :class:`EnginePoolFetchError` surface.
+
+    Args:
+        adapter: :class:`AppAdapterProto` for the instance.
+        instance: Fully-populated instance.
+
+    Returns:
+        The raw upgrade-pool list produced by the adapter.
+
+    Raises:
+        EnginePoolFetchError: Any non-typed ``Exception``; the original
+            is preserved on ``__cause__``.
+    """
+    try:
+        async with adapter.make_client(instance) as client:
+            return await adapter.fetch_upgrade_pool(client, instance)
+    except (EngineError, ClientError):
+        raise
+    except Exception as exc:  # noqa: BLE001
+        raise EnginePoolFetchError(str(exc)) from exc
+
+
 # Unified search pass
 
 
@@ -874,7 +992,7 @@ async def run_instance_search(
     3. Optionally run the cutoff pass via :func:`_run_search_pass`.
     4. Return the total number of items searched.
 
-    Error surface (Track B.13):
+    Error surface:
     Typed Houndarr errors (:class:`~houndarr.errors.EngineError` and
     :class:`~houndarr.errors.ClientError` subclasses) and
     :class:`httpx.TransportError` propagate unchanged; the supervisor's

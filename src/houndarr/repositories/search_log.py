@@ -1,19 +1,15 @@
 """Search-log aggregate: SQL boundary for the ``search_log`` table.
 
-Track D.6 lands the insert path and a minimal fetch surface matching
-the :class:`houndarr.protocols.SearchLogRepository` Protocol.  The
-engine's ``_write_log`` helper in :mod:`houndarr.engine.search_loop`
-delegates to :func:`insert_log_row`; the golden-log characterisation
-test in ``tests/test_engine/test_golden_search_log.py`` pins the
-column ordering and NULL-vs-value handling so the byte-equal
-invariant survives the migration.
-
-Track D.9 extracts a log-query service that will consume
-:func:`fetch_log_rows` for the ``/api/logs`` route; until then the
-route keeps its own dynamic SQL.  D.27 sweeps the remaining engine
-call sites for ``_write_log`` (the specialised ``fetch_recent_searches``
-and ``fetch_latest_missing_reason`` lookups currently living in
-:mod:`houndarr.engine.search_loop`) through the repository.
+Implements the :class:`houndarr.protocols.SearchLogRepository`
+contract plus the retention purge.  The engine's ``_write_log``
+helper in :mod:`houndarr.engine.search_loop` delegates to
+:func:`insert_log_row`; the golden-log characterisation test in
+``tests/test_engine/test_golden_search_log.py`` pins the column
+ordering and NULL-vs-value handling so the insert shape stays
+byte-equal.  The ``/api/logs`` route is backed by
+:mod:`houndarr.services.log_query`, which composes
+:func:`fetch_log_rows` with the filter and pagination logic the
+route needs.
 
 Timestamps: the ``search_log.timestamp`` column is a ``DEFAULT
 strftime(...)`` at the schema level, so inserts leave it untouched

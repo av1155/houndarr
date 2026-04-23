@@ -1,23 +1,15 @@
 """Frozen value object for one missing or cutoff search pass.
 
-Track B.22 declaration.  :func:`houndarr.engine.search_loop._run_search_pass`
-currently takes 13 keyword arguments that fall naturally into four
-groups:
-
-* pass identity: ``search_kind``;
-* adapter bindings: ``adapt_fn``, ``dispatch_fn``, ``fetch_fn``,
-  ``total_fn``;
-* behaviour knobs: ``batch_size``, ``hourly_cap``,
-  ``cooldown_days``, ``page_size``, ``scan_budget``;
-* cycle metadata: ``cycle_id``, ``cycle_trigger``, ``start_page``.
-
-:class:`SearchPassConfig` collapses all thirteen into a single frozen
-dataclass so the caller at
+:func:`houndarr.engine.search_loop._run_search_pass` takes 13 values
+that fall naturally into four groups: pass identity
+(``search_kind``), adapter bindings (``adapt_fn``, ``dispatch_fn``,
+``fetch_fn``, ``total_fn``), behaviour knobs (``batch_size``,
+``hourly_cap``, ``cooldown_days``, ``page_size``, ``scan_budget``),
+and cycle metadata (``cycle_id``, ``cycle_trigger``,
+``start_page``).  :class:`SearchPassConfig` collapses them into a
+single frozen dataclass so
 :func:`~houndarr.engine.search_loop.run_instance_search` passes one
-value instead of keyword-unpacking every field.  The signature switch
-itself is deferred to Track D.21; this batch only lands the
-declaration + pinning tests so Track C pattern work and Track D
-repository work can reference the type safely.
+value instead of keyword-unpacking every field.
 
 The dataclass is frozen + slots for the same reason every other
 value object in Houndarr is: keep construction cheap, reject
@@ -39,9 +31,9 @@ from houndarr.enums import CycleTrigger, SearchKind
 class SearchPassConfig:
     """Per-pass configuration for :func:`_run_search_pass`.
 
-    The fields mirror the current keyword-argument surface one-for-one
-    so Track D.21's migration is mechanical: every ``foo=bar`` kwarg
-    becomes ``config.foo`` at the call site.
+    The fields mirror the keyword-argument surface one-for-one so
+    call sites read ``config.foo`` where they used to pass
+    ``foo=bar``.
 
     Attributes:
         search_kind: ``"missing"`` or ``"cutoff"``.

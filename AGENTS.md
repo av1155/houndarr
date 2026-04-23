@@ -91,6 +91,15 @@ just dev        # python -m houndarr --data-dir ./data-dev --dev
 # invoke the tree explicitly:
 .venv/bin/pytest tests/e2e_browser/ --browser chromium
 
+# Visual baseline capture / verify for the Phase 7b login + setup pins.
+# Both recipes orchestrate the mock *arr stack via
+# scripts/e2e_browser/capture_baselines.sh and run pytest inside a
+# Linux Playwright container so fonts match CI's ubuntu-latest renderer.
+# Re-capture is only required when login.html, setup.html, or the
+# auth CSS tokens change; see tests/e2e_browser/_screenshots/README.md.
+just capture-baselines   # produce + commit new PNG baselines
+just verify-baselines    # check committed baselines without re-capturing
+
 # Single file
 .venv/bin/pytest tests/test_auth.py
 

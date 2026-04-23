@@ -72,14 +72,12 @@ async def db(tmp_data_dir: str) -> AsyncGenerator[None, None]:
 def test_settings(tmp_data_dir: str) -> AppSettings:
     """Return AppSettings pointing at tmp data dir."""
     settings = bootstrap_settings(data_dir=tmp_data_dir)
-    # Reset auth module singletons so each test starts with a clean state.
-    # - _serializer: re-initialized with the new test DB's session_secret.
-    # - _login_attempts: cleared so rate-limit counters don't bleed between tests.
-    import houndarr.auth as _auth
+    # Reset every auth-package cache so each test starts clean.  Covers
+    # the session serializer (re-keyed on next ``_get_serializer()``),
+    # the setup-complete flag, and the in-memory rate-limit buckets.
+    from houndarr.auth import reset_auth_caches
 
-    _auth._serializer = None  # noqa: SLF001
-    _auth._setup_complete = None  # noqa: SLF001
-    _auth._login_attempts.clear()  # noqa: SLF001
+    reset_auth_caches()
     return settings
 
 

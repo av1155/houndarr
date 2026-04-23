@@ -8,6 +8,7 @@
   The <form> inside is what actually POSTs on confirm; hx-post is set
   dynamically by the JS so the same dialog serves all three actions.
 #}
+{%- import "_macros/forms.html" as forms -%}
 <div
   id="confirm-dialog"
   class="confirm-dialog hidden"
@@ -50,17 +51,17 @@
 
         {# Typed-phrase field: only visible for factory reset. #}
         <div id="confirm-typed" class="hidden mt-4">
-          <label for="confirm-phrase-input" class="block text-xs font-medium text-slate-400 mb-1.5">
+          {% call forms.form_field(
+              id="confirm-phrase-input",
+              name="confirm_phrase",
+              input_class="station-input h-10 px-3 text-sm font-mono",
+              label_class="block text-xs font-medium text-slate-400 mb-1.5",
+              autocomplete="off",
+          ) -%}
             Type
             <span id="confirm-word" class="font-mono text-danger">RESET</span>
             to confirm
-          </label>
-          <input
-            id="confirm-phrase-input"
-            name="confirm_phrase"
-            class="station-input h-10 px-3 text-sm font-mono"
-            autocomplete="off"
-          />
+          {%- endcall %}
         </div>
 
         {# Second-factor field: password in builtin, typed username in proxy. #}
@@ -79,44 +80,14 @@
         </div>
         {% else %}
         <div id="confirm-second-factor" class="hidden mt-3">
-          <label
-            class="block text-xs font-medium text-slate-400 mb-1.5"
-            for="confirm-password-input"
-          >
-            Current password
-          </label>
-          <div class="input-wrap">
-            <input
-              id="confirm-password-input"
-              name="current_password"
-              type="password"
-              autocomplete="current-password"
-              placeholder="••••••••"
-              data-pw-input
-              class="station-input has-trailing h-10 px-3 text-sm text-white placeholder:text-slate-600 font-mono"
-            />
-            <div class="input-trailing">
-              <span class="caps-badge" role="status" aria-label="Caps Lock is on">
-                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                  <path d="M8 3.2 3.6 7.6h2.5v4h3.8v-4h2.5z"/>
-                  <line x1="5.6" y1="13.3" x2="10.4" y2="13.3"/>
-                </svg>
-              </span>
-              <button
-                type="button"
-                class="icon-btn"
-                data-pw-toggle
-                aria-label="Show password"
-                aria-pressed="false"
-                tabindex="-1"
-              >
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/>
-                  <circle cx="12" cy="12" r="3"/>
-                </svg>
-              </button>
-            </div>
-          </div>
+          {{ forms.password_input(
+              id="confirm-password-input",
+              name="current_password",
+              label="Current password",
+              autocomplete="current-password",
+              placeholder="••••••••",
+              required=false,
+          ) }}
         </div>
         {% endif %}
       </div>

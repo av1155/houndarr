@@ -22,6 +22,14 @@
   batches do that.  Centralising the markup here means Track G can
   change a form element's component class in one seam instead of
   seven inline call sites.
+
+  Whitespace layout per macro is deliberate and pinned by
+  tests/test_templates/test_macros_forms.py: form_field emits every
+  attribute on a single line; password_input variant="auth" keeps
+  the pre-refactor multi-line auth-card attribute layout; variant=
+  "admin" keeps the one-attribute-per-line admin layout.  Changing
+  any of the three without also re-pinning the relevant byte-equal
+  tests will fail the pinning gate.
 -#}
 
 

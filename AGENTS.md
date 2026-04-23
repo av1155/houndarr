@@ -129,7 +129,7 @@ just dev        # python -m houndarr --data-dir ./data-dev --dev
 ## Running Tests
 
 ```bash
-# Full suite (~1325 tests; count includes parametrised expansions and
+# Full suite (~2502 tests; count includes parametrised expansions and
 # the 12 async engine-cycle tests tagged @pytest.mark.integration).
 .venv/bin/pytest
 
@@ -345,7 +345,15 @@ No alternative logging libraries (structlog, loguru) are used.
 src/houndarr/
   __main__.py          # CLI entry point (Click), logging setup, uvicorn.run
   app.py               # create_app(), lifespan, middleware registration
-  auth.py              # AuthMiddleware, bcrypt, CSRF, rate limiter
+  auth/                # AuthMiddleware, bcrypt, CSRF, rate limiter (seam package)
+    password.py        # bcrypt verify / hash helpers
+    rate_limit.py      # in-memory login rate limiter
+    session.py         # signed session cookie encode / decode
+    setup.py           # first-run admin setup + password policy
+    csrf.py            # CSRF double-submit token rotation
+    proxy_auth.py      # reverse-proxy trust gate and header extraction
+    identity.py        # current-user resolution from session or proxy header
+    middleware.py      # AuthMiddleware dispatch (builtin vs proxy path)
   config.py            # AppSettings dataclass, get_settings() singleton
   crypto.py            # Fernet encrypt/decrypt, master key management
   database.py          # get_db() context manager, schema migrations
@@ -399,8 +407,29 @@ src/houndarr/
   connection; WAL mode set once in `init_db()`)
 - **Config:** `AppSettings` is a plain dataclass (not Pydantic); `get_settings()`
   is a lazy singleton. Pydantic is used only at the *arr wire boundary
-  (`src/houndarr/clients/_wire_models.py`), not for internal domain models or
+  (`src/houndarr/clients/_wire_models/`), not for internal domain models or
   config
+- **Wire models:** every *arr HTTP response is validated with a Pydantic
+  model from the `clients/_wire_models/` package before it reaches a parser.
+  `PaginatedResponse[T]` (generic, PEP 695 syntax) covers the shared
+  `/wanted/*` envelope; `SystemStatus` and `QueueStatus` back
+  `ArrClient.ping()` and `ArrClient.get_queue_status()`; per-app
+  `*WantedEpisode` / `*WantedMovie` / `*WantedAlbum` / `*WantedBook`
+  and `*LibraryEpisode` / `*LibraryMovie` / `*LibraryAlbum` / `*LibraryBook`
+  models name the record shapes.  `ArrSeries` / `ArrArtist` / `ArrAuthor`
+  type the parent-aggregate fetches.  All wire models extend an internal
+  `_ArrModel` that sets `populate_by_name=True` + `extra="ignore"` so
+  unknown fields from new *arr versions never raise.  Field names are
+  snake_case in Python and alias to the camelCase the APIs serialise.
+- **Domain models:** the parsed result types (`MissingEpisode`,
+  `LibraryMovie`, etc.) are frozen dataclasses, one per client file
+  next to the client that builds them.  Every frozen dataclass in the
+  codebase uses `slots=True`.  `Instance` composes seven frozen
+  sub-structs (`core`, `missing`, `cutoff`, `upgrade`, `schedule`,
+  `snapshot`, `timestamps`) and is itself frozen and slotted; callers
+  evolve it through `dataclasses.replace`.  `AppSettings` is the only
+  deliberately-mutable dataclass (env overrides applied in-place on
+  the lazy singleton).
 - **Encryption:** Master key in `request.app.state.master_key`; passed
   explicitly to service functions as `master_key=` kwarg; never imported globally
 - **Auth:** Global `AuthMiddleware` (Starlette `BaseHTTPMiddleware`) handles

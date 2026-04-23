@@ -81,6 +81,21 @@ def bootstrap_non_web(
         Three-tuple ``(settings, db_path, master_key)``. ``db_path`` is
         the resolved SQLite path (same object as ``settings.db_path``)
         and ``master_key`` is the 32-byte URL-safe base64 Fernet key.
+
+    Notes:
+        Must be called from a sync context. The body invokes
+        :func:`asyncio.run` to execute :func:`~houndarr.database.init_db`,
+        so calling this from inside an already-running event loop raises
+        ``RuntimeError: asyncio.run() cannot be called from a running
+        event loop``.
+
+        Every call clears ``_runtime_settings`` before resolving the new
+        one and, when ``overrides`` are supplied, pins a fresh
+        :class:`AppSettings` into the singleton. Back-to-back calls with
+        different overrides therefore leave the singleton pinned to the
+        last call; callers holding an :class:`AppSettings` reference
+        returned by an earlier call keep their own object but disagree
+        with the process-wide singleton.
     """
     # Drop any prior pin so tests and repeated script invocations cannot
     # leak stale settings from a previous run (seed_demo_data + serve_demo

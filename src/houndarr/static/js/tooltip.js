@@ -27,6 +27,17 @@
     panel.id = "app-tooltip";
     panel.className = "app-tooltip";
     panel.setAttribute("role", "tooltip");
+    // popover="manual" promotes the panel into the browser's top
+    // layer when showPopover() is called, the same layer <dialog>
+    // uses.  Without this, an open modal sits above any regular
+    // DOM-ordered element (no z-index trick escapes the top layer),
+    // so tooltips triggered from within the add-instance modal
+    // rendered behind it.  Manual mode means the runtime here owns
+    // show / hide rather than the browser light-dismissing on
+    // outside clicks.
+    if ("popover" in HTMLElement.prototype) {
+      panel.setAttribute("popover", "manual");
+    }
     caret = document.createElement("span");
     caret.className = "app-tooltip__caret";
     caret.setAttribute("aria-hidden", "true");
@@ -86,6 +97,21 @@
     clearTimeout(hideTimer);
     ensurePanel();
     loadContent(trigger);
+    // Promote to the top layer so the panel sits above any open
+    // <dialog> (add / edit instance modal).  Wrapped in a guard
+    // because calling showPopover on an already-shown popover
+    // throws in some browsers.
+    if (
+      typeof panel.showPopover === "function"
+      && !panel.matches(":popover-open")
+    ) {
+      try {
+        panel.showPopover();
+      } catch (_err) {
+        /* Popover support is best-effort; the fade class still opens
+           the panel for browsers without the API. */
+      }
+    }
     panel.classList.add("is-visible");
     position(trigger);
     activeTrigger = trigger;
@@ -97,6 +123,23 @@
     panel.classList.remove("is-visible");
     if (activeTrigger) activeTrigger.removeAttribute("aria-describedby");
     activeTrigger = null;
+    // Defer top-layer removal until the opacity transition finishes
+    // (matches --dur-base).  Re-checking .is-visible on the timeout
+    // lets a follow-up show() during the fade cancel the teardown.
+    if (
+      typeof panel.hidePopover === "function"
+      && panel.matches(":popover-open")
+    ) {
+      window.setTimeout(function () {
+        if (panel && !panel.classList.contains("is-visible")) {
+          try {
+            panel.hidePopover();
+          } catch (_err) {
+            /* Already hidden by another code path. */
+          }
+        }
+      }, 160);
+    }
   }
 
   function scheduleHide() {

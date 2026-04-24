@@ -296,7 +296,10 @@ body {
      as a deliberate chip balancing the brand on the left, instead of
      a naked 16px glyph floating past the edge of the nav pill.
      Matches the mobile hamburger's always-on outline + surface
-     treatment, just at the desktop 34x34 size. */
+     treatment, just at the desktop 34x34 size.  Colour/background
+     transition runs on --dur-base (180ms) so the fade between the
+     muted resting slate and the red danger hover state registers
+     both directions. */
   .nav-iconbtn {
     width: 34px;
     height: 34px;
@@ -308,9 +311,9 @@ body {
     background: var(--color-surface-2);
     border: 1px solid var(--color-border-subtle);
     transition:
-      color        var(--dur-fast) var(--ease-station),
-      background   var(--dur-fast) var(--ease-station),
-      border-color var(--dur-fast) var(--ease-station);
+      color        var(--dur-base) var(--ease-station),
+      background   var(--dur-base) var(--ease-station),
+      border-color var(--dur-base) var(--ease-station);
   }
   .nav-iconbtn svg { width: 16px; height: 16px; }
   .nav-iconbtn:hover {

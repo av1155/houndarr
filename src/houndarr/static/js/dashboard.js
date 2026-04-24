@@ -484,12 +484,9 @@ function initDashboardPage() {
       const items = Array.isArray(inst.unlocking_next) ? inst.unlocking_next : [];
       const totalCd = toNumber(inst.cooldown_total);
       const shown = Math.min(items.length, 3);
-      // Compact tally: "3 / 73" fits on one line alongside the label at
-      // every card width, while the old "3 OF 73 IN COOLDOWN" phrasing
-      // wrapped around 1146px browser width and pushed the cooldown box
-      // down by a row, bleeding into the card footer.  "Cooldown" is
-      // already in the label; "in cooldown" was redundant.
-      const tally = totalCd === 0 ? '0 / 0' : `${shown} / ${totalCd}`;
+      const tally = totalCd === 0
+        ? '0 in cooldown'
+        : `${shown} of ${totalCd} in cooldown`;
       if (items.length === 0) {
         return `
 <div class="dash-unlocks">

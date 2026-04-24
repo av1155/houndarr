@@ -51,6 +51,16 @@ Radarr, Sonarr, Lidarr, Readarr, and Whisparr monitor RSS feeds for new releases
 
 Houndarr fixes this by searching slowly, politely, and automatically. It works through your backlog in small, configurable batches with sleep intervals between cycles, per-item cooldowns, and hourly API caps. It runs as a single Docker container alongside your existing \*arr stack and stays out of the way.
 
+## What Houndarr does and doesn't do
+
+**Does.** Trigger searches on your Radarr / Sonarr / Lidarr / Readarr / Whisparr instances for items they already report as missing or below quality cutoff. Read-only REST calls to your configured \*arrs plus `POST /api/v{1,3}/command` for each search. That is the entire network surface.
+
+**Doesn't.** Phone home, report telemetry, ship obfuscated code, manage download clients, integrate Prowlarr, bundle Usenet or torrent clients, scrape indexers directly, or contact any service outside the \*arr instances you configure.
+
+**Polite by default.** Small batches and long intervals out of the box. Configured caps are the ceiling, not the floor, and Houndarr never ignores an indexer's retry-after. Designed so you never have to think about your indexer's daily budget.
+
+See [SECURITY.md](SECURITY.md) for the full security posture.
+
 ## Key Features
 
 **Supported Apps**

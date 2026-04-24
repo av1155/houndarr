@@ -526,9 +526,12 @@
   }
   .dash-unlocks__row {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    gap: 0.875rem;
-    align-items: baseline;
+    /* Three columns: icon | title (expands, ellipsizes) | unlock time.
+       Matches the recent-hunts fix so the kind icon sits adjacent to
+       the title on every card, not stranded in an empty-column 1fr. */
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    gap: 0.625rem;
+    align-items: center;
     font-size: 0.8125rem;
     color: var(--color-text-emphasis);
   }

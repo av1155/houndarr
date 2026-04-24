@@ -185,11 +185,19 @@ body {
 
 /* Halo derives from currentColor so an error pill pulses red while an
    active pill pulses green: the dot sits inside status-pill--* parents
-   that already set text colour via @apply text-danger / text-success. */
+   that already set text colour via @apply text-danger / text-success.
+   Alpha is held at 18% across every stop so only the shadow spread
+   animates: tweening between a 0%-mix (which simplifies to the named
+   `transparent`) and an 18%-mix rgba would step the whole shadow
+   rather than interpolate, collapsing the expand/contract into a
+   pop-on / pop-off. Holding the colour structurally identical makes
+   spread the sole animated dimension, which length-interpolates
+   smoothly. At spread=0 the shadow is coincident with the dot and
+   fully hidden by its own opaque background. */
 @keyframes station-pulse {
   0%, 100% {
     opacity: 1;
-    box-shadow: 0 0 0 0 color-mix(in srgb, currentColor 0%, transparent);
+    box-shadow: 0 0 0 0 color-mix(in srgb, currentColor 18%, transparent);
   }
   50% {
     opacity: 0.85;
@@ -214,6 +222,7 @@ body {
     var(--color-base);
 }
 
+<<<<<<< HEAD
 /* ── Body atmosphere — desktop ambient depth ────────────────────────────── */
 body {
   background-image:
@@ -226,6 +235,79 @@ body {
       rgba(34, 211, 238, 0.018) 31px,
       rgba(34, 211, 238, 0.018) 32px
     );
+||||||| parent of 61eb46c (fix(ui): restore smooth radar pulse on status dots)
+/* ── Global keyboard focus (dashboard redesign) ─────────────────────────── */
+:focus-visible {
+  outline: 2px solid var(--color-brand-400);
+  outline-offset: 2px;
+  border-radius: var(--radius-bar);
+}
+.dash-card:focus-visible {
+  outline-offset: 4px;
+}
+.dash-pill:focus-visible {
+  outline-offset: 3px;
+}
+a:focus-visible,
+button:focus-visible {
+  text-decoration: none;
+}
+
+/* Halo inherits currentColor; the dot pins its own colour to
+   --seg-eligible so the emerald pulse is preserved even though the
+   enclosing .dash-pill--active uses a softer --color-success-text for
+   the "Active" label. Future pill variants only need to override color
+   on the dot selector to get a matching halo. */
+@keyframes dash-pulse-dot {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, currentColor 0%, transparent); }
+  50%      { box-shadow: 0 0 0 4px color-mix(in srgb, currentColor 18%, transparent); }
+}
+.dash-pill--active .dash-pill__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  color: var(--seg-eligible);
+  background: currentColor;
+  animation: dash-pulse-dot 2.4s var(--ease-station) infinite;
+=======
+/* ── Global keyboard focus (dashboard redesign) ─────────────────────────── */
+:focus-visible {
+  outline: 2px solid var(--color-brand-400);
+  outline-offset: 2px;
+  border-radius: var(--radius-bar);
+}
+.dash-card:focus-visible {
+  outline-offset: 4px;
+}
+.dash-pill:focus-visible {
+  outline-offset: 3px;
+}
+a:focus-visible,
+button:focus-visible {
+  text-decoration: none;
+}
+
+/* Halo inherits currentColor; the dot pins its own colour to
+   --seg-eligible so the emerald pulse is preserved even though the
+   enclosing .dash-pill--active uses a softer --color-success-text for
+   the "Active" label. Future pill variants only need to override color
+   on the dot selector to get a matching halo. Alpha held at 18%
+   across every stop for the same reason as station-pulse above:
+   color-mix endpoints must be structurally identical for the shadow
+   to interpolate, otherwise the ring pops on/off instead of
+   expanding and contracting. */
+@keyframes dash-pulse-dot {
+  0%, 100% { box-shadow: 0 0 0 0  color-mix(in srgb, currentColor 18%, transparent); }
+  50%      { box-shadow: 0 0 0 4px color-mix(in srgb, currentColor 18%, transparent); }
+}
+.dash-pill--active .dash-pill__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  color: var(--seg-eligible);
+  background: currentColor;
+  animation: dash-pulse-dot 2.4s var(--ease-station) infinite;
+>>>>>>> 61eb46c (fix(ui): restore smooth radar pulse on status dots)
 }
 
 /* ── Nav atmospheric glow ───────────────────────────────────────────────── */

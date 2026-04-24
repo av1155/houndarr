@@ -466,6 +466,21 @@
   .dash-card__stat-value--eligible { color: var(--seg-eligible); }
   .dash-card__stat-value--searched { color: var(--color-brand-300); }
   .dash-card__stat-value--muted    { color: var(--color-text-muted); }
+  /* Secondary context below a stat value (e.g. lifetime count under
+     "Searched 24h").  Same type scale as the label but muted, so the
+     big number stays the tile's focal point while the subtitle
+     quietly confirms the broader number.  Negative top margin pulls
+     it tight against the big number and offsets the flex gap set on
+     the parent stat tile. */
+  .dash-card__stat-sub {
+    font-family: var(--font-mono);
+    font-size: 0.625rem;
+    letter-spacing: 0.04em;
+    color: var(--color-text-muted);
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+    margin: -0.125rem 0 0;
+  }
 
   .dash-unlocks {
     background: #0b0e14;

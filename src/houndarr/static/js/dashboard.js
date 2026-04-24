@@ -150,6 +150,14 @@ function initDashboardPage() {
       return `Patrol · ${mo} ${day} ${year} · ${hh}:${mm} ${tz || ''}`.trim();
     }
 
+    function failingInstances(instances) {
+      // Shared helper for renderSubheader + renderAlert so both parts
+      // of the dashboard header agree on which instances are "failing"
+      // right now.  Disabled instances opted out of patrol, so their
+      // stale error rows are excluded by design.
+      return instances.filter(function (i) { return i.enabled && i.active_error; });
+    }
+
     function renderSubheader(instances) {
       const eyebrow = formatPatrolEyebrow();
       if (instances.length === 0) {
@@ -161,14 +169,19 @@ function initDashboardPage() {
       }
       const total = instances.length;
       const active = instances.filter(function (i) { return i.enabled; }).length;
-      // Disabled instances are opted out of patrol, so they never count
-      // toward "needs attention" even if their last search_log row is an
-      // error.  renderAlert() filters the same way.
-      const errored = instances.find(function (i) { return i.enabled && i.active_error; });
+      const failing = failingInstances(instances);
       let sentence;
-      if (errored) {
-        const on = total - instances.filter(function (i) { return i.enabled && i.active_error; }).length;
-        sentence = `${on} of ${total} hounds on patrol. <span class="attn">${escHtml(errored.name)} needs attention.</span>`;
+      if (failing.length > 0) {
+        const on = total - failing.length;
+        // Singular: name the instance so the subheader reads naturally.
+        // Plural: switch to a count-based phrasing so the line length
+        // stays stable regardless of how many instances degraded at
+        // once (a five-instance outage should not push "needs
+        // attention" off the end of the viewport).
+        const attn = failing.length === 1
+          ? `${escHtml(failing[0].name)} needs attention.`
+          : `${failing.length} instances need attention.`;
+        sentence = `${on} of ${total} hounds on patrol. <span class="attn">${attn}</span>`;
       } else {
         const recent = instances
           .map(function (i) { return i.last_dispatch_at; })
@@ -212,27 +225,48 @@ function initDashboardPage() {
       return `${escHtml(before)}<span class="mono">${escHtml(url)}</span>${escHtml(after)}`;
     }
 
+    function renderAlertRow(inst) {
+      // One row inside the banner body per errored instance.  Each row
+      // reuses renderAlertMessage so an http(s):// URL embedded in the
+      // error message renders in the monospace accent, matching the
+      // previous single-instance layout.
+      const err = inst.active_error || {};
+      const failures = toNumber(err.failures_count);
+      const failText = failures > 0
+        ? `${failures} failure${failures === 1 ? '' : 's'}`
+        : 'Connection error';
+      const whenAgo = formatTimeAgo(err.timestamp);
+      const msg = err.message || '';
+      return `
+    <li class="dash-alert__row">
+      <span class="dash-alert__row-text">
+        <strong>${escHtml(inst.name)}</strong><span class="muted">:</span>
+        ${renderAlertMessage(msg)}
+      </span>
+      <span class="dash-alert__row-meta">${escHtml(failText)} <span class="muted">·</span> last ${escHtml(whenAgo || 'just now')}</span>
+    </li>`;
+    }
+
     function renderAlert(instances) {
-      // Only enabled instances trigger the top banner; a disabled instance
-      // has been explicitly opted out of patrol, so stale error rows
-      // should not keep shouting at the user.
-      const failing = instances.filter(function (i) { return i.enabled && i.active_error; });
+      const failing = failingInstances(instances);
       if (failing.length === 0) return '';
-      const inst = failing[0];
-      const failures = toNumber(inst.active_error && inst.active_error.failures_count);
-      const failText = failures > 0 ? `${failures} failure${failures === 1 ? '' : 's'}` : 'Connection error';
-      const whenAgo = inst.active_error ? formatTimeAgo(inst.active_error.timestamp) : '';
-      const msg = (inst.active_error && inst.active_error.message) || '';
-      const logsHref = `/logs?instance_id=${encodeURIComponent(inst.id)}&action=error`;
+      // One ?instance_id=N per failing instance so the "View logs"
+      // deep link opens the logs page with all errored instances
+      // pre-selected in the multi-select filter.  FastAPI reads the
+      // repeated query param as a list and the /logs SSR route pre-
+      // checks the matching checkboxes in the filter dropdown.
+      const qs = failing
+        .map((i) => `instance_id=${encodeURIComponent(i.id)}`)
+        .join('&');
+      const logsHref = `/logs?${qs}&action=error`;
+      const rows = failing.map(renderAlertRow).join('');
       return `
 <section class="dash-alert" role="alert">
   <span class="dash-alert__icon" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg></span>
   <div class="dash-alert__body">
     <p class="dash-alert__head">Degraded · ${failing.length} instance${failing.length === 1 ? '' : 's'} offline</p>
-    <p class="dash-alert__text">
-      <strong>${escHtml(inst.name)}</strong><span class="muted">:</span>
-      ${renderAlertMessage(msg)}<span class="dash-alert__meta"><span class="muted dash-alert__meta-lead">&nbsp;·&nbsp;</span>${escHtml(failText)} <span class="muted">·</span> last ${escHtml(whenAgo || 'just now')}</span>
-    </p>
+    <ul class="dash-alert__list">${rows}
+    </ul>
   </div>
   <a class="dash-alert__link" href="${logsHref}"
      hx-get="${logsHref}" hx-target="#app-content" hx-swap="innerHTML" hx-push-url="true">View logs${ARROW_RIGHT_ICON}</a>

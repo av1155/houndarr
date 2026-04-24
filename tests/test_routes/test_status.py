@@ -466,28 +466,30 @@ def test_status_active_error_still_emitted_for_disabled_instance(app: TestClient
 def test_dashboard_template_filters_banner_on_disabled_instances() -> None:
     """Regression guard for the client-side alert filter.
 
-    ``renderAlert`` and the subheader's ``errored`` / on-patrol tally in
-    ``dashboard_content.html`` must each check ``enabled && active_error``
-    so disabling an instance silences the top-of-dashboard banner and
-    the "needs attention" callout.  Per-card pill + cooldown panel are
-    already guarded at their own call sites by ``!inst.enabled`` first.
+    ``renderAlert`` and ``renderSubheader`` in ``dashboard.js`` must
+    both route through ``failingInstances(instances)`` so disabling an
+    instance silences the top-of-dashboard banner AND the "needs
+    attention" callout through a single source of truth.  The shared
+    helper pins the ``enabled && active_error`` predicate in one place
+    so a new surface that needs the same filter cannot accidentally
+    drift from the banner's rules.
     """
     from pathlib import Path
 
-    template = (
-        Path(__file__).resolve().parents[2]
-        / "src"
-        / "houndarr"
-        / "templates"
-        / "partials"
-        / "pages"
-        / "dashboard_content.html"
+    script = (
+        Path(__file__).resolve().parents[2] / "src" / "houndarr" / "static" / "js" / "dashboard.js"
     ).read_text()
-    # Three inline-JS call sites: renderAlert filter, subheader `errored`
-    # find, subheader "on patrol" count.  Stricter than >=3 to keep the
-    # test honest if someone adds a fourth surface without also filtering.
-    assert template.count("i.enabled && i.active_error") == 3, (
-        "Expected 3 call sites filtering banner/subheader on enabled + active_error"
+    # Exactly one predicate: the helper is the only place the filter
+    # lives.  A second occurrence would mean someone re-inlined the
+    # check instead of calling failingInstances().
+    assert script.count("i.enabled && i.active_error") == 1, (
+        "Expected exactly one enabled+active_error predicate (inside failingInstances)"
+    )
+    # Helper must be called from both the banner and the subheader so
+    # the two surfaces agree on which instances are failing right now.
+    assert script.count("failingInstances(instances)") >= 2, (
+        "Expected failingInstances(instances) to be called from both "
+        "renderAlert and renderSubheader"
     )
 
 

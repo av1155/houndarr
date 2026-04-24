@@ -42,6 +42,10 @@ SELECT
              AND julianday(timestamp) >= julianday('now', '-24 hours')
              THEN 1 ELSE 0 END)
         AS errors_24h,
+    SUM(CASE WHEN action = 'searched'
+             AND julianday(timestamp) >= julianday('now', '-1 hour')
+             THEN 1 ELSE 0 END)
+        AS searches_last_hour,
     MAX(CASE WHEN action = 'searched' THEN timestamp END)
         AS last_search_at
 FROM search_log
@@ -153,6 +157,7 @@ EMPTY_METRICS: dict[str, Any] = {
     "searched_24h": 0,
     "skipped_24h": 0,
     "errors_24h": 0,
+    "searches_last_hour": 0,
     "last_search_at": None,
 }
 
@@ -164,9 +169,9 @@ EMPTY_METRICS: dict[str, Any] = {
 _STATUS_INSTANCE_COLS = (
     "id, name, type, enabled, batch_size, sleep_interval_mins, hourly_cap,"
     " cooldown_days, cutoff_enabled, cutoff_batch_size,"
-    " cutoff_cooldown_days,"
+    " cutoff_cooldown_days, cutoff_hourly_cap,"
     " post_release_grace_hrs, queue_limit,"
-    " upgrade_enabled, upgrade_cooldown_days,"
+    " upgrade_enabled, upgrade_cooldown_days, upgrade_hourly_cap,"
     " monitored_total, unreleased_count, snapshot_refreshed_at"
 )
 
@@ -210,6 +215,7 @@ def _build_instance_status_row(
         "searched_24h": window_metrics["searched_24h"],
         "skipped_24h": window_metrics["skipped_24h"],
         "errors_24h": window_metrics["errors_24h"],
+        "searches_last_hour": window_metrics["searches_last_hour"],
         "last_activity_action": action,
         "last_activity_at": at,
         "batch_size": inst["batch_size"],
@@ -218,6 +224,7 @@ def _build_instance_status_row(
         "cooldown_days": inst["cooldown_days"],
         "cutoff_enabled": bool(inst["cutoff_enabled"]),
         "cutoff_batch_size": inst["cutoff_batch_size"],
+        "cutoff_hourly_cap": int(inst["cutoff_hourly_cap"]),
         "post_release_grace_hrs": inst["post_release_grace_hrs"],
         "queue_limit": inst["queue_limit"],
         "lifetime_searched": lifetime["lifetime_searched"],
@@ -231,6 +238,7 @@ def _build_instance_status_row(
         "snapshot_refreshed_at": str(refreshed) if refreshed else None,
         "upgrade_enabled": bool(inst["upgrade_enabled"]),
         "upgrade_cooldown_days": int(inst["upgrade_cooldown_days"]),
+        "upgrade_hourly_cap": int(inst["upgrade_hourly_cap"]),
     }
 
 
@@ -317,6 +325,7 @@ async def gather_window_metrics(
                 "searched_24h": int(row["searched_24h"] or 0),
                 "skipped_24h": int(row["skipped_24h"] or 0),
                 "errors_24h": int(row["errors_24h"] or 0),
+                "searches_last_hour": int(row["searches_last_hour"] or 0),
                 "last_search_at": str(row["last_search_at"]) if row["last_search_at"] else None,
             }
 

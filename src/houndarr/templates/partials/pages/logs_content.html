@@ -7,6 +7,7 @@
    carry per-session expand/collapse state in JS; caching a stale
    snapshot would surface collapsed cards the user had expanded (and
    vice-versa) on browser back-nav. #}
+{% import "_macros/forms.html" as forms %}
 <div class="sr-only" data-page-key="logs" data-page-title="Logs | Houndarr" hx-history="false" aria-hidden="true"></div>
 
 <section class="logs-head">
@@ -38,19 +39,48 @@
     hx-indicator="#log-spinner"
     class="filter-bar"
   >
-    <label class="field">
-      <span class="field__label">Instance</span>
-      <div class="field__control">
-        <select id="filter-instance" name="instance_id">
-          <option value="">All instances</option>
+    {# Multi-select dropdown: trigger + popover of checkboxes.  Each
+       checkbox carries name="instance_id" so native form serialisation
+       sends one ?instance_id=X per checked box, matching the repeated
+       query-param shape the backend accepts.  No <select> element
+       participates; the popover's checkboxes ARE the filter values. #}
+    <div class="field field--multiselect" data-multiselect="filter-instance">
+      <span class="field__label" id="filter-instance-label">Instance</span>
+      <div class="field__control filter-multiselect">
+        <button
+          type="button"
+          id="filter-instance-trigger"
+          class="filter-multiselect__trigger"
+          data-multiselect-trigger
+          aria-haspopup="true"
+          aria-expanded="false"
+          aria-controls="filter-instance-menu"
+          aria-labelledby="filter-instance-label filter-instance-summary"
+        >
+          <span id="filter-instance-summary" class="filter-multiselect__summary">{{ forms.multiselect_summary(selected_instance_ids, instances, "All instances") }}</span>
+        </button>
+        <div
+          id="filter-instance-menu"
+          class="filter-multiselect__menu"
+          role="group"
+          aria-labelledby="filter-instance-label"
+          data-multiselect-menu
+          hidden
+        >
           {% for inst in instances %}
-          <option value="{{ inst.core.id }}" {% if selected_instance_id == inst.core.id %}selected{% endif %}>
-            {{ inst.core.name }}
-          </option>
+          <label class="filter-multiselect__option">
+            <input
+              type="checkbox"
+              name="instance_id"
+              value="{{ inst.core.id }}"
+              {% if inst.core.id in (selected_instance_ids or ()) %}checked{% endif %}
+            />
+            <span>{{ inst.core.name }}</span>
+          </label>
           {% endfor %}
-        </select>
+        </div>
       </div>
-    </label>
+    </div>
 
     <label class="field">
       <span class="field__label">Action</span>

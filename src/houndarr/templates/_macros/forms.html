@@ -300,3 +300,24 @@
 <p class="mt-1.5 text-xs text-slate-600">{{ help_text }}</p>
 {%- endif %}
 {%- endmacro %}
+
+
+{#- multiselect_summary: label text for a checkbox-dropdown trigger.
+
+    Mirrors the summary logic the logs page's multi-select JS computes
+    after every change event so the SSR first paint and the post-HTMX
+    swap render identical label text.  Three branches:
+      - no selection: the caller-supplied fallback (e.g. "All instances")
+      - one selection: the matching instance's display name
+      - two or more: "N instances" to keep the trigger width predictable
+
+    Reads the instance name from inst.core.name to match the shape the
+    /logs route passes; the filter-bar trigger sits directly in that
+    template so the call site and the macro stay close together. -#}
+{%- macro multiselect_summary(selected_ids, instances, fallback) -%}
+{%- if not selected_ids -%}{{ fallback }}
+{%- elif selected_ids | length == 1 -%}
+{%- for inst in instances if inst.core.id == selected_ids[0] -%}{{ inst.core.name }}{%- endfor -%}
+{%- else -%}{{ selected_ids | length }} instances
+{%- endif -%}
+{%- endmacro %}

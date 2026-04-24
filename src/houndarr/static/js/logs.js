@@ -396,9 +396,95 @@ function initLogsPage() {
     { signal },
   );
 
-  // ---------------------------------------------------------------------
-  // Head-poll + new-entries banner
-  // ---------------------------------------------------------------------
+  // Multi-select filter dropdown controller.  Mirrors the copy-menu
+  // pattern above (module-local open reference, click-outside and
+  // Escape wired to the shared AbortController signal) but scoped to
+  // [data-multiselect] roots so the two controllers never tangle.
+  // The checkboxes inside live in the log-filter form, so HTMX fires
+  // hx-get on every `change` via hx-trigger="change, submit"; this
+  // controller only handles open/close, the summary label, and focus
+  // restoration.
+  let openMultiselect = null;
+  let lastMultiselectTrigger = null;
+
+  function closeMultiselect() {
+    if (!openMultiselect) return;
+    openMultiselect.hidden = true;
+    const root = openMultiselect.closest('[data-multiselect]');
+    const trigger = root?.querySelector('[data-multiselect-trigger]');
+    trigger?.setAttribute('aria-expanded', 'false');
+    openMultiselect = null;
+    // Restore focus to the trigger the user opened the menu from so
+    // keyboard users land back where they started after Escape.
+    lastMultiselectTrigger?.focus();
+    lastMultiselectTrigger = null;
+  }
+
+  function openMultiselectMenu(menu, trigger) {
+    closeMultiselect();
+    menu.hidden = false;
+    trigger.setAttribute('aria-expanded', 'true');
+    openMultiselect = menu;
+    lastMultiselectTrigger = trigger;
+  }
+
+  function multiselectSummaryText(root) {
+    const menu = root.querySelector('[data-multiselect-menu]');
+    const boxes = menu ? [...menu.querySelectorAll('input[type="checkbox"]')] : [];
+    const checked = boxes.filter((b) => b.checked);
+    if (checked.length === 0) return 'All instances';
+    if (checked.length === 1) {
+      return checked[0].closest('label')?.querySelector('span')?.textContent?.trim() || '';
+    }
+    return `${checked.length} instances`;
+  }
+
+  document.querySelectorAll('[data-multiselect]').forEach((root) => {
+    const trigger = root.querySelector('[data-multiselect-trigger]');
+    const menu = root.querySelector('[data-multiselect-menu]');
+    const summary = root.querySelector('.filter-multiselect__summary');
+    if (!trigger || !menu) return;
+
+    trigger.addEventListener(
+      'click',
+      (ev) => {
+        ev.stopPropagation();
+        if (menu.hidden) openMultiselectMenu(menu, trigger);
+        else closeMultiselect();
+      },
+      { signal },
+    );
+
+    root.querySelectorAll('input[type="checkbox"]').forEach((box) => {
+      box.addEventListener(
+        'change',
+        () => {
+          if (summary) summary.textContent = multiselectSummaryText(root);
+        },
+        { signal },
+      );
+    });
+  });
+
+  document.addEventListener(
+    'click',
+    (ev) => {
+      if (openMultiselect && !ev.target.closest('[data-multiselect]')) {
+        closeMultiselect();
+      }
+    },
+    { signal },
+  );
+
+  document.addEventListener(
+    'keydown',
+    (ev) => {
+      if (ev.key === 'Escape' && openMultiselect) {
+        closeMultiselect();
+      }
+    },
+    { signal },
+  );
 
   const SCROLL_THRESHOLD = 240;
   const POLL_MS = 30000;

@@ -183,10 +183,22 @@ async def dashboard(request: Request) -> HTMLResponse:
     for subsequent polls.
     """
     from houndarr.database import get_db
+    from houndarr.engine.supervisor import Supervisor
     from houndarr.services.metrics import gather_dashboard_status
 
+    # Pull the supervisor's in-memory cycle-end timestamps so the
+    # inline SSR envelope renders the same `last_cycle_end` field the
+    # 30-second /api/status poll surfaces.  Without this, the first
+    # paint falls back to `last_activity_at`, which on an instance
+    # whose cycles are all LRU-throttled can be hours stale, pinning
+    # the countdown on "running..." until the first poll lands ~30s
+    # later and overwrites it with the fresh value.
+    supervisor = getattr(request.app.state, "supervisor", None)
+    cycle_ends: dict[int, str] = (
+        supervisor.cycle_end_timestamps() if isinstance(supervisor, Supervisor) else {}
+    )
     async with get_db() as db:
-        initial_status_envelope = await gather_dashboard_status(db)
+        initial_status_envelope = await gather_dashboard_status(db, cycle_ends=cycle_ends)
     template_name = (
         "partials/pages/dashboard_content.html" if is_hx_request(request) else "dashboard.html"
     )

@@ -65,6 +65,11 @@
 
 /* ─── Controls panel (filters + copy split) ───────────────────────────── */
 .controls {
+  /* One height for every filter-row control so dropdowns, chip
+     toggles, and the copy-split button sit on a single baseline
+     instead of the three different heights they drifted into.
+     Retuning this variable restyles the whole row. */
+  --filter-ctl-height: 36px;
   display: flex;
   gap: 16px;
   align-items: flex-end;
@@ -99,6 +104,9 @@
 }
 .field__control {
   position: relative;
+  display: flex;
+  align-items: stretch;
+  min-height: var(--filter-ctl-height);
   background: var(--color-surface-2);
   border: 1px solid var(--hairline);
   border-radius: var(--radius-inset);
@@ -119,7 +127,10 @@
   appearance: none;
   -webkit-appearance: none;
   width: 100%;
-  padding: 8px 32px 8px 10px;
+  /* Vertical padding dropped: the select now stretches to the
+     wrapper's flex height (var(--filter-ctl-height)) and the text
+     centres via line-height. */
+  padding: 0 32px 0 10px;
   background: transparent;
   border: 0;
   font-size: 13px;
@@ -148,13 +159,16 @@
   display: flex;
   gap: 6px;
   flex-wrap: wrap;
-  padding-top: 2px;
 }
 .chip-switch {
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  padding: 7px 10px 7px 9px;
+  /* Horizontal padding only; vertical footprint comes from the
+     shared min-height so the chips match the dropdowns and the
+     copy button on the same row. */
+  padding: 0 10px 0 9px;
+  min-height: var(--filter-ctl-height);
   background: var(--color-surface-2);
   border: 1px solid var(--hairline);
   border-radius: var(--radius-chip);
@@ -224,7 +238,10 @@
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 9px 14px;
+  /* Horizontal padding only so the split button matches the
+     var(--filter-ctl-height) rhythm of the dropdowns and chips. */
+  padding: 0 14px;
+  min-height: var(--filter-ctl-height);
   font-size: 12.5px;
   color: var(--color-text-heading);
   font-weight: 500;
@@ -232,7 +249,7 @@
 }
 .copy-main:hover,
 .copy-chevron:hover { background: var(--color-surface-3); }
-.copy-chevron { padding: 9px 10px; border-left: 1px solid var(--hairline); }
+.copy-chevron { padding: 0 10px; border-left: 1px solid var(--hairline); }
 .copy-icon     { width: 14px; height: 14px; color: var(--color-text-muted); }
 .copy-chev-icon { width: 12px; height: 12px; color: var(--color-text-muted); transition: transform var(--dur-base) var(--ease-station); }
 [hidden] { display: none !important; }
@@ -277,7 +294,9 @@
   align-items: center;
   justify-content: space-between;
   width: 100%;
-  padding: 8px 32px 8px 10px;
+  /* Match the native <select> sibling: horizontal padding only, the
+     parent .field__control min-height sets the vertical footprint. */
+  padding: 0 32px 0 10px;
   background: transparent;
   border: 0;
   font-size: 13px;

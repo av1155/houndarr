@@ -63,7 +63,7 @@ async def is_on_cooldown_ref(ref: ItemRef, cooldown_days: int) -> bool:
     return await exists_active_cooldown(ref, cooldown_days)
 
 
-async def record_search_ref(ref: ItemRef) -> None:
+async def record_search_ref(ref: ItemRef, search_kind: str) -> None:
     """Upsert a cooldown record for *ref* with the current UTC timestamp.
 
     Thin delegator over
@@ -71,10 +71,15 @@ async def record_search_ref(ref: ItemRef) -> None:
 
     Args:
         ref: The item to record as just-searched.
+        search_kind: Which pass dispatched the search: ``"missing"``,
+            ``"cutoff"``, or ``"upgrade"``.  Forwarded verbatim so the
+            cooldown row carries the classification for later dashboard
+            breakdown reads and for the reconciliation path that
+            intersects cooldowns against each pass's wanted set.
     """
     from houndarr.repositories.cooldowns import upsert_cooldown
 
-    await upsert_cooldown(ref)
+    await upsert_cooldown(ref, search_kind)
 
 
 async def is_on_cooldown(
@@ -114,6 +119,7 @@ async def record_search(
     instance_id: int,
     item_id: int,
     item_type: ItemType | str,
+    search_kind: str = "missing",
 ) -> None:
     """Positional compat wrapper over :func:`record_search_ref`.
 
@@ -129,9 +135,15 @@ async def record_search(
             ``"whisparr_episode"``, or ``"whisparr_v3_movie"``.  Plain
             ``str`` values are coerced to :class:`ItemType` for the
             ItemRef construction.
+        search_kind: Defaults to ``"missing"`` to preserve the old
+            positional signature for seed fixtures and tests that
+            predate the classified-cooldown migration.  Pass
+            ``"cutoff"`` or ``"upgrade"`` explicitly when seeding
+            those cases.
     """
     await record_search_ref(
         ItemRef(instance_id, item_id, ItemType(item_type)),
+        search_kind,
     )
 
 

@@ -89,30 +89,41 @@ async def exists_active_cooldown(ref: ItemRef, cooldown_days: int) -> bool:
     return row is not None
 
 
-async def upsert_cooldown(ref: ItemRef) -> None:
+async def upsert_cooldown(ref: ItemRef, search_kind: str) -> None:
     """Record *ref* as just-searched, upserting any existing row.
 
     Uses ``INSERT ... ON CONFLICT(instance_id, item_id, item_type) DO
-    UPDATE SET searched_at = excluded.searched_at`` so repeated
-    searches slide the cooldown forward instead of piling up history
-    rows; the three-column uniqueness constraint in the schema is
-    what makes that possible.
+    UPDATE SET searched_at = excluded.searched_at, search_kind =
+    excluded.search_kind`` so repeated searches slide both the
+    timestamp AND the classification forward.  One row per
+    (instance_id, item_id, item_type) carries the kind of the most
+    recent search that wrote it; the reconciliation path reads that
+    column directly instead of re-deriving it from search_log.
 
     Args:
         ref: The (instance, item_id, item_type) triple that was just
             searched.  ``item_type`` serialises through
             :attr:`~enum.StrEnum.value`.
+        search_kind: Which pass dispatched the search: ``"missing"``,
+            ``"cutoff"``, or ``"upgrade"``.  Required, non-default on
+            purpose: callers always know which pass they are in, and
+            a default would silently miscategorise cutoff / upgrade
+            searches as missing.  The DB CHECK constraint enforces
+            the allowed values; passing anything else raises at
+            write time.
     """
     now = _iso(_now_utc())
     async with get_db() as db:
         await db.execute(
             """
-            INSERT INTO cooldowns (instance_id, item_id, item_type, searched_at)
-            VALUES (?, ?, ?, ?)
+            INSERT INTO cooldowns (instance_id, item_id, item_type, search_kind, searched_at)
+            VALUES (?, ?, ?, ?, ?)
             ON CONFLICT(instance_id, item_id, item_type)
-            DO UPDATE SET searched_at = excluded.searched_at
+            DO UPDATE SET
+                searched_at = excluded.searched_at,
+                search_kind = excluded.search_kind
             """,
-            (ref.instance_id, ref.item_id, ref.item_type.value, now),
+            (ref.instance_id, ref.item_id, ref.item_type.value, search_kind, now),
         )
         await db.commit()
 

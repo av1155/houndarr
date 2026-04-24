@@ -566,7 +566,7 @@ async def _run_search_pass(  # noqa: C901
                             )
                             continue
 
-                        await record_search_ref(ref)
+                        await record_search_ref(ref, search_kind)
                         await _write_item_log(
                             ref,
                             SearchAction.searched.value,
@@ -639,7 +639,7 @@ async def _run_search_pass(  # noqa: C901
                 )
                 continue
 
-            await record_search_ref(ref)
+            await record_search_ref(ref, search_kind)
             await _write_item_log(
                 ref,
                 SearchAction.searched.value,
@@ -878,7 +878,7 @@ async def _run_upgrade_pass(
             new_offset = (offset + scanned) % len(pool)
             continue
 
-        await record_search_ref(ref)
+        await record_search_ref(ref, "upgrade")
         await _write_item_log(
             ref,
             SearchAction.searched.value,

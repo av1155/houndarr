@@ -10,11 +10,16 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+import httpx
+from pydantic import ValidationError
+
+from houndarr.clients.base import ReconcileSets
 from houndarr.clients.sonarr import LibraryEpisode, MissingEpisode, SonarrClient
 from houndarr.engine.adapters._common import (
     ContextOverride,
     build_cutoff_candidate,
     build_missing_candidate,
+    paginate_wanted,
 )
 from houndarr.engine.candidates import (
     SearchCandidate,
@@ -310,6 +315,62 @@ def make_client(instance: Instance) -> SonarrClient:
     return SonarrClient(url=instance.url, api_key=instance.api_key)
 
 
+def _episode_leaf_pairs(items: list[MissingEpisode]) -> frozenset[tuple[str, int]]:
+    """Return the ``(item_type, episode_id)`` pairs for a wanted list.
+
+    Shared between the missing and cutoff passes; leaf cooldown rows
+    match episodes by positive episode_id.  Items whose ``episode_id``
+    is missing are dropped (defensive: the Sonarr wire model marks it
+    as ``int`` not optional, so this should not fire in practice).
+    """
+    return frozenset(("episode", it.episode_id) for it in items if it.episode_id)
+
+
+def _season_synth_pairs(items: list[MissingEpisode]) -> frozenset[tuple[str, int]]:
+    """Return ``(item_type, synthetic)`` pairs for season-context rows.
+
+    Collapses the leaf wanted list to the set of ``(series_id,
+    season)`` parents, then renders each parent through
+    :func:`_season_item_id` so the synthetic negative ids match what
+    :func:`adapt_missing` stamps onto cooldowns in season-context
+    mode.  Items without ``series_id`` are skipped; they could not
+    have produced a season-context cooldown in the first place.
+    """
+    parents: set[tuple[int, int]] = set()
+    for it in items:
+        if it.series_id:
+            parents.add((it.series_id, it.season))
+    return frozenset(("episode", _season_item_id(sid, sn)) for sid, sn in parents)
+
+
+async def fetch_reconcile_sets(client: SonarrClient, instance: Instance) -> ReconcileSets:
+    """Return the authoritative wanted / upgrade-pool sets for Sonarr.
+
+    Always unions leaf episode ids into the missing / cutoff sets.
+    When the instance runs in ``season_context`` missing-pass mode, the
+    missing set ALSO carries synthetic negative season ids derived
+    from the same wanted list so cooldown rows stamped under the
+    season-context path keep matching.  Cutoff is always dispatched
+    per-episode, so cutoff cooldown rows never carry synthetic ids;
+    the cutoff reconcile set stays leaf-only.  Upgrade-pool ids come
+    from the existing :func:`fetch_upgrade_pool` which already applies
+    the same context-mode branch to each library episode.
+    """
+    missing_items = await paginate_wanted(client.get_missing)
+    cutoff_items = await paginate_wanted(client.get_cutoff_unmet)
+    missing_set = _episode_leaf_pairs(missing_items)
+    cutoff_set = _episode_leaf_pairs(cutoff_items)
+    if instance.sonarr_search_mode != SonarrSearchMode.episode:
+        missing_set = missing_set | _season_synth_pairs(missing_items)
+    upgrade_candidates = [
+        adapt_upgrade(item, instance) for item in await fetch_upgrade_pool(client, instance)
+    ]
+    upgrade_set: frozenset[tuple[str, int]] = frozenset(
+        (str(c.item_type), c.item_id) for c in upgrade_candidates
+    )
+    return ReconcileSets(missing=missing_set, cutoff=cutoff_set, upgrade=upgrade_set)
+
+
 class SonarrAdapter:
     """Class-form Sonarr adapter for the :data:`ADAPTERS` registry.
 
@@ -326,3 +387,4 @@ class SonarrAdapter:
     fetch_upgrade_pool = staticmethod(fetch_upgrade_pool)
     dispatch_search = staticmethod(dispatch_search)
     make_client = staticmethod(make_client)
+    fetch_reconcile_sets = staticmethod(fetch_reconcile_sets)

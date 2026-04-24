@@ -17,11 +17,13 @@ from uuid import uuid4
 
 import httpx
 
+from houndarr.clients.base import ReconcileSets
 from houndarr.database import get_db
 from houndarr.engine.adapters import get_adapter
 from houndarr.engine.retry import ReconnectState, run_with_reconnect
 from houndarr.engine.search_loop import _write_log, run_instance_search
 from houndarr.enums import CycleTrigger, SearchAction
+from houndarr.services.cooldown_reconcile import reconcile_cooldowns
 from houndarr.services.instances import (
     Instance,
     get_instance,
@@ -409,6 +411,18 @@ class Supervisor:
         dashboard counters land in the next status poll instead of
         sitting at zero until the 10-minute loop wakes. Skips disabled
         instances and treats transport errors as soft failures.
+
+        Also reconciles the ``cooldowns`` table for this instance
+        against the authoritative wanted / upgrade-pool sets returned
+        by the adapter.  Cooldown rows for items that have left the
+        *arr's wanted state (downloaded, unmonitored, deleted,
+        cutoff-met) are deleted in the same round-trip so the
+        dashboard breakdown reflects live reality instead of
+        historical search dispatches that no longer bind.  An adapter
+        failure anywhere in the reconcile fetch causes the reconcile
+        step to skip (the :meth:`ReconcileSets.empty` sentinel path),
+        preserving existing rows rather than risking a wipe on a
+        transient *arr blip.
         """
         if not instance.enabled:
             return
@@ -418,6 +432,22 @@ class Supervisor:
                 adapter = get_adapter(instance.type)
                 async with adapter.make_client(instance) as client:
                     snap = await client.get_instance_snapshot()
+                    try:
+                        reconcile_sets = await adapter.fetch_reconcile_sets(client, instance)
+                    except httpx.TransportError:
+                        reconcile_sets = ReconcileSets.empty()
+                        logger.debug(
+                            "Supervisor: reconcile sets unreachable for %r; "
+                            "keeping existing cooldowns.",
+                            instance.name,
+                        )
+                    except Exception:  # noqa: BLE001
+                        reconcile_sets = ReconcileSets.empty()
+                        logger.exception(
+                            "Supervisor: reconcile fetch failed for %r; "
+                            "keeping existing cooldowns.",
+                            instance.name,
+                        )
                 # Surface a one-line INFO when the unreleased count
                 # jumps non-trivially.  The first refresh after a user
                 # upgrade flips every non-Whisparr-v3 instance from 0
@@ -442,6 +472,7 @@ class Supervisor:
                     monitored_total=snap.monitored_total,
                     unreleased_count=snap.unreleased_count,
                 )
+                await reconcile_cooldowns(instance.id, reconcile_sets)
             except httpx.TransportError:
                 logger.debug(
                     "Supervisor: snapshot refresh skipped for %r; instance unreachable",

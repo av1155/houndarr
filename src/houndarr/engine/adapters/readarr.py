@@ -9,11 +9,16 @@ from __future__ import annotations
 
 import logging
 
+import httpx
+from pydantic import ValidationError
+
+from houndarr.clients.base import ReconcileSets
 from houndarr.clients.readarr import LibraryBook, MissingBook, ReadarrClient
 from houndarr.engine.adapters._common import (
     ContextOverride,
     build_cutoff_candidate,
     build_missing_candidate,
+    paginate_wanted,
 )
 from houndarr.engine.candidates import (
     SearchCandidate,
@@ -257,6 +262,39 @@ def make_client(instance: Instance) -> ReadarrClient:
     return ReadarrClient(url=instance.url, api_key=instance.api_key)
 
 
+def _book_leaf_pairs(items: list[MissingBook]) -> frozenset[tuple[str, int]]:
+    """Return the ``(item_type, book_id)`` pairs for a wanted list."""
+    return frozenset(("book", it.book_id) for it in items if it.book_id)
+
+
+def _author_synth_pairs(items: list[MissingBook]) -> frozenset[tuple[str, int]]:
+    """Return synthetic author-context pairs for author-context cooldowns."""
+    authors = {it.author_id for it in items if it.author_id and it.author_id > 0}
+    return frozenset(("book", _author_item_id(aid)) for aid in authors)
+
+
+async def fetch_reconcile_sets(client: ReadarrClient, instance: Instance) -> ReconcileSets:
+    """Return the authoritative wanted / upgrade-pool sets for Readarr.
+
+    Parallels the Lidarr implementation: leaf book ids always, plus
+    synthetic negative author ids when the instance runs author-context
+    missing-pass mode.  Cutoff cooldowns are always leaf.
+    """
+    missing_items = await paginate_wanted(client.get_missing)
+    cutoff_items = await paginate_wanted(client.get_cutoff_unmet)
+    missing_set = _book_leaf_pairs(missing_items)
+    cutoff_set = _book_leaf_pairs(cutoff_items)
+    if instance.readarr_search_mode != ReadarrSearchMode.book:
+        missing_set = missing_set | _author_synth_pairs(missing_items)
+    upgrade_candidates = [
+        adapt_upgrade(item, instance) for item in await fetch_upgrade_pool(client, instance)
+    ]
+    upgrade_set: frozenset[tuple[str, int]] = frozenset(
+        (str(c.item_type), c.item_id) for c in upgrade_candidates
+    )
+    return ReconcileSets(missing=missing_set, cutoff=cutoff_set, upgrade=upgrade_set)
+
+
 class ReadarrAdapter:
     """Class-form Readarr adapter for the :data:`ADAPTERS` registry.
 
@@ -273,3 +311,4 @@ class ReadarrAdapter:
     fetch_upgrade_pool = staticmethod(fetch_upgrade_pool)
     dispatch_search = staticmethod(dispatch_search)
     make_client = staticmethod(make_client)
+    fetch_reconcile_sets = staticmethod(fetch_reconcile_sets)

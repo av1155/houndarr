@@ -13,6 +13,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
+from houndarr.clients.base import ReconcileSets
 from houndarr.clients.whisparr_v3 import (
     LibraryWhisparrV3Movie,
     MissingWhisparrV3Movie,
@@ -191,6 +192,40 @@ def make_client(instance: Instance) -> WhisparrV3Client:
     return WhisparrV3Client(url=instance.url, api_key=instance.api_key)
 
 
+async def fetch_reconcile_sets(
+    client: WhisparrV3Client,
+    instance: Instance,  # noqa: ARG001
+) -> ReconcileSets:
+    """Return the authoritative wanted / upgrade-pool sets for Whisparr v3.
+
+    Whisparr v3 has no ``/wanted`` endpoint; the client already caches
+    the full ``/api/v3/movie`` response for the whole lifetime of one
+    client context.  Read that cache three ways to build the sets
+    without additional network calls: missing = monitored without
+    file; cutoff = monitored with file but cutoff-unmet; upgrade =
+    monitored with file and cutoff-met.  There is no context-mode
+    variant to handle.
+    """
+    library = await client.get_library()
+    missing_ids: set[int] = set()
+    cutoff_ids: set[int] = set()
+    upgrade_ids: set[int] = set()
+    for movie in library:
+        if not movie.monitored:
+            continue
+        if not movie.has_file:
+            missing_ids.add(movie.movie_id)
+        elif not movie.cutoff_met:
+            cutoff_ids.add(movie.movie_id)
+        else:
+            upgrade_ids.add(movie.movie_id)
+    return ReconcileSets(
+        missing=frozenset(("whisparr_v3_movie", mid) for mid in missing_ids),
+        cutoff=frozenset(("whisparr_v3_movie", mid) for mid in cutoff_ids),
+        upgrade=frozenset(("whisparr_v3_movie", mid) for mid in upgrade_ids),
+    )
+
+
 class WhisparrV3Adapter:
     """Class-form Whisparr v3 adapter for the :data:`ADAPTERS` registry.
 
@@ -207,3 +242,4 @@ class WhisparrV3Adapter:
     fetch_upgrade_pool = staticmethod(fetch_upgrade_pool)
     dispatch_search = staticmethod(dispatch_search)
     make_client = staticmethod(make_client)
+    fetch_reconcile_sets = staticmethod(fetch_reconcile_sets)

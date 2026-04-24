@@ -22,7 +22,7 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable
 from typing import Any, Protocol, runtime_checkable
 
-from houndarr.clients.base import ArrClient
+from houndarr.clients.base import ArrClient, ReconcileSets
 from houndarr.engine.candidates import SearchCandidate
 from houndarr.services.instances import Instance
 
@@ -54,3 +54,17 @@ class AppAdapterProto(Protocol):
     @property
     def make_client(self) -> Callable[[Instance], ArrClient]:
         """Return a fresh (unopened) :class:`ArrClient` for *instance*."""
+
+    @property
+    def fetch_reconcile_sets(self) -> Callable[..., Awaitable[ReconcileSets]]:
+        """Return the authoritative ``(item_type, item_id)`` sets per pass.
+
+        Called from the supervisor's snapshot refresh; the returned
+        :class:`~houndarr.clients.base.ReconcileSets` drive the cooldown
+        reconciliation that reaps rows for items no longer wanted.
+        Implementations paginate ``/wanted/missing`` and
+        ``/wanted/cutoff`` for leaf ids, call :attr:`fetch_upgrade_pool`
+        for upgrade-pool ids, and (in context-mode adapters) UNION in
+        the synthetic parent ids derived from leaf parent metadata so
+        the DB match stays pure set membership.
+        """

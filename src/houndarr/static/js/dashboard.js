@@ -557,7 +557,13 @@ function initDashboardPage() {
       const gated = toNumber(bd.missing) + toNumber(bd.cutoff);
       const unr = toNumber(inst.unreleased_count);
       const eligibleVal = Math.max(0, wantedVal - gated - unr);
-      const searchedVal = toNumber(inst.lifetime_searched);
+      // The card headline is a per-moment counter; "Searched 24h" reads
+      // alongside Wanted / Eligible as a rate, not a lifetime total.
+      // Lifetime is preserved in the value's tooltip so power users can
+      // still see it without adding a fourth stat cell.
+      const searched24hVal = toNumber(inst.searched_24h);
+      const lifetimeVal = toNumber(inst.lifetime_searched);
+      const lifetimeTitle = `Lifetime searches: ${lifetimeVal}`;
 
       const wantedText = offline || disabled
         ? `<dd class="dash-card__stat-value dash-card__stat-value--muted">${wantedVal || '-'}</dd>`
@@ -568,8 +574,8 @@ function initDashboardPage() {
           ? `<dd class="dash-card__stat-value dash-card__stat-value--muted">-</dd>`
           : `<dd class="dash-card__stat-value dash-card__stat-value--eligible">${eligibleVal}</dd>`;
       const searchedText = offline || disabled
-        ? `<dd class="dash-card__stat-value dash-card__stat-value--muted">${searchedVal}</dd>`
-        : `<dd class="dash-card__stat-value dash-card__stat-value--searched">${searchedVal}</dd>`;
+        ? `<dd class="dash-card__stat-value dash-card__stat-value--muted" title="${escHtml(lifetimeTitle)}">${searched24hVal}</dd>`
+        : `<dd class="dash-card__stat-value dash-card__stat-value--searched" title="${escHtml(lifetimeTitle)}">${searched24hVal}</dd>`;
 
       return `
 <article class="dash-card"${typeAttr}${disabledAttr}>
@@ -590,7 +596,7 @@ function initDashboardPage() {
       ${eligibleText}
     </div>
     <div>
-      <dt class="dash-card__stat-label">Searched</dt>
+      <dt class="dash-card__stat-label" title="Dispatches in the last 24 hours. Hover the value for lifetime.">Searched 24h</dt>
       ${searchedText}
     </div>
   </dl>

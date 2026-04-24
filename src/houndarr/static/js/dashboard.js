@@ -316,15 +316,15 @@ function initDashboardPage() {
 <section class="dash-lh" aria-label="Library health">
   <p class="dash-lh__eyebrow">Library health · ${barTotal} items tracked</p>
   <div class="dash-lh__headline">
-    <span class="dash-lh__stat">
+    <span class="dash-lh__stat" data-tip="Items Houndarr can search right now across every enabled instance.">
       <span class="dash-lh__stat-value dash-lh__stat-value--eligible">${eligible}</span>
       <span class="dash-lh__stat-label dash-lh__stat-label--eligible">Eligible</span>
     </span>
-    <span class="dash-lh__stat">
+    <span class="dash-lh__stat" data-tip="Items on per-item cooldown from a recent search. They return to Eligible once the cooldown elapses.">
       <span class="dash-lh__stat-value dash-lh__stat-value--gated">${gated}</span>
       <span class="dash-lh__stat-label">Gated</span>
     </span>
-    <span class="dash-lh__stat">
+    <span class="dash-lh__stat" data-tip="Items not yet released. Houndarr waits out the post-release grace window before searching them.">
       <span class="dash-lh__stat-value dash-lh__stat-value--unrel">${totals.unreleased}</span>
       <span class="dash-lh__stat-label">Unreleased</span>
     </span>
@@ -488,14 +488,17 @@ function initDashboardPage() {
       const pct = effectiveCap > 0 ? Math.min(100, (used / effectiveCap) * 100) : 0;
       const level = pct >= 80 ? 'danger' : pct >= 50 ? 'warning' : 'eligible';
       const atCap = effectiveCap > 0 && used >= effectiveCap;
-      const title = `${used} of ${effectiveCap} searches used this hour. `
+      // Short sentence shown in the shared tooltip on hover; aria
+      // label keeps the detailed breakdown for screen readers.
+      const tip = `Searches dispatched this hour against this instance's combined hourly cap.`;
+      const aria = `${used} of ${effectiveCap} searches used this hour. `
         + `Missing cap ${hourlyCap}, cutoff cap ${inst.cutoff_enabled ? toNumber(inst.cutoff_hourly_cap) : 'off'}, `
         + `upgrade cap ${inst.upgrade_enabled ? toNumber(inst.upgrade_hourly_cap) : 'off'}.`;
       return `
-<div class="dash-card__budget" data-level="${level}"${atCap ? ' data-at-cap="true"' : ''} title="${escHtml(title)}">
+<div class="dash-card__budget" data-level="${level}"${atCap ? ' data-at-cap="true"' : ''} data-tip="${escHtml(tip)}">
   <dt class="dash-card__budget-label">Hourly budget</dt>
   <dd class="dash-card__budget-value">${used} / ${effectiveCap}</dd>
-  <div class="dash-card__budget-bar" role="img" aria-label="${escHtml(title)}">
+  <div class="dash-card__budget-bar" role="img" aria-label="${escHtml(aria)}">
     <span class="dash-card__budget-fill" style="--budget-fill: ${pct.toFixed(1)}%;"></span>
   </div>
 </div>`;
@@ -746,16 +749,16 @@ function initDashboardPage() {
     ${renderStatusPill(inst)}
   </header>
   <dl class="dash-card__stats">
-    <div>
-      <dt class="dash-card__stat-label" title="Missing + Cutoff Unmet on this instance">Wanted</dt>
+    <div data-tip="Missing and Cutoff Unmet items reported by this instance.">
+      <dt class="dash-card__stat-label">Wanted</dt>
       ${wantedText}
     </div>
-    <div>
+    <div data-tip="Items Houndarr can search now: Wanted minus items on cooldown or not yet released.">
       <dt class="dash-card__stat-label">Eligible</dt>
       ${eligibleText}
     </div>
     <div${lifetimeTip}>
-      <dt class="dash-card__stat-label" title="Dispatches this instance made in the last 24 hours. Hover for the lifetime total.">Searched</dt>
+      <dt class="dash-card__stat-label">Searched</dt>
       ${searchedText}
     </div>
   </dl>
@@ -780,6 +783,16 @@ function initDashboardPage() {
       // clicks on the View-logs link and the + Add Instance link.
       if (window.htmx && typeof window.htmx.process === 'function') {
         window.htmx.process(host);
+      }
+      // Bind tooltip triggers on the freshly-mounted subtree.  This
+      // path replaces DOM directly via replaceChildren rather than
+      // through an HTMX swap, so the htmx:afterSwap listener inside
+      // tooltip.js never fires for it; call initTooltips explicitly
+      // so the library-health stat tooltips and instance-card
+      // Wanted / Eligible / Searched / Hourly budget tooltips bind
+      // on first paint and every /api/status poll.
+      if (typeof window.initTooltips === 'function') {
+        window.initTooltips(host);
       }
     }
 

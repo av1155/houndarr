@@ -712,10 +712,12 @@ function initDashboardPage() {
       // "Searched" on the card shows the rolling 24-hour dispatch
       // count (the rate that matters for indexer pressure).  The
       // cumulative lifetime count rides on a hover tooltip attached
-      // directly to the value; tooltip.js wires [data-tip] into the
-      // shared floating panel.  Suppressed when the two numbers are
-      // equal, which is trivially true on fresh installs where
-      // everything still fits inside the 24-hour window.
+      // to the whole stat cell (rendered below) rather than just the
+      // number, so hovering anywhere over the "Searched" label,
+      // value, or the padding around them reveals the total.
+      // Suppressed when the two numbers are equal, which is
+      // trivially true on fresh installs where everything still fits
+      // inside the 24-hour window.
       const searched24hVal = toNumber(inst.searched_24h);
       const lifetimeVal = toNumber(inst.lifetime_searched);
       const lifetimeTip = lifetimeVal > 0 && lifetimeVal !== searched24hVal
@@ -731,8 +733,8 @@ function initDashboardPage() {
           ? `<dd class="dash-card__stat-value dash-card__stat-value--muted">-</dd>`
           : `<dd class="dash-card__stat-value dash-card__stat-value--eligible">${eligibleVal}</dd>`;
       const searchedText = offline || disabled
-        ? `<dd class="dash-card__stat-value dash-card__stat-value--muted"${lifetimeTip}>${searched24hVal}</dd>`
-        : `<dd class="dash-card__stat-value dash-card__stat-value--searched"${lifetimeTip}>${searched24hVal}</dd>`;
+        ? `<dd class="dash-card__stat-value dash-card__stat-value--muted">${searched24hVal}</dd>`
+        : `<dd class="dash-card__stat-value dash-card__stat-value--searched">${searched24hVal}</dd>`;
 
       return `
 <article class="dash-card"${typeAttr}${disabledAttr}>
@@ -752,8 +754,8 @@ function initDashboardPage() {
       <dt class="dash-card__stat-label">Eligible</dt>
       ${eligibleText}
     </div>
-    <div>
-      <dt class="dash-card__stat-label" title="Dispatches this instance made in the last 24 hours. Hover the number for the lifetime total.">Searched</dt>
+    <div${lifetimeTip}>
+      <dt class="dash-card__stat-label" title="Dispatches this instance made in the last 24 hours. Hover for the lifetime total.">Searched</dt>
       ${searchedText}
     </div>
   </dl>

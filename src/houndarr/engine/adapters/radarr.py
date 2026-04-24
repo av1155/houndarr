@@ -9,10 +9,12 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
+from houndarr.clients.base import ReconcileSets
 from houndarr.clients.radarr import LibraryMovie, MissingMovie, RadarrClient
 from houndarr.engine.adapters._common import (
     build_missing_candidate,
     fetch_movie_upgrade_pool,
+    paginate_wanted,
 )
 from houndarr.engine.candidates import (
     SearchCandidate,
@@ -174,6 +176,29 @@ async def dispatch_search(client: RadarrClient, candidate: SearchCandidate) -> N
     await client.search(candidate.search_payload["movie_id"])
 
 
+async def fetch_reconcile_sets(
+    client: RadarrClient,
+    instance: Instance,  # noqa: ARG001
+) -> ReconcileSets:
+    """Return the authoritative wanted / upgrade-pool sets for Radarr.
+
+    Radarr has no parent-context mode: cooldown rows always carry the
+    leaf ``movie_id``, so the reconciliation sets are just the leaf
+    ids from each pass.  ``instance`` is kept for signature parity
+    with the parent-context adapters.
+    """
+    missing_items = await paginate_wanted(client.get_missing)
+    cutoff_items = await paginate_wanted(client.get_cutoff_unmet)
+    upgrade_candidates = [
+        adapt_upgrade(item, instance) for item in await fetch_upgrade_pool(client, instance)
+    ]
+    return ReconcileSets(
+        missing=frozenset(("movie", m.movie_id) for m in missing_items),
+        cutoff=frozenset(("movie", m.movie_id) for m in cutoff_items),
+        upgrade=frozenset((str(c.item_type), c.item_id) for c in upgrade_candidates),
+    )
+
+
 def make_client(instance: Instance) -> RadarrClient:
     """Construct a :class:`RadarrClient` for *instance*.
 
@@ -200,3 +225,4 @@ class RadarrAdapter:
     fetch_upgrade_pool = staticmethod(fetch_upgrade_pool)
     dispatch_search = staticmethod(dispatch_search)
     make_client = staticmethod(make_client)
+    fetch_reconcile_sets = staticmethod(fetch_reconcile_sets)

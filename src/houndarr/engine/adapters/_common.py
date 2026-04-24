@@ -76,6 +76,50 @@ async def fetch_movie_upgrade_pool[T: _UpgradeFilterable](
     return [m for m in library if m.monitored and m.has_file and m.cutoff_met]
 
 
+_RECONCILE_PAGE_SIZE = 250
+"""Page size used when paginating /wanted endpoints for reconciliation.
+
+250 is the maximum every /wanted endpoint accepts.  Picking the ceiling
+means a 5,000-item wanted list becomes 20 requests at refresh time — a
+one-off cost per instance per snapshot cycle rather than a per-poll
+overhead."""
+
+
+async def paginate_wanted[T](
+    fetch_page: Callable[..., Awaitable[list[T]]],
+    *,
+    page_size: int = _RECONCILE_PAGE_SIZE,
+) -> list[T]:
+    """Return every wanted item by paginating *fetch_page* until exhausted.
+
+    Stops on the first short page (length < *page_size*) since that is
+    the last page by contract.  An explicit empty first page yields an
+    empty list without a second request.
+
+    Used by every adapter's :func:`fetch_reconcile_sets` to walk the
+    full wanted list so the reconciler sees a complete picture of which
+    items are still wanted at this instant.
+
+    Args:
+        fetch_page: ``async def(page=N, page_size=M)`` callable.
+            Typically bound to ``client.get_missing`` or
+            ``client.get_cutoff_unmet``.
+        page_size: Items per request.  Defaults to the /wanted endpoint
+            maximum so total requests stay minimal at full library scale.
+
+    Returns:
+        Flat list of every item across every page, preserving order.
+    """
+    items: list[T] = []
+    page = 1
+    while True:
+        chunk = await fetch_page(page=page, page_size=page_size)
+        items.extend(chunk)
+        if len(chunk) < page_size:
+            return items
+        page += 1
+
+
 @dataclass(frozen=True, slots=True)
 class ContextOverride:
     """Parent-context dispatch override for the missing-pass candidate.

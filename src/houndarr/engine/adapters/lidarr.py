@@ -12,11 +12,13 @@ import logging
 import httpx
 from pydantic import ValidationError
 
+from houndarr.clients.base import ReconcileSets
 from houndarr.clients.lidarr import LibraryAlbum, LidarrClient, MissingAlbum
 from houndarr.engine.adapters._common import (
     ContextOverride,
     build_cutoff_candidate,
     build_missing_candidate,
+    paginate_wanted,
 )
 from houndarr.engine.candidates import (
     SearchCandidate,
@@ -261,6 +263,49 @@ def make_client(instance: Instance) -> LidarrClient:
     return LidarrClient(url=instance.core.url, api_key=instance.core.api_key)
 
 
+def _album_leaf_pairs(items: list[MissingAlbum]) -> frozenset[tuple[str, int]]:
+    """Return the ``(item_type, album_id)`` pairs for a wanted list."""
+    return frozenset(("album", it.album_id) for it in items if it.album_id)
+
+
+def _artist_synth_pairs(items: list[MissingAlbum]) -> frozenset[tuple[str, int]]:
+    """Return synthetic artist-context pairs for artist-context cooldowns.
+
+    Collapses the leaf wanted list to the set of distinct artist ids,
+    then renders each through :func:`_artist_item_id` so the negative
+    synthetic ids match what :func:`adapt_missing` stamps in
+    artist-context mode.  Items with ``artist_id <= 0`` are skipped;
+    those would not have produced a context-mode cooldown.
+    """
+    artists = {it.artist_id for it in items if it.artist_id and it.artist_id > 0}
+    return frozenset(("album", _artist_item_id(aid)) for aid in artists)
+
+
+async def fetch_reconcile_sets(client: LidarrClient, instance: Instance) -> ReconcileSets:
+    """Return the authoritative wanted / upgrade-pool sets for Lidarr.
+
+    The missing set always carries leaf album ids.  When the instance
+    runs in ``artist_context`` missing-pass mode, synthetic negative
+    artist ids derived from the same wanted list are unioned in so
+    cooldown rows written under the context path keep matching.
+    Cutoff cooldowns are always leaf (album-level dispatch); no
+    context-mode promotion happens there.
+    """
+    missing_items = await paginate_wanted(client.get_missing)
+    cutoff_items = await paginate_wanted(client.get_cutoff_unmet)
+    missing_set = _album_leaf_pairs(missing_items)
+    cutoff_set = _album_leaf_pairs(cutoff_items)
+    if instance.missing.lidarr_search_mode != LidarrSearchMode.album:
+        missing_set = missing_set | _artist_synth_pairs(missing_items)
+    upgrade_candidates = [
+        adapt_upgrade(item, instance) for item in await fetch_upgrade_pool(client, instance)
+    ]
+    upgrade_set: frozenset[tuple[str, int]] = frozenset(
+        (str(c.item_type), c.item_id) for c in upgrade_candidates
+    )
+    return ReconcileSets(missing=missing_set, cutoff=cutoff_set, upgrade=upgrade_set)
+
+
 class LidarrAdapter:
     """Class-form Lidarr adapter for the :data:`ADAPTERS` registry.
 
@@ -275,3 +320,4 @@ class LidarrAdapter:
     fetch_upgrade_pool = staticmethod(fetch_upgrade_pool)
     dispatch_search = staticmethod(dispatch_search)
     make_client = staticmethod(make_client)
+    fetch_reconcile_sets = staticmethod(fetch_reconcile_sets)

@@ -68,7 +68,7 @@ async def test_exists_active_cooldown_short_circuits_on_disabled_cooldown(
     """cooldown_days <= 0 returns False without touching the database."""
     ref = ItemRef(1, 42, ItemType.episode)
     # Even with an active record present, zero days disables the check.
-    await repo.upsert_cooldown(ref)
+    await repo.upsert_cooldown(ref, "missing")
     assert await repo.exists_active_cooldown(ref, cooldown_days=0) is False
     assert await repo.exists_active_cooldown(ref, cooldown_days=-3) is False
 
@@ -78,7 +78,7 @@ async def test_exists_active_cooldown_short_circuits_on_disabled_cooldown(
 async def test_exists_active_cooldown_true_after_upsert(seeded_instances: None) -> None:
     """A just-upserted cooldown reads as active within the configured window."""
     ref = ItemRef(1, 42, ItemType.episode)
-    await repo.upsert_cooldown(ref)
+    await repo.upsert_cooldown(ref, "missing")
     assert await repo.exists_active_cooldown(ref, cooldown_days=7) is True
 
 
@@ -108,7 +108,7 @@ async def test_upsert_cooldown_inserts_first_time(seeded_instances: None) -> Non
     """First upsert creates a row; count goes from 0 to 1."""
     ref = ItemRef(1, 42, ItemType.episode)
     assert await _count_cooldowns(1) == 0
-    await repo.upsert_cooldown(ref)
+    await repo.upsert_cooldown(ref, "missing")
     assert await _count_cooldowns(1) == 1
 
 
@@ -117,9 +117,9 @@ async def test_upsert_cooldown_inserts_first_time(seeded_instances: None) -> Non
 async def test_upsert_cooldown_replaces_on_repeat(seeded_instances: None) -> None:
     """Repeated upsert keeps the row count at 1 (in-place UPDATE)."""
     ref = ItemRef(1, 42, ItemType.episode)
-    await repo.upsert_cooldown(ref)
-    await repo.upsert_cooldown(ref)
-    await repo.upsert_cooldown(ref)
+    await repo.upsert_cooldown(ref, "missing")
+    await repo.upsert_cooldown(ref, "missing")
+    await repo.upsert_cooldown(ref, "missing")
     assert await _count_cooldowns(1) == 1
 
 
@@ -127,9 +127,9 @@ async def test_upsert_cooldown_replaces_on_repeat(seeded_instances: None) -> Non
 @pytest.mark.asyncio()
 async def test_upsert_cooldown_distinct_items_coexist(seeded_instances: None) -> None:
     """Different (item_id, item_type) triples share an instance without conflict."""
-    await repo.upsert_cooldown(ItemRef(1, 42, ItemType.episode))
-    await repo.upsert_cooldown(ItemRef(1, 43, ItemType.episode))
-    await repo.upsert_cooldown(ItemRef(1, 42, ItemType.movie))
+    await repo.upsert_cooldown(ItemRef(1, 42, ItemType.episode), "missing")
+    await repo.upsert_cooldown(ItemRef(1, 43, ItemType.episode), "missing")
+    await repo.upsert_cooldown(ItemRef(1, 42, ItemType.movie), "missing")
     assert await _count_cooldowns(1) == 3
 
 
@@ -139,9 +139,9 @@ async def test_delete_cooldowns_for_instance_returns_row_count(
     seeded_instances: None,
 ) -> None:
     """delete_cooldowns_for_instance returns the number of rows removed."""
-    await repo.upsert_cooldown(ItemRef(1, 1, ItemType.episode))
-    await repo.upsert_cooldown(ItemRef(1, 2, ItemType.episode))
-    await repo.upsert_cooldown(ItemRef(1, 3, ItemType.episode))
+    await repo.upsert_cooldown(ItemRef(1, 1, ItemType.episode), "missing")
+    await repo.upsert_cooldown(ItemRef(1, 2, ItemType.episode), "missing")
+    await repo.upsert_cooldown(ItemRef(1, 3, ItemType.episode), "missing")
 
     deleted = await repo.delete_cooldowns_for_instance(1)
     assert deleted == 3
@@ -162,8 +162,8 @@ async def test_delete_cooldowns_for_instance_returns_zero_when_empty(
 @pytest.mark.asyncio()
 async def test_delete_cooldowns_is_scoped_to_one_instance(seeded_instances: None) -> None:
     """Deleting cooldowns for instance A leaves instance B untouched."""
-    await repo.upsert_cooldown(ItemRef(1, 1, ItemType.episode))
-    await repo.upsert_cooldown(ItemRef(2, 1, ItemType.movie))
+    await repo.upsert_cooldown(ItemRef(1, 1, ItemType.episode), "missing")
+    await repo.upsert_cooldown(ItemRef(2, 1, ItemType.movie), "missing")
 
     await repo.delete_cooldowns_for_instance(1)
     assert await _count_cooldowns(1) == 0
@@ -177,7 +177,7 @@ async def test_service_is_on_cooldown_ref_delegates(seeded_instances: None) -> N
     from houndarr.services.cooldown import is_on_cooldown_ref as svc_check
 
     ref = ItemRef(1, 42, ItemType.episode)
-    await repo.upsert_cooldown(ref)
+    await repo.upsert_cooldown(ref, "missing")
 
     assert await svc_check(ref, cooldown_days=7) == await repo.exists_active_cooldown(
         ref, cooldown_days=7
@@ -191,7 +191,7 @@ async def test_service_record_search_ref_delegates(seeded_instances: None) -> No
     from houndarr.services.cooldown import record_search_ref as svc_record
 
     ref = ItemRef(1, 42, ItemType.episode)
-    await svc_record(ref)
+    await svc_record(ref, "missing")
     assert await repo.exists_active_cooldown(ref, cooldown_days=7) is True
 
 
@@ -201,7 +201,7 @@ async def test_service_clear_cooldowns_delegates(seeded_instances: None) -> None
     """services.cooldown.clear_cooldowns returns the same count as the repo."""
     from houndarr.services.cooldown import clear_cooldowns as svc_clear
 
-    await repo.upsert_cooldown(ItemRef(1, 1, ItemType.episode))
-    await repo.upsert_cooldown(ItemRef(1, 2, ItemType.episode))
+    await repo.upsert_cooldown(ItemRef(1, 1, ItemType.episode), "missing")
+    await repo.upsert_cooldown(ItemRef(1, 2, ItemType.episode), "missing")
 
     assert await svc_clear(1) == 2

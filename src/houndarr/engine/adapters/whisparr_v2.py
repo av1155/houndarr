@@ -18,6 +18,7 @@ from typing import Any
 import httpx
 from pydantic import ValidationError
 
+from houndarr.clients.base import ReconcileSets
 from houndarr.clients.whisparr_v2 import (
     LibraryWhisparrEpisode,
     MissingWhisparrEpisode,
@@ -27,6 +28,7 @@ from houndarr.engine.adapters._common import (
     ContextOverride,
     build_cutoff_candidate,
     build_missing_candidate,
+    paginate_wanted,
 )
 from houndarr.engine.candidates import SearchCandidate
 from houndarr.services.instances import Instance, WhisparrSearchMode
@@ -320,6 +322,52 @@ def make_client(instance: Instance) -> WhisparrClient:
     return WhisparrClient(url=instance.core.url, api_key=instance.core.api_key)
 
 
+def _whisparr_leaf_pairs(items: list[MissingWhisparrEpisode]) -> frozenset[tuple[str, int]]:
+    """Return ``(item_type, episode_id)`` pairs for a wanted list.
+
+    Whisparr v2 stamps cooldowns with ``item_type="whisparr_episode"``
+    to distinguish them from Sonarr episodes that share the same
+    numeric id space.
+    """
+    return frozenset(("whisparr_episode", it.episode_id) for it in items if it.episode_id)
+
+
+def _whisparr_season_synth_pairs(
+    items: list[MissingWhisparrEpisode],
+) -> frozenset[tuple[str, int]]:
+    """Return synthetic season-context pairs for Whisparr v2 cooldowns."""
+    parents: set[tuple[int, int]] = set()
+    for it in items:
+        if it.series_id is not None and it.series_id > 0 and it.season_number > 0:
+            parents.add((it.series_id, it.season_number))
+    return frozenset(
+        ("whisparr_episode", _season_item_id(sid, sn)) for sid, sn in parents
+    )
+
+
+async def fetch_reconcile_sets(client: WhisparrClient, instance: Instance) -> ReconcileSets:
+    """Return the authoritative wanted / upgrade-pool sets for Whisparr v2.
+
+    Mirrors the Sonarr implementation but uses the
+    ``whisparr_episode`` item_type.  In ``season_context`` missing-pass
+    mode, synthetic negative season ids derived from the same wanted
+    list are unioned in.  Cutoff cooldowns stay leaf-only.
+    """
+    missing_items = await paginate_wanted(client.get_missing)
+    cutoff_items = await paginate_wanted(client.get_cutoff_unmet)
+    missing_set = _whisparr_leaf_pairs(missing_items)
+    cutoff_set = _whisparr_leaf_pairs(cutoff_items)
+    if instance.missing.whisparr_search_mode != WhisparrSearchMode.episode:
+        missing_set = missing_set | _whisparr_season_synth_pairs(missing_items)
+    upgrade_candidates = [
+        adapt_upgrade(item, instance) for item in await fetch_upgrade_pool(client, instance)
+    ]
+    upgrade_set: frozenset[tuple[str, int]] = frozenset(
+        (str(c.item_type), c.item_id) for c in upgrade_candidates
+    )
+    return ReconcileSets(missing=missing_set, cutoff=cutoff_set, upgrade=upgrade_set)
+
+
 class WhisparrV2Adapter:
     """Class-form Whisparr v2 adapter for the :data:`ADAPTERS` registry.
 
@@ -334,3 +382,4 @@ class WhisparrV2Adapter:
     fetch_upgrade_pool = staticmethod(fetch_upgrade_pool)
     dispatch_search = staticmethod(dispatch_search)
     make_client = staticmethod(make_client)
+    fetch_reconcile_sets = staticmethod(fetch_reconcile_sets)

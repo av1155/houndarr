@@ -40,6 +40,54 @@ class InstanceSnapshot:
     unreleased_count: int
 
 
+@dataclass(frozen=True, slots=True)
+class ReconcileSets:
+    """Authoritative (item_type, item_id) sets for each search pass.
+
+    One set per ``search_kind`` value stamped on cooldown rows.  Each
+    entry is a pair that matches a cooldown row's ``(item_type,
+    item_id)`` columns: leaf item ids for straight-episode / movie /
+    album / book / scene searches, or the negative synthetic ids
+    (e.g. ``-(series_id * 1000 + season_number)``) that context-mode
+    adapters stamp when the search was dispatched at the parent
+    level.  A cooldown row is considered live iff its ``(item_type,
+    item_id)`` appears in the matching ``search_kind`` set.
+
+    The adapter populates both leaves AND synthetics in one pass:
+    synthetics are derived from the leaf wanted list by grouping on
+    the parent id carried on each item (e.g. ``series_id``,
+    ``artist_id``, ``author_id``).  Reconciliation stays a pure set
+    membership check and does not need adapter-specific logic.
+    """
+
+    missing: frozenset[tuple[str, int]]
+    cutoff: frozenset[tuple[str, int]]
+    upgrade: frozenset[tuple[str, int]]
+
+    @classmethod
+    def empty(cls) -> ReconcileSets:
+        """Return a :class:`ReconcileSets` with three empty sets.
+
+        Used when an adapter cannot build a reliable authoritative set
+        (network failure mid-fetch, unsupported feature path) so the
+        supervisor skips reconciliation for that cycle rather than
+        wiping every cooldown row against an empty reference.
+        """
+        return cls(missing=frozenset(), cutoff=frozenset(), upgrade=frozenset())
+
+    def is_empty(self) -> bool:
+        """Return True if every pass set is empty.
+
+        The reconciler treats an all-empty result as an explicit
+        signal to SKIP the DELETE step: an instance that genuinely has
+        zero wanted items and zero upgrade-pool items will not have
+        cooldowns either, so the no-op is safe; and a mid-fetch
+        failure that returned :meth:`empty` must never drive the DB
+        to a blank state.
+        """
+        return not self.missing and not self.cutoff and not self.upgrade
+
+
 WantedKind = Literal["missing", "cutoff"]
 
 

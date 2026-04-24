@@ -128,27 +128,25 @@ ORDER BY sl.timestamp DESC
 LIMIT ?
 """
 
-# Per-instance cooldown rows with the most recent searched kind attached.
-# Small correlated subqueries are fine here: cooldowns is typically <100 rows
-# per instance and each subquery uses the idx_search_log_instance index.
+# Per-instance cooldown rows.  search_kind is stamped on the row at
+# insert time (see schema v14 + repositories.cooldowns.upsert_cooldown),
+# so the breakdown reads it directly instead of re-classifying via a
+# correlated search_log subquery on every /api/status poll.  The
+# item_label subquery stays because labels are still sourced from
+# search_log and change as items are re-searched.
 _COOLDOWNS_SQL = """
 SELECT
     c.instance_id,
     c.item_id,
     c.item_type,
+    c.search_kind,
     c.searched_at,
     (SELECT sl.item_label FROM search_log sl
      WHERE sl.instance_id = c.instance_id
        AND sl.item_id = c.item_id
        AND sl.item_type = c.item_type
        AND sl.action = 'searched'
-     ORDER BY sl.timestamp DESC LIMIT 1) AS item_label,
-    (SELECT sl.search_kind FROM search_log sl
-     WHERE sl.instance_id = c.instance_id
-       AND sl.item_id = c.item_id
-       AND sl.item_type = c.item_type
-       AND sl.action = 'searched'
-     ORDER BY sl.timestamp DESC LIMIT 1) AS last_search_kind
+     ORDER BY sl.timestamp DESC LIMIT 1) AS item_label
 FROM cooldowns c
 WHERE c.instance_id IN ({placeholders})
 """
@@ -521,7 +519,10 @@ async def gather_cooldown_data(
     async with db.execute(_COOLDOWNS_SQL.format(placeholders=placeholders), instance_ids) as cur:
         async for row in cur:
             iid = int(row["instance_id"])
-            kind = str(row["last_search_kind"]) if row["last_search_kind"] else "missing"
+            # search_kind is a stamped column constrained to the three
+            # enum values; the DB CHECK guarantees it; fall back to
+            # "missing" only if a legacy row somehow slipped through.
+            kind = str(row["search_kind"]) if row["search_kind"] else "missing"
             bucket = kind if kind in ("missing", "cutoff", "upgrade") else "missing"
             out[iid]["cooldown_breakdown"][bucket] += 1
             out[iid]["cooldown_total"] += 1

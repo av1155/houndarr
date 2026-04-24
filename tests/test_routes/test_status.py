@@ -288,14 +288,20 @@ async def _seed_search_log(rows: list[tuple[Any, ...]]) -> None:
         await conn.commit()
 
 
-async def _seed_cooldown(instance_id: int, item_id: int, item_type: str, days_ago: float) -> None:
+async def _seed_cooldown(
+    instance_id: int,
+    item_id: int,
+    item_type: str,
+    days_ago: float,
+    search_kind: str = "missing",
+) -> None:
     when = datetime.now(UTC) - timedelta(days=days_ago)
     iso = when.strftime("%Y-%m-%dT%H:%M:%S.000Z")
     async with get_db() as conn:
         await conn.execute(
-            "INSERT INTO cooldowns (instance_id, item_id, item_type, searched_at)"
-            " VALUES (?, ?, ?, ?)",
-            (instance_id, item_id, item_type, iso),
+            "INSERT INTO cooldowns (instance_id, item_id, item_type, search_kind, searched_at)"
+            " VALUES (?, ?, ?, ?, ?)",
+            (instance_id, item_id, item_type, search_kind, iso),
         )
         await conn.commit()
 
@@ -788,9 +794,9 @@ def test_status_v2_unlocking_next_keys_window_by_kind(app: TestClient) -> None:
             ]
         )
     )
-    asyncio.run(_seed_cooldown(iid, 501, "episode", days_ago=1.0))
-    asyncio.run(_seed_cooldown(iid, 502, "episode", days_ago=1.0))
-    asyncio.run(_seed_cooldown(iid, 503, "episode", days_ago=1.0))
+    asyncio.run(_seed_cooldown(iid, 501, "episode", days_ago=1.0, search_kind="missing"))
+    asyncio.run(_seed_cooldown(iid, 502, "episode", days_ago=1.0, search_kind="cutoff"))
+    asyncio.run(_seed_cooldown(iid, 503, "episode", days_ago=1.0, search_kind="upgrade"))
 
     body = app.get("/api/status").json()["instances"][0]
     picks = {row["item_id"]: row for row in body["unlocking_next"]}
@@ -863,10 +869,10 @@ def test_status_v2_cooldown_breakdown_splits_by_kind(app: TestClient) -> None:
             ]
         )
     )
-    asyncio.run(_seed_cooldown(iid, 301, "episode", days_ago=1.0))
-    asyncio.run(_seed_cooldown(iid, 302, "episode", days_ago=1.0))
-    asyncio.run(_seed_cooldown(iid, 303, "episode", days_ago=1.0))
-    asyncio.run(_seed_cooldown(iid, 304, "episode", days_ago=1.0))
+    asyncio.run(_seed_cooldown(iid, 301, "episode", days_ago=1.0, search_kind="missing"))
+    asyncio.run(_seed_cooldown(iid, 302, "episode", days_ago=1.0, search_kind="cutoff"))
+    asyncio.run(_seed_cooldown(iid, 303, "episode", days_ago=1.0, search_kind="upgrade"))
+    asyncio.run(_seed_cooldown(iid, 304, "episode", days_ago=1.0, search_kind="missing"))
     body = app.get("/api/status").json()["instances"][0]
     assert body["cooldown_breakdown"] == {"missing": 2, "cutoff": 1, "upgrade": 1}
 

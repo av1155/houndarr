@@ -446,15 +446,17 @@ body {
   }
 }
 
-/* ── Active status pulsing dot (Dashboard instance cards) ────────────────── */
+/* Halo derives from currentColor so an error pill pulses red while an
+   active pill pulses green: the dot sits inside status-pill--* parents
+   that already set text colour via @apply text-danger / text-success. */
 @keyframes station-pulse {
   0%, 100% {
     opacity: 1;
-    box-shadow: 0 0 0 0 color-mix(in srgb, var(--seg-eligible) 0%, transparent);
+    box-shadow: 0 0 0 0 color-mix(in srgb, currentColor 0%, transparent);
   }
   50% {
     opacity: 0.85;
-    box-shadow: 0 0 0 3px color-mix(in srgb, var(--seg-eligible) 18%, transparent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 18%, transparent);
   }
 }
 
@@ -521,16 +523,21 @@ button:focus-visible {
   text-decoration: none;
 }
 
-/* ── Dashboard active-pill pulse (preview parity) ───────────────────────── */
+/* Halo inherits currentColor; the dot pins its own colour to
+   --seg-eligible so the emerald pulse is preserved even though the
+   enclosing .dash-pill--active uses a softer --color-success-text for
+   the "Active" label. Future pill variants only need to override color
+   on the dot selector to get a matching halo. */
 @keyframes dash-pulse-dot {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(74, 222, 128, 0); }
-  50%      { box-shadow: 0 0 0 4px rgba(74, 222, 128, 0.18); }
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, currentColor 0%, transparent); }
+  50%      { box-shadow: 0 0 0 4px color-mix(in srgb, currentColor 18%, transparent); }
 }
 .dash-pill--active .dash-pill__dot {
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: var(--seg-eligible);
+  color: var(--seg-eligible);
+  background: currentColor;
   animation: dash-pulse-dot 2.4s var(--ease-station) infinite;
 }
 

@@ -576,6 +576,60 @@ def test_status_v2_recent_searches_last_7_days(app: TestClient) -> None:
     assert labels == ["Fresh Show", "Older Show"]
 
 
+def test_status_v2_recent_searches_includes_search_kind(app: TestClient) -> None:
+    """Each recent-hunts row surfaces its pass kind so the dashboard can icon-tag it."""
+    _login(app)
+    iid = _create_instance(app)
+    now = datetime.now(UTC)
+    asyncio.run(
+        _seed_search_log(
+            [
+                (
+                    iid,
+                    101,
+                    "episode",
+                    "missing",
+                    "searched",
+                    None,
+                    "Missing Ep",
+                    None,
+                    (now - timedelta(minutes=1)).strftime("%Y-%m-%dT%H:%M:%S.000Z"),
+                ),
+                (
+                    iid,
+                    102,
+                    "episode",
+                    "cutoff",
+                    "searched",
+                    None,
+                    "Cutoff Ep",
+                    None,
+                    (now - timedelta(minutes=2)).strftime("%Y-%m-%dT%H:%M:%S.000Z"),
+                ),
+                (
+                    iid,
+                    103,
+                    "episode",
+                    "upgrade",
+                    "searched",
+                    None,
+                    "Upgrade Ep",
+                    None,
+                    (now - timedelta(minutes=3)).strftime("%Y-%m-%dT%H:%M:%S.000Z"),
+                ),
+            ]
+        )
+    )
+    body = app.get("/api/status").json()
+    rows = body["recent_searches"]
+    # Newest-first ordering preserved, each row carries its search_kind.
+    assert [(r["item_label"], r["search_kind"]) for r in rows] == [
+        ("Missing Ep", "missing"),
+        ("Cutoff Ep", "cutoff"),
+        ("Upgrade Ep", "upgrade"),
+    ]
+
+
 def test_status_v2_recent_searches_limit_5(app: TestClient) -> None:
     _login(app)
     iid = _create_instance(app)

@@ -113,6 +113,7 @@ SELECT
     sl.instance_id,
     i.name AS instance_name,
     i.type AS instance_type,
+    sl.search_kind,
     sl.item_label,
     sl.timestamp
 FROM search_log sl
@@ -427,6 +428,7 @@ async def gather_recent_searches(db: aiosqlite.Connection, limit: int = 5) -> li
                     "instance_id": int(row["instance_id"]),
                     "instance_name": str(row["instance_name"]),
                     "instance_type": str(row["instance_type"]),
+                    "search_kind": str(row["search_kind"]) if row["search_kind"] else None,
                     "item_label": str(row["item_label"]) if row["item_label"] else None,
                     "timestamp": str(row["timestamp"]),
                 }

@@ -310,6 +310,24 @@ function initDashboardPage() {
       return 'var(--color-brand-400)';
     }
 
+    // Inline Lucide SVG per search kind.  Paths are verbatim from
+    // Lucide v0.x; colors come from --color-kind-* tokens set on the
+    // element's `data-kind` attribute in app.css.  Returns '' for an
+    // unknown kind so render sites can drop the icon entirely without
+    // a wrapper element leaking into the layout.
+    function searchKindIcon(kind) {
+      const label = kind === 'missing' ? 'Missing search'
+        : kind === 'cutoff' ? 'Cutoff search'
+        : kind === 'upgrade' ? 'Upgrade search'
+        : '';
+      if (!label) return '';
+      const path =
+        kind === 'missing' ? '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>'
+        : kind === 'cutoff' ? '<circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/>'
+        : '<path d="M12 19V5"/><path d="m5 12 7-7 7 7"/>';
+      return `<svg class="kind-icon" data-kind="${kind}" role="img" aria-label="${label}" title="${label}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${path}</svg>`;
+    }
+
     function renderRecentHunts(recentSearches) {
       if (!recentSearches || recentSearches.length === 0) {
         return `
@@ -325,6 +343,7 @@ function initDashboardPage() {
           const title = r.item_label || 'Untitled';
           return `
         <div class="dash-trail__row">
+          ${searchKindIcon(r.search_kind)}
           <span class="dash-trail__title">${escHtml(title)}</span>
           <span class="dash-trail__inst" style="color: ${color};">${escHtml(r.instance_name)}</span>
           <span class="dash-trail__when">${escHtml(formatTimeAgo(r.timestamp))}</span>
@@ -432,6 +451,7 @@ function initDashboardPage() {
         const title = row.item_label || `Item ${row.item_id}`;
         return `
       <div class="dash-unlocks__row">
+        ${searchKindIcon(row.last_search_kind)}
         <span class="dash-unlocks__title">${escHtml(title)}</span>
         <span class="dash-unlocks__time">${escHtml(formatTimeUntil(row.unlock_at))}</span>
       </div>`;

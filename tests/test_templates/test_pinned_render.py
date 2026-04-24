@@ -164,7 +164,6 @@ class TestLogRowsRender:
         # The partial must never raise on an empty list.
         assert html is not None
 
-
 # ---------------------------------------------------------------------------
 # changelog_modal.html
 # ---------------------------------------------------------------------------

@@ -453,7 +453,7 @@ function initDashboardPage() {
 
     function renderStatusPill(inst) {
       if (!inst.enabled) {
-        return `<span class="dash-pill dash-pill--disabled"><span class="dash-pill__dot"></span>Disabled</span>`;
+        return `<span class="dash-pill dash-pill--disabled"><span class="status-dot status-dot--disabled"></span>Disabled</span>`;
       }
       if (inst.active_error) {
         const count = toNumber(inst.active_error.failures_count) || 1;
@@ -462,7 +462,7 @@ function initDashboardPage() {
                   hx-get="${href}" hx-target="#app-content" hx-swap="innerHTML" hx-push-url="true"
                   aria-label="${count} error${count === 1 ? '' : 's'}; view logs"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>${count} error${count === 1 ? '' : 's'}</a>`;
       }
-      return `<span class="dash-pill dash-pill--active"><span class="dash-pill__dot"></span>Active</span>`;
+      return `<span class="dash-pill dash-pill--active"><span class="status-dot status-dot--active"></span>Active</span>`;
     }
 
     // Hourly search-budget bar.  Shows how many indexer hits the

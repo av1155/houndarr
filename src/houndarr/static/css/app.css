@@ -446,40 +446,45 @@ body {
   }
 }
 
-/* Halo derives from currentColor so an error pill pulses red while an
-   active pill pulses green: the dot sits inside status-pill--* parents
-   that already set text colour via @apply text-danger / text-success.
-   The ring is a scaled, faded ::after pseudo-element rather than a
-   box-shadow tween.  Chromium (bug 713674) treats currentColor inside
-   a keyframe's box-shadow as an opaque, discrete value and does not
-   interpolate the shadow between stops, so the ring pops on/off
-   instead of expanding and contracting.  transform and opacity always
-   interpolate cleanly, so scaling a pseudo-element restores the
-   expand/contract motion for every variant. */
-@keyframes station-pulse-ring {
-  0%, 100% { transform: scale(1);   opacity: 0; }
-  50%      { transform: scale(2.4); opacity: 0.35; }
+/* Single status indicator component used by both the dashboard
+   instance card pill and the settings page status pill.  The base
+   rule owns size and shape so every caller renders at the same
+   scale; variant modifiers layer on colour and the pulse.
+   Hardcoded rgba in the keyframes because Chromium bug 713674 will
+   not interpolate a box-shadow whose colour routes through
+   currentColor, which collapses the pulse to a pop-on / pop-off. */
+.status-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.status-dot--active {
+  background: var(--seg-eligible);
+  animation: status-dot-pulse-active 2.4s var(--ease-station) infinite;
+}
+.status-dot--error {
+  background: var(--color-danger);
+  animation: status-dot-pulse-error 2.4s var(--ease-station) infinite;
+}
+.status-dot--disabled {
+  background: var(--color-state-disabled);
 }
 
-.station-pulse-dot {
-  position: relative;
+@keyframes status-dot-pulse-active {
+  0%, 100% { box-shadow: 0 0 0 0    rgba(74, 222, 128, 0); }
+  50%      { box-shadow: 0 0 0 3.3px rgba(74, 222, 128, 0.18); }
 }
-.station-pulse-dot::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  background: currentColor;
-  opacity: 0;
-  pointer-events: none;
-  animation: station-pulse-ring 2.8s var(--ease-station) infinite;
+@keyframes status-dot-pulse-error {
+  0%, 100% { box-shadow: 0 0 0 0    rgba(248, 113, 113, 0); }
+  50%      { box-shadow: 0 0 0 3.3px rgba(248, 113, 113, 0.18); }
 }
 
-/* Legacy @keyframes station-pulse retained only for the at-cap flash
-   on .dash-card__budget-fill, which runs two iterations as a warning
-   pulse on a bar (not a dot).  Left at the pre-cca0dda var(--seg-eligible)
-   halo since that keyframe never rode on currentColor; swapping to
-   the pseudo-element approach there is a separate concern. */
+/* Consumed only by .dash-card__budget-fill[data-at-cap="true"] as a
+   two-iteration at-cap warning flash on the budget bar.  Uses a
+   concrete colour token rather than currentColor so Chromium bug
+   713674 does not affect it. */
 @keyframes station-pulse {
   0%, 100% {
     opacity: 1;
@@ -548,36 +553,6 @@ body {
 a:focus-visible,
 button:focus-visible {
   text-decoration: none;
-}
-
-/* Ring is a scaled pseudo-element, not a box-shadow, for the same
-   reason as .station-pulse-dot above: Chromium does not interpolate
-   box-shadow colours driven by currentColor inside keyframes, so a
-   shadow-based halo pops on/off.  The dot itself stays pinned to
-   --seg-eligible so the emerald pulse is preserved regardless of
-   the softer --color-success-text the enclosing .dash-pill--active
-   uses for the "Active" label. */
-@keyframes dash-pulse-ring {
-  0%, 100% { transform: scale(1);   opacity: 0; }
-  50%      { transform: scale(2.6); opacity: 0.32; }
-}
-.dash-pill--active .dash-pill__dot {
-  position: relative;
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  color: var(--seg-eligible);
-  background: currentColor;
-}
-.dash-pill--active .dash-pill__dot::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  background: currentColor;
-  opacity: 0;
-  pointer-events: none;
-  animation: dash-pulse-ring 2.4s var(--ease-station) infinite;
 }
 
 /* ── Nav atmospheric glow ───────────────────────────────────────────────── */
@@ -684,22 +659,14 @@ body > nav {
   .shell-nav-link,
   #app-content,
   #app-content.is-shell-loading,
-  #app-content.is-shell-entering,
-  .station-pulse-dot {
+  #app-content.is-shell-entering {
     transition: none;
     animation: none;
     transform: none;
   }
-  .dash-pill--active .dash-pill__dot {
+  .status-dot--active,
+  .status-dot--error {
     animation: none;
-    opacity: 1;
-    transform: none;
-  }
-  /* Silence the pseudo-element rings that now carry the pulse. */
-  .station-pulse-dot::after,
-  .dash-pill--active .dash-pill__dot::after {
-    animation: none;
-    opacity: 0;
-    transform: none;
+    box-shadow: none;
   }
 }

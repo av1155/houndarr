@@ -444,13 +444,6 @@
     border: 1px solid var(--color-border-default);
     color: var(--color-text-muted);
   }
-  .dash-pill--disabled .dash-pill__dot {
-    width: 0.375rem;
-    height: 0.375rem;
-    border-radius: 50%;
-    background: #475569;
-  }
-
   .dash-card__stats {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -724,7 +717,7 @@
     content: "";
     width: 0.75rem;
     height: 0.75rem;
-    border: 1px solid #475569;
+    border: 1px solid var(--color-state-disabled);
     border-radius: 50%;
   }
   .dash-empty-state__title {

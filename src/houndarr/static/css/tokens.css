@@ -63,6 +63,10 @@
   --color-danger-bg:     rgba(153, 27, 27, 0.30);
   --color-danger-border: rgba(248, 113, 113, 0.35);
   --color-info:          #67e8f9;
+  /* Neutral slate for disabled indicators and empty-state outlines:
+     reads as "present but inactive" without competing with the state
+     colours above. */
+  --color-state-disabled: #475569;
 
   /* ── Instance type signature colors ─────────────────────────────────── */
   --color-sonarr:       #7dd3fc;  /* sky */

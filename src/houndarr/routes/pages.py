@@ -221,7 +221,7 @@ async def dashboard(request: Request) -> HTMLResponse:
 async def logs_page(
     request: Request,
     master_key: Annotated[bytes, Depends(get_master_key)],
-    instance_id: str | None = Query(default=None),
+    instance_id: list[str] = Query(default_factory=list),
     action: str | None = Query(default=None),
     search_kind: str | None = Query(default=None),
     cycle_trigger: str | None = Query(default=None),
@@ -232,13 +232,17 @@ async def logs_page(
 
     Query parameters pre-apply filters so the dashboard's error banner
     and per-card error pill can deep-link straight to the relevant
-    instance/action rows.
+    instance/action rows.  ``instance_id`` is declared as ``list[str]``
+    because the dashboard banner passes one value per errored instance
+    via a repeated query param; FastAPI preserves every occurrence so
+    a URL like ``/logs?instance_id=1&instance_id=2&action=error``
+    hydrates the multi-select filter's checkboxes without a redirect.
     """
     from houndarr.routes.api.logs import (
         parse_cycle_trigger,
         parse_hide_skipped,
         parse_hide_system,
-        parse_instance_id,
+        parse_instance_ids,
         parse_search_kind,
     )
     from houndarr.services.log_query import (
@@ -248,7 +252,7 @@ async def logs_page(
     )
 
     try:
-        parsed_instance_id = parse_instance_id(instance_id)
+        parsed_instance_ids = parse_instance_ids(instance_id)
         parsed_search_kind = parse_search_kind(search_kind)
         parsed_cycle_trigger = parse_cycle_trigger(cycle_trigger)
         parsed_hide_system = parse_hide_system(hide_system) if hide_system is not None else True
@@ -258,7 +262,7 @@ async def logs_page(
     except HTTPException:
         # Malformed query string: fall back to unfiltered view so the
         # page still loads rather than bubbling a 422 JSON response.
-        parsed_instance_id = None
+        parsed_instance_ids = ()
         parsed_search_kind = None
         parsed_cycle_trigger = None
         parsed_hide_system = True
@@ -268,7 +272,7 @@ async def logs_page(
 
     instances = await list_instances(master_key=master_key)
     rows = await query_logs(
-        instance_id=parsed_instance_id,
+        instance_ids=parsed_instance_ids,
         action=parsed_action,
         search_kind=parsed_search_kind,
         cycle_trigger=parsed_cycle_trigger,
@@ -293,13 +297,13 @@ async def logs_page(
         rows=rows,
         limit=50,
         load_more_limit=compute_load_more_limit(50),
-        selected_instance_id=parsed_instance_id,
+        selected_instance_ids=parsed_instance_ids,
         selected_action=parsed_action,
         selected_search_kind=parsed_search_kind,
         selected_cycle_trigger=parsed_cycle_trigger,
         selected_hide_system=parsed_hide_system,
         selected_hide_skipped=parsed_hide_skipped,
-        instance_id=parsed_instance_id,
+        instance_ids=parsed_instance_ids,
         action=parsed_action,
         search_kind=parsed_search_kind,
         cycle_trigger=parsed_cycle_trigger,

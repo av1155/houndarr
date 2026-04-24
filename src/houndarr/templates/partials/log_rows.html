@@ -182,7 +182,7 @@
     <button
       type="button"
       class="load-older"
-      hx-get="/api/logs/partial?limit={{ next_limit }}{% if instance_id %}&instance_id={{ instance_id }}{% endif %}{% if action %}&action={{ action }}{% endif %}{% if search_kind %}&search_kind={{ search_kind }}{% endif %}{% if cycle_trigger %}&cycle_trigger={{ cycle_trigger }}{% endif %}&hide_system={{ 'true' if hide_system else 'false' }}&hide_skipped={{ 'true' if hide_skipped else 'false' }}&before={{ rows[-1].timestamp }}"
+      hx-get="/api/logs/partial?limit={{ next_limit }}{% for iid in (instance_ids or []) %}&instance_id={{ iid }}{% endfor %}{% if action %}&action={{ action }}{% endif %}{% if search_kind %}&search_kind={{ search_kind }}{% endif %}{% if cycle_trigger %}&cycle_trigger={{ cycle_trigger }}{% endif %}&hide_system={{ 'true' if hide_system else 'false' }}&hide_skipped={{ 'true' if hide_skipped else 'false' }}&before={{ rows[-1].timestamp }}"
       hx-target="#pagination-row"
       hx-swap="outerHTML"
     >

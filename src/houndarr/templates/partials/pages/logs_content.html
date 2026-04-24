@@ -40,7 +40,7 @@
         <select id="filter-instance" name="instance_id">
           <option value="">All instances</option>
           {% for inst in instances %}
-          <option value="{{ inst.core.id }}" {% if selected_instance_id == inst.core.id %}selected{% endif %}>
+          <option value="{{ inst.core.id }}" {% if inst.core.id in (selected_instance_ids or ()) %}selected{% endif %}>
             {{ inst.core.name }}
           </option>
           {% endfor %}

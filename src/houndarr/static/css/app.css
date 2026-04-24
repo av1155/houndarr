@@ -368,6 +368,42 @@ body {
   box-shadow: 0 0 0 2px rgba(34, 211, 238, 0.38);
 }
 
+/* ── Global toast (bottom-center pill) ──────────────────────────────────
+   Triggered by window.houndarrShowToast(msg) in app.js, by the
+   houndarr-toast custom event (HTMX HX-Trigger), and by the
+   houndarr_flash cookie check on page load.  The markup lives in
+   base.html so every page ships one instance. */
+.toast {
+  position: fixed;
+  bottom: 28px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 10px 18px;
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-brand-400);
+  border-radius: 999px;
+  box-shadow: var(--glow-cyan), var(--shadow-pop);
+  font-size: 13px;
+  color: var(--color-text-heading);
+  z-index: 100;
+  animation: toast-in 240ms var(--ease-station);
+}
+@keyframes toast-in {
+  from { opacity: 0; transform: translate(-50%, 10px); }
+  to   { opacity: 1; transform: translate(-50%, 0); }
+}
+@keyframes toast-out {
+  from { opacity: 1; transform: translate(-50%, 0); }
+  to   { opacity: 0; transform: translate(-50%, 10px); }
+}
+.toast.is-leaving {
+  animation: toast-out 240ms var(--ease-station) forwards;
+}
+@media (prefers-reduced-motion: reduce) {
+  .toast,
+  .toast.is-leaving { animation: none; }
+}
+
 /* ── Global keyboard focus (dashboard redesign) ─────────────────────────── */
 :focus-visible {
   outline: 2px solid var(--color-brand-400);

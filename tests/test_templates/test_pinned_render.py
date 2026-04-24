@@ -223,7 +223,7 @@ class TestLogRowsRender:
             ]
         )
         html = render("partials/log_rows.html", rows=rows, limit=50)
-        assert "all <span class=\"cycle__summary-reason\">not yet released</span>" in html
+        assert 'all <span class="cycle__summary-reason">not yet released</span>' in html
         assert "<strong>4</strong> items" in html
 
     def test_skip_only_summary_all_capped(self, render) -> None:
@@ -235,7 +235,7 @@ class TestLogRowsRender:
             ]
         )
         html = render("partials/log_rows.html", rows=rows, limit=50)
-        assert "hit the <span class=\"cycle__summary-reason\">hourly limit</span>" in html
+        assert 'hit the <span class="cycle__summary-reason">hourly limit</span>' in html
         assert "will resume next hour" in html
         # "Cycle paused" message should not restate an item count.
         assert "<strong>3</strong>" not in html

@@ -317,6 +317,20 @@ body {
     border-color: var(--color-danger-border);
     background: var(--color-danger-bg);
   }
+
+  /* Search-kind icon.  Appears in Recent hunts and Cooldown schedule
+     rows, 12px high to match the 12.5px row text.  Color is driven by
+     data-kind through the three --color-kind-* aliases defined in
+     tokens.css so retints stay in one place. */
+  .kind-icon {
+    width: 12px;
+    height: 12px;
+    flex-shrink: 0;
+    color: var(--color-text-muted);
+  }
+  .kind-icon[data-kind="missing"] { color: var(--color-kind-missing); }
+  .kind-icon[data-kind="cutoff"]  { color: var(--color-kind-cutoff); }
+  .kind-icon[data-kind="upgrade"] { color: var(--color-kind-upgrade); }
 }
 
 /* ── App content loading / entering ────────────────────────────────────── */

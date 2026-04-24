@@ -30,8 +30,7 @@ async def seeded_instance(db: None) -> AsyncGenerator[None, None]:  # noqa: ARG0
     """Seed one instance row so cooldowns FKs resolve."""
     async with get_db() as conn:
         await conn.execute(
-            "INSERT INTO instances (id, name, type, url, encrypted_api_key)"
-            " VALUES (?, ?, ?, ?, ?)",
+            "INSERT INTO instances (id, name, type, url, encrypted_api_key) VALUES (?, ?, ?, ?, ?)",
             (1, "Sonarr Test", "sonarr", "http://sonarr:8989", _ENC_KEY),
         )
         await conn.commit()

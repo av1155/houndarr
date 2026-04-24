@@ -340,9 +340,7 @@ def _whisparr_season_synth_pairs(
     for it in items:
         if it.series_id is not None and it.series_id > 0 and it.season_number > 0:
             parents.add((it.series_id, it.season_number))
-    return frozenset(
-        ("whisparr_episode", _season_item_id(sid, sn)) for sid, sn in parents
-    )
+    return frozenset(("whisparr_episode", _season_item_id(sid, sn)) for sid, sn in parents)
 
 
 async def fetch_reconcile_sets(client: WhisparrClient, instance: Instance) -> ReconcileSets:

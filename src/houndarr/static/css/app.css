@@ -183,15 +183,17 @@ body {
   }
 }
 
-/* ── Active status pulsing dot (Dashboard instance cards) ────────────────── */
+/* Halo derives from currentColor so an error pill pulses red while an
+   active pill pulses green: the dot sits inside status-pill--* parents
+   that already set text colour via @apply text-danger / text-success. */
 @keyframes station-pulse {
   0%, 100% {
     opacity: 1;
-    box-shadow: 0 0 0 0 color-mix(in srgb, var(--seg-eligible) 0%, transparent);
+    box-shadow: 0 0 0 0 color-mix(in srgb, currentColor 0%, transparent);
   }
   50% {
     opacity: 0.85;
-    box-shadow: 0 0 0 3px color-mix(in srgb, var(--seg-eligible) 18%, transparent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 18%, transparent);
   }
 }
 

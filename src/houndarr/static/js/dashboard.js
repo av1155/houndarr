@@ -709,12 +709,13 @@ function initDashboardPage() {
       const gated = toNumber(bd.missing) + toNumber(bd.cutoff);
       const unr = toNumber(inst.unreleased_count);
       const eligibleVal = Math.max(0, wantedVal - gated - unr);
-      // "Searched 24h" is a rate; the cumulative lifetime count rides
-      // on a hover tooltip attached directly to the value (tooltip.js
-      // wires [data-tip] into the shared floating panel).  Suppressed
-      // when the two numbers are equal, which is trivially true on
-      // fresh installs where everything still fits inside the 24h
-      // window.
+      // "Searched" on the card shows the rolling 24-hour dispatch
+      // count (the rate that matters for indexer pressure).  The
+      // cumulative lifetime count rides on a hover tooltip attached
+      // directly to the value; tooltip.js wires [data-tip] into the
+      // shared floating panel.  Suppressed when the two numbers are
+      // equal, which is trivially true on fresh installs where
+      // everything still fits inside the 24-hour window.
       const searched24hVal = toNumber(inst.searched_24h);
       const lifetimeVal = toNumber(inst.lifetime_searched);
       const lifetimeTip = lifetimeVal > 0 && lifetimeVal !== searched24hVal
@@ -752,7 +753,7 @@ function initDashboardPage() {
       ${eligibleText}
     </div>
     <div>
-      <dt class="dash-card__stat-label" title="Dispatches this instance made in the last 24 hours. Hover the number for the lifetime total.">Searched 24h</dt>
+      <dt class="dash-card__stat-label" title="Dispatches this instance made in the last 24 hours. Hover the number for the lifetime total.">Searched</dt>
       ${searchedText}
     </div>
   </dl>

@@ -12,7 +12,7 @@
 //
 // Trigger nodes can be real <button class="tip-trigger"> elements
 // (keyboard-focusable by default) or any element with data-tip for
-// hover-only reveals (e.g. the dashboard's Searched 24h value).
+// hover-only reveals (e.g. the dashboard's Searched value).
 
 (function () {
   let panel = null;

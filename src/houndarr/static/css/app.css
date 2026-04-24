@@ -626,7 +626,7 @@ body {
 }
 
 /* Icon-button trigger for use next to form labels.  Hover-only data-tip
-   callers (like the dashboard's Searched 24h value) skip this class and
+   callers (like the dashboard's Searched value) skip this class and
    just let [data-tip] flip the cursor. */
 .tip-trigger {
   display: inline-flex;

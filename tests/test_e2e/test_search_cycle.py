@@ -298,7 +298,7 @@ async def test_hourly_cap_enforced(
     assert actions.count("searched") == 1
     assert actions.count("skipped") == 1
     skipped = next(r for r in logs if r["action"] == "skipped")
-    assert "hourly cap" in (skipped["reason"] or "")
+    assert "hourly limit" in (skipped["reason"] or "")
 
 
 # ---------------------------------------------------------------------------

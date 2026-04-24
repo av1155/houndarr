@@ -568,6 +568,34 @@ function initDashboardPage() {
       }).join('');
     }
 
+    // Stale-snapshot pill.  Surfaced when the instance's
+    // monitored_total / unreleased_count were last refreshed more
+    // than 15 minutes ago (10-minute scheduled refresh + 5-minute
+    // grace for a missed tick).  Flags the condition where an *arr
+    // goes silent and the dashboard's Wanted/Eligible numbers freeze
+    // without any visual signal.  Returns '' when fresh so a healthy
+    // card stays uncluttered.
+    const SNAPSHOT_STALE_THRESHOLD_MS = 15 * 60 * 1000;
+    function renderStaleSnapshotPill(inst) {
+      if (!inst.enabled || inst.active_error) return '';
+      const ts = inst.snapshot_refreshed_at;
+      if (!ts) return '';
+      const refreshed = Date.parse(ts);
+      if (Number.isNaN(refreshed)) return '';
+      const age = Date.now() - refreshed;
+      if (age <= SNAPSHOT_STALE_THRESHOLD_MS) return '';
+      const label = `counts ${formatTimeAgo(ts)} old`;
+      return `
+  <span class="dash-card__stale" title="Wanted / Eligible counts last refreshed ${escHtml(formatTimeAgo(ts))}. Normal refresh cadence is 10 minutes; longer gaps usually mean the *arr is unreachable.">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/>
+      <path d="M12 9v4"/>
+      <path d="M12 17h.01"/>
+    </svg>
+    <span>${escHtml(label)}</span>
+  </span>`;
+    }
+
     function renderCardFooter(inst) {
       const disabled = !inst.enabled;
       const offline = !disabled && !!inst.active_error;
@@ -596,6 +624,7 @@ function initDashboardPage() {
       return `
 <div class="dash-card__foot">
   <span class="dash-card__foot-text">${footText}</span>
+  ${renderStaleSnapshotPill(inst)}
   <button class="dash-run-now"
           hx-post="/api/instances/${inst.id}/run-now"
           hx-swap="none"

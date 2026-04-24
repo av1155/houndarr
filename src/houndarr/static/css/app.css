@@ -318,6 +318,29 @@ body {
   .dash-card__budget[data-at-cap="true"] .dash-card__budget-fill {
     animation: station-pulse 2.4s var(--ease-station) 2;
   }
+
+  /* Stale-snapshot pill on the card footer.  Muted amber chip with a
+     12px Lucide alert-triangle.  Only rendered when the snapshot is
+     >15 min old; absence = healthy.  Sized to align with the footer
+     text baseline. */
+  .dash-card__stale {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 8px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-family: var(--font-mono);
+    color: var(--color-warning);
+    background: var(--color-warning-bg);
+    border: 1px solid var(--color-warning-border);
+    white-space: nowrap;
+  }
+  .dash-card__stale svg {
+    width: 12px;
+    height: 12px;
+    flex-shrink: 0;
+  }
 }
 
 /* ── App content loading / entering ────────────────────────────────────── */

@@ -574,7 +574,6 @@ def test_logs_page_renders(app: TestClient) -> None:
     assert b'id="log-filter-form"' in resp.content
     assert b'id="log-feed"' in resp.content
     assert b'id="live-indicator"' in resp.content
-    # Filter labels (still present, just no longer column headers).
     assert b"Kind" in resp.content
     assert b"Trigger" in resp.content
     # Noise switches (hide_system default on, hide_skipped default off).

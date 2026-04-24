@@ -88,11 +88,19 @@
            data-cycle-progress="{{ row.cycle_progress or '' }}"
            data-item-type="{{ row.item_type or '' }}"
       >
-        <div class="entry__time" data-ts="{{ row.timestamp or '' }}" data-log-ts="{{ row.timestamp or '' }}">{{ row.timestamp[:19].replace('T', ' ') if row.timestamp else '-' }}</div>
-        <div class="entry__action entry__action--{{ row.action or 'info' }}">{{ row.action or '-' }}</div>
-        <div class="entry__kind{% if row.search_kind %} entry__kind--{{ row.search_kind }}{% endif %}">{{ row.search_kind or '-' }}</div>
+        <div class="entry__time" data-ts="{{ row.timestamp or '' }}" data-log-ts="{{ row.timestamp or '' }}">{{ row.timestamp[:19].replace('T', ' ') if row.timestamp else '' }}</div>
+        <div class="entry__action entry__action--{{ row.action or 'info' }}">{{ row.action or 'info' }}</div>
+        {%- if row.search_kind %}
+        <div class="entry__kind entry__kind--{{ row.search_kind }}">{{ row.search_kind }}</div>
+        {%- else %}
+        <div></div>
+        {%- endif %}
         <div class="entry__media">
-          <div class="entry__title">{% if row.item_label %}{{ row.item_label }}{% elif row.item_type and row.item_id is not none %}{{ row.item_type|capitalize }} {{ row.item_id }}{% else %}-{% endif %}</div>
+          {%- if row.item_label %}
+          <div class="entry__title">{{ row.item_label }}</div>
+          {%- elif row.item_type and row.item_id is not none %}
+          <div class="entry__title">{{ row.item_type|capitalize }} {{ row.item_id }}</div>
+          {%- endif %}
           {%- if row.item_type or row.item_id is not none %}
           <div class="entry__sub">{{ row.item_type or '' }}{% if row.item_type and row.item_id is not none %} · {% endif %}{% if row.item_id is not none %}id:{{ row.item_id }}{% endif %}</div>
           {%- endif %}

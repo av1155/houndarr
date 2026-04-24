@@ -291,6 +291,10 @@
 
   @media (max-width: 640px) {
     .dash-sub__sentence { font-size: 1.375rem; }
+    /* Break the "X of Y on patrol / N need attention" sentence onto
+       two lines so the danger callout never wraps mid-phrase on a
+       phone-width viewport. */
+    .dash-sub__sentence .attn { display: block; }
     .dash-section-head__title { font-size: 1.375rem; }
     .dash-lh { padding: 1.125rem 1.125rem; }
     .dash-lh__headline { gap: 1.375rem; }
@@ -326,6 +330,15 @@
       padding: 0.625rem 0.875rem;
       font-size: 0.8125rem;
     }
+    /* On narrow viewports each error row stacks three lines:
+       "<name>: Could not reach" / "<url>" / "N failures · last Xm ago".
+       The URL (wrapped in .mono by renderAlertMessage) and the meta
+       span switch to block; the leading middle-dot hides so the meta
+       line starts cleanly with the failure count. */
+    .dash-alert__row .mono { display: block; word-break: break-all; }
+    .dash-alert__row-meta { display: block; }
+    .dash-alert__row-meta-lead { display: none; }
+    .dash-alert__list { gap: 0.625rem; }
   }
 
   @media (max-width: 420px) {

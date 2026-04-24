@@ -5,7 +5,10 @@
 
 
 /* ─── Page head ────────────────────────────────────────────────────────── */
-.logs-head { margin-bottom: 24px; }
+/* Header-to-container gap matches the settings page (which uses Tailwind
+   `mb-3` = 0.75rem on its instances-section title row); both pages feed
+   off the same --space-3 token so retuning it moves them together. */
+.logs-head { margin-bottom: var(--space-3); }
 .logs-head__title-row {
   display: flex;
   align-items: flex-start;

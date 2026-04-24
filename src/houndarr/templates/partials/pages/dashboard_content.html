@@ -117,7 +117,10 @@
     border: 1px solid rgba(252, 165, 165, 0.35);
     border-radius: var(--radius-inset);
     white-space: nowrap;
-    align-self: start;
+    /* Vertically centre the button in the banner so a multi-row list
+       does not leave the call-to-action stranded at the top while the
+       error rows stack beneath it. */
+    align-self: center;
     transition: background var(--dur-base) var(--ease-station);
   }
   .dash-alert__link:hover { background: rgba(248, 113, 113, 0.12); }

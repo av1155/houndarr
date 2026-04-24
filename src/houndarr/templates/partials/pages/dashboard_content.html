@@ -71,6 +71,438 @@
     [data-run-now-btn="true"].is-error {
       animation: none;
     }
+    .dash-alert__link {
+      justify-self: stretch;
+      text-align: center;
+      padding: 0.625rem 0.875rem;
+      font-size: 0.8125rem;
+    }
+    /* On narrow viewports each error row stacks three lines:
+       "<name>: Could not reach" / "<url>" / "N failures · last Xm ago".
+       The URL (wrapped in .mono by renderAlertMessage) and the meta
+       span switch to block; the leading middle-dot hides so the meta
+       line starts cleanly with the failure count. */
+    .dash-alert__row .mono { display: block; word-break: break-all; }
+    .dash-alert__row-meta { display: block; }
+    .dash-alert__row-meta-lead { display: none; }
+    .dash-alert__list { gap: 0.625rem; }
+  }
+
+  @media (max-width: 420px) {
+    .dash-lh__headline { gap: 1.125rem; }
+    .dash-lh__stat-value { font-size: 1.625rem; }
+    .dash-lh__legend { gap: 0.625rem; font-size: 0.625rem; }
+  }
+
+  /* ── Instance card (PR 3 redesign) ────────────────────────────────── */
+  .dash-grid {
+    display: grid;
+    gap: 1rem;
+    grid-template-columns: 1fr;
+  }
+  @media (min-width: 640px) {
+    .dash-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .dash-trail__row { transition: none; }
+  }
+
+  .dash-card {
+    --type-color: var(--color-brand-400);
+    background: var(--color-surface-1);
+    border: 1px solid var(--color-border-subtle);
+    border-top: 3px solid var(--type-color);
+    border-radius: var(--radius-container);
+    padding: 1.375rem 1.5rem 1.25rem;
+    max-width: 40rem;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 1.125rem;
+    box-shadow: var(--shadow-2);
+  }
+  .dash-card[data-type="sonarr"]      { --type-color: var(--color-sonarr); }
+  .dash-card[data-type="radarr"]      { --type-color: var(--color-radarr); }
+  .dash-card[data-type="lidarr"]      { --type-color: var(--color-lidarr); }
+  .dash-card[data-type="readarr"]     { --type-color: var(--color-readarr); }
+  .dash-card[data-type="whisparr_v2"] { --type-color: var(--color-whisparr); }
+  .dash-card[data-type="whisparr_v3"] { --type-color: var(--color-whisparr-v3); }
+
+  .dash-card[data-disabled="true"]               { --type-color: #64748b; }
+  .dash-card[data-disabled="true"] .dash-card__name    { color: var(--color-text-muted); }
+  .dash-card[data-disabled="true"] .dash-card__eyebrow { opacity: 0.6; }
+  .dash-card[data-disabled="true"] .dash-policy        { opacity: 0.55; }
+
+  .dash-card__head {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 0.625rem;
+    align-items: start;
+  }
+  .dash-card__eyebrow {
+    font-family: var(--font-mono);
+    font-size: 0.625rem;
+    letter-spacing: 0.24em;
+    text-transform: uppercase;
+    color: var(--type-color);
+    font-weight: 600;
+    margin: 0;
+  }
+  .dash-card__name {
+    font-family: var(--font-sans);
+    font-size: 1.375rem;
+    font-weight: 600;
+    color: var(--color-text-inverse);
+    margin: 0.25rem 0 0;
+    letter-spacing: -0.02em;
+    line-height: 1.15;
+  }
+
+  .dash-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    font-size: 0.6875rem;
+    font-weight: 500;
+    padding: 3px 0.625rem;
+    border-radius: var(--radius-full);
+    font-family: var(--font-sans);
+    white-space: nowrap;
+    align-self: start;
+    margin-top: 2px;
+    text-decoration: none;
+  }
+  .dash-pill--active {
+    background: rgba(22, 101, 52, 0.28);
+    border: 1px solid rgba(74, 222, 128, 0.28);
+    color: var(--color-success-text);
+  }
+  .dash-pill--error {
+    background: rgba(153, 27, 27, 0.25);
+    border: 1px solid rgba(248, 113, 113, 0.42);
+    color: var(--color-danger-text);
+    cursor: pointer;
+  }
+  .dash-pill--error:hover { background: rgba(153, 27, 27, 0.40); }
+  .dash-pill--error svg { width: 0.75rem; height: 0.75rem; flex-shrink: 0; }
+  .dash-pill--disabled {
+    background: var(--color-surface-2);
+    border: 1px solid var(--color-border-default);
+    color: var(--color-text-muted);
+  }
+  .dash-card__stats {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.625rem;
+  }
+  .dash-card__stats > div {
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.375rem;
+    padding: 0.25rem 0;
+    position: relative;
+  }
+  .dash-card__stats > div + div::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 20%;
+    bottom: 20%;
+    width: 1px;
+    background: var(--color-border-subtle);
+  }
+  .dash-card__stat-label {
+    font-family: var(--font-mono);
+    font-size: 0.625rem;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--color-text-muted);
+    font-weight: 600;
+    margin: 0;
+  }
+  .dash-card__stat-value {
+    font-family: var(--font-mono);
+    font-size: 1.625rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    color: var(--color-text-inverse);
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+    margin: 0;
+  }
+  .dash-card__stat-value--eligible { color: var(--seg-eligible); }
+  .dash-card__stat-value--searched { color: var(--color-brand-300); }
+  .dash-card__stat-value--muted    { color: var(--color-text-muted); }
+  /* Secondary context below a stat value (e.g. lifetime count under
+     "Searched 24h").  Same type scale as the label but muted, so the
+     big number stays the tile's focal point while the subtitle
+     quietly confirms the broader number.  Negative top margin pulls
+     it tight against the big number and offsets the flex gap set on
+     the parent stat tile. */
+  .dash-card__stat-sub {
+    font-family: var(--font-mono);
+    font-size: 0.625rem;
+    letter-spacing: 0.04em;
+    color: var(--color-text-muted);
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+    margin: -0.125rem 0 0;
+  }
+
+  .dash-unlocks {
+    background: #0b0e14;
+    border: 1px solid var(--color-border-subtle);
+    border-radius: var(--radius-inset);
+    padding: 0.875rem 1rem;
+    /* Absorb the card's extra vertical space so disabled / short-list
+       cards align with taller siblings in the same grid row. The card
+       is flex-column; the grid stretches siblings to a shared height.
+       Without this the cooldown box hugs its natural height and the
+       footer drifts up, leaving the card feeling top-heavy. */
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+  }
+  .dash-unlocks__head {
+    font-family: var(--font-mono);
+    font-size: 0.5625rem;
+    letter-spacing: 0.24em;
+    text-transform: uppercase;
+    color: var(--color-text-muted);
+    font-weight: 600;
+    margin: 0 0 0.625rem;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem 0.625rem;
+  }
+  .dash-unlocks__head .tally {
+    color: var(--color-text-muted);
+    font-weight: 500;
+    margin-left: auto;
+    text-align: right;
+  }
+  .dash-unlocks__list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    /* Centre a short list vertically in the expanded cooldown box so
+       a 1- or 2-item card doesn't cluster at the top like the empty
+       state used to. 3+ items fill naturally (auto margins collapse
+       to 0 when there's no slack). */
+    margin: auto 0;
+  }
+  .dash-unlocks__row {
+    display: grid;
+    /* Three columns: icon | title (expands, ellipsizes) | unlock time.
+       Matches the recent-hunts fix so the kind icon sits adjacent to
+       the title on every card, not stranded in an empty-column 1fr. */
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    gap: 0.625rem;
+    align-items: center;
+    font-size: 0.8125rem;
+    color: var(--color-text-emphasis);
+  }
+  .dash-unlocks__title {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .dash-unlocks__time {
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    color: var(--type-color);
+    font-weight: 500;
+    white-space: nowrap;
+  }
+  .dash-unlocks--empty {
+    font-size: 0.75rem;
+    color: var(--color-text-muted);
+    font-style: italic;
+    text-align: center;
+    padding: 1.125rem 0.5rem;
+    /* Same auto-margin trick as __list: centres the empty message
+       vertically in the expanded cooldown box so a disabled or
+       all-caught-up card stays visually balanced with sibling cards. */
+    margin: auto 0;
+  }
+
+  .dash-policy {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem 0.3125rem;
+    font-family: var(--font-mono);
+    margin: 0;
+    padding: 0;
+  }
+  .dash-policy__chip {
+    display: inline-flex;
+    /* Align label + value on their shared text baseline. With
+       align-items: center the bounding boxes are centered but the
+       different font sizes leave visible ~1px baseline offset. */
+    align-items: baseline;
+    gap: 0.3125rem;
+    padding: 0.25rem 0.5rem 3px;
+    background: rgba(11, 14, 20, 0.8);
+    border: 1px solid var(--color-border-subtle);
+    border-radius: var(--radius-chip);
+    transition: border-color var(--dur-base) var(--ease-station);
+  }
+  .dash-policy__chip:hover { border-color: var(--color-border-default); }
+  .dash-policy__label {
+    font-size: 0.5625rem;
+    color: var(--color-text-muted);
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    font-weight: 500;
+    line-height: 1;
+  }
+  .dash-policy__value {
+    font-size: 0.71875rem;
+    color: var(--color-text-emphasis);
+    font-weight: 500;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+  }
+  .dash-policy__value[data-state="on"]  { color: var(--seg-eligible); }
+  .dash-policy__value[data-state="off"] { color: var(--color-text-muted); }
+
+  .dash-card__foot {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.875rem;
+    padding-top: 0.875rem;
+    border-top: 1px solid var(--color-border-subtle);
+    font-family: var(--font-mono);
+    font-size: 0.6875rem;
+    color: var(--color-text-muted);
+    flex-wrap: wrap;
+  }
+  .dash-card__foot-text { line-height: 1.4; }
+  .dash-card__foot-text .sep { color: #334155; margin: 0 0.3125rem; }
+
+  .dash-run-now {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    /* Fixed min-width so label swaps (Run now → Running… → Queued → Failed)
+       don't reflow the button dimensions mid-interaction. Sized for the
+       widest label ("Running…") plus icon + gap + 2× padding at the
+       font-size / letter-spacing / font-mono metrics below. */
+    min-width: 7rem;
+    gap: 0.375rem;
+    padding: 0.375rem 0.75rem;
+    /* Pin to the right edge of whichever flex line this ends up on: when
+       the footer wraps at narrow viewports the button becomes the only
+       item on its own line, and space-between alone would left-align it. */
+    margin-left: auto;
+    border: 1px solid color-mix(in srgb, var(--type-color) 50%, transparent);
+    color: var(--type-color);
+    background: transparent;
+    border-radius: var(--radius-inset);
+    font-family: var(--font-mono);
+    font-size: 0.6875rem;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    cursor: pointer;
+    transition:
+      background var(--dur-base) var(--ease-station),
+      border-color var(--dur-base) var(--ease-station),
+      transform var(--dur-base) var(--ease-station);
+  }
+  .dash-run-now:hover {
+    background: color-mix(in srgb, var(--type-color) 14%, transparent);
+    border-color: var(--type-color);
+  }
+  .dash-run-now:active { transform: translateY(1px); }
+  .dash-run-now:disabled { opacity: 0.4; cursor: not-allowed; }
+  .dash-run-now svg { width: 0.875rem; height: 0.875rem; flex-shrink: 0; }
+
+  /* Run-now state machine overrides (reuse existing data-run-now-btn hook). */
+  .dash-run-now.is-running {
+    background: color-mix(in srgb, var(--type-color) 18%, transparent);
+    border-color: var(--type-color);
+  }
+  .dash-run-now.is-success {
+    background: color-mix(in srgb, var(--seg-eligible) 22%, transparent);
+    border-color: var(--seg-eligible);
+    color: var(--seg-eligible);
+  }
+  .dash-run-now.is-error {
+    background: color-mix(in srgb, var(--color-danger) 22%, transparent);
+    border-color: var(--color-danger);
+    color: var(--color-danger);
+    animation: run-now-shake 280ms var(--ease-station);
+  }
+
+  /* Empty-dashboard panel (State C in the preview). */
+  .dash-empty-state {
+    background: var(--color-surface-1);
+    border: 1px solid var(--color-border-subtle);
+    border-radius: var(--radius-container);
+    padding: 3.5rem 1.5rem;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.875rem;
+  }
+  .dash-empty-state__icon {
+    width: 2.75rem;
+    height: 2.75rem;
+    border-radius: 50%;
+    border: 1px dashed var(--color-border-default);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 0.25rem;
+  }
+  .dash-empty-state__icon::before {
+    content: "";
+    width: 0.75rem;
+    height: 0.75rem;
+    border: 1px solid var(--color-state-disabled);
+    border-radius: 50%;
+  }
+  .dash-empty-state__title {
+    font-size: 1.125rem;
+    font-weight: 600;
+    color: var(--color-text-emphasis);
+    margin: 0;
+    letter-spacing: -0.01em;
+  }
+  .dash-empty-state__body {
+    font-size: 0.84375rem;
+    color: var(--color-text-muted);
+    margin: 0;
+    max-width: 27.5rem;
+    line-height: 1.55;
+  }
+  .dash-empty-state__cta {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    margin-top: 0.625rem;
+    padding: 0.625rem 1.25rem;
+    background: var(--color-brand-600);
+    color: var(--color-text-inverse);
+    border: 1px solid var(--color-brand-500);
+    border-radius: var(--radius-inset);
+    font-size: 0.8125rem;
+    font-weight: 500;
+    text-decoration: none;
+    transition: background var(--dur-base) var(--ease-station);
+  }
+  .dash-empty-state__cta:hover { background: var(--color-brand-500); }
+
+  @media (max-width: 640px) {
+    .dash-card { padding: 1.125rem 1.125rem 1rem; }
+    .dash-card__name { font-size: 1.1875rem; }
+    .dash-card__stat-value { font-size: 1.375rem; }
+    .dash-card__foot { font-size: 0.65625rem; }
   }
 </style>
 

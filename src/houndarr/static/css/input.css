@@ -315,10 +315,9 @@
   /* .status-pill centralises the instance-row status indicator (dot +
      label) used on the settings page.  The base class captures the
      shared flex shell; BEM-style `--active / --error / --disabled`
-     modifiers layer on the state colour.  The inner dot keeps its
-     Tailwind utilities inline because its colour is tied to the
-     variant and the `station-pulse-dot` animation toggle only applies
-     to active + error (disabled is intentionally unanimated). */
+     modifiers layer on the state colour.  The inner dot is the
+     shared `.status-dot` component (app.css), which carries size,
+     shape, and the active/error pulse. */
   .status-pill {
     @apply inline-flex items-center justify-center gap-1 text-xs min-w-[4.5rem];
   }

@@ -91,7 +91,7 @@ class TestInstanceRowRender:
             instance=inst,
             active_error_ids=[],
         )
-        assert "station-pulse-dot" in html
+        assert "status-dot--active" in html
 
     def test_disabled_instance_omits_pulse(self, render) -> None:
         inst = _instance_stub(enabled=False)
@@ -100,8 +100,7 @@ class TestInstanceRowRender:
             instance=inst,
             active_error_ids=[],
         )
-        # Disabled pill should not animate the pulse dot.
-        # We still emit a <span> but without station-pulse-dot on the dot.
+        # Disabled pill emits a .status-dot but none of the pulsing variants.
         assert "Disabled" in html or "disabled" in html.lower()
 
     def test_active_error_shows_error_pill(self, render) -> None:

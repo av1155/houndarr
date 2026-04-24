@@ -57,9 +57,10 @@
     input_class="station-input",
     label_class="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide",
     data_default_value=none,
-    help_text=none
+    help_text=none,
+    tip_ref=none
 ) -%}
-<label class="{{ label_class }}" for="{{ id }}">{% if caller %}{{ caller() }}{% else %}{{ label }}{% endif %}</label>
+<label class="{{ label_class }}" for="{{ id }}">{% if caller %}{{ caller() }}{% else %}{{ label }}{% endif %}{% if tip_ref %}<button type="button" class="tip-trigger" data-tip-ref="{{ tip_ref }}" aria-label="Help: {{ label }}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg></button>{% endif %}</label>
 <input id="{{ id }}" name="{{ name }}" type="{{ type }}"{% if required %} required{% endif %}{% if min is not none %} min="{{ min }}"{% endif %}{% if max is not none %} max="{{ max }}"{% endif %}{% if minlength is not none %} minlength="{{ minlength }}"{% endif %}{% if maxlength is not none %} maxlength="{{ maxlength }}"{% endif %}{% if pattern is not none %} pattern="{{ pattern }}"{% endif %}{% if autocomplete is not none %} autocomplete="{{ autocomplete }}"{% endif %}{% if placeholder is not none %} placeholder="{{ placeholder }}"{% endif %}{% if value is not none %} value="{{ value }}"{% endif %}{% if data_default_value is not none %} data-default-value="{{ data_default_value }}"{% endif %} class="{{ input_class }}" />
 {%- if help_text %}
 <p class="mt-1.5 text-xs text-slate-600">{{ help_text }}</p>
@@ -284,10 +285,11 @@
     label_class="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide",
     select_class="station-input station-select",
     data_default_value=none,
-    help_text=none
+    help_text=none,
+    tip_ref=none
 ) -%}
 <label class="{{ label_class }}" for="{{ id }}">
-  {% if caller %}{{ caller() }}{% else %}{{ label }}{% endif %}
+  {% if caller %}{{ caller() }}{% else %}{{ label }}{% endif %}{% if tip_ref %}<button type="button" class="tip-trigger" data-tip-ref="{{ tip_ref }}" aria-label="Help: {{ label }}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg></button>{% endif %}
 </label>
 <select id="{{ id }}" name="{{ name }}"{% if data_default_value is not none %} data-default-value="{{ data_default_value }}"{% endif %} class="{{ select_class }}">
 {%- for opt_value, opt_text in options %}

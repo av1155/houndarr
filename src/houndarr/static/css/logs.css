@@ -263,6 +263,76 @@
 }
 
 
+/* Multi-select filter dropdown.  Matches the copy-menu popover
+   language (surface-2 background, hairline-strong border, shadow-pop)
+   so the Instance filter reads as the same "menu" affordance already
+   established on this page.  The trigger inherits .field__control's
+   frame for parity with the other filter-bar fields. */
+.filter-multiselect { position: relative; }
+.filter-multiselect__trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 8px 32px 8px 10px;
+  background: transparent;
+  border: 0;
+  font-size: 13px;
+  color: var(--color-text-primary);
+  font-family: var(--font-sans);
+  text-align: left;
+  cursor: pointer;
+  line-height: 1.2;
+}
+.filter-multiselect__summary {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.filter-multiselect__menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  min-width: 100%;
+  max-height: 280px;
+  overflow-y: auto;
+  background: var(--color-surface-2);
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-inset);
+  padding: 4px;
+  box-shadow: var(--shadow-pop);
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+}
+.filter-multiselect__option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  font-size: 13px;
+  color: var(--color-text-emphasis);
+  border-radius: 3px;
+  cursor: pointer;
+  transition:
+    background var(--dur-fast) var(--ease-station),
+    color      var(--dur-fast) var(--ease-station);
+}
+.filter-multiselect__option:hover { background: var(--color-surface-3); color: var(--color-text-heading); }
+.filter-multiselect__option input[type="checkbox"] {
+  /* Native checkbox with the same brand accent the Noise chip uses so
+     the checked state reads as a recognisable selection, not a stray
+     system-themed box.  accent-color is inherited site-wide from
+     input.css but the multi-select menu needs it explicit because the
+     surrounding label is not a .chip-switch. */
+  accent-color: var(--color-brand-400);
+  width: 14px;
+  height: 14px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+
 /* ─── New-entries floating banner ─────────────────────────────────────── */
 .new-entries {
   position: fixed;

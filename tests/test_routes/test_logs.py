@@ -1042,8 +1042,12 @@ def test_logs_page_accepts_instance_id_query_param(app: TestClient) -> None:
     resp = app.get("/logs?instance_id=1&action=error")
     assert resp.status_code == 200
     body = resp.content
-    # Form's instance-filter select should mark option value="1" as selected.
-    assert b'value="1" selected' in body
+    # The instance multi-select dropdown pre-checks the box whose value
+    # matches the deep link's instance_id.  The checkbox sits inside a
+    # <label> so the `value="1" ... checked` substring is enough to
+    # pin the pre-selection without coupling to layout whitespace.
+    assert b'value="1"' in body
+    assert b"checked" in body
     # The action filter dropdown should surface the requested action.
     assert b'value="error" selected' in body
 

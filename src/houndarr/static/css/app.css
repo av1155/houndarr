@@ -292,6 +292,11 @@ body {
     background: var(--color-brand-400);
   }
 
+  /* Visible at rest on purpose so the right-hand utility slot reads
+     as a deliberate chip balancing the brand on the left, instead of
+     a naked 16px glyph floating past the edge of the nav pill.
+     Matches the mobile hamburger's always-on outline + surface
+     treatment, just at the desktop 34x34 size. */
   .nav-iconbtn {
     width: 34px;
     height: 34px;
@@ -299,8 +304,9 @@ body {
     align-items: center;
     justify-content: center;
     border-radius: 8px;
-    color: var(--color-text-muted);
-    border: 1px solid transparent;
+    color: var(--color-text-subtle);
+    background: var(--color-surface-2);
+    border: 1px solid var(--color-border-subtle);
     transition:
       color        var(--dur-fast) var(--ease-station),
       background   var(--dur-fast) var(--ease-station),
@@ -309,7 +315,7 @@ body {
   .nav-iconbtn svg { width: 16px; height: 16px; }
   .nav-iconbtn:hover {
     color: var(--color-text-primary);
-    background: var(--color-surface-2);
+    background: var(--color-surface-3);
     border-color: var(--color-border-default);
   }
   .nav-logout:hover {

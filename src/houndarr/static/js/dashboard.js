@@ -644,7 +644,7 @@ function initDashboardPage() {
           || '';
         footText = `last dispatch ${escHtml(lastDispatch || 'never')} <span class="sep">·</span>`
           + ` next patrol <span data-next-patrol`
-          + ` data-last-dispatch="${escHtml(anchor)}"`
+          + ` data-anchor="${escHtml(anchor)}"`
           + ` data-sleep-min="${sleep}">${sleep}m</span>`;
       }
       return `
@@ -848,16 +848,19 @@ function initDashboardPage() {
     );
 
     // Live "next patrol" countdown.  Renders on every [data-next-patrol]
-    // element once per second, computing `next_patrol_at = last_dispatch
-    // + sleep_interval_mins * 60s` from data attributes written server-
-    // side via the envelope.  Transitions to "running..." when the
-    // timer hits zero and stays there until the next poll updates
-    // last_dispatch_at.  Fallback: static "Nm" when we've never
-    // dispatched (initial install) or the timestamp is unparseable.
-    function formatNextPatrol(lastDispatch, sleepMin) {
+    // element once per second, computing `next_patrol_at = anchor +
+    // sleep_interval_mins * 60s` from data attributes written server-
+    // side via the envelope.  The anchor is `last_activity_at` (newest
+    // searched/skipped/error row, which advances at the end of every
+    // cycle whether items dispatched or all got skipped); falling
+    // back to `last_dispatch_at` and then to a static label if neither
+    // is present.  Transitions to "running..." when the timer hits
+    // zero and stays there until the next 30s status poll refreshes
+    // the anchor.
+    function formatNextPatrol(anchor, sleepMin) {
       if (sleepMin <= 0) return '-';
-      if (!lastDispatch) return `${sleepMin}m`;
-      const last = Date.parse(lastDispatch);
+      if (!anchor) return `${sleepMin}m`;
+      const last = Date.parse(anchor);
       if (Number.isNaN(last)) return `${sleepMin}m`;
       const remaining = (last + sleepMin * 60_000) - Date.now();
       if (remaining <= 0) return 'running...';
@@ -867,7 +870,7 @@ function initDashboardPage() {
     function tickNextPatrol() {
       document.querySelectorAll('[data-next-patrol]').forEach(function (el) {
         const nextText = formatNextPatrol(
-          el.dataset.lastDispatch || '',
+          el.dataset.anchor || '',
           Number(el.dataset.sleepMin) || 0,
         );
         if (el.textContent !== nextText) el.textContent = nextText;

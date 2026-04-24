@@ -226,10 +226,13 @@ function initDashboardPage() {
     }
 
     function renderAlertRow(inst) {
-      // One row inside the banner body per errored instance.  Each row
-      // reuses renderAlertMessage so an http(s):// URL embedded in the
-      // error message renders in the monospace accent, matching the
-      // previous single-instance layout.
+      // One row inside the banner body per errored instance.  The meta
+      // ("N failures · last Xm ago") lives inline at the end of the
+      // sentence, immediately after the URL, so the eye reads the row
+      // as a single line with an inline timestamp instead of a two-
+      // column grid with right-aligned metadata.  renderAlertMessage
+      // continues to wrap any http(s):// URL in .mono so the URL keeps
+      // the red monospace accent.
       const err = inst.active_error || {};
       const failures = toNumber(err.failures_count);
       const failText = failures > 0
@@ -239,11 +242,9 @@ function initDashboardPage() {
       const msg = err.message || '';
       return `
     <li class="dash-alert__row">
-      <span class="dash-alert__row-text">
-        <strong>${escHtml(inst.name)}</strong><span class="muted">:</span>
-        ${renderAlertMessage(msg)}
-      </span>
-      <span class="dash-alert__row-meta">${escHtml(failText)} <span class="muted">·</span> last ${escHtml(whenAgo || 'just now')}</span>
+      <strong>${escHtml(inst.name)}</strong><span class="muted">:</span>
+      ${renderAlertMessage(msg)}
+      <span class="dash-alert__row-meta"><span class="muted">·</span> ${escHtml(failText)} <span class="muted">·</span> last ${escHtml(whenAgo || 'just now')}</span>
     </li>`;
     }
 

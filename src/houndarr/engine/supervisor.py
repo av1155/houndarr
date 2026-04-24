@@ -180,22 +180,9 @@ class Supervisor:
         logger.info("Supervisor: all tasks stopped")
 
     async def start_instance_task(
-        self,
-        instance_id: int,
-        *,
-        instance: Instance | None = None,
-        startup_offset: int = 0,
-        skip_grace: bool = False,
+        self, instance_id: int, *, instance: Instance | None = None, startup_offset: int = 0
     ) -> bool:
-        """Ensure the scheduled loop task exists for *instance_id* when enabled.
-
-        Pass ``skip_grace=True`` when the task is starting in response to a
-        user action (manual enable, edit-save, create) so the first cycle
-        fires immediately instead of waiting ``_STARTUP_GRACE_SECS``.  The
-        grace exists to give co-located *arr containers a chance to finish
-        their own boot before Houndarr hammers them; it has no value when
-        a user is actively waiting for feedback on a click.
-        """
+        """Ensure the scheduled loop task exists for *instance_id* when enabled."""
         self._prune_scheduled_tasks()
 
         existing = self._tasks.get(instance_id)
@@ -209,7 +196,7 @@ class Supervisor:
             return False
 
         task = asyncio.create_task(
-            self._instance_loop(instance_id, startup_offset=startup_offset, skip_grace=skip_grace),
+            self._instance_loop(instance_id, startup_offset=startup_offset),
             name=f"search-loop-{instance_id}",
         )
         task.add_done_callback(partial(self._on_scheduled_task_done, instance_id))
@@ -253,20 +240,13 @@ class Supervisor:
         return stopped
 
     async def reconcile_instance(self, instance_id: int) -> None:
-        """Start or stop tasks to match the instance's current enabled state.
-
-        Called from the Settings CRUD and toggle-enabled routes whenever an
-        instance's ``enabled`` flag or config changes.  Always passes
-        ``skip_grace=True`` because every reconcile originates from a user
-        action; the startup grace is only helpful for cold container boot
-        (which is handled by ``start()`` separately).
-        """
+        """Start or stop tasks to match the instance's current enabled state."""
         instance = await get_instance(instance_id, master_key=self._master_key)
         if instance is None or not instance.core.enabled:
             await self.stop_instance_task(instance_id)
             return
 
-        await self.start_instance_task(instance_id, instance=instance, skip_grace=True)
+        await self.start_instance_task(instance_id, instance=instance)
 
     async def trigger_run_now(self, instance_id: int) -> RunNowStatus:
         """Queue one immediate search cycle for *instance_id* if active."""
@@ -293,9 +273,7 @@ class Supervisor:
     # Internal
     # ------------------------------------------------------------------
 
-    async def _instance_loop(
-        self, instance_id: int, startup_offset: int = 0, skip_grace: bool = False
-    ) -> None:
+    async def _instance_loop(self, instance_id: int, startup_offset: int = 0) -> None:
         """Run search cycles for one instance until cancelled.
 
         A one-time startup grace delay gives co-located *arr services time
@@ -304,27 +282,15 @@ class Supervisor:
         recovery) to avoid inflating the dashboard error counter with retry
         noise; the state machine lives in
         :func:`houndarr.engine.retry.run_with_reconnect`.
-
-        When ``skip_grace=True`` the grace sleep is bypassed entirely; the
-        first cycle fires on the next event-loop tick.  Used on user-
-        initiated starts (manual enable, edit-save, instance create) so the
-        dashboard's self-clearing error banner picks up the fresh non-error
-        row immediately instead of 10 seconds later.
         """
         logger.debug("Supervisor: loop started for instance id=%d", instance_id)
 
-        if skip_grace:
-            logger.info(
-                "Supervisor: user-initiated start for instance id=%d; no startup grace",
-                instance_id,
-            )
-        else:
-            logger.info(
-                "Supervisor: waiting %d s startup grace for instance id=%d",
-                _STARTUP_GRACE_SECS + startup_offset,
-                instance_id,
-            )
-            await asyncio.sleep(_STARTUP_GRACE_SECS + startup_offset)
+        logger.info(
+            "Supervisor: waiting %d s startup grace for instance id=%d",
+            _STARTUP_GRACE_SECS + startup_offset,
+            instance_id,
+        )
+        await asyncio.sleep(_STARTUP_GRACE_SECS + startup_offset)
 
         state = ReconnectState()
 

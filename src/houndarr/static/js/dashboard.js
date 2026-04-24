@@ -244,7 +244,7 @@ function initDashboardPage() {
     <li class="dash-alert__row">
       <strong>${escHtml(inst.name)}</strong><span class="muted">:</span>
       ${renderAlertMessage(msg)}
-      <span class="dash-alert__row-meta"><span class="muted">·</span> ${escHtml(failText)} <span class="muted">·</span> last ${escHtml(whenAgo || 'just now')}</span>
+      <span class="dash-alert__row-meta"><span class="muted dash-alert__row-meta-lead">·</span> ${escHtml(failText)} <span class="muted">·</span> last ${escHtml(whenAgo || 'just now')}</span>
     </li>`;
     }
 

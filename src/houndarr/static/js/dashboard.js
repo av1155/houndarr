@@ -419,6 +419,42 @@ function initDashboardPage() {
       return `<span class="dash-pill dash-pill--active"><span class="dash-pill__dot"></span>Active</span>`;
     }
 
+    // Hourly search-budget bar.  Shows how many indexer hits the
+    // instance has dispatched in the last rolling hour against the
+    // dominant cap (missing + cutoff + upgrade, when enabled).  The
+    // "am I about to get banned by my indexer" signal — #1 research-
+    // identified trust anxiety and Huntarr's single most-praised
+    // widget pre-incident.  Suppressed when hourly_cap=0 (unlimited)
+    // since the denominator is meaningless.
+    function renderBudgetBar(inst) {
+      if (!inst.enabled || inst.active_error) {
+        return '';
+      }
+      const hourlyCap = toNumber(inst.hourly_cap);
+      if (hourlyCap <= 0) {
+        return '';
+      }
+      const effectiveCap =
+        hourlyCap
+        + (inst.cutoff_enabled ? toNumber(inst.cutoff_hourly_cap) : 0)
+        + (inst.upgrade_enabled ? toNumber(inst.upgrade_hourly_cap) : 0);
+      const used = Math.max(0, toNumber(inst.searches_last_hour));
+      const pct = effectiveCap > 0 ? Math.min(100, (used / effectiveCap) * 100) : 0;
+      const level = pct >= 80 ? 'danger' : pct >= 50 ? 'warning' : 'eligible';
+      const atCap = effectiveCap > 0 && used >= effectiveCap;
+      const title = `${used} of ${effectiveCap} searches used this hour. `
+        + `Missing cap ${hourlyCap}, cutoff cap ${inst.cutoff_enabled ? toNumber(inst.cutoff_hourly_cap) : 'off'}, `
+        + `upgrade cap ${inst.upgrade_enabled ? toNumber(inst.upgrade_hourly_cap) : 'off'}.`;
+      return `
+<div class="dash-card__budget" data-level="${level}"${atCap ? ' data-at-cap="true"' : ''} title="${escHtml(title)}">
+  <dt class="dash-card__budget-label">Hourly budget</dt>
+  <dd class="dash-card__budget-value">${used} / ${effectiveCap}</dd>
+  <div class="dash-card__budget-bar" role="img" aria-label="${escHtml(title)}">
+    <span class="dash-card__budget-fill" style="--budget-fill: ${pct.toFixed(1)}%;"></span>
+  </div>
+</div>`;
+    }
+
     function renderUnlockPanel(inst) {
       if (!inst.enabled) {
         return `
@@ -621,6 +657,7 @@ function initDashboardPage() {
     </div>
   </dl>
   ${renderUnlockPanel(inst)}
+  ${renderBudgetBar(inst)}
   <p class="dash-policy">${renderPolicyChips(inst)}
   </p>
   ${renderCardFooter(inst)}

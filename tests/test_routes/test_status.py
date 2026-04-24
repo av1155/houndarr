@@ -576,6 +576,76 @@ def test_status_v2_recent_searches_last_7_days(app: TestClient) -> None:
     assert labels == ["Fresh Show", "Older Show"]
 
 
+def test_status_v2_envelope_includes_budget_bar_fields(app: TestClient) -> None:
+    """Each instance carries the data the hourly budget bar needs.
+
+    `searches_last_hour` is the numerator (rolling 1-hour SUM of
+    dispatches).  `cutoff_hourly_cap` and `upgrade_hourly_cap` let
+    the dashboard sum the dominant-cap denominator without hitting
+    the DB again.
+    """
+    _login(app)
+    _create_instance(app)
+    body = app.get("/api/status").json()
+    row = body["instances"][0]
+    assert "searches_last_hour" in row
+    assert "cutoff_hourly_cap" in row
+    assert "upgrade_hourly_cap" in row
+    assert isinstance(row["searches_last_hour"], int)
+    assert isinstance(row["cutoff_hourly_cap"], int)
+    assert isinstance(row["upgrade_hourly_cap"], int)
+
+
+def test_status_v2_searches_last_hour_counts_only_recent(app: TestClient) -> None:
+    """The budget counter windows strictly to the last 60 minutes."""
+    _login(app)
+    iid = _create_instance(app)
+    now = datetime.now(UTC)
+    asyncio.run(
+        _seed_search_log(
+            [
+                (
+                    iid,
+                    201,
+                    "episode",
+                    "missing",
+                    "searched",
+                    None,
+                    "Fresh",
+                    None,
+                    (now - timedelta(minutes=5)).strftime("%Y-%m-%dT%H:%M:%S.000Z"),
+                ),
+                (
+                    iid,
+                    202,
+                    "episode",
+                    "cutoff",
+                    "searched",
+                    None,
+                    "Also Fresh",
+                    None,
+                    (now - timedelta(minutes=45)).strftime("%Y-%m-%dT%H:%M:%S.000Z"),
+                ),
+                (
+                    iid,
+                    203,
+                    "episode",
+                    "missing",
+                    "searched",
+                    None,
+                    "Just Outside",
+                    None,
+                    (now - timedelta(minutes=65)).strftime("%Y-%m-%dT%H:%M:%S.000Z"),
+                ),
+            ]
+        )
+    )
+    body = app.get("/api/status").json()
+    row = body["instances"][0]
+    # Two rows are inside the 60-minute window (5m and 45m); the 65m row is out.
+    assert row["searches_last_hour"] == 2
+
+
 def test_status_v2_recent_searches_includes_search_kind(app: TestClient) -> None:
     """Each recent-hunts row surfaces its pass kind so the dashboard can icon-tag it."""
     _login(app)

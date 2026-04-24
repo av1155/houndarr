@@ -255,6 +255,69 @@ body {
   .kind-icon[data-kind="missing"] { color: var(--color-kind-missing); }
   .kind-icon[data-kind="cutoff"]  { color: var(--color-kind-cutoff); }
   .kind-icon[data-kind="upgrade"] { color: var(--color-kind-upgrade); }
+
+  /* Hourly budget bar on each dashboard instance card.
+     - data-level = eligible | warning | danger drives the fill color
+       through the three segment tokens (mirrors library-health legend).
+     - data-at-cap triggers a station-pulse that flags the "at or over
+       your indexer budget" moment, matching Huntarr's pre-incident
+       traffic-light treatment.
+     - --budget-fill is a per-render percentage written inline; no
+       JS mutation after first paint.  The transition lets the poll
+       cadence feel smooth instead of snappy. */
+  .dash-card__budget {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    column-gap: 8px;
+    row-gap: 4px;
+    padding: 8px 12px;
+    margin: 8px 0;
+    background: var(--color-surface-1);
+    border-radius: var(--radius-container, 8px);
+    border: 1px solid var(--color-border-subtle);
+    font-size: 11px;
+    font-family: var(--font-mono);
+    letter-spacing: 0.03em;
+  }
+  .dash-card__budget-label {
+    text-transform: uppercase;
+    color: var(--color-text-muted);
+    font-weight: 500;
+  }
+  .dash-card__budget-value {
+    justify-self: end;
+    color: var(--color-text-emphasis);
+    font-weight: 600;
+  }
+  .dash-card__budget-bar {
+    grid-column: 1 / -1;
+    height: 6px;
+    border-radius: 3px;
+    background: color-mix(in srgb, var(--color-border-default) 60%, transparent);
+    overflow: hidden;
+  }
+  .dash-card__budget-fill {
+    display: block;
+    height: 100%;
+    width: var(--budget-fill, 0%);
+    border-radius: 3px;
+    background: var(--seg-eligible);
+    transition:
+      width      var(--dur-slow, 420ms) var(--ease-station),
+      background var(--dur-fast) var(--ease-station);
+  }
+  .dash-card__budget[data-level="warning"] .dash-card__budget-fill {
+    background: var(--color-warning);
+  }
+  .dash-card__budget[data-level="danger"] .dash-card__budget-fill {
+    background: var(--color-danger);
+  }
+  .dash-card__budget[data-level="danger"] .dash-card__budget-value {
+    color: var(--color-danger);
+  }
+  .dash-card__budget[data-at-cap="true"] .dash-card__budget-fill {
+    animation: station-pulse 2.4s var(--ease-station) 2;
+  }
 }
 
 /* ── App content loading / entering ────────────────────────────────────── */

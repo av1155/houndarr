@@ -286,20 +286,36 @@ function initDashboardPage() {
       });
       const totals = activeInstances.reduce(function (acc, i) {
         const bd = i.cooldown_breakdown || { missing: 0, cutoff: 0, upgrade: 0 };
-        acc.monitored += toNumber(i.monitored_total);
+        const monI = toNumber(i.monitored_total);
+        const gatedI = toNumber(bd.missing) + toNumber(bd.cutoff);
+        const unrI = toNumber(i.unreleased_count);
+        acc.monitored += monI;
         acc.cooldown  += toNumber(bd.missing);
         acc.cutoffCd  += toNumber(bd.cutoff);
         acc.upgradeCd += toNumber(bd.upgrade);
-        acc.unreleased += toNumber(i.unreleased_count);
+        acc.unreleased += unrI;
+        // Sum per-instance Eligibles (each already clamped at zero)
+        // so one instance's stale-cooldown overshoot cannot drain
+        // another instance's positive contribution.  Computing
+        // max(0, totals.monitored - totals.gated - totals.unreleased)
+        // at the fleet scope silently drops a genuine positive
+        // whenever any instance's (gated + unreleased) exceeds its
+        // monitored_total: the overshoot turns the fleet total
+        // negative, max clamps to 0, and the rollup headline
+        // contradicts the sum of the cards below it.  Cooldown
+        // accounting can run above monitored_total because rows
+        // outlive the wanted item (downloads, unmonitors, cutoff-met
+        // transitions) and there is no current lifecycle cleanup; a
+        // proper reconcile is a separate commit.
+        acc.eligible += Math.max(0, monI - gatedI - unrI);
         return acc;
-      }, { monitored: 0, cooldown: 0, cutoffCd: 0, upgradeCd: 0, unreleased: 0 });
+      }, { monitored: 0, cooldown: 0, cutoffCd: 0, upgradeCd: 0, unreleased: 0, eligible: 0 });
       // Upgrade cooldowns sit outside monitored_total (the upgrade pool is
       // has_file + cutoff_met; those items are neither in /wanted/missing
-      // nor /wanted/cutoff). Subtracting upgradeCd here would under-report
-      // Eligible by exactly the upgrade-cooldown count. Keep the violet
-      // bar segment + legend entry to surface upgrade activity separately.
+      // nor /wanted/cutoff), so the bar segment + legend entry surface
+      // upgrade activity separately.
       const gated = totals.cooldown + totals.cutoffCd;
-      const eligible = Math.max(0, totals.monitored - gated - totals.unreleased);
+      const eligible = totals.eligible;
       // Eyebrow count equals the sum of every segment rendered below it
       // so bar width and eyebrow number visually agree.  Labeling this
       // "items tracked" rather than "monitored" avoids overloading the

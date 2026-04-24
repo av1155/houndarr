@@ -152,15 +152,38 @@
   function bind(el) {
     if (el.dataset.tipBound === "1") return;
     el.dataset.tipBound = "1";
-    el.addEventListener("mouseenter", function () {
-      show(el);
+    // Hover is mouse-only.  On touch devices, tapping a button also
+    // emits simulated mouseenter + focusin; pairing either with the
+    // click toggle below made the first tap cancel itself out (show
+    // via hover/focus, then hide via click === activeTrigger), and
+    // the user had to tap twice to reveal the tooltip.  Filtering on
+    // pointerType keeps real mouse hover working while leaving touch
+    // entirely in the click handler's hands.
+    el.addEventListener("pointerenter", function (event) {
+      if (event.pointerType === "mouse") show(el);
     });
-    el.addEventListener("mouseleave", scheduleHide);
+    el.addEventListener("pointerleave", function (event) {
+      if (event.pointerType === "mouse") scheduleHide();
+    });
+    // Keyboard tab-focus should reveal the tooltip, but the same
+    // focusin event also fires when touch / mouse taps set focus on
+    // the button.  :focus-visible is the UA's own keyboard-vs-pointer
+    // discriminator, so it gives us keyboard behaviour without
+    // re-triggering the touch self-cancel bug.
     el.addEventListener("focusin", function () {
-      show(el);
+      try {
+        if (el.matches(":focus-visible")) show(el);
+      } catch (_err) {
+        // Very old browsers without :focus-visible: fall back to the
+        // prior focus-always-shows behaviour.  Mildly imperfect on
+        // touch for those browsers, but safe for keyboard users.
+        show(el);
+      }
     });
     el.addEventListener("focusout", scheduleHide);
-    // Tap on mobile toggles; a second tap or a tap elsewhere hides.
+    // Tap / click toggles.  On touch devices this is the sole path
+    // that opens the tooltip, so the first tap shows it and each
+    // subsequent tap flips state.
     el.addEventListener("click", function (event) {
       event.preventDefault();
       if (activeTrigger === el) {

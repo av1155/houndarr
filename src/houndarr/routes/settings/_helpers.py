@@ -65,7 +65,6 @@ from houndarr.services.instances import (
     list_instances,
 )
 
-
 # Re-exported from houndarr.services.instance_validation so existing
 # imports from this module keep working; D.11 moved the real definitions
 # into the service layer.

@@ -1,6 +1,6 @@
 """Pin the pure helpers in routes/api/logs.py.
 
-Locks the parser helpers (``parse_instance_id`` /
+Locks the parser helpers (``parse_instance_ids`` /
 ``parse_search_kind`` / ``parse_cycle_trigger`` /
 ``parse_hide_system``), the summary builder (``summarize_rows``),
 the limit clamp (``compute_load_more_limit``), and the HTMX 422
@@ -21,7 +21,7 @@ from houndarr.routes.api.logs import (
     parse_cycle_trigger,
     parse_hide_skipped,
     parse_hide_system,
-    parse_instance_id,
+    parse_instance_ids,
     parse_search_kind,
 )
 from houndarr.services.log_query import compute_load_more_limit, summarize_rows
@@ -32,19 +32,41 @@ pytestmark = pytest.mark.pinning
 # Parsers
 
 
-class TestParseInstanceId:
-    def test_none_returns_none(self) -> None:
-        assert parse_instance_id(None) is None
+class TestParseInstanceIds:
+    def test_none_returns_empty_tuple(self) -> None:
+        assert parse_instance_ids(None) == ()
 
-    def test_empty_string_returns_none(self) -> None:
-        assert parse_instance_id("") is None
+    def test_empty_list_returns_empty_tuple(self) -> None:
+        assert parse_instance_ids([]) == ()
 
-    def test_integer_string_parses(self) -> None:
-        assert parse_instance_id("42") == 42
+    def test_empty_string_filtered_out(self) -> None:
+        # The native "All instances" <option value=""> still submits an
+        # empty string; it must not introduce a phantom zero into the
+        # WHERE clause.
+        assert parse_instance_ids([""]) == ()
+
+    def test_single_integer_string_parses(self) -> None:
+        assert parse_instance_ids(["42"]) == (42,)
+
+    def test_multiple_values_preserve_order(self) -> None:
+        assert parse_instance_ids(["3", "1", "2"]) == (3, 1, 2)
+
+    def test_duplicates_deduped(self) -> None:
+        # Order-preserving dedupe keeps the first occurrence so the SQL
+        # placeholder sequence is deterministic across retries.
+        assert parse_instance_ids(["1", "2", "1", "2"]) == (1, 2)
+
+    def test_mixed_empties_skipped(self) -> None:
+        assert parse_instance_ids(["", "42", ""]) == (42,)
 
     def test_negative_accepted(self) -> None:
         """Pinning quirk: negative ints pass the int() cast; upstream should gate."""
-        assert parse_instance_id("-1") == -1
+        assert parse_instance_ids(["-1"]) == (-1,)
+
+    def test_non_integer_raises_422(self) -> None:
+        with pytest.raises(HTTPException) as exc:
+            parse_instance_ids(["abc"])
+        assert exc.value.status_code == 422
 
 
 class TestParseSearchKind:

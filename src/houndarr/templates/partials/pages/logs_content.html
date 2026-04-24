@@ -68,15 +68,9 @@
           hidden
         >
           {% for inst in instances %}
-          <label class="filter-multiselect__option">
-            <input
-              type="checkbox"
-              name="instance_id"
-              value="{{ inst.core.id }}"
-              {% if inst.core.id in (selected_instance_ids or ()) %}checked{% endif %}
-            />
-            <span>{{ inst.core.name }}</span>
-          </label>
+          <option value="{{ inst.core.id }}" {% if inst.core.id in (selected_instance_ids or ()) %}selected{% endif %}>
+            {{ inst.core.name }}
+          </option>
           {% endfor %}
         </div>
       </div>

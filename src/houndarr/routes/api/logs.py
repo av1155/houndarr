@@ -37,26 +37,41 @@ _SEARCH_KINDS = {"missing", "cutoff", "upgrade"}
 _CYCLE_TRIGGERS = {"scheduled", "run_now", "system"}
 
 
-def _parse_instance_id(raw: str | None) -> int | None:
-    """Parse optional instance_id query param from HTMX form values.
+def _parse_instance_ids(raw: list[str] | None) -> tuple[int, ...]:
+    """Parse zero or more ``instance_id`` query params from an HTMX form.
 
-    Empty-string values are treated as no filter.
+    Accepts the repeated ``?instance_id=1&instance_id=2`` shape the
+    multi-select filter submits, plus the empty-string sentinel the
+    native "All instances" option used to emit.  De-duplicates while
+    preserving request order so the SQL ``WHERE ... IN (...)`` clause
+    stays deterministic and test assertions over ordering are stable.
 
     Args:
-        raw: Query param value from request.
+        raw: Query values FastAPI collects under ``list[str]``.  ``None``
+            and empty lists both mean "no instance filter".
 
     Returns:
-        Parsed integer instance ID, or ``None``.
+        Tuple of unique instance ids in request order; empty tuple when
+        no meaningful value was supplied.
 
     Raises:
-        HTTPException: If a non-empty value is not an integer.
+        HTTPException: If any non-empty value is not an integer.
     """
-    if raw is None or raw == "":
-        return None
-    try:
-        return int(raw)
-    except ValueError as exc:  # pragma: no cover - defensive path
-        raise HTTPException(status_code=422, detail="instance_id must be an integer") from exc
+    if not raw:
+        return ()
+    seen: set[int] = set()
+    ordered: list[int] = []
+    for value in raw:
+        if value is None or value == "":
+            continue
+        try:
+            parsed = int(value)
+        except ValueError as exc:  # pragma: no cover - defensive path
+            raise HTTPException(status_code=422, detail="instance_id must be an integer") from exc
+        if parsed not in seen:
+            seen.add(parsed)
+            ordered.append(parsed)
+    return tuple(ordered)
 
 
 def _parse_search_kind(raw: str | None) -> str | None:
@@ -123,7 +138,7 @@ class _ParsedLogFilters:
     is not part of any public contract.
     """
 
-    instance_id: int | None
+    instance_ids: tuple[int, ...]
     action: str | None
     search_kind: str | None
     cycle_trigger: str | None
@@ -134,7 +149,7 @@ class _ParsedLogFilters:
 
 
 def _resolve_filters(
-    instance_id: str | None = Query(default=None),
+    instance_id: list[str] = Query(default_factory=list),
     action: str | None = Query(default=None),
     search_kind: str | None = Query(default=None),
     cycle_trigger: str | None = Query(default=None),
@@ -151,7 +166,7 @@ def _resolve_filters(
     error row instead (see :func:`_partial_validation_error`).
     """
     return _ParsedLogFilters(
-        instance_id=_parse_instance_id(instance_id),
+        instance_ids=_parse_instance_ids(instance_id),
         action=action or None,
         search_kind=_parse_search_kind(search_kind),
         cycle_trigger=_parse_cycle_trigger(cycle_trigger),
@@ -165,7 +180,7 @@ def _resolve_filters(
 async def _fetch_filtered_rows(filters: _ParsedLogFilters) -> list[dict[str, Any]]:
     """Dispatch the parsed filter bundle to :func:`query_logs`."""
     return await query_logs(
-        instance_id=filters.instance_id,
+        instance_ids=filters.instance_ids,
         action=filters.action,
         search_kind=filters.search_kind,
         cycle_trigger=filters.cycle_trigger,
@@ -208,7 +223,7 @@ async def get_logs(
 @router.get("/api/logs/partial", response_class=HTMLResponse)
 async def get_logs_partial(
     request: Request,
-    instance_id: str | None = Query(default=None),
+    instance_id: list[str] = Query(default_factory=list),
     action: str | None = Query(default=None),
     search_kind: str | None = Query(default=None),
     cycle_trigger: str | None = Query(default=None),
@@ -248,7 +263,7 @@ async def get_logs_partial(
         context={
             "rows": rows,
             # Pass back current filter values so the partial can render pagination.
-            "instance_id": filters.instance_id,
+            "instance_ids": filters.instance_ids,
             "action": filters.action,
             "search_kind": filters.search_kind,
             "cycle_trigger": filters.cycle_trigger,

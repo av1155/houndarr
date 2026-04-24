@@ -23,6 +23,7 @@ does not need to share a handle with sibling reads, so the simpler
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import UTC, datetime
 from typing import Any
 
@@ -124,7 +125,7 @@ def summarize_rows(rows: list[dict[str, Any]]) -> dict[str, int]:
 
 async def query_logs(
     *,
-    instance_id: int | None = None,
+    instance_ids: Sequence[int] = (),
     action: str | None = None,
     search_kind: str | None = None,
     cycle_trigger: str | None = None,
@@ -147,7 +148,12 @@ async def query_logs(
     the cycle level.
 
     Args:
-        instance_id: Restrict to one instance, or ``None`` for all.
+        instance_ids: Restrict to the supplied instance ids.  Empty
+            sequence (the default) means "no instance filter" and
+            keeps the WHERE clause untouched.  The filter compiles to
+            ``sl.instance_id IN (?, ?, ...)`` so the dashboard error
+            banner's multi-instance deep link pulls logs for every
+            errored instance in one query.
         action: Filter by ``action`` column value, or ``None``.
         search_kind: ``"missing"`` / ``"cutoff"`` / ``"upgrade"``,
             or ``None``.
@@ -171,9 +177,14 @@ async def query_logs(
     conditions: list[str] = []
     params: list[str | int] = []
 
-    if instance_id is not None:
-        conditions.append("sl.instance_id = ?")
-        params.append(instance_id)
+    if instance_ids:
+        # Build a `?,?,?`-style placeholder string whose length equals
+        # the id list; concatenating fixed `?` characters keeps the
+        # query parameterised (placeholders only, never user values)
+        # and leaves the bandit suppression below honest.
+        placeholders = ",".join("?" * len(instance_ids))
+        conditions.append(f"sl.instance_id IN ({placeholders})")  # noqa: S608  # nosec B608
+        params.extend(instance_ids)
 
     if action is not None:
         conditions.append("sl.action = ?")

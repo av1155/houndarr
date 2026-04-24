@@ -324,6 +324,57 @@ async def test_logs_empty_instance_id_treated_as_all(
 
 
 @pytest.mark.asyncio()
+async def test_logs_filter_by_multiple_instance_ids(seeded_log: None, async_client: object) -> None:
+    """Repeated instance_id params narrow the feed to the selected instances.
+
+    Exercises the multi-select contract added for the dashboard error
+    banner: ``/logs?instance_id=1&instance_id=2`` must return rows whose
+    ``instance_id`` is in ``{1, 2}`` and nothing else.  The seeded
+    fixture owns two instances (ids 1 and 2), so asserting that both
+    appear rules out accidental single-value fallback.
+    """
+    from httpx import AsyncClient
+
+    assert isinstance(async_client, AsyncClient)
+
+    await async_client.post(
+        "/setup",
+        data={"username": "admin", "password": "ValidPass1!", "password_confirm": "ValidPass1!"},
+    )
+    await async_client.post("/login", data={"username": "admin", "password": "ValidPass1!"})
+
+    resp = await async_client.get("/api/logs?instance_id=1&instance_id=2&limit=200")
+    assert resp.status_code == 200
+    data = resp.json()
+    returned_ids = {row["instance_id"] for row in data}
+    # The seed also carries a system row whose instance_id IS NULL;
+    # the IN-clause filter must exclude it so we only see rows for the
+    # two instances explicitly asked for.
+    assert returned_ids == {1, 2}
+    for row in data:
+        assert row["instance_id"] in {1, 2}
+
+
+@pytest.mark.asyncio()
+async def test_logs_filter_rejects_non_integer_instance_id(
+    seeded_log: None, async_client: object
+) -> None:
+    """A non-integer instance_id value returns a 422 (multi-select preserved)."""
+    from httpx import AsyncClient
+
+    assert isinstance(async_client, AsyncClient)
+
+    await async_client.post(
+        "/setup",
+        data={"username": "admin", "password": "ValidPass1!", "password_confirm": "ValidPass1!"},
+    )
+    await async_client.post("/login", data={"username": "admin", "password": "ValidPass1!"})
+
+    resp = await async_client.get("/api/logs?instance_id=1&instance_id=abc")
+    assert resp.status_code == 422
+
+
+@pytest.mark.asyncio()
 async def test_logs_filter_by_action(seeded_log: None, async_client: object) -> None:
     """Filtering by action returns only rows with that action."""
     from httpx import AsyncClient

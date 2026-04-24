@@ -583,7 +583,7 @@ async def _run_search_pass(  # noqa: C901
                 )
                 bucket = "cutoff_cd" if is_cutoff else "cooldown"
                 skip_key = (instance.core.id, candidate.item_id, search_kind, bucket)
-                if await should_log_skip(skip_key):
+                if cycle_trigger == "run_now" or await should_log_skip(skip_key):
                     logger.debug(
                         "[%s] %s%s: %s",
                         instance.core.name,
@@ -819,7 +819,7 @@ async def _run_upgrade_pass(
         if await is_on_cooldown_ref(ref, cooldown_days):
             reason = f"on upgrade cooldown ({cooldown_days}d)"
             skip_key = (instance.core.id, candidate.item_id, "upgrade", "upgrade_cd")
-            if await should_log_skip(skip_key):
+            if cycle_trigger == "run_now" or await should_log_skip(skip_key):
                 logger.debug("[%s] upgrade %s: %s", instance.core.name, candidate.item_id, reason)
                 await _write_item_log(
                     ref,

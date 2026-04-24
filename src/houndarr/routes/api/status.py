@@ -61,21 +61,33 @@ def get_supervisor(request: Request) -> SupervisorProto:
 
 
 @router.get("/api/status")
-async def get_status(request: Request) -> JSONResponse:  # noqa: ARG001
+async def get_status(request: Request) -> JSONResponse:
     """Return the dashboard status envelope.
 
     ``{"instances": [...], "recent_searches": [...]}``.  Each instance
     carries per-card fields (``monitored_total``, ``unreleased_count``,
-    ``lifetime_searched``, ``last_dispatch_at``, ``active_error``,
-    ``cooldown_breakdown``, ``unlocking_next``) plus the policy fields
-    used by the chip row; ``recent_searches`` is the global last-five
-    dispatches over the past seven days, joined against instances for
-    the type-colour rendering.  See
+    ``lifetime_searched``, ``last_dispatch_at``, ``last_cycle_end``,
+    ``active_error``, ``cooldown_breakdown``, ``unlocking_next``) plus
+    the policy fields used by the chip row; ``recent_searches`` is the
+    global last-five dispatches over the past seven days, joined
+    against instances for the type-colour rendering.  See
     :func:`houndarr.services.metrics.gather_dashboard_status` for the
     per-field contract.
+
+    ``last_cycle_end`` is pulled from the live supervisor's in-memory
+    map (populated at the end of every cycle) so the dashboard
+    countdown anchors on a signal that advances once per cycle even
+    when the cycle is all-LRU-throttled skips.  Missing when the
+    supervisor hasn't booted yet or has never completed a cycle for
+    the instance; the client falls back to ``last_activity_at`` in
+    those cases.
     """
+    supervisor = getattr(request.app.state, "supervisor", None)
+    cycle_ends: dict[int, str] = (
+        supervisor.cycle_end_timestamps() if isinstance(supervisor, Supervisor) else {}
+    )
     async with get_db() as db:
-        envelope = await gather_dashboard_status(db)
+        envelope = await gather_dashboard_status(db, cycle_ends=cycle_ends)
     return JSONResponse(envelope)
 
 

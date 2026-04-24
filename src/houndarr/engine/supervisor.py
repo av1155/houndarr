@@ -11,6 +11,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from contextlib import suppress
+from datetime import UTC, datetime
 from functools import partial
 from typing import Literal
 from uuid import uuid4
@@ -90,6 +91,16 @@ class Supervisor:
         # supervisor tears down (e.g. during a factory reset that wipes the DB
         # out from under an in-progress snapshot write).
         self._prime_tasks: set[asyncio.Task[None]] = set()
+        # In-memory "last cycle ended at" timestamp per instance.  Populated
+        # at the end of every _run_search_cycle invocation so the dashboard
+        # countdown can anchor on a signal that always advances, even on
+        # instances where every item is on cooldown and the LRU skip-log
+        # throttle silences all skip rows (which would otherwise freeze
+        # `last_activity_at` for hours and pin the countdown on "running...").
+        # Lost on process restart; the dashboard falls back to
+        # `last_activity_at` in that case until the first post-restart cycle
+        # completes.
+        self._last_cycle_end: dict[int, datetime] = {}
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -341,6 +352,11 @@ class Supervisor:
 
         Returns:
             ``True`` if the cycle failed with a connection error, ``False`` otherwise.
+
+        Records the cycle-end wallclock in ``_last_cycle_end`` regardless
+        of cycle outcome (success / transport error / engine error) so
+        the dashboard countdown anchors on a signal that advances once
+        per cycle even when every item is LRU-throttled.
         """
         lock = self._run_locks.setdefault(instance.core.id, asyncio.Lock())
         async with lock:
@@ -383,6 +399,22 @@ class Supervisor:
                     message=str(exc),
                 )
                 return False
+            finally:
+                self._last_cycle_end[instance.core.id] = datetime.now(UTC)
+
+    def cycle_end_timestamps(self) -> dict[int, str]:
+        """Return ISO-8601 UTC timestamps for each instance's most recent cycle end.
+
+        Populated in memory by ``_run_search_cycle`` (see its finally
+        block).  Consumed by the ``/api/status`` route so the dashboard
+        countdown can anchor on a signal that advances once per cycle,
+        including for instances whose every skip is LRU-throttled.
+
+        Returns an empty dict if no cycle has completed since the
+        supervisor started, so the caller can treat "missing" as the
+        equivalent of "fall back to last_activity_at".
+        """
+        return {iid: ts.isoformat() for iid, ts in self._last_cycle_end.items()}
 
     async def _snapshot_refresh_loop(self) -> None:
         """Background loop: refresh dashboard snapshot columns at 10-min cadence.

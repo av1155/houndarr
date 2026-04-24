@@ -484,9 +484,12 @@ function initDashboardPage() {
       const items = Array.isArray(inst.unlocking_next) ? inst.unlocking_next : [];
       const totalCd = toNumber(inst.cooldown_total);
       const shown = Math.min(items.length, 3);
-      const tally = totalCd === 0
-        ? '0 in cooldown'
-        : `${shown} of ${totalCd} in cooldown`;
+      // Compact tally: "3 / 73" fits on one line alongside the label at
+      // every card width, while the old "3 OF 73 IN COOLDOWN" phrasing
+      // wrapped around 1146px browser width and pushed the cooldown box
+      // down by a row, bleeding into the card footer.  "Cooldown" is
+      // already in the label; "in cooldown" was redundant.
+      const tally = totalCd === 0 ? '0 / 0' : `${shown} / ${totalCd}`;
       if (items.length === 0) {
         return `
 <div class="dash-unlocks">
@@ -620,16 +623,28 @@ function initDashboardPage() {
         footText = `offline since ${escHtml(since || 'just now')}`;
       } else {
         const sleep = toNumber(inst.sleep_interval_mins);
-        const lastDispatchAt = inst.last_dispatch_at || '';
-        // The ticker below updates text on every [data-next-patrol]
-        // element each second.  Data attributes carry the inputs the
-        // ticker needs so a single loop can handle every card without
-        // closing over per-card state.  Initial text is the static
-        // fallback (just the interval) so the first paint is never
-        // blank even if the ticker hasn't run yet.
+        // Countdown anchor preference order:
+        //   1. last_cycle_end  - supervisor's in-memory cycle-end
+        //      timestamp, advances once per cycle regardless of
+        //      whether any rows were written.  Solves the
+        //      "everything LRU-throttled" case that froze the
+        //      previous last_activity_at anchor.
+        //   2. last_activity_at - newest searched/skipped/error row.
+        //      Used on supervisor restart before a cycle has
+        //      completed, and any time the supervisor isn't available
+        //      (e.g. a stub deployment without an engine).
+        //   3. last_dispatch_at - newest searched row only.  Final
+        //      fallback; same field the very first iteration of this
+        //      countdown used before we realised it froze on skip-
+        //      only cycles.
+        const anchor =
+          inst.last_cycle_end
+          || inst.last_activity_at
+          || inst.last_dispatch_at
+          || '';
         footText = `last dispatch ${escHtml(lastDispatch || 'never')} <span class="sep">·</span>`
           + ` next patrol <span data-next-patrol`
-          + ` data-last-dispatch="${escHtml(lastDispatchAt)}"`
+          + ` data-last-dispatch="${escHtml(anchor)}"`
           + ` data-sleep-min="${sleep}">${sleep}m</span>`;
       }
       return `

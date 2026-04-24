@@ -169,6 +169,101 @@ class TestLogRowsRender:
         # The partial must never raise on an empty list.
         assert html is not None
 
+    @staticmethod
+    def _skip_only_rows(reasons: list[str], instance_name: str = "Sonarr") -> list[dict]:
+        """Build a cycle's worth of skip-only rows sharing one cycle_id."""
+        cycle_id = "cyc-skip-only"
+        rows = []
+        for idx, reason in enumerate(reasons, start=1):
+            rows.append(
+                {
+                    "id": idx,
+                    "instance_id": 1,
+                    "instance_name": instance_name,
+                    "instance_type": "sonarr",
+                    "timestamp": f"2026-04-22T10:00:{idx:02d}.000Z",
+                    "action": "skipped",
+                    "search_kind": "missing",
+                    "cycle_trigger": "scheduled",
+                    "cycle_id": cycle_id,
+                    "cycle_progress": "no_progress",
+                    "cycle_searched_count": 0,
+                    "cycle_skipped_count": len(reasons),
+                    "cycle_error_count": 0,
+                    "item_id": 100 + idx,
+                    "item_type": "episode",
+                    "item_label": f"Show - S01E{idx:02d}",
+                    "reason": reason,
+                    "message": None,
+                }
+            )
+        return rows
+
+    def test_skip_only_summary_all_cooldown(self, render) -> None:
+        rows = self._skip_only_rows(
+            [
+                "on cooldown (14d)",
+                "on cutoff cooldown (21d)",
+                "on upgrade cooldown (90d)",
+            ]
+        )
+        html = render("partials/log_rows.html", rows=rows, limit=50)
+        assert "Healthy pacing" in html
+        assert ">on cooldown</span>" in html
+        # Count renders correctly ("3 items").
+        assert "<strong>3</strong> items" in html
+
+    def test_skip_only_summary_all_unreleased(self, render) -> None:
+        rows = self._skip_only_rows(
+            [
+                "not yet released",
+                "post-release grace (6h)",
+                "radarr reports not available",
+                "radarr status indicates unreleased",
+            ]
+        )
+        html = render("partials/log_rows.html", rows=rows, limit=50)
+        assert "all <span class=\"cycle__summary-reason\">not yet released</span>" in html
+        assert "<strong>4</strong> items" in html
+
+    def test_skip_only_summary_all_capped(self, render) -> None:
+        rows = self._skip_only_rows(
+            [
+                "hourly limit reached (20/hr)",
+                "cutoff hourly limit reached (1/hr)",
+                "upgrade hourly limit reached (1/hr)",
+            ]
+        )
+        html = render("partials/log_rows.html", rows=rows, limit=50)
+        assert "hit the <span class=\"cycle__summary-reason\">hourly limit</span>" in html
+        assert "will resume next hour" in html
+        # "Cycle paused" message should not restate an item count.
+        assert "<strong>3</strong>" not in html
+
+    def test_skip_only_summary_mixed(self, render) -> None:
+        rows = self._skip_only_rows(
+            [
+                "on cooldown (14d)",
+                "on cooldown (14d)",
+                "not yet released",
+                "hourly limit reached (20/hr)",
+            ]
+        )
+        html = render("partials/log_rows.html", rows=rows, limit=50)
+        # Mixed variant renders both counts and the separator.
+        assert "<strong>4</strong> items:" in html
+        assert "2 on cooldown" in html
+        assert "1 not yet released" in html
+        assert "1 hit hourly limit" in html
+        assert "No dispatches needed" in html
+
+    def test_skip_only_summary_singular_item(self, render) -> None:
+        """One skipped item uses the singular 'item' noun, not 'items'."""
+        rows = self._skip_only_rows(["on cooldown (14d)"])
+        html = render("partials/log_rows.html", rows=rows, limit=50)
+        assert "<strong>1</strong> item:" in html
+        assert "<strong>1</strong> items" not in html
+
     @pytest.mark.parametrize(
         ("raw_type", "expected_display"),
         [

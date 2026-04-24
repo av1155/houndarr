@@ -9,6 +9,50 @@
    recomputing, so the template stays O(n) with the row count. #}
 {%- set _accents = instance_accent_by_name | default({}) -%}
 
+{#- Bucket a skip-only cycle's rows by reason family and emit the
+    user-facing summary sentence.  Four branches keep each variant
+    honest about what actually happened in the cycle (reasons in the
+    same family collapse into one number).  Reason strings are
+    compared with startswith / membership, not exact equality, so new
+    `(Nd)` / `(N/hr)` / `(Nh)` parameter shapes inside a family do not
+    require a template change. -#}
+{%- macro _skip_only_summary(instance_name, group) -%}
+{%- set ns = namespace(cooldown=0, unreleased=0, capped=0, other=0) -%}
+{%- for row in group -%}
+{%- if row.action == 'skipped' -%}
+{%- set r = row.reason or '' -%}
+{%- if r.startswith('on ') and 'cooldown' in r -%}
+{%- set ns.cooldown = ns.cooldown + 1 -%}
+{%- elif r in ('not yet released', 'radarr reports not available', 'radarr status indicates unreleased', 'future title not yet available') or r.startswith('post-release grace') -%}
+{%- set ns.unreleased = ns.unreleased + 1 -%}
+{%- elif 'limit reached' in r -%}
+{%- set ns.capped = ns.capped + 1 -%}
+{%- else -%}
+{%- set ns.other = ns.other + 1 -%}
+{%- endif -%}
+{%- endif -%}
+{%- endfor -%}
+{%- set total = ns.cooldown + ns.unreleased + ns.capped + ns.other -%}
+{%- set _item = 'item' if total == 1 else 'items' -%}
+{%- if total > 0 and ns.cooldown == total -%}
+<strong>{{ instance_name }}</strong> checked <strong>{{ total }}</strong> {{ _item }}: all <span class="cycle__summary-reason">on cooldown</span>. Healthy pacing.
+{%- elif total > 0 and ns.unreleased == total -%}
+<strong>{{ instance_name }}</strong> checked <strong>{{ total }}</strong> {{ _item }}: all <span class="cycle__summary-reason">not yet released</span>.
+{%- elif total > 0 and ns.capped == total -%}
+<strong>{{ instance_name }}</strong> hit the <span class="cycle__summary-reason">hourly limit</span>. Cycle paused; will resume next hour.
+{%- elif total > 0 -%}
+<strong>{{ instance_name }}</strong> checked <strong>{{ total }}</strong> {{ _item }}:
+{%- set parts = [] -%}
+{%- if ns.cooldown -%}{%- set _ = parts.append(ns.cooldown ~ ' on cooldown') -%}{%- endif -%}
+{%- if ns.unreleased -%}{%- set _ = parts.append(ns.unreleased ~ ' not yet released') -%}{%- endif -%}
+{%- if ns.capped -%}{%- set _ = parts.append(ns.capped ~ ' hit hourly limit') -%}{%- endif -%}
+{%- if ns.other -%}{%- set _ = parts.append(ns.other ~ ' other') -%}{%- endif -%}
+ <span class="cycle__summary-reason">{{ parts | join(', ') }}</span>. No dispatches needed.
+{%- else -%}
+<strong>{{ instance_name }}</strong> checked the queue. No dispatches needed.
+{%- endif -%}
+{%- endmacro -%}
+
 {%- macro _render_cycle(cycle_id, group, accents) -%}
 {%- set first = group[0] -%}
 {%- set last = group[-1] -%}
@@ -71,12 +115,7 @@
       {%- endif %}
     </div>
     {%- if is_skip_only %}
-    <div class="cycle__summary">
-      <strong>{{ instance_name }}</strong> checked
-      <strong>{{ skipped_count }}</strong> item{% if skipped_count > 1 %}s{% endif %}:
-      all <span class="cycle__summary-reason">on cooldown or not yet released</span>.
-      No dispatches needed.
-    </div>
+    <div class="cycle__summary">{{ _skip_only_summary(instance_name, group) }}</div>
     {%- endif %}
   </header>
   <div class="cycle__body">

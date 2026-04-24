@@ -484,9 +484,12 @@ function initDashboardPage() {
       const items = Array.isArray(inst.unlocking_next) ? inst.unlocking_next : [];
       const totalCd = toNumber(inst.cooldown_total);
       const shown = Math.min(items.length, 3);
-      const tally = totalCd === 0
-        ? '0 in cooldown'
-        : `${shown} of ${totalCd} in cooldown`;
+      // Compact tally: "3 / 73" fits on one line alongside the label at
+      // every card width, while the old "3 OF 73 IN COOLDOWN" phrasing
+      // wrapped around 1146px browser width and pushed the cooldown box
+      // down by a row, bleeding into the card footer.  "Cooldown" is
+      // already in the label; "in cooldown" was redundant.
+      const tally = totalCd === 0 ? '0 / 0' : `${shown} / ${totalCd}`;
       if (items.length === 0) {
         return `
 <div class="dash-unlocks">
@@ -620,17 +623,25 @@ function initDashboardPage() {
         footText = `offline since ${escHtml(since || 'just now')}`;
       } else {
         const sleep = toNumber(inst.sleep_interval_mins);
-        // Countdown anchor is the newest searched/skipped/error row,
-        // NOT the newest dispatch.  The supervisor sleeps after every
-        // cycle regardless of whether items dispatched or were all
-        // skipped, so `last_activity_at` tracks the actual "cycle
-        // just ended" moment.  Using last_dispatch_at here (the
-        // previous implementation) meant skip-only cycles on an
-        // instance where everything sits in cooldown would freeze the
-        // anchor at the last real dispatch, and the countdown would
-        // stay stuck on "running..." indefinitely while cycles kept
-        // firing invisibly in the background.
-        const anchor = inst.last_activity_at || inst.last_dispatch_at || '';
+        // Countdown anchor preference order:
+        //   1. last_cycle_end  - supervisor's in-memory cycle-end
+        //      timestamp, advances once per cycle regardless of
+        //      whether any rows were written.  Solves the
+        //      "everything LRU-throttled" case that froze the
+        //      previous last_activity_at anchor.
+        //   2. last_activity_at - newest searched/skipped/error row.
+        //      Used on supervisor restart before a cycle has
+        //      completed, and any time the supervisor isn't available
+        //      (e.g. a stub deployment without an engine).
+        //   3. last_dispatch_at - newest searched row only.  Final
+        //      fallback; same field the very first iteration of this
+        //      countdown used before we realised it froze on skip-
+        //      only cycles.
+        const anchor =
+          inst.last_cycle_end
+          || inst.last_activity_at
+          || inst.last_dispatch_at
+          || '';
         footText = `last dispatch ${escHtml(lastDispatch || 'never')} <span class="sep">·</span>`
           + ` next patrol <span data-next-patrol`
           + ` data-anchor="${escHtml(anchor)}"`

@@ -193,6 +193,7 @@ def _build_instance_status_row(
     lifetime: dict[str, Any],
     active_error: dict[str, Any] | None,
     cooldown: dict[str, Any],
+    last_cycle_end: str | None,
 ) -> dict[str, Any]:
     """Assemble one instance entry for the ``/api/status`` envelope.
 
@@ -212,6 +213,7 @@ def _build_instance_status_row(
         "type": inst["type"],
         "enabled": bool(inst["enabled"]),
         "last_search_at": window_metrics["last_search_at"],
+        "last_cycle_end": last_cycle_end,
         "searched_24h": window_metrics["searched_24h"],
         "skipped_24h": window_metrics["skipped_24h"],
         "errors_24h": window_metrics["errors_24h"],
@@ -242,7 +244,11 @@ def _build_instance_status_row(
     }
 
 
-async def gather_dashboard_status(db: aiosqlite.Connection) -> dict[str, list[dict[str, Any]]]:
+async def gather_dashboard_status(
+    db: aiosqlite.Connection,
+    *,
+    cycle_ends: dict[int, str] | None = None,
+) -> dict[str, list[dict[str, Any]]]:
     """Build the full ``/api/status`` JSON envelope against an open connection.
 
     One SQL fetch for the instance rows, then the five per-cycle
@@ -254,6 +260,12 @@ async def gather_dashboard_status(db: aiosqlite.Connection) -> dict[str, list[di
     Args:
         db: Open :class:`aiosqlite.Connection`.  The caller owns the
             connection lifetime; this function issues reads only.
+        cycle_ends: Optional per-instance ``{id: iso_timestamp}`` of
+            the most recent cycle end, sourced from the live
+            supervisor's in-memory map.  When provided and the
+            instance has an entry, the envelope's ``last_cycle_end``
+            field reflects it; otherwise the field is ``None`` and
+            the client falls back to ``last_activity_at``.
 
     Returns:
         ``{"instances": [...], "recent_searches": [...]}`` ready for
@@ -274,6 +286,7 @@ async def gather_dashboard_status(db: aiosqlite.Connection) -> dict[str, list[di
     error_map = await gather_active_errors(db, instance_ids)
     cooldown_map = await gather_cooldown_data(db, list(instances))
     recent = await gather_recent_searches(db, limit=5)
+    cycle_ends = cycle_ends or {}
 
     rows: list[dict[str, Any]] = []
     for inst in instances:
@@ -286,6 +299,7 @@ async def gather_dashboard_status(db: aiosqlite.Connection) -> dict[str, list[di
                 lifetime=lifetime_map.get(iid, {"lifetime_searched": 0, "last_dispatch_at": None}),
                 active_error=error_map.get(iid),
                 cooldown=cooldown_map.get(iid, _EMPTY_COOLDOWN),
+                last_cycle_end=cycle_ends.get(iid),
             )
         )
     return {"instances": rows, "recent_searches": recent}

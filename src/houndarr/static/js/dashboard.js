@@ -709,13 +709,17 @@ function initDashboardPage() {
       const gated = toNumber(bd.missing) + toNumber(bd.cutoff);
       const unr = toNumber(inst.unreleased_count);
       const eligibleVal = Math.max(0, wantedVal - gated - unr);
-      // The card headline is a per-moment counter; "Searched 24h" reads
-      // alongside Wanted / Eligible as a rate, not a lifetime total.
-      // Lifetime is surfaced as a small muted subtitle under the value
-      // (rendered below) so power users see the cumulative count at
-      // rest without needing to hover or read docs.
+      // "Searched 24h" is a rate; the cumulative lifetime count rides
+      // on a hover tooltip attached directly to the value (tooltip.js
+      // wires [data-tip] into the shared floating panel).  Suppressed
+      // when the two numbers are equal, which is trivially true on
+      // fresh installs where everything still fits inside the 24h
+      // window.
       const searched24hVal = toNumber(inst.searched_24h);
       const lifetimeVal = toNumber(inst.lifetime_searched);
+      const lifetimeTip = lifetimeVal > 0 && lifetimeVal !== searched24hVal
+        ? ` data-tip="Lifetime: ${lifetimeVal} search${lifetimeVal === 1 ? '' : 'es'}"`
+        : '';
 
       const wantedText = offline || disabled
         ? `<dd class="dash-card__stat-value dash-card__stat-value--muted">${wantedVal || '-'}</dd>`
@@ -726,15 +730,8 @@ function initDashboardPage() {
           ? `<dd class="dash-card__stat-value dash-card__stat-value--muted">-</dd>`
           : `<dd class="dash-card__stat-value dash-card__stat-value--eligible">${eligibleVal}</dd>`;
       const searchedText = offline || disabled
-        ? `<dd class="dash-card__stat-value dash-card__stat-value--muted">${searched24hVal}</dd>`
-        : `<dd class="dash-card__stat-value dash-card__stat-value--searched">${searched24hVal}</dd>`;
-      // Suppress the subtitle on fresh installs where 24h and lifetime
-      // are trivially equal (first day, everything cumulative still fits
-      // inside the window).  When they diverge the subtitle becomes
-      // informative again.
-      const searchedSub = lifetimeVal > 0 && lifetimeVal !== searched24hVal
-        ? `<p class="dash-card__stat-sub">${lifetimeVal} lifetime</p>`
-        : '';
+        ? `<dd class="dash-card__stat-value dash-card__stat-value--muted"${lifetimeTip}>${searched24hVal}</dd>`
+        : `<dd class="dash-card__stat-value dash-card__stat-value--searched"${lifetimeTip}>${searched24hVal}</dd>`;
 
       return `
 <article class="dash-card"${typeAttr}${disabledAttr}>
@@ -755,9 +752,8 @@ function initDashboardPage() {
       ${eligibleText}
     </div>
     <div>
-      <dt class="dash-card__stat-label" title="Dispatches this instance made in the last 24 hours. The smaller number below is the cumulative count since install.">Searched 24h</dt>
+      <dt class="dash-card__stat-label" title="Dispatches this instance made in the last 24 hours. Hover the number for the lifetime total.">Searched 24h</dt>
       ${searchedText}
-      ${searchedSub}
     </div>
   </dl>
   ${renderUnlockPanel(inst)}

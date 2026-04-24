@@ -489,21 +489,6 @@
   .dash-card__stat-value--eligible { color: var(--seg-eligible); }
   .dash-card__stat-value--searched { color: var(--color-brand-300); }
   .dash-card__stat-value--muted    { color: var(--color-text-muted); }
-  /* Secondary context below a stat value (e.g. lifetime count under
-     "Searched 24h").  Same type scale as the label but muted, so the
-     big number stays the tile's focal point while the subtitle
-     quietly confirms the broader number.  Negative top margin pulls
-     it tight against the big number and offsets the flex gap set on
-     the parent stat tile. */
-  .dash-card__stat-sub {
-    font-family: var(--font-mono);
-    font-size: 0.625rem;
-    letter-spacing: 0.04em;
-    color: var(--color-text-muted);
-    font-variant-numeric: tabular-nums;
-    line-height: 1;
-    margin: -0.125rem 0 0;
-  }
 
   .dash-unlocks {
     background: #0b0e14;
@@ -541,14 +526,11 @@
     display: flex;
     flex-direction: column;
     gap: 0.5rem;
-    /* Reserve a full-list's worth of vertical space regardless of the
-       row count so the cooldown region is a deterministic shape: 3
-       rows fill it exactly, 1 or 2 rows sit at the top with stable
-       empty space below, and card-row height equalisation cannot
-       distribute slack above or below the rows.  Kills the Chromium
-       sub-pixel bug where auto-margins split slack unevenly between
-       row-mate cards at viewport widths around the lg: breakpoint. */
-    min-height: calc(3 * 1.25rem + 2 * 0.5rem);
+    /* Centre a short list vertically in the expanded cooldown box so
+       a 1- or 2-item card doesn't cluster at the top like the empty
+       state used to. 3+ items fill naturally (auto margins collapse
+       to 0 when there's no slack). */
+    margin: auto 0;
   }
   .dash-unlocks__row {
     display: grid;
@@ -579,15 +561,10 @@
     font-style: italic;
     text-align: center;
     padding: 1.125rem 0.5rem;
-    /* Match the populated list's reserved height and centre the
-       message inside it explicitly.  Sharing the same min-height
-       keeps disabled / all-caught-up cards visually balanced with
-       sibling cards without relying on flex auto-margins to
-       redistribute outer slack. */
-    min-height: calc(3 * 1.25rem + 2 * 0.5rem);
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    /* Same auto-margin trick as __list: centres the empty message
+       vertically in the expanded cooldown box so a disabled or
+       all-caught-up card stays visually balanced with sibling cards. */
+    margin: auto 0;
   }
 
   .dash-policy {

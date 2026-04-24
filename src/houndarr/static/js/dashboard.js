@@ -265,10 +265,21 @@ function initDashboardPage() {
       // bar segment + legend entry to surface upgrade activity separately.
       const gated = totals.cooldown + totals.cutoffCd;
       const eligible = Math.max(0, totals.monitored - gated - totals.unreleased);
+      // Eyebrow count equals the sum of every segment rendered below it
+      // so bar width and eyebrow number visually agree.  Labeling this
+      // "items tracked" rather than "monitored" avoids overloading the
+      // *arr term: upgrade-pool items are tracked by Houndarr but are
+      // not part of each *arr's monitored_total.
+      const barTotal =
+        eligible
+        + totals.cooldown
+        + totals.cutoffCd
+        + totals.upgradeCd
+        + totals.unreleased;
       const ariaLabel = `${eligible} eligible, ${totals.cooldown} cooldown, ${totals.cutoffCd} cutoff cooldown, ${totals.upgradeCd} upgrade cooldown, ${totals.unreleased} unreleased`;
       return `
 <section class="dash-lh" aria-label="Library health">
-  <p class="dash-lh__eyebrow">Library health · ${totals.monitored} monitored</p>
+  <p class="dash-lh__eyebrow">Library health · ${barTotal} items tracked</p>
   <div class="dash-lh__headline">
     <span class="dash-lh__stat">
       <span class="dash-lh__stat-value dash-lh__stat-value--eligible">${eligible}</span>

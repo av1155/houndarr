@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Schema version: bump when adding new migrations
 # ---------------------------------------------------------------------------
-SCHEMA_VERSION = 13
+SCHEMA_VERSION = 14
 
 # ---------------------------------------------------------------------------
 # DDL
@@ -84,6 +84,8 @@ CREATE TABLE IF NOT EXISTS cooldowns (
     instance_id INTEGER NOT NULL REFERENCES instances(id) ON DELETE CASCADE,
     item_id     INTEGER NOT NULL,
     item_type   TEXT    NOT NULL CHECK(item_type IN ({_ITEM_TYPES})),
+    search_kind TEXT    NOT NULL DEFAULT 'missing'
+                        CHECK(search_kind IN ('missing', 'cutoff', 'upgrade')),
     searched_at TEXT    NOT NULL,
     UNIQUE(instance_id, item_id, item_type)
 );
@@ -176,6 +178,7 @@ async def init_db() -> None:
             await _migrate_to_v11(db)
             await _migrate_to_v12(db)
             await _migrate_to_v13(db)
+            await _migrate_to_v14(db)
             await _ensure_v3_indexes(db)
             await db.commit()
 
@@ -206,6 +209,8 @@ async def _run_migrations(db: aiosqlite.Connection, from_version: int) -> None:
         await _migrate_to_v12(db)
     if from_version < 13:
         await _migrate_to_v13(db)
+    if from_version < 14:
+        await _migrate_to_v14(db)
 
     logger.info("Migrated database from schema version %d to %d", from_version, SCHEMA_VERSION)
     await db.execute(
@@ -751,10 +756,90 @@ async def _migrate_to_v13(db: aiosqlite.Connection) -> None:
         )
 
 
+async def _migrate_to_v14(db: aiosqlite.Connection) -> None:
+    """Stamp ``search_kind`` on cooldown rows at insert time.
+
+    Previously ``cooldown_breakdown`` was derived at read time by joining
+    every cooldown row to its most-recent ``search_log`` row and reading
+    ``search_kind`` off that.  Two fragilities fall out of this: the
+    classification flips whenever a later search kind is logged for the
+    same item, and it quietly defaults to ``"missing"`` if the log row
+    is absent (e.g. retention pruned it, or a migration truncated the
+    table).  Also a correlated subquery per cooldown row per
+    ``/api/status`` poll.
+
+    Stamp the kind on the row itself at INSERT time so the cooldowns
+    table carries its own classification.  Backfill existing rows from
+    the newest ``searched`` log entry per item, defaulting to
+    ``"missing"`` when no log match exists (preserving current read
+    behaviour for pre-migration data).  A nullable-then-default dance
+    is unnecessary because the column has a ``NOT NULL DEFAULT
+    'missing'`` literal: rows added before backfill simply carry the
+    default, which matches what the old read-path returned anyway.
+
+    The ``(instance_id, item_id, item_type)`` UNIQUE constraint stays
+    as-is: cooldowns are about pacing indexer requests per item, not
+    per pass, so one row per item-per-instance is correct.  The
+    stamped ``search_kind`` is the kind of the MOST RECENT search that
+    updated that row, which is what the reconciliation path matches
+    against the *arr's per-pass wanted sets.
+    """
+    if not await _column_exists(db, "cooldowns", "search_kind"):
+        await db.execute(
+            "ALTER TABLE cooldowns ADD COLUMN search_kind TEXT NOT NULL DEFAULT 'missing'"
+        )
+    # Backfill any rows that still carry the literal default from the
+    # ALTER.  The SELECT mirrors the classifier that used to live in
+    # services/metrics.py's cooldown breakdown SQL; newer log rows
+    # override older ones so the stamp matches what the dashboard used
+    # to infer at read time.
+    await db.execute(
+        """
+        UPDATE cooldowns
+           SET search_kind = (
+                 SELECT sl.search_kind
+                   FROM search_log sl
+                  WHERE sl.instance_id = cooldowns.instance_id
+                    AND sl.item_id     = cooldowns.item_id
+                    AND sl.item_type   = cooldowns.item_type
+                    AND sl.action      = 'searched'
+                    AND sl.search_kind IN ('missing', 'cutoff', 'upgrade')
+                  ORDER BY sl.timestamp DESC
+                  LIMIT 1
+               )
+         WHERE EXISTS (
+                 SELECT 1 FROM search_log sl2
+                  WHERE sl2.instance_id = cooldowns.instance_id
+                    AND sl2.item_id     = cooldowns.item_id
+                    AND sl2.item_type   = cooldowns.item_type
+                    AND sl2.action      = 'searched'
+                    AND sl2.search_kind IN ('missing', 'cutoff', 'upgrade')
+               )
+        """
+    )
+    # Index creation lives in _ensure_v3_indexes so fresh installs
+    # (which skip migrations) still get it; the helper runs after both
+    # the fresh-install DDL and the upgrade migration path.
+
+
 async def _ensure_v3_indexes(db: aiosqlite.Connection) -> None:
-    """Create v3 indexes that depend on post-v2 columns."""
+    """Create indexes that depend on post-v2 columns.
+
+    Runs after the main schema DDL and after any migrations, so every
+    column each index references is guaranteed to exist.  Kept under
+    the ``v3`` name for historical continuity; in practice it now
+    carries any post-schema index that cannot live in ``_SCHEMA_SQL``
+    because its column was added by a later migration.
+    """
     await db.execute(
         "CREATE INDEX IF NOT EXISTS idx_search_log_cycle ON search_log(cycle_id, timestamp DESC)"
+    )
+    # search_kind arrived in v14; the column will exist here whether
+    # this DB came in fresh (the DDL in _SCHEMA_SQL creates it) or
+    # migrated up (_migrate_to_v14 adds it via ALTER TABLE).
+    await db.execute(
+        "CREATE INDEX IF NOT EXISTS idx_cooldowns_search_kind "
+        "ON cooldowns(instance_id, search_kind)"
     )
 
 

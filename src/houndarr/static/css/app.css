@@ -449,27 +449,46 @@ body {
 /* Halo derives from currentColor so an error pill pulses red while an
    active pill pulses green: the dot sits inside status-pill--* parents
    that already set text colour via @apply text-danger / text-success.
-   Alpha is held at 18% across every stop so only the shadow spread
-   animates: tweening between a 0%-mix (which simplifies to the named
-   `transparent`) and an 18%-mix rgba would step the whole shadow
-   rather than interpolate, collapsing the expand/contract into a
-   pop-on / pop-off. Holding the colour structurally identical makes
-   spread the sole animated dimension, which length-interpolates
-   smoothly. At spread=0 the shadow is coincident with the dot and
-   fully hidden by its own opaque background. */
-@keyframes station-pulse {
-  0%, 100% {
-    opacity: 1;
-    box-shadow: 0 0 0 0 color-mix(in srgb, currentColor 18%, transparent);
-  }
-  50% {
-    opacity: 0.85;
-    box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 18%, transparent);
-  }
+   The ring is a scaled, faded ::after pseudo-element rather than a
+   box-shadow tween.  Chromium (bug 713674) treats currentColor inside
+   a keyframe's box-shadow as an opaque, discrete value and does not
+   interpolate the shadow between stops, so the ring pops on/off
+   instead of expanding and contracting.  transform and opacity always
+   interpolate cleanly, so scaling a pseudo-element restores the
+   expand/contract motion for every variant. */
+@keyframes station-pulse-ring {
+  0%, 100% { transform: scale(1);   opacity: 0; }
+  50%      { transform: scale(2.4); opacity: 0.35; }
 }
 
 .station-pulse-dot {
-  animation: station-pulse 2.8s var(--ease-station) infinite;
+  position: relative;
+}
+.station-pulse-dot::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: currentColor;
+  opacity: 0;
+  pointer-events: none;
+  animation: station-pulse-ring 2.8s var(--ease-station) infinite;
+}
+
+/* Legacy @keyframes station-pulse retained only for the at-cap flash
+   on .dash-card__budget-fill, which runs two iterations as a warning
+   pulse on a bar (not a dot).  Left at the pre-cca0dda var(--seg-eligible)
+   halo since that keyframe never rode on currentColor; swapping to
+   the pseudo-element approach there is a separate concern. */
+@keyframes station-pulse {
+  0%, 100% {
+    opacity: 1;
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--seg-eligible) 0%, transparent);
+  }
+  50% {
+    opacity: 0.85;
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--seg-eligible) 18%, transparent);
+  }
 }
 
 /* ── Brand focus ring ────────────────────────────────────────────────────── */
@@ -531,26 +550,34 @@ button:focus-visible {
   text-decoration: none;
 }
 
-/* Halo inherits currentColor; the dot pins its own colour to
-   --seg-eligible so the emerald pulse is preserved even though the
-   enclosing .dash-pill--active uses a softer --color-success-text for
-   the "Active" label. Future pill variants only need to override color
-   on the dot selector to get a matching halo. Alpha held at 18%
-   across every stop for the same reason as station-pulse above:
-   color-mix endpoints must be structurally identical for the shadow
-   to interpolate, otherwise the ring pops on/off instead of
-   expanding and contracting. */
-@keyframes dash-pulse-dot {
-  0%, 100% { box-shadow: 0 0 0 0  color-mix(in srgb, currentColor 18%, transparent); }
-  50%      { box-shadow: 0 0 0 4px color-mix(in srgb, currentColor 18%, transparent); }
+/* Ring is a scaled pseudo-element, not a box-shadow, for the same
+   reason as .station-pulse-dot above: Chromium does not interpolate
+   box-shadow colours driven by currentColor inside keyframes, so a
+   shadow-based halo pops on/off.  The dot itself stays pinned to
+   --seg-eligible so the emerald pulse is preserved regardless of
+   the softer --color-success-text the enclosing .dash-pill--active
+   uses for the "Active" label. */
+@keyframes dash-pulse-ring {
+  0%, 100% { transform: scale(1);   opacity: 0; }
+  50%      { transform: scale(2.6); opacity: 0.32; }
 }
 .dash-pill--active .dash-pill__dot {
+  position: relative;
   width: 7px;
   height: 7px;
   border-radius: 50%;
   color: var(--seg-eligible);
   background: currentColor;
-  animation: dash-pulse-dot 2.4s var(--ease-station) infinite;
+}
+.dash-pill--active .dash-pill__dot::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: currentColor;
+  opacity: 0;
+  pointer-events: none;
+  animation: dash-pulse-ring 2.4s var(--ease-station) infinite;
 }
 
 /* ── Nav atmospheric glow ───────────────────────────────────────────────── */
@@ -666,6 +693,13 @@ body > nav {
   .dash-pill--active .dash-pill__dot {
     animation: none;
     opacity: 1;
+    transform: none;
+  }
+  /* Silence the pseudo-element rings that now carry the pulse. */
+  .station-pulse-dot::after,
+  .dash-pill--active .dash-pill__dot::after {
+    animation: none;
+    opacity: 0;
     transform: none;
   }
 }

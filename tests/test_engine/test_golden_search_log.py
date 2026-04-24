@@ -431,14 +431,14 @@ async def test_golden_mixed_eligibility(seeded_instances: None) -> None:
       - ep 102: unreleased (future air date → skipped before cap check)
       - ep 103: on cooldown (passes unreleased + cap, hits cooldown)
       - ep 104: eligible (searched - uses 2 of 2 cap slots)
-      - ep 105: hourly cap reached (cap=2 exhausted → skipped, stop_pass)
+      - ep 105: hourly limit reached (cap=2 exhausted → skipped, stop_pass)
 
     Expected sequence:
       1. searched - ep 101
       2. skipped  - ep 102, "not yet released"
       3. skipped  - ep 103, "on cooldown (7d)"
       4. searched - ep 104
-      5. skipped  - ep 105, "hourly cap reached (2)"
+      5. skipped  - ep 105, "hourly limit reached (2/hr)"
     """
     from houndarr.services.cooldown import record_search
 
@@ -537,7 +537,7 @@ async def test_golden_mixed_eligibility(seeded_instances: None) -> None:
     assert rows[4]["item_type"] == "episode"
     assert rows[4]["item_label"] == "My Show - S01E05 - Capped"
     assert rows[4]["search_kind"] == "missing"
-    assert rows[4]["reason"] == "hourly cap reached (2)"
+    assert rows[4]["reason"] == "hourly limit reached (2/hr)"
     assert rows[4]["cycle_id"] == "golden-g4"
 
 

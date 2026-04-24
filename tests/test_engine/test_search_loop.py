@@ -1143,7 +1143,7 @@ async def test_hourly_cap_stops_searches(seeded_instances: None) -> None:
 
     rows = await _get_log_rows()
     assert rows[-1]["action"] == "skipped"
-    assert "hourly cap" in (rows[-1]["reason"] or "")
+    assert "hourly limit" in (rows[-1]["reason"] or "")
 
 
 @pytest.mark.asyncio()

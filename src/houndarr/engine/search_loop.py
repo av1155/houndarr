@@ -73,8 +73,21 @@ _UPGRADE_MIN_COOLDOWN_DAYS = 7
 
 
 # ---------------------------------------------------------------------------
-# search_log helper
+# search_log helpers
 # ---------------------------------------------------------------------------
+
+
+def _format_hourly_limit_reason(kind: SearchKind | str, cap: int) -> str:
+    """Return the skip-reason string for a cap-exhausted pass.
+
+    Centralises the phrasing used at the three hourly-cap gate sites
+    (missing / cutoff / upgrade) so they cannot drift apart.  The
+    parameter shape ``(N/hr)`` reads as "N per hour" to a user, where
+    the older ``(N)`` form read as an error code, a repeat finding
+    in post-Huntarr self-hoster research.
+    """
+    prefix = "" if kind == "missing" else f"{kind} "
+    return f"{prefix}hourly limit reached ({cap}/hr)"
 
 
 async def _write_log(
@@ -531,10 +544,8 @@ async def _run_search_pass(  # noqa: C901
 
             # Hourly cap.
             if hourly_cap > 0 and searches_this_hour >= hourly_cap:
-                reason = (
-                    f"cutoff hourly cap reached ({hourly_cap})"
-                    if is_cutoff
-                    else f"hourly cap reached ({hourly_cap})"
+                reason = _format_hourly_limit_reason(
+                    "cutoff" if is_cutoff else "missing", hourly_cap
                 )
                 logger.info("[%s] %s%s: %s", instance.name, log_prefix, candidate.item_id, reason)
                 await _write_item_log(
@@ -830,7 +841,7 @@ async def _run_upgrade_pass(
 
         # Hourly cap
         if hourly_cap > 0 and searches_this_hour >= hourly_cap:
-            reason = f"upgrade hourly cap reached ({hourly_cap})"
+            reason = _format_hourly_limit_reason("upgrade", hourly_cap)
             logger.info("[%s] upgrade %s: %s", instance.name, candidate.item_id, reason)
             await _write_item_log(
                 ref,

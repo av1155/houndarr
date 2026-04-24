@@ -896,3 +896,39 @@ def test_status_monitored_total_zero_when_no_snapshot(app: TestClient) -> None:
     body = app.get("/api/status").json()["instances"][0]
     assert body["monitored_total"] == 0
     assert body["unreleased_count"] == 0
+
+
+def test_status_reconciled_invariant_holds(app: TestClient) -> None:
+    """After reconciliation, per-instance cooldown counts must not
+    exceed monitored_total.
+
+    Encodes the invariant the dashboard's Eligible formula depends on:
+    ``monitored_total >= missing_cd + cutoff_cd`` for every enabled
+    instance in /api/status.  Pre-reconcile this could fail (downloads
+    / unmonitors left stale cooldown rows behind); post-reconcile the
+    cooldowns table is a projection of the *arr's live state, so the
+    inequality holds by construction.  The seed below mirrors that
+    post-reconcile steady state: cooldowns only exist for items still
+    present in monitored_total.
+    """
+    from houndarr.services.instances import update_instance_snapshot
+
+    _login(app)
+    iid = _create_instance(app)
+    asyncio.run(update_instance_snapshot(iid, monitored_total=10, unreleased_count=2))
+    # Seed a realistic post-reconcile mix: six cooldowns against
+    # ten monitored items.  missing_cd + cutoff_cd = 6 <= 10.
+    for i in range(1, 5):
+        asyncio.run(_seed_cooldown(iid, i, "episode", days_ago=1.0, search_kind="missing"))
+    for i in range(100, 102):
+        asyncio.run(_seed_cooldown(iid, i, "episode", days_ago=1.0, search_kind="cutoff"))
+
+    body = app.get("/api/status").json()["instances"][0]
+    bd = body["cooldown_breakdown"]
+    monitored = body["monitored_total"]
+    unreleased = body["unreleased_count"]
+    gated = bd["missing"] + bd["cutoff"]
+    assert gated + unreleased <= monitored, (
+        f"invariant violated: gated={gated} unreleased={unreleased} "
+        f"monitored={monitored} breakdown={bd}"
+    )

@@ -169,6 +169,54 @@ class TestLogRowsRender:
         # The partial must never raise on an empty list.
         assert html is not None
 
+    @pytest.mark.parametrize(
+        ("raw_type", "expected_display"),
+        [
+            ("whisparr_episode", "episode"),
+            ("whisparr_v3_movie", "movie"),
+            ("episode", "episode"),
+            ("movie", "movie"),
+            ("album", "album"),
+            ("book", "book"),
+        ],
+    )
+    def test_item_type_subtitle_strips_whisparr_namespace(
+        self, render, raw_type: str, expected_display: str
+    ) -> None:
+        """`entry__sub` shows a clean type word; `data-item-type` stays canonical."""
+        rows = [
+            {
+                "id": 1,
+                "instance_id": 1,
+                "instance_name": "Whisparr",
+                "instance_type": "whisparr_v2",
+                "timestamp": "2026-04-22T10:00:00.000Z",
+                "action": "searched",
+                "search_kind": "missing",
+                "cycle_trigger": "scheduled",
+                "cycle_id": None,
+                "cycle_progress": None,
+                "cycle_searched_count": 1,
+                "cycle_skipped_count": 0,
+                "cycle_error_count": 0,
+                "item_id": 4242,
+                "item_type": raw_type,
+                "item_label": None,  # forces the fallback title path
+                "reason": None,
+                "message": None,
+            }
+        ]
+        html = render("partials/log_rows.html", rows=rows, limit=50)
+        # Canonical value still lands on the data attribute.
+        assert f'data-item-type="{raw_type}"' in html
+        # Subtitle renders the stripped word + id separator.
+        assert f'<div class="entry__sub">{expected_display} · id:4242</div>' in html
+        # Fallback title capitalises the stripped word (no `whisparr_` leaked).
+        assert f'<div class="entry__title">{expected_display.capitalize()} 4242</div>' in html
+        # Defense in depth: the bare namespaced form never leaks into UI text.
+        if raw_type != expected_display:
+            assert f">{raw_type}<" not in html
+
 
 # changelog_modal.html
 

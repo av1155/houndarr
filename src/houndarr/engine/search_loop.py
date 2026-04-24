@@ -418,7 +418,12 @@ async def _run_search_pass(  # noqa: C901
                             )
                             continue
 
-                        await record_search(instance.id, candidate.item_id, candidate.item_type)
+                        await record_search(
+                            instance.id,
+                            candidate.item_id,
+                            candidate.item_type,
+                            search_kind,
+                        )
                         await _write_log(
                             instance.id,
                             candidate.item_id,
@@ -489,7 +494,12 @@ async def _run_search_pass(  # noqa: C901
                 )
                 continue
 
-            await record_search(instance.id, candidate.item_id, candidate.item_type)
+            await record_search(
+                instance.id,
+                candidate.item_id,
+                candidate.item_type,
+                search_kind,
+            )
             await _write_log(
                 instance.id,
                 candidate.item_id,
@@ -722,7 +732,12 @@ async def _run_upgrade_pass(
             new_offset = (offset + scanned) % len(pool)
             continue
 
-        await record_search(instance.id, candidate.item_id, candidate.item_type)
+        await record_search(
+            instance.id,
+            candidate.item_id,
+            candidate.item_type,
+            "upgrade",
+        )
         await _write_log(
             instance.id,
             candidate.item_id,

@@ -70,6 +70,7 @@ async def record_search(
     instance_id: int,
     item_id: int,
     item_type: ItemType | str,
+    search_kind: str = "missing",
 ) -> None:
     """Upsert a cooldown record for *item_id* with the current UTC timestamp.
 
@@ -80,17 +81,24 @@ async def record_search(
         instance_id: Owning instance primary key.
         item_id: Item identifier (e.g. episode, movie, album, or book ID).
         item_type: ``"episode"``, ``"movie"``, ``"album"``, ``"book"``, or ``"whisparr_episode"``.
+        search_kind: Which pass dispatched the search: ``"missing"``,
+            ``"cutoff"``, or ``"upgrade"``.  Stamped on the cooldown
+            row so the dashboard breakdown and the reconciliation path
+            both read it from the column instead of re-classifying via
+            ``search_log``.  Defaults to ``"missing"`` to keep older
+            seed fixtures working.
     """
     now = _iso(_now_utc())
     async with get_db() as db:
         await db.execute(
             """
-            INSERT INTO cooldowns (instance_id, item_id, item_type, searched_at)
-            VALUES (?, ?, ?, ?)
+            INSERT INTO cooldowns (instance_id, item_id, item_type, searched_at, search_kind)
+            VALUES (?, ?, ?, ?, ?)
             ON CONFLICT(instance_id, item_id, item_type)
-            DO UPDATE SET searched_at = excluded.searched_at
+            DO UPDATE SET searched_at = excluded.searched_at,
+                          search_kind = excluded.search_kind
             """,
-            (instance_id, item_id, item_type, now),
+            (instance_id, item_id, item_type, now, search_kind),
         )
         await db.commit()
 
@@ -125,9 +133,9 @@ async def is_on_cooldown_ref(ref: ItemRef, cooldown_days: int) -> bool:
     return await is_on_cooldown(ref.instance_id, ref.item_id, ref.item_type, cooldown_days)
 
 
-async def record_search_ref(ref: ItemRef) -> None:
+async def record_search_ref(ref: ItemRef, search_kind: str) -> None:
     """ItemRef-accepting overload of :func:`record_search`."""
-    await record_search(ref.instance_id, ref.item_id, ref.item_type)
+    await record_search(ref.instance_id, ref.item_id, ref.item_type, search_kind)
 
 
 async def clear_cooldowns(instance_id: int) -> int:

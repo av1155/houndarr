@@ -314,6 +314,9 @@
     font: inherit; color: inherit;
     transition: background-color 180ms ease;
   }
+  .admin-panel__header:hover {
+    background: var(--color-surface-2);
+  }
   .admin-panel__header:focus-visible {
     outline: 2px solid var(--color-brand-400); outline-offset: -2px;
   }
@@ -488,8 +491,6 @@
   }
 </style>
 
-{# The nav already labels this page; the section h2s below (Instances,
-   Admin) carry the page structure.  A redundant h1 was dropped. #}
 {% if error is defined and error %}
 {% call alerts.alert("error", prefix="mb-4", extra="text-sm font-sans") %}{{ error }}{% endcall %}
 {% endif %}
@@ -556,7 +557,7 @@
     <button
       type="button"
       id="admin-toggle"
-      class="admin-panel__header w-full text-left flex items-center justify-between gap-4 px-5 sm:px-6 py-4 sm:py-5 hover:bg-surface-2 transition-colors"
+      class="admin-panel__header w-full text-left flex items-center justify-between gap-4 px-5 sm:px-6 py-4 sm:py-5"
       aria-expanded="false"
       aria-controls="admin-body"
     >

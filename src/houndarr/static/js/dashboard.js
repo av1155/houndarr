@@ -838,9 +838,6 @@ function initDashboardPage() {
   </a>
 </section>`;
 
-    // Translate an /api/status envelope into the pair of markup
-    // strings the page renders: the top section and the instance
-    // grid (or the empty-state card when no instances exist).
     function renderEnvelope(payload) {
       const instances = (payload && Array.isArray(payload.instances)) ? payload.instances : [];
       const recentSearches = (payload && Array.isArray(payload.recent_searches))

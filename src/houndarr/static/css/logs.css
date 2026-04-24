@@ -13,9 +13,6 @@
   gap: 24px;
   flex-wrap: wrap;
 }
-/* .logs-head__h1 removed: the Logs page heading now reuses Tailwind
-   utilities (text-xl font-bold text-white tracking-tight) so it
-   matches the Settings page h1 exactly. */
 
 @keyframes logs-pulse {
   0%, 100% { opacity: 1; box-shadow: 0 0 0 3px var(--glow-brand-medium); }
@@ -264,10 +261,6 @@
   background: var(--color-surface-3);
   color: var(--color-text-heading);
 }
-
-/* Copy-button flash states reuse the same unlayered rules from app.css
-   (.copy-main-btn.is-copy-success / .is-copy-error) so the toast and
-   button both flip in sync. */
 
 
 /* Multi-select filter dropdown.  Matches the copy-menu popover
@@ -566,7 +559,10 @@
 .cycle--skip-only .cycle__header { padding-top: 13px; padding-bottom: 13px; }
 .cycle--skip-only .cycle__summary {
   grid-column: 1 / -1;
-  padding: 0 16px 12px 52px;
+  /* padding-left: chevron (20) + gap (12) + chip padding-left (8) +
+     dot (6) + dot-to-text gap (8) = 54px.  Aligns the summary's
+     first character with the instance name inside the chip. */
+  padding: 0 16px 12px 54px;
   font-size: 12.5px;
   color: var(--color-text-emphasis);
   line-height: 1.55;
@@ -706,8 +702,10 @@
   text-align: right;
   color: var(--color-text-emphasis);
   font-size: 12.5px;
-  white-space: nowrap;
   font-family: var(--font-mono);
+  white-space: normal;
+  overflow-wrap: anywhere;
+  min-width: 0;
 }
 .entry--error    .entry__reason { color: var(--color-danger); }
 .entry--searched .entry__reason { color: var(--color-success); }
@@ -717,7 +715,6 @@
 .entry--skipped:hover { opacity: 1; }
 .entry--skipped .entry__title { color: var(--color-text-emphasis); font-weight: 400; }
 
-/* Subtle left rules for outcome-bearing rows. */
 .entry--searched {
   background: linear-gradient(90deg, rgba(74, 222, 128, 0.04), transparent 50%);
 }
@@ -835,12 +832,25 @@
     row-gap: 10px;
     padding: 14px;
   }
+  .cycle__lead {
+    flex-wrap: wrap;
+    row-gap: 6px;
+  }
+  /* Drop the meta line (timestamp · trigger) onto its own row below
+     the chevron + chip so the date does not wrap mid-string and the
+     "·" separator never lands alone at a line start.  margin-left
+     aligns the first character with the instance chip text above. */
+  .cycle__meta {
+    flex-basis: 100%;
+    margin-left: 32px;
+    font-size: 10px;
+  }
   .cycle__outcome {
     grid-column: 1 / -1;
     justify-content: flex-start;
     padding-left: 32px;
   }
-  .cycle--skip-only .cycle__summary { padding-left: 32px; }
+  .cycle--skip-only .cycle__summary { padding-left: 54px; }
 
   .entry {
     grid-template-columns: 1fr auto;

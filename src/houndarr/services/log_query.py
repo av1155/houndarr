@@ -301,6 +301,38 @@ async def query_logs(
     return reordered
 
 
+# Map from Instance.core.type.value to the CSS --inst-<slug> token
+# suffix the Logs page cycle cards consume.  Collapses the two
+# Whisparr variants to slugs Tailwind accepts without an underscore
+# (--inst-whisparr / --inst-whisparr-v3).  Instances whose type is
+# unknown to this map (future *arr families, legacy rows) fall
+# through to an empty string; the template then omits the accent
+# style attribute entirely.
+_INSTANCE_TYPE_TO_ACCENT_SLUG = {
+    "sonarr": "sonarr",
+    "radarr": "radarr",
+    "lidarr": "lidarr",
+    "readarr": "readarr",
+    "whisparr_v2": "whisparr",
+    "whisparr_v3": "whisparr-v3",
+}
+
+
+async def instance_accent_by_name() -> dict[str, str]:
+    """Return a name -> accent-slug map for the cycle card accent rule.
+
+    Lightweight counterpart to :func:`services.instances.list_instances`:
+    reads only the two columns the Logs page needs and skips the
+    master-key decryption round-trip.  Both the ``/logs`` page route
+    and the ``/api/logs/partial`` swap route call this so the cycle
+    accent resolves identically on first paint and on every HTMX
+    partial append, including pagination beyond the first page.
+    """
+    async with get_db() as db, db.execute("SELECT name, type FROM instances") as cur:
+        rows = await cur.fetchall()
+    return {row["name"]: _INSTANCE_TYPE_TO_ACCENT_SLUG.get(row["type"], "") for row in rows}
+
+
 async def head_snapshot(since_cycle_id: str | None) -> dict[str, Any]:
     """Return newest cycle identifier + delta count since a cursor.
 

@@ -158,9 +158,20 @@
 {%- endmacro -%}
 
 {% if rows %}
+{#- Cycle grouping.  Two separate cases:
+     * cycle_id is not none  -> consecutive rows sharing that id are
+       folded into one cycle card.
+     * cycle_id is none       -> each row becomes its own standalone
+       card.  This is the case for connection-error rows the
+       supervisor writes when an instance ping fails outside any
+       search cycle; grouping them by the shared None would collapse
+       errors from three different instances into a single pseudo-
+       "system" card labelled with whichever instance happened to be
+       first in the buffer (the bug Lidarr + Whisparr v2 + Whisparr v3
+       hid in one Whisparr v3 card under multi-select). -#}
 {%- set ns = namespace(current=none, buf=[], started=false) -%}
 {%- for row in rows -%}
-{%- if ns.started and row.cycle_id != ns.current -%}
+{%- if ns.started and (row.cycle_id is none or row.cycle_id != ns.current) -%}
 {{ _render_cycle(ns.current, ns.buf, _accents) }}
 {%- set ns.buf = [] -%}
 {%- endif -%}

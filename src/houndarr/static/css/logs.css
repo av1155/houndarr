@@ -1,0 +1,874 @@
+/* ─────────────────────────────────────────────────────────────────────── */
+/* Houndarr: Logs page (audit trail, cycle-first feed).                    */
+/* Consumes tokens from tokens.css.                                        */
+/* ─────────────────────────────────────────────────────────────────────── */
+
+
+/* ─── Page head ────────────────────────────────────────────────────────── */
+/* Header-to-container gap matches the settings page (which uses Tailwind
+   `mb-3` = 0.75rem on its instances-section title row); both pages feed
+   off the same --space-3 token so retuning it moves them together. */
+.logs-head { margin-bottom: var(--space-3); }
+.logs-head__title-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+
+@keyframes logs-pulse {
+  0%, 100% { opacity: 1; box-shadow: 0 0 0 3px var(--glow-brand-medium); }
+  50%      { opacity: 0.55; box-shadow: 0 0 0 6px transparent; }
+}
+
+/* Live indicator pill (top-right of the page head).  Data-state flips
+   between `live` (green pulsing dot) and `paused` (amber static dot)
+   when the head-poll detects unseen cycles while the user is scrolled
+   past the filter panel. */
+.logs-head__live {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px 7px 11px;
+  background: var(--color-surface-1);
+  border: 1px solid var(--hairline-strong);
+  border-radius: 999px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.03em;
+  color: var(--color-text-emphasis);
+  transition:
+    border-color var(--dur-base) var(--ease-station),
+    background var(--dur-base) var(--ease-station);
+}
+.logs-head__live[data-state="live"]   { border-color: var(--color-success-border); }
+.logs-head__live[data-state="paused"] { border-color: var(--color-warning-border); }
+.live-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--color-success);
+  box-shadow: 0 0 0 3px rgba(74, 222, 128, 0.18);
+  animation: logs-pulse 2s ease-in-out infinite;
+}
+.logs-head__live[data-state="paused"] .live-dot {
+  background: var(--color-warning);
+  box-shadow: 0 0 0 3px rgba(251, 191, 36, 0.18);
+  animation: none;
+}
+.live-label { color: var(--color-text-heading); font-weight: 500; }
+.logs-head__live[data-state="paused"] .live-label { color: var(--color-warning); }
+.live-sep  { color: var(--color-text-subtle); }
+.live-meta { color: var(--color-text-muted); }
+
+
+/* ─── Controls panel (filters + copy split) ───────────────────────────── */
+.controls {
+  display: flex;
+  gap: 16px;
+  align-items: flex-end;
+  justify-content: space-between;
+  margin-bottom: 22px;
+  padding: 16px;
+  background: linear-gradient(180deg, var(--color-surface-1) 0%, #0b0d15 100%);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-container);
+  flex-wrap: wrap;
+}
+.filter-bar {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr)) auto;
+  gap: 14px 16px;
+  flex: 1;
+  min-width: 0;
+}
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.field__label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+  font-weight: 500;
+}
+.field__control {
+  position: relative;
+  background: var(--color-surface-2);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-inset);
+  transition:
+    border-color var(--dur-fast) var(--ease-station),
+    background   var(--dur-fast) var(--ease-station);
+}
+.field__control:hover {
+  border-color: var(--hairline-strong);
+  background: var(--color-surface-3);
+}
+.field__control:focus-within {
+  border-color: var(--color-brand-400);
+  box-shadow: 0 0 0 3px var(--glow-brand-medium);
+  background: var(--color-surface-3);
+}
+.field__control select {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 100%;
+  padding: 8px 32px 8px 10px;
+  background: transparent;
+  border: 0;
+  font-size: 13px;
+  color: var(--color-text-primary);
+  cursor: pointer;
+}
+.field__control::after {
+  content: "";
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  width: 12px;
+  height: 12px;
+  transform: translateY(-50%);
+  pointer-events: none;
+  background-color: var(--color-text-muted);
+  -webkit-mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>") center / contain no-repeat;
+          mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>") center / contain no-repeat;
+  transition: background-color var(--dur-fast) var(--ease-station);
+}
+.field__control:hover::after,
+.field__control:focus-within::after { background-color: var(--color-text-heading); }
+
+.field--switches { grid-column: span 1; }
+.switch-group {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding-top: 2px;
+}
+.chip-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 10px 7px 9px;
+  background: var(--color-surface-2);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-chip);
+  font-size: 12px;
+  color: var(--color-text-emphasis);
+  cursor: pointer;
+  transition:
+    border-color var(--dur-fast) var(--ease-station),
+    color        var(--dur-fast) var(--ease-station),
+    background   var(--dur-fast) var(--ease-station);
+  white-space: nowrap;
+}
+.chip-switch:hover {
+  border-color: var(--hairline-strong);
+  color: var(--color-text-heading);
+}
+.chip-switch input {
+  appearance: none;
+  -webkit-appearance: none;
+  margin: 0;
+  width: 13px;
+  height: 13px;
+  border: 1.5px solid var(--color-text-muted);
+  border-radius: 3px;
+  background: transparent;
+  position: relative;
+  cursor: pointer;
+  transition: all var(--dur-fast) var(--ease-station);
+}
+.chip-switch input:checked {
+  background: var(--color-brand-400);
+  border-color: var(--color-brand-400);
+  box-shadow: 0 0 0 3px var(--glow-brand-medium);
+}
+.chip-switch input:checked::after {
+  content: "";
+  position: absolute;
+  left: 3px;
+  top: 0;
+  width: 4px;
+  height: 7px;
+  border: solid var(--color-surface-base);
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+.chip-switch:has(input:checked) {
+  color: var(--color-text-heading);
+  border-color: var(--hairline-strong);
+}
+
+.controls__right { display: flex; align-items: flex-end; }
+.logs-spinner { display: none; }
+
+
+/* ─── Copy split button ───────────────────────────────────────────────── */
+.copy-split {
+  position: relative;
+  display: inline-flex;
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-inset);
+  background: var(--color-surface-2);
+  transition: border-color var(--dur-fast) var(--ease-station);
+}
+.copy-split:hover { border-color: var(--color-brand-400); }
+.copy-main,
+.copy-chevron {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 14px;
+  font-size: 12.5px;
+  color: var(--color-text-heading);
+  font-weight: 500;
+  transition: background var(--dur-fast) var(--ease-station);
+}
+.copy-main:hover,
+.copy-chevron:hover { background: var(--color-surface-3); }
+.copy-chevron { padding: 9px 10px; border-left: 1px solid var(--hairline); }
+.copy-icon     { width: 14px; height: 14px; color: var(--color-text-muted); }
+.copy-chev-icon { width: 12px; height: 12px; color: var(--color-text-muted); transition: transform var(--dur-base) var(--ease-station); }
+[hidden] { display: none !important; }
+.copy-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  min-width: 200px;
+  background: var(--color-surface-2);
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-inset);
+  padding: 4px;
+  box-shadow: var(--shadow-pop);
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+}
+.copy-menu button {
+  text-align: left;
+  padding: 8px 10px;
+  font-size: 13px;
+  color: var(--color-text-emphasis);
+  border-radius: 3px;
+  transition:
+    background var(--dur-fast) var(--ease-station),
+    color      var(--dur-fast) var(--ease-station);
+}
+.copy-menu button:hover {
+  background: var(--color-surface-3);
+  color: var(--color-text-heading);
+}
+
+
+/* Multi-select filter dropdown.  Matches the copy-menu popover
+   language (surface-2 background, hairline-strong border, shadow-pop)
+   so the Instance filter reads as the same "menu" affordance already
+   established on this page.  The trigger inherits .field__control's
+   frame for parity with the other filter-bar fields. */
+.filter-multiselect { position: relative; }
+.filter-multiselect__trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 8px 32px 8px 10px;
+  background: transparent;
+  border: 0;
+  font-size: 13px;
+  color: var(--color-text-primary);
+  font-family: var(--font-sans);
+  text-align: left;
+  cursor: pointer;
+  line-height: 1.2;
+}
+.filter-multiselect__summary {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.filter-multiselect__menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  min-width: 100%;
+  max-height: 280px;
+  overflow-y: auto;
+  background: var(--color-surface-2);
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-inset);
+  padding: 4px;
+  box-shadow: var(--shadow-pop);
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+}
+.filter-multiselect__option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  font-size: 13px;
+  color: var(--color-text-emphasis);
+  border-radius: 3px;
+  cursor: pointer;
+  transition:
+    background var(--dur-fast) var(--ease-station),
+    color      var(--dur-fast) var(--ease-station);
+}
+.filter-multiselect__option:hover { background: var(--color-surface-3); color: var(--color-text-heading); }
+.filter-multiselect__option input[type="checkbox"] {
+  /* Native checkbox with the same brand accent the Noise chip uses so
+     the checked state reads as a recognisable selection, not a stray
+     system-themed box.  accent-color is inherited site-wide from
+     input.css but the multi-select menu needs it explicit because the
+     surrounding label is not a .chip-switch. */
+  accent-color: var(--color-brand-400);
+  width: 14px;
+  height: 14px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+
+/* ─── New-entries floating banner ─────────────────────────────────────── */
+.new-entries {
+  position: fixed;
+  top: 84px;
+  left: 50%;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 16px 9px 14px;
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-brand-400);
+  border-radius: 999px;
+  font-size: 12.5px;
+  color: var(--color-text-heading);
+  font-weight: 500;
+  box-shadow: var(--glow-cyan), var(--shadow-pop);
+  cursor: pointer;
+  width: max-content;
+  opacity: 0;
+  transform: translate(-50%, -14px);
+  pointer-events: none;
+  transition:
+    opacity   var(--dur-base) var(--ease-station),
+    transform var(--dur-base) var(--ease-station);
+}
+.new-entries[data-visible="true"] {
+  opacity: 1;
+  transform: translate(-50%, 0);
+  pointer-events: auto;
+}
+.new-entries:hover { background: var(--color-surface-3); }
+.new-entries__arrow {
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: var(--color-brand-400);
+  color: var(--color-surface-base);
+  font-weight: 700;
+  font-size: 12px;
+}
+
+
+/* ─── Feed + cycle card ───────────────────────────────────────────────── */
+.feed { display: flex; flex-direction: column; gap: 12px; }
+
+.cycle {
+  position: relative;
+  background: var(--color-surface-1);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-container);
+  overflow: hidden;
+  transition:
+    border-color var(--dur-fast) var(--ease-station),
+    background   var(--dur-fast) var(--ease-station);
+}
+.cycle:hover { border-color: var(--hairline-strong); }
+.cycle[data-just-added="true"] { animation: cycle-enter 520ms var(--ease-station); }
+@keyframes cycle-enter {
+  0%   { opacity: 0; transform: translateY(-6px); box-shadow: var(--glow-cyan); }
+  60%  { opacity: 1; transform: translateY(0); box-shadow: var(--glow-cyan); }
+  100% { box-shadow: none; }
+}
+
+/* Instance accent bar on the left edge; colour comes from the inline
+   --cycle-accent custom property the template sets per article. */
+.cycle::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: var(--cycle-accent, var(--color-text-subtle));
+  opacity: 0.8;
+}
+.cycle--system::before { opacity: 0.35; }
+
+/* Cycle header is always visible; body collapses and expands via
+   JS-driven max-height so the animation survives window resize and
+   nested flex layout.  Chevron rotates 90deg on expand. */
+.cycle__header {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 16px;
+  align-items: center;
+  padding: 14px 16px 14px 20px;
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-station);
+  user-select: none;
+}
+.cycle__header:hover { background: var(--color-surface-2); }
+
+.cycle__lead {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+.cycle__expand {
+  width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-muted);
+  flex-shrink: 0;
+  transition:
+    transform var(--dur-base) var(--ease-station),
+    color     var(--dur-fast) var(--ease-station);
+}
+.cycle__expand svg { width: 12px; height: 12px; }
+.cycle__header:hover .cycle__expand { color: var(--color-text-heading); }
+.cycle[data-expanded="true"] .cycle__expand { transform: rotate(90deg); }
+
+.cycle__instance {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px 4px 8px;
+  background: var(--cycle-accent-bg, var(--color-surface-2));
+  border: 1px solid var(--cycle-accent-border, var(--hairline));
+  border-radius: var(--radius-chip);
+  font-size: 12px;
+  color: var(--cycle-accent, var(--color-text-heading));
+  font-weight: 500;
+  white-space: nowrap;
+}
+.cycle__instance-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--cycle-accent, var(--color-text-subtle));
+}
+
+.cycle__meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.05em;
+  color: var(--color-text-muted);
+  flex-wrap: wrap;
+  font-variant-numeric: tabular-nums;
+}
+.cycle__meta-sep { color: var(--color-text-subtle); }
+.cycle__trigger { text-transform: lowercase; }
+
+.cycle__outcome {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+.outcome-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 9px;
+  border-radius: var(--radius-chip);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+.outcome-pill__n {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+.outcome-pill--searched {
+  background: var(--color-success-bg);
+  border-color: var(--color-success-border);
+  color: var(--color-success);
+}
+.outcome-pill--skipped {
+  background: rgba(148, 163, 184, 0.08);
+  border-color: var(--hairline);
+  color: var(--color-text-emphasis);
+}
+.outcome-pill--error {
+  background: var(--color-danger-bg);
+  border-color: var(--color-danger-border);
+  color: var(--color-danger);
+}
+.outcome-pill--info {
+  background: color-mix(in srgb, var(--color-info) 15%, transparent);
+  border-color: color-mix(in srgb, var(--color-info) 40%, transparent);
+  color: var(--color-info);
+}
+
+.health-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 9px;
+  background: rgba(74, 222, 128, 0.08);
+  border: 1px solid rgba(74, 222, 128, 0.22);
+  border-radius: var(--radius-chip);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  color: var(--color-success);
+  text-transform: uppercase;
+  font-weight: 500;
+}
+.health-pill::before {
+  content: "";
+  width: 4px;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--color-success);
+  box-shadow: 0 0 0 2px rgba(74, 222, 128, 0.2);
+}
+
+/* Skip-only cycles show a calm one-line summary below the header
+   when collapsed.  Activity cycles (searched / error) open by default. */
+.cycle--skip-only .cycle__header { padding-top: 13px; padding-bottom: 13px; }
+.cycle--skip-only .cycle__summary {
+  grid-column: 1 / -1;
+  /* padding-left: chevron (20) + gap (12) + chip padding-left (8) +
+     dot (6) + dot-to-text gap (8) = 54px.  Aligns the summary's
+     first character with the instance name inside the chip. */
+  padding: 0 16px 12px 54px;
+  font-size: 12.5px;
+  color: var(--color-text-emphasis);
+  line-height: 1.55;
+}
+.cycle--skip-only .cycle__summary-reason {
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+}
+
+
+/* ─── Cycle body (expanded entry rows) ────────────────────────────────── */
+
+/* The body animates via JS-driven max-height.  At rest we pin it to
+   the inline --cycle-body-max the controller writes on open (0 when
+   collapsed, scrollHeight px while opening, 'none' after transitionend
+   so window resize does not clip).  overflow:hidden keeps the clipping
+   honest during the animation frame. */
+.cycle__body {
+  overflow: hidden;
+  max-height: 0;
+  background: #0a0c13;
+  border-top: 1px solid var(--hairline);
+  transition: max-height var(--dur-slow) var(--ease-station);
+}
+.cycle[data-expanded="true"] .cycle__body {
+  max-height: var(--cycle-body-max, none);
+}
+
+.entries { display: flex; flex-direction: column; }
+
+.entry {
+  display: grid;
+  grid-template-columns: 195px 84px 84px 1fr auto;
+  gap: 16px;
+  align-items: center;
+  padding: 10px 20px 10px 24px;
+  border-top: 1px solid var(--hairline);
+  font-size: 13px;
+  transition: background var(--dur-fast) var(--ease-station);
+  position: relative;
+}
+.entries .entry:first-child { border-top: 0; }
+.entry:hover { background: var(--color-surface-1); }
+
+.entry__time {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.entry__action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3px 9px;
+  border-radius: var(--radius-chip);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+  font-weight: 500;
+  text-transform: lowercase;
+  width: fit-content;
+}
+.entry__action--searched {
+  background: var(--color-success-bg);
+  color: var(--color-success);
+  border: 1px solid var(--color-success-border);
+}
+.entry__action--skipped {
+  background: rgba(148, 163, 184, 0.08);
+  color: var(--color-text-muted);
+  border: 1px solid var(--hairline);
+}
+.entry__action--error {
+  background: var(--color-danger-bg);
+  color: var(--color-danger);
+  border: 1px solid var(--color-danger-border);
+}
+.entry__action--info {
+  background: color-mix(in srgb, var(--color-info) 15%, transparent);
+  color: var(--color-info);
+  border: 1px solid color-mix(in srgb, var(--color-info) 40%, transparent);
+}
+
+.entry__kind {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 7px;
+  border-radius: var(--radius-chip);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: lowercase;
+  color: var(--color-text-muted);
+  border: 1px solid var(--hairline);
+  background: transparent;
+  width: fit-content;
+}
+.entry__kind--missing {
+  color: var(--color-info);
+  border-color: color-mix(in srgb, var(--color-info) 40%, transparent);
+}
+.entry__kind--cutoff {
+  color: var(--color-warning);
+  border-color: var(--color-warning-border);
+}
+.entry__kind--upgrade {
+  color: var(--color-seg-upgrade-cd);
+  border-color: color-mix(in srgb, var(--color-seg-upgrade-cd) 40%, transparent);
+}
+
+.entry__media {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.entry__title {
+  color: var(--color-text-primary);
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.entry__sub {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--color-text-subtle);
+  letter-spacing: 0.03em;
+  text-transform: lowercase;
+}
+
+.entry__reason {
+  text-align: right;
+  color: var(--color-text-emphasis);
+  font-size: 12.5px;
+  font-family: var(--font-mono);
+  white-space: normal;
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+.entry--error    .entry__reason { color: var(--color-danger); }
+.entry--searched .entry__reason { color: var(--color-success); }
+
+/* Dim skipped rows at rest; they are background chatter. */
+.entry--skipped { opacity: 0.62; }
+.entry--skipped:hover { opacity: 1; }
+.entry--skipped .entry__title { color: var(--color-text-emphasis); font-weight: 400; }
+
+.entry--searched {
+  background: linear-gradient(90deg, rgba(74, 222, 128, 0.04), transparent 50%);
+}
+.entry--searched::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--color-success);
+  opacity: 0.5;
+}
+.entry--error {
+  background: linear-gradient(90deg, rgba(248, 113, 113, 0.06), transparent 50%);
+}
+.entry--error::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--color-danger);
+  opacity: 0.6;
+}
+
+
+.feed-foot {
+  display: flex;
+  justify-content: center;
+  padding: 24px 0 0;
+}
+.load-older {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 16px;
+  background: var(--color-surface-1);
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-inset);
+  font-size: 12.5px;
+  color: var(--color-text-emphasis);
+  transition:
+    border-color var(--dur-fast) var(--ease-station),
+    color        var(--dur-fast) var(--ease-station);
+  cursor: pointer;
+}
+.load-older:hover {
+  color: var(--color-text-heading);
+  border-color: var(--color-brand-400);
+}
+.load-older svg { width: 13px; height: 13px; }
+
+.empty {
+  padding: 48px 20px;
+  text-align: center;
+  color: var(--color-text-muted);
+  font-size: 13px;
+  background: var(--color-surface-1);
+  border: 1px dashed var(--hairline-strong);
+  border-radius: var(--radius-container);
+}
+.empty__title {
+  color: var(--color-text-heading);
+  font-weight: 500;
+  font-size: 15px;
+  margin: 0 0 6px;
+}
+.empty--error {
+  border-style: solid;
+  border-color: var(--color-danger-border);
+  background: var(--color-danger-bg);
+}
+.empty--error .empty__title { color: var(--color-danger); }
+
+
+/* ─── Responsive ──────────────────────────────────────────────────────── */
+@media (max-width: 1100px) {
+  .filter-bar { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .field--switches { grid-column: span 3; }
+}
+
+@media (max-width: 760px) {
+  .controls { padding: 14px; gap: 14px; }
+  .filter-bar { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .field--switches { grid-column: span 2; }
+  .controls__right { width: 100%; }
+  .copy-split { width: 100%; }
+  .copy-main { flex: 1; justify-content: center; }
+
+  .cycle__header {
+    grid-template-columns: auto 1fr;
+    row-gap: 10px;
+    padding: 14px;
+  }
+  .cycle__lead {
+    flex-wrap: wrap;
+    row-gap: 6px;
+  }
+  /* Drop the meta line (timestamp · trigger) onto its own row below
+     the chevron + chip so the date does not wrap mid-string and the
+     "·" separator never lands alone at a line start.  margin-left
+     aligns the first character with the instance chip text above. */
+  .cycle__meta {
+    flex-basis: 100%;
+    margin-left: 32px;
+    font-size: 10px;
+  }
+  .cycle__outcome {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+    padding-left: 32px;
+  }
+  .cycle--skip-only .cycle__summary { padding-left: 54px; }
+
+  .entry {
+    grid-template-columns: 1fr auto;
+    gap: 6px 12px;
+    padding: 12px 16px;
+  }
+  .entry__time   { grid-column: 1 / -1; order: -1; font-size: 10.5px; }
+  .entry__action { grid-row: 2; }
+  .entry__kind   { grid-row: 2; justify-self: start; }
+  .entry__media  { grid-column: 1 / -1; grid-row: 3; }
+  .entry__reason {
+    grid-column: 1 / -1;
+    grid-row: 4;
+    text-align: left;
+    font-size: 11.5px;
+  }
+}
+
+/* Copy split is duplicated in the markup so each breakpoint can show
+   the appropriate placement.  The mobile placement inherits the
+   wider width rules above; hide it at desktop widths. */
+#copy-dropdown-group-mobile { display: none; }
+@media (max-width: 760px) {
+  #copy-dropdown-group-desktop { display: none; }
+  #copy-dropdown-group-mobile  { display: inline-flex; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cycle[data-just-added="true"],
+  .eyebrow__dot,
+  .live-dot,
+  .toast,
+  .cycle__body,
+  .cycle__expand,
+  .new-entries {
+    animation: none;
+    transition: none;
+  }
+}

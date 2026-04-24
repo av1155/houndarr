@@ -581,8 +581,17 @@ function initDashboardPage() {
         footText = `offline since ${escHtml(since || 'just now')}`;
       } else {
         const sleep = toNumber(inst.sleep_interval_mins);
-        const nextPatrol = `${sleep}m`;
-        footText = `last dispatch ${escHtml(lastDispatch || 'never')} <span class="sep">·</span> next patrol ${escHtml(nextPatrol)}`;
+        const lastDispatchAt = inst.last_dispatch_at || '';
+        // The ticker below updates text on every [data-next-patrol]
+        // element each second.  Data attributes carry the inputs the
+        // ticker needs so a single loop can handle every card without
+        // closing over per-card state.  Initial text is the static
+        // fallback (just the interval) so the first paint is never
+        // blank even if the ticker hasn't run yet.
+        footText = `last dispatch ${escHtml(lastDispatch || 'never')} <span class="sep">·</span>`
+          + ` next patrol <span data-next-patrol`
+          + ` data-last-dispatch="${escHtml(lastDispatchAt)}"`
+          + ` data-sleep-min="${sleep}">${sleep}m</span>`;
       }
       return `
 <div class="dash-card__foot">
@@ -782,6 +791,36 @@ function initDashboardPage() {
       },
       { signal },
     );
+
+    // Live "next patrol" countdown.  Renders on every [data-next-patrol]
+    // element once per second, computing `next_patrol_at = last_dispatch
+    // + sleep_interval_mins * 60s` from data attributes written server-
+    // side via the envelope.  Transitions to "running..." when the
+    // timer hits zero and stays there until the next poll updates
+    // last_dispatch_at.  Fallback: static "Nm" when we've never
+    // dispatched (initial install) or the timestamp is unparseable.
+    function formatNextPatrol(lastDispatch, sleepMin) {
+      if (sleepMin <= 0) return '-';
+      if (!lastDispatch) return `${sleepMin}m`;
+      const last = Date.parse(lastDispatch);
+      if (Number.isNaN(last)) return `${sleepMin}m`;
+      const remaining = (last + sleepMin * 60_000) - Date.now();
+      if (remaining <= 0) return 'running...';
+      if (remaining <= 60_000) return `${Math.ceil(remaining / 1000)}s`;
+      return `${Math.ceil(remaining / 60_000)}m`;
+    }
+    function tickNextPatrol() {
+      document.querySelectorAll('[data-next-patrol]').forEach(function (el) {
+        const nextText = formatNextPatrol(
+          el.dataset.lastDispatch || '',
+          Number(el.dataset.sleepMin) || 0,
+        );
+        if (el.textContent !== nextText) el.textContent = nextText;
+      });
+    }
+    const nextPatrolInterval = setInterval(tickNextPatrol, 1000);
+    signal.addEventListener('abort', () => clearInterval(nextPatrolInterval));
+    tickNextPatrol();
 }
 
 // Direct load.

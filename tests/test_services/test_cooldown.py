@@ -12,11 +12,13 @@ import pytest_asyncio
 from houndarr.database import get_db
 from houndarr.services import cooldown as cooldown_module
 from houndarr.services.cooldown import (
+    _reset_info_log_cache,
     _reset_skip_log_cache,
     clear_cooldowns,
     count_searches_last_hour,
     is_on_cooldown,
     record_search,
+    should_log_info,
     should_log_skip,
 )
 
@@ -306,5 +308,79 @@ async def test_should_log_skip_concurrent_calls_serialize() -> None:
     """Ten concurrent callers with the same key produce exactly one True."""
     key = (1, 101, "missing", "cooldown")
     results = await asyncio.gather(*(should_log_skip(key) for _ in range(10)))
+    assert sum(results) == 1
+    assert results.count(False) == 9
+
+
+# ---------------------------------------------------------------------------
+# should_log_info sentinel (caller-supplied TTL per key category)
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture(autouse=True)
+def _reset_info_sentinel() -> Iterator[None]:
+    _reset_info_log_cache()
+    yield
+    _reset_info_log_cache()
+
+
+@pytest.mark.asyncio()
+async def test_should_log_info_first_call_returns_true() -> None:
+    assert await should_log_info((1, "upgrade_pool_empty"), 3600) is True
+
+
+@pytest.mark.asyncio()
+async def test_should_log_info_within_ttl_returns_false() -> None:
+    key = (1, "upgrade_pool_empty")
+    assert await should_log_info(key, 3600) is True
+    assert await should_log_info(key, 3600) is False
+    assert await should_log_info(key, 3600) is False
+
+
+@pytest.mark.asyncio()
+async def test_should_log_info_after_ttl_returns_true() -> None:
+    key = (1, "upgrade_pool_empty")
+    assert await should_log_info(key, 3600) is True
+    # Rewind the stored timestamp past the 1h TTL.
+    stale = datetime.now(UTC) - timedelta(seconds=3601)
+    cooldown_module._INFO_LOG_CACHE[key] = stale
+    assert await should_log_info(key, 3600) is True
+
+
+@pytest.mark.asyncio()
+async def test_should_log_info_distinct_instances_independent() -> None:
+    k_a = (1, "upgrade_pool_empty")
+    k_b = (2, "upgrade_pool_empty")
+    assert await should_log_info(k_a, 3600) is True
+    assert await should_log_info(k_b, 3600) is True
+    # Each instance's entry is throttled independently.
+    assert await should_log_info(k_a, 3600) is False
+    assert await should_log_info(k_b, 3600) is False
+
+
+@pytest.mark.asyncio()
+async def test_should_log_info_distinct_reason_keys_independent() -> None:
+    k_one = (1, "upgrade_pool_empty")
+    k_two = (1, "some_other_info")
+    assert await should_log_info(k_one, 3600) is True
+    assert await should_log_info(k_two, 3600) is True
+    assert await should_log_info(k_one, 3600) is False
+    assert await should_log_info(k_two, 3600) is False
+
+
+@pytest.mark.asyncio()
+async def test_should_log_info_caller_owns_ttl() -> None:
+    """Different callers can pass different TTLs on the same key; window of the last call wins."""
+    key = (1, "upgrade_pool_empty")
+    assert await should_log_info(key, 10) is True
+    # Inside the 10s window, subsequent calls are suppressed regardless of TTL.
+    assert await should_log_info(key, 60 * 60) is False
+    assert await should_log_info(key, 1) is False
+
+
+@pytest.mark.asyncio()
+async def test_should_log_info_concurrent_calls_serialize() -> None:
+    key = (1, "upgrade_pool_empty")
+    results = await asyncio.gather(*(should_log_info(key, 3600) for _ in range(10)))
     assert sum(results) == 1
     assert results.count(False) == 9

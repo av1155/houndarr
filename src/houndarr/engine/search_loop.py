@@ -774,16 +774,24 @@ async def _run_upgrade_pass(
 
     if not pool:
         logger.info("[%s] upgrade pool empty, nothing to upgrade", instance.name)
-        await _write_log(
-            instance.id,
-            None,
-            None,
-            SearchAction.info.value,
-            search_kind="upgrade",
-            cycle_id=cycle_id,
-            cycle_trigger=cycle_trigger,
-            message="upgrade pool empty",
-        )
+        # Suppress identical info rows on every cycle for an instance
+        # that has nothing to upgrade.  One row per 6 hours per
+        # instance keeps the logs feed calm while still proving the
+        # pass ran periodically.  See `services/cooldown.py::
+        # should_log_info` for the LRU + TTL contract.
+        from houndarr.services.cooldown import should_log_info
+
+        if await should_log_info((instance.id, "upgrade_pool_empty"), 6 * 3600):
+            await _write_log(
+                instance.id,
+                None,
+                None,
+                SearchAction.info.value,
+                search_kind="upgrade",
+                cycle_id=cycle_id,
+                cycle_trigger=cycle_trigger,
+                message="nothing to upgrade right now",
+            )
         return 0
 
     # Random mode shuffles the pool and bypasses id-sort + offset-rotation.

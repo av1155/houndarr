@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import ClassVar
+from dataclasses import dataclass, replace
+from typing import Any, ClassVar, TypeVar
 
 from houndarr.clients._wire_models import (
     PaginatedResponse,
@@ -39,6 +39,9 @@ class MissingBook:
     release_date: str | None  # ISO-8601 nullable string
 
 
+_BookT = TypeVar("_BookT", "MissingBook", "LibraryBook")
+
+
 class ReadarrClient(ArrClient):
     """Async client for the Readarr v1 REST API."""
 
@@ -53,6 +56,56 @@ class ReadarrClient(ArrClient):
         ReadarrWantedBook
     ]
 
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        # Session-scoped author-name cache.  Readarr's
+        # /wanted/{missing,cutoff}?includeAuthor=true is inconsistent:
+        # some records return the nested author object, others return
+        # author=null even when /author/{id} knows the name.  On the
+        # first book with an empty author_name we fetch /api/v1/author
+        # once, build an id->name map, and use it to hydrate every
+        # affected book for the rest of the session.  None means
+        # not-yet-loaded; {} means loaded-but-empty.
+        self._author_name_cache: dict[int, str] | None = None
+
+    async def _load_author_cache(self) -> dict[int, str]:
+        """Fetch the full author list once per session and build id->name."""
+        if self._author_name_cache is not None:
+            return self._author_name_cache
+        try:
+            records = await self._get("/api/v1/author")
+        except Exception:  # noqa: BLE001
+            # Transport failure fall-through: leave books with empty
+            # author_name rather than bubbling a secondary failure that
+            # would mask the primary wanted-page success.
+            self._author_name_cache = {}
+            return self._author_name_cache
+        cache: dict[int, str] = {}
+        if isinstance(records, list):
+            for r in records:
+                if not isinstance(r, dict):
+                    continue
+                aid = r.get("id")
+                name = r.get("authorName")
+                if isinstance(aid, int) and isinstance(name, str) and name:
+                    cache[aid] = name
+        self._author_name_cache = cache
+        return cache
+
+    async def _hydrate_author_names(self, books: list[_BookT]) -> list[_BookT]:
+        """Fill empty ``author_name`` on books whose wanted-page author was null."""
+        if not any(b.author_id and not b.author_name for b in books):
+            return books
+        cache = await self._load_author_cache()
+        if not cache:
+            return books
+        return [
+            replace(b, author_name=cache[b.author_id])
+            if (not b.author_name and b.author_id in cache)
+            else b
+            for b in books
+        ]
+
     async def get_missing(
         self,
         *,
@@ -62,7 +115,10 @@ class ReadarrClient(ArrClient):
         """Return a page of monitored missing books.
 
         Calls ``GET /api/v1/wanted/missing`` with ``includeAuthor=true``
-        so that author metadata is embedded in each record.
+        so that author metadata is embedded in each record.  Readarr
+        sometimes returns ``author: null`` even with the include flag;
+        :meth:`_hydrate_author_names` fills those in from the bulk
+        ``/api/v1/author`` list on first miss.
 
         Args:
             page: 1-based page number.
@@ -72,7 +128,8 @@ class ReadarrClient(ArrClient):
             List of :class:`MissingBook` dataclasses.
         """
         envelope = await self._fetch_wanted_page("missing", page=page, page_size=page_size)
-        return [_parse_book(w) for w in envelope.records]
+        books = [_parse_book(w) for w in envelope.records]
+        return await self._hydrate_author_names(books)
 
     async def search(self, item_id: int) -> None:
         """Trigger an automatic book search in Readarr.
@@ -125,7 +182,8 @@ class ReadarrClient(ArrClient):
             page_size=page_size,
             include_sort=False,
         )
-        return [_parse_book(w) for w in envelope.records]
+        books = [_parse_book(w) for w in envelope.records]
+        return await self._hydrate_author_names(books)
 
     async def get_wanted_total(self, kind: WantedKind) -> int:
         """Return the totalRecords count for ``wanted/{kind}`` via a size-1 probe.
@@ -156,7 +214,8 @@ class ReadarrClient(ArrClient):
             "/api/v1/book",
             includeAuthor="true",
         )
-        return [_parse_library_book(ReadarrLibraryBook.model_validate(r)) for r in records]
+        books = [_parse_library_book(ReadarrLibraryBook.model_validate(r)) for r in records]
+        return await self._hydrate_author_names(books)
 
 
 # Parsing helpers

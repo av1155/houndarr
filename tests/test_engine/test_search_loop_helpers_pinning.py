@@ -14,6 +14,7 @@ from houndarr.engine.search_loop import (
     _clamp,
     _cutoff_page_size,
     _cutoff_scan_budget,
+    _format_hourly_limit_reason,
     _is_release_timing_reason,
     _missing_page_size,
     _missing_scan_budget,
@@ -111,3 +112,30 @@ class TestIsReleaseTimingReason:
     def test_prefix_case_sensitive(self) -> None:
         """Uppercase 'POST-RELEASE GRACE' does not match (pinning quirk)."""
         assert _is_release_timing_reason("POST-RELEASE GRACE") is False
+
+
+class TestFormatHourlyLimitReason:
+    """Pin the cap-exhausted reason string across the three pass kinds.
+
+    The three call sites in search_loop.py route through this helper
+    so their output never drifts apart.  The parameter ``(N/hr)`` form
+    is deliberate: it reads as "N per hour" to a user.  An older form
+    ``(N)`` read as an error code in post-Huntarr self-hoster research.
+    Missing is the unprefixed base case; cutoff and upgrade get their
+    kind as a leading word.
+    """
+
+    def test_missing_kind_has_no_prefix(self) -> None:
+        assert _format_hourly_limit_reason("missing", 20) == "hourly limit reached (20/hr)"
+
+    def test_cutoff_kind_has_cutoff_prefix(self) -> None:
+        assert _format_hourly_limit_reason("cutoff", 1) == "cutoff hourly limit reached (1/hr)"
+
+    def test_upgrade_kind_has_upgrade_prefix(self) -> None:
+        assert _format_hourly_limit_reason("upgrade", 5) == "upgrade hourly limit reached (5/hr)"
+
+    @pytest.mark.parametrize("cap", [1, 2, 10, 100, 1_000])
+    def test_cap_value_round_trips(self, cap: int) -> None:
+        """Any positive cap appears verbatim inside the parens."""
+        out = _format_hourly_limit_reason("missing", cap)
+        assert f"({cap}/hr)" in out

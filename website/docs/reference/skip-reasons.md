@@ -19,9 +19,9 @@ reasons are normal scheduling behavior, not errors.
 | `on upgrade cooldown (Nd)` | per-item | Upgrade item was searched less than `Upgrade Cooldown (days)` ago. Default 90 days. |
 | `not yet released` | per-item | No release date, or the release date is in the future. |
 | `post-release grace (Nh)` | per-item | Release date passed but the grace window (default 6 hours) has not elapsed. |
-| `hourly cap reached (N)` | per-item | Missing pass hit `Hourly Cap` of `N` for the current hour. |
-| `cutoff hourly cap reached (N)` | per-item | Cutoff pass hit `Cutoff Cap` of `N`. |
-| `upgrade hourly cap reached (N)` | per-item | Upgrade pass hit `Upgrade Cap` of `N`. |
+| `hourly limit reached (N/hr)` | per-item | Missing pass hit `Hourly Cap` of `N` for the current hour. |
+| `cutoff hourly limit reached (N/hr)` | per-item | Cutoff pass hit `Cutoff Cap` of `N`. |
+| `upgrade hourly limit reached (N/hr)` | per-item | Upgrade pass hit `Upgrade Cap` of `N`. |
 | `queue backpressure (N/M)` | cycle-level | Download queue has `N` items, at or above `Queue Limit` of `M`. Entire cycle is skipped. |
 | `outside allowed time window` | cycle-level | Current time falls outside every window defined in `Allowed Search Window`. Entire cycle is skipped. |
 

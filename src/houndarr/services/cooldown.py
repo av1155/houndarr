@@ -192,3 +192,65 @@ async def should_log_skip(key: SkipLogKey) -> bool:
 def _reset_skip_log_cache() -> None:
     """Clear the sentinel cache.  Test-only helper."""
     _SKIP_LOG_CACHE.clear()
+
+
+# Info-row throttle (separate cache + caller-supplied TTL)
+
+InfoLogKey = tuple[int, str]
+"""``(instance_id, reason_key)``.  The ``reason_key`` is a short
+stable slug identifying which recurring info-row this entry gates
+(e.g. ``"upgrade_pool_empty"``).  Keys are intentionally coarse: one
+per-instance-per-condition, not per-cycle."""
+
+_INFO_LOG_CACHE: OrderedDict[InfoLogKey, datetime] = OrderedDict()
+_INFO_LOG_MAX_ENTRIES = 256
+_INFO_LOG_LOCK = asyncio.Lock()
+
+
+async def should_log_info(key: InfoLogKey, ttl_seconds: int) -> bool:
+    """Gate recurring cycle-level info rows behind a caller-supplied TTL.
+
+    Sibling to :func:`should_log_skip` for info-row scenarios where a
+    condition persists across many cycles and would otherwise write an
+    identical row per cycle.  The upgrade-pass-empty case on an
+    instance with no upgrade-eligible items produces one row per
+    cycle; at a five-minute interval that is 288 rows per day per
+    instance of pure noise.  Wrapping the write behind
+    ``should_log_info((instance_id, "upgrade_pool_empty"), 6*3600)``
+    caps it at one row per six-hour window per instance.
+
+    The check-and-write is serialized under a dedicated lock so two
+    concurrent passes cannot both bypass the cache.  Cache is bounded
+    at 256 entries with LRU eviction; the keyspace is small (roughly
+    one entry per instance per distinct info-row category) so the
+    cap almost never fires in practice.
+
+    Args:
+        key: ``(instance_id, reason_key)``.  ``reason_key`` is a
+            stable short slug describing the info-row kind.
+        ttl_seconds: How long to suppress duplicate rows for the same
+            key, in seconds.  Caller owns the cadence; this function
+            does not pick one.
+
+    Returns:
+        ``True`` if the caller should write the info row (cache miss
+        or expired entry).  ``False`` if a row for the same key was
+        recorded within the TTL window.
+    """
+    now = datetime.now(UTC)
+    ttl = timedelta(seconds=ttl_seconds)
+    async with _INFO_LOG_LOCK:
+        entry = _INFO_LOG_CACHE.get(key)
+        if entry is not None and now - entry < ttl:
+            _INFO_LOG_CACHE.move_to_end(key)
+            return False
+        _INFO_LOG_CACHE[key] = now
+        _INFO_LOG_CACHE.move_to_end(key)
+        while len(_INFO_LOG_CACHE) > _INFO_LOG_MAX_ENTRIES:
+            _INFO_LOG_CACHE.popitem(last=False)
+        return True
+
+
+def _reset_info_log_cache() -> None:
+    """Clear the info-log sentinel cache.  Test-only helper."""
+    _INFO_LOG_CACHE.clear()

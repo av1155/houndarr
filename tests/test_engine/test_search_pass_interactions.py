@@ -533,7 +533,10 @@ async def test_empty_upgrade_pool_logs_info(
     mock_update: AsyncMock,
     seeded_instances: None,
 ) -> None:
-    """Empty upgrade pool logs an info row with 'upgrade pool empty'."""
+    """Empty upgrade pool logs a user-facing info row once per TTL window."""
+    from houndarr.services.cooldown import _reset_info_log_cache
+
+    _reset_info_log_cache()
     _mock_radarr_missing(_EMPTY_PAGE)
     _mock_radarr_library([])
     _mock_radarr_command()
@@ -548,7 +551,7 @@ async def test_empty_upgrade_pool_logs_info(
     rows = await get_log_rows()
     info_rows = [r for r in rows if r["action"] == "info" and r["search_kind"] == "upgrade"]
     assert len(info_rows) == 1
-    assert "upgrade pool empty" in (info_rows[0].get("message") or "")
+    assert "nothing to upgrade right now" in (info_rows[0].get("message") or "")
 
 
 @pytest.mark.asyncio()

@@ -370,6 +370,7 @@ async def instance_toggle_enabled(request: Request, instance_id: int) -> HTMLRes
     if instance is None:
         return HTMLResponse(content="Not found", status_code=404)
 
+    was_enabled = instance.core.enabled
     updated = await update_instance(
         instance_id,
         master_key=master_key(request),
@@ -377,7 +378,7 @@ async def instance_toggle_enabled(request: Request, instance_id: int) -> HTMLRes
         type=instance.type,
         url=instance.url,
         api_key=instance.api_key,
-        enabled=not instance.enabled,
+        enabled=not was_enabled,
         batch_size=instance.batch_size,
         sleep_interval_mins=instance.sleep_interval_mins,
         hourly_cap=instance.hourly_cap,
@@ -395,6 +396,29 @@ async def instance_toggle_enabled(request: Request, instance_id: int) -> HTMLRes
     )
     if updated is None:
         return HTMLResponse(content="Not found", status_code=404)
+
+    # When a user re-enables a previously disabled instance, the newest
+    # row in search_log is usually the stale error that caused them to
+    # disable the instance in the first place.  active_error_instance_ids
+    # keys off "newest row per instance", so the status pill would
+    # continue rendering "Error" (on this Settings page) and the
+    # dashboard banner would keep showing the instance as errored until
+    # a fresh non-error row lands — which can take 10+ seconds even
+    # with skip_grace on the supervisor.  Write a system info row here
+    # so the newest-row lookup immediately sees a non-error row and
+    # every surface that keys off active_error flips to "Active" in the
+    # same HTMX response that re-renders this row.
+    if not was_enabled:
+        from houndarr.repositories.search_log import insert_log_row
+
+        await insert_log_row(
+            instance_id=updated.core.id,
+            item_id=None,
+            item_type=None,
+            action="info",
+            cycle_trigger="system",
+            message="Instance re-enabled",
+        )
 
     supervisor = getattr(request.app.state, "supervisor", None)
     if isinstance(supervisor, Supervisor):

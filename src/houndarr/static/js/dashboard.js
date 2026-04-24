@@ -548,7 +548,7 @@ function initDashboardPage() {
       const offline = !disabled && !!inst.active_error;
       const typeAttr = inst.type ? ` data-type="${escHtml(inst.type)}"` : '';
       const disabledAttr = disabled ? ' data-disabled="true"' : '';
-      const watchingVal = toNumber(inst.monitored_total);
+      const wantedVal = toNumber(inst.monitored_total);
       const bd = inst.cooldown_breakdown || { missing: 0, cutoff: 0, upgrade: 0 };
       // Per-card Eligible mirrors the library-health formula: upgrade
       // cooldowns are tracked separately from monitored_total (the
@@ -556,12 +556,12 @@ function initDashboardPage() {
       // the in-monitored cooldown buckets here.
       const gated = toNumber(bd.missing) + toNumber(bd.cutoff);
       const unr = toNumber(inst.unreleased_count);
-      const eligibleVal = Math.max(0, watchingVal - gated - unr);
+      const eligibleVal = Math.max(0, wantedVal - gated - unr);
       const searchedVal = toNumber(inst.lifetime_searched);
 
-      const watchingText = offline || disabled
-        ? `<dd class="dash-card__stat-value dash-card__stat-value--muted">${watchingVal || '-'}</dd>`
-        : `<dd class="dash-card__stat-value">${watchingVal}</dd>`;
+      const wantedText = offline || disabled
+        ? `<dd class="dash-card__stat-value dash-card__stat-value--muted">${wantedVal || '-'}</dd>`
+        : `<dd class="dash-card__stat-value">${wantedVal}</dd>`;
       const eligibleText = offline
         ? `<dd class="dash-card__stat-value dash-card__stat-value--muted">-</dd>`
         : disabled
@@ -582,8 +582,8 @@ function initDashboardPage() {
   </header>
   <dl class="dash-card__stats">
     <div>
-      <dt class="dash-card__stat-label">Watching</dt>
-      ${watchingText}
+      <dt class="dash-card__stat-label" title="Missing + Cutoff Unmet on this instance">Wanted</dt>
+      ${wantedText}
     </div>
     <div>
       <dt class="dash-card__stat-label">Eligible</dt>

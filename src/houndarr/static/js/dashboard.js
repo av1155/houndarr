@@ -340,7 +340,7 @@ function initDashboardPage() {
       <span class="dash-lh__stat-value dash-lh__stat-value--gated">${gated}</span>
       <span class="dash-lh__stat-label">Gated</span>
     </span>
-    <span class="dash-lh__stat" data-tip="Items not yet released. Houndarr waits out the post-release grace window before searching them.">
+    <span class="dash-lh__stat" data-tip="Items still awaiting their release date.">
       <span class="dash-lh__stat-value dash-lh__stat-value--unrel">${totals.unreleased}</span>
       <span class="dash-lh__stat-label">Unreleased</span>
     </span>

@@ -160,7 +160,9 @@ def _row_to_instance(row: aiosqlite.Row, master_key: bytes) -> Instance:
         upgrade_sonarr_search_mode=SonarrSearchMode(row["upgrade_sonarr_search_mode"]),
         upgrade_lidarr_search_mode=LidarrSearchMode(row["upgrade_lidarr_search_mode"]),
         upgrade_readarr_search_mode=ReadarrSearchMode(row["upgrade_readarr_search_mode"]),
-        upgrade_whisparr_v2_search_mode=WhisparrV2SearchMode(row["upgrade_whisparr_v2_search_mode"]),
+        upgrade_whisparr_v2_search_mode=WhisparrV2SearchMode(
+            row["upgrade_whisparr_v2_search_mode"]
+        ),
         upgrade_item_offset=row["upgrade_item_offset"],
         upgrade_series_offset=row["upgrade_series_offset"],
         missing_page_offset=row["missing_page_offset"],

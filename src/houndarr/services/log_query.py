@@ -23,6 +23,7 @@ does not need to share a handle with sibling reads, so the simpler
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from typing import Any
 
 from houndarr.database import get_db
@@ -283,3 +284,96 @@ async def query_logs(
             reordered.extend(groups[cid])
 
     return reordered
+
+
+# Map from Instance.core.type.value to the CSS --inst-<slug> token
+# suffix the Logs page cycle cards consume.  Renders the two Whisparr
+# variants as hyphenated slugs Tailwind accepts without an underscore
+# (--inst-whisparr-v2 / --inst-whisparr-v3).  Instances whose type is
+# unknown to this map (future *arr families, legacy rows) fall
+# through to an empty string; the template then omits the accent
+# style attribute entirely.
+_INSTANCE_TYPE_TO_ACCENT_SLUG = {
+    "sonarr": "sonarr",
+    "radarr": "radarr",
+    "lidarr": "lidarr",
+    "readarr": "readarr",
+    "whisparr_v2": "whisparr-v2",
+    "whisparr_v3": "whisparr-v3",
+}
+
+
+async def instance_accent_by_name() -> dict[str, str]:
+    """Return a name -> accent-slug map for the cycle card accent rule.
+
+    Lightweight counterpart to :func:`services.instances.list_instances`:
+    reads only the two columns the Logs page needs and skips the
+    master-key decryption round-trip.  Both the ``/logs`` page route
+    and the ``/api/logs/partial`` swap route call this so the cycle
+    accent resolves identically on first paint and on every HTMX
+    partial append, including pagination beyond the first page.
+    """
+    async with get_db() as db, db.execute("SELECT name, type FROM instances") as cur:
+        rows = await cur.fetchall()
+    return {row["name"]: _INSTANCE_TYPE_TO_ACCENT_SLUG.get(row["type"], "") for row in rows}
+
+
+async def head_snapshot(since_cycle_id: str | None) -> dict[str, Any]:
+    """Return newest cycle identifier + delta count since a cursor.
+
+    Powers the Logs page live-tail banner.  Two reads: the newest cycle
+    anywhere in ``search_log`` (ordered by row timestamp + id DESC), and
+    a count of distinct cycles whose latest row is strictly newer than
+    the since-cursor's latest row.  When ``since_cycle_id`` is missing
+    from the DB (purged by the 30-day retention, or never seen), the
+    count falls through to zero; the client recovers on the next full
+    page refresh.
+
+    Args:
+        since_cycle_id: Top-of-feed cycle id the client last rendered.
+            ``None`` on first poll before any cycles have been shown.
+
+    Returns:
+        Dict with keys ``newest_cycle_id`` (str | None),
+        ``newest_timestamp`` (ISO string | None),
+        ``count_newer_than`` (int), and ``at`` (server-side UTC ISO
+        timestamp).  ``newest_*`` are ``None`` when the search_log has
+        no cycle rows yet.
+    """
+    async with get_db() as db:
+        async with db.execute(
+            "SELECT cycle_id, timestamp FROM search_log "
+            "WHERE cycle_id IS NOT NULL "
+            "ORDER BY timestamp DESC, id DESC "
+            "LIMIT 1"
+        ) as cur:
+            newest = await cur.fetchone()
+
+        count_newer_than = 0
+        if since_cycle_id:
+            # The inner subquery returns the latest row timestamp of the
+            # cursor cycle; when the cursor has been purged (or never
+            # existed) the subquery yields NULL and the `> NULL`
+            # comparison excludes every row, so count_newer_than stays
+            # at 0.  That's the intentional fallback: a stale client is
+            # told nothing is newer and recovers on refresh.
+            async with db.execute(
+                "SELECT COUNT(DISTINCT cycle_id) AS n FROM search_log "
+                "WHERE cycle_id IS NOT NULL "
+                "AND cycle_id != ? "
+                "AND timestamp > ("
+                "  SELECT timestamp FROM search_log "
+                "  WHERE cycle_id = ? "
+                "  ORDER BY timestamp DESC LIMIT 1"
+                ")",
+                (since_cycle_id, since_cycle_id),
+            ) as cur:
+                count_row = await cur.fetchone()
+                count_newer_than = int(count_row["n"]) if count_row else 0
+
+    return {
+        "newest_cycle_id": newest["cycle_id"] if newest else None,
+        "newest_timestamp": newest["timestamp"] if newest else None,
+        "count_newer_than": count_newer_than,
+        "at": datetime.now(UTC).isoformat(),
+    }

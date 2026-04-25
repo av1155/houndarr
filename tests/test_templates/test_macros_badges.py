@@ -52,7 +52,7 @@ class TestInstanceTypeBadge:
             (
                 "whisparr_v2",
                 "Whisparr v2",
-                ("bg-whisparr-bg", "text-whisparr", "border-whisparr/40"),
+                ("bg-whisparr-v2-bg", "text-whisparr-v2", "border-whisparr-v2/40"),
             ),
             (
                 "whisparr_v3",

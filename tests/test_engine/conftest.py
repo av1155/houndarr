@@ -44,7 +44,7 @@ SONARR_URL = "http://sonarr:8989"
 RADARR_URL = "http://radarr:7878"
 LIDARR_URL = "http://lidarr:8686"
 READARR_URL = "http://readarr:8787"
-WHISPARR_URL = "http://whisparr:6969"
+WHISPARR_V2_URL = "http://whisparr:6969"
 MASTER_KEY: bytes = Fernet.generate_key()
 
 _EPISODE_RECORD: dict[str, Any] = {
@@ -239,7 +239,7 @@ async def seeded_instances(db: None) -> AsyncGenerator[None, None]:
                 (2, "Radarr Test", "radarr", RADARR_URL, encrypted),
                 (3, "Lidarr Test", "lidarr", LIDARR_URL, encrypted),
                 (4, "Readarr Test", "readarr", READARR_URL, encrypted),
-                (5, "Whisparr Test", "whisparr_v2", WHISPARR_URL, encrypted),
+                (5, "Whisparr Test", "whisparr_v2", WHISPARR_V2_URL, encrypted),
             ],
         )
         await conn.commit()

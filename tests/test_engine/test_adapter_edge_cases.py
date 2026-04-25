@@ -13,7 +13,7 @@ from houndarr.engine.adapters import lidarr as lidarr_adapter
 from houndarr.engine.adapters import radarr as radarr_adapter
 from houndarr.engine.adapters import readarr as readarr_adapter
 from houndarr.engine.adapters import sonarr as sonarr_adapter
-from houndarr.engine.adapters import whisparr_v2 as whisparr_adapter
+from houndarr.engine.adapters import whisparr_v2 as whisparr_v2_adapter
 from houndarr.engine.adapters.lidarr import _artist_item_id
 from houndarr.engine.adapters.readarr import _author_item_id
 from houndarr.engine.adapters.sonarr import _season_item_id
@@ -483,13 +483,13 @@ def test_readarr_adapt_upgrade_author_context() -> None:
 
 
 def test_whisparr_v2_adapt_missing_episode_mode() -> None:
-    """Episode mode: item_type=whisparr_episode, group_key=None."""
+    """Episode mode: item_type=whisparr_v2_episode, group_key=None."""
     inst = make_instance(
         itype=InstanceType.whisparr_v2,
         whisparr_v2_search_mode=WhisparrV2SearchMode.episode,
     )
     item = _missing_whisparr_v2_episode()
-    cand = whisparr_adapter.adapt_missing(item, inst)
+    cand = whisparr_v2_adapter.adapt_missing(item, inst)
 
     assert cand.item_id == 501
     assert cand.item_type == "whisparr_v2_episode"
@@ -504,7 +504,7 @@ def test_whisparr_v2_adapt_missing_season_context() -> None:
         whisparr_v2_search_mode=WhisparrV2SearchMode.season_context,
     )
     item = _missing_whisparr_v2_episode(series_id=70, season_number=2)
-    cand = whisparr_adapter.adapt_missing(item, inst)
+    cand = whisparr_v2_adapter.adapt_missing(item, inst)
 
     expected_id = -(70 * 1000 + 2)
     assert cand.item_id == expected_id
@@ -513,13 +513,13 @@ def test_whisparr_v2_adapt_missing_season_context() -> None:
 
 
 def test_whisparr_v2_adapt_cutoff_always_episode_mode() -> None:
-    """Cutoff always uses episode mode for Whisparr."""
+    """Cutoff always uses episode mode for Whisparr v2."""
     inst = make_instance(
         itype=InstanceType.whisparr_v2,
         whisparr_v2_search_mode=WhisparrV2SearchMode.season_context,
     )
     item = _missing_whisparr_v2_episode(series_id=70, season_number=2)
-    cand = whisparr_adapter.adapt_cutoff(item, inst)
+    cand = whisparr_v2_adapter.adapt_cutoff(item, inst)
 
     assert cand.item_id == 501
     assert cand.group_key is None
@@ -533,7 +533,7 @@ def test_whisparr_v2_adapt_upgrade_season_context() -> None:
         upgrade_whisparr_v2_search_mode=WhisparrV2SearchMode.season_context,
     )
     item = _library_whisparr_v2_episode(series_id=70, season_number=2)
-    cand = whisparr_adapter.adapt_upgrade(item, inst)
+    cand = whisparr_v2_adapter.adapt_upgrade(item, inst)
 
     expected_id = -(70 * 1000 + 2)
     assert cand.item_id == expected_id
@@ -549,7 +549,7 @@ def test_whisparr_v2_unreleased_with_future_datetime() -> None:
     )
     future_dt = datetime.now(UTC) + timedelta(days=30)
     item = _missing_whisparr_v2_episode(release_date=future_dt)
-    cand = whisparr_adapter.adapt_missing(item, inst)
+    cand = whisparr_v2_adapter.adapt_missing(item, inst)
 
     assert cand.unreleased_reason == "not yet released"
 
@@ -561,6 +561,6 @@ def test_whisparr_v2_unreleased_with_none_release_date() -> None:
         whisparr_v2_search_mode=WhisparrV2SearchMode.episode,
     )
     item = _missing_whisparr_v2_episode(release_date=None)
-    cand = whisparr_adapter.adapt_missing(item, inst)
+    cand = whisparr_v2_adapter.adapt_missing(item, inst)
 
     assert cand.unreleased_reason is None

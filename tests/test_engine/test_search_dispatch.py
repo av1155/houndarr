@@ -642,7 +642,7 @@ async def test_readarr_cutoff_uses_book_search(
 
 @pytest.mark.asyncio()
 @respx.mock
-async def test_whisparr_cutoff_uses_episode_search(
+async def test_whisparr_v2_cutoff_uses_episode_search(
     seeded_instances: None,
 ) -> None:
     """Cutoff pass always uses EpisodeSearch even in season_context."""

@@ -77,8 +77,23 @@
   --color-lidarr-bg:    rgba(6, 78, 59, 0.50);
   --color-readarr:      #fca5a5;  /* rose */
   --color-readarr-bg:   rgba(127, 29, 29, 0.50);
-  --color-whisparr:     #f9a8d4;  /* pink */
-  --color-whisparr-bg:  rgba(80, 7, 36, 0.50);
+  --color-whisparr-v2:    #f9a8d4;  /* pink (v2) */
+  --color-whisparr-v2-bg: rgba(80, 7, 36, 0.50);
+  --color-whisparr-v3:    #e879f9;  /* fuchsia */
+  --color-whisparr-v3-bg: rgba(86, 19, 88, 0.50);
+
+  /* ── Library-health bar segment colors ─────────────────────────────── */
+  --seg-eligible:      #4ade80;   /* emerald (ready to search) */
+  --seg-cutoff-cd:     #fcd34d;   /* amber (cutoff cooldown) */
+  --seg-cooldown:      #22d3ee;   /* cyan (missing cooldown) */
+  --seg-upgrade-cd:    #a78bfa;   /* violet (upgrade cooldown) */
+  --seg-unreleased:    #64748b;   /* slate (future release) */
+
+  /* ── Search-kind tint (icons on recent-hunts + cooldown schedule) ───── */
+  /* Aliases; one place to retune if the green/amber/violet scheme moves. */
+  --color-kind-missing: var(--color-success);   /* green */
+  --color-kind-cutoff:  var(--color-warning);   /* amber */
+  --color-kind-upgrade: var(--seg-upgrade-cd);  /* violet */
 
   /* ── Typography ─────────────────────────────────────────────────────── */
   --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system,
@@ -128,4 +143,45 @@
   --dur-fast:  120ms;
   --dur-base:  180ms;
   --dur-slow:  280ms;
+
+  /* ── Logs page tokens ───────────────────────────────────────────────── */
+
+  /* Alpha hairlines for the Logs page cycle cards.  Calibrated against
+     the cards' darker inner surface (#0a0c13), where the solid-hex
+     --color-border-subtle token reads as double-weight. */
+  --hairline:        rgba(148, 163, 184, 0.10);
+  --hairline-strong: rgba(148, 163, 184, 0.18);
+
+  /* Composite effect tokens consumed only via var().  Deliberately
+     kept out of @theme so a retune propagates without a template
+     sweep; Tailwind utility forms would capture a snapshot at build
+     time. */
+  --shadow-pop: 0 12px 32px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(148, 163, 184, 0.12);
+  --glow-cyan:  0 0 0 1px rgba(34, 211, 238, 0.25), 0 0 24px -6px rgba(34, 211, 238, 0.55);
+
+  /* Per-*arr accent aliases for the Logs page cycle cards.  Cards set
+     --cycle-accent / --cycle-accent-bg / --cycle-accent-border on the
+     <article> via inline style, resolved from the instance's type
+     slug.  The 0.10 / 0.32 alphas diverge from the existing
+     --color-<type>-bg token (0.50 alpha for the settings-page badge)
+     because the card surface is much darker; at 0.50 the chip reads
+     as opaque. */
+  --inst-sonarr:             var(--color-sonarr);
+  --inst-sonarr-bg:          rgba(125, 211, 252, 0.10);
+  --inst-sonarr-border:      rgba(125, 211, 252, 0.32);
+  --inst-radarr:             var(--color-radarr);
+  --inst-radarr-bg:          rgba(252, 211, 77, 0.10);
+  --inst-radarr-border:      rgba(252, 211, 77, 0.32);
+  --inst-lidarr:             var(--color-lidarr);
+  --inst-lidarr-bg:          rgba(110, 231, 183, 0.10);
+  --inst-lidarr-border:      rgba(110, 231, 183, 0.32);
+  --inst-readarr:            var(--color-readarr);
+  --inst-readarr-bg:         rgba(252, 165, 165, 0.10);
+  --inst-readarr-border:     rgba(252, 165, 165, 0.32);
+  --inst-whisparr-v2:        var(--color-whisparr-v2);
+  --inst-whisparr-v2-bg:     rgba(249, 168, 212, 0.10);
+  --inst-whisparr-v2-border: rgba(249, 168, 212, 0.32);
+  --inst-whisparr-v3:        var(--color-whisparr-v3);
+  --inst-whisparr-v3-bg:     rgba(232, 121, 249, 0.10);
+  --inst-whisparr-v3-border: rgba(232, 121, 249, 0.32);
 }

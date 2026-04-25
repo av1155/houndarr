@@ -17,6 +17,7 @@ from houndarr.engine.adapters.sonarr import (
     adapt_cutoff,
     adapt_missing,
     dispatch_search,
+    fetch_instance_snapshot,
     fetch_reconcile_sets,
     make_client,
 )
@@ -442,3 +443,86 @@ class TestFetchReconcileSetsUpgrade:
         assert sets.upgrade == frozenset()
         client.get_series.assert_not_called()
         client.get_episodes.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# fetch_instance_snapshot
+# ---------------------------------------------------------------------------
+
+
+class TestFetchInstanceSnapshot:
+    """Verify the snapshot composition for Sonarr.
+
+    monitored_total comes from get_wanted_total('missing') +
+    get_wanted_total('cutoff') (cheap pageSize=1 probes).
+    unreleased_count comes from a paginate_wanted walk of /wanted/missing
+    counting items whose ``air_date_utc`` is strictly in the future.
+    """
+
+    @pytest.mark.asyncio()
+    async def test_paginated_walk_counts_future_anchors(self):
+        future = "2999-01-01T00:00:00Z"
+        past = "2020-01-01T00:00:00Z"
+        client = AsyncMock(spec=SonarrClient)
+        client.get_wanted_total.side_effect = lambda kind: {"missing": 3, "cutoff": 5}[kind]
+        client.get_missing.return_value = [
+            _make_episode(episode_id=1, air_date_utc=future),
+            _make_episode(episode_id=2, air_date_utc=past),
+            _make_episode(episode_id=3, air_date_utc=future),
+        ]
+
+        snap = await fetch_instance_snapshot(client, _make_instance())
+
+        assert snap.monitored_total == 8
+        assert snap.unreleased_count == 2
+
+    @pytest.mark.asyncio()
+    async def test_no_unreleased_when_all_anchors_past(self):
+        client = AsyncMock(spec=SonarrClient)
+        client.get_wanted_total.side_effect = lambda kind: {"missing": 2, "cutoff": 0}[kind]
+        client.get_missing.return_value = [
+            _make_episode(episode_id=1, air_date_utc=_OLD_DATE),
+            _make_episode(episode_id=2, air_date_utc=_OLD_DATE),
+        ]
+
+        snap = await fetch_instance_snapshot(client, _make_instance())
+
+        assert snap.monitored_total == 2
+        assert snap.unreleased_count == 0
+
+    @pytest.mark.asyncio()
+    async def test_null_anchor_treated_as_released(self):
+        """A monitored episode without an air date is not pre-release.
+
+        Mirrors :func:`_is_unreleased`: missing dates fall through to
+        the "already released" branch so dashboards do not inflate the
+        Unreleased bucket from records the *arr just hasn't classified.
+        """
+        client = AsyncMock(spec=SonarrClient)
+        client.get_wanted_total.side_effect = lambda kind: {"missing": 1, "cutoff": 0}[kind]
+        client.get_missing.return_value = [_make_episode(episode_id=1, air_date_utc=None)]
+
+        snap = await fetch_instance_snapshot(client, _make_instance())
+
+        assert snap.monitored_total == 1
+        assert snap.unreleased_count == 0
+
+    @pytest.mark.asyncio()
+    async def test_monitored_total_uses_get_wanted_total(self):
+        """monitored_total stays on the cheap pageSize=1 probe path.
+
+        Not derived from len(get_missing()): the paginated list is
+        used only for unreleased counting, while monitored_total is
+        the live ``totalRecords`` for missing + cutoff so the value
+        does not drift if pagination is mid-walk.
+        """
+        client = AsyncMock(spec=SonarrClient)
+        client.get_wanted_total.side_effect = lambda kind: {"missing": 100, "cutoff": 50}[kind]
+        client.get_missing.return_value = []
+
+        snap = await fetch_instance_snapshot(client, _make_instance())
+
+        assert snap.monitored_total == 150
+        assert snap.unreleased_count == 0
+        client.get_wanted_total.assert_any_await("missing")
+        client.get_wanted_total.assert_any_await("cutoff")

@@ -431,7 +431,7 @@ class Supervisor:
             try:
                 adapter = get_adapter(instance.type)
                 async with adapter.make_client(instance) as client:
-                    snap = await client.get_instance_snapshot()
+                    snap = await adapter.fetch_instance_snapshot(client, instance)
                     try:
                         reconcile_sets = await adapter.fetch_reconcile_sets(client, instance)
                     except httpx.TransportError:

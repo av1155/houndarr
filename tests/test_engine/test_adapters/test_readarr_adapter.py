@@ -15,6 +15,7 @@ from houndarr.engine.adapters.readarr import (
     adapt_cutoff,
     adapt_missing,
     dispatch_search,
+    fetch_instance_snapshot,
     make_client,
 )
 from houndarr.engine.candidates import SearchCandidate
@@ -332,3 +333,27 @@ class TestMakeClient:
         instance = _make_instance()
         client = make_client(instance)
         assert isinstance(client, ReadarrClient)
+
+
+# ---------------------------------------------------------------------------
+# fetch_instance_snapshot
+# ---------------------------------------------------------------------------
+
+
+class TestFetchInstanceSnapshot:
+    """Verify the snapshot composition for Readarr."""
+
+    @pytest.mark.asyncio()
+    async def test_paginated_walk_counts_future_anchors(self):
+        future = "2999-01-01T00:00:00Z"
+        client = AsyncMock(spec=ReadarrClient)
+        client.get_wanted_total.side_effect = lambda kind: {"missing": 2, "cutoff": 1}[kind]
+        client.get_missing.return_value = [
+            _make_book(book_id=1, release_date=_OLD_DATE),
+            _make_book(book_id=2, release_date=future),
+        ]
+
+        snap = await fetch_instance_snapshot(client, _make_instance())
+
+        assert snap.monitored_total == 3
+        assert snap.unreleased_count == 1

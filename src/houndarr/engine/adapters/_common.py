@@ -30,9 +30,16 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any, Protocol
 
-from houndarr.engine.candidates import ItemType, SearchCandidate
+from houndarr.clients.base import ArrClient, InstanceSnapshot, WantedKind
+from houndarr.engine.candidates import (
+    ItemType,
+    SearchCandidate,
+    _is_unreleased,
+    _is_unreleased_dt,
+)
 
 
 class _UpgradeFilterable(Protocol):
@@ -261,4 +268,69 @@ def build_cutoff_candidate(
         unreleased_reason=unreleased_reason,
         group_key=None,
         search_payload=search_payload,
+    )
+
+
+async def compute_default_snapshot[T](
+    client: ArrClient,
+    *,
+    anchor_fn: Callable[[T], str | None] | Callable[[T], datetime | None],
+    anchor_is_dt: bool = False,
+) -> InstanceSnapshot:
+    """Build an :class:`InstanceSnapshot` from a ``/wanted``-paged client.
+
+    Used by the five paginated adapters (Sonarr, Radarr, Lidarr,
+    Readarr, Whisparr v2).  Whisparr v3 has no ``/wanted`` endpoint and
+    composes its own snapshot in one cached library walk.
+
+    The composition has two pieces:
+
+    - ``monitored_total``: the sum of ``totalRecords`` for missing +
+      cutoff via :meth:`ArrClient.get_wanted_total`.  Each call is a
+      cheap ``pageSize=1`` probe.  Mirrors the legacy
+      ``ArrClient.get_instance_snapshot`` default precisely so the
+      number does not drift after the refactor.
+    - ``unreleased_count``: walks ``/wanted/missing`` once via
+      :func:`paginate_wanted` and counts items whose
+      ``anchor_fn(item)`` resolves as still-in-the-future per
+      :func:`_is_unreleased` (string anchor) or
+      :func:`_is_unreleased_dt` (pre-parsed datetime anchor).  Cutoff
+      items never count: by definition they have a file, so they are
+      released.
+
+    The caller supplies the per-app anchor selector.  For Sonarr it is
+    ``lambda ep: ep.air_date_utc``; for Radarr it is the multi-fallback
+    ``_radarr_release_anchor``; etc.  This keeps the helper agnostic
+    of the wire model and lets each adapter own its canonical anchor
+    exactly once.
+
+    Args:
+        client: An open :class:`ArrClient` (any /wanted-paged subclass).
+        anchor_fn: Selector that returns the canonical "release anchor"
+            for a missing-pass item.  Either an ISO string or a
+            ``datetime`` (controlled by ``anchor_is_dt``).
+        anchor_is_dt: When ``True`` the anchor is a pre-parsed
+            ``datetime``; pick the dt-typed unreleased helper.  Default
+            ``False`` keeps the string path.
+
+    Returns:
+        :class:`InstanceSnapshot` with both counts populated.
+    """
+    monitored_kind: WantedKind = "missing"
+    cutoff_kind: WantedKind = "cutoff"
+    monitored_total = await client.get_wanted_total(monitored_kind) + await client.get_wanted_total(
+        cutoff_kind
+    )
+
+    items: list[T] = await paginate_wanted(client.get_missing)
+    if anchor_is_dt:
+        dt_fn: Callable[[T], datetime | None] = anchor_fn  # type: ignore[assignment]
+        unreleased_count = sum(1 for item in items if _is_unreleased_dt(dt_fn(item)))
+    else:
+        str_fn: Callable[[T], str | None] = anchor_fn  # type: ignore[assignment]
+        unreleased_count = sum(1 for item in items if _is_unreleased(str_fn(item)))
+
+    return InstanceSnapshot(
+        monitored_total=monitored_total,
+        unreleased_count=unreleased_count,
     )

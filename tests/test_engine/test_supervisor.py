@@ -329,7 +329,7 @@ async def test_no_extra_log_rows_during_retry_sequence(
 
 
 # ---------------------------------------------------------------------------
-# PR 5: snapshot refresh loop
+# Snapshot refresh loop
 # ---------------------------------------------------------------------------
 
 
@@ -338,17 +338,14 @@ async def test_refresh_all_snapshots_once_updates_enabled_instances(
     seeded_instances: None,
 ) -> None:
     """_refresh_all_snapshots_once calls update_instance_snapshot on each
-    enabled instance using the per-client snapshot.
+    enabled instance using the snapshot composed by the adapter.
     """
-    from houndarr.clients.base import InstanceSnapshot
+    from houndarr.clients.base import InstanceSnapshot, ReconcileSets
     from houndarr.services.instances import get_instance
 
     inst = _make_instance(enabled=True)
 
     fake_client = AsyncMock()
-    fake_client.get_instance_snapshot = AsyncMock(
-        return_value=InstanceSnapshot(monitored_total=42, unreleased_count=3),
-    )
 
     class _CtxClient:
         async def __aenter__(self) -> Any:
@@ -360,7 +357,13 @@ async def test_refresh_all_snapshots_once_updates_enabled_instances(
     fake_adapter = type(
         "FakeAdapter",
         (),
-        {"make_client": staticmethod(lambda _inst: _CtxClient())},
+        {
+            "make_client": staticmethod(lambda _inst: _CtxClient()),
+            "fetch_instance_snapshot": staticmethod(
+                AsyncMock(return_value=InstanceSnapshot(monitored_total=42, unreleased_count=3))
+            ),
+            "fetch_reconcile_sets": staticmethod(AsyncMock(return_value=ReconcileSets.empty())),
+        },
     )()
 
     with (
@@ -411,14 +414,11 @@ async def test_refresh_one_snapshot_logs_big_unreleased_jump(
     DB value seeded at 0, the snapshot returns 16, the delta crosses
     the threshold (>10), so the log must fire once.
     """
-    from houndarr.clients.base import InstanceSnapshot
+    from houndarr.clients.base import InstanceSnapshot, ReconcileSets
 
     inst = _make_instance(enabled=True)
 
     fake_client = AsyncMock()
-    fake_client.get_instance_snapshot = AsyncMock(
-        return_value=InstanceSnapshot(monitored_total=20, unreleased_count=16),
-    )
 
     class _CtxClient:
         async def __aenter__(self) -> Any:
@@ -430,7 +430,13 @@ async def test_refresh_one_snapshot_logs_big_unreleased_jump(
     fake_adapter = type(
         "FakeAdapter",
         (),
-        {"make_client": staticmethod(lambda _inst: _CtxClient())},
+        {
+            "make_client": staticmethod(lambda _inst: _CtxClient()),
+            "fetch_instance_snapshot": staticmethod(
+                AsyncMock(return_value=InstanceSnapshot(monitored_total=20, unreleased_count=16))
+            ),
+            "fetch_reconcile_sets": staticmethod(AsyncMock(return_value=ReconcileSets.empty())),
+        },
     )()
 
     with (
@@ -456,7 +462,7 @@ async def test_refresh_one_snapshot_quiet_on_small_unreleased_change(
     churn (one item flipping past midnight); the test pins the
     "no log fired" half of the contract.
     """
-    from houndarr.clients.base import InstanceSnapshot
+    from houndarr.clients.base import InstanceSnapshot, ReconcileSets
     from houndarr.services.instances import update_instance_snapshot
 
     inst = _make_instance(enabled=True)
@@ -465,9 +471,6 @@ async def test_refresh_one_snapshot_quiet_on_small_unreleased_change(
     await update_instance_snapshot(inst.id, monitored_total=10, unreleased_count=5)
 
     fake_client = AsyncMock()
-    fake_client.get_instance_snapshot = AsyncMock(
-        return_value=InstanceSnapshot(monitored_total=10, unreleased_count=7),
-    )
 
     class _CtxClient:
         async def __aenter__(self) -> Any:
@@ -479,7 +482,13 @@ async def test_refresh_one_snapshot_quiet_on_small_unreleased_change(
     fake_adapter = type(
         "FakeAdapter",
         (),
-        {"make_client": staticmethod(lambda _inst: _CtxClient())},
+        {
+            "make_client": staticmethod(lambda _inst: _CtxClient()),
+            "fetch_instance_snapshot": staticmethod(
+                AsyncMock(return_value=InstanceSnapshot(monitored_total=10, unreleased_count=7))
+            ),
+            "fetch_reconcile_sets": staticmethod(AsyncMock(return_value=ReconcileSets.empty())),
+        },
     )()
 
     with (

@@ -11,7 +11,11 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from houndarr.clients.whisparr_v3 import LibraryWhisparrV3Movie, MissingWhisparrV3Movie
+from houndarr.clients.whisparr_v3 import (
+    LibraryWhisparrV3Movie,
+    MissingWhisparrV3Movie,
+    WhisparrV3Client,
+)
 from houndarr.engine.adapters.whisparr_v3 import (
     _movie_label,
     _release_anchor,
@@ -20,6 +24,7 @@ from houndarr.engine.adapters.whisparr_v3 import (
     adapt_missing,
     adapt_upgrade,
     dispatch_search,
+    fetch_instance_snapshot,
     fetch_upgrade_pool,
 )
 from houndarr.engine.candidates import SearchCandidate
@@ -82,6 +87,7 @@ def _make_library_movie(**overrides: object) -> LibraryWhisparrV3Movie:
         "in_cinemas": _OLD_RELEASE,
         "physical_release": None,
         "digital_release": _OLD_RELEASE,
+        "release_date": None,
     }
     defaults.update(overrides)
     return LibraryWhisparrV3Movie(**defaults)  # type: ignore[arg-type]
@@ -253,3 +259,102 @@ class TestDispatchSearch:
         candidate = adapt_missing(_make_movie(), _make_instance())
         await dispatch_search(mock_client, candidate)
         mock_client.search.assert_awaited_once_with(201)
+
+
+# ---------------------------------------------------------------------------
+# fetch_instance_snapshot
+# ---------------------------------------------------------------------------
+
+
+class TestFetchInstanceSnapshot:
+    """Verify the snapshot composition for Whisparr v3.
+
+    v3 has no ``/wanted`` endpoint, so this adapter walks the cached
+    library directly.  ``monitored_total`` counts items that are
+    monitored AND (missing OR cutoff-unmet).  ``unreleased_count``
+    counts monitored items whose first parseable release anchor is
+    strictly in the future.  Status-based skips
+    (``isAvailable=false``, ``status in {tba, announced}``) stay at
+    the dispatch-time path and intentionally do NOT inflate the
+    Unreleased dashboard bucket.
+    """
+
+    @pytest.mark.asyncio()
+    async def test_counts_monitored_and_unreleased(self) -> None:
+        client = AsyncMock(spec=WhisparrV3Client)
+        client.get_library.return_value = [
+            # Monitored, missing, past anchor: counted in monitored only.
+            _make_library_movie(
+                movie_id=1,
+                has_file=False,
+                cutoff_met=False,
+                digital_release=_OLD_RELEASE,
+            ),
+            # Monitored, has-file but cutoff unmet: counted in monitored.
+            _make_library_movie(
+                movie_id=2,
+                has_file=True,
+                cutoff_met=False,
+                digital_release=_OLD_RELEASE,
+            ),
+            # Monitored, missing, future anchor: counted in both.
+            _make_library_movie(
+                movie_id=3,
+                has_file=False,
+                cutoff_met=False,
+                digital_release=_FUTURE_RELEASE,
+            ),
+            # Unmonitored future anchor: counted nowhere.
+            _make_library_movie(
+                movie_id=4,
+                monitored=False,
+                has_file=False,
+                cutoff_met=False,
+                digital_release=_FUTURE_RELEASE,
+            ),
+            # Monitored, has-file, cutoff met: not in monitored, not unreleased.
+            _make_library_movie(
+                movie_id=5,
+                has_file=True,
+                cutoff_met=True,
+                digital_release=_OLD_RELEASE,
+            ),
+        ]
+
+        snap = await fetch_instance_snapshot(client, _make_instance())
+
+        assert snap.monitored_total == 3
+        assert snap.unreleased_count == 1
+
+    @pytest.mark.asyncio()
+    async def test_anchor_priority_falls_through_to_release_date(self) -> None:
+        """The new ``release_date`` field on LibraryWhisparrV3Movie is
+        last in the priority ladder.  When digital / physical / cinemas
+        are all None, a future ``release_date`` still counts."""
+        client = AsyncMock(spec=WhisparrV3Client)
+        client.get_library.return_value = [
+            _make_library_movie(
+                movie_id=1,
+                has_file=False,
+                cutoff_met=False,
+                digital_release=None,
+                physical_release=None,
+                in_cinemas=None,
+                release_date=_FUTURE_RELEASE,
+            ),
+        ]
+
+        snap = await fetch_instance_snapshot(client, _make_instance())
+
+        assert snap.monitored_total == 1
+        assert snap.unreleased_count == 1
+
+    @pytest.mark.asyncio()
+    async def test_empty_library(self) -> None:
+        client = AsyncMock(spec=WhisparrV3Client)
+        client.get_library.return_value = []
+
+        snap = await fetch_instance_snapshot(client, _make_instance())
+
+        assert snap.monitored_total == 0
+        assert snap.unreleased_count == 0

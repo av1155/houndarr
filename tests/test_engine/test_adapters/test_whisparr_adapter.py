@@ -16,6 +16,7 @@ from houndarr.engine.adapters.whisparr_v2 import (
     adapt_cutoff,
     adapt_missing,
     dispatch_search,
+    fetch_instance_snapshot,
     make_client,
 )
 from houndarr.engine.candidates import SearchCandidate
@@ -427,3 +428,51 @@ class TestMakeClient:
         instance = _make_instance()
         client = make_client(instance)
         assert isinstance(client, WhisparrClient)
+
+
+# ---------------------------------------------------------------------------
+# fetch_instance_snapshot
+# ---------------------------------------------------------------------------
+
+
+class TestFetchInstanceSnapshot:
+    """Verify the snapshot composition for Whisparr v2.
+
+    Whisparr v2's domain model carries a pre-parsed ``datetime`` for
+    ``release_date`` (handles both ISO string and ``{y, m, d}`` dict
+    wire forms), so the adapter takes the datetime branch of the
+    shared snapshot helper.
+    """
+
+    @pytest.mark.asyncio()
+    async def test_paginated_walk_counts_future_anchors(self):
+        future = datetime(2999, 1, 1, tzinfo=UTC)
+        client = AsyncMock(spec=WhisparrClient)
+        client.get_wanted_total.side_effect = lambda kind: {"missing": 2, "cutoff": 1}[kind]
+        client.get_missing.return_value = [
+            _make_episode(episode_id=1, release_date=_OLD_RELEASE),
+            _make_episode(episode_id=2, release_date=future),
+        ]
+
+        snap = await fetch_instance_snapshot(client, _make_instance())
+
+        assert snap.monitored_total == 3
+        assert snap.unreleased_count == 1
+
+    @pytest.mark.asyncio()
+    async def test_null_release_date_treated_as_released(self):
+        """A missing ``release_date`` must NOT count as unreleased.
+
+        Mirrors the dispatch-time helper: a None datetime falls through
+        to the "already released" branch.
+        """
+        client = AsyncMock(spec=WhisparrClient)
+        client.get_wanted_total.side_effect = lambda kind: {"missing": 1, "cutoff": 0}[kind]
+        client.get_missing.return_value = [
+            _make_episode(episode_id=1, release_date=None),
+        ]
+
+        snap = await fetch_instance_snapshot(client, _make_instance())
+
+        assert snap.monitored_total == 1
+        assert snap.unreleased_count == 0

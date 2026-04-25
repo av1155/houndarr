@@ -9,12 +9,13 @@ from __future__ import annotations
 
 import logging
 
-from houndarr.clients.base import ReconcileSets
+from houndarr.clients.base import InstanceSnapshot, ReconcileSets
 from houndarr.clients.lidarr import LibraryAlbum, LidarrClient, MissingAlbum
 from houndarr.engine.adapters._common import (
     ContextOverride,
     build_cutoff_candidate,
     build_missing_candidate,
+    compute_default_snapshot,
     paginate_wanted,
 )
 from houndarr.engine.candidates import (
@@ -305,11 +306,27 @@ async def fetch_reconcile_sets(client: LidarrClient, instance: Instance) -> Reco
     return ReconcileSets(missing=missing_set, cutoff=cutoff_set, upgrade=upgrade_set)
 
 
+async def fetch_instance_snapshot(
+    client: LidarrClient,
+    instance: Instance,  # noqa: ARG001
+) -> InstanceSnapshot:
+    """Compose the dashboard snapshot for a Lidarr instance.
+
+    Anchor for unreleased detection is :attr:`MissingAlbum.release_date`
+    (single ISO string).  Albums with no release date fall through to
+    "already released", consistent with :func:`_lidarr_unreleased_reason`.
+    """
+    return await compute_default_snapshot(
+        client,
+        anchor_fn=lambda al: al.release_date,
+    )
+
+
 class LidarrAdapter:
     """Class-form Lidarr adapter for the :data:`ADAPTERS` registry.
 
     Conforms to :class:`~houndarr.engine.adapters.protocols.AppAdapterProto`
-    structurally via the six staticmethod attributes below; the
+    structurally via the seven staticmethod attributes below; the
     module-level functions remain importable for direct unit-test use.
     Track C.10 introduces this class form to replace the prior
     ``AppAdapter`` dataclass-of-callables registry shape.
@@ -322,3 +339,4 @@ class LidarrAdapter:
     dispatch_search = staticmethod(dispatch_search)
     make_client = staticmethod(make_client)
     fetch_reconcile_sets = staticmethod(fetch_reconcile_sets)
+    fetch_instance_snapshot = staticmethod(fetch_instance_snapshot)

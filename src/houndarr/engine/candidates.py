@@ -80,6 +80,24 @@ def _is_unreleased(release_at: str | None) -> bool:
     return datetime.now(UTC) < release_dt
 
 
+def _is_unreleased_dt(release_dt: datetime | None) -> bool:
+    """Return True when a pre-parsed datetime is in the future.
+
+    Sibling of :func:`_is_unreleased` for adapters whose wire layer
+    already emits a ``datetime`` rather than an ISO string (today only
+    Whisparr v2, whose ``releaseDate`` field can arrive as either a
+    string or a ``{year, month, day}`` dict and is normalised at parse
+    time).  Behaviour matches :func:`_is_unreleased`: ``None`` reads as
+    "already released" so a missing date never inflates the unreleased
+    bucket; naive datetimes are coerced to UTC defensively.
+    """
+    if release_dt is None:
+        return False
+    if release_dt.tzinfo is None:
+        release_dt = release_dt.replace(tzinfo=UTC)
+    return datetime.now(UTC) < release_dt
+
+
 def _is_within_post_release_grace(release_at: str | None, grace_hrs: int) -> bool:
     """Return True when an item is released but still inside the grace period.
 

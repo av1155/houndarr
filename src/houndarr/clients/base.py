@@ -382,31 +382,3 @@ class ArrClient(ABC):
         random page range.  Implementations should use the cheapest available
         probe (``pageSize=1`` for paged APIs; cached counts for Whisparr v3).
         """
-
-    async def get_instance_snapshot(self) -> InstanceSnapshot:
-        """Return the live monitored / unreleased counts for the dashboard.
-
-        Default implementation sums ``get_wanted_total("missing")`` and
-        ``get_wanted_total("cutoff")`` for ``monitored_total`` and probes
-        ``/wanted/missing?pageSize=1&sortKey=airDateUtc&sortDirection=asc``
-        to count items with a future release date for
-        ``unreleased_count``.  Subclasses that use non-standard field
-        names or lack a ``/wanted`` endpoint (Whisparr v3) override.
-        """
-        missing = await self.get_wanted_total("missing")
-        cutoff = await self.get_wanted_total("cutoff")
-        monitored_total = missing + cutoff
-        unreleased_count = await self._count_unreleased_default()
-        return InstanceSnapshot(
-            monitored_total=monitored_total,
-            unreleased_count=unreleased_count,
-        )
-
-    async def _count_unreleased_default(self) -> int:
-        """Default unreleased probe using ``/wanted/missing?sortKey=airDateUtc``.
-
-        Returns 0 on error; an unreachable instance should not mask
-        previously-written snapshot values.  Subclasses may override
-        (Readarr / Lidarr swap the sort key).
-        """
-        return 0

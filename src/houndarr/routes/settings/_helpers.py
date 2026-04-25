@@ -23,7 +23,7 @@ from houndarr.clients.lidarr import LidarrClient
 from houndarr.clients.radarr import RadarrClient
 from houndarr.clients.readarr import ReadarrClient
 from houndarr.clients.sonarr import SonarrClient
-from houndarr.clients.whisparr_v2 import WhisparrClient
+from houndarr.clients.whisparr_v2 import WhisparrV2Client
 from houndarr.clients.whisparr_v3 import WhisparrV3Client
 from houndarr.config import (
     DEFAULT_ALLOWED_TIME_WINDOW,
@@ -40,7 +40,7 @@ from houndarr.config import (
     DEFAULT_SEARCH_ORDER,
     DEFAULT_SLEEP_INTERVAL_MINUTES,
     DEFAULT_SONARR_SEARCH_MODE,
-    DEFAULT_WHISPARR_SEARCH_MODE,
+    DEFAULT_WHISPARR_V2_SEARCH_MODE,
     get_settings,
 )
 from houndarr.routes._htmx import is_hx_request
@@ -60,7 +60,7 @@ from houndarr.services.instances import (
     ReadarrSearchMode,
     SearchOrder,
     SonarrSearchMode,
-    WhisparrSearchMode,
+    WhisparrV2SearchMode,
     active_error_instance_ids,
     list_instances,
 )
@@ -140,7 +140,7 @@ def blank_instance() -> Instance:
         sonarr_search_mode=SonarrSearchMode(DEFAULT_SONARR_SEARCH_MODE),
         lidarr_search_mode=LidarrSearchMode(DEFAULT_LIDARR_SEARCH_MODE),
         readarr_search_mode=ReadarrSearchMode(DEFAULT_READARR_SEARCH_MODE),
-        whisparr_search_mode=WhisparrSearchMode(DEFAULT_WHISPARR_SEARCH_MODE),
+        whisparr_v2_search_mode=WhisparrV2SearchMode(DEFAULT_WHISPARR_V2_SEARCH_MODE),
         created_at="",
         updated_at="",
         allowed_time_window=DEFAULT_ALLOWED_TIME_WINDOW,
@@ -153,7 +153,7 @@ _CLIENT_CONSTRUCTORS: dict[InstanceType, type[ArrClient]] = {
     InstanceType.sonarr: SonarrClient,
     InstanceType.lidarr: LidarrClient,
     InstanceType.readarr: ReadarrClient,
-    InstanceType.whisparr_v2: WhisparrClient,
+    InstanceType.whisparr_v2: WhisparrV2Client,
     InstanceType.whisparr_v3: WhisparrV3Client,
 }
 

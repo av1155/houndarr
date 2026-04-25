@@ -154,12 +154,12 @@ async def test_cooldown_episode_vs_movie_independent(
 
 
 @pytest.mark.asyncio()
-async def test_cooldown_episode_vs_whisparr_episode_independent(
+async def test_cooldown_episode_vs_whisparr_v2_episode_independent(
     seeded_instances: None,
 ) -> None:
-    """episode and whisparr_episode are tracked independently."""
+    """episode and whisparr_v2_episode are tracked independently."""
     await record_search(1, 101, "episode")
-    on_cd = await is_on_cooldown(1, 101, "whisparr_episode", cooldown_days=7)
+    on_cd = await is_on_cooldown(1, 101, "whisparr_v2_episode", cooldown_days=7)
     assert on_cd is False
 
 

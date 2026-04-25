@@ -192,7 +192,7 @@ def build_missing_candidate(
 
     Args:
         item_type: Per-adapter type string (``"movie"``, ``"episode"``,
-            ``"album"``, ``"book"``, ``"whisparr_episode"``,
+            ``"album"``, ``"book"``, ``"whisparr_v2_episode"``,
             ``"whisparr_v3_movie"``).
         item_id: The DB-stable per-item id used in primary mode.
             Ignored when *context* is supplied.
@@ -250,7 +250,7 @@ def build_cutoff_candidate(
     Args:
         item_type: Per-adapter type string (``"movie"``,
             ``"episode"``, ``"album"``, ``"book"``,
-            ``"whisparr_episode"``, ``"whisparr_v3_movie"``).
+            ``"whisparr_v2_episode"``, ``"whisparr_v3_movie"``).
         item_id: The DB-stable per-item id.
         label: Human-readable per-item log label.
         unreleased_reason: ``None`` when eligible; a skip-reason

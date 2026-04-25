@@ -35,7 +35,7 @@ from houndarr.services.instances import (
     LidarrSearchMode,
     ReadarrSearchMode,
     SonarrSearchMode,
-    WhisparrSearchMode,
+    WhisparrV2SearchMode,
 )
 
 
@@ -185,19 +185,19 @@ class SearchModes:
     instance-submit path reads back.
     """
 
-    __slots__ = ("lidarr", "readarr", "sonarr", "whisparr")
+    __slots__ = ("lidarr", "readarr", "sonarr", "whisparr_v2")
 
     def __init__(
         self,
         sonarr: SonarrSearchMode,
         lidarr: LidarrSearchMode,
         readarr: ReadarrSearchMode,
-        whisparr: WhisparrSearchMode,
+        whisparr_v2: WhisparrV2SearchMode,
     ) -> None:
         self.sonarr = sonarr
         self.lidarr = lidarr
         self.readarr = readarr
-        self.whisparr = whisparr
+        self.whisparr_v2 = whisparr_v2
 
 
 def resolve_search_modes(
@@ -254,9 +254,9 @@ def resolve_search_modes(
 
     try:
         whisparr_mode = (
-            WhisparrSearchMode(whisparr_raw)
+            WhisparrV2SearchMode(whisparr_raw)
             if instance_type == InstanceType.whisparr_v2
-            else WhisparrSearchMode.episode
+            else WhisparrV2SearchMode.episode
         )
     except ValueError:
         return "Invalid Whisparr search mode."
@@ -265,5 +265,5 @@ def resolve_search_modes(
         sonarr=sonarr_mode,
         lidarr=lidarr_mode,
         readarr=readarr_mode,
-        whisparr=whisparr_mode,
+        whisparr_v2=whisparr_mode,
     )

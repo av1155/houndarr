@@ -12,7 +12,7 @@ from houndarr.clients.lidarr import LidarrClient
 from houndarr.clients.radarr import RadarrClient
 from houndarr.clients.readarr import ReadarrClient
 from houndarr.clients.sonarr import SonarrClient
-from houndarr.clients.whisparr_v2 import WhisparrClient
+from houndarr.clients.whisparr_v2 import WhisparrV2Client
 
 # ---------------------------------------------------------------------------
 # Queue status: per-app path verification
@@ -85,12 +85,12 @@ async def test_readarr_queue_status_uses_v1_path() -> None:
 
 @pytest.mark.asyncio()
 @respx.mock
-async def test_whisparr_queue_status_uses_v3_path() -> None:
-    """WhisparrClient uses /api/v3/queue/status."""
+async def test_whisparr_v2_queue_status_uses_v3_path() -> None:
+    """WhisparrV2Client uses /api/v3/queue/status."""
     route = respx.get("http://whisparr:6969/api/v3/queue/status").mock(
         return_value=httpx.Response(200, json={"totalCount": 0}),
     )
-    async with WhisparrClient(url="http://whisparr:6969", api_key="test") as client:
+    async with WhisparrV2Client(url="http://whisparr:6969", api_key="test") as client:
         result = await client.get_queue_status()
     assert route.called
     assert result.total_count == 0

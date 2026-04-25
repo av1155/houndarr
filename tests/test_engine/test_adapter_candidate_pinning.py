@@ -17,7 +17,7 @@ from houndarr.clients.lidarr import MissingAlbum
 from houndarr.clients.radarr import MissingMovie
 from houndarr.clients.readarr import MissingBook
 from houndarr.clients.sonarr import MissingEpisode
-from houndarr.clients.whisparr_v2 import MissingWhisparrEpisode
+from houndarr.clients.whisparr_v2 import MissingWhisparrV2Episode
 from houndarr.clients.whisparr_v3 import MissingWhisparrV3Movie
 from houndarr.engine.adapters.lidarr import (
     adapt_cutoff as lidarr_adapt_cutoff,
@@ -111,8 +111,8 @@ def _readarr_book() -> MissingBook:
     )
 
 
-def _whisparr_v2_episode() -> MissingWhisparrEpisode:
-    return MissingWhisparrEpisode(
+def _whisparr_v2_episode() -> MissingWhisparrV2Episode:
+    return MissingWhisparrV2Episode(
         episode_id=401,
         series_id=41,
         series_title="Site",
@@ -245,13 +245,13 @@ class TestWhisparrV2Adapter:
         inst = make_instance(itype=InstanceType.whisparr_v2)
         cand = whisparr_v2_adapt_missing(_whisparr_v2_episode(), inst)
         assert cand.item_id == 401
-        assert cand.item_type == "whisparr_episode"
+        assert cand.item_type == "whisparr_v2_episode"
         assert cand.search_payload["command"] == "EpisodeSearch"
 
     def test_adapt_cutoff_episode_type(self) -> None:
         inst = make_instance(itype=InstanceType.whisparr_v2)
         cand = whisparr_v2_adapt_cutoff(_whisparr_v2_episode(), inst)
-        assert cand.item_type == "whisparr_episode"
+        assert cand.item_type == "whisparr_v2_episode"
 
 
 # ---------------------------------------------------------------------------

@@ -33,7 +33,7 @@ SONARR_URL = "http://sonarr:8989"
 RADARR_URL = "http://radarr:7878"
 LIDARR_URL = "http://lidarr:8686"
 READARR_URL = "http://readarr:8787"
-WHISPARR_URL = "http://whisparr:6969"
+WHISPARR_V2_URL = "http://whisparr:6969"
 
 _EPISODE: dict[str, Any] = {
     "id": 101,
@@ -70,7 +70,7 @@ _WHISPARR_EP: dict[str, Any] = {
     "seasonNumber": 1,
     "absoluteEpisodeNumber": 5,
     "releaseDate": {"year": 2023, "month": 9, "day": 1},
-    "series": {"id": 70, "title": "My Whisparr Show"},
+    "series": {"id": 70, "title": "My Whisparr v2 Show"},
 }
 
 _MISSING_SONARR_1 = {"records": [_EPISODE]}
@@ -503,7 +503,7 @@ async def whisparr_instance(db: None, master_key: bytes) -> Instance:
         master_key=master_key,
         name="E2E Whisparr",
         type=InstanceType.whisparr_v2,
-        url=WHISPARR_URL,
+        url=WHISPARR_V2_URL,
         api_key="whisparr-key",
         batch_size=5,
         hourly_cap=10,
@@ -584,10 +584,10 @@ async def test_full_cycle_readarr(readarr_instance: Instance, master_key: bytes)
 @respx.mock
 async def test_full_cycle_whisparr(whisparr_instance: Instance, master_key: bytes) -> None:
     """One complete Whisparr search cycle - episode is searched, log and cooldown written."""
-    respx.get(f"{WHISPARR_URL}/api/v3/wanted/missing").mock(
+    respx.get(f"{WHISPARR_V2_URL}/api/v3/wanted/missing").mock(
         return_value=httpx.Response(200, json=_MISSING_WHISPARR_1)
     )
-    respx.post(f"{WHISPARR_URL}/api/v3/command").mock(
+    respx.post(f"{WHISPARR_V2_URL}/api/v3/command").mock(
         return_value=httpx.Response(201, json={"id": 5})
     )
 
@@ -598,9 +598,9 @@ async def test_full_cycle_whisparr(whisparr_instance: Instance, master_key: byte
     assert len(logs) == 1
     assert logs[0]["action"] == "searched"
     assert logs[0]["item_id"] == 501
-    assert logs[0]["item_type"] == "whisparr_episode"
+    assert logs[0]["item_type"] == "whisparr_v2_episode"
 
     cds = await _cooldown_rows(whisparr_instance.id)
     assert len(cds) == 1
     assert cds[0]["item_id"] == 501
-    assert cds[0]["item_type"] == "whisparr_episode"
+    assert cds[0]["item_type"] == "whisparr_v2_episode"

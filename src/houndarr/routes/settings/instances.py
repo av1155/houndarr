@@ -35,8 +35,8 @@ from houndarr.config import (
     DEFAULT_UPGRADE_LIDARR_SEARCH_MODE,
     DEFAULT_UPGRADE_READARR_SEARCH_MODE,
     DEFAULT_UPGRADE_SONARR_SEARCH_MODE,
-    DEFAULT_UPGRADE_WHISPARR_SEARCH_MODE,
-    DEFAULT_WHISPARR_SEARCH_MODE,
+    DEFAULT_UPGRADE_WHISPARR_V2_SEARCH_MODE,
+    DEFAULT_WHISPARR_V2_SEARCH_MODE,
 )
 from houndarr.engine.supervisor import Supervisor
 from houndarr.errors import InstanceValidationError
@@ -171,7 +171,7 @@ async def instance_create(
     sonarr_search_mode: Annotated[str, Form()] = DEFAULT_SONARR_SEARCH_MODE,
     lidarr_search_mode: Annotated[str, Form()] = DEFAULT_LIDARR_SEARCH_MODE,
     readarr_search_mode: Annotated[str, Form()] = DEFAULT_READARR_SEARCH_MODE,
-    whisparr_search_mode: Annotated[str, Form()] = DEFAULT_WHISPARR_SEARCH_MODE,
+    whisparr_v2_search_mode: Annotated[str, Form()] = DEFAULT_WHISPARR_V2_SEARCH_MODE,
     upgrade_enabled: Annotated[str, Form()] = "",
     upgrade_batch_size: Annotated[int, Form()] = DEFAULT_UPGRADE_BATCH_SIZE,
     upgrade_cooldown_days: Annotated[int, Form()] = DEFAULT_UPGRADE_COOLDOWN_DAYS,
@@ -179,7 +179,9 @@ async def instance_create(
     upgrade_sonarr_search_mode: Annotated[str, Form()] = DEFAULT_UPGRADE_SONARR_SEARCH_MODE,
     upgrade_lidarr_search_mode: Annotated[str, Form()] = DEFAULT_UPGRADE_LIDARR_SEARCH_MODE,
     upgrade_readarr_search_mode: Annotated[str, Form()] = DEFAULT_UPGRADE_READARR_SEARCH_MODE,
-    upgrade_whisparr_search_mode: Annotated[str, Form()] = DEFAULT_UPGRADE_WHISPARR_SEARCH_MODE,
+    upgrade_whisparr_v2_search_mode: Annotated[str, Form()] = (
+        DEFAULT_UPGRADE_WHISPARR_V2_SEARCH_MODE
+    ),
     allowed_time_window: Annotated[str, Form()] = DEFAULT_ALLOWED_TIME_WINDOW,
     search_order: Annotated[str, Form()] = DEFAULT_SEARCH_ORDER,
     connection_verified: Annotated[str, Form()] = "false",
@@ -205,7 +207,7 @@ async def instance_create(
             sonarr_search_mode=sonarr_search_mode,
             lidarr_search_mode=lidarr_search_mode,
             readarr_search_mode=readarr_search_mode,
-            whisparr_search_mode=whisparr_search_mode,
+            whisparr_v2_search_mode=whisparr_v2_search_mode,
             upgrade_enabled=upgrade_enabled == "on",
             upgrade_batch_size=upgrade_batch_size,
             upgrade_cooldown_days=upgrade_cooldown_days,
@@ -213,7 +215,7 @@ async def instance_create(
             upgrade_sonarr_search_mode=upgrade_sonarr_search_mode,
             upgrade_lidarr_search_mode=upgrade_lidarr_search_mode,
             upgrade_readarr_search_mode=upgrade_readarr_search_mode,
-            upgrade_whisparr_search_mode=upgrade_whisparr_search_mode,
+            upgrade_whisparr_v2_search_mode=upgrade_whisparr_v2_search_mode,
             allowed_time_window=allowed_time_window,
             search_order=search_order,
             connection_verified=connection_verified == "true",
@@ -272,7 +274,7 @@ async def instance_update(
     sonarr_search_mode: Annotated[str, Form()] = DEFAULT_SONARR_SEARCH_MODE,
     lidarr_search_mode: Annotated[str, Form()] = DEFAULT_LIDARR_SEARCH_MODE,
     readarr_search_mode: Annotated[str, Form()] = DEFAULT_READARR_SEARCH_MODE,
-    whisparr_search_mode: Annotated[str, Form()] = DEFAULT_WHISPARR_SEARCH_MODE,
+    whisparr_v2_search_mode: Annotated[str, Form()] = DEFAULT_WHISPARR_V2_SEARCH_MODE,
     upgrade_enabled: Annotated[str, Form()] = "",
     upgrade_batch_size: Annotated[int, Form()] = DEFAULT_UPGRADE_BATCH_SIZE,
     upgrade_cooldown_days: Annotated[int, Form()] = DEFAULT_UPGRADE_COOLDOWN_DAYS,
@@ -280,7 +282,9 @@ async def instance_update(
     upgrade_sonarr_search_mode: Annotated[str, Form()] = DEFAULT_UPGRADE_SONARR_SEARCH_MODE,
     upgrade_lidarr_search_mode: Annotated[str, Form()] = DEFAULT_UPGRADE_LIDARR_SEARCH_MODE,
     upgrade_readarr_search_mode: Annotated[str, Form()] = DEFAULT_UPGRADE_READARR_SEARCH_MODE,
-    upgrade_whisparr_search_mode: Annotated[str, Form()] = DEFAULT_UPGRADE_WHISPARR_SEARCH_MODE,
+    upgrade_whisparr_v2_search_mode: Annotated[str, Form()] = (
+        DEFAULT_UPGRADE_WHISPARR_V2_SEARCH_MODE
+    ),
     allowed_time_window: Annotated[str, Form()] = DEFAULT_ALLOWED_TIME_WINDOW,
     search_order: Annotated[str, Form()] = DEFAULT_SEARCH_ORDER,
     connection_verified: Annotated[str, Form()] = "false",
@@ -313,7 +317,7 @@ async def instance_update(
             sonarr_search_mode=sonarr_search_mode,
             lidarr_search_mode=lidarr_search_mode,
             readarr_search_mode=readarr_search_mode,
-            whisparr_search_mode=whisparr_search_mode,
+            whisparr_v2_search_mode=whisparr_v2_search_mode,
             upgrade_enabled=upgrade_enabled == "on",
             upgrade_batch_size=upgrade_batch_size,
             upgrade_cooldown_days=upgrade_cooldown_days,
@@ -321,7 +325,7 @@ async def instance_update(
             upgrade_sonarr_search_mode=upgrade_sonarr_search_mode,
             upgrade_lidarr_search_mode=upgrade_lidarr_search_mode,
             upgrade_readarr_search_mode=upgrade_readarr_search_mode,
-            upgrade_whisparr_search_mode=upgrade_whisparr_search_mode,
+            upgrade_whisparr_v2_search_mode=upgrade_whisparr_v2_search_mode,
             allowed_time_window=allowed_time_window,
             search_order=search_order,
             connection_verified=connection_verified == "true",
@@ -382,7 +386,7 @@ async def instance_toggle_enabled(request: Request, instance_id: int) -> HTMLRes
         sonarr_search_mode=instance.sonarr_search_mode,
         lidarr_search_mode=instance.lidarr_search_mode,
         readarr_search_mode=instance.readarr_search_mode,
-        whisparr_search_mode=instance.whisparr_search_mode,
+        whisparr_v2_search_mode=instance.whisparr_v2_search_mode,
     )
     if updated is None:
         return HTMLResponse(content="Not found", status_code=404)

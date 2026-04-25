@@ -1,4 +1,4 @@
-"""Tests for WhisparrClient - all HTTP calls mocked with respx."""
+"""Tests for WhisparrV2Client - all HTTP calls mocked with respx."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ import httpx
 import pytest
 import respx
 
-from houndarr.clients.whisparr_v2 import MissingWhisparrEpisode, WhisparrClient
+from houndarr.clients.whisparr_v2 import MissingWhisparrV2Episode, WhisparrV2Client
 
 BASE = "http://whisparr:6969"
 API_KEY = "test-api-key"
@@ -20,8 +20,8 @@ API_KEY = "test-api-key"
 
 
 @pytest.fixture()
-def client() -> WhisparrClient:
-    return WhisparrClient(url=BASE, api_key=API_KEY)
+def client() -> WhisparrV2Client:
+    return WhisparrV2Client(url=BASE, api_key=API_KEY)
 
 
 # ---------------------------------------------------------------------------
@@ -31,7 +31,7 @@ def client() -> WhisparrClient:
 
 @pytest.mark.asyncio()
 @respx.mock
-async def test_ping_success(client: WhisparrClient) -> None:
+async def test_ping_success(client: WhisparrV2Client) -> None:
     respx.get(f"{BASE}/api/v3/system/status").mock(
         return_value=httpx.Response(200, json={"appName": "Whisparr", "version": "2.2.0"})
     )
@@ -42,14 +42,14 @@ async def test_ping_success(client: WhisparrClient) -> None:
 
 @pytest.mark.asyncio()
 @respx.mock
-async def test_ping_non_2xx_returns_none(client: WhisparrClient) -> None:
+async def test_ping_non_2xx_returns_none(client: WhisparrV2Client) -> None:
     respx.get(f"{BASE}/api/v3/system/status").mock(return_value=httpx.Response(401))
     assert await client.ping() is None
 
 
 @pytest.mark.asyncio()
 @respx.mock
-async def test_ping_network_error_returns_none(client: WhisparrClient) -> None:
+async def test_ping_network_error_returns_none(client: WhisparrV2Client) -> None:
     respx.get(f"{BASE}/api/v3/system/status").mock(side_effect=httpx.ConnectError("refused"))
     assert await client.ping() is None
 
@@ -58,37 +58,37 @@ async def test_ping_network_error_returns_none(client: WhisparrClient) -> None:
 # get_missing - /api/v3/wanted/missing
 # ---------------------------------------------------------------------------
 
-_WHISPARR_EPISODE_RECORD = {
+_WHISPARR_V2_EPISODE_RECORD = {
     "id": 501,
     "seriesId": 70,
     "title": "Scene Title",
     "seasonNumber": 1,
     "absoluteEpisodeNumber": 5,
     "releaseDate": "2023-09-01",
-    "series": {"id": 70, "title": "My Whisparr Show"},
+    "series": {"id": 70, "title": "My Whisparr v2 Show"},
 }
 
 _MISSING_RESPONSE = {
     "page": 1,
     "pageSize": 10,
     "totalRecords": 1,
-    "records": [_WHISPARR_EPISODE_RECORD],
+    "records": [_WHISPARR_V2_EPISODE_RECORD],
 }
 
 
 @pytest.mark.asyncio()
 @respx.mock
-async def test_get_missing_returns_episodes(client: WhisparrClient) -> None:
+async def test_get_missing_returns_episodes(client: WhisparrV2Client) -> None:
     route = respx.get(f"{BASE}/api/v3/wanted/missing").mock(
         return_value=httpx.Response(200, json=_MISSING_RESPONSE)
     )
     results = await client.get_missing(page=1, page_size=10)
     assert len(results) == 1
     ep = results[0]
-    assert isinstance(ep, MissingWhisparrEpisode)
+    assert isinstance(ep, MissingWhisparrV2Episode)
     assert ep.episode_id == 501
     assert ep.series_id == 70
-    assert ep.series_title == "My Whisparr Show"
+    assert ep.series_title == "My Whisparr v2 Show"
     assert ep.episode_title == "Scene Title"
     assert ep.season_number == 1
     assert ep.absolute_episode_number == 5
@@ -102,7 +102,7 @@ async def test_get_missing_returns_episodes(client: WhisparrClient) -> None:
 
 @pytest.mark.asyncio()
 @respx.mock
-async def test_get_missing_empty(client: WhisparrClient) -> None:
+async def test_get_missing_empty(client: WhisparrV2Client) -> None:
     respx.get(f"{BASE}/api/v3/wanted/missing").mock(
         return_value=httpx.Response(
             200, json={"page": 1, "pageSize": 10, "totalRecords": 0, "records": []}
@@ -114,9 +114,9 @@ async def test_get_missing_empty(client: WhisparrClient) -> None:
 
 @pytest.mark.asyncio()
 @respx.mock
-async def test_get_missing_null_release_date(client: WhisparrClient) -> None:
+async def test_get_missing_null_release_date(client: WhisparrV2Client) -> None:
     """Null releaseDate results in release_date=None."""
-    record = {**_WHISPARR_EPISODE_RECORD, "releaseDate": None}
+    record = {**_WHISPARR_V2_EPISODE_RECORD, "releaseDate": None}
     respx.get(f"{BASE}/api/v3/wanted/missing").mock(
         return_value=httpx.Response(200, json={"records": [record]})
     )
@@ -126,9 +126,9 @@ async def test_get_missing_null_release_date(client: WhisparrClient) -> None:
 
 @pytest.mark.asyncio()
 @respx.mock
-async def test_get_missing_dict_release_date(client: WhisparrClient) -> None:
+async def test_get_missing_dict_release_date(client: WhisparrV2Client) -> None:
     """Legacy DateOnly dict format is still accepted."""
-    record = {**_WHISPARR_EPISODE_RECORD, "releaseDate": {"year": 2023, "month": 9, "day": 1}}
+    record = {**_WHISPARR_V2_EPISODE_RECORD, "releaseDate": {"year": 2023, "month": 9, "day": 1}}
     respx.get(f"{BASE}/api/v3/wanted/missing").mock(
         return_value=httpx.Response(200, json={"records": [record]})
     )
@@ -138,9 +138,9 @@ async def test_get_missing_dict_release_date(client: WhisparrClient) -> None:
 
 @pytest.mark.asyncio()
 @respx.mock
-async def test_get_missing_empty_release_date_object(client: WhisparrClient) -> None:
+async def test_get_missing_empty_release_date_object(client: WhisparrV2Client) -> None:
     """Empty DateOnly object {} results in release_date=None."""
-    record = {**_WHISPARR_EPISODE_RECORD, "releaseDate": {}}
+    record = {**_WHISPARR_V2_EPISODE_RECORD, "releaseDate": {}}
     respx.get(f"{BASE}/api/v3/wanted/missing").mock(
         return_value=httpx.Response(200, json={"records": [record]})
     )
@@ -150,9 +150,9 @@ async def test_get_missing_empty_release_date_object(client: WhisparrClient) -> 
 
 @pytest.mark.asyncio()
 @respx.mock
-async def test_get_missing_invalid_release_date_object(client: WhisparrClient) -> None:
+async def test_get_missing_invalid_release_date_object(client: WhisparrV2Client) -> None:
     """Invalid DateOnly values (e.g., month=13) result in release_date=None."""
-    record = {**_WHISPARR_EPISODE_RECORD, "releaseDate": {"year": 2023, "month": 13, "day": 1}}
+    record = {**_WHISPARR_V2_EPISODE_RECORD, "releaseDate": {"year": 2023, "month": 13, "day": 1}}
     respx.get(f"{BASE}/api/v3/wanted/missing").mock(
         return_value=httpx.Response(200, json={"records": [record]})
     )
@@ -162,9 +162,9 @@ async def test_get_missing_invalid_release_date_object(client: WhisparrClient) -
 
 @pytest.mark.asyncio()
 @respx.mock
-async def test_get_missing_invalid_release_date_string(client: WhisparrClient) -> None:
+async def test_get_missing_invalid_release_date_string(client: WhisparrV2Client) -> None:
     """Unparseable date strings result in release_date=None."""
-    record = {**_WHISPARR_EPISODE_RECORD, "releaseDate": "not-a-date"}
+    record = {**_WHISPARR_V2_EPISODE_RECORD, "releaseDate": "not-a-date"}
     respx.get(f"{BASE}/api/v3/wanted/missing").mock(
         return_value=httpx.Response(200, json={"records": [record]})
     )
@@ -174,7 +174,7 @@ async def test_get_missing_invalid_release_date_string(client: WhisparrClient) -
 
 @pytest.mark.asyncio()
 @respx.mock
-async def test_get_missing_series_title_fallback(client: WhisparrClient) -> None:
+async def test_get_missing_series_title_fallback(client: WhisparrV2Client) -> None:
     """When series key is missing, falls back to seriesTitle field."""
     record = {
         "id": 502,
@@ -195,7 +195,7 @@ async def test_get_missing_series_title_fallback(client: WhisparrClient) -> None
 
 @pytest.mark.asyncio()
 @respx.mock
-async def test_get_missing_series_id_fallback(client: WhisparrClient) -> None:
+async def test_get_missing_series_id_fallback(client: WhisparrV2Client) -> None:
     """When seriesId is missing, falls back to series.id."""
     record = {
         "id": 503,
@@ -213,7 +213,7 @@ async def test_get_missing_series_id_fallback(client: WhisparrClient) -> None:
 
 @pytest.mark.asyncio()
 @respx.mock
-async def test_get_missing_non_2xx_raises(client: WhisparrClient) -> None:
+async def test_get_missing_non_2xx_raises(client: WhisparrV2Client) -> None:
     respx.get(f"{BASE}/api/v3/wanted/missing").mock(return_value=httpx.Response(403))
     with pytest.raises(httpx.HTTPStatusError):
         await client.get_missing()
@@ -226,7 +226,7 @@ async def test_get_missing_non_2xx_raises(client: WhisparrClient) -> None:
 
 @pytest.mark.asyncio()
 @respx.mock
-async def test_search_posts_correct_payload(client: WhisparrClient) -> None:
+async def test_search_posts_correct_payload(client: WhisparrV2Client) -> None:
     route = respx.post(f"{BASE}/api/v3/command").mock(
         return_value=httpx.Response(201, json={"id": 1, "name": "EpisodeSearch"})
     )
@@ -239,7 +239,7 @@ async def test_search_posts_correct_payload(client: WhisparrClient) -> None:
 
 @pytest.mark.asyncio()
 @respx.mock
-async def test_search_non_2xx_raises(client: WhisparrClient) -> None:
+async def test_search_non_2xx_raises(client: WhisparrV2Client) -> None:
     respx.post(f"{BASE}/api/v3/command").mock(return_value=httpx.Response(500))
     with pytest.raises(httpx.HTTPStatusError):
         await client.search(501)
@@ -252,7 +252,7 @@ async def test_search_non_2xx_raises(client: WhisparrClient) -> None:
 
 @pytest.mark.asyncio()
 @respx.mock
-async def test_search_season_posts_correct_payload(client: WhisparrClient) -> None:
+async def test_search_season_posts_correct_payload(client: WhisparrV2Client) -> None:
     route = respx.post(f"{BASE}/api/v3/command").mock(
         return_value=httpx.Response(201, json={"id": 3, "name": "SeasonSearch"})
     )
@@ -266,7 +266,7 @@ async def test_search_season_posts_correct_payload(client: WhisparrClient) -> No
 
 @pytest.mark.asyncio()
 @respx.mock
-async def test_search_season_non_2xx_raises(client: WhisparrClient) -> None:
+async def test_search_season_non_2xx_raises(client: WhisparrV2Client) -> None:
     respx.post(f"{BASE}/api/v3/command").mock(return_value=httpx.Response(500))
     with pytest.raises(httpx.HTTPStatusError):
         await client.search_season(70, 2)
@@ -280,22 +280,22 @@ _CUTOFF_RESPONSE = {
     "page": 1,
     "pageSize": 10,
     "totalRecords": 1,
-    "records": [_WHISPARR_EPISODE_RECORD],
+    "records": [_WHISPARR_V2_EPISODE_RECORD],
 }
 
 
 @pytest.mark.asyncio()
 @respx.mock
-async def test_get_cutoff_unmet_returns_episodes(client: WhisparrClient) -> None:
+async def test_get_cutoff_unmet_returns_episodes(client: WhisparrV2Client) -> None:
     route = respx.get(f"{BASE}/api/v3/wanted/cutoff").mock(
         return_value=httpx.Response(200, json=_CUTOFF_RESPONSE)
     )
     results = await client.get_cutoff_unmet(page=1, page_size=10)
     assert len(results) == 1
     ep = results[0]
-    assert isinstance(ep, MissingWhisparrEpisode)
+    assert isinstance(ep, MissingWhisparrV2Episode)
     assert ep.episode_id == 501
-    assert ep.series_title == "My Whisparr Show"
+    assert ep.series_title == "My Whisparr v2 Show"
     request = route.calls[0].request
     assert request.url.params["monitored"] == "true"
     assert request.url.params["includeSeries"] == "true"
@@ -303,7 +303,7 @@ async def test_get_cutoff_unmet_returns_episodes(client: WhisparrClient) -> None
 
 @pytest.mark.asyncio()
 @respx.mock
-async def test_get_cutoff_unmet_empty(client: WhisparrClient) -> None:
+async def test_get_cutoff_unmet_empty(client: WhisparrV2Client) -> None:
     respx.get(f"{BASE}/api/v3/wanted/cutoff").mock(
         return_value=httpx.Response(
             200, json={"page": 1, "pageSize": 10, "totalRecords": 0, "records": []}
@@ -315,7 +315,7 @@ async def test_get_cutoff_unmet_empty(client: WhisparrClient) -> None:
 
 @pytest.mark.asyncio()
 @respx.mock
-async def test_get_cutoff_unmet_non_2xx_raises(client: WhisparrClient) -> None:
+async def test_get_cutoff_unmet_non_2xx_raises(client: WhisparrV2Client) -> None:
     respx.get(f"{BASE}/api/v3/wanted/cutoff").mock(return_value=httpx.Response(403))
     with pytest.raises(httpx.HTTPStatusError):
         await client.get_cutoff_unmet()
@@ -328,7 +328,7 @@ async def test_get_cutoff_unmet_non_2xx_raises(client: WhisparrClient) -> None:
 
 @pytest.mark.asyncio()
 @respx.mock
-async def test_timeout_propagates(client: WhisparrClient) -> None:
+async def test_timeout_propagates(client: WhisparrV2Client) -> None:
     respx.get(f"{BASE}/api/v3/wanted/missing").mock(side_effect=httpx.ReadTimeout("timed out"))
     with pytest.raises(httpx.ReadTimeout):
         await client.get_missing()
@@ -343,14 +343,14 @@ async def test_timeout_propagates(client: WhisparrClient) -> None:
 @respx.mock
 async def test_context_manager() -> None:
     respx.get(f"{BASE}/api/v3/system/status").mock(return_value=httpx.Response(200, json={}))
-    async with WhisparrClient(url=BASE, api_key=API_KEY) as c:
+    async with WhisparrV2Client(url=BASE, api_key=API_KEY) as c:
         result = await c.ping()
     assert result is not None
 
 
 @pytest.mark.asyncio()
 @respx.mock
-async def test_get_wanted_total_missing(client: WhisparrClient) -> None:
+async def test_get_wanted_total_missing(client: WhisparrV2Client) -> None:
     respx.get(f"{BASE}/api/v3/wanted/missing").mock(
         return_value=httpx.Response(200, json={"totalRecords": 33, "records": []})
     )

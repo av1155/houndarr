@@ -22,7 +22,7 @@ from houndarr.services.instances import (
     ReadarrSearchMode,
     SearchOrder,
     SonarrSearchMode,
-    WhisparrSearchMode,
+    WhisparrV2SearchMode,
 )
 
 # ---------------------------------------------------------------------------
@@ -33,7 +33,7 @@ SONARR_URL = "http://sonarr:8989"
 RADARR_URL = "http://radarr:7878"
 LIDARR_URL = "http://lidarr:8686"
 READARR_URL = "http://readarr:8787"
-WHISPARR_URL = "http://whisparr:6969"
+WHISPARR_V2_URL = "http://whisparr:6969"
 # Valid Fernet key required wherever crypto.decrypt is called (supervisor tests)
 MASTER_KEY: bytes = Fernet.generate_key()
 
@@ -76,25 +76,25 @@ _BOOK_RECORD: dict[str, Any] = {
     "author": {"id": 60, "authorName": "Test Author"},
 }
 
-_WHISPARR_EPISODE_RECORD: dict[str, Any] = {
+_WHISPARR_V2_EPISODE_RECORD: dict[str, Any] = {
     "id": 501,
     "seriesId": 70,
     "title": "Scene Title",
     "seasonNumber": 1,
     "absoluteEpisodeNumber": 5,
     "releaseDate": {"year": 2023, "month": 9, "day": 1},
-    "series": {"id": 70, "title": "My Whisparr Show"},
+    "series": {"id": 70, "title": "My Whisparr v2 Show"},
 }
 
 _MISSING_SONARR = {"page": 1, "pageSize": 10, "totalRecords": 1, "records": [_EPISODE_RECORD]}
 _MISSING_RADARR = {"page": 1, "pageSize": 10, "totalRecords": 1, "records": [_MOVIE_RECORD]}
 _MISSING_LIDARR = {"page": 1, "pageSize": 10, "totalRecords": 1, "records": [_ALBUM_RECORD]}
 _MISSING_READARR = {"page": 1, "pageSize": 10, "totalRecords": 1, "records": [_BOOK_RECORD]}
-_MISSING_WHISPARR = {
+_MISSING_WHISPARR_V2 = {
     "page": 1,
     "pageSize": 10,
     "totalRecords": 1,
-    "records": [_WHISPARR_EPISODE_RECORD],
+    "records": [_WHISPARR_V2_EPISODE_RECORD],
 }
 _COMMAND_RESP = {"id": 1, "name": "EpisodeSearch"}
 _FUTURE_AIR_DATE = "2999-01-01T00:00:00Z"
@@ -119,7 +119,7 @@ def _make_instance(
     sonarr_search_mode: SonarrSearchMode = SonarrSearchMode.episode,
     lidarr_search_mode: LidarrSearchMode = LidarrSearchMode.album,
     readarr_search_mode: ReadarrSearchMode = ReadarrSearchMode.book,
-    whisparr_search_mode: WhisparrSearchMode = WhisparrSearchMode.episode,
+    whisparr_v2_search_mode: WhisparrV2SearchMode = WhisparrV2SearchMode.episode,
     search_order: SearchOrder = SearchOrder.chronological,
 ) -> Instance:
     return Instance(
@@ -144,7 +144,7 @@ def _make_instance(
         sonarr_search_mode=sonarr_search_mode,
         lidarr_search_mode=lidarr_search_mode,
         readarr_search_mode=readarr_search_mode,
-        whisparr_search_mode=whisparr_search_mode,
+        whisparr_v2_search_mode=whisparr_v2_search_mode,
         search_order=search_order,
     )
 
@@ -167,7 +167,7 @@ async def seeded_instances(db: None) -> AsyncGenerator[None, None]:
                 (2, "Radarr Test", "radarr", RADARR_URL, encrypted),
                 (3, "Lidarr Test", "lidarr", LIDARR_URL, encrypted),
                 (4, "Readarr Test", "readarr", READARR_URL, encrypted),
-                (5, "Whisparr Test", "whisparr_v2", WHISPARR_URL, encrypted),
+                (5, "Whisparr Test", "whisparr_v2", WHISPARR_V2_URL, encrypted),
             ],
         )
         await conn.commit()
@@ -1042,59 +1042,59 @@ async def test_readarr_author_context_release_timing_skip_allows_one_retry_while
 
 @pytest.mark.asyncio()
 @respx.mock
-async def test_whisparr_release_timing_skip_allows_one_retry_while_on_cooldown(
+async def test_whisparr_v2_release_timing_skip_allows_one_retry_while_on_cooldown(
     seeded_instances: None,
 ) -> None:
-    """Whisparr missing pass may override cooldown after a release-timing skip."""
+    """Whisparr v2 missing pass may override cooldown after a release-timing skip."""
     await _seed_release_timing_retry(
         instance_id=5,
         item_id=501,
-        item_type="whisparr_episode",
+        item_type="whisparr_v2_episode",
     )
 
-    respx.get(f"{WHISPARR_URL}/api/v3/wanted/missing").mock(
-        return_value=httpx.Response(200, json=_MISSING_WHISPARR)
+    respx.get(f"{WHISPARR_V2_URL}/api/v3/wanted/missing").mock(
+        return_value=httpx.Response(200, json=_MISSING_WHISPARR_V2)
     )
-    search_route = respx.post(f"{WHISPARR_URL}/api/v3/command").mock(
+    search_route = respx.post(f"{WHISPARR_V2_URL}/api/v3/command").mock(
         return_value=httpx.Response(201, json={"id": 5})
     )
 
-    instance = _make_instance(instance_id=5, itype=InstanceType.whisparr_v2, url=WHISPARR_URL)
+    instance = _make_instance(instance_id=5, itype=InstanceType.whisparr_v2, url=WHISPARR_V2_URL)
     count = await run_instance_search(instance, MASTER_KEY)
 
     assert count == 1
     assert search_route.called
     rows = await _get_log_rows()
     assert rows[-1]["action"] == "searched"
-    assert rows[-1]["item_type"] == "whisparr_episode"
+    assert rows[-1]["item_type"] == "whisparr_v2_episode"
 
 
 @pytest.mark.asyncio()
 @respx.mock
-async def test_whisparr_season_context_release_timing_skip_allows_one_retry_while_on_cooldown(
+async def test_whisparr_v2_season_context_release_timing_skip_allows_one_retry_while_on_cooldown(
     seeded_instances: None,
 ) -> None:
-    """Whisparr season-context mode may override season cooldown after a release-timing skip."""
+    """Whisparr v2 season-context mode may override season cooldown after a release-timing skip."""
     from houndarr.engine.adapters.whisparr_v2 import _season_item_id
 
     await _seed_release_timing_retry(
         instance_id=5,
         item_id=_season_item_id(70, 1),
-        item_type="whisparr_episode",
+        item_type="whisparr_v2_episode",
     )
 
-    respx.get(f"{WHISPARR_URL}/api/v3/wanted/missing").mock(
-        return_value=httpx.Response(200, json=_MISSING_WHISPARR)
+    respx.get(f"{WHISPARR_V2_URL}/api/v3/wanted/missing").mock(
+        return_value=httpx.Response(200, json=_MISSING_WHISPARR_V2)
     )
-    search_route = respx.post(f"{WHISPARR_URL}/api/v3/command").mock(
+    search_route = respx.post(f"{WHISPARR_V2_URL}/api/v3/command").mock(
         return_value=httpx.Response(201, json={"id": 5})
     )
 
     instance = _make_instance(
         instance_id=5,
         itype=InstanceType.whisparr_v2,
-        url=WHISPARR_URL,
-        whisparr_search_mode=WhisparrSearchMode.season_context,
+        url=WHISPARR_V2_URL,
+        whisparr_v2_search_mode=WhisparrV2SearchMode.season_context,
     )
     count = await run_instance_search(instance, MASTER_KEY)
 
@@ -1445,49 +1445,49 @@ async def test_readarr_author_context_mode(seeded_instances: None) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Tests - Whisparr items searched
+# Tests - Whisparr v2 items searched
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio()
 @respx.mock
-async def test_whisparr_item_is_searched(seeded_instances: None) -> None:
-    """A Whisparr missing episode should be searched with whisparr_episode item_type."""
-    respx.get(f"{WHISPARR_URL}/api/v3/wanted/missing").mock(
-        return_value=httpx.Response(200, json=_MISSING_WHISPARR)
+async def test_whisparr_v2_item_is_searched(seeded_instances: None) -> None:
+    """A Whisparr v2 missing episode should be searched with whisparr_v2_episode item_type."""
+    respx.get(f"{WHISPARR_V2_URL}/api/v3/wanted/missing").mock(
+        return_value=httpx.Response(200, json=_MISSING_WHISPARR_V2)
     )
-    respx.post(f"{WHISPARR_URL}/api/v3/command").mock(
+    respx.post(f"{WHISPARR_V2_URL}/api/v3/command").mock(
         return_value=httpx.Response(201, json={"id": 5})
     )
 
-    instance = _make_instance(instance_id=5, itype=InstanceType.whisparr_v2, url=WHISPARR_URL)
+    instance = _make_instance(instance_id=5, itype=InstanceType.whisparr_v2, url=WHISPARR_V2_URL)
     count = await run_instance_search(instance, MASTER_KEY)
 
     assert count == 1
     rows = await _get_log_rows()
     assert rows[0]["action"] == "searched"
     assert rows[0]["item_id"] == 501
-    assert rows[0]["item_type"] == "whisparr_episode"
-    assert rows[0]["item_label"] == "My Whisparr Show - S01 - Scene Title"
+    assert rows[0]["item_type"] == "whisparr_v2_episode"
+    assert rows[0]["item_label"] == "My Whisparr v2 Show - S01 - Scene Title"
     assert rows[0]["search_kind"] == "missing"
 
 
 @pytest.mark.asyncio()
 @respx.mock
-async def test_whisparr_season_context_mode(seeded_instances: None) -> None:
+async def test_whisparr_v2_season_context_mode(seeded_instances: None) -> None:
     """Season-context mode issues one SeasonSearch per eligible season."""
     missing_records = {
         "records": [
-            {**_WHISPARR_EPISODE_RECORD, "id": 501, "seriesId": 70, "seasonNumber": 1},
+            {**_WHISPARR_V2_EPISODE_RECORD, "id": 501, "seriesId": 70, "seasonNumber": 1},
             {
-                **_WHISPARR_EPISODE_RECORD,
+                **_WHISPARR_V2_EPISODE_RECORD,
                 "id": 502,
                 "seriesId": 70,
                 "seasonNumber": 1,
                 "title": "Scene 2",
             },
             {
-                **_WHISPARR_EPISODE_RECORD,
+                **_WHISPARR_V2_EPISODE_RECORD,
                 "id": 503,
                 "seriesId": 70,
                 "seasonNumber": 2,
@@ -1495,21 +1495,21 @@ async def test_whisparr_season_context_mode(seeded_instances: None) -> None:
             },
         ]
     }
-    respx.get(f"{WHISPARR_URL}/api/v3/wanted/missing").mock(
+    respx.get(f"{WHISPARR_V2_URL}/api/v3/wanted/missing").mock(
         side_effect=[
             httpx.Response(200, json=missing_records),
             httpx.Response(200, json={"records": []}),
         ]
     )
-    search_route = respx.post(f"{WHISPARR_URL}/api/v3/command").mock(
+    search_route = respx.post(f"{WHISPARR_V2_URL}/api/v3/command").mock(
         return_value=httpx.Response(201, json={"id": 1})
     )
 
     instance = _make_instance(
         instance_id=5,
         itype=InstanceType.whisparr_v2,
-        url=WHISPARR_URL,
-        whisparr_search_mode=WhisparrSearchMode.season_context,
+        url=WHISPARR_V2_URL,
+        whisparr_v2_search_mode=WhisparrV2SearchMode.season_context,
     )
     count = await run_instance_search(instance, MASTER_KEY)
 

@@ -31,7 +31,7 @@ async def test_schema_created(db: None) -> None:
 async def test_schema_version_set(db: None) -> None:
     """Schema version should be set after init."""
     version = await get_setting("schema_version")
-    assert version == "15"
+    assert version == "16"
 
 
 @pytest.mark.asyncio()
@@ -54,7 +54,7 @@ async def test_search_log_and_instance_v3_columns_exist(db: None) -> None:
     assert "sonarr_search_mode" in instance_columns
     assert "lidarr_search_mode" in instance_columns
     assert "readarr_search_mode" in instance_columns
-    assert "whisparr_search_mode" in instance_columns
+    assert "whisparr_v2_search_mode" in instance_columns
     assert "post_release_grace_hrs" in instance_columns
 
 
@@ -112,7 +112,7 @@ async def test_init_db_migrates_v1_schema_to_v3(tmp_path: Path) -> None:
         search_log_columns = {row[1] async for row in search_log_cur}
         instance_columns = {row[1] async for row in instances_cur}
 
-    assert await get_setting("schema_version") == "15"
+    assert await get_setting("schema_version") == "16"
     assert "item_label" in search_log_columns
     assert "search_kind" in search_log_columns
     assert "cycle_id" in search_log_columns
@@ -122,7 +122,7 @@ async def test_init_db_migrates_v1_schema_to_v3(tmp_path: Path) -> None:
     assert "sonarr_search_mode" in instance_columns
     assert "lidarr_search_mode" in instance_columns
     assert "readarr_search_mode" in instance_columns
-    assert "whisparr_search_mode" in instance_columns
+    assert "whisparr_v2_search_mode" in instance_columns
     assert "post_release_grace_hrs" in instance_columns
     assert "unreleased_delay_hrs" not in instance_columns
 
@@ -181,7 +181,7 @@ async def test_init_db_migrates_v2_schema_to_v4(tmp_path: Path) -> None:
         async with conn.execute("PRAGMA table_info(search_log)") as cur:
             search_log_columns = {row[1] async for row in cur}
 
-    assert await get_setting("schema_version") == "15"
+    assert await get_setting("schema_version") == "16"
     assert "cycle_id" in search_log_columns
     assert "cycle_trigger" in search_log_columns
 
@@ -191,7 +191,7 @@ async def test_init_db_migrates_v2_schema_to_v4(tmp_path: Path) -> None:
     assert "sonarr_search_mode" in instance_columns
     assert "lidarr_search_mode" in instance_columns
     assert "readarr_search_mode" in instance_columns
-    assert "whisparr_search_mode" in instance_columns
+    assert "whisparr_v2_search_mode" in instance_columns
     assert "post_release_grace_hrs" in instance_columns
     assert "unreleased_delay_hrs" not in instance_columns
 
@@ -248,14 +248,14 @@ async def test_init_db_migrates_v3_schema_to_v4(tmp_path: Path) -> None:
     set_db_path(str(db_path))
     await init_db()
 
-    assert await get_setting("schema_version") == "15"
+    assert await get_setting("schema_version") == "16"
     async with get_db() as conn:
         async with conn.execute("PRAGMA table_info(instances)") as cur:
             instance_columns = {row[1] async for row in cur}
     assert "sonarr_search_mode" in instance_columns
     assert "lidarr_search_mode" in instance_columns
     assert "readarr_search_mode" in instance_columns
-    assert "whisparr_search_mode" in instance_columns
+    assert "whisparr_v2_search_mode" in instance_columns
     assert "post_release_grace_hrs" in instance_columns
     assert "unreleased_delay_hrs" not in instance_columns
 
@@ -331,7 +331,7 @@ async def test_init_db_migrates_v4_schema_to_v6(tmp_path: Path) -> None:
     set_db_path(str(db_path))
     await init_db()
 
-    assert await get_setting("schema_version") == "15"
+    assert await get_setting("schema_version") == "16"
 
     async with get_db() as conn:
         # Verify new columns exist
@@ -339,7 +339,7 @@ async def test_init_db_migrates_v4_schema_to_v6(tmp_path: Path) -> None:
             instance_columns = {row[1] async for row in cur}
         assert "lidarr_search_mode" in instance_columns
         assert "readarr_search_mode" in instance_columns
-        assert "whisparr_search_mode" in instance_columns
+        assert "whisparr_v2_search_mode" in instance_columns
         assert "post_release_grace_hrs" in instance_columns
         assert "unreleased_delay_hrs" not in instance_columns
 
@@ -465,7 +465,7 @@ async def test_init_db_migrates_v5_schema_to_v6(tmp_path: Path) -> None:
     set_db_path(str(db_path))
     await init_db()
 
-    assert await get_setting("schema_version") == "15"
+    assert await get_setting("schema_version") == "16"
 
     async with get_db() as conn:
         async with conn.execute("PRAGMA table_info(instances)") as cur:
@@ -562,7 +562,7 @@ async def test_init_db_migrates_v6_schema_to_v7(tmp_path: Path) -> None:
     set_db_path(str(db_path))
     await init_db()
 
-    assert await get_setting("schema_version") == "15"
+    assert await get_setting("schema_version") == "16"
 
     async with get_db() as conn:
         async with conn.execute("PRAGMA table_info(instances)") as cur:
@@ -675,7 +675,7 @@ async def test_init_db_self_heals_v9_and_v10_when_version_already_current(
     set_db_path(str(db_path))
     await init_db()
 
-    assert await get_setting("schema_version") == "15"
+    assert await get_setting("schema_version") == "16"
 
     async with get_db() as conn:
         async with conn.execute("PRAGMA table_info(instances)") as cur:
@@ -816,7 +816,7 @@ async def test_init_db_is_idempotent_on_healthy_v12(tmp_path: Path) -> None:
 
     # Second call: should be a no-op through the self-heal branch.
     await init_db()
-    assert await get_setting("schema_version") == first_version == "15"
+    assert await get_setting("schema_version") == first_version == "16"
 
     async with get_db() as conn:
         async with conn.execute("PRAGMA table_info(instances)") as cur:
@@ -911,7 +911,7 @@ async def test_migrate_to_v12_adds_search_order_column(tmp_path: Path) -> None:
     set_db_path(str(db_path))
     await init_db()
 
-    assert await get_setting("schema_version") == "15"
+    assert await get_setting("schema_version") == "16"
 
     async with get_db() as conn:
         async with conn.execute("PRAGMA table_info(instances)") as cur:
@@ -1054,7 +1054,7 @@ async def test_migrate_to_v15_coerces_invalid_search_kind(tmp_path: Path) -> Non
     set_db_path(str(db_path))
     await init_db()
 
-    assert await get_setting("schema_version") == "15"
+    assert await get_setting("schema_version") == "16"
 
     async with get_db() as conn:
         await conn.execute("PRAGMA foreign_keys=ON")

@@ -13,13 +13,13 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Schema version: bump when adding new migrations
 # ---------------------------------------------------------------------------
-SCHEMA_VERSION = 15
+SCHEMA_VERSION = 16
 
 # ---------------------------------------------------------------------------
 # DDL
 # ---------------------------------------------------------------------------
 _INSTANCE_TYPES = "'radarr', 'sonarr', 'lidarr', 'readarr', 'whisparr_v2', 'whisparr_v3'"
-_ITEM_TYPES = "'episode', 'movie', 'album', 'book', 'whisparr_episode', 'whisparr_v3_movie'"
+_ITEM_TYPES = "'episode', 'movie', 'album', 'book', 'whisparr_v2_episode', 'whisparr_v3_movie'"
 
 _SCHEMA_SQL = f"""
 CREATE TABLE IF NOT EXISTS settings (
@@ -49,8 +49,8 @@ CREATE TABLE IF NOT EXISTS instances (
                                 CHECK(lidarr_search_mode IN ('album', 'artist_context')),
     readarr_search_mode  TEXT    NOT NULL DEFAULT 'book'
                                 CHECK(readarr_search_mode IN ('book', 'author_context')),
-    whisparr_search_mode TEXT    NOT NULL DEFAULT 'episode'
-                                CHECK(whisparr_search_mode IN ('episode', 'season_context')),
+    whisparr_v2_search_mode TEXT NOT NULL DEFAULT 'episode'
+                                CHECK(whisparr_v2_search_mode IN ('episode', 'season_context')),
     upgrade_enabled      INTEGER NOT NULL DEFAULT 0,
     upgrade_batch_size   INTEGER NOT NULL DEFAULT 1,
     upgrade_cooldown_days INTEGER NOT NULL DEFAULT 90,
@@ -61,8 +61,8 @@ CREATE TABLE IF NOT EXISTS instances (
                                 CHECK(upgrade_lidarr_search_mode IN ('album', 'artist_context')),
     upgrade_readarr_search_mode TEXT NOT NULL DEFAULT 'book'
                                 CHECK(upgrade_readarr_search_mode IN ('book', 'author_context')),
-    upgrade_whisparr_search_mode TEXT NOT NULL DEFAULT 'episode'
-                                CHECK(upgrade_whisparr_search_mode
+    upgrade_whisparr_v2_search_mode TEXT NOT NULL DEFAULT 'episode'
+                                CHECK(upgrade_whisparr_v2_search_mode
                                       IN ('episode', 'season_context')),
     upgrade_item_offset  INTEGER NOT NULL DEFAULT 0,
     upgrade_series_offset INTEGER NOT NULL DEFAULT 0,
@@ -180,6 +180,7 @@ async def init_db() -> None:
             await _migrate_to_v13(db)
             await _migrate_to_v14(db)
             await _migrate_to_v15(db)
+            await _migrate_to_v16(db)
             await _ensure_v3_indexes(db)
             await db.commit()
 
@@ -214,6 +215,8 @@ async def _run_migrations(db: aiosqlite.Connection, from_version: int) -> None:
         await _migrate_to_v14(db)
     if from_version < 15:
         await _migrate_to_v15(db)
+    if from_version < 16:
+        await _migrate_to_v16(db)
 
     logger.info("Migrated database from schema version %d to %d", from_version, SCHEMA_VERSION)
     await db.execute(
@@ -334,7 +337,10 @@ async def _migrate_to_v5(db: aiosqlite.Connection) -> None:
     await db.execute(
         """
         INSERT INTO cooldowns_new (id, instance_id, item_id, item_type, searched_at)
-        SELECT id, instance_id, item_id, item_type, searched_at
+        SELECT id, instance_id, item_id,
+               CASE WHEN item_type = 'whisparr_episode' THEN 'whisparr_v2_episode'
+                    ELSE item_type END,
+               searched_at
         FROM cooldowns
         """
     )
@@ -371,8 +377,10 @@ async def _migrate_to_v5(db: aiosqlite.Connection) -> None:
             cycle_id, cycle_trigger, item_label, action, reason, message, timestamp
         )
         SELECT
-            id, instance_id, item_id, item_type, search_kind,
-            cycle_id, cycle_trigger, item_label, action, reason, message, timestamp
+            id, instance_id, item_id,
+            CASE WHEN item_type = 'whisparr_episode' THEN 'whisparr_v2_episode'
+                 ELSE item_type END,
+            search_kind, cycle_id, cycle_trigger, item_label, action, reason, message, timestamp
         FROM search_log
         """
     )
@@ -532,6 +540,13 @@ async def _migrate_to_v10(db: aiosqlite.Connection) -> None:
     SQLite cannot ALTER CHECK constraints, so affected tables are recreated.
     On a healthy database where the CHECK already includes ``whisparr_v3``,
     this is a no-op (detected via the DDL stored in ``sqlite_master``).
+
+    Self-heal note: when this runs after :func:`_migrate_to_v16` (which
+    happens during the self-heal pass on a corrupted v10 database), the
+    ``whisparr_search_mode`` column has already been renamed to
+    ``whisparr_v2_search_mode``.  The two column-name branches below
+    select whichever name currently exists so the rebuild succeeds in
+    both orders.
     """
     # Guard: skip the expensive table recreation if the migration was already
     # applied.  Querying sqlite_master for the CREATE TABLE DDL is the
@@ -543,6 +558,17 @@ async def _migrate_to_v10(db: aiosqlite.Connection) -> None:
         row = await cur.fetchone()
     if row and "whisparr_v3" in (row[0] or ""):
         return
+
+    # Detect whether v16 has already renamed the columns.  In incremental
+    # migrations from a real v10 database this is False and the rebuild uses
+    # the original column names.  In the self-heal path on a corrupted v10
+    # database, _run_migrations applies v11..v16 first, the column rename
+    # in v16 has run, and the rebuild must use the new names.
+    v16_already_applied = await _column_exists(db, "instances", "whisparr_v2_search_mode")
+    new_col = "whisparr_v2_search_mode" if v16_already_applied else "whisparr_search_mode"
+    new_upgrade_col = (
+        "upgrade_whisparr_v2_search_mode" if v16_already_applied else "upgrade_whisparr_search_mode"
+    )
 
     await db.execute("PRAGMA foreign_keys=OFF")
 
@@ -576,8 +602,8 @@ async def _migrate_to_v10(db: aiosqlite.Connection) -> None:
                                         CHECK(lidarr_search_mode IN ('album', 'artist_context')),
             readarr_search_mode  TEXT    NOT NULL DEFAULT 'book'
                                         CHECK(readarr_search_mode IN ('book', 'author_context')),
-            whisparr_search_mode TEXT    NOT NULL DEFAULT 'episode'
-                                 CHECK(whisparr_search_mode
+            {new_col} TEXT    NOT NULL DEFAULT 'episode'
+                                 CHECK({new_col}
                                        IN ('episode', 'season_context')),
             upgrade_enabled      INTEGER NOT NULL DEFAULT 0,
             upgrade_batch_size   INTEGER NOT NULL DEFAULT 1,
@@ -592,8 +618,8 @@ async def _migrate_to_v10(db: aiosqlite.Connection) -> None:
             upgrade_readarr_search_mode TEXT NOT NULL DEFAULT 'book'
                                         CHECK(upgrade_readarr_search_mode
                                               IN ('book', 'author_context')),
-            upgrade_whisparr_search_mode TEXT NOT NULL DEFAULT 'episode'
-                                        CHECK(upgrade_whisparr_search_mode
+            {new_upgrade_col} TEXT NOT NULL DEFAULT 'episode'
+                                        CHECK({new_upgrade_col}
                                               IN ('episode', 'season_context')),
             upgrade_item_offset  INTEGER NOT NULL DEFAULT 0,
             upgrade_series_offset INTEGER NOT NULL DEFAULT 0,
@@ -603,10 +629,10 @@ async def _migrate_to_v10(db: aiosqlite.Connection) -> None:
             created_at           TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
             updated_at           TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
         )
-        """
+        """  # noqa: S608  # nosec B608
     )
     await db.execute(
-        """
+        f"""
         INSERT INTO instances_new
         SELECT id, name,
                CASE WHEN type='whisparr' THEN 'whisparr_v2' ELSE type END,
@@ -615,16 +641,16 @@ async def _migrate_to_v10(db: aiosqlite.Connection) -> None:
                post_release_grace_hrs, queue_limit, cutoff_enabled,
                cutoff_batch_size, cutoff_cooldown_days, cutoff_hourly_cap,
                sonarr_search_mode, lidarr_search_mode, readarr_search_mode,
-               whisparr_search_mode,
+               {new_col},
                upgrade_enabled, upgrade_batch_size, upgrade_cooldown_days,
                upgrade_hourly_cap,
                upgrade_sonarr_search_mode, upgrade_lidarr_search_mode,
-               upgrade_readarr_search_mode, upgrade_whisparr_search_mode,
+               upgrade_readarr_search_mode, {new_upgrade_col},
                upgrade_item_offset, upgrade_series_offset,
                missing_page_offset, cutoff_page_offset,
                enabled, created_at, updated_at
         FROM instances
-        """
+        """  # noqa: S608  # nosec B608
     )
     await db.execute("DROP TABLE instances")
     await db.execute("ALTER TABLE instances_new RENAME TO instances")
@@ -645,7 +671,10 @@ async def _migrate_to_v10(db: aiosqlite.Connection) -> None:
     await db.execute(
         """
         INSERT INTO cooldowns_new (id, instance_id, item_id, item_type, searched_at)
-        SELECT id, instance_id, item_id, item_type, searched_at
+        SELECT id, instance_id, item_id,
+               CASE WHEN item_type = 'whisparr_episode' THEN 'whisparr_v2_episode'
+                    ELSE item_type END,
+               searched_at
         FROM cooldowns
         """
     )
@@ -683,8 +712,10 @@ async def _migrate_to_v10(db: aiosqlite.Connection) -> None:
             reason, message, timestamp
         )
         SELECT
-            id, instance_id, item_id, item_type, search_kind,
-            cycle_id, cycle_trigger, item_label, action,
+            id, instance_id, item_id,
+            CASE WHEN item_type = 'whisparr_episode' THEN 'whisparr_v2_episode'
+                 ELSE item_type END,
+            search_kind, cycle_id, cycle_trigger, item_label, action,
             reason, message, timestamp
         FROM search_log
         """
@@ -895,6 +926,160 @@ async def _migrate_to_v15(db: aiosqlite.Connection) -> None:
         )
     finally:
         await db.execute("PRAGMA foreign_keys=ON")
+
+
+async def _migrate_to_v16(db: aiosqlite.Connection) -> None:
+    """Disambiguate Whisparr v2 columns and item_type values from the family name.
+
+    Renames the two ``instances`` columns ``whisparr_search_mode`` and
+    ``upgrade_whisparr_search_mode`` to ``whisparr_v2_search_mode`` and
+    ``upgrade_whisparr_v2_search_mode`` so the column names match the
+    ``InstanceType.whisparr_v2`` row those modes apply to.  Renames the
+    ``cooldowns`` and ``search_log`` ``item_type`` value
+    ``'whisparr_episode'`` to ``'whisparr_v2_episode'`` for the same reason.
+
+    The column renames use ``ALTER TABLE ... RENAME COLUMN`` (SQLite 3.25+,
+    Python 3.12 ships ≥3.40 so this is safe) and skip when the new column
+    name is already present so the migration is idempotent.
+
+    Updating the ``item_type`` value requires a table rebuild because
+    the existing CHECK constraint allows ``'whisparr_episode'`` but not
+    ``'whisparr_v2_episode'``.  The rebuild mirrors the v15 ``cooldowns``
+    rebuild and the v10 ``search_log`` rebuild: drop into the temp
+    ``*_new`` table with the v16 CHECK clause, copy rows while
+    rewriting the value, then ``DROP`` and ``RENAME``.  Idempotent via
+    a sentinel that inspects ``sqlite_master.sql`` for the ``v2_episode``
+    token.
+    """
+    # Column renames on instances (skip when already migrated).
+    if not await _column_exists(db, "instances", "whisparr_v2_search_mode"):
+        await db.execute(
+            "ALTER TABLE instances RENAME COLUMN whisparr_search_mode TO whisparr_v2_search_mode"
+        )
+    if not await _column_exists(db, "instances", "upgrade_whisparr_v2_search_mode"):
+        await db.execute(
+            "ALTER TABLE instances RENAME COLUMN upgrade_whisparr_search_mode"
+            " TO upgrade_whisparr_v2_search_mode"
+        )
+
+    # Table rebuilds for cooldowns + search_log if the v16 item_type is not
+    # yet allowed by their CHECK clauses.
+    if await _cooldowns_has_v2_item_type_check(db):
+        return
+
+    await db.execute("PRAGMA foreign_keys=OFF")
+    try:
+        # Clean up any leftover temp tables from a partial previous run.
+        await db.execute("DROP TABLE IF EXISTS cooldowns_new")
+        await db.execute("DROP TABLE IF EXISTS search_log_new")
+
+        # cooldowns rebuild with the v16 item_type CHECK + UPDATE rows.
+        await db.execute(
+            f"""
+            CREATE TABLE cooldowns_new (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                instance_id INTEGER NOT NULL
+                                    REFERENCES instances(id) ON DELETE CASCADE,
+                item_id     INTEGER NOT NULL,
+                item_type   TEXT    NOT NULL CHECK(item_type IN ({_ITEM_TYPES})),
+                search_kind TEXT    NOT NULL DEFAULT 'missing'
+                                    CHECK(search_kind IN ('missing', 'cutoff', 'upgrade')),
+                searched_at TEXT    NOT NULL,
+                UNIQUE(instance_id, item_id, item_type)
+            )
+            """
+        )
+        await db.execute(
+            """
+            INSERT INTO cooldowns_new
+                (id, instance_id, item_id, item_type, search_kind, searched_at)
+            SELECT id,
+                   instance_id,
+                   item_id,
+                   CASE
+                       WHEN item_type = 'whisparr_episode' THEN 'whisparr_v2_episode'
+                       ELSE item_type
+                   END AS item_type,
+                   search_kind,
+                   searched_at
+              FROM cooldowns
+            """
+        )
+        await db.execute("DROP TABLE cooldowns")
+        await db.execute("ALTER TABLE cooldowns_new RENAME TO cooldowns")
+        await db.execute(
+            "CREATE INDEX IF NOT EXISTS idx_cooldowns_lookup "
+            "ON cooldowns(instance_id, item_type, searched_at)"
+        )
+
+        # search_log rebuild with the v16 item_type CHECK + UPDATE rows.
+        await db.execute(
+            f"""
+            CREATE TABLE search_log_new (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                instance_id INTEGER REFERENCES instances(id) ON DELETE SET NULL,
+                item_id     INTEGER,
+                item_type   TEXT    CHECK(item_type IN ({_ITEM_TYPES})),
+                search_kind TEXT,
+                cycle_id    TEXT,
+                cycle_trigger TEXT CHECK(cycle_trigger IN ('scheduled', 'run_now', 'system')),
+                item_label  TEXT,
+                action      TEXT    NOT NULL
+                                    CHECK(action IN ('searched', 'skipped', 'error', 'info')),
+                reason      TEXT,
+                message     TEXT,
+                timestamp   TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+            )
+            """
+        )
+        await db.execute(
+            """
+            INSERT INTO search_log_new (
+                id, instance_id, item_id, item_type, search_kind,
+                cycle_id, cycle_trigger, item_label, action,
+                reason, message, timestamp
+            )
+            SELECT
+                id, instance_id, item_id,
+                CASE
+                    WHEN item_type = 'whisparr_episode' THEN 'whisparr_v2_episode'
+                    ELSE item_type
+                END AS item_type,
+                search_kind, cycle_id, cycle_trigger, item_label, action,
+                reason, message, timestamp
+            FROM search_log
+            """
+        )
+        await db.execute("DROP TABLE search_log")
+        await db.execute("ALTER TABLE search_log_new RENAME TO search_log")
+        await db.execute(
+            "CREATE INDEX IF NOT EXISTS idx_search_log_timestamp ON search_log(timestamp DESC)"
+        )
+        await db.execute(
+            "CREATE INDEX IF NOT EXISTS idx_search_log_instance"
+            " ON search_log(instance_id, timestamp DESC)"
+        )
+    finally:
+        await db.execute("PRAGMA foreign_keys=ON")
+
+
+async def _cooldowns_has_v2_item_type_check(db: aiosqlite.Connection) -> bool:
+    """Return whether ``cooldowns`` already lists ``whisparr_v2_episode`` in CHECK.
+
+    Used by :func:`_migrate_to_v16` to skip the rebuild on a database that
+    has already migrated.  The fresh-install DDL emits the
+    ``whisparr_v2_episode`` token directly; rebuilt tables carry the same
+    literal.  Whitespace varies between SQLite versions, so the check
+    looks for the token in the stored ``CREATE TABLE`` SQL with no
+    normalisation needed (the token contains no whitespace).
+    """
+    async with db.execute(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='cooldowns'"
+    ) as cur:
+        row = await cur.fetchone()
+    if row is None:
+        return False
+    return "whisparr_v2_episode" in str(row[0] or "")
 
 
 async def _cooldowns_has_search_kind_check(db: aiosqlite.Connection) -> bool:

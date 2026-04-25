@@ -51,8 +51,8 @@ from houndarr.config import (
     DEFAULT_UPGRADE_LIDARR_SEARCH_MODE,
     DEFAULT_UPGRADE_READARR_SEARCH_MODE,
     DEFAULT_UPGRADE_SONARR_SEARCH_MODE,
-    DEFAULT_UPGRADE_WHISPARR_SEARCH_MODE,
-    DEFAULT_WHISPARR_SEARCH_MODE,
+    DEFAULT_UPGRADE_WHISPARR_V2_SEARCH_MODE,
+    DEFAULT_WHISPARR_V2_SEARCH_MODE,
 )
 from houndarr.services.instances import (
     CutoffPolicy,
@@ -68,7 +68,7 @@ from houndarr.services.instances import (
     SearchOrder,
     SonarrSearchMode,
     UpgradePolicy,
-    WhisparrSearchMode,
+    WhisparrV2SearchMode,
 )
 
 pytestmark = pytest.mark.pinning
@@ -196,7 +196,7 @@ def test_missing_policy_fields_in_declaration_order() -> None:
         "sonarr_search_mode",
         "lidarr_search_mode",
         "readarr_search_mode",
-        "whisparr_search_mode",
+        "whisparr_v2_search_mode",
     ]
 
 
@@ -212,7 +212,7 @@ def test_missing_policy_defaults_match_config() -> None:
     assert policy.sonarr_search_mode == SonarrSearchMode(DEFAULT_SONARR_SEARCH_MODE)
     assert policy.lidarr_search_mode == LidarrSearchMode(DEFAULT_LIDARR_SEARCH_MODE)
     assert policy.readarr_search_mode == ReadarrSearchMode(DEFAULT_READARR_SEARCH_MODE)
-    assert policy.whisparr_search_mode == WhisparrSearchMode(DEFAULT_WHISPARR_SEARCH_MODE)
+    assert policy.whisparr_v2_search_mode == WhisparrV2SearchMode(DEFAULT_WHISPARR_V2_SEARCH_MODE)
 
 
 # CutoffPolicy.
@@ -250,7 +250,7 @@ def test_upgrade_policy_fields_in_declaration_order() -> None:
         "upgrade_sonarr_search_mode",
         "upgrade_lidarr_search_mode",
         "upgrade_readarr_search_mode",
-        "upgrade_whisparr_search_mode",
+        "upgrade_whisparr_v2_search_mode",
         "upgrade_item_offset",
         "upgrade_series_offset",
     ]
@@ -268,8 +268,8 @@ def test_upgrade_policy_defaults_match_config() -> None:
     assert policy.upgrade_readarr_search_mode == ReadarrSearchMode(
         DEFAULT_UPGRADE_READARR_SEARCH_MODE
     )
-    assert policy.upgrade_whisparr_search_mode == WhisparrSearchMode(
-        DEFAULT_UPGRADE_WHISPARR_SEARCH_MODE
+    assert policy.upgrade_whisparr_v2_search_mode == WhisparrV2SearchMode(
+        DEFAULT_UPGRADE_WHISPARR_V2_SEARCH_MODE
     )
     assert policy.upgrade_item_offset == 0
     assert policy.upgrade_series_offset == 0
@@ -412,7 +412,7 @@ FLAT_TO_SUB: dict[str, str] = {
     "sonarr_search_mode": "missing",
     "lidarr_search_mode": "missing",
     "readarr_search_mode": "missing",
-    "whisparr_search_mode": "missing",
+    "whisparr_v2_search_mode": "missing",
     # CutoffPolicy
     "cutoff_enabled": "cutoff",
     "cutoff_batch_size": "cutoff",
@@ -426,7 +426,7 @@ FLAT_TO_SUB: dict[str, str] = {
     "upgrade_sonarr_search_mode": "upgrade",
     "upgrade_lidarr_search_mode": "upgrade",
     "upgrade_readarr_search_mode": "upgrade",
-    "upgrade_whisparr_search_mode": "upgrade",
+    "upgrade_whisparr_v2_search_mode": "upgrade",
     "upgrade_item_offset": "upgrade",
     "upgrade_series_offset": "upgrade",
     # SchedulePolicy
@@ -465,7 +465,7 @@ FLAT_WRITE_VALUES: dict[str, Any] = {
     "sonarr_search_mode": SonarrSearchMode.season_context,
     "lidarr_search_mode": LidarrSearchMode.artist_context,
     "readarr_search_mode": ReadarrSearchMode.author_context,
-    "whisparr_search_mode": WhisparrSearchMode.season_context,
+    "whisparr_v2_search_mode": WhisparrV2SearchMode.season_context,
     # CutoffPolicy
     "cutoff_enabled": True,
     "cutoff_batch_size": 3,
@@ -479,7 +479,7 @@ FLAT_WRITE_VALUES: dict[str, Any] = {
     "upgrade_sonarr_search_mode": SonarrSearchMode.season_context,
     "upgrade_lidarr_search_mode": LidarrSearchMode.artist_context,
     "upgrade_readarr_search_mode": ReadarrSearchMode.author_context,
-    "upgrade_whisparr_search_mode": WhisparrSearchMode.season_context,
+    "upgrade_whisparr_v2_search_mode": WhisparrV2SearchMode.season_context,
     "upgrade_item_offset": 42,
     "upgrade_series_offset": 17,
     # SchedulePolicy
@@ -610,12 +610,12 @@ def test_instance_flat_kwarg_defaults_preserve_pre_refactor_values() -> None:
     assert instance.sonarr_search_mode == SonarrSearchMode.episode
     assert instance.lidarr_search_mode == LidarrSearchMode.album
     assert instance.readarr_search_mode == ReadarrSearchMode.book
-    assert instance.whisparr_search_mode == WhisparrSearchMode.episode
+    assert instance.whisparr_v2_search_mode == WhisparrV2SearchMode.episode
     assert instance.upgrade_enabled is False
     assert instance.upgrade_sonarr_search_mode == SonarrSearchMode.episode
     assert instance.upgrade_lidarr_search_mode == LidarrSearchMode.album
     assert instance.upgrade_readarr_search_mode == ReadarrSearchMode.book
-    assert instance.upgrade_whisparr_search_mode == WhisparrSearchMode.episode
+    assert instance.upgrade_whisparr_v2_search_mode == WhisparrV2SearchMode.episode
     assert instance.upgrade_item_offset == 0
     assert instance.upgrade_series_offset == 0
     assert instance.missing_page_offset == 1

@@ -1,12 +1,13 @@
-"""Whisparr adapter functions for the search engine pipeline.
+"""Whisparr v2 adapter functions for the search engine pipeline.
 
-Converts :class:`~houndarr.clients.whisparr.MissingWhisparrEpisode` instances
+Converts :class:`~houndarr.clients.whisparr_v2.MissingWhisparrV2Episode` instances
 into :class:`~houndarr.engine.candidates.SearchCandidate` and dispatches
-search commands via :class:`~houndarr.clients.whisparr.WhisparrClient`.
+search commands via :class:`~houndarr.clients.whisparr_v2.WhisparrV2Client`.
 
-Whisparr is a Sonarr fork, so the adapter structure mirrors the Sonarr adapter
-with two key differences: the item type is ``whisparr_episode`` (not shared
-with Sonarr), and episode labels omit ``episodeNumber`` (absent in Whisparr).
+Whisparr v2 is a Sonarr fork, so the adapter structure mirrors the Sonarr
+adapter with two key differences: the item type is ``whisparr_v2_episode``
+(not shared with Sonarr), and episode labels omit ``episodeNumber`` (absent
+in Whisparr v2).
 """
 
 from __future__ import annotations
@@ -22,9 +23,9 @@ from pydantic import ValidationError
 from houndarr.clients._wire_models import ArrSeries
 from houndarr.clients.base import InstanceSnapshot, ReconcileSets
 from houndarr.clients.whisparr_v2 import (
-    LibraryWhisparrEpisode,
-    MissingWhisparrEpisode,
-    WhisparrClient,
+    LibraryWhisparrV2Episode,
+    MissingWhisparrV2Episode,
+    WhisparrV2Client,
 )
 from houndarr.engine.adapters._common import (
     ContextOverride,
@@ -34,7 +35,7 @@ from houndarr.engine.adapters._common import (
     paginate_wanted,
 )
 from houndarr.engine.candidates import SearchCandidate
-from houndarr.services.instances import Instance, WhisparrSearchMode
+from houndarr.services.instances import Instance, WhisparrV2SearchMode
 
 logger = logging.getLogger(__name__)
 
@@ -45,10 +46,10 @@ _UPGRADE_MAX_SERIES_PER_CYCLE = 5
 # ---------------------------------------------------------------------------
 
 
-def _episode_label(item: MissingWhisparrEpisode) -> str:
-    """Build a human-readable log label for Whisparr episodes.
+def _episode_label(item: MissingWhisparrV2Episode) -> str:
+    """Build a human-readable log label for Whisparr v2 episodes.
 
-    Whisparr has no ``episodeNumber``; labels use season only.
+    Whisparr v2 has no ``episodeNumber``; labels use season only.
     """
     series = item.series_title or "Unknown Series"
     if item.episode_title:
@@ -56,8 +57,8 @@ def _episode_label(item: MissingWhisparrEpisode) -> str:
     return f"{series} - S{item.season_number:02d}"
 
 
-def _season_context_label(item: MissingWhisparrEpisode) -> str:
-    """Build a log label for Whisparr season-context search mode."""
+def _season_context_label(item: MissingWhisparrV2Episode) -> str:
+    """Build a log label for Whisparr v2 season-context search mode."""
     series = item.series_title or "Unknown Series"
     return f"{series} - S{item.season_number:02d} (season-context)"
 
@@ -72,14 +73,14 @@ def _season_item_id(series_id: int, season_number: int) -> int:
     return -(series_id * 1000 + season_number)
 
 
-def _whisparr_unreleased_reason(
+def _whisparr_v2_unreleased_reason(
     release_dt: datetime | None,
     grace_hrs: int,
 ) -> str | None:
-    """Return skip reason when a Whisparr episode is not yet searchable.
+    """Return skip reason when a Whisparr v2 episode is not yet searchable.
 
-    Whisparr provides a parsed ``datetime`` (from DateOnly) rather than an
-    ISO-8601 string, so this helper operates on ``datetime`` directly.
+    Whisparr v2 provides a parsed ``datetime`` (from DateOnly) rather than
+    an ISO-8601 string, so this helper operates on ``datetime`` directly.
     """
     if release_dt is None:
         return None
@@ -96,31 +97,31 @@ def _whisparr_unreleased_reason(
 # ---------------------------------------------------------------------------
 
 
-def adapt_missing(item: MissingWhisparrEpisode, instance: Instance) -> SearchCandidate:
-    """Convert a Whisparr missing episode into a :class:`SearchCandidate`.
+def adapt_missing(item: MissingWhisparrV2Episode, instance: Instance) -> SearchCandidate:
+    """Convert a Whisparr v2 missing episode into a :class:`SearchCandidate`.
 
     Args:
-        item: A missing episode returned by :meth:`WhisparrClient.get_missing`.
-        instance: The configured Whisparr instance.
+        item: A missing episode returned by :meth:`WhisparrV2Client.get_missing`.
+        instance: The configured Whisparr v2 instance.
 
     Returns:
         A fully populated :class:`SearchCandidate`.
     """
-    unreleased_reason = _whisparr_unreleased_reason(
+    unreleased_reason = _whisparr_v2_unreleased_reason(
         item.release_date, instance.missing.post_release_grace_hrs
     )
 
     # Episodes without any series linkage (series_id is None means both
     # seriesId and series.id were absent from the API response) are orphan
-    # records that Whisparr cannot reliably search. Skip them so the pipeline
-    # logs a clean "skipped" row instead of a dispatch-then-fail "error" row.
-    # Season-0 specials with a valid series_id are unaffected.
+    # records that Whisparr v2 cannot reliably search. Skip them so the
+    # pipeline logs a clean "skipped" row instead of a dispatch-then-fail
+    # "error" row.  Season-0 specials with a valid series_id are unaffected.
     if item.series_id is None and unreleased_reason is None:
         unreleased_reason = "no series linked"
 
     context: ContextOverride | None = None
     if (
-        instance.missing.whisparr_search_mode != WhisparrSearchMode.episode
+        instance.missing.whisparr_v2_search_mode != WhisparrV2SearchMode.episode
         and item.series_id is not None
         and item.season_number > 0
     ):
@@ -136,7 +137,7 @@ def adapt_missing(item: MissingWhisparrEpisode, instance: Instance) -> SearchCan
         )
 
     return build_missing_candidate(
-        item_type="whisparr_episode",
+        item_type="whisparr_v2_episode",
         item_id=item.episode_id,
         label=_episode_label(item),
         unreleased_reason=unreleased_reason,
@@ -148,19 +149,19 @@ def adapt_missing(item: MissingWhisparrEpisode, instance: Instance) -> SearchCan
     )
 
 
-def adapt_cutoff(item: MissingWhisparrEpisode, instance: Instance) -> SearchCandidate:
-    """Convert a Whisparr cutoff-unmet episode into a :class:`SearchCandidate`.
+def adapt_cutoff(item: MissingWhisparrV2Episode, instance: Instance) -> SearchCandidate:
+    """Convert a Whisparr v2 cutoff-unmet episode into a :class:`SearchCandidate`.
 
-    Cutoff always uses episode-mode regardless of ``whisparr_search_mode``.
+    Cutoff always uses episode-mode regardless of ``whisparr_v2_search_mode``.
 
     Args:
-        item: A cutoff-unmet episode from :meth:`WhisparrClient.get_cutoff_unmet`.
-        instance: The configured Whisparr instance.
+        item: A cutoff-unmet episode from :meth:`WhisparrV2Client.get_cutoff_unmet`.
+        instance: The configured Whisparr v2 instance.
 
     Returns:
         A fully populated :class:`SearchCandidate`.
     """
-    unreleased_reason = _whisparr_unreleased_reason(
+    unreleased_reason = _whisparr_v2_unreleased_reason(
         item.release_date, instance.missing.post_release_grace_hrs
     )
 
@@ -169,7 +170,7 @@ def adapt_cutoff(item: MissingWhisparrEpisode, instance: Instance) -> SearchCand
         unreleased_reason = "no series linked"
 
     return build_cutoff_candidate(
-        item_type="whisparr_episode",
+        item_type="whisparr_v2_episode",
         item_id=item.episode_id,
         label=_episode_label(item),
         unreleased_reason=unreleased_reason,
@@ -180,37 +181,37 @@ def adapt_cutoff(item: MissingWhisparrEpisode, instance: Instance) -> SearchCand
     )
 
 
-def _library_episode_label(item: LibraryWhisparrEpisode) -> str:
-    """Build a human-readable log label for library Whisparr episodes."""
+def _library_episode_label(item: LibraryWhisparrV2Episode) -> str:
+    """Build a human-readable log label for library Whisparr v2 episodes."""
     series = item.series_title or "Unknown Series"
     if item.episode_title:
         return f"{series} - S{item.season_number:02d} - {item.episode_title}"
     return f"{series} - S{item.season_number:02d}"
 
 
-def _library_season_context_label(item: LibraryWhisparrEpisode) -> str:
-    """Build a log label for library Whisparr episode in season-context mode."""
+def _library_season_context_label(item: LibraryWhisparrV2Episode) -> str:
+    """Build a log label for library Whisparr v2 episode in season-context mode."""
     series = item.series_title or "Unknown Series"
     return f"{series} - S{item.season_number:02d} (season-context)"
 
 
 def adapt_upgrade(
-    item: LibraryWhisparrEpisode,
+    item: LibraryWhisparrV2Episode,
     instance: Instance,
 ) -> SearchCandidate:
-    """Convert a Whisparr library episode into a :class:`SearchCandidate` for upgrade.
+    """Convert a Whisparr v2 library episode into a :class:`SearchCandidate` for upgrade.
 
-    Respects ``instance.upgrade.upgrade_whisparr_search_mode`` for episode vs season-context.
-    No unreleased checks: upgrade items already have files.
+    Respects ``instance.upgrade.upgrade_whisparr_v2_search_mode`` for episode
+    vs season-context.  No unreleased checks: upgrade items already have files.
 
     Args:
-        item: A library episode from :meth:`WhisparrClient.get_episodes`.
-        instance: The configured Whisparr instance.
+        item: A library episode from :meth:`WhisparrV2Client.get_episodes`.
+        instance: The configured Whisparr v2 instance.
 
     Returns:
         A fully populated :class:`SearchCandidate`.
     """
-    episode_mode = instance.upgrade.upgrade_whisparr_search_mode == WhisparrSearchMode.episode
+    episode_mode = instance.upgrade.upgrade_whisparr_v2_search_mode == WhisparrV2SearchMode.episode
 
     use_season_context = not episode_mode and item.series_id > 0 and item.season_number > 0
 
@@ -234,7 +235,7 @@ def adapt_upgrade(
 
     return SearchCandidate(
         item_id=item_id,
-        item_type="whisparr_episode",
+        item_type="whisparr_v2_episode",
         label=label,
         unreleased_reason=None,
         group_key=group_key,
@@ -243,10 +244,10 @@ def adapt_upgrade(
 
 
 async def _collect_upgrade_episodes(
-    client: WhisparrClient,
+    client: WhisparrV2Client,
     instance: Instance,
     series_list: Sequence[ArrSeries],
-) -> list[LibraryWhisparrEpisode]:
+) -> list[LibraryWhisparrV2Episode]:
     """Return monitored, on-disk, cutoff-met episodes for the given series.
 
     Shared loop body between the rotation-windowed search-cycle fetch
@@ -255,7 +256,7 @@ async def _collect_upgrade_episodes(
     errors on a single series are logged and skipped so one flaky
     series cannot blank the whole pool.
     """
-    episodes: list[LibraryWhisparrEpisode] = []
+    episodes: list[LibraryWhisparrV2Episode] = []
     for s in series_list:
         series_id = s.id or 0
         try:
@@ -272,20 +273,20 @@ async def _collect_upgrade_episodes(
 
 
 async def fetch_upgrade_pool(
-    client: WhisparrClient,
+    client: WhisparrV2Client,
     instance: Instance,
-) -> list[LibraryWhisparrEpisode]:
-    """Fetch and filter Whisparr library for upgrade-eligible episodes.
+) -> list[LibraryWhisparrV2Episode]:
+    """Fetch and filter Whisparr v2 library for upgrade-eligible episodes.
 
     Uses series rotation: fetches up to ``_UPGRADE_MAX_SERIES_PER_CYCLE``
     monitored series per cycle, starting from ``instance.upgrade.upgrade_series_offset``.
 
     Args:
-        client: An open :class:`WhisparrClient` context.
-        instance: The configured Whisparr instance.
+        client: An open :class:`WhisparrV2Client` context.
+        instance: The configured Whisparr v2 instance.
 
     Returns:
-        List of upgrade-eligible :class:`LibraryWhisparrEpisode` items.
+        List of upgrade-eligible :class:`LibraryWhisparrV2Episode` items.
     """
     all_series = await client.get_series()
     monitored = sorted(
@@ -306,9 +307,9 @@ async def fetch_upgrade_pool(
 
 
 async def _fetch_all_upgrade_episodes(
-    client: WhisparrClient,
+    client: WhisparrV2Client,
     instance: Instance,
-) -> list[LibraryWhisparrEpisode]:
+) -> list[LibraryWhisparrV2Episode]:
     """Return upgrade-eligible episodes across EVERY monitored series.
 
     The cycle-facing :func:`fetch_upgrade_pool` windows the series list
@@ -326,11 +327,11 @@ async def _fetch_all_upgrade_episodes(
     return await _collect_upgrade_episodes(client, instance, monitored)
 
 
-async def dispatch_search(client: WhisparrClient, candidate: SearchCandidate) -> None:
-    """Dispatch the appropriate Whisparr search command for *candidate*.
+async def dispatch_search(client: WhisparrV2Client, candidate: SearchCandidate) -> None:
+    """Dispatch the appropriate Whisparr v2 search command for *candidate*.
 
     Args:
-        client: An open :class:`WhisparrClient` context.
+        client: An open :class:`WhisparrV2Client` context.
         candidate: The candidate to search for.
 
     Raises:
@@ -345,48 +346,48 @@ async def dispatch_search(client: WhisparrClient, candidate: SearchCandidate) ->
     elif command == "EpisodeSearch":
         await client.search(candidate.search_payload["episode_id"])
     else:
-        msg = f"Unknown Whisparr search command: {command}"
+        msg = f"Unknown Whisparr v2 search command: {command}"
         raise ValueError(msg)
 
 
-def make_client(instance: Instance) -> WhisparrClient:
-    """Construct a :class:`WhisparrClient` for *instance*.
+def make_client(instance: Instance) -> WhisparrV2Client:
+    """Construct a :class:`WhisparrV2Client` for *instance*.
 
     Args:
-        instance: The configured Whisparr instance.
+        instance: The configured Whisparr v2 instance.
 
     Returns:
-        A new (unopened) :class:`WhisparrClient`.
+        A new (unopened) :class:`WhisparrV2Client`.
     """
-    return WhisparrClient(url=instance.core.url, api_key=instance.core.api_key)
+    return WhisparrV2Client(url=instance.core.url, api_key=instance.core.api_key)
 
 
-def _whisparr_leaf_pairs(items: list[MissingWhisparrEpisode]) -> frozenset[tuple[str, int]]:
+def _whisparr_v2_leaf_pairs(items: list[MissingWhisparrV2Episode]) -> frozenset[tuple[str, int]]:
     """Return ``(item_type, episode_id)`` pairs for a wanted list.
 
-    Whisparr v2 stamps cooldowns with ``item_type="whisparr_episode"``
+    Whisparr v2 stamps cooldowns with ``item_type="whisparr_v2_episode"``
     to distinguish them from Sonarr episodes that share the same
     numeric id space.
     """
-    return frozenset(("whisparr_episode", it.episode_id) for it in items if it.episode_id)
+    return frozenset(("whisparr_v2_episode", it.episode_id) for it in items if it.episode_id)
 
 
-def _whisparr_season_synth_pairs(
-    items: list[MissingWhisparrEpisode],
+def _whisparr_v2_season_synth_pairs(
+    items: list[MissingWhisparrV2Episode],
 ) -> frozenset[tuple[str, int]]:
     """Return synthetic season-context pairs for Whisparr v2 cooldowns."""
     parents: set[tuple[int, int]] = set()
     for it in items:
         if it.series_id is not None and it.series_id > 0 and it.season_number > 0:
             parents.add((it.series_id, it.season_number))
-    return frozenset(("whisparr_episode", _season_item_id(sid, sn)) for sid, sn in parents)
+    return frozenset(("whisparr_v2_episode", _season_item_id(sid, sn)) for sid, sn in parents)
 
 
-async def fetch_reconcile_sets(client: WhisparrClient, instance: Instance) -> ReconcileSets:
+async def fetch_reconcile_sets(client: WhisparrV2Client, instance: Instance) -> ReconcileSets:
     """Return the authoritative wanted / upgrade-pool sets for Whisparr v2.
 
     Mirrors the Sonarr implementation but uses the
-    ``whisparr_episode`` item_type.  In ``season_context`` missing-pass
+    ``whisparr_v2_episode`` item_type.  In ``season_context`` missing-pass
     mode, synthetic negative season ids derived from the same wanted
     list are unioned in.  Cutoff cooldowns stay leaf-only.  The
     upgrade set walks the FULL monitored library via
@@ -397,10 +398,10 @@ async def fetch_reconcile_sets(client: WhisparrClient, instance: Instance) -> Re
     """
     missing_items = await paginate_wanted(client.get_missing)
     cutoff_items = await paginate_wanted(client.get_cutoff_unmet)
-    missing_set = _whisparr_leaf_pairs(missing_items)
-    cutoff_set = _whisparr_leaf_pairs(cutoff_items)
-    if instance.whisparr_search_mode != WhisparrSearchMode.episode:
-        missing_set = missing_set | _whisparr_season_synth_pairs(missing_items)
+    missing_set = _whisparr_v2_leaf_pairs(missing_items)
+    cutoff_set = _whisparr_v2_leaf_pairs(cutoff_items)
+    if instance.whisparr_v2_search_mode != WhisparrV2SearchMode.episode:
+        missing_set = missing_set | _whisparr_v2_season_synth_pairs(missing_items)
     upgrade_set: frozenset[tuple[str, int]] = frozenset()
     if instance.upgrade_enabled:
         upgrade_candidates = [
@@ -412,7 +413,7 @@ async def fetch_reconcile_sets(client: WhisparrClient, instance: Instance) -> Re
 
 
 async def fetch_instance_snapshot(
-    client: WhisparrClient,
+    client: WhisparrV2Client,
     instance: Instance,  # noqa: ARG001
 ) -> InstanceSnapshot:
     """Compose the dashboard snapshot for a Whisparr v2 instance.

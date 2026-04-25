@@ -19,7 +19,7 @@ from houndarr.services.instances import (
     ReadarrSearchMode,
     SearchOrder,
     SonarrSearchMode,
-    WhisparrSearchMode,
+    WhisparrV2SearchMode,
 )
 
 
@@ -86,14 +86,14 @@ _BOOK_RECORD: dict[str, Any] = {
     "author": {"id": 60, "authorName": "Test Author"},
 }
 
-_WHISPARR_EPISODE_RECORD: dict[str, Any] = {
+_WHISPARR_V2_EPISODE_RECORD: dict[str, Any] = {
     "id": 501,
     "seriesId": 70,
     "title": "Scene Title",
     "seasonNumber": 1,
     "absoluteEpisodeNumber": 5,
     "releaseDate": {"year": 2023, "month": 9, "day": 1},
-    "series": {"id": 70, "title": "My Whisparr Show"},
+    "series": {"id": 70, "title": "My Whisparr v2 Show"},
 }
 
 _MISSING_SONARR: dict[str, Any] = {
@@ -120,11 +120,11 @@ _MISSING_READARR: dict[str, Any] = {
     "totalRecords": 1,
     "records": [_BOOK_RECORD],
 }
-_MISSING_WHISPARR: dict[str, Any] = {
+_MISSING_WHISPARR_V2: dict[str, Any] = {
     "page": 1,
     "pageSize": 10,
     "totalRecords": 1,
-    "records": [_WHISPARR_EPISODE_RECORD],
+    "records": [_WHISPARR_V2_EPISODE_RECORD],
 }
 _COMMAND_RESP: dict[str, Any] = {"id": 1, "name": "EpisodeSearch"}
 _FUTURE_AIR_DATE = "2999-01-01T00:00:00Z"
@@ -135,7 +135,7 @@ URL_FOR_TYPE: dict[InstanceType, str] = {
     InstanceType.radarr: RADARR_URL,
     InstanceType.lidarr: LIDARR_URL,
     InstanceType.readarr: READARR_URL,
-    InstanceType.whisparr_v2: WHISPARR_URL,
+    InstanceType.whisparr_v2: WHISPARR_V2_URL,
 }
 
 
@@ -162,7 +162,7 @@ def make_instance(
     sonarr_search_mode: SonarrSearchMode = SonarrSearchMode.episode,
     lidarr_search_mode: LidarrSearchMode = LidarrSearchMode.album,
     readarr_search_mode: ReadarrSearchMode = ReadarrSearchMode.book,
-    whisparr_search_mode: WhisparrSearchMode = WhisparrSearchMode.episode,
+    whisparr_v2_search_mode: WhisparrV2SearchMode = WhisparrV2SearchMode.episode,
     upgrade_enabled: bool = False,
     upgrade_batch_size: int = 1,
     upgrade_cooldown_days: int = 90,
@@ -170,7 +170,7 @@ def make_instance(
     upgrade_sonarr_search_mode: SonarrSearchMode = SonarrSearchMode.episode,
     upgrade_lidarr_search_mode: LidarrSearchMode = LidarrSearchMode.album,
     upgrade_readarr_search_mode: ReadarrSearchMode = ReadarrSearchMode.book,
-    upgrade_whisparr_search_mode: WhisparrSearchMode = WhisparrSearchMode.episode,
+    upgrade_whisparr_v2_search_mode: WhisparrV2SearchMode = WhisparrV2SearchMode.episode,
     upgrade_item_offset: int = 0,
     upgrade_series_offset: int = 0,
     missing_page_offset: int = 1,
@@ -202,7 +202,7 @@ def make_instance(
         sonarr_search_mode=sonarr_search_mode,
         lidarr_search_mode=lidarr_search_mode,
         readarr_search_mode=readarr_search_mode,
-        whisparr_search_mode=whisparr_search_mode,
+        whisparr_v2_search_mode=whisparr_v2_search_mode,
         upgrade_enabled=upgrade_enabled,
         upgrade_batch_size=upgrade_batch_size,
         upgrade_cooldown_days=upgrade_cooldown_days,
@@ -210,7 +210,7 @@ def make_instance(
         upgrade_sonarr_search_mode=upgrade_sonarr_search_mode,
         upgrade_lidarr_search_mode=upgrade_lidarr_search_mode,
         upgrade_readarr_search_mode=upgrade_readarr_search_mode,
-        upgrade_whisparr_search_mode=upgrade_whisparr_search_mode,
+        upgrade_whisparr_v2_search_mode=upgrade_whisparr_v2_search_mode,
         upgrade_item_offset=upgrade_item_offset,
         upgrade_series_offset=upgrade_series_offset,
         missing_page_offset=missing_page_offset,

@@ -48,8 +48,8 @@ from houndarr.config import (
     DEFAULT_UPGRADE_LIDARR_SEARCH_MODE,
     DEFAULT_UPGRADE_READARR_SEARCH_MODE,
     DEFAULT_UPGRADE_SONARR_SEARCH_MODE,
-    DEFAULT_UPGRADE_WHISPARR_SEARCH_MODE,
-    DEFAULT_WHISPARR_SEARCH_MODE,
+    DEFAULT_UPGRADE_WHISPARR_V2_SEARCH_MODE,
+    DEFAULT_WHISPARR_V2_SEARCH_MODE,
 )
 from houndarr.crypto import ensure_master_key
 from houndarr.database import (
@@ -65,7 +65,7 @@ from houndarr.services.instances import (
     ReadarrSearchMode,
     SearchOrder,
     SonarrSearchMode,
-    WhisparrSearchMode,
+    WhisparrV2SearchMode,
     list_instances,
     update_instance,
 )
@@ -94,7 +94,7 @@ def _policy_defaults() -> dict[str, object]:
         "sonarr_search_mode": SonarrSearchMode(DEFAULT_SONARR_SEARCH_MODE),
         "lidarr_search_mode": LidarrSearchMode(DEFAULT_LIDARR_SEARCH_MODE),
         "readarr_search_mode": ReadarrSearchMode(DEFAULT_READARR_SEARCH_MODE),
-        "whisparr_search_mode": WhisparrSearchMode(DEFAULT_WHISPARR_SEARCH_MODE),
+        "whisparr_v2_search_mode": WhisparrV2SearchMode(DEFAULT_WHISPARR_V2_SEARCH_MODE),
         "upgrade_enabled": False,
         "upgrade_batch_size": DEFAULT_UPGRADE_BATCH_SIZE,
         "upgrade_cooldown_days": DEFAULT_UPGRADE_COOLDOWN_DAYS,
@@ -102,8 +102,8 @@ def _policy_defaults() -> dict[str, object]:
         "upgrade_sonarr_search_mode": SonarrSearchMode(DEFAULT_UPGRADE_SONARR_SEARCH_MODE),
         "upgrade_lidarr_search_mode": LidarrSearchMode(DEFAULT_UPGRADE_LIDARR_SEARCH_MODE),
         "upgrade_readarr_search_mode": ReadarrSearchMode(DEFAULT_UPGRADE_READARR_SEARCH_MODE),
-        "upgrade_whisparr_search_mode": WhisparrSearchMode(
-            DEFAULT_UPGRADE_WHISPARR_SEARCH_MODE,
+        "upgrade_whisparr_v2_search_mode": WhisparrV2SearchMode(
+            DEFAULT_UPGRADE_WHISPARR_V2_SEARCH_MODE,
         ),
         "allowed_time_window": DEFAULT_ALLOWED_TIME_WINDOW,
         "search_order": SearchOrder(DEFAULT_SEARCH_ORDER),

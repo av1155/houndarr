@@ -148,7 +148,7 @@ def _resolve_modes_or_raise(
     sonarr: str,
     lidarr: str,
     readarr: str,
-    whisparr: str,
+    whisparr_v2: str,
 ) -> SearchModes:
     """Resolve the four per-app mode values to enum instances.
 
@@ -158,7 +158,7 @@ def _resolve_modes_or_raise(
     :class:`InstanceValidationError` so the route always sees the
     typed surface.
     """
-    bundle = resolve_search_modes(instance_type, sonarr, lidarr, readarr, whisparr)
+    bundle = resolve_search_modes(instance_type, sonarr, lidarr, readarr, whisparr_v2)
     if isinstance(bundle, str):
         raise InstanceValidationError(bundle)
     return bundle
@@ -184,7 +184,7 @@ async def submit_create(
     sonarr_search_mode: str,
     lidarr_search_mode: str,
     readarr_search_mode: str,
-    whisparr_search_mode: str,
+    whisparr_v2_search_mode: str,
     upgrade_enabled: bool,
     upgrade_batch_size: int,
     upgrade_cooldown_days: int,
@@ -192,7 +192,7 @@ async def submit_create(
     upgrade_sonarr_search_mode: str,
     upgrade_lidarr_search_mode: str,
     upgrade_readarr_search_mode: str,
-    upgrade_whisparr_search_mode: str,
+    upgrade_whisparr_v2_search_mode: str,
     allowed_time_window: str,
     search_order: str,
     connection_verified: bool,
@@ -250,14 +250,14 @@ async def submit_create(
         sonarr_search_mode,
         lidarr_search_mode,
         readarr_search_mode,
-        whisparr_search_mode,
+        whisparr_v2_search_mode,
     )
     upgrade_modes = _resolve_modes_or_raise(
         instance_type,
         upgrade_sonarr_search_mode,
         upgrade_lidarr_search_mode,
         upgrade_readarr_search_mode,
-        upgrade_whisparr_search_mode,
+        upgrade_whisparr_v2_search_mode,
     )
 
     parsed_search_order = _parse_search_order(search_order)
@@ -282,7 +282,7 @@ async def submit_create(
         sonarr_search_mode=modes.sonarr,
         lidarr_search_mode=modes.lidarr,
         readarr_search_mode=modes.readarr,
-        whisparr_search_mode=modes.whisparr,
+        whisparr_v2_search_mode=modes.whisparr_v2,
         upgrade_enabled=upgrade_enabled,
         upgrade_batch_size=upgrade_batch_size,
         upgrade_cooldown_days=upgrade_cooldown_days,
@@ -290,7 +290,7 @@ async def submit_create(
         upgrade_sonarr_search_mode=upgrade_modes.sonarr,
         upgrade_lidarr_search_mode=upgrade_modes.lidarr,
         upgrade_readarr_search_mode=upgrade_modes.readarr,
-        upgrade_whisparr_search_mode=upgrade_modes.whisparr,
+        upgrade_whisparr_v2_search_mode=upgrade_modes.whisparr_v2,
         allowed_time_window=canonical_window,
         search_order=parsed_search_order,
     )
@@ -317,7 +317,7 @@ async def submit_update(
     sonarr_search_mode: str,
     lidarr_search_mode: str,
     readarr_search_mode: str,
-    whisparr_search_mode: str,
+    whisparr_v2_search_mode: str,
     upgrade_enabled: bool,
     upgrade_batch_size: int,
     upgrade_cooldown_days: int,
@@ -325,7 +325,7 @@ async def submit_update(
     upgrade_sonarr_search_mode: str,
     upgrade_lidarr_search_mode: str,
     upgrade_readarr_search_mode: str,
-    upgrade_whisparr_search_mode: str,
+    upgrade_whisparr_v2_search_mode: str,
     allowed_time_window: str,
     search_order: str,
     connection_verified: bool,
@@ -391,14 +391,14 @@ async def submit_update(
         sonarr_search_mode,
         lidarr_search_mode,
         readarr_search_mode,
-        whisparr_search_mode,
+        whisparr_v2_search_mode,
     )
     upgrade_modes = _resolve_modes_or_raise(
         instance_type,
         upgrade_sonarr_search_mode,
         upgrade_lidarr_search_mode,
         upgrade_readarr_search_mode,
-        upgrade_whisparr_search_mode,
+        upgrade_whisparr_v2_search_mode,
     )
 
     parsed_search_order = _parse_search_order(search_order)
@@ -422,7 +422,7 @@ async def submit_update(
         "sonarr_search_mode": modes.sonarr,
         "lidarr_search_mode": modes.lidarr,
         "readarr_search_mode": modes.readarr,
-        "whisparr_search_mode": modes.whisparr,
+        "whisparr_v2_search_mode": modes.whisparr_v2,
         "upgrade_enabled": upgrade_enabled,
         "upgrade_batch_size": upgrade_batch_size,
         "upgrade_cooldown_days": upgrade_cooldown_days,
@@ -430,7 +430,7 @@ async def submit_update(
         "upgrade_sonarr_search_mode": upgrade_modes.sonarr,
         "upgrade_lidarr_search_mode": upgrade_modes.lidarr,
         "upgrade_readarr_search_mode": upgrade_modes.readarr,
-        "upgrade_whisparr_search_mode": upgrade_modes.whisparr,
+        "upgrade_whisparr_v2_search_mode": upgrade_modes.whisparr_v2,
         "missing_page_offset": 1,
         "cutoff_page_offset": 1,
         "allowed_time_window": canonical_window,

@@ -54,8 +54,8 @@ from houndarr.config import (
     DEFAULT_UPGRADE_LIDARR_SEARCH_MODE,
     DEFAULT_UPGRADE_READARR_SEARCH_MODE,
     DEFAULT_UPGRADE_SONARR_SEARCH_MODE,
-    DEFAULT_UPGRADE_WHISPARR_SEARCH_MODE,
-    DEFAULT_WHISPARR_SEARCH_MODE,
+    DEFAULT_UPGRADE_WHISPARR_V2_SEARCH_MODE,
+    DEFAULT_WHISPARR_V2_SEARCH_MODE,
 )
 from houndarr.crypto import decrypt, encrypt
 from houndarr.database import get_db
@@ -66,7 +66,7 @@ from houndarr.services.instances import (
     ReadarrSearchMode,
     SearchOrder,
     SonarrSearchMode,
-    WhisparrSearchMode,
+    WhisparrV2SearchMode,
 )
 
 
@@ -152,7 +152,7 @@ def _row_to_instance(row: aiosqlite.Row, master_key: bytes) -> Instance:
         sonarr_search_mode=SonarrSearchMode(row["sonarr_search_mode"]),
         lidarr_search_mode=LidarrSearchMode(row["lidarr_search_mode"]),
         readarr_search_mode=ReadarrSearchMode(row["readarr_search_mode"]),
-        whisparr_search_mode=WhisparrSearchMode(row["whisparr_search_mode"]),
+        whisparr_v2_search_mode=WhisparrV2SearchMode(row["whisparr_v2_search_mode"]),
         upgrade_enabled=bool(row["upgrade_enabled"]),
         upgrade_batch_size=row["upgrade_batch_size"],
         upgrade_cooldown_days=row["upgrade_cooldown_days"],
@@ -160,7 +160,7 @@ def _row_to_instance(row: aiosqlite.Row, master_key: bytes) -> Instance:
         upgrade_sonarr_search_mode=SonarrSearchMode(row["upgrade_sonarr_search_mode"]),
         upgrade_lidarr_search_mode=LidarrSearchMode(row["upgrade_lidarr_search_mode"]),
         upgrade_readarr_search_mode=ReadarrSearchMode(row["upgrade_readarr_search_mode"]),
-        upgrade_whisparr_search_mode=WhisparrSearchMode(row["upgrade_whisparr_search_mode"]),
+        upgrade_whisparr_v2_search_mode=WhisparrV2SearchMode(row["upgrade_whisparr_v2_search_mode"]),
         upgrade_item_offset=row["upgrade_item_offset"],
         upgrade_series_offset=row["upgrade_series_offset"],
         missing_page_offset=row["missing_page_offset"],
@@ -241,7 +241,9 @@ class InstanceInsert:
     sonarr_search_mode: SonarrSearchMode = SonarrSearchMode(DEFAULT_SONARR_SEARCH_MODE)
     lidarr_search_mode: LidarrSearchMode = LidarrSearchMode(DEFAULT_LIDARR_SEARCH_MODE)
     readarr_search_mode: ReadarrSearchMode = ReadarrSearchMode(DEFAULT_READARR_SEARCH_MODE)
-    whisparr_search_mode: WhisparrSearchMode = WhisparrSearchMode(DEFAULT_WHISPARR_SEARCH_MODE)
+    whisparr_v2_search_mode: WhisparrV2SearchMode = WhisparrV2SearchMode(
+        DEFAULT_WHISPARR_V2_SEARCH_MODE
+    )
     upgrade_enabled: bool = False
     upgrade_batch_size: int = DEFAULT_UPGRADE_BATCH_SIZE
     upgrade_cooldown_days: int = DEFAULT_UPGRADE_COOLDOWN_DAYS
@@ -255,8 +257,8 @@ class InstanceInsert:
     upgrade_readarr_search_mode: ReadarrSearchMode = ReadarrSearchMode(
         DEFAULT_UPGRADE_READARR_SEARCH_MODE
     )
-    upgrade_whisparr_search_mode: WhisparrSearchMode = WhisparrSearchMode(
-        DEFAULT_UPGRADE_WHISPARR_SEARCH_MODE
+    upgrade_whisparr_v2_search_mode: WhisparrV2SearchMode = WhisparrV2SearchMode(
+        DEFAULT_UPGRADE_WHISPARR_V2_SEARCH_MODE
     )
     allowed_time_window: str = DEFAULT_ALLOWED_TIME_WINDOW
     search_order: SearchOrder = SearchOrder(DEFAULT_SEARCH_ORDER)
@@ -295,7 +297,7 @@ class InstanceUpdate:
     sonarr_search_mode: SonarrSearchMode | None = None
     lidarr_search_mode: LidarrSearchMode | None = None
     readarr_search_mode: ReadarrSearchMode | None = None
-    whisparr_search_mode: WhisparrSearchMode | None = None
+    whisparr_v2_search_mode: WhisparrV2SearchMode | None = None
     upgrade_enabled: bool | None = None
     upgrade_batch_size: int | None = None
     upgrade_cooldown_days: int | None = None
@@ -303,7 +305,7 @@ class InstanceUpdate:
     upgrade_sonarr_search_mode: SonarrSearchMode | None = None
     upgrade_lidarr_search_mode: LidarrSearchMode | None = None
     upgrade_readarr_search_mode: ReadarrSearchMode | None = None
-    upgrade_whisparr_search_mode: WhisparrSearchMode | None = None
+    upgrade_whisparr_v2_search_mode: WhisparrV2SearchMode | None = None
     upgrade_item_offset: int | None = None
     upgrade_series_offset: int | None = None
     missing_page_offset: int | None = None
@@ -324,11 +326,11 @@ _ENUM_UPDATE_FIELDS: frozenset[str] = frozenset(
         "sonarr_search_mode",
         "lidarr_search_mode",
         "readarr_search_mode",
-        "whisparr_search_mode",
+        "whisparr_v2_search_mode",
         "upgrade_sonarr_search_mode",
         "upgrade_lidarr_search_mode",
         "upgrade_readarr_search_mode",
-        "upgrade_whisparr_search_mode",
+        "upgrade_whisparr_v2_search_mode",
         "search_order",
     }
 )
@@ -395,11 +397,11 @@ async def insert_instance(payload: InstanceInsert, *, master_key: bytes) -> int:
                 hourly_cap, cooldown_days, post_release_grace_hrs, queue_limit,
                 cutoff_enabled, cutoff_batch_size, cutoff_cooldown_days, cutoff_hourly_cap,
                 sonarr_search_mode, lidarr_search_mode, readarr_search_mode,
-                whisparr_search_mode,
+                whisparr_v2_search_mode,
                 upgrade_enabled, upgrade_batch_size, upgrade_cooldown_days,
                 upgrade_hourly_cap,
                 upgrade_sonarr_search_mode, upgrade_lidarr_search_mode,
-                upgrade_readarr_search_mode, upgrade_whisparr_search_mode,
+                upgrade_readarr_search_mode, upgrade_whisparr_v2_search_mode,
                 allowed_time_window, search_order
             ) VALUES (
                 ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
@@ -425,7 +427,7 @@ async def insert_instance(payload: InstanceInsert, *, master_key: bytes) -> int:
                 payload.sonarr_search_mode.value,
                 payload.lidarr_search_mode.value,
                 payload.readarr_search_mode.value,
-                payload.whisparr_search_mode.value,
+                payload.whisparr_v2_search_mode.value,
                 int(payload.upgrade_enabled),
                 payload.upgrade_batch_size,
                 payload.upgrade_cooldown_days,
@@ -433,7 +435,7 @@ async def insert_instance(payload: InstanceInsert, *, master_key: bytes) -> int:
                 payload.upgrade_sonarr_search_mode.value,
                 payload.upgrade_lidarr_search_mode.value,
                 payload.upgrade_readarr_search_mode.value,
-                payload.upgrade_whisparr_search_mode.value,
+                payload.upgrade_whisparr_v2_search_mode.value,
                 payload.allowed_time_window,
                 payload.search_order.value,
             ),

@@ -90,7 +90,7 @@
   <p>Book (default) fires one command per missing book. Author-context groups missing books by author and searches all of them in one request: fewer calls, broader sweep.</p>
   <p class="tip__hint">Cooldown is tracked at the author level in author-context mode.</p>
 </template>
-<template id="tip-whisparr_search_mode">
+<template id="tip-whisparr_v2_search_mode">
   <p class="tip__eyebrow">Whisparr v2 missing search mode</p>
   <p>Episode (default) fires one command per missing episode. Season-context groups by season with a single SeasonSearch: fewer calls but may pull noisier results.</p>
   <p class="tip__hint">Cooldown is tracked at the season level in season-context mode.</p>
@@ -147,7 +147,7 @@
   <p class="tip__eyebrow">Readarr upgrade search mode</p>
   <p>Strategy for upgrade-pass commands, independent of the missing mode. Book fires per-book; author-context groups by author for fewer, broader commands.</p>
 </template>
-<template id="tip-upgrade_whisparr_search_mode">
+<template id="tip-upgrade_whisparr_v2_search_mode">
   <p class="tip__eyebrow">Whisparr v2 upgrade search mode</p>
   <p>Strategy for upgrade-pass commands, independent of the missing mode. Episode fires per-episode; season-context groups by season for fewer, broader commands.</p>
 </template>
@@ -344,14 +344,14 @@
         </div>
         <div class="sm:col-span-2" data-whisparr_v2-only="true"
              {% if instance.core.type.value != 'whisparr_v2' %}style="display:none;"{% endif %}>
-          <label class="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide" for="{{ form_id }}-whisparr-mode">
-            Whisparr v2 Missing Search Mode{{ tip_icon("whisparr_search_mode", "Whisparr v2 missing search mode") }}
+          <label class="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide" for="{{ form_id }}-whisparr-v2-mode">
+            Whisparr v2 Missing Search Mode{{ tip_icon("whisparr_v2_search_mode", "Whisparr v2 missing search mode") }}
           </label>
-          <select id="{{ form_id }}-whisparr-mode" name="whisparr_search_mode"
-                  data-default-value="{{ defaults.whisparr_search_mode.value }}"
+          <select id="{{ form_id }}-whisparr-v2-mode" name="whisparr_v2_search_mode"
+                  data-default-value="{{ defaults.whisparr_v2_search_mode.value }}"
                   class="{{ select_cls }}">
-            <option value="episode"        {% if instance.missing.whisparr_search_mode.value == 'episode'        %}selected{% endif %}>Episode search (default)</option>
-            <option value="season_context" {% if instance.missing.whisparr_search_mode.value == 'season_context' %}selected{% endif %}>Season-context search (advanced)</option>
+            <option value="episode"        {% if instance.missing.whisparr_v2_search_mode.value == 'episode'        %}selected{% endif %}>Episode search (default)</option>
+            <option value="season_context" {% if instance.missing.whisparr_v2_search_mode.value == 'season_context' %}selected{% endif %}>Season-context search (advanced)</option>
           </select>
           <p class="mt-1.5 text-xs text-amber-400/80">Advanced mode: season search may pull noisier results.</p>
         </div>
@@ -478,14 +478,14 @@
       </div>
       <div data-whisparr_v2-only="true"
            {% if instance.core.type.value != 'whisparr_v2' %}style="display:none;"{% endif %}>
-        <label class="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide" for="{{ form_id }}-upgrade-whisparr-mode">
-          Whisparr v2 Upgrade Search Mode{{ tip_icon("upgrade_whisparr_search_mode", "Whisparr v2 upgrade search mode") }}
+        <label class="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide" for="{{ form_id }}-upgrade-whisparr-v2-mode">
+          Whisparr v2 Upgrade Search Mode{{ tip_icon("upgrade_whisparr_v2_search_mode", "Whisparr v2 upgrade search mode") }}
         </label>
-        <select id="{{ form_id }}-upgrade-whisparr-mode" name="upgrade_whisparr_search_mode"
-                data-default-value="{{ defaults.upgrade_whisparr_search_mode.value }}"
+        <select id="{{ form_id }}-upgrade-whisparr-v2-mode" name="upgrade_whisparr_v2_search_mode"
+                data-default-value="{{ defaults.upgrade_whisparr_v2_search_mode.value }}"
                 class="{{ select_cls }}">
-          <option value="episode"        {% if instance.upgrade.upgrade_whisparr_search_mode.value == 'episode'        %}selected{% endif %}>Episode search (default)</option>
-          <option value="season_context" {% if instance.upgrade.upgrade_whisparr_search_mode.value == 'season_context' %}selected{% endif %}>Season-context search</option>
+          <option value="episode"        {% if instance.upgrade.upgrade_whisparr_v2_search_mode.value == 'episode'        %}selected{% endif %}>Episode search (default)</option>
+          <option value="season_context" {% if instance.upgrade.upgrade_whisparr_v2_search_mode.value == 'season_context' %}selected{% endif %}>Season-context search</option>
         </select>
       </div>
     </section>

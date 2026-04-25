@@ -77,6 +77,13 @@ fix:
 dev:
     {{python}} -m houndarr --data-dir ./data-dev --dev
 
+# Launch the seeded mock *arr server. Mounts all six apps under one process
+# at distinct path prefixes (e.g. http://127.0.0.1:9100/sonarr). `items`
+# controls the approximate leaf count per app; `seed` makes the data
+# deterministic so two runs produce identical IDs.
+mock-arr port='9100' items='500' seed='42':
+    {{python}} -m tests.mock_arr.server --port {{port}} --items {{items}} --seed {{seed}}
+
 # Browser e2e against a Docker-Compose stack. Assumes the image is built
 # and mock-sonarr / mock-radarr are reachable on the shared network.
 # Host env: HOUNDARR_URL, MOCK_SONARR_URL, MOCK_RADARR_URL, HOUNDARR_E2E_USER,

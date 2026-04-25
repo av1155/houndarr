@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Schema version: bump when adding new migrations
 # ---------------------------------------------------------------------------
-SCHEMA_VERSION = 16
+SCHEMA_VERSION = 17
 
 # ---------------------------------------------------------------------------
 # DDL
@@ -66,6 +66,9 @@ CREATE TABLE IF NOT EXISTS instances (
                                       IN ('episode', 'season_context')),
     upgrade_item_offset  INTEGER NOT NULL DEFAULT 0,
     upgrade_series_offset INTEGER NOT NULL DEFAULT 0,
+    upgrade_series_window_size INTEGER NOT NULL DEFAULT 5
+                                    CHECK(upgrade_series_window_size >= 1
+                                          AND upgrade_series_window_size <= 100),
     missing_page_offset  INTEGER NOT NULL DEFAULT 1,
     cutoff_page_offset   INTEGER NOT NULL DEFAULT 1,
     allowed_time_window  TEXT    NOT NULL DEFAULT '',
@@ -181,6 +184,7 @@ async def init_db() -> None:
             await _migrate_to_v14(db)
             await _migrate_to_v15(db)
             await _migrate_to_v16(db)
+            await _migrate_to_v17(db)
             await _ensure_v3_indexes(db)
             await db.commit()
 
@@ -217,6 +221,8 @@ async def _run_migrations(db: aiosqlite.Connection, from_version: int) -> None:
         await _migrate_to_v15(db)
     if from_version < 16:
         await _migrate_to_v16(db)
+    if from_version < 17:
+        await _migrate_to_v17(db)
 
     logger.info("Migrated database from schema version %d to %d", from_version, SCHEMA_VERSION)
     await db.execute(
@@ -1119,6 +1125,26 @@ async def _ensure_v3_indexes(db: aiosqlite.Connection) -> None:
         "CREATE INDEX IF NOT EXISTS idx_cooldowns_search_kind "
         "ON cooldowns(instance_id, search_kind)"
     )
+
+
+async def _migrate_to_v17(db: aiosqlite.Connection) -> None:
+    """Add ``upgrade_series_window_size`` for per-instance Sonarr/Whisparr-v2 tuning.
+
+    Sonarr and Whisparr v2 use a windowed series rotation in the upgrade
+    pool fetcher: each cycle samples up to N monitored series, advancing
+    the offset by N every cycle.  N was a module constant (5) until this
+    migration.  Exposing it as a per-instance column lets users with very
+    large libraries trade per-cycle *arr load for faster rotation
+    coverage without forking the code.
+
+    Default of 5 preserves the old behaviour for every existing instance.
+    The CHECK clause caps the value at 100 to prevent a runaway value
+    from triggering a single cycle that fetches every series at once.
+    """
+    if not await _column_exists(db, "instances", "upgrade_series_window_size"):
+        await db.execute(
+            "ALTER TABLE instances ADD COLUMN upgrade_series_window_size INTEGER NOT NULL DEFAULT 5"
+        )
 
 
 async def _column_exists(db: aiosqlite.Connection, table_name: str, column_name: str) -> bool:

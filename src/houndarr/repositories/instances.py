@@ -53,6 +53,7 @@ from houndarr.config import (
     DEFAULT_UPGRADE_HOURLY_CAP,
     DEFAULT_UPGRADE_LIDARR_SEARCH_MODE,
     DEFAULT_UPGRADE_READARR_SEARCH_MODE,
+    DEFAULT_UPGRADE_SERIES_WINDOW_SIZE,
     DEFAULT_UPGRADE_SONARR_SEARCH_MODE,
     DEFAULT_UPGRADE_WHISPARR_V2_SEARCH_MODE,
     DEFAULT_WHISPARR_V2_SEARCH_MODE,
@@ -163,6 +164,7 @@ def _row_to_instance(row: aiosqlite.Row, master_key: bytes) -> Instance:
         upgrade_whisparr_v2_search_mode=WhisparrV2SearchMode(
             row["upgrade_whisparr_v2_search_mode"]
         ),
+        upgrade_series_window_size=row["upgrade_series_window_size"],
         upgrade_item_offset=row["upgrade_item_offset"],
         upgrade_series_offset=row["upgrade_series_offset"],
         missing_page_offset=row["missing_page_offset"],
@@ -262,6 +264,7 @@ class InstanceInsert:
     upgrade_whisparr_v2_search_mode: WhisparrV2SearchMode = WhisparrV2SearchMode(
         DEFAULT_UPGRADE_WHISPARR_V2_SEARCH_MODE
     )
+    upgrade_series_window_size: int = DEFAULT_UPGRADE_SERIES_WINDOW_SIZE
     allowed_time_window: str = DEFAULT_ALLOWED_TIME_WINDOW
     search_order: SearchOrder = SearchOrder(DEFAULT_SEARCH_ORDER)
 
@@ -310,6 +313,7 @@ class InstanceUpdate:
     upgrade_whisparr_v2_search_mode: WhisparrV2SearchMode | None = None
     upgrade_item_offset: int | None = None
     upgrade_series_offset: int | None = None
+    upgrade_series_window_size: int | None = None
     missing_page_offset: int | None = None
     cutoff_page_offset: int | None = None
     allowed_time_window: str | None = None
@@ -404,10 +408,11 @@ async def insert_instance(payload: InstanceInsert, *, master_key: bytes) -> int:
                 upgrade_hourly_cap,
                 upgrade_sonarr_search_mode, upgrade_lidarr_search_mode,
                 upgrade_readarr_search_mode, upgrade_whisparr_v2_search_mode,
+                upgrade_series_window_size,
                 allowed_time_window, search_order
             ) VALUES (
                 ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
             )
             """,
             (
@@ -438,6 +443,7 @@ async def insert_instance(payload: InstanceInsert, *, master_key: bytes) -> int:
                 payload.upgrade_lidarr_search_mode.value,
                 payload.upgrade_readarr_search_mode.value,
                 payload.upgrade_whisparr_v2_search_mode.value,
+                payload.upgrade_series_window_size,
                 payload.allowed_time_window,
                 payload.search_order.value,
             ),

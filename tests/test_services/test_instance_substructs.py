@@ -241,7 +241,7 @@ def test_cutoff_policy_defaults_match_config() -> None:
 
 
 def test_upgrade_policy_fields_in_declaration_order() -> None:
-    """UpgradePolicy exposes the ten upgrade tunables + pool offsets."""
+    """UpgradePolicy exposes the upgrade tunables + pool offsets + window size."""
     assert _field_names(UpgradePolicy) == [
         "upgrade_enabled",
         "upgrade_batch_size",
@@ -253,6 +253,7 @@ def test_upgrade_policy_fields_in_declaration_order() -> None:
         "upgrade_whisparr_v2_search_mode",
         "upgrade_item_offset",
         "upgrade_series_offset",
+        "upgrade_series_window_size",
     ]
 
 
@@ -429,6 +430,7 @@ FLAT_TO_SUB: dict[str, str] = {
     "upgrade_whisparr_v2_search_mode": "upgrade",
     "upgrade_item_offset": "upgrade",
     "upgrade_series_offset": "upgrade",
+    "upgrade_series_window_size": "upgrade",
     # SchedulePolicy
     "allowed_time_window": "schedule",
     "search_order": "schedule",
@@ -482,6 +484,7 @@ FLAT_WRITE_VALUES: dict[str, Any] = {
     "upgrade_whisparr_v2_search_mode": WhisparrV2SearchMode.season_context,
     "upgrade_item_offset": 42,
     "upgrade_series_offset": 17,
+    "upgrade_series_window_size": 12,
     # SchedulePolicy
     "allowed_time_window": "08:00-20:00",
     "search_order": SearchOrder.random,
@@ -685,14 +688,16 @@ def test_sub_struct_swap_isolated_to_its_group() -> None:
 
 
 def test_pre_refactor_instance_field_count_via_flat_accessors() -> None:
-    """The D.14 facade still exposes exactly 39 flat accessors.
+    """The D.14 facade exposes exactly 40 flat accessors after PR22.
 
     Canary that the facade migration did not quietly grow or shrink
     the flat surface.  :data:`FLAT_TO_SUB` is the authoritative
     encoding of that surface; bumping it requires a deliberate update
-    with a matching accessor pair on :class:`Instance`.
+    with a matching accessor pair on :class:`Instance`.  PR22 added
+    ``upgrade_series_window_size`` for per-instance Sonarr/Whisparr-v2
+    upgrade-pool window tuning, taking the count from 39 to 40.
     """
-    assert len(FLAT_TO_SUB) == 39
+    assert len(FLAT_TO_SUB) == 40
     instance = _minimal_instance()
     for flat_name in FLAT_TO_SUB:
         assert hasattr(instance, flat_name)

@@ -438,6 +438,7 @@ def test_instance_update_has_every_updatable_column() -> None:
         "upgrade_whisparr_v2_search_mode",
         "upgrade_item_offset",
         "upgrade_series_offset",
+        "upgrade_series_window_size",
         "missing_page_offset",
         "cutoff_page_offset",
         "allowed_time_window",

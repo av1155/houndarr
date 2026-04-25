@@ -31,6 +31,7 @@ from houndarr.config import (
     DEFAULT_UPGRADE_HOURLY_CAP,
     DEFAULT_UPGRADE_LIDARR_SEARCH_MODE,
     DEFAULT_UPGRADE_READARR_SEARCH_MODE,
+    DEFAULT_UPGRADE_SERIES_WINDOW_SIZE,
     DEFAULT_UPGRADE_SONARR_SEARCH_MODE,
     DEFAULT_UPGRADE_WHISPARR_V2_SEARCH_MODE,
     DEFAULT_WHISPARR_V2_SEARCH_MODE,
@@ -192,6 +193,7 @@ class UpgradePolicy:
     )
     upgrade_item_offset: int = 0
     upgrade_series_offset: int = 0
+    upgrade_series_window_size: int = DEFAULT_UPGRADE_SERIES_WINDOW_SIZE
 
 
 @dataclass(frozen=True, slots=True)
@@ -325,6 +327,7 @@ class Instance:
         upgrade_whisparr_v2_search_mode: WhisparrV2SearchMode = WhisparrV2SearchMode.episode,
         upgrade_item_offset: int = 0,
         upgrade_series_offset: int = 0,
+        upgrade_series_window_size: int = DEFAULT_UPGRADE_SERIES_WINDOW_SIZE,
         missing_page_offset: int = 1,
         cutoff_page_offset: int = 1,
         allowed_time_window: str = "",
@@ -381,6 +384,7 @@ class Instance:
             upgrade_whisparr_v2_search_mode=upgrade_whisparr_v2_search_mode,
             upgrade_item_offset=upgrade_item_offset,
             upgrade_series_offset=upgrade_series_offset,
+            upgrade_series_window_size=upgrade_series_window_size,
         )
         self.schedule = SchedulePolicy(
             allowed_time_window=allowed_time_window,
@@ -645,6 +649,14 @@ class Instance:
     @upgrade_series_offset.setter
     def upgrade_series_offset(self, value: int) -> None:
         self.upgrade = replace(self.upgrade, upgrade_series_offset=value)
+
+    @property
+    def upgrade_series_window_size(self) -> int:
+        return self.upgrade.upgrade_series_window_size
+
+    @upgrade_series_window_size.setter
+    def upgrade_series_window_size(self, value: int) -> None:
+        self.upgrade = replace(self.upgrade, upgrade_series_window_size=value)
 
     # SchedulePolicy delegation.
 

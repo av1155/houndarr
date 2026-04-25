@@ -362,3 +362,11 @@ DEFAULT_UPGRADE_SONARR_SEARCH_MODE: str = "episode"
 DEFAULT_UPGRADE_LIDARR_SEARCH_MODE: str = "album"
 DEFAULT_UPGRADE_READARR_SEARCH_MODE: str = "book"
 DEFAULT_UPGRADE_WHISPARR_V2_SEARCH_MODE: str = "episode"
+# Series window size for the Sonarr / Whisparr v2 upgrade-pool fetch.  A
+# cycle samples up to this many monitored series, advancing the series
+# offset each cycle so the whole library rotates.  Default of 5 stays
+# polite per cycle: full coverage of a large library still scales as
+# ``ceil(monitored_series / window) * batch_size`` per upgrade-eligible
+# item, so users with very large Sonarr libraries can raise the window
+# (and accept higher per-cycle *arr load) to drive coverage faster.
+DEFAULT_UPGRADE_SERIES_WINDOW_SIZE: int = 5

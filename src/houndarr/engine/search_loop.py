@@ -13,6 +13,7 @@ import logging
 import math
 import random
 from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import uuid4
@@ -70,6 +71,76 @@ _UPGRADE_SCAN_BUDGET_MAX = 40
 _UPGRADE_BATCH_HARD_CAP = 5
 _UPGRADE_HOURLY_CAP_HARD_CAP = 5
 _UPGRADE_MIN_COOLDOWN_DAYS = 7
+
+
+# ---------------------------------------------------------------------------
+# Random search order: stratified-shuffle deck
+# ---------------------------------------------------------------------------
+#
+# When ``SearchOrder.random`` is active, ``_run_search_pass`` picks page
+# numbers from a shuffled permutation of ``[1, max_page]`` rather than a
+# fresh ``random.randint`` each cycle plus a forward walk with wrap-once.
+# The deck is held in this module-level cache, keyed by
+# ``(instance_id, search_kind)`` so each (instance, missing/cutoff) pair
+# tracks its own progress through the current round.
+#
+# Two properties this design buys over the old algorithm:
+#
+#   1. Bounded short-term variance.  Every page is visited exactly once
+#      per round (one round == ``max_page`` page-draws). The worst-case
+#      wait for a given page is therefore ``ceil(max_page / K)`` cycles,
+#      where K = ``_MAX_LIST_PAGES_PER_PASS``.  The previous algorithm
+#      could skip a page for arbitrarily many cycles in a row by chance.
+#
+#   2. No wrap-once asymmetry.  The original walk visited
+#      ``{start, start+1, ..., max_page, 1, 2, ...}`` which favoured
+#      pages near the end of the list when start>1 (a 1.25x-1.5x bias
+#      under multi-page-walk conditions; see AGENTS.md "Verifying
+#      Claims About Algorithms").  Pulling from a fresh shuffle has
+#      no positional asymmetry.
+#
+# The deck is rebuilt whenever ``max_page`` changes (the wanted-list
+# grew or shrank since the last cycle) or whenever the previous round
+# is exhausted.  Stale entries for deleted instances stay in the dict
+# but cost only a small list of integers per (instance, kind) pair.
+
+
+@dataclass(slots=True)
+class _RandomDeckState:
+    """Per-(instance, kind) deck of remaining page numbers for random mode."""
+
+    max_page: int
+    remaining: list[int]
+
+
+_random_decks: dict[tuple[int, str], _RandomDeckState] = {}
+
+
+def _draw_next_random_page(instance_id: int, search_kind: SearchKind | str, max_page: int) -> int:
+    """Pop the next page from this (instance, kind)'s shuffled deck.
+
+    Refreshes the deck when it is empty or when ``max_page`` differs from
+    the value the deck was built against (which happens when the user has
+    added or removed wanted items in the *arr instance since the last
+    cycle).
+    """
+    key = (instance_id, str(search_kind))
+    state = _random_decks.get(key)
+    if state is None or state.max_page != max_page or not state.remaining:
+        deck = list(range(1, max_page + 1))
+        random.shuffle(deck)  # noqa: S311  # nosec B311
+        state = _RandomDeckState(max_page=max_page, remaining=deck)
+        _random_decks[key] = state
+    return state.remaining.pop()
+
+
+def _reset_random_deck(instance_id: int, search_kind: SearchKind | str) -> None:
+    """Drop the cached deck for one (instance, kind) pair.
+
+    Test helper.  Production code does not need to call this because the
+    deck self-refreshes on ``max_page`` mismatch and on exhaustion.
+    """
+    _random_decks.pop((instance_id, str(search_kind)), None)
 
 
 # ---------------------------------------------------------------------------
@@ -450,6 +521,8 @@ async def _run_search_pass(  # noqa: C901
     scanned = 0
     page = max(1, start_page)
     wrapped = False
+    random_max_page = 0
+    use_random_deck = False
 
     if instance.search_order == SearchOrder.random and total_fn is not None:
         try:
@@ -464,8 +537,9 @@ async def _run_search_pass(  # noqa: C901
             )
         else:
             if total > 0:
-                max_page = max(1, math.ceil(total / page_size))
-                page = random.randint(1, max_page)  # noqa: S311  # nosec B311
+                random_max_page = max(1, math.ceil(total / page_size))
+                use_random_deck = True
+                page = _draw_next_random_page(instance.core.id, search_kind, random_max_page)
 
     for _ in range(_MAX_LIST_PAGES_PER_PASS):
         if searched >= target or scanned >= scan_budget:
@@ -482,9 +556,17 @@ async def _run_search_pass(  # noqa: C901
             page,
         )
         if not items:
-            # Paged past available data; wrap to page 1 once per pass so
-            # items at the start of the list (which may have come off
-            # cooldown) still get evaluated.
+            # Random mode draws every page from a pre-shuffled deck of
+            # ``[1, max_page]``, so an empty response means the deck is
+            # carrying a stale page number from before the wanted-list
+            # shrank.  Skip to the next deck entry; the deck will refresh
+            # itself when exhausted or when ``max_page`` no longer matches.
+            if use_random_deck:
+                page = _draw_next_random_page(instance.core.id, search_kind, random_max_page)
+                continue
+            # Chronological mode: paged past available data; wrap to page
+            # 1 once per pass so items at the start of the list (which may
+            # have come off cooldown) still get evaluated.
             if start_page > 1 and not wrapped:
                 page = 1
                 wrapped = True
@@ -695,7 +777,10 @@ async def _run_search_pass(  # noqa: C901
         # consumed.  When the batch fills or scan budget is reached
         # mid-page, the remaining items should be re-evaluated next cycle.
         if page_fully_consumed:
-            page += 1
+            if use_random_deck:
+                page = _draw_next_random_page(instance.core.id, search_kind, random_max_page)
+            else:
+                page += 1
 
     return searched, page
 

@@ -567,6 +567,31 @@ explain what the original observation was actually picking up
 noise), and close the discussion. A correct "no change required" is a
 successful task, not a non-result.
 
+### Known emergent behaviours (already measured)
+
+These are real but minor effects that have been verified by probe and
+deliberately left alone. Do not re-investigate them unless the
+operating point changes or a user reports a concrete regression.
+
+- Partial-last-page over-selection on missing/cutoff under random
+  search order. When the engine's `page_size` does not divide
+  `totalRecords` evenly, items on the (short) last page are drained
+  every visit because the engine dispatches up to `batch_size` items
+  per page. Measured at most 2x attention skew for the 1-9 items on
+  the last page at default settings (batch=1, pageSize=10) and 4x in
+  contrived configurations (batch=5, pageSize=20). Affects a small
+  slice of the backlog; the only clean fix is a virtual flat-index
+  draw which is a substantial redesign of `_run_search_pass`. Probe:
+  `tests/mock_arr/probe_cooldown.py`.
+- Sonarr / Whisparr v2 windowed-rotation coverage time. The upgrade
+  pass visits 5 series per cycle; full-library coverage takes
+  approximately `ceil(eligible_episodes * H / batch)` cycles where H
+  is the harmonic-coverage factor. Measured 91% theoretical and
+  85-89% empirical coverage at 60 cycles with batch=5 on 50 series.
+  This is the intentional trade-off versus hammering one series with
+  a single huge *arr fetch. Probe:
+  `tests/mock_arr/probe_upgrade_coverage.py`.
+
 ---
 
 ## Git & GitHub Workflow

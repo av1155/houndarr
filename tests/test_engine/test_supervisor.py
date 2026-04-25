@@ -401,6 +401,99 @@ async def test_refresh_all_snapshots_skips_disabled(
 
 
 @pytest.mark.asyncio()
+async def test_refresh_one_snapshot_logs_big_unreleased_jump(
+    seeded_instances: None,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """A jump above the threshold emits a single INFO line.
+
+    Smoke test for the post-upgrade observability path: the prior
+    DB value seeded at 0, the snapshot returns 16, the delta crosses
+    the threshold (>10), so the log must fire once.
+    """
+    from houndarr.clients.base import InstanceSnapshot
+
+    inst = _make_instance(enabled=True)
+
+    fake_client = AsyncMock()
+    fake_client.get_instance_snapshot = AsyncMock(
+        return_value=InstanceSnapshot(monitored_total=20, unreleased_count=16),
+    )
+
+    class _CtxClient:
+        async def __aenter__(self) -> Any:
+            return fake_client
+
+        async def __aexit__(self, exc_type: object, exc: object, tb: object) -> None:
+            return None
+
+    fake_adapter = type(
+        "FakeAdapter",
+        (),
+        {"make_client": staticmethod(lambda _inst: _CtxClient())},
+    )()
+
+    with (
+        caplog.at_level("INFO", logger="houndarr.engine.supervisor"),
+        patch("houndarr.engine.supervisor.get_adapter", return_value=fake_adapter),
+    ):
+        supervisor = Supervisor(master_key=MASTER_KEY)
+        await supervisor._refresh_one_snapshot(inst)  # noqa: SLF001
+
+    matching = [r for r in caplog.records if "unreleased jumped" in r.getMessage()]
+    assert len(matching) == 1
+    assert "0 -> 16" in matching[0].getMessage()
+
+
+@pytest.mark.asyncio()
+async def test_refresh_one_snapshot_quiet_on_small_unreleased_change(
+    seeded_instances: None,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """A jump within the threshold stays silent.
+
+    Threshold is intentionally noisy enough to ignore single-release
+    churn (one item flipping past midnight); the test pins the
+    "no log fired" half of the contract.
+    """
+    from houndarr.clients.base import InstanceSnapshot
+    from houndarr.services.instances import update_instance_snapshot
+
+    inst = _make_instance(enabled=True)
+
+    # Seed a prior count of 5; the new snapshot returns 7 (delta = 2).
+    await update_instance_snapshot(inst.id, monitored_total=10, unreleased_count=5)
+
+    fake_client = AsyncMock()
+    fake_client.get_instance_snapshot = AsyncMock(
+        return_value=InstanceSnapshot(monitored_total=10, unreleased_count=7),
+    )
+
+    class _CtxClient:
+        async def __aenter__(self) -> Any:
+            return fake_client
+
+        async def __aexit__(self, exc_type: object, exc: object, tb: object) -> None:
+            return None
+
+    fake_adapter = type(
+        "FakeAdapter",
+        (),
+        {"make_client": staticmethod(lambda _inst: _CtxClient())},
+    )()
+
+    with (
+        caplog.at_level("INFO", logger="houndarr.engine.supervisor"),
+        patch("houndarr.engine.supervisor.get_adapter", return_value=fake_adapter),
+    ):
+        supervisor = Supervisor(master_key=MASTER_KEY)
+        await supervisor._refresh_one_snapshot(inst)  # noqa: SLF001
+
+    matching = [r for r in caplog.records if "unreleased jumped" in r.getMessage()]
+    assert matching == []
+
+
+@pytest.mark.asyncio()
 async def test_refresh_all_snapshots_handles_transport_error(
     seeded_instances: None,
 ) -> None:

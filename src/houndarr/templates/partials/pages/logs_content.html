@@ -1,258 +1,1080 @@
-{# Logs page content partial.  Emitted for direct loads of /logs and
-   for HTMX shell-swaps (HX-Request header present); base.html is
-   skipped in the latter case so only this fragment ships.
+<div class="sr-only" data-page-key="logs" data-page-title="Logs | Houndarr" aria-hidden="true"></div>
 
-   hx-history="false" prevents HTMX from snapshotting this page into
-   its localStorage cache.  The feed is live-polled and cycle cards
-   carry per-session expand/collapse state in JS; caching a stale
-   snapshot would surface collapsed cards the user had expanded (and
-   vice-versa) on browser back-nav. #}
-{% import "_macros/forms.html" as forms %}
-<div class="sr-only" data-page-key="logs" data-page-title="Logs | Houndarr" hx-history="false" aria-hidden="true"></div>
+<style>
+  #logs-table-shell {
+    transition: opacity var(--dur-fast, 120ms) var(--ease-station, cubic-bezier(0.16,1,0.3,1));
+  }
 
-<section class="logs-head">
-  <div class="logs-head__title-row">
-    <div>
-      <h1 class="text-base font-semibold text-slate-200">Audit trail</h1>
-    </div>
+  #logs-table-shell.is-loading {
+    opacity: 0.5;
+  }
 
-    <div class="logs-head__live" id="live-indicator" data-state="live">
-      <span class="live-dot" aria-hidden="true"></span>
-      <span class="live-label">Live</span>
-      <span class="live-sep" aria-hidden="true">·</span>
-      <span class="live-meta" id="live-meta">updated just now</span>
-    </div>
-  </div>
-</section>
+  #log-tbody tr.htmx-added {
+    animation: log-row-enter var(--dur-base, 180ms) var(--ease-station, cubic-bezier(0.16,1,0.3,1));
+  }
 
-<section class="controls" aria-label="Log filters">
-  <form
-    id="log-filter-form"
-    hx-get="/api/logs/partial"
-    hx-target="#log-feed"
-    hx-swap="innerHTML"
-    hx-trigger="change, submit"
-    hx-indicator="#log-spinner"
-    class="filter-bar"
+  @keyframes log-row-enter {
+    from { opacity: 0; transform: translateY(4px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    #logs-table-shell { transition: none; }
+    #log-tbody tr.htmx-added { animation: none; }
+  }
+
+  /* ── Desktop (1100px+): auto-layout table ───────────────────────────── */
+  /*
+   * table-layout: auto is critical here. With fixed layout, percentage-based
+   * column widths can shrink badge columns below their content minimum (~86px
+   * for "searched"), causing visible overflow into adjacent columns.
+   * Auto layout guarantees badge columns are never smaller than their content.
+   *
+   * The breakpoint is 1100px because the 7-column table requires roughly:
+   *   timestamp(150) + instance(80) + action(86) + type(60) + kind(75)
+   *   + media(35%) + reason(20%) ≈ 870px+ before reason has breathing room.
+   * Below 1100px the card layout (below) is more readable and never crushes
+   * the Reason / Message column.
+   */
+  @media (min-width: 1100px) {
+    #logs-table-shell {
+      overflow-x: hidden;
+    }
+
+    #logs-table-shell table {
+      table-layout: auto;
+      width: 100%;
+    }
+
+    /* Preferred widths for predictable columns; auto layout uses these as
+       hints and lets content push wider if needed. */
+    th[data-col='timestamp'] { width: 150px; }
+    th[data-col='instance']  { width: 80px;  }
+    /* action / type / kind have no explicit width; they size to badge content */
+
+    /* Media and reason absorb the remaining space */
+    th[data-col='media']  { width: 35%; }
+    th[data-col='reason'] { width: 20%; }
+
+    /* Header cells: never wrap */
+    #logs-table-shell thead th {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* Cycle ID, Cycle Outcome, Trigger: shown in the cycle group header row */
+    th[data-col='cycle'],   td[data-col='cycle'],
+    th[data-col='outcome'], td[data-col='outcome'],
+    th[data-col='trigger'], td[data-col='trigger'] {
+      display: none;
+    }
+
+    /* Timestamp: clip long timezone suffixes gracefully */
+    td[data-col='timestamp'] {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* Instance: clip long names */
+    td[data-col='instance'] {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* Media: clip at cell boundary; inner <div class="truncate"> handles ellipsis */
+    td[data-col='media'] {
+      overflow: hidden;
+    }
+
+    /* Reason: word-wrap within its column */
+    td[data-col='reason'] {
+      white-space: normal;
+      overflow: hidden;
+      overflow-wrap: break-word;
+    }
+
+    /* Cycle group header: colored left accent */
+    tr[data-cycle-group] > td {
+      box-shadow: inset 3px 0 0 #334155;
+    }
+    tr[data-cycle-group][data-cycle-outcome='progress'] > td {
+      box-shadow: inset 3px 0 0 rgba(52, 211, 153, 0.55);
+    }
+    tr[data-cycle-group][data-cycle-outcome='no_progress'] > td {
+      box-shadow: inset 3px 0 0 rgba(71, 85, 105, 0.7);
+    }
+  }
+
+  /* ── Mobile/tablet (<1100px): cycle groups + entry cards ────────────── */
+  @media (max-width: 1099px) {
+    /* Shell: remove scroll container, let cards flow naturally */
+    #logs-table-shell {
+      overflow-x: visible;
+      border: none;
+      border-radius: 0;
+      background: transparent;
+      max-height: none;
+    }
+
+    #logs-table-shell table {
+      min-width: 0 !important;
+      width: 100%;
+    }
+
+    #logs-table-shell thead { display: none; }
+
+    #log-tbody {
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+    }
+
+    /* ── Cycle group header ── */
+    #log-tbody tr[data-cycle-group] {
+      display: block;
+      background: #07080f;
+      border: 1px solid #1e2638;
+      border-left: 3px solid #334155;
+      border-radius: 8px;
+      margin-top: 24px;
+      margin-bottom: 6px;
+    }
+
+    #log-tbody tr[data-cycle-group]:first-child {
+      margin-top: 2px;
+    }
+
+    /* Color the left accent by cycle outcome */
+    #log-tbody tr[data-cycle-outcome='progress']    { border-left-color: #34d399; }
+    #log-tbody tr[data-cycle-outcome='no_progress'] { border-left-color: #475569; }
+
+    #log-tbody tr[data-cycle-group] > td {
+      display: block;
+      padding: 9px 12px;
+      border: none;
+    }
+
+    /* ── Individual log entry cards ── */
+    #log-tbody tr[data-log-row='true'] {
+      display: grid;
+      grid-template-columns: auto auto 1fr;
+      grid-template-rows: auto auto auto auto;
+      column-gap: 6px;
+      row-gap: 5px;
+      padding: 11px 12px;
+      background: #0e1117;
+      border: 1px solid #1e2638;
+      border-radius: 8px;
+      margin-bottom: 5px;
+    }
+
+    #log-tbody tr[data-log-row='true'] > td {
+      padding: 0;
+      border: none;
+      max-width: none;
+      overflow: visible;
+      text-overflow: initial;
+      white-space: normal;
+    }
+
+    /* Row 1: [action] [kind] [type right-aligned] */
+    #log-tbody td[data-col='action'] { grid-column: 1; grid-row: 1; align-self: center; }
+    #log-tbody td[data-col='kind']   { grid-column: 2; grid-row: 1; align-self: center; }
+    #log-tbody td[data-col='type']   {
+      grid-column: 3;
+      grid-row: 1;
+      align-self: center;
+      text-align: right;
+      font-size: 10px;
+      color: #64748b;
+      text-transform: capitalize;
+    }
+
+    /* Row 2: media title */
+    #log-tbody td[data-col='media'] {
+      grid-column: 1 / -1;
+      grid-row: 2;
+      font-size: 13px;
+      font-weight: 500;
+      color: #e2e8f0;
+      line-height: 1.4;
+    }
+
+    /* Row 3: timestamp (left) · instance (right) */
+    #log-tbody td[data-col='timestamp'] {
+      grid-column: 1 / 3;
+      grid-row: 3;
+      font-size: 10px;
+      color: #475569;
+      white-space: nowrap;
+    }
+
+    #log-tbody td[data-col='instance'] {
+      grid-column: 3;
+      grid-row: 3;
+      text-align: right;
+      font-size: 10px;
+      font-weight: 500;
+      color: #94a3b8;
+      max-width: none;
+    }
+
+    /* Cycle header: make instance name readable at a glance */
+    .log-instance-label {
+      color: #cbd5e1;
+      font-weight: 500;
+    }
+
+    /* Row 4: reason / message */
+    #log-tbody td[data-col='reason'] {
+      grid-column: 1 / -1;
+      grid-row: 4;
+      font-size: 11px;
+      color: #94a3b8;
+      white-space: normal;
+    }
+
+    /* Hide secondary columns */
+    #log-tbody td[data-col='trigger'],
+    #log-tbody td[data-col='cycle'],
+    #log-tbody td[data-col='outcome'] {
+      display: none;
+    }
+
+    /* Pagination + empty state */
+    #log-tbody tr#pagination-row,
+    #log-tbody tr#log-empty-row {
+      display: block;
+      margin-top: 16px;
+    }
+
+    #log-tbody tr#pagination-row > td,
+    #log-tbody tr#log-empty-row > td {
+      display: block;
+      padding: 16px;
+      border: none;
+      text-align: center;
+    }
+  }
+</style>
+
+<div class="flex items-center justify-between mb-6">
+  <h1 class="text-xl font-bold text-white tracking-tight">Logs</h1>
+  <!-- Mobile split-button copy group -->
+  <div
+    id="copy-dropdown-group-mobile"
+    class="sm:hidden relative inline-flex flex-shrink-0"
+    data-copy-group="mobile"
   >
-    {# Multi-select dropdown: trigger + popover of checkboxes.  Each
-       checkbox carries name="instance_id" so native form serialisation
-       sends one ?instance_id=X per checked box, matching the repeated
-       query-param shape the backend accepts.  No <select> element
-       participates; the popover's checkboxes ARE the filter values. #}
-    <div class="field field--multiselect" data-multiselect="filter-instance">
-      <span class="field__label" id="filter-instance-label">Instance</span>
-      <div class="field__control filter-multiselect">
-        <button
-          type="button"
-          id="filter-instance-trigger"
-          class="filter-multiselect__trigger"
-          data-multiselect-trigger
-          aria-haspopup="true"
-          aria-expanded="false"
-          aria-controls="filter-instance-menu"
-          aria-labelledby="filter-instance-label filter-instance-summary"
-        >
-          <span id="filter-instance-summary" class="filter-multiselect__summary">{{ forms.multiselect_summary(selected_instance_ids, instances, "All instances") }}</span>
-        </button>
-        <div
-          id="filter-instance-menu"
-          class="filter-multiselect__menu"
-          role="group"
-          aria-labelledby="filter-instance-label"
-          data-multiselect-menu
-          hidden
-        >
-          {% for inst in instances %}
-          <label class="filter-multiselect__option">
-            <input
-              type="checkbox"
-              name="instance_id"
-              value="{{ inst.core.id }}"
-              {% if inst.core.id in (selected_instance_ids or ()) %}checked{% endif %}
-            />
-            <span>{{ inst.core.name }}</span>
-          </label>
-          {% endfor %}
-        </div>
-      </div>
-    </div>
-
-    <label class="field">
-      <span class="field__label">Action</span>
-      <div class="field__control">
-        <select id="filter-action" name="action">
-          <option value="">All actions</option>
-          <option value="searched" {% if selected_action == "searched" %}selected{% endif %}>Searched</option>
-          <option value="skipped" {% if selected_action == "skipped" %}selected{% endif %}>Skipped</option>
-          <option value="error" {% if selected_action == "error" %}selected{% endif %}>Error</option>
-          <option value="info" {% if selected_action == "info" %}selected{% endif %}>Info</option>
-        </select>
-      </div>
-    </label>
-
-    <label class="field">
-      <span class="field__label">Kind</span>
-      <div class="field__control">
-        <select id="filter-search-kind" name="search_kind">
-          <option value="">All kinds</option>
-          <option value="missing" {% if selected_search_kind == "missing" %}selected{% endif %}>Missing</option>
-          <option value="cutoff" {% if selected_search_kind == "cutoff" %}selected{% endif %}>Cutoff</option>
-          <option value="upgrade" {% if selected_search_kind == "upgrade" %}selected{% endif %}>Upgrade</option>
-        </select>
-      </div>
-    </label>
-
-    <label class="field">
-      <span class="field__label">Trigger</span>
-      <div class="field__control">
-        <select id="filter-cycle-trigger" name="cycle_trigger">
-          <option value="">All triggers</option>
-          <option value="scheduled" {% if selected_cycle_trigger == "scheduled" %}selected{% endif %}>Scheduled</option>
-          <option value="run_now" {% if selected_cycle_trigger == "run_now" %}selected{% endif %}>Run now</option>
-          <option value="system" {% if selected_cycle_trigger == "system" %}selected{% endif %}>System</option>
-        </select>
-      </div>
-    </label>
-
-    <label class="field">
-      <span class="field__label">Rows</span>
-      <div class="field__control">
-        <select id="filter-limit" name="limit">
-          <option value="25">25</option>
-          <option value="50" selected>50</option>
-          <option value="100">100</option>
-          <option value="200">200</option>
-          <option value="300">300</option>
-          <option value="500">500</option>
-          <option value="1000">1000</option>
-          <option value="5000">All</option>
-        </select>
-      </div>
-    </label>
-
-    <div class="field field--switches">
-      <span class="field__label">Noise</span>
-      <div class="switch-group">
-        <label class="chip-switch">
-          <input
-            id="filter-hide-system"
-            name="hide_system"
-            type="checkbox"
-            value="true"
-            {% if selected_hide_system %}checked{% endif %}
-          />
-          <span>Hide system</span>
-        </label>
-        <label class="chip-switch">
-          <input
-            id="filter-hide-skipped"
-            name="hide_skipped"
-            type="checkbox"
-            value="true"
-            {% if selected_hide_skipped %}checked{% endif %}
-          />
-          <span>Hide skipped</span>
-        </label>
-      </div>
-    </div>
-  </form>
-
-  <div id="log-spinner" class="htmx-indicator logs-spinner" aria-hidden="true"></div>
-
-  <div class="controls__right">
-    {# Two copy-split groups, one for each breakpoint.  Desktop hides
-       the mobile duplicate via CSS and vice versa.  Keeping two ids
-       preserves existing HTMX-partial pin tests that assert both
-       placements ship in every response. #}
-    <div class="copy-split" id="copy-dropdown-group-desktop" data-copy-group="desktop">
-      <button
-        id="copy-main-btn-desktop"
-        type="button"
-        data-copy-main="true"
-        class="copy-main copy-main-btn"
-        aria-label="Copy visible log rows as TSV"
-      >
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="copy-icon">
-          <rect x="9" y="9" width="13" height="13" rx="2" />
-          <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-        </svg>
-        <span class="copy-label copy-visible-logs-label">Copy as TSV</span>
-      </button>
-      <button
-        id="copy-chevron-btn-desktop"
-        type="button"
-        data-copy-chevron="true"
-        class="copy-chevron copy-chevron-btn"
-        aria-label="Open copy format menu"
-        aria-haspopup="menu"
-        aria-expanded="false"
-      >
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="copy-chev-icon copy-chevron-icon">
-          <polyline points="6 9 12 15 18 9" />
-        </svg>
-      </button>
-      <div
-        id="copy-dropdown-menu-desktop"
-        role="menu"
-        aria-label="Copy format options"
-        class="copy-menu copy-dropdown-menu"
-        hidden
-      >
-        {% include "partials/copy_format_menu_items.html" %}
-      </div>
-    </div>
-
-    <div class="copy-split copy-split--mobile" id="copy-dropdown-group-mobile" data-copy-group="mobile">
-      <button
-        id="copy-main-btn-mobile"
-        type="button"
-        data-copy-main="true"
-        class="copy-main copy-main-btn"
-        aria-label="Copy visible log rows as TSV"
-      >
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="copy-icon">
-          <rect x="9" y="9" width="13" height="13" rx="2" />
-          <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-        </svg>
-        <span class="copy-label copy-visible-logs-label">Copy as TSV</span>
-      </button>
-      <button
-        id="copy-chevron-btn-mobile"
-        type="button"
-        data-copy-chevron="true"
-        class="copy-chevron copy-chevron-btn"
-        aria-label="Open copy format menu"
-        aria-haspopup="menu"
-        aria-expanded="false"
-      >
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="copy-chev-icon copy-chevron-icon">
-          <polyline points="6 9 12 15 18 9" />
-        </svg>
-      </button>
-      <div
-        id="copy-dropdown-menu-mobile"
-        role="menu"
-        aria-label="Copy format options"
-        class="copy-menu copy-dropdown-menu"
-        hidden
-      >
-        {% include "partials/copy_format_menu_items.html" %}
-      </div>
+    <button
+      id="copy-main-btn-mobile"
+      type="button"
+      data-copy-main="true"
+      class="copy-main-btn inline-flex items-center justify-center w-[7.5rem] px-3 py-2 rounded-l-lg bg-[#151b27] hover:bg-[#1e2638] border border-r-0 border-[#2a3448] text-slate-200 text-sm font-medium font-sans transition-colors duration-300 ease-out"
+      aria-label="Copy visible log rows as TSV"
+    >
+      <span class="copy-visible-logs-label transition-opacity duration-200 ease-out">Copy as TSV</span>
+    </button>
+    <button
+      id="copy-chevron-btn-mobile"
+      type="button"
+      data-copy-chevron="true"
+      class="copy-chevron-btn inline-flex items-center justify-center px-2 py-2 rounded-r-lg bg-[#151b27] hover:bg-[#1e2638] border border-[#2a3448] text-slate-400 transition-colors duration-300 ease-out"
+      aria-label="Open copy format menu"
+      aria-haspopup="menu"
+      aria-expanded="false"
+    >
+      <svg class="w-3.5 h-3.5 copy-chevron-icon transition-transform duration-200" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
+      </svg>
+    </button>
+    <div
+      id="copy-dropdown-menu-mobile"
+      role="menu"
+      aria-label="Copy format options"
+      class="copy-dropdown-menu hidden absolute right-0 top-full mt-1 z-50 min-w-[11rem] rounded-lg border border-[#2a3448] bg-[#0e1117] py-1" style="box-shadow:var(--shadow-4);"
+    >
+      {% include "partials/copy_format_menu_items.html" %}
     </div>
   </div>
-</section>
+</div>
 
-{# New-entries banner floats over the feed once the head-poll detects
-   unseen cycles while the user has scrolled past the filter panel.
-   Kept hidden at first paint; logs.js flips data-visible when the
-   scroll + delta conditions both hold. #}
-<button type="button" class="new-entries" id="new-entries" hidden>
-  <span class="new-entries__arrow" aria-hidden="true">↑</span>
-  <span id="new-entries-count">0</span> new <span id="new-entries-noun">cycles</span> · tap to see
-</button>
+<form
+  id="log-filter-form"
+  hx-get="/api/logs/partial"
+  hx-target="#log-tbody"
+  hx-swap="innerHTML"
+  hx-trigger="change, submit"
+  hx-indicator="#log-spinner"
+  class="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-end sm:gap-3 mb-5"
+>
+  <div class="col-span-2 flex flex-col gap-1 sm:min-w-[180px]">
+    <label for="filter-instance" class="text-xs text-slate-400 font-medium">Instance</label>
+    <select
+      id="filter-instance"
+      name="instance_id"
+      class="bg-[#151b27] border border-[#2a3448] text-slate-200 text-base rounded-lg px-3 py-2 font-sans
+                    focus:outline-none focus:ring-1 focus:ring-brand-400 focus:border-brand-400/70"
+    >
+      <option value="">All instances</option>
+      {% for inst in instances %}
+      <option value="{{ inst.id }}" {% if selected_instance_id == inst.id %}selected{% endif %}>
+        {{ inst.name }}
+      </option>
+      {% endfor %}
+    </select>
+  </div>
 
-<section class="feed" id="log-feed" aria-live="polite" aria-label="Log feed">
-  {% include "partials/log_rows.html" %}
-</section>
+  <div class="flex flex-col gap-1">
+    <label for="filter-action" class="text-xs text-slate-400 font-medium">Action</label>
+    <select
+      id="filter-action"
+      name="action"
+      class="bg-[#151b27] border border-[#2a3448] text-slate-200 text-base rounded-lg px-3 py-2 font-sans
+                    focus:outline-none focus:ring-1 focus:ring-brand-400 focus:border-brand-400/70"
+    >
+      <option value="">All actions</option>
+      <option value="searched" {% if selected_action == "searched" %}selected{% endif %}>Searched</option>
+      <option value="skipped" {% if selected_action == "skipped" %}selected{% endif %}>Skipped</option>
+      <option value="error" {% if selected_action == "error" %}selected{% endif %}>Error</option>
+      <option value="info" {% if selected_action == "info" %}selected{% endif %}>Info</option>
+    </select>
+  </div>
 
+  <div class="flex flex-col gap-1">
+    <label for="filter-limit" class="text-xs text-slate-400 font-medium">Rows</label>
+    <select
+      id="filter-limit"
+      name="limit"
+      class="bg-[#151b27] border border-[#2a3448] text-slate-200 text-base rounded-lg px-3 py-2 font-sans
+                    focus:outline-none focus:ring-1 focus:ring-brand-400 focus:border-brand-400/70"
+    >
+      <option value="25">25</option>
+      <option value="50" selected>50</option>
+      <option value="100">100</option>
+      <option value="200">200</option>
+      <option value="300">300</option>
+      <option value="500">500</option>
+      <option value="1000">1000</option>
+      <option value="5000">All</option>
+    </select>
+  </div>
+
+  <div class="flex flex-col gap-1">
+    <label for="filter-search-kind" class="text-xs text-slate-400 font-medium">Kind</label>
+    <select
+      id="filter-search-kind"
+      name="search_kind"
+      class="bg-[#151b27] border border-[#2a3448] text-slate-200 text-base rounded-lg px-3 py-2 font-sans
+                    focus:outline-none focus:ring-1 focus:ring-brand-400 focus:border-brand-400/70"
+    >
+      <option value="">All kinds</option>
+      <option value="missing" {% if selected_search_kind == "missing" %}selected{% endif %}>Missing</option>
+      <option value="cutoff" {% if selected_search_kind == "cutoff" %}selected{% endif %}>Cutoff</option>
+      <option value="upgrade" {% if selected_search_kind == "upgrade" %}selected{% endif %}>Upgrade</option>
+    </select>
+  </div>
+
+  <div class="flex flex-col gap-1">
+    <label for="filter-cycle-trigger" class="text-xs text-slate-400 font-medium">Trigger</label>
+    <select
+      id="filter-cycle-trigger"
+      name="cycle_trigger"
+      class="bg-[#151b27] border border-[#2a3448] text-slate-200 text-base rounded-lg px-3 py-2 font-sans
+                    focus:outline-none focus:ring-1 focus:ring-brand-400 focus:border-brand-400/70"
+    >
+      <option value="">All triggers</option>
+      <option value="scheduled" {% if selected_cycle_trigger == "scheduled" %}selected{% endif %}>Scheduled</option>
+      <option value="run_now" {% if selected_cycle_trigger == "run_now" %}selected{% endif %}>Run now</option>
+      <option value="system" {% if selected_cycle_trigger == "system" %}selected{% endif %}>System</option>
+    </select>
+  </div>
+
+  <div class="col-span-2 flex items-center gap-2 sm:pb-2">
+    <input
+      id="filter-hide-system"
+      name="hide_system"
+      type="checkbox"
+      value="true"
+      {% if selected_hide_system %}checked{% endif %}
+      class="w-4 h-4 rounded border-[#2a3448] bg-[#151b27] text-brand-500 focus:ring-brand-400 focus:ring-offset-0"
+    />
+    <label for="filter-hide-system" class="text-xs text-slate-300 font-medium">Hide system rows</label>
+  </div>
+
+  <div id="log-spinner" class="col-span-2 htmx-indicator flex items-center gap-2 text-xs text-slate-400">
+    <svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+      <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+      <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+    </svg>
+    Loading...
+  </div>
+</form>
+
+<div class="flex flex-wrap items-center justify-between gap-2 mb-4">
+  <div id="logs-summary" class="min-w-0 flex-1">
+    {% include "partials/log_summary.html" %}
+  </div>
+  <!-- Desktop split-button copy group -->
+  <div
+    id="copy-dropdown-group-desktop"
+    class="hidden sm:inline-flex relative flex-shrink-0"
+    data-copy-group="desktop"
+  >
+    <button
+      id="copy-main-btn-desktop"
+      type="button"
+      data-copy-main="true"
+      class="copy-main-btn inline-flex items-center justify-center w-[7.5rem] px-3 py-2 rounded-l-lg bg-[#151b27] hover:bg-[#1e2638] border border-r-0 border-[#2a3448] text-slate-200 text-sm font-medium font-sans transition-colors duration-300 ease-out"
+      aria-label="Copy visible log rows as TSV"
+    >
+      <span id="copy-visible-logs-label" class="copy-visible-logs-label transition-opacity duration-200 ease-out">Copy as TSV</span>
+    </button>
+    <button
+      id="copy-chevron-btn-desktop"
+      type="button"
+      data-copy-chevron="true"
+      class="copy-chevron-btn inline-flex items-center justify-center px-2 py-2 rounded-r-lg bg-[#151b27] hover:bg-[#1e2638] border border-[#2a3448] text-slate-400 transition-colors duration-300 ease-out"
+      aria-label="Open copy format menu"
+      aria-haspopup="menu"
+      aria-expanded="false"
+    >
+      <svg class="w-3.5 h-3.5 copy-chevron-icon transition-transform duration-200" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
+      </svg>
+    </button>
+    <div
+      id="copy-dropdown-menu-desktop"
+      role="menu"
+      aria-label="Copy format options"
+      class="copy-dropdown-menu hidden absolute right-0 top-full mt-1 z-50 min-w-[11rem] rounded-lg border border-[#2a3448] bg-[#0e1117] py-1" style="box-shadow:var(--shadow-4);"
+    >
+      {% include "partials/copy_format_menu_items.html" %}
+    </div>
+  </div>
+</div>
+
+<div
+  id="logs-table-shell"
+  class="overflow-x-auto overflow-y-auto max-h-none sm:max-h-[calc(100vh-18rem)] rounded-xl border border-[#1e2638] bg-[#0e1117]"
+>
+  <table class="w-full text-left text-sm">
+    <thead class="border-b border-[#1e2638] sticky top-0 bg-[#0e1117] z-10">
+      <tr class="text-[10px] uppercase tracking-widest text-slate-500 font-sans">
+        <th class="px-3 py-2.5 font-medium" data-col="timestamp">Timestamp (Local)</th>
+        <th class="px-3 py-2.5 font-medium" data-col="instance">Instance</th>
+        <th class="px-3 py-2.5 font-medium" data-col="action">Action</th>
+        <th class="px-3 py-2.5 font-medium" data-col="type">Type</th>
+        <th class="px-3 py-2.5 font-medium" data-col="kind">Kind</th>
+        <th class="px-3 py-2.5 font-medium" data-col="trigger">Trigger</th>
+        <th class="px-3 py-2.5 font-medium" data-col="cycle">Cycle</th>
+        <th class="px-3 py-2.5 font-medium" data-col="outcome">Cycle outcome</th>
+        <th class="px-3 py-2.5 font-medium" data-col="media">Media</th>
+        <th class="px-3 py-2.5 font-medium" data-col="reason">Reason / Message</th>
+      </tr>
+    </thead>
+    <tbody id="log-tbody">
+      {% include "partials/log_rows.html" %}
+    </tbody>
+  </table>
+</div>
+
+<script>
+  (function () {
+    window.__houndarrLogsPageController?.abort();
+    const controller = new AbortController();
+    window.__houndarrLogsPageController = controller;
+    const { signal } = controller;
+
+    // -------------------------------------------------------------------------
+    // Timestamp formatting
+    // -------------------------------------------------------------------------
+
+    const formatLocalTimestamp =
+      window.houndarrClientHelpers?.formatLocalTimestamp ||
+      function (isoTimestamp) {
+        if (!isoTimestamp) {
+          return 'N/A';
+        }
+
+        const parsed = new Date(isoTimestamp);
+        if (Number.isNaN(parsed.getTime())) {
+          return isoTimestamp;
+        }
+
+        return new Intl.DateTimeFormat(undefined, {
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+          hour12: false,
+          timeZoneName: 'short',
+        }).format(parsed);
+      };
+
+    function formatVisibleLogTimestamps(root = document) {
+      root.querySelectorAll('[data-log-ts]').forEach((el) => {
+        if (el.getAttribute('data-ts-formatted') === 'true') {
+          return;
+        }
+        const ts = el.getAttribute('data-log-ts') || '';
+        el.textContent = formatLocalTimestamp(ts);
+        el.setAttribute('data-ts-formatted', 'true');
+      });
+    }
+
+    // -------------------------------------------------------------------------
+    // Row data extraction helpers
+    // -------------------------------------------------------------------------
+
+    function getRowCells(row) {
+      return {
+        timestamp: row.querySelector('[data-col="timestamp"]')?.textContent?.trim() || '',
+        instance: row.querySelector('[data-col="instance"]')?.textContent?.trim() || '',
+        action: row.querySelector('[data-col="action"]')?.textContent?.trim() || '',
+        type: row.querySelector('[data-col="type"]')?.textContent?.trim() || '',
+        kind: row.querySelector('[data-col="kind"]')?.textContent?.trim() || '',
+        trigger: row.querySelector('[data-col="trigger"]')?.textContent?.trim() || '',
+        cycle: row.querySelector('[data-col="cycle"]')?.textContent?.trim() || '',
+        cycle_outcome: row.querySelector('[data-col="outcome"]')?.textContent?.trim() || '',
+        media: row.querySelector('[data-col="media"]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+        reason: row.querySelector('[data-col="reason"]')?.textContent?.trim() || '',
+      };
+    }
+
+    // -------------------------------------------------------------------------
+    // Copy format implementations
+    // -------------------------------------------------------------------------
+
+    const _COPY_HEADERS = [
+      'Timestamp (Local)', 'Instance', 'Action', 'Type', 'Kind',
+      'Trigger', 'Cycle', 'Cycle outcome', 'Media', 'Reason / Message',
+    ];
+
+    function _tsvCell(value) {
+      // Replace tabs and newlines with spaces; preserve other content as-is.
+      return String(value).replaceAll('\t', ' ').replaceAll('\n', ' ').replaceAll('\r', ' ');
+    }
+
+    function buildTsv(rows) {
+      const lines = [_COPY_HEADERS.map(_tsvCell).join('\t')];
+      rows.forEach((row) => {
+        const c = getRowCells(row);
+        lines.push([
+          c.timestamp, c.instance, c.action, c.type, c.kind,
+          c.trigger, c.cycle, c.cycle_outcome, c.media, c.reason,
+        ].map(_tsvCell).join('\t'));
+      });
+      return lines.join('\n');
+    }
+
+    function _escapePipes(value) {
+      return String(value).replaceAll('|', '\\|').replaceAll('\n', ' ');
+    }
+
+    function _mdCell(value) {
+      // Use a hyphen for blank cells.
+      const str = String(value);
+      return _escapePipes(str || '-');
+    }
+
+    function buildMarkdown(rows) {
+      const divider = _COPY_HEADERS.map(() => '---');
+      const lines = [
+        `| ${_COPY_HEADERS.join(' | ')} |`,
+        `| ${divider.join(' | ')} |`,
+      ];
+      rows.forEach((row) => {
+        const c = getRowCells(row);
+        const values = [
+          c.timestamp, c.instance, c.action, c.type, c.kind,
+          c.trigger, c.cycle, c.cycle_outcome, c.media, c.reason,
+        ].map(_mdCell);
+        lines.push(`| ${values.join(' | ')} |`);
+      });
+      return lines.join('\n');
+    }
+
+    function buildJson(rows) {
+      const data = rows.map((row) => {
+        const c = getRowCells(row);
+        return {
+          timestamp: c.timestamp || null,
+          instance: c.instance || null,
+          action: c.action || null,
+          type: c.type || null,
+          kind: c.kind || null,
+          trigger: c.trigger || null,
+          cycle: c.cycle || null,
+          cycle_outcome: c.cycle_outcome || null,
+          media: c.media || null,
+          reason: c.reason || null,
+        };
+      });
+      return JSON.stringify(data, null, 2);
+    }
+
+    function buildPlainText(rows) {
+      const lines = [];
+      rows.forEach((row) => {
+        const c = getRowCells(row);
+        const parts = [];
+        if (c.timestamp) parts.push(c.timestamp);
+        if (c.instance) parts.push(`[${c.instance}]`);
+        if (c.action) parts.push(c.action.toUpperCase());
+        if (c.type) parts.push(c.type);
+        if (c.kind) parts.push(`kind:${c.kind}`);
+        if (c.trigger) parts.push(`trigger:${c.trigger}`);
+        if (c.cycle) parts.push(`cycle:${c.cycle}`);
+        if (c.cycle_outcome) parts.push(`outcome:${c.cycle_outcome}`);
+        if (c.media) parts.push(c.media);
+        if (c.reason) parts.push(`reason: ${c.reason}`);
+        lines.push(parts.join('  '));
+      });
+      return lines.join('\n');
+    }
+
+    function buildCopyText(format) {
+      const rows = Array.from(document.querySelectorAll('#log-tbody tr[data-log-row="true"]'));
+      if (rows.length === 0) {
+        return null;
+      }
+      if (format === 'tsv') return buildTsv(rows);
+      if (format === 'markdown') return buildMarkdown(rows);
+      if (format === 'json') return buildJson(rows);
+      if (format === 'text') return buildPlainText(rows);
+      return buildTsv(rows);
+    }
+
+    // -------------------------------------------------------------------------
+    // Summary state
+    // -------------------------------------------------------------------------
+
+    function setSummaryValue(id, value) {
+      const el = document.getElementById(id);
+      if (!el) {
+        return;
+      }
+      el.textContent = String(value);
+    }
+
+    const summaryState = {
+      totalRows: 0,
+      searchedRows: 0,
+      skippedRows: 0,
+      errorRows: 0,
+      infoRows: 0,
+      totalCycles: 0,
+      searchedCycles: 0,
+      skipOnlyCycles: 0,
+      cycleProgressById: new Map(),
+    };
+
+    function mergeCycleProgress(current, incoming) {
+      if (current === 'progress' || incoming === 'progress') {
+        return 'progress';
+      }
+      if (current) {
+        return current;
+      }
+      return incoming || 'unknown';
+    }
+
+    function adjustCycleBucket(status, delta) {
+      if (status === 'progress') {
+        summaryState.searchedCycles += delta;
+        return;
+      }
+      if (status === 'no_progress') {
+        summaryState.skipOnlyCycles += delta;
+        return;
+      }
+    }
+
+    function accountSummaryRow(row) {
+      if (row.getAttribute('data-summary-accounted') === 'true') {
+        return;
+      }
+
+      row.setAttribute('data-summary-accounted', 'true');
+      summaryState.totalRows += 1;
+
+      const action = (row.getAttribute('data-action') || '').toLowerCase();
+      if (action === 'searched') {
+        summaryState.searchedRows += 1;
+      } else if (action === 'skipped') {
+        summaryState.skippedRows += 1;
+      } else if (action === 'error') {
+        summaryState.errorRows += 1;
+      } else if (action === 'info') {
+        summaryState.infoRows += 1;
+      }
+
+      const cycleId = row.getAttribute('data-cycle-id') || '';
+      const cycleProgress = row.getAttribute('data-cycle-progress') || '';
+      if (!cycleId) {
+        return;
+      }
+
+      const previous = summaryState.cycleProgressById.get(cycleId) || '';
+      const next = mergeCycleProgress(previous, cycleProgress);
+      if (!previous) {
+        summaryState.totalCycles += 1;
+        summaryState.cycleProgressById.set(cycleId, next);
+        adjustCycleBucket(next, 1);
+        return;
+      }
+
+      if (previous !== next) {
+        summaryState.cycleProgressById.set(cycleId, next);
+        adjustCycleBucket(previous, -1);
+        adjustCycleBucket(next, 1);
+      }
+    }
+
+    function renderSummaryState() {
+      setSummaryValue('summary-total-rows', summaryState.totalRows);
+      setSummaryValue('summary-total-cycles', summaryState.totalCycles);
+      setSummaryValue('summary-searched-cycles', summaryState.searchedCycles);
+      setSummaryValue('summary-skip-cycles', summaryState.skipOnlyCycles);
+      setSummaryValue('summary-searched-rows', summaryState.searchedRows);
+      setSummaryValue('summary-skipped-rows', summaryState.skippedRows);
+      setSummaryValue('summary-error-rows', summaryState.errorRows);
+      setSummaryValue('summary-info-rows', summaryState.infoRows);
+    }
+
+    function resetSummaryState() {
+      summaryState.totalRows = 0;
+      summaryState.searchedRows = 0;
+      summaryState.skippedRows = 0;
+      summaryState.errorRows = 0;
+      summaryState.infoRows = 0;
+      summaryState.totalCycles = 0;
+      summaryState.searchedCycles = 0;
+      summaryState.skipOnlyCycles = 0;
+      summaryState.cycleProgressById.clear();
+    }
+
+    function rebuildSummaryFromVisibleRows() {
+      resetSummaryState();
+      document.querySelectorAll('#log-tbody tr[data-log-row="true"]').forEach((row) => {
+        row.removeAttribute('data-summary-accounted');
+        accountSummaryRow(row);
+      });
+      renderSummaryState();
+    }
+
+    function updateSummaryForAppendedRows(rows) {
+      rows.forEach((row) => {
+        accountSummaryRow(row);
+      });
+      renderSummaryState();
+    }
+
+    // -------------------------------------------------------------------------
+    // Split-button copy dropdown controller
+    // -------------------------------------------------------------------------
+
+    // Collect all main buttons and all label spans across both placements.
+    const copyMainBtns = Array.from(document.querySelectorAll('[data-copy-main="true"]'));
+    const copyLabels = Array.from(document.querySelectorAll('.copy-visible-logs-label'));
+    const copyChevronBtns = Array.from(document.querySelectorAll('[data-copy-chevron="true"]'));
+    const copyDropdownMenus = Array.from(document.querySelectorAll('.copy-dropdown-menu'));
+    const copyGroups = Array.from(document.querySelectorAll('[data-copy-group]'));
+
+    let copyButtonTimer = null;
+    let copyLabelSwapTimer = null;
+    let dropdownOpen = false;
+
+    function setCopyButtonLabel(nextLabel) {
+      if (!copyLabels.length) {
+        return;
+      }
+
+      if (copyLabels[0].textContent === nextLabel) {
+        return;
+      }
+
+      if (copyLabelSwapTimer) {
+        window.clearTimeout(copyLabelSwapTimer);
+        copyLabelSwapTimer = null;
+      }
+
+      copyLabels.forEach((el) => el.classList.add('opacity-0'));
+      copyLabelSwapTimer = window.setTimeout(() => {
+        copyLabels.forEach((el) => {
+          el.textContent = nextLabel;
+          el.classList.remove('opacity-0');
+        });
+        copyLabelSwapTimer = null;
+      }, 120);
+    }
+
+    function flashCopyButtonState(state) {
+      if (!copyMainBtns.length) {
+        return;
+      }
+
+      if (copyButtonTimer) {
+        window.clearTimeout(copyButtonTimer);
+        copyButtonTimer = null;
+      }
+
+      copyMainBtns.forEach((btn) => {
+        btn.classList.remove('bg-emerald-700', 'hover:bg-emerald-600', 'border-emerald-500/60');
+        btn.classList.remove('bg-red-800', 'hover:bg-red-700', 'border-red-600/60');
+      });
+
+      if (state === 'success') {
+        setCopyButtonLabel('Copied');
+        copyMainBtns.forEach((btn) =>
+          btn.classList.add('bg-emerald-700', 'hover:bg-emerald-600', 'border-emerald-500/60'),
+        );
+      } else if (state === 'error') {
+        setCopyButtonLabel('Copy failed');
+        copyMainBtns.forEach((btn) =>
+          btn.classList.add('bg-red-800', 'hover:bg-red-700', 'border-red-600/60'),
+        );
+      } else {
+        setCopyButtonLabel('Copy as TSV');
+        return;
+      }
+
+      copyButtonTimer = window.setTimeout(() => {
+        flashCopyButtonState('idle');
+      }, 1200);
+    }
+
+    function closeDropdown() {
+      dropdownOpen = false;
+      copyDropdownMenus.forEach((menu) => menu.classList.add('hidden'));
+      copyChevronBtns.forEach((btn) => {
+        btn.setAttribute('aria-expanded', 'false');
+        btn.querySelectorAll('.copy-chevron-icon').forEach((icon) => {
+          icon.style.transform = '';
+        });
+      });
+    }
+
+    function openDropdown() {
+      dropdownOpen = true;
+      copyDropdownMenus.forEach((menu) => menu.classList.remove('hidden'));
+      copyChevronBtns.forEach((btn) => {
+        btn.setAttribute('aria-expanded', 'true');
+        btn.querySelectorAll('.copy-chevron-icon').forEach((icon) => {
+          icon.style.transform = 'rotate(180deg)';
+        });
+      });
+      // Focus the first menu item in the first visible menu.
+      const firstMenu = copyDropdownMenus.find((m) => !m.classList.contains('hidden'));
+      if (firstMenu) {
+        const firstItem = firstMenu.querySelector('[data-copy-format]');
+        if (firstItem) firstItem.focus();
+      }
+    }
+
+    function toggleDropdown() {
+      if (dropdownOpen) {
+        closeDropdown();
+      } else {
+        openDropdown();
+      }
+    }
+
+    function performCopy(format) {
+      const text = buildCopyText(format);
+      if (text === null) {
+        return;
+      }
+      // navigator.clipboard is only available in secure contexts (HTTPS or localhost).
+      // Fall back to the legacy textarea + execCommand approach for plain HTTP access.
+      if (navigator.clipboard) {
+        navigator.clipboard
+          .writeText(text)
+          .then(() => {
+            flashCopyButtonState('success');
+          })
+          .catch(() => {
+            flashCopyButtonState('error');
+          });
+      } else {
+        try {
+          const ta = document.createElement('textarea');
+          ta.value = text;
+          ta.style.position = 'fixed';
+          ta.style.opacity = '0';
+          document.body.appendChild(ta);
+          ta.focus();
+          ta.select();
+          document.execCommand('copy');
+          document.body.removeChild(ta);
+          flashCopyButtonState('success');
+        } catch {
+          flashCopyButtonState('error');
+        }
+      }
+    }
+
+    // Main button: copy TSV immediately, also close dropdown if open.
+    copyMainBtns.forEach((btn) => {
+      btn.addEventListener(
+        'click',
+        () => {
+          if (dropdownOpen) {
+            closeDropdown();
+          }
+          performCopy('tsv');
+        },
+        { signal },
+      );
+    });
+
+    // Chevron: toggle dropdown.
+    copyChevronBtns.forEach((btn) => {
+      btn.addEventListener('click', toggleDropdown, { signal });
+    });
+
+    // Format menu items: copy in selected format, close dropdown.
+    copyDropdownMenus.forEach((menu) => {
+      menu.querySelectorAll('[data-copy-format]').forEach((item) => {
+        item.addEventListener(
+          'click',
+          () => {
+            const fmt = item.getAttribute('data-copy-format') || 'tsv';
+            closeDropdown();
+            performCopy(fmt);
+          },
+          { signal },
+        );
+      });
+
+      // Keyboard navigation within the menu.
+      menu.addEventListener(
+        'keydown',
+        (evt) => {
+          const items = Array.from(menu.querySelectorAll('[data-copy-format]'));
+          const focused = document.activeElement;
+          const idx = items.indexOf(focused);
+
+          if (evt.key === 'ArrowDown') {
+            evt.preventDefault();
+            const next = items[(idx + 1) % items.length];
+            if (next) next.focus();
+          } else if (evt.key === 'ArrowUp') {
+            evt.preventDefault();
+            const prev = items[(idx - 1 + items.length) % items.length];
+            if (prev) prev.focus();
+          } else if (evt.key === 'Escape' || evt.key === 'Tab') {
+            evt.preventDefault();
+            closeDropdown();
+            // Return focus to the chevron of the group that owns this menu.
+            const groupEl = menu.closest('[data-copy-group]');
+            if (groupEl) {
+              const chevron = groupEl.querySelector('[data-copy-chevron="true"]');
+              if (chevron) chevron.focus();
+            }
+          }
+        },
+        { signal },
+      );
+    });
+
+    // Close on Esc globally or outside click.
+    document.addEventListener(
+      'keydown',
+      (evt) => {
+        if (evt.key === 'Escape' && dropdownOpen) {
+          closeDropdown();
+        }
+      },
+      { signal },
+    );
+
+    document.addEventListener(
+      'pointerdown',
+      (evt) => {
+        if (!dropdownOpen) {
+          return;
+        }
+        const isInsideGroup = copyGroups.some((g) => g.contains(evt.target));
+        if (!isInsideGroup) {
+          closeDropdown();
+        }
+      },
+      { signal },
+    );
+
+    // -------------------------------------------------------------------------
+    // HTMX event handlers
+    // -------------------------------------------------------------------------
+
+    formatVisibleLogTimestamps(document);
+    rebuildSummaryFromVisibleRows();
+
+    document.body.addEventListener(
+      'htmx:afterSwap',
+      (evt) => {
+        const target = evt.detail && evt.detail.target;
+        if (!target) {
+          return;
+        }
+
+        if (target.id === 'log-tbody') {
+          formatVisibleLogTimestamps(target);
+          rebuildSummaryFromVisibleRows();
+          return;
+        }
+
+        if (target.id === 'pagination-row') {
+          const appendedRows = Array.from(
+            document.querySelectorAll('#log-tbody tr[data-log-row="true"].htmx-added'),
+          );
+          formatVisibleLogTimestamps(document);
+          if (appendedRows.length > 0) {
+            updateSummaryForAppendedRows(appendedRows);
+          } else {
+            rebuildSummaryFromVisibleRows();
+          }
+        }
+      },
+      { signal },
+    );
+
+    document.body.addEventListener(
+      'htmx:beforeRequest',
+      (evt) => {
+        const requestPath = evt.detail?.pathInfo?.requestPath || '';
+        if (!requestPath.includes('/api/logs/partial')) {
+          return;
+        }
+
+        const shell = document.getElementById('logs-table-shell');
+        if (shell) {
+          shell.classList.add('is-loading');
+        }
+      },
+      { signal },
+    );
+
+    document.body.addEventListener(
+      'htmx:afterRequest',
+      (evt) => {
+        const requestPath = evt.detail?.pathInfo?.requestPath || '';
+        if (!requestPath.includes('/api/logs/partial')) {
+          return;
+        }
+
+        const shell = document.getElementById('logs-table-shell');
+        if (shell) {
+          shell.classList.remove('is-loading');
+        }
+      },
+      { signal },
+    );
+  })();
+</script>

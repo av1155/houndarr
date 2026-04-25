@@ -11,36 +11,19 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from houndarr.clients.whisparr_v3 import (
-    LibraryWhisparrV3Movie,
-    MissingWhisparrV3Movie,
-    WhisparrV3Client,
-)
+from houndarr.clients.whisparr_v3 import LibraryWhisparrV3Movie, MissingWhisparrV3Movie
 from houndarr.engine.adapters.whisparr_v3 import (
     _movie_label,
-    _whisparr_v3_release_anchor,
-    _whisparr_v3_unreleased_reason,
+    _release_anchor,
+    _unreleased_reason,
     adapt_cutoff,
     adapt_missing,
     adapt_upgrade,
     dispatch_search,
-    fetch_instance_snapshot,
     fetch_upgrade_pool,
 )
 from houndarr.engine.candidates import SearchCandidate
-from houndarr.services.instances import (
-    CutoffPolicy,
-    Instance,
-    InstanceCore,
-    InstanceTimestamps,
-    InstanceType,
-    MissingPolicy,
-    RuntimeSnapshot,
-    SchedulePolicy,
-    SearchOrder,
-    SonarrSearchMode,
-    UpgradePolicy,
-)
+from houndarr.services.instances import Instance, InstanceType, SonarrSearchMode
 
 _NOW_ISO = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 _OLD_RELEASE = "2020-01-15T00:00:00Z"
@@ -49,36 +32,25 @@ _FUTURE_RELEASE = "2099-06-01T00:00:00Z"
 
 def _make_instance(*, post_release_grace_hrs: int = 6) -> Instance:
     return Instance(
-        core=InstanceCore(
-            id=1,
-            name="Whisparr V3 Test",
-            type=InstanceType.whisparr_v3,
-            url="http://whisparr:6969",
-            api_key="test-key",
-            enabled=True,
-        ),
-        missing=MissingPolicy(
-            batch_size=5,
-            sleep_interval_mins=30,
-            hourly_cap=4,
-            cooldown_days=14,
-            post_release_grace_hrs=post_release_grace_hrs,
-            queue_limit=0,
-            sonarr_search_mode=SonarrSearchMode.episode,
-        ),
-        cutoff=CutoffPolicy(
-            cutoff_enabled=False,
-            cutoff_batch_size=1,
-            cutoff_cooldown_days=21,
-            cutoff_hourly_cap=1,
-        ),
-        upgrade=UpgradePolicy(),
-        schedule=SchedulePolicy(search_order=SearchOrder.chronological),
-        snapshot=RuntimeSnapshot(),
-        timestamps=InstanceTimestamps(
-            created_at="2024-01-01T00:00:00Z",
-            updated_at="2024-01-01T00:00:00Z",
-        ),
+        id=1,
+        name="Whisparr V3 Test",
+        type=InstanceType.whisparr_v3,
+        url="http://whisparr:6969",
+        api_key="test-key",
+        enabled=True,
+        batch_size=5,
+        sleep_interval_mins=30,
+        hourly_cap=4,
+        cooldown_days=14,
+        post_release_grace_hrs=post_release_grace_hrs,
+        queue_limit=0,
+        cutoff_enabled=False,
+        cutoff_batch_size=1,
+        cutoff_cooldown_days=21,
+        cutoff_hourly_cap=1,
+        created_at="2024-01-01T00:00:00Z",
+        updated_at="2024-01-01T00:00:00Z",
+        sonarr_search_mode=SonarrSearchMode.episode,
     )
 
 
@@ -110,7 +82,6 @@ def _make_library_movie(**overrides: object) -> LibraryWhisparrV3Movie:
         "in_cinemas": _OLD_RELEASE,
         "physical_release": None,
         "digital_release": _OLD_RELEASE,
-        "release_date": None,
     }
     defaults.update(overrides)
     return LibraryWhisparrV3Movie(**defaults)  # type: ignore[arg-type]
@@ -140,17 +111,17 @@ class TestMovieLabel:
 class TestReleaseAnchor:
     def test_digital_preferred(self) -> None:
         m = _make_movie(digital_release="2024-01-01", physical_release="2024-02-01")
-        assert _whisparr_v3_release_anchor(m) == "2024-01-01"
+        assert _release_anchor(m) == "2024-01-01"
 
     def test_falls_back_to_in_cinemas(self) -> None:
         m = _make_movie(digital_release=None, physical_release=None, release_date=None)
-        assert _whisparr_v3_release_anchor(m) == _OLD_RELEASE
+        assert _release_anchor(m) == _OLD_RELEASE
 
     def test_all_none(self) -> None:
         m = _make_movie(
             digital_release=None, physical_release=None, release_date=None, in_cinemas=None
         )
-        assert _whisparr_v3_release_anchor(m) is None
+        assert _release_anchor(m) is None
 
 
 # ---------------------------------------------------------------------------
@@ -160,32 +131,32 @@ class TestReleaseAnchor:
 
 class TestUnreleasedReason:
     def test_released_returns_none(self) -> None:
-        assert _whisparr_v3_unreleased_reason(_make_movie(), 6) is None
+        assert _unreleased_reason(_make_movie(), 6) is None
 
-    def test_future_whisparr_v3_release_anchor(self) -> None:
+    def test_future_release_anchor(self) -> None:
         m = _make_movie(digital_release=_FUTURE_RELEASE)
-        assert _whisparr_v3_unreleased_reason(m, 6) == "not yet released"
+        assert _unreleased_reason(m, 6) == "not yet released"
 
     def test_post_release_grace(self) -> None:
         recent = (datetime.now(UTC) - timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
         m = _make_movie(digital_release=recent)
-        assert _whisparr_v3_unreleased_reason(m, 6) == "post-release grace (6h)"
+        assert _unreleased_reason(m, 6) == "post-release grace (6h)"
 
     def test_is_available_false(self) -> None:
         m = _make_movie(is_available=False)
-        assert _whisparr_v3_unreleased_reason(m, 0) == "whisparr v3 reports not available"
+        assert _unreleased_reason(m, 0) == "whisparr reports not available"
 
     def test_tba_status(self) -> None:
         m = _make_movie(status="tba", is_available=None)
-        assert _whisparr_v3_unreleased_reason(m, 0) == "whisparr v3 status indicates unreleased"
+        assert _unreleased_reason(m, 0) == "whisparr status indicates unreleased"
 
     def test_announced_status(self) -> None:
         m = _make_movie(status="announced", is_available=None)
-        assert _whisparr_v3_unreleased_reason(m, 0) == "whisparr v3 status indicates unreleased"
+        assert _unreleased_reason(m, 0) == "whisparr status indicates unreleased"
 
     def test_future_year(self) -> None:
         m = _make_movie(year=2099, status="", is_available=None)
-        assert _whisparr_v3_unreleased_reason(m, 0) == "future title not yet available"
+        assert _unreleased_reason(m, 0) == "future title not yet available"
 
 
 # ---------------------------------------------------------------------------
@@ -282,107 +253,3 @@ class TestDispatchSearch:
         candidate = adapt_missing(_make_movie(), _make_instance())
         await dispatch_search(mock_client, candidate)
         mock_client.search.assert_awaited_once_with(201)
-
-
-# ---------------------------------------------------------------------------
-# fetch_instance_snapshot
-# ---------------------------------------------------------------------------
-
-
-class TestFetchInstanceSnapshot:
-    """Verify the snapshot composition for Whisparr v3.
-
-    v3 has no ``/wanted`` endpoint, so this adapter walks the cached
-    library directly.  ``monitored_total`` counts items that are
-    monitored AND (missing OR cutoff-unmet).  ``unreleased_count``
-    counts monitored items whose first parseable release anchor is
-    strictly in the future.  Status-based skips
-    (``isAvailable=false``, ``status in {tba, announced}``) stay at
-    the dispatch-time path and intentionally do NOT inflate the
-    Unreleased dashboard bucket.
-
-    Marked ``pinning`` because ``fetch_instance_snapshot`` is a new
-    behavioural contract.
-    """
-
-    pytestmark = pytest.mark.pinning
-
-    @pytest.mark.asyncio()
-    async def test_counts_monitored_and_unreleased(self) -> None:
-        client = AsyncMock(spec=WhisparrV3Client)
-        client.get_library.return_value = [
-            # Monitored, missing, past anchor: counted in monitored only.
-            _make_library_movie(
-                movie_id=1,
-                has_file=False,
-                cutoff_met=False,
-                digital_release=_OLD_RELEASE,
-            ),
-            # Monitored, has-file but cutoff unmet: counted in monitored.
-            _make_library_movie(
-                movie_id=2,
-                has_file=True,
-                cutoff_met=False,
-                digital_release=_OLD_RELEASE,
-            ),
-            # Monitored, missing, future anchor: counted in both.
-            _make_library_movie(
-                movie_id=3,
-                has_file=False,
-                cutoff_met=False,
-                digital_release=_FUTURE_RELEASE,
-            ),
-            # Unmonitored future anchor: counted nowhere.
-            _make_library_movie(
-                movie_id=4,
-                monitored=False,
-                has_file=False,
-                cutoff_met=False,
-                digital_release=_FUTURE_RELEASE,
-            ),
-            # Monitored, has-file, cutoff met: not in monitored, not unreleased.
-            _make_library_movie(
-                movie_id=5,
-                has_file=True,
-                cutoff_met=True,
-                digital_release=_OLD_RELEASE,
-            ),
-        ]
-
-        snap = await fetch_instance_snapshot(client, _make_instance())
-
-        assert snap.monitored_total == 3
-        assert snap.unreleased_count == 1
-
-    @pytest.mark.asyncio()
-    async def test_anchor_priority_falls_through_to_release_date(self) -> None:
-        """The new ``release_date`` field on LibraryWhisparrV3Movie is
-        last in the priority ladder.  When digital / physical / cinemas
-        are all None, a future ``release_date`` still counts."""
-        client = AsyncMock(spec=WhisparrV3Client)
-        client.get_library.return_value = [
-            _make_library_movie(
-                movie_id=1,
-                has_file=False,
-                cutoff_met=False,
-                digital_release=None,
-                physical_release=None,
-                in_cinemas=None,
-                release_date=_FUTURE_RELEASE,
-            ),
-        ]
-
-        snap = await fetch_instance_snapshot(client, _make_instance())
-
-        assert snap.monitored_total == 1
-        assert snap.unreleased_count == 1
-
-    @pytest.mark.asyncio()
-    async def test_empty_library(self) -> None:
-        client = AsyncMock(spec=WhisparrV3Client)
-        client.get_library.return_value = []
-
-        snap = await fetch_instance_snapshot(client, _make_instance())
-
-        assert snap.monitored_total == 0
-        assert snap.unreleased_count == 0

@@ -9,18 +9,12 @@ import pytest
 from fastapi.testclient import TestClient
 
 from houndarr.auth import (
-    _CSRF_PROTECTED_METHODS,  # noqa: SLF001
-    _LOGOUT_PATH,  # noqa: SLF001
-    _PUBLIC_PATHS,  # noqa: SLF001
-    BCRYPT_COST,
-    CSRF_COOKIE_NAME,
-    SESSION_COOKIE_NAME,
     check_credentials,
     hash_password,
     is_setup_complete,
     verify_password,
 )
-from houndarr.repositories.settings import get_setting
+from houndarr.database import get_setting
 from tests.conftest import csrf_headers
 
 # ---------------------------------------------------------------------------
@@ -155,17 +149,21 @@ def test_client_ip_honours_xff_for_cidr_trusted_proxy(
     """_client_ip honours X-Forwarded-For when direct IP is in a trusted subnet."""
     from unittest.mock import MagicMock
 
+    import houndarr.config as _cfg
     from houndarr.auth import _client_ip  # noqa: SLF001
-    from houndarr.config import bootstrap_settings
+    from houndarr.config import AppSettings
 
+    original = _cfg._runtime_settings  # noqa: SLF001
     try:
-        bootstrap_settings(data_dir=tmp_data_dir, trusted_proxies="172.18.0.0/16")
+        _cfg._runtime_settings = AppSettings(  # noqa: SLF001
+            data_dir=tmp_data_dir, trusted_proxies="172.18.0.0/16"
+        )
         request = MagicMock()
         request.client.host = "172.18.0.5"
         request.headers.get.return_value = "203.0.113.50, 172.18.0.5"
         assert _client_ip(request) == "203.0.113.50"
     finally:
-        bootstrap_settings()
+        _cfg._runtime_settings = original  # noqa: SLF001
 
 
 def test_client_ip_ignores_xff_when_not_in_trusted_subnet(
@@ -174,17 +172,21 @@ def test_client_ip_ignores_xff_when_not_in_trusted_subnet(
     """_client_ip ignores X-Forwarded-For when direct IP is NOT in trusted subnet."""
     from unittest.mock import MagicMock
 
+    import houndarr.config as _cfg
     from houndarr.auth import _client_ip  # noqa: SLF001
-    from houndarr.config import bootstrap_settings
+    from houndarr.config import AppSettings
 
+    original = _cfg._runtime_settings  # noqa: SLF001
     try:
-        bootstrap_settings(data_dir=tmp_data_dir, trusted_proxies="172.18.0.0/16")
+        _cfg._runtime_settings = AppSettings(  # noqa: SLF001
+            data_dir=tmp_data_dir, trusted_proxies="172.18.0.0/16"
+        )
         request = MagicMock()
         request.client.host = "10.0.0.5"
         request.headers.get.return_value = "203.0.113.50"
         assert _client_ip(request) == "10.0.0.5"
     finally:
-        bootstrap_settings()
+        _cfg._runtime_settings = original  # noqa: SLF001
 
 
 # ---------------------------------------------------------------------------
@@ -246,82 +248,6 @@ async def test_check_credentials_claims_username_for_legacy_install(db: None) ->
     await set_password("correct_password")
     assert await check_credentials("admin", "correct_password") is True
     assert await get_setting("username") == "admin"
-
-
-# ---------------------------------------------------------------------------
-# resolve_signed_in_as: the identity label the Settings > Security card
-# renders. Proxy mode returns the forwarded header; builtin mode returns the
-# stored username and falls back to "admin" when nothing is configured yet.
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.asyncio()
-async def test_resolve_signed_in_as_builtin_returns_stored_username(
-    db: None,
-) -> None:
-    from fastapi import Request
-
-    from houndarr.auth import resolve_signed_in_as, set_username
-
-    await set_username("customadmin")
-    scope = {
-        "type": "http",
-        "method": "GET",
-        "path": "/",
-        "headers": [],
-        "query_string": b"",
-    }
-    request = Request(scope)
-    assert await resolve_signed_in_as(request) == "customadmin"
-
-
-@pytest.mark.asyncio()
-async def test_resolve_signed_in_as_builtin_falls_back_to_admin(
-    db: None,
-) -> None:
-    from fastapi import Request
-
-    from houndarr.auth import resolve_signed_in_as
-
-    scope = {
-        "type": "http",
-        "method": "GET",
-        "path": "/",
-        "headers": [],
-        "query_string": b"",
-    }
-    request = Request(scope)
-    assert await resolve_signed_in_as(request) == "admin"
-
-
-@pytest.mark.asyncio()
-async def test_resolve_signed_in_as_proxy_returns_header_user(
-    tmp_data_dir: str,
-) -> None:
-    from fastapi import Request
-
-    from houndarr.auth import resolve_signed_in_as
-    from houndarr.config import bootstrap_settings
-
-    try:
-        bootstrap_settings(
-            data_dir=tmp_data_dir,
-            auth_mode="proxy",
-            auth_proxy_header="Remote-User",
-            trusted_proxies="127.0.0.1",
-        )
-        scope = {
-            "type": "http",
-            "method": "GET",
-            "path": "/",
-            "headers": [],
-            "query_string": b"",
-        }
-        request = Request(scope)
-        request.state.proxy_auth_user = "alice"
-        assert await resolve_signed_in_as(request) == "alice"
-    finally:
-        bootstrap_settings()
 
 
 # ---------------------------------------------------------------------------
@@ -553,10 +479,10 @@ def test_dashboard_accessible_after_login(app: TestClient) -> None:
     assert response.status_code == 200
     assert b"Dashboard" in response.content
     assert b'id="instance-grid"' in response.content
-    assert b'hx-trigger="every 30s"' in response.content
-    assert b'id="dash-initial-status"' in response.content
-    assert b'class="dash-main"' in response.content
-    assert b'id="dash-top"' in response.content
+    assert b'data-hydrated="false"' in response.content
+    assert b'hx-trigger="load, every 30s"' in response.content
+    assert b"Search activity (24h)" in response.content
+    assert b"24h searched" in response.content
 
 
 def test_logout_clears_session(app: TestClient) -> None:
@@ -681,460 +607,3 @@ def test_rate_limiter_uses_direct_ip_by_default(app: TestClient) -> None:
     # not trusted and the real IP is still tracked).  It must NOT be 401 due to
     # XFF bypass - i.e., a different XFF must not reset the counter.
     assert response2.status_code in (429, 401)  # Either is fine; must not bypass rate limit
-
-
-# ---------------------------------------------------------------------------
-# Characterisation pins for the auth seam split.
-#
-# Each test below locks one load-bearing auth invariant so the eight
-# seam modules under :mod:`houndarr.auth` cannot silently drift the
-# bcrypt cost, session cookie kwargs, CSRF bucket survival, or the
-# proxy-auth trust-gate ordering.  ``@pytest.mark.pinning`` joins the
-# characterisation suite surfaced by ``just pin``.
-# ---------------------------------------------------------------------------
-
-
-# Password seam
-
-
-@pytest.mark.pinning()
-def test_bcrypt_cost_is_12() -> None:
-    """The configured bcrypt work factor must stay at cost 12.
-
-    Lowering the cost would silently weaken every newly-hashed password
-    after a rotation; raising it without a throughput review could turn
-    every login into a denial of service on small hosts.
-    """
-    assert BCRYPT_COST == 12
-    # The resulting hash encodes the cost in its ``$2b$NN$`` prefix;
-    # pin that encoding too so a future rotation cannot diverge the
-    # constant from the actual bcrypt output.
-    hashed = hash_password("work-factor-probe")
-    assert hashed.startswith("$2b$12$")
-
-
-@pytest.mark.pinning()
-def test_bcrypt_verify_accepts_exactly_72_byte_password() -> None:
-    """72-byte password must round-trip through hash + verify.
-
-    bcrypt's upstream cliff sits at 72 bytes; older binaries silently
-    truncated longer input.  The modern ``bcrypt`` Python package
-    rejects >72-byte input with ``ValueError``, which
-    :func:`verify_password` collapses to ``False`` via the catch-all
-    at `auth.py:70`.  Pin the 72-byte acceptance branch so a future
-    dependency upgrade cannot silently change the effective password
-    length ceiling.
-    """
-    prefix = "a" * 72
-    hashed = hash_password(prefix)
-    assert verify_password(prefix, hashed) is True
-    # A divergence within the first 72 bytes must still fail.
-    assert verify_password("a" * 71 + "b", hashed) is False
-    # A longer input must not raise; verify_password collapses to False.
-    assert verify_password("a" * 200, hashed) is False
-
-
-@pytest.mark.pinning()
-def test_bcrypt_verify_returns_false_on_malformed_hash() -> None:
-    """verify_password must collapse every malformed-hash error to False.
-
-    The catch-all at `auth.py:70` protects the login path from a
-    corrupted `password_hash` setting surfacing as a 500.  Specifically
-    pin the three error types bcrypt.checkpw can raise: ``ValueError``
-    (bad hash shape), ``UnicodeDecodeError`` (hash contains non-UTF8),
-    and ``TypeError`` (wrong argument type).
-    """
-    assert verify_password("anything", "not-a-bcrypt-hash") is False
-    assert verify_password("anything", "") is False
-    # Bytes masquerading as a hash would raise TypeError on encode().
-    # verify_password takes str hashes; a pathological None coerced to
-    # str via its default docstring contract still returns False.
-    assert verify_password("anything", "$2b$12$" + "!" * 53) is False
-
-
-# Rate-limit seam
-
-
-@pytest.mark.pinning()
-def test_clear_login_attempts_drops_bucket(test_settings: object) -> None:
-    """clear_login_attempts must drop the per-IP bucket entirely.
-
-    Called on every successful login (auth.py:407).  A residual bucket
-    would let an attacker lock the owner out by exhausting the window
-    with wrong guesses and the owner's subsequent correct login would
-    not clear the record.
-    """
-    from unittest.mock import MagicMock
-
-    from houndarr.auth import (
-        _login_attempts,  # noqa: SLF001
-        check_login_rate_limit,
-        clear_login_attempts,
-        record_failed_login,
-    )
-
-    request = MagicMock()
-    request.client.host = "198.51.100.7"
-    request.headers.get.return_value = None
-    for _ in range(3):
-        record_failed_login(request)
-    assert "198.51.100.7" in _login_attempts
-    clear_login_attempts(request)
-    assert "198.51.100.7" not in _login_attempts
-    assert check_login_rate_limit(request) is True
-
-
-@pytest.mark.pinning()
-def test_check_login_rate_limit_prunes_stale_entries(
-    test_settings: object,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Entries older than the window must fall off the sliding count.
-
-    Without pruning, a client could be locked out by attempts that
-    scrolled past the window hours ago, and the counter would grow
-    unboundedly in memory.  Pin the semantics by clock-travelling past
-    the window and confirming the limiter re-admits the client.
-    """
-    from unittest.mock import MagicMock
-
-    import houndarr.auth as _auth
-    from houndarr.auth import (
-        _LOGIN_WINDOW_SECONDS,  # noqa: SLF001
-        _login_attempts,  # noqa: SLF001
-        check_login_rate_limit,
-        record_failed_login,
-    )
-
-    now = {"t": 1_700_000_000.0}
-    monkeypatch.setattr(_auth.time, "time", lambda: now["t"])
-
-    request = MagicMock()
-    request.client.host = "198.51.100.9"
-    request.headers.get.return_value = None
-    for _ in range(5):
-        record_failed_login(request)
-    assert check_login_rate_limit(request) is False
-
-    # Advance past the window; the next check must prune and re-admit.
-    now["t"] += _LOGIN_WINDOW_SECONDS + 1
-    assert check_login_rate_limit(request) is True
-    assert _login_attempts["198.51.100.9"] == []
-
-
-# Setup seam
-
-
-@pytest.mark.asyncio()
-@pytest.mark.pinning()
-async def test_reset_auth_caches_clears_every_module_global(db: None) -> None:
-    """reset_auth_caches must clear _serializer, _setup_complete, _login_attempts.
-
-    Called on factory reset (services/admin.py:263).  A stale
-    ``_setup_complete=True`` after the database is wiped would short-
-    circuit the `/setup` redirect and strand the operator without a
-    way to configure a new owner.
-    """
-    from unittest.mock import MagicMock
-
-    import houndarr.auth as _auth
-    from houndarr.auth import (
-        _get_serializer,  # noqa: SLF001
-        record_failed_login,
-        reset_auth_caches,
-        set_password,
-    )
-
-    # Prime every cache.
-    await set_password("SomePass1!")
-    await _get_serializer()
-    req = MagicMock()
-    req.client.host = "198.51.100.11"
-    req.headers.get.return_value = None
-    record_failed_login(req)
-
-    assert _auth._setup_complete is True  # noqa: SLF001
-    assert _auth._serializer is not None  # noqa: SLF001
-    assert _auth._login_attempts  # noqa: SLF001
-
-    reset_auth_caches()
-
-    assert _auth._setup_complete is None  # noqa: SLF001
-    assert _auth._serializer is None  # noqa: SLF001
-    assert _auth._login_attempts == {}  # noqa: SLF001
-
-
-# Session seam
-
-
-@pytest.mark.asyncio()
-@pytest.mark.pinning()
-async def test_get_serializer_lazy_init_reads_session_secret(db: None) -> None:
-    """First call generates-and-persists the secret; subsequent calls reuse it."""
-    import houndarr.auth as _auth
-    from houndarr.auth import _get_serializer  # noqa: SLF001
-
-    assert _auth._serializer is None  # noqa: SLF001
-    assert await get_setting("session_secret") is None
-
-    first = await _get_serializer()
-    assert _auth._serializer is first  # noqa: SLF001
-    persisted = await get_setting("session_secret")
-    assert persisted is not None and len(persisted) == 64  # 32 bytes hex
-
-    # Second call must not rotate the secret.
-    second = await _get_serializer()
-    assert second is first
-    assert await get_setting("session_secret") == persisted
-
-
-@pytest.mark.asyncio()
-@pytest.mark.pinning()
-async def test_rotate_session_secret_invalidates_prior_token(db: None) -> None:
-    """A token signed with the prior secret must fail verification after rotate.
-
-    Critical for the password-change flow: rotating the session secret
-    is how Houndarr invalidates every other signed-in tab after a
-    credential change.
-    """
-    from itsdangerous import BadSignature
-
-    from houndarr.auth import _get_serializer, rotate_session_secret  # noqa: SLF001
-
-    serializer = await _get_serializer()
-    signed = serializer.dumps({"ts": 1, "csrf": "tok"})
-
-    await rotate_session_secret()
-    refreshed = await _get_serializer()
-
-    with pytest.raises(BadSignature):
-        refreshed.loads(signed, max_age=60)
-
-
-@pytest.mark.asyncio()
-@pytest.mark.pinning()
-async def test_get_session_csrf_token_extracts_payload(app: TestClient) -> None:
-    """get_session_csrf_token reads the CSRF value embedded in the session cookie.
-
-    Same cookie both stores the session and carries the per-session
-    CSRF token; the cookie value is signed and must round-trip through
-    ``itsdangerous`` before the CSRF check can compare-digest against
-    the submitted header.
-    """
-    from fastapi import Request
-
-    from houndarr.auth import get_session_csrf_token
-
-    app.post(
-        "/setup",
-        data={"username": "admin", "password": "ValidPass1!", "password_confirm": "ValidPass1!"},
-    )
-    app.post("/login", data={"username": "admin", "password": "ValidPass1!"})
-    session_cookie = app.cookies.get(SESSION_COOKIE_NAME)
-    csrf_cookie = app.cookies.get(CSRF_COOKIE_NAME)
-    assert session_cookie is not None
-    assert csrf_cookie is not None
-
-    scope = {
-        "type": "http",
-        "method": "GET",
-        "path": "/",
-        "headers": [(b"cookie", f"{SESSION_COOKIE_NAME}={session_cookie}".encode())],
-        "query_string": b"",
-    }
-    request = Request(scope)
-    extracted = await get_session_csrf_token(request)
-    assert extracted == csrf_cookie
-
-
-# Username helpers
-
-
-@pytest.mark.pinning()
-@pytest.mark.parametrize(
-    "raw,expected",
-    [
-        ("  ADMIN  ", "admin"),
-        ("MixedCase", "mixedcase"),
-        ("\talice\n", "alice"),
-        ("", ""),
-        ("a", "a"),
-    ],
-)
-def test_normalize_username_lowercases_and_strips(raw: str, expected: str) -> None:
-    from houndarr.auth import normalize_username
-
-    assert normalize_username(raw) == expected
-
-
-@pytest.mark.pinning()
-@pytest.mark.parametrize(
-    "raw,error_fragment",
-    [
-        ("", "Username is required"),
-        ("ab", "3-32 characters"),
-        ("a" * 33, "3-32 characters"),
-        ("has space", "lowercase letters"),
-        ("CAPITAL", None),  # normalized to 'capital', passes
-        ("bad!char", "lowercase letters"),
-        ("ok.name_1", None),
-        ("dotted.name-here", None),
-    ],
-)
-def test_validate_username_error_messages(raw: str, error_fragment: str | None) -> None:
-    from houndarr.auth import validate_username
-
-    result = validate_username(raw)
-    if error_fragment is None:
-        assert result is None
-    else:
-        assert result is not None
-        assert error_fragment in result
-
-
-# Module constants (pin the exact values)
-
-
-@pytest.mark.pinning()
-def test_logout_path_constant_is_slash_logout() -> None:
-    """_LOGOUT_PATH must stay '/logout'; any drift would silently break logout."""
-    assert _LOGOUT_PATH == "/logout"
-
-
-@pytest.mark.pinning()
-def test_csrf_protected_methods_constant() -> None:
-    """The set of CSRF-protected methods must stay exactly {POST, PUT, PATCH, DELETE}."""
-    assert frozenset(["POST", "PUT", "PATCH", "DELETE"]) == _CSRF_PROTECTED_METHODS
-
-
-@pytest.mark.pinning()
-def test_public_paths_constant_has_exact_contents() -> None:
-    """_PUBLIC_PATHS must stay exactly {/setup, /login, /api/health, /static}.
-
-    Each entry is matched via ``path.startswith`` in the middleware, so
-    the breadth is deliberately small; widening it without updating
-    every consumer (proxy-auth dead-path redirects included) would
-    silently bypass the auth check.
-    """
-    assert frozenset(["/setup", "/login", "/api/health", "/static"]) == _PUBLIC_PATHS
-
-
-# Proxy-auth seam
-
-
-@pytest.mark.pinning()
-def test_extract_proxy_username_returns_none_on_missing_or_blank(
-    tmp_data_dir: str,
-) -> None:
-    """_extract_proxy_username returns None for absent or whitespace-only headers.
-
-    The middleware composes this with `_is_trusted_proxy`; returning an
-    empty string would let the Auth middleware treat a blank header as
-    an authenticated identity.
-    """
-    from unittest.mock import MagicMock
-
-    from houndarr.auth import _extract_proxy_username  # noqa: SLF001
-    from houndarr.config import bootstrap_settings
-
-    try:
-        bootstrap_settings(
-            data_dir=tmp_data_dir,
-            auth_mode="proxy",
-            auth_proxy_header="Remote-User",
-            trusted_proxies="172.18.0.5",
-        )
-        request = MagicMock()
-        request.headers.get.return_value = ""
-        assert _extract_proxy_username(request) is None
-        request.headers.get.return_value = "   "
-        assert _extract_proxy_username(request) is None
-        request.headers.get.return_value = None
-        # get(header, "") returns "" when absent; MagicMock autospec'd to
-        # return None still exercises the empty-string branch correctly.
-        request.headers.get.return_value = ""
-        assert _extract_proxy_username(request) is None
-    finally:
-        bootstrap_settings()
-
-
-@pytest.mark.pinning()
-def test_validate_csrf_reads_form_body_csrf_token_field(app: TestClient) -> None:
-    """The form-body fallback at `auth.py:208` must accept csrf_token inputs.
-
-    Covered transitively elsewhere, but pinned in isolation here so the
-    header-first / body-fallback order survives the csrf seam split.
-    """
-    from tests.conftest import get_csrf_token
-
-    app.post(
-        "/setup",
-        data={"username": "admin", "password": "ValidPass1!", "password_confirm": "ValidPass1!"},
-    )
-    app.post("/login", data={"username": "admin", "password": "ValidPass1!"})
-    token = get_csrf_token(app)
-    assert token
-
-    # Post without the X-CSRF-Token header; the form body must supply it.
-    resp = app.post("/logout", data={"csrf_token": token}, follow_redirects=False)
-    assert resp.status_code == 303
-
-
-# Middleware seam (ordering invariant)
-
-
-@pytest.mark.asyncio()
-@pytest.mark.pinning()
-async def test_dispatch_proxy_calls_trust_gate_before_header_read(
-    tmp_data_dir: str, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """The proxy dispatch must call `_is_trusted_proxy` before reading the header.
-
-    The trust gate owns the IP check.  Reading the auth header before
-    the IP check would allow a spoofed ``Remote-User`` header from any
-    client to influence a log message even if the middleware still
-    rejected the request.  Pin the call order so the middleware seam
-    split cannot silently reorder the two helpers.
-    """
-    from unittest.mock import AsyncMock, MagicMock
-
-    from houndarr.auth import AuthMiddleware
-    from houndarr.auth import proxy_auth as _proxy_auth
-    from houndarr.config import bootstrap_settings
-
-    try:
-        bootstrap_settings(
-            data_dir=tmp_data_dir,
-            auth_mode="proxy",
-            auth_proxy_header="Remote-User",
-            trusted_proxies="172.18.0.5",
-        )
-        calls: list[str] = []
-
-        def fake_is_trusted(request: object) -> bool:
-            calls.append("trust")
-            return False  # force early return
-
-        def fake_extract(request: object) -> str | None:
-            calls.append("extract")
-            return "never-seen"
-
-        # Patch the proxy_auth module directly: the middleware resolves
-        # each helper via ``proxy_auth.<name>`` at call time so the patch
-        # propagates without also having to update the import site.
-        monkeypatch.setattr(_proxy_auth, "_is_trusted_proxy", fake_is_trusted)
-        monkeypatch.setattr(_proxy_auth, "_extract_proxy_username", fake_extract)
-
-        middleware = AuthMiddleware(app=MagicMock())
-        request = MagicMock()
-        request.url.path = "/settings"
-        request.method = "GET"
-        request.client.host = "10.0.0.1"
-        call_next = AsyncMock()
-        await middleware._dispatch_proxy(request, call_next, "/settings")  # noqa: SLF001
-
-        assert calls == ["trust"], (
-            f"expected only trust gate to run when IP is untrusted, got {calls!r}"
-        )
-    finally:
-        bootstrap_settings()

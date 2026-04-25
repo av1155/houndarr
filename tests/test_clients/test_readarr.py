@@ -36,7 +36,7 @@ async def test_ping_success(client: ReadarrClient) -> None:
     )
     result = await client.ping()
     assert result is not None
-    assert result.app_name == "Readarr"
+    assert result["appName"] == "Readarr"
 
 
 @pytest.mark.asyncio()

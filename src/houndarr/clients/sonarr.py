@@ -3,20 +3,16 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import ClassVar
+from typing import Any, Literal
 
-from houndarr.clients._wire_models import (
-    ArrSeries,
-    PaginatedResponse,
-    SonarrLibraryEpisode,
-    SonarrWantedEpisode,
-)
-from houndarr.clients.base import ArrClient, WantedKind
+import httpx
+
+from houndarr.clients.base import ArrClient
 
 __all__ = ["LibraryEpisode", "MissingEpisode", "SonarrClient"]
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class LibraryEpisode:
     """An episode from Sonarr's full library with file and cutoff metadata."""
 
@@ -31,7 +27,7 @@ class LibraryEpisode:
     cutoff_met: bool
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class MissingEpisode:
     """A single missing episode returned by Sonarr's wanted/missing endpoint."""
 
@@ -46,12 +42,6 @@ class MissingEpisode:
 
 class SonarrClient(ArrClient):
     """Async client for the Sonarr v3 REST API."""
-
-    _WANTED_SORT_KEY: ClassVar[str] = "airDateUtc"
-    _WANTED_INCLUDE_PARAM: ClassVar[str | None] = "includeSeries"
-    _WANTED_ENVELOPE: ClassVar[type[PaginatedResponse[SonarrWantedEpisode]]] = PaginatedResponse[
-        SonarrWantedEpisode
-    ]
 
     async def get_missing(
         self,
@@ -71,8 +61,17 @@ class SonarrClient(ArrClient):
         Returns:
             List of :class:`MissingEpisode` dataclasses, oldest first.
         """
-        envelope = await self._fetch_wanted_page("missing", page=page, page_size=page_size)
-        return [_parse_episode(w) for w in envelope.records]
+        data: dict[str, Any] = await self._get(
+            "/api/v3/wanted/missing",
+            page=page,
+            pageSize=page_size,
+            sortKey="airDateUtc",
+            sortDirection="ascending",
+            includeSeries="true",
+            monitored="true",
+        )
+        records: list[dict[str, Any]] = data.get("records", [])
+        return [_parse_episode(r) for r in records]
 
     async def search(self, item_id: int) -> None:
         """Trigger an automatic episode search in Sonarr.
@@ -110,9 +109,7 @@ class SonarrClient(ArrClient):
         """Return a page of monitored episodes that have not met their quality cutoff.
 
         Calls ``GET /api/v3/wanted/cutoff`` with ``includeSeries=true`` so that
-        series metadata is embedded in each record.  Sonarr's cutoff
-        endpoint historically omits the sort params, so the call passes
-        ``include_sort=False`` to suppress them.
+        series metadata is embedded in each record.
 
         Args:
             page: 1-based page number.
@@ -121,42 +118,39 @@ class SonarrClient(ArrClient):
         Returns:
             List of :class:`MissingEpisode` dataclasses for cutoff-unmet episodes.
         """
-        envelope = await self._fetch_wanted_page(
-            "cutoff",
+        data: dict[str, Any] = await self._get(
+            "/api/v3/wanted/cutoff",
             page=page,
-            page_size=page_size,
-            include_sort=False,
+            pageSize=page_size,
+            includeSeries="true",
+            monitored="true",
         )
-        return [_parse_episode(w) for w in envelope.records]
+        records: list[dict[str, Any]] = data.get("records", [])
+        return [_parse_episode(r) for r in records]
 
-    async def get_wanted_total(self, kind: WantedKind) -> int:
-        """Return the totalRecords count for ``wanted/{kind}`` via a size-1 probe.
+    async def get_wanted_total(self, kind: Literal["missing", "cutoff"]) -> int:
+        """Return the totalRecords count for ``wanted/{kind}`` via a size-1 probe."""
+        data: dict[str, Any] = await self._get(
+            f"/api/v3/wanted/{kind}",
+            page=1,
+            pageSize=1,
+            sortKey="airDateUtc",
+            sortDirection="ascending",
+            monitored="true",
+        )
+        return int(data.get("totalRecords", 0) or 0)
 
-        Delegates to :meth:`ArrClient._fetch_wanted_total`, which wraps
-        raw ``httpx`` and ``pydantic`` failures in typed
-        :class:`~houndarr.errors.ClientError` subclasses with the
-        original exception preserved on ``__cause__``.
-
-        Raises:
-            ClientHTTPError: Non-2xx response.
-            ClientTransportError: Transport failure (connect, timeout,
-                malformed URL, etc.).
-            ClientValidationError: Response shape did not match the
-                paginated envelope schema.
-        """
-        return await self._fetch_wanted_total(kind)
-
-    async def get_series(self) -> list[ArrSeries]:
+    async def get_series(self) -> list[dict[str, Any]]:
         """Return the full series list.
 
-        Calls ``GET /api/v3/series``.  The upgrade-pass adapter filters on
-        ``monitored`` and ``id``; other fields on the response are ignored.
+        Calls ``GET /api/v3/series``.  Returns raw dicts; only ``id`` and
+        ``monitored`` are needed by the upgrade-pass adapter.
 
         Returns:
-            List of :class:`ArrSeries` wire models.
+            List of series dicts from Sonarr.
         """
-        result = await self._get("/api/v3/series")
-        return [ArrSeries.model_validate(r) for r in result]
+        result: list[dict[str, Any]] = await self._get("/api/v3/series")
+        return result
 
     async def get_episodes(self, series_id: int) -> list[LibraryEpisode]:
         """Return all episodes for a series with file and cutoff metadata.
@@ -170,49 +164,64 @@ class SonarrClient(ArrClient):
         Returns:
             List of :class:`LibraryEpisode` dataclasses.
         """
-        records = await self._get(
+        records: list[dict[str, Any]] = await self._get(
             "/api/v3/episode",
             seriesId=series_id,
             includeEpisodeFile="true",
             includeSeries="true",
         )
-        return [_parse_library_episode(SonarrLibraryEpisode.model_validate(r)) for r in records]
+        return [_parse_library_episode(r) for r in records]
+
+    async def search_episode(self, episode_id: int) -> None:
+        """Alias for :meth:`search` with a more descriptive name."""
+        await self.search(episode_id)
 
 
+# ---------------------------------------------------------------------------
 # Parsing helpers
+# ---------------------------------------------------------------------------
 
 
-def _parse_library_episode(wire: SonarrLibraryEpisode) -> LibraryEpisode:
-    has_file = bool(wire.has_file)
-    cutoff_not_met = True
-    if wire.episode_file is not None and wire.episode_file.quality_cutoff_not_met is not None:
-        cutoff_not_met = wire.episode_file.quality_cutoff_not_met
-    series_id = wire.series_id or (wire.series.id if wire.series else None) or 0
-    series_title = (wire.series.title if wire.series else None) or ""
+def _parse_library_episode(record: dict[str, Any]) -> LibraryEpisode:
+    series: dict[str, Any] = record.get("series") or {}
+    has_file = bool(record.get("hasFile", False))
+    ep_file: dict[str, Any] = record.get("episodeFile") or {}
+    cutoff_not_met = ep_file.get("qualityCutoffNotMet", True)
     return LibraryEpisode(
-        episode_id=wire.id,
-        series_id=series_id,
-        series_title=series_title,
-        episode_title=wire.title or "",
-        season=wire.season_number or 0,
-        episode=wire.episode_number or 0,
-        monitored=bool(wire.monitored),
+        episode_id=record["id"],
+        series_id=record.get("seriesId") or series.get("id") or 0,
+        series_title=series.get("title") or "",
+        episode_title=record.get("title") or "",
+        season=record.get("seasonNumber", 0),
+        episode=record.get("episodeNumber", 0),
+        monitored=bool(record.get("monitored", False)),
         has_file=has_file,
         cutoff_met=not cutoff_not_met if has_file else False,
     )
 
 
-def _parse_episode(wire: SonarrWantedEpisode) -> MissingEpisode:
-    series_id = (
-        wire.series_id if wire.series_id is not None else (wire.series.id if wire.series else None)
-    )
-    series_title = (wire.series.title if wire.series else None) or wire.series_title or ""
+def _parse_episode(record: dict[str, Any]) -> MissingEpisode:
+    series: dict[str, Any] = record.get("series") or {}
     return MissingEpisode(
-        episode_id=wire.id,
-        series_id=series_id,
-        series_title=series_title,
-        episode_title=wire.title or "",
-        season=wire.season_number or 0,
-        episode=wire.episode_number or 0,
-        air_date_utc=wire.air_date_utc,
+        episode_id=record["id"],
+        series_id=record.get("seriesId") or series.get("id"),
+        series_title=series.get("title") or record.get("seriesTitle") or "",
+        episode_title=record.get("title") or "",
+        season=record.get("seasonNumber", 0),
+        episode=record.get("episodeNumber", 0),
+        air_date_utc=record.get("airDateUtc"),
     )
+
+
+# ---------------------------------------------------------------------------
+# Convenience factory (mirrors httpx.AsyncClient signature)
+# ---------------------------------------------------------------------------
+
+
+def make_sonarr_client(
+    url: str,
+    api_key: str,
+    timeout: httpx.Timeout = httpx.Timeout(30.0, connect=5.0),
+) -> SonarrClient:
+    """Return a :class:`SonarrClient` ready for use as an async context manager."""
+    return SonarrClient(url=url, api_key=api_key, timeout=timeout)

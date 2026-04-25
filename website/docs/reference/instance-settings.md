@@ -17,27 +17,9 @@ see [Increase Throughput](/docs/guides/increase-throughput). For
 the per-app API command Houndarr sends see
 [Search Commands](/docs/reference/search-commands).
 
-:::tip Want to start fresh?
-If you want every instance back to default policy without losing the
-instances themselves, use **Settings > Admin > Maintenance > Reset
-all instance settings**. It reverts every field below at once but
-keeps your connection details and API keys. See
-[Admin actions](/docs/guides/admin-actions) for the full list of
-what a reset touches.
-:::
-
 <Image
   img={require('@site/static/img/screenshots/houndarr-add-instance-form.png')}
   alt="The Houndarr Add Instance form showing search, cutoff, and upgrade configuration fields"
-/>
-
-The same form opens when you click **Edit** on an existing row, with
-the current values pre-populated. The API key stays masked until you
-overwrite it.
-
-<Image
-  img={require('@site/static/img/screenshots/houndarr-edit-instance-form.png')}
-  alt="The Houndarr Edit Instance modal, pre-populated with an existing Sonarr instance's connection, search policy, and schedule values"
 />
 
 ## Missing search controls
@@ -211,20 +193,6 @@ missing search mode.
 - Readarr: Book (default) or Author-context
 - Radarr, Whisparr v3: Always movie-level (no mode selection)
 
-### Upgrade Series Window (Sonarr / Whisparr v2 only)
-
-How many monitored series the upgrade pass samples per cycle. The
-series offset rotates by this amount each cycle, so the whole
-library cycles through over time.
-
-- Default: `5`
-- Range: `1` to `100`
-- Larger windows finish a full library rotation faster but make
-  every upgrade cycle hit more series at once. Raise this on a
-  large Sonarr library if you can absorb the higher per-cycle load
-  on the *arr instance.
-- No effect on Radarr, Whisparr v3, Lidarr, or Readarr.
-
 ### Offset-based rotation
 
 Applies when `Search Order` is `Chronological`. Persistent per-pass
@@ -288,7 +256,6 @@ Restricts scheduled cycles to one or more time-of-day windows.
 | Upgrade search | Off |
 | Upgrade Batch | `1` (hard cap: 5) |
 | Upgrade Cooldown | `90` (min: 7) |
-| Upgrade Series Window | `5` (range 1-100, Sonarr/Whisparr v2 only) |
 | Upgrade Cap | `1` (hard cap: 5) |
 
 ## Status control
@@ -299,26 +266,4 @@ in Settings. New instances are created as enabled by default.
 <Image
   img={require('@site/static/img/screenshots/houndarr-settings-instances.png')}
   alt="The Houndarr Settings page showing the instance list with per-row enable toggles"
-/>
-
-<figure className="docs-screenshot-portrait">
-  <Image
-    img={require('@site/static/img/screenshots/houndarr-settings-mobile.png')}
-    alt="The Houndarr Settings page rendered on a mobile viewport, with each instance shown as a stacked row carrying Disable, Edit, and Delete buttons"
-  />
-  <figcaption>
-    Same list on a phone-width viewport; each row keeps its own
-    Disable / Edit / Delete controls.
-  </figcaption>
-</figure>
-
-## Changelog notifications
-
-The **Changelog notifications** toggle opens a modal after each upgrade
-summarising what shipped. The **What's new** button re-opens the same
-modal on demand.
-
-<Image
-  img={require('@site/static/img/screenshots/houndarr-changelog-modal.png')}
-  alt="The Houndarr What's New modal listing Added, Changed, and Fixed items from the latest release with a link to the full changelog on GitHub"
 />

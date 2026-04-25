@@ -62,7 +62,7 @@ _HOSTNAME_PATTERN = re.compile(
 )
 
 
-def is_blocked_address(addr: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
+def _is_blocked_address(addr: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
     """Return whether *addr* falls into a blocked network range."""
     return addr.is_loopback or addr.is_link_local or addr.is_unspecified
 
@@ -165,7 +165,7 @@ def validate_instance_url(url: str) -> str | None:
             return f"Instance URL host '{host}' is invalid."
 
         for resolved in resolved_ips:
-            if is_blocked_address(resolved):
+            if _is_blocked_address(resolved):
                 return (
                     f"Instance URL host '{host}' resolves to a blocked address range ({resolved}). "
                     "Use a container name or routable hostname."
@@ -175,7 +175,7 @@ def validate_instance_url(url: str) -> str | None:
         # failure to the explicit connection test.
         return None
 
-    if is_blocked_address(addr):
+    if _is_blocked_address(addr):
         return (
             f"Instance URL points to a blocked address range ({addr}). "
             "Use a container name or routable hostname."

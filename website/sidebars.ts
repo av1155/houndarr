@@ -32,7 +32,6 @@ const sidebars: SidebarsConfig = {
         'guides/verify-its-working',
         'guides/troubleshoot-connection',
         'guides/increase-throughput',
-        'guides/admin-actions',
         'guides/backup-and-restore',
         'guides/reverse-proxy',
         'guides/sso-proxy-auth',

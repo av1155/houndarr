@@ -49,8 +49,8 @@ exist to catch mistakes; working around them reintroduces the mistakes.
 
 - Hook 5 blocks a file edit on main: create a feature branch
   (`git checkout -b type/slug`) and make the edit there.
-- Hook 6 blocks a commit: run `just fix` (or `just fmt-check` to see
-  the diff first) to fix formatting, then retry the commit.
+- Hook 6 blocks a commit: run `.venv/bin/python -m ruff format src/ tests/`
+  to fix formatting, then retry the commit.
 - Hook 3 blocks `rm -rf`: use a more specific path instead of a
   dangerous wildcard target.
 - Hook 4 blocks a git push: you are pushing to main or force-pushing.

@@ -9,14 +9,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from houndarr.clients.base import InstanceSnapshot, ReconcileSets
 from houndarr.clients.radarr import LibraryMovie, MissingMovie, RadarrClient
-from houndarr.engine.adapters._common import (
-    build_missing_candidate,
-    compute_default_snapshot,
-    fetch_movie_upgrade_pool,
-    paginate_wanted,
-)
 from houndarr.engine.candidates import (
     SearchCandidate,
     _is_unreleased,
@@ -28,7 +21,7 @@ _RADARR_UNRELEASED_STATUSES = {"tba", "announced"}
 
 
 # ---------------------------------------------------------------------------
-# Helpers
+# Helpers (copied from search_loop.py; originals removed in Phase 2)
 # ---------------------------------------------------------------------------
 
 
@@ -85,11 +78,12 @@ def adapt_missing(item: MissingMovie, instance: Instance) -> SearchCandidate:
     Returns:
         A fully populated :class:`SearchCandidate`.
     """
-    return build_missing_candidate(
-        item_type="movie",
+    return SearchCandidate(
         item_id=item.movie_id,
+        item_type="movie",
         label=_movie_label(item),
-        unreleased_reason=_radarr_unreleased_reason(item, instance.missing.post_release_grace_hrs),
+        unreleased_reason=_radarr_unreleased_reason(item, instance.post_release_grace_hrs),
+        group_key=None,
         search_payload={
             "command": "MoviesSearch",
             "movie_id": item.movie_id,
@@ -148,7 +142,7 @@ def adapt_upgrade(item: LibraryMovie, instance: Instance) -> SearchCandidate:
 
 async def fetch_upgrade_pool(
     client: RadarrClient,
-    instance: Instance,  # noqa: ARG001
+    instance: Instance,
 ) -> list[LibraryMovie]:
     """Fetch and filter Radarr library for upgrade-eligible movies.
 
@@ -156,15 +150,13 @@ async def fetch_upgrade_pool(
 
     Args:
         client: An open :class:`RadarrClient` context.
-        instance: The configured Radarr instance.  Unused at present;
-            kept for AppAdapter signature parity with the series /
-            album / book adapters whose pool builders consult instance
-            policy.
+        instance: The configured Radarr instance.
 
     Returns:
         List of upgrade-eligible :class:`LibraryMovie` items.
     """
-    return await fetch_movie_upgrade_pool(client.get_library)
+    library = await client.get_library()
+    return [m for m in library if m.monitored and m.has_file and m.cutoff_met]
 
 
 async def dispatch_search(client: RadarrClient, candidate: SearchCandidate) -> None:
@@ -177,33 +169,6 @@ async def dispatch_search(client: RadarrClient, candidate: SearchCandidate) -> N
     await client.search(candidate.search_payload["movie_id"])
 
 
-async def fetch_reconcile_sets(
-    client: RadarrClient,
-    instance: Instance,
-) -> ReconcileSets:
-    """Return the authoritative wanted / upgrade-pool sets for Radarr.
-
-    Radarr has no parent-context mode: cooldown rows always carry the
-    leaf ``movie_id``, so the reconciliation sets are just the leaf
-    ids from each pass.  When ``upgrade_enabled`` is false the upgrade
-    set short-circuits to empty so the ``/movie`` library call is
-    skipped.
-    """
-    missing_items = await paginate_wanted(client.get_missing)
-    cutoff_items = await paginate_wanted(client.get_cutoff_unmet)
-    upgrade_set: frozenset[tuple[str, int]] = frozenset()
-    if instance.upgrade.upgrade_enabled:
-        upgrade_candidates = [
-            adapt_upgrade(item, instance) for item in await fetch_upgrade_pool(client, instance)
-        ]
-        upgrade_set = frozenset((str(c.item_type), c.item_id) for c in upgrade_candidates)
-    return ReconcileSets(
-        missing=frozenset(("movie", m.movie_id) for m in missing_items),
-        cutoff=frozenset(("movie", m.movie_id) for m in cutoff_items),
-        upgrade=upgrade_set,
-    )
-
-
 def make_client(instance: Instance) -> RadarrClient:
     """Construct a :class:`RadarrClient` for *instance*.
 
@@ -213,43 +178,4 @@ def make_client(instance: Instance) -> RadarrClient:
     Returns:
         A new (unopened) :class:`RadarrClient`.
     """
-    return RadarrClient(url=instance.core.url, api_key=instance.core.api_key)
-
-
-async def fetch_instance_snapshot(
-    client: RadarrClient,
-    instance: Instance,  # noqa: ARG001
-) -> InstanceSnapshot:
-    """Compose the dashboard snapshot for a Radarr instance.
-
-    Reuses :func:`_radarr_release_anchor` so the unreleased count uses
-    the same digital → physical → release → in-cinemas fallback that
-    :func:`_radarr_unreleased_reason` applies at search-dispatch time.
-    The dashboard's strict-future bucket is intentionally narrower
-    than the dispatch ladder (which also adds ``isAvailable=false`` and
-    status-based gates); items skipped for those reasons surface in
-    logs as ``"radarr reports not available"`` etc. and never sum into
-    the Unreleased headline by design.
-    """
-    return await compute_default_snapshot(
-        client,
-        anchor_fn=_radarr_release_anchor,
-    )
-
-
-class RadarrAdapter:
-    """Class-form Radarr adapter for the :data:`ADAPTERS` registry.
-
-    Conforms to :class:`~houndarr.engine.adapters.protocols.AppAdapterProto`
-    structurally via the eight staticmethod attributes below; the
-    module-level functions remain importable for direct unit-test use.
-    """
-
-    adapt_missing = staticmethod(adapt_missing)
-    adapt_cutoff = staticmethod(adapt_cutoff)
-    adapt_upgrade = staticmethod(adapt_upgrade)
-    fetch_upgrade_pool = staticmethod(fetch_upgrade_pool)
-    dispatch_search = staticmethod(dispatch_search)
-    make_client = staticmethod(make_client)
-    fetch_reconcile_sets = staticmethod(fetch_reconcile_sets)
-    fetch_instance_snapshot = staticmethod(fetch_instance_snapshot)
+    return RadarrClient(url=instance.url, api_key=instance.api_key)

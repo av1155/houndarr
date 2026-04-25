@@ -3,15 +3,14 @@
 from __future__ import annotations
 
 from collections.abc import AsyncGenerator
+from typing import Any
 
 import pytest
 import pytest_asyncio
 from fastapi.testclient import TestClient
 
-from houndarr.clients._wire_models import SystemStatus
 from houndarr.clients.base import ArrClient
 from houndarr.database import get_db
-from tests.conftest import csrf_headers
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -30,9 +29,9 @@ _VALID_FORM = {
 
 @pytest.fixture(autouse=True)
 def _mock_connection_ping(monkeypatch: pytest.MonkeyPatch) -> None:
-    async def _always_ok(self: ArrClient) -> SystemStatus | None:
+    async def _always_ok(self: ArrClient) -> dict[str, Any] | None:
         name = type(self).__name__.replace("Client", "")
-        return SystemStatus(app_name=name, version="4.0.0")
+        return {"appName": name, "version": "4.0.0"}
 
     monkeypatch.setattr(ArrClient, "ping", _always_ok)
 
@@ -324,57 +323,6 @@ async def test_logs_empty_instance_id_treated_as_all(
 
 
 @pytest.mark.asyncio()
-async def test_logs_filter_by_multiple_instance_ids(seeded_log: None, async_client: object) -> None:
-    """Repeated instance_id params narrow the feed to the selected instances.
-
-    Exercises the multi-select contract added for the dashboard error
-    banner: ``/logs?instance_id=1&instance_id=2`` must return rows whose
-    ``instance_id`` is in ``{1, 2}`` and nothing else.  The seeded
-    fixture owns two instances (ids 1 and 2), so asserting that both
-    appear rules out accidental single-value fallback.
-    """
-    from httpx import AsyncClient
-
-    assert isinstance(async_client, AsyncClient)
-
-    await async_client.post(
-        "/setup",
-        data={"username": "admin", "password": "ValidPass1!", "password_confirm": "ValidPass1!"},
-    )
-    await async_client.post("/login", data={"username": "admin", "password": "ValidPass1!"})
-
-    resp = await async_client.get("/api/logs?instance_id=1&instance_id=2&limit=200")
-    assert resp.status_code == 200
-    data = resp.json()
-    returned_ids = {row["instance_id"] for row in data}
-    # The seed also carries a system row whose instance_id IS NULL;
-    # the IN-clause filter must exclude it so we only see rows for the
-    # two instances explicitly asked for.
-    assert returned_ids == {1, 2}
-    for row in data:
-        assert row["instance_id"] in {1, 2}
-
-
-@pytest.mark.asyncio()
-async def test_logs_filter_rejects_non_integer_instance_id(
-    seeded_log: None, async_client: object
-) -> None:
-    """A non-integer instance_id value returns a 422 (multi-select preserved)."""
-    from httpx import AsyncClient
-
-    assert isinstance(async_client, AsyncClient)
-
-    await async_client.post(
-        "/setup",
-        data={"username": "admin", "password": "ValidPass1!", "password_confirm": "ValidPass1!"},
-    )
-    await async_client.post("/login", data={"username": "admin", "password": "ValidPass1!"})
-
-    resp = await async_client.get("/api/logs?instance_id=1&instance_id=abc")
-    assert resp.status_code == 422
-
-
-@pytest.mark.asyncio()
 async def test_logs_filter_by_action(seeded_log: None, async_client: object) -> None:
     """Filtering by action returns only rows with that action."""
     from httpx import AsyncClient
@@ -453,49 +401,6 @@ async def test_logs_hide_system_rows_filter(seeded_log: None, async_client: obje
     data = resp.json()
     assert len(data) == 5
     assert all(row["cycle_trigger"] != "system" for row in data)
-
-
-@pytest.mark.asyncio()
-async def test_logs_hide_skipped_filter(seeded_log: None, async_client: object) -> None:
-    """hide_skipped=true should remove action='skipped' rows from results."""
-    from httpx import AsyncClient
-
-    assert isinstance(async_client, AsyncClient)
-
-    await async_client.post(
-        "/setup",
-        data={"username": "admin", "password": "ValidPass1!", "password_confirm": "ValidPass1!"},
-    )
-    await async_client.post("/login", data={"username": "admin", "password": "ValidPass1!"})
-
-    resp = await async_client.get("/api/logs?hide_skipped=true&limit=200")
-    assert resp.status_code == 200
-    data = resp.json()
-    assert all(row["action"] != "skipped" for row in data)
-
-
-@pytest.mark.asyncio()
-async def test_logs_partial_hide_skipped_excludes_skipped_rows(
-    seeded_log: None, async_client: object
-) -> None:
-    """Partial endpoint honours hide_skipped=true and round-trips it in pagination."""
-    from httpx import AsyncClient
-
-    assert isinstance(async_client, AsyncClient)
-
-    await async_client.post(
-        "/setup",
-        data={"username": "admin", "password": "ValidPass1!", "password_confirm": "ValidPass1!"},
-    )
-    await async_client.post("/login", data={"username": "admin", "password": "ValidPass1!"})
-
-    resp = await async_client.get("/api/logs/partial?hide_skipped=true&limit=200")
-    assert resp.status_code == 200
-    content = resp.content.decode()
-    # data-action is stamped on every row in both the legacy table and
-    # the redesigned cycle feed, so the filter's effect is visible as
-    # the absence of the skipped value regardless of template shape.
-    assert 'data-action="skipped"' not in content
 
 
 @pytest.mark.asyncio()
@@ -621,19 +526,18 @@ def test_logs_page_renders(app: TestClient) -> None:
     resp = app.get("/logs")
     assert resp.status_code == 200
     assert b'data-page-key="logs"' in resp.content
-    assert b'hx-history="false"' in resp.content
-    assert b'id="log-filter-form"' in resp.content
-    assert b'id="log-feed"' in resp.content
-    assert b'id="live-indicator"' in resp.content
+    assert b"log-filter-form" in resp.content
+    assert b"log-tbody" in resp.content
+    assert b"Media" in resp.content
+    assert b"Timestamp (Local)" in resp.content
     assert b"Kind" in resp.content
     assert b"Trigger" in resp.content
-    # Noise switches (hide_system default on, hide_skipped default off).
+    assert b"Cycle" in resp.content
+    assert b"Cycle outcome" in resp.content
+    assert b"Hide system rows" in resp.content
+    assert b'id="summary-total-rows"' in resp.content
     assert b'id="filter-hide-system"' in resp.content
-    assert b'id="filter-hide-skipped"' in resp.content
-    assert b"Hide system" in resp.content
-    assert b"Hide skipped" in resp.content
     assert b"checked" in resp.content
-    # Rows selector: full option set preserved from the legacy page.
     assert b'<option value="500">500</option>' in resp.content
     assert b'<option value="1000">1000</option>' in resp.content
     assert b'<option value="5000">All</option>' in resp.content
@@ -655,9 +559,6 @@ def test_logs_page_renders(app: TestClient) -> None:
     assert b'id="copy-visible-logs-btn"' not in resp.content
     assert b'id="copy-visible-logs-btn-mobile"' not in resp.content
     assert b"Copy visible rows" not in resp.content
-    # Legacy summary bar and table shell must not leak back in.
-    assert b"log-tbody" not in resp.content
-    assert b'id="summary-total-rows"' not in resp.content
 
 
 def test_logs_page_hx_request_returns_content_fragment(app: TestClient) -> None:
@@ -721,12 +622,11 @@ def test_logs_page_copy_dropdown_aria_attributes(app: TestClient) -> None:
 
 
 def test_logs_partial_empty(app: TestClient) -> None:
-    """The HTMX partial returns the empty-state card when no logs exist."""
+    """The HTMX partial returns the empty-state row when no logs exist."""
     _login(app)
     resp = app.get("/api/logs/partial")
     assert resp.status_code == 200
-    assert b'class="empty"' in resp.content
-    assert b"No entries match those filters" in resp.content
+    assert b"No log entries found" in resp.content
 
 
 @pytest.mark.asyncio()
@@ -745,15 +645,14 @@ async def test_logs_partial_returns_rows(seeded_log: None, async_client: object)
     resp = await async_client.get("/api/logs/partial?limit=200")
     assert resp.status_code == 200
     content = resp.text
-    assert 'class="cycle' in content
-    assert 'data-cycle-id="cycle-b"' in content
-    # Cycle cards expose the trigger as a data attribute and render it
-    # as the lowercased label in the meta line.
-    assert 'data-cycle-trigger="run_now"' in content
-    assert "run now" in content
-    # Entry chips + titles.
-    assert 'class="entry' in content
+    assert "<tr" in content
+    assert 'data-cycle-group="cycle-b"' in content
+    # Should contain action badges
+    assert "searched" in content or "skipped" in content
     assert "My Show - S01E01 - Pilot" in content
+    assert "run_now" in content
+    assert "skips only" in content
+    assert "unknown" in content
 
 
 @pytest.mark.asyncio()
@@ -773,7 +672,7 @@ async def test_logs_partial_empty_instance_id_treated_as_all(
 
     resp = await async_client.get("/api/logs/partial?instance_id=&limit=200")
     assert resp.status_code == 200
-    assert 'class="cycle' in resp.text
+    assert "<tr" in resp.text
 
 
 @pytest.mark.asyncio()
@@ -901,15 +800,10 @@ async def test_logs_partial_cycle_group_headers_include_cycle_context(
 
     resp = await async_client.get("/api/logs/partial?limit=200")
     assert resp.status_code == 200
-    # Cycle identity + trigger live on data attributes; counts render
-    # as outcome pills whose inner span carries the number.  The " N"
-    # label text sits outside the span so the exact byte sequence is
-    # `outcome-pill__n">1</span> searched`.
-    assert 'data-cycle-id="cycle-b"' in resp.text
-    assert 'data-cycle-trigger="run_now"' in resp.text
-    assert "outcome-pill--searched" in resp.text
-    assert "outcome-pill--error" in resp.text
-    assert 'outcome-pill__n">1</span>' in resp.text
+    assert "Cycle cycle-b" in resp.text
+    assert "trigger run_now" in resp.text
+    assert "searched 1" in resp.text
+    assert "skipped 1" in resp.text
 
 
 # ---------------------------------------------------------------------------
@@ -974,15 +868,13 @@ async def test_logs_limit_above_max_rejected(seeded_log: None, async_client: obj
 async def test_logs_partial_returns_html_422_on_bad_filter(
     seeded_log: None, async_client: object
 ) -> None:
-    """``/api/logs/partial`` must return a feed-shaped error card on
+    """``/api/logs/partial`` must return an HTML ``<tr>`` error row on
     validation failure, not FastAPI's default JSON body.
 
-    Rationale: the partial is swapped into ``#log-feed`` (a
-    ``<section>``) via HTMX.  With the ``422 -> swap`` config
-    override in ``base.html``, a JSON response would render as raw
-    ``{"detail": ...}`` inside the section.  The endpoint shapes
-    the error as a ``<div class="empty empty--error">`` card to
-    match the feed's visual language.
+    Rationale: the partial is swapped into ``#log-tbody`` via HTMX.
+    With the ``422 -> swap`` config override in ``base.html``, a JSON
+    response would render as raw ``{"detail": ...}`` inside the
+    ``<tbody>``.  The endpoint shapes the error as a ``<tr>`` instead.
     """
     from httpx import AsyncClient
 
@@ -998,7 +890,7 @@ async def test_logs_partial_returns_html_422_on_bad_filter(
     assert resp.status_code == 422
     assert resp.headers["content-type"].startswith("text/html"), resp.headers
     body = resp.text
-    assert 'class="empty' in body and "empty--error" in body, body
+    assert "<tr" in body and 'colspan="10"' in body, body
     assert "Invalid filter value" in body, body
     # The specific detail string is surfaced so operators can see what failed.
     assert "search_kind" in body, body
@@ -1027,33 +919,3 @@ def test_logs_summary_no_unknown_cycles_in_html(app: TestClient) -> None:
     resp = app.get("/logs")
     assert resp.status_code == 200
     assert b"unknown cycles" not in resp.content
-
-
-# ---------------------------------------------------------------------------
-# PR 4: /logs query-param pre-filtering (dashboard error-banner / pill links)
-# ---------------------------------------------------------------------------
-
-
-def test_logs_page_accepts_instance_id_query_param(app: TestClient) -> None:
-    """Following /logs?instance_id=1 keeps the filter selected on the page."""
-    _login(app)
-    app.post("/settings/instances", data=_VALID_FORM, headers=csrf_headers(app))
-
-    resp = app.get("/logs?instance_id=1&action=error")
-    assert resp.status_code == 200
-    body = resp.content
-    # The instance multi-select dropdown pre-checks the box whose value
-    # matches the deep link's instance_id.  The checkbox sits inside a
-    # <label> so the `value="1" ... checked` substring is enough to
-    # pin the pre-selection without coupling to layout whitespace.
-    assert b'value="1"' in body
-    assert b"checked" in body
-    # The action filter dropdown should surface the requested action.
-    assert b'value="error" selected' in body
-
-
-def test_logs_page_unknown_filter_falls_back_to_unfiltered(app: TestClient) -> None:
-    """Malformed query strings should not 422 the page; fall back cleanly."""
-    _login(app)
-    resp = app.get("/logs?instance_id=not-a-number")
-    assert resp.status_code == 200

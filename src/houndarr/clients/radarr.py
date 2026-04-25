@@ -3,19 +3,16 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import ClassVar
+from typing import Any, Literal
 
-from houndarr.clients._wire_models import (
-    PaginatedResponse,
-    RadarrLibraryMovie,
-    RadarrWantedMovie,
-)
-from houndarr.clients.base import ArrClient, WantedKind
+import httpx
+
+from houndarr.clients.base import ArrClient
 
 __all__ = ["LibraryMovie", "MissingMovie", "RadarrClient"]
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class LibraryMovie:
     """A movie from Radarr's full library endpoint."""
 
@@ -30,7 +27,7 @@ class LibraryMovie:
     digital_release: str | None
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class MissingMovie:
     """A single missing movie returned by Radarr's wanted/missing endpoint."""
 
@@ -48,15 +45,6 @@ class MissingMovie:
 
 class RadarrClient(ArrClient):
     """Async client for the Radarr v3 REST API."""
-
-    # Radarr is the only paginated client whose cutoff endpoint includes
-    # the sort params (Sonarr, Lidarr, Readarr, and Whisparr v2 omit them
-    # for cutoff); the template's ``include_sort=True`` default captures
-    # both passes here.
-    _WANTED_SORT_KEY: ClassVar[str] = "inCinemas"
-    _WANTED_ENVELOPE: ClassVar[type[PaginatedResponse[RadarrWantedMovie]]] = PaginatedResponse[
-        RadarrWantedMovie
-    ]
 
     async def get_missing(
         self,
@@ -76,8 +64,16 @@ class RadarrClient(ArrClient):
         Returns:
             List of :class:`MissingMovie` dataclasses.
         """
-        envelope = await self._fetch_wanted_page("missing", page=page, page_size=page_size)
-        return [_parse_movie(w) for w in envelope.records]
+        data: dict[str, Any] = await self._get(
+            "/api/v3/wanted/missing",
+            page=page,
+            pageSize=page_size,
+            sortKey="inCinemas",
+            sortDirection="ascending",
+            monitored="true",
+        )
+        records: list[dict[str, Any]] = data.get("records", [])
+        return [_parse_movie(r) for r in records]
 
     async def search(self, item_id: int) -> None:
         """Trigger an automatic movie search in Radarr.
@@ -109,25 +105,28 @@ class RadarrClient(ArrClient):
         Returns:
             List of :class:`MissingMovie` dataclasses for cutoff-unmet movies.
         """
-        envelope = await self._fetch_wanted_page("cutoff", page=page, page_size=page_size)
-        return [_parse_movie(w) for w in envelope.records]
+        data: dict[str, Any] = await self._get(
+            "/api/v3/wanted/cutoff",
+            page=page,
+            pageSize=page_size,
+            sortKey="inCinemas",
+            sortDirection="ascending",
+            monitored="true",
+        )
+        records: list[dict[str, Any]] = data.get("records", [])
+        return [_parse_movie(r) for r in records]
 
-    async def get_wanted_total(self, kind: WantedKind) -> int:
-        """Return the totalRecords count for ``wanted/{kind}`` via a size-1 probe.
-
-        Delegates to :meth:`ArrClient._fetch_wanted_total`, which wraps
-        raw ``httpx`` and ``pydantic`` failures in typed
-        :class:`~houndarr.errors.ClientError` subclasses with the
-        original exception preserved on ``__cause__``.
-
-        Raises:
-            ClientHTTPError: Non-2xx response.
-            ClientTransportError: Transport failure (connect, timeout,
-                malformed URL, etc.).
-            ClientValidationError: Response shape did not match the
-                paginated envelope schema.
-        """
-        return await self._fetch_wanted_total(kind)
+    async def get_wanted_total(self, kind: Literal["missing", "cutoff"]) -> int:
+        """Return the totalRecords count for ``wanted/{kind}`` via a size-1 probe."""
+        data: dict[str, Any] = await self._get(
+            f"/api/v3/wanted/{kind}",
+            page=1,
+            pageSize=1,
+            sortKey="inCinemas",
+            sortDirection="ascending",
+            monitored="true",
+        )
+        return int(data.get("totalRecords", 0) or 0)
 
     async def get_library(self) -> list[LibraryMovie]:
         """Return the full movie library.
@@ -138,41 +137,60 @@ class RadarrClient(ArrClient):
         Returns:
             List of :class:`LibraryMovie` dataclasses.
         """
-        records = await self._get("/api/v3/movie")
-        return [_parse_library_movie(RadarrLibraryMovie.model_validate(r)) for r in records]
+        records: list[dict[str, Any]] = await self._get("/api/v3/movie")
+        return [_parse_library_movie(r) for r in records]
+
+    async def search_movie(self, movie_id: int) -> None:
+        """Alias for :meth:`search` with a more descriptive name."""
+        await self.search(movie_id)
 
 
+# ---------------------------------------------------------------------------
 # Parsing helpers
+# ---------------------------------------------------------------------------
 
 
-def _parse_library_movie(wire: RadarrLibraryMovie) -> LibraryMovie:
-    has_file = bool(wire.has_file)
-    cutoff_not_met = True
-    if wire.movie_file is not None and wire.movie_file.quality_cutoff_not_met is not None:
-        cutoff_not_met = wire.movie_file.quality_cutoff_not_met
+def _parse_library_movie(record: dict[str, Any]) -> LibraryMovie:
+    has_file = bool(record.get("hasFile", False))
+    movie_file: dict[str, Any] = record.get("movieFile") or {}
+    cutoff_not_met = movie_file.get("qualityCutoffNotMet", True)
     return LibraryMovie(
-        movie_id=wire.id,
-        title=wire.title or "",
-        year=wire.year or 0,
-        monitored=bool(wire.monitored),
+        movie_id=record["id"],
+        title=record.get("title") or "",
+        year=record.get("year", 0),
+        monitored=bool(record.get("monitored", False)),
         has_file=has_file,
         cutoff_met=not cutoff_not_met if has_file else False,
-        in_cinemas=wire.in_cinemas,
-        physical_release=wire.physical_release,
-        digital_release=wire.digital_release,
+        in_cinemas=record.get("inCinemas"),
+        physical_release=record.get("physicalRelease"),
+        digital_release=record.get("digitalRelease"),
     )
 
 
-def _parse_movie(wire: RadarrWantedMovie) -> MissingMovie:
+def _parse_movie(record: dict[str, Any]) -> MissingMovie:
     return MissingMovie(
-        movie_id=wire.id,
-        title=wire.title or "",
-        year=wire.year or 0,
-        status=wire.status,
-        minimum_availability=wire.minimum_availability,
-        is_available=wire.is_available,
-        in_cinemas=wire.in_cinemas,
-        physical_release=wire.physical_release,
-        release_date=wire.release_date,
-        digital_release=wire.digital_release,
+        movie_id=record["id"],
+        title=record.get("title") or "",
+        year=record.get("year", 0),
+        status=record.get("status"),
+        minimum_availability=record.get("minimumAvailability"),
+        is_available=record.get("isAvailable"),
+        in_cinemas=record.get("inCinemas"),
+        physical_release=record.get("physicalRelease"),
+        release_date=record.get("releaseDate"),
+        digital_release=record.get("digitalRelease"),
     )
+
+
+# ---------------------------------------------------------------------------
+# Convenience factory
+# ---------------------------------------------------------------------------
+
+
+def make_radarr_client(
+    url: str,
+    api_key: str,
+    timeout: httpx.Timeout = httpx.Timeout(30.0, connect=5.0),
+) -> RadarrClient:
+    """Return a :class:`RadarrClient` ready for use as an async context manager."""
+    return RadarrClient(url=url, api_key=api_key, timeout=timeout)

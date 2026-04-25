@@ -34,7 +34,7 @@ async def test_ping_success(client: RadarrClient) -> None:
     )
     result = await client.ping()
     assert result is not None
-    assert result.app_name == "Radarr"
+    assert result["appName"] == "Radarr"
 
 
 @pytest.mark.asyncio()
@@ -154,17 +154,17 @@ async def test_get_missing_non_2xx_raises(client: RadarrClient) -> None:
 
 
 # ---------------------------------------------------------------------------
-# search
+# search / search_movie
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio()
 @respx.mock
-async def test_search_posts_correct_payload(client: RadarrClient) -> None:
+async def test_search_movie_posts_correct_payload(client: RadarrClient) -> None:
     route = respx.post(f"{BASE}/api/v3/command").mock(
         return_value=httpx.Response(201, json={"id": 1, "name": "MoviesSearch"})
     )
-    await client.search(201)
+    await client.search_movie(201)
     assert route.called
     sent = route.calls[0].request
     import json
@@ -176,10 +176,20 @@ async def test_search_posts_correct_payload(client: RadarrClient) -> None:
 
 @pytest.mark.asyncio()
 @respx.mock
+async def test_search_alias_works(client: RadarrClient) -> None:
+    route = respx.post(f"{BASE}/api/v3/command").mock(
+        return_value=httpx.Response(201, json={"id": 2})
+    )
+    await client.search(202)
+    assert route.called
+
+
+@pytest.mark.asyncio()
+@respx.mock
 async def test_search_non_2xx_raises(client: RadarrClient) -> None:
     respx.post(f"{BASE}/api/v3/command").mock(return_value=httpx.Response(500))
     with pytest.raises(httpx.HTTPStatusError):
-        await client.search(201)
+        await client.search_movie(201)
 
 
 # ---------------------------------------------------------------------------

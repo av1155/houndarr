@@ -205,17 +205,10 @@ services:
 |------|----------|
 | Login and setup | Redirected to `/`; no local credentials needed |
 | Logout | Clears the CSRF cookie, redirects to `/` |
-| Admin > Security | Password form hidden; a read-only card shows the forwarded username and points at this guide |
-| Admin > Updates | Unchanged |
-| Admin > Maintenance | Unchanged (Reset all instance settings, Clear all logs) |
-| Admin > Danger zone | Factory reset asks you to type your proxy username (echoed from the auth header) instead of entering a password |
-| Factory reset redirect | Goes to `/` (empty dashboard) instead of `/setup` because `/setup` is not reachable in proxy mode |
+| Account settings | Password change section hidden |
 | `/api/health` | Still public, no auth required |
 | CSRF | Still enforced on mutations via double-submit cookie |
 | Startup | Logs the configured auth mode and trusted proxy range |
-
-See [Admin actions](/docs/guides/admin-actions) for what each button in
-Settings > Admin does and when to use it.
 
 ## Switching back to built-in auth
 

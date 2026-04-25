@@ -22,10 +22,8 @@ classifiers = [
 
 dependencies = [
     "fastapi>=0.135.3",
-    "starlette>=0.52.1",
     "uvicorn[standard]>=0.44.0",
     "jinja2>=3.1.6",
-    "markupsafe>=3.0.3",
     "aiosqlite>=0.22.1",
     "httpx>=0.28.1",
     "bcrypt>=5.0.0",
@@ -33,18 +31,15 @@ dependencies = [
     "itsdangerous>=2.2.0",
     "python-multipart>=0.0.26",
     "click>=8.3.2",
-    "pydantic>=2.10.0",
 ]
 
 [project.optional-dependencies]
 dev = [
     "ruff>=0.15.10",
     "mypy>=1.20.1",
-    "bandit[toml]>=1.9.4",
     "pytest>=9.0.3",
     "pytest-asyncio>=1.3.0",
     "pytest-cov>=7.1.0",
-    "pytest-xdist>=3.8.0",
     "httpx>=0.28.1",
     "respx>=0.23.1",
     "anyio>=4.13.0",
@@ -143,7 +138,3 @@ norecursedirs = ["e2e_browser"]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 addopts = "-q --tb=short"
-markers = [
-    "integration: end-to-end tests (live mock *arr containers or Playwright browser driving)",
-    "pinning: characterization tests that lock current behaviour (run via `just pin`)",
-]

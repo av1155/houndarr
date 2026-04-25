@@ -15,23 +15,10 @@ from houndarr.engine.adapters.lidarr import (
     adapt_cutoff,
     adapt_missing,
     dispatch_search,
-    fetch_instance_snapshot,
     make_client,
 )
 from houndarr.engine.candidates import SearchCandidate
-from houndarr.services.instances import (
-    CutoffPolicy,
-    Instance,
-    InstanceCore,
-    InstanceTimestamps,
-    InstanceType,
-    LidarrSearchMode,
-    MissingPolicy,
-    RuntimeSnapshot,
-    SchedulePolicy,
-    SearchOrder,
-    UpgradePolicy,
-)
+from houndarr.services.instances import Instance, InstanceType, LidarrSearchMode
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -46,36 +33,25 @@ def _make_instance(
     post_release_grace_hrs: int = 24,
 ) -> Instance:
     return Instance(
-        core=InstanceCore(
-            id=3,
-            name="Lidarr Test",
-            type=InstanceType.lidarr,
-            url="http://lidarr:8686",
-            api_key="test-key",
-            enabled=True,
-        ),
-        missing=MissingPolicy(
-            batch_size=10,
-            sleep_interval_mins=15,
-            hourly_cap=20,
-            cooldown_days=7,
-            post_release_grace_hrs=post_release_grace_hrs,
-            queue_limit=0,
-            lidarr_search_mode=lidarr_search_mode,
-        ),
-        cutoff=CutoffPolicy(
-            cutoff_enabled=False,
-            cutoff_batch_size=5,
-            cutoff_cooldown_days=21,
-            cutoff_hourly_cap=1,
-        ),
-        upgrade=UpgradePolicy(),
-        schedule=SchedulePolicy(search_order=SearchOrder.chronological),
-        snapshot=RuntimeSnapshot(),
-        timestamps=InstanceTimestamps(
-            created_at="2024-01-01T00:00:00Z",
-            updated_at="2024-01-01T00:00:00Z",
-        ),
+        id=3,
+        name="Lidarr Test",
+        type=InstanceType.lidarr,
+        url="http://lidarr:8686",
+        api_key="test-key",
+        enabled=True,
+        batch_size=10,
+        sleep_interval_mins=15,
+        hourly_cap=20,
+        cooldown_days=7,
+        post_release_grace_hrs=post_release_grace_hrs,
+        queue_limit=0,
+        cutoff_enabled=False,
+        cutoff_batch_size=5,
+        cutoff_cooldown_days=21,
+        cutoff_hourly_cap=1,
+        created_at="2024-01-01T00:00:00Z",
+        updated_at="2024-01-01T00:00:00Z",
+        lidarr_search_mode=lidarr_search_mode,
     )
 
 
@@ -356,34 +332,3 @@ class TestMakeClient:
         instance = _make_instance()
         client = make_client(instance)
         assert isinstance(client, LidarrClient)
-
-
-# ---------------------------------------------------------------------------
-# fetch_instance_snapshot
-# ---------------------------------------------------------------------------
-
-
-class TestFetchInstanceSnapshot:
-    """Verify the snapshot composition for Lidarr.
-
-    Marked ``pinning`` because ``fetch_instance_snapshot`` is a new
-    behavioural contract.
-    """
-
-    pytestmark = pytest.mark.pinning
-
-    @pytest.mark.asyncio()
-    async def test_paginated_walk_counts_future_anchors(self):
-        future = "2999-01-01T00:00:00Z"
-        client = AsyncMock(spec=LidarrClient)
-        client.get_wanted_total.side_effect = lambda kind: {"missing": 3, "cutoff": 2}[kind]
-        client.get_missing.return_value = [
-            _make_album(album_id=1, release_date=_OLD_DATE),
-            _make_album(album_id=2, release_date=future),
-            _make_album(album_id=3, release_date=None),
-        ]
-
-        snap = await fetch_instance_snapshot(client, _make_instance())
-
-        assert snap.monitored_total == 5
-        assert snap.unreleased_count == 1

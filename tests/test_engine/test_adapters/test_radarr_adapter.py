@@ -15,23 +15,10 @@ from houndarr.engine.adapters.radarr import (
     adapt_cutoff,
     adapt_missing,
     dispatch_search,
-    fetch_instance_snapshot,
     make_client,
 )
 from houndarr.engine.candidates import SearchCandidate
-from houndarr.services.instances import (
-    CutoffPolicy,
-    Instance,
-    InstanceCore,
-    InstanceTimestamps,
-    InstanceType,
-    MissingPolicy,
-    RuntimeSnapshot,
-    SchedulePolicy,
-    SearchOrder,
-    SonarrSearchMode,
-    UpgradePolicy,
-)
+from houndarr.services.instances import Instance, InstanceType, SonarrSearchMode
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -42,36 +29,25 @@ _OLD_DATE = "2020-01-01T00:00:00Z"
 
 def _make_instance(*, post_release_grace_hrs: int = 24) -> Instance:
     return Instance(
-        core=InstanceCore(
-            id=2,
-            name="Radarr Test",
-            type=InstanceType.radarr,
-            url="http://radarr:7878",
-            api_key="test-key",
-            enabled=True,
-        ),
-        missing=MissingPolicy(
-            batch_size=10,
-            sleep_interval_mins=15,
-            hourly_cap=20,
-            cooldown_days=7,
-            post_release_grace_hrs=post_release_grace_hrs,
-            queue_limit=0,
-            sonarr_search_mode=SonarrSearchMode.episode,
-        ),
-        cutoff=CutoffPolicy(
-            cutoff_enabled=False,
-            cutoff_batch_size=5,
-            cutoff_cooldown_days=21,
-            cutoff_hourly_cap=1,
-        ),
-        upgrade=UpgradePolicy(),
-        schedule=SchedulePolicy(search_order=SearchOrder.chronological),
-        snapshot=RuntimeSnapshot(),
-        timestamps=InstanceTimestamps(
-            created_at="2024-01-01T00:00:00Z",
-            updated_at="2024-01-01T00:00:00Z",
-        ),
+        id=2,
+        name="Radarr Test",
+        type=InstanceType.radarr,
+        url="http://radarr:7878",
+        api_key="test-key",
+        enabled=True,
+        batch_size=10,
+        sleep_interval_mins=15,
+        hourly_cap=20,
+        cooldown_days=7,
+        post_release_grace_hrs=post_release_grace_hrs,
+        queue_limit=0,
+        cutoff_enabled=False,
+        cutoff_batch_size=5,
+        cutoff_cooldown_days=21,
+        cutoff_hourly_cap=1,
+        created_at="2024-01-01T00:00:00Z",
+        updated_at="2024-01-01T00:00:00Z",
+        sonarr_search_mode=SonarrSearchMode.episode,
     )
 
 
@@ -401,109 +377,3 @@ class TestMakeClient:
         instance = _make_instance()
         client = make_client(instance)
         assert isinstance(client, RadarrClient)
-
-
-# ---------------------------------------------------------------------------
-# fetch_instance_snapshot
-# ---------------------------------------------------------------------------
-
-
-class TestFetchInstanceSnapshot:
-    """Verify the snapshot composition for Radarr.
-
-    Reuses :func:`_radarr_release_anchor` so the unreleased count uses
-    the same digital → physical → release → in-cinemas fallback the
-    search-loop's :func:`_radarr_unreleased_reason` applies.
-
-    Marked ``pinning`` because ``fetch_instance_snapshot`` is a new
-    behavioural contract (anchor selection, monitored vs cutoff sums,
-    unreleased semantics).
-    """
-
-    pytestmark = pytest.mark.pinning
-
-    @pytest.mark.asyncio()
-    async def test_uses_radarr_release_anchor_priority(self):
-        """digital_release takes precedence; then physical, release, cinemas."""
-        future = "2999-01-01T00:00:00Z"
-        past = "2020-01-01T00:00:00Z"
-        client = AsyncMock(spec=RadarrClient)
-        client.get_wanted_total.side_effect = lambda kind: {"missing": 4, "cutoff": 0}[kind]
-        client.get_missing.return_value = [
-            # Digital is past; physical wins as a fallback in the past, NOT unreleased.
-            _make_movie(
-                movie_id=1,
-                digital_release=past,
-                physical_release=past,
-                release_date=past,
-                in_cinemas=past,
-            ),
-            # Digital in future: counted as unreleased.
-            _make_movie(
-                movie_id=2,
-                digital_release=future,
-                physical_release=past,
-                release_date=past,
-                in_cinemas=past,
-            ),
-            # Digital is None; physical past; releaseDate fallback in future.
-            _make_movie(
-                movie_id=3,
-                digital_release=None,
-                physical_release=past,
-                release_date=future,
-                in_cinemas=past,
-            ),
-            # All anchors None: not unreleased (treated as released).
-            _make_movie(
-                movie_id=4,
-                digital_release=None,
-                physical_release=None,
-                release_date=None,
-                in_cinemas=None,
-            ),
-        ]
-
-        snap = await fetch_instance_snapshot(client, _make_instance())
-
-        # Note: id 3 does NOT count because the priority ladder picks
-        # digital first if non-None, otherwise physical, otherwise
-        # releaseDate; here digital is None, physical is past so it
-        # wins (not future).  Only id 2 (digital in future) ends up
-        # unreleased.
-        assert snap.monitored_total == 4
-        assert snap.unreleased_count == 1
-
-    @pytest.mark.asyncio()
-    async def test_status_unaffected_by_default_anchor_logic(self):
-        """The dashboard's strict-future bucket intentionally stays
-        narrower than :func:`_radarr_unreleased_reason`'s 5-check
-        ladder.
-
-        The search-loop additionally skips items with
-        ``isAvailable=false`` and unreleased statuses, but those
-        do not sum into the dashboard's Unreleased count by design.
-        Items skipped for those reasons surface in logs as their
-        explicit reason strings.
-        """
-        past = "2020-01-01T00:00:00Z"
-        client = AsyncMock(spec=RadarrClient)
-        client.get_wanted_total.side_effect = lambda kind: {"missing": 1, "cutoff": 0}[kind]
-        # Anchor in past, but isAvailable=false and status='announced'
-        # would have the search-loop skip it.  The dashboard does not.
-        client.get_missing.return_value = [
-            _make_movie(
-                movie_id=1,
-                status="announced",
-                is_available=False,
-                digital_release=past,
-                physical_release=past,
-                release_date=past,
-                in_cinemas=past,
-            ),
-        ]
-
-        snap = await fetch_instance_snapshot(client, _make_instance())
-
-        assert snap.monitored_total == 1
-        assert snap.unreleased_count == 0

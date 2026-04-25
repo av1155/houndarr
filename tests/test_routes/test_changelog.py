@@ -8,7 +8,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from houndarr import __version__
-from houndarr.repositories.settings import get_setting, set_setting
+from houndarr.database import get_setting, set_setting
 from houndarr.services import changelog as cl
 from tests.conftest import csrf_headers
 
@@ -281,10 +281,11 @@ async def test_preferences_enable_writes_zero(app: TestClient, sample_changelog:
         data={"enabled": "on"},
         headers=csrf_headers(app),
     )
-    # 204 so HTMX skips the swap and the in-place switch animation plays
-    # to completion instead of being clobbered by an outerHTML replacement.
-    assert resp.status_code == 204
+    assert resp.status_code == 200
     assert await get_setting("changelog_popups_disabled") == "0"
+    # Returns the settings section partial with the checkbox checked.
+    assert 'id="changelog-section"' in resp.text
+    assert "checked" in resp.text
 
 
 async def test_preferences_disable_writes_one(app: TestClient, sample_changelog: Path) -> None:
@@ -294,8 +295,17 @@ async def test_preferences_disable_writes_one(app: TestClient, sample_changelog:
         data={},  # unchecked = field absent
         headers=csrf_headers(app),
     )
-    assert resp.status_code == 204
+    assert resp.status_code == 200
     assert await get_setting("changelog_popups_disabled") == "1"
+    assert 'id="changelog-section"' in resp.text
+    # The checkbox should NOT be checked when disabled.
+    # We verify by locating the input element and checking the attribute.
+    # This is a weak assertion; the stronger one is the value in the DB above.
+    import re
+
+    input_match = re.search(r'<input[^>]*name="enabled"[^>]*>', resp.text)
+    assert input_match is not None
+    assert "checked" not in input_match.group(0)
 
 
 # ---------------------------------------------------------------------------

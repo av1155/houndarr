@@ -17,9 +17,9 @@ type ScreenshotItem = {
 };
 
 const DASHBOARD_SCREENSHOT: ScreenshotItem = {
-  img: require('@site/static/img/screenshots/houndarr-dashboard-hero.png'),
-  alt: 'Houndarr Dashboard: library-health bar, Recent hunts strip, and per-instance cards with WATCHING / ELIGIBLE / SEARCHED stats, Expected-to-unlock panel, policy chips, and Run Now button',
-  caption: 'Dashboard: gating state at a glance, per-instance Expected-to-unlock panels, on-demand Run Now',
+  img: require('@site/static/img/screenshots/houndarr-dashboard.png'),
+  alt: 'Houndarr Dashboard: instance cards with search metrics and activity',
+  caption: 'Dashboard: live search metrics, instance status, and on-demand triggers',
 };
 
 const SUPPORTING_SCREENSHOTS: ScreenshotItem[] = [
@@ -166,7 +166,7 @@ function Screenshots() {
         <div className={styles.screenshotHero}>
           <Image img={DASHBOARD_SCREENSHOT.img} alt={DASHBOARD_SCREENSHOT.alt} />
           <p className={styles.screenshotCaption}>
-            <strong>Dashboard</strong>: gating state at a glance, per-instance Expected-to-unlock panels, on-demand Run Now
+            <strong>Dashboard</strong>: live search metrics, instance status, and on-demand triggers
           </p>
         </div>
 

@@ -2,7 +2,7 @@
   {# Newest release: always expanded, visible without scrolling #}
   <section class="space-y-3" data-changelog-release="{{ newest.version }}">
     <header class="flex items-baseline gap-3">
-      <h3 class="text-lg font-semibold text-white tracking-tight">v{{ newest.version }}</h3>
+      <h3 class="text-lg font-semibold text-white">v{{ newest.version }}</h3>
       <time class="text-xs text-slate-500 font-mono">{{ newest.date }}</time>
     </header>
     {% for section in newest.sections %}
@@ -23,9 +23,9 @@
 
   {% if older %}
   {# Accordion for older releases when span is 2+ extra entries #}
-  <details class="changelog-accordion border-t border-border-subtle pt-4 group">
+  <details class="changelog-accordion border-t border-[#1e2638] pt-4 group">
     <summary
-      class="cursor-pointer list-none text-sm font-medium text-slate-300 hover:text-white transition-colors duration-base ease-station focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400/30 rounded-sm flex items-center gap-2"
+      class="cursor-pointer list-none text-sm font-medium text-slate-300 hover:text-white transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400/30 rounded-sm flex items-center gap-2"
     >
       <svg
         class="w-3.5 h-3.5 transition-transform group-open:rotate-90"
@@ -46,7 +46,7 @@
       {% for release in older %}
       <section class="space-y-3" data-changelog-release="{{ release.version }}">
         <header class="flex items-baseline gap-3">
-          <h3 class="text-base font-semibold text-slate-200 tracking-tight">v{{ release.version }}</h3>
+          <h3 class="text-base font-semibold text-slate-200">v{{ release.version }}</h3>
           <time class="text-xs text-slate-500 font-mono">{{ release.date }}</time>
         </header>
         {% for section in release.sections %}

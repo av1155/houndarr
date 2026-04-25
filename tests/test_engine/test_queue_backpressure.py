@@ -160,7 +160,7 @@ async def test_queue_http_500_fails_open(seeded_instances: None) -> None:
 async def test_queue_missing_total_count_fails_open(
     seeded_instances: None,
 ) -> None:
-    """Response without totalCount raises ValidationError, caught, proceeds."""
+    """Response without totalCount raises KeyError, caught, proceeds."""
     respx.get(f"{SONARR_URL}/api/v3/queue/status").mock(
         return_value=httpx.Response(200, json={}),
     )

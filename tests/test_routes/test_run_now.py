@@ -6,12 +6,13 @@ availability, CSRF enforcement, response body shape, and path-param validation.
 
 from __future__ import annotations
 
+from typing import Any
+
 import httpx
 import pytest
 import respx
 from fastapi.testclient import TestClient
 
-from houndarr.clients._wire_models import SystemStatus
 from houndarr.clients.base import ArrClient
 from houndarr.engine import supervisor as supervisor_module
 from tests.conftest import csrf_headers
@@ -33,9 +34,9 @@ _VALID_FORM = {
 
 @pytest.fixture(autouse=True)
 def _mock_connection_ping(monkeypatch: pytest.MonkeyPatch) -> None:
-    async def _always_ok(self: ArrClient) -> SystemStatus | None:
+    async def _always_ok(self: ArrClient) -> dict[str, Any] | None:
         name = type(self).__name__.replace("Client", "")
-        return SystemStatus(app_name=name, version="4.0.0")
+        return {"appName": name, "version": "4.0.0"}
 
     monkeypatch.setattr(ArrClient, "ping", _always_ok)
 
@@ -65,7 +66,8 @@ def test_run_now_503_when_supervisor_missing(app: TestClient) -> None:
     """Returns 503 when app.state has no supervisor attribute."""
     _login(app)
     app.post("/settings/instances", data=_VALID_FORM, headers=csrf_headers(app))
-    inst_id = app.get("/api/status").json()["instances"][0]["id"]
+    status = app.get("/api/status").json()
+    inst_id = status[0]["id"]
 
     # Remove the supervisor from app state
     original = getattr(app.app.state, "supervisor", None)  # type: ignore[union-attr]
@@ -82,7 +84,8 @@ def test_run_now_503_when_supervisor_wrong_type(app: TestClient) -> None:
     """Returns 503 when supervisor is set but not a Supervisor instance."""
     _login(app)
     app.post("/settings/instances", data=_VALID_FORM, headers=csrf_headers(app))
-    inst_id = app.get("/api/status").json()["instances"][0]["id"]
+    status = app.get("/api/status").json()
+    inst_id = status[0]["id"]
 
     original = getattr(app.app.state, "supervisor", None)  # type: ignore[union-attr]
     try:
@@ -102,7 +105,8 @@ def test_run_now_requires_csrf_token(app: TestClient) -> None:
     """POST /api/instances/{id}/run-now without CSRF token is rejected."""
     _login(app)
     app.post("/settings/instances", data=_VALID_FORM, headers=csrf_headers(app))
-    inst_id = app.get("/api/status").json()["instances"][0]["id"]
+    status = app.get("/api/status").json()
+    inst_id = status[0]["id"]
 
     # POST without CSRF headers
     resp = app.post(f"/api/instances/{inst_id}/run-now")
@@ -119,7 +123,8 @@ def test_run_now_202_response_body_shape(app: TestClient) -> None:
     """202 response body contains exactly 'status' and 'instance_id' keys."""
     _login(app)
     app.post("/settings/instances", data=_VALID_FORM, headers=csrf_headers(app))
-    inst_id = app.get("/api/status").json()["instances"][0]["id"]
+    status = app.get("/api/status").json()
+    inst_id = status[0]["id"]
 
     respx.get("http://sonarr:8989/api/v3/wanted/missing").mock(
         return_value=httpx.Response(200, json={"records": []})
@@ -148,7 +153,8 @@ def test_run_now_409_response_body(app: TestClient) -> None:
     """409 response includes a descriptive detail field."""
     _login(app)
     app.post("/settings/instances", data=_VALID_FORM, headers=csrf_headers(app))
-    inst_id = app.get("/api/status").json()["instances"][0]["id"]
+    status = app.get("/api/status").json()
+    inst_id = status[0]["id"]
 
     # Disable the instance
     app.post(f"/settings/instances/{inst_id}/toggle-enabled", headers=csrf_headers(app))

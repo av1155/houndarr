@@ -1,7 +1,7 @@
 # \*arr search command reference
 
 Reference for Houndarr client code that dispatches search commands to Sonarr,
-Radarr, Lidarr, Readarr, and Whisparr v2.
+Radarr, Lidarr, Readarr, and Whisparr.
 
 This file is scoped to the search commands Houndarr needs for missing and
 cutoff-unmet items. It documents the minimal request bodies accepted by the
@@ -13,7 +13,7 @@ tested app versions and the command endpoint each app uses.
 - Radarr `6.0.4.10291`
 - Lidarr `3.1.0.4875`
 - Bookshelf `0.4.20.129` (Readarr fork; readarr was archived by the owner on Jun 27, 2025)
-- Whisparr v2 `2.2.0.108`
+- Whisparr `2.2.0.108`
 
 ## Sources used
 
@@ -180,7 +180,7 @@ from upstream Readarr.
 
 ---
 
-## Whisparr v2
+## Whisparr
 
 **Version tested:** `2.2.0.108`  
 **Command endpoint:** `POST /api/v3/command`
@@ -390,7 +390,7 @@ API `name` value (strips the `Command` suffix from the class name).
 - [AuthorSearchCommand.cs](https://raw.githubusercontent.com/Readarr/Readarr/develop/src/NzbDrone.Core/IndexerSearch/AuthorSearchCommand.cs)
 - [Command.cs](https://raw.githubusercontent.com/Readarr/Readarr/develop/src/NzbDrone.Core/Messaging/Commands/Command.cs)
 
-### Whisparr v2
+### Whisparr
 
 - [EpisodeSearchCommand.cs](https://raw.githubusercontent.com/Whisparr/Whisparr/develop/src/NzbDrone.Core/IndexerSearch/EpisodeSearchCommand.cs)
 - [SeasonSearchCommand.cs](https://raw.githubusercontent.com/Whisparr/Whisparr/develop/src/NzbDrone.Core/IndexerSearch/SeasonSearchCommand.cs)

@@ -12,8 +12,7 @@ from houndarr.clients.lidarr import LidarrClient
 from houndarr.clients.radarr import RadarrClient
 from houndarr.clients.readarr import ReadarrClient
 from houndarr.clients.sonarr import SonarrClient
-from houndarr.clients.whisparr_v2 import WhisparrV2Client
-from houndarr.errors import ClientHTTPError, ClientTransportError
+from houndarr.clients.whisparr_v2 import WhisparrClient
 
 # ---------------------------------------------------------------------------
 # Queue status: per-app path verification
@@ -30,7 +29,7 @@ async def test_sonarr_queue_status_success() -> None:
     )
     async with SonarrClient(url="http://sonarr:8989", api_key="test") as client:
         result = await client.get_queue_status()
-    assert result.total_count == 5
+    assert result["totalCount"] == 5
 
 
 @pytest.mark.asyncio()
@@ -55,7 +54,7 @@ async def test_radarr_queue_status_success() -> None:
     )
     async with RadarrClient(url="http://radarr:7878", api_key="test") as client:
         result = await client.get_queue_status()
-    assert result.total_count == 3
+    assert result["totalCount"] == 3
 
 
 @pytest.mark.asyncio()
@@ -68,7 +67,7 @@ async def test_lidarr_queue_status_uses_v1_path() -> None:
     async with LidarrClient(url="http://lidarr:8686", api_key="test") as client:
         result = await client.get_queue_status()
     assert route.called
-    assert result.total_count == 2
+    assert result["totalCount"] == 2
 
 
 @pytest.mark.asyncio()
@@ -81,20 +80,20 @@ async def test_readarr_queue_status_uses_v1_path() -> None:
     async with ReadarrClient(url="http://readarr:8787", api_key="test") as client:
         result = await client.get_queue_status()
     assert route.called
-    assert result.total_count == 1
+    assert result["totalCount"] == 1
 
 
 @pytest.mark.asyncio()
 @respx.mock
-async def test_whisparr_v2_queue_status_uses_v3_path() -> None:
-    """WhisparrV2Client uses /api/v3/queue/status."""
+async def test_whisparr_queue_status_uses_v3_path() -> None:
+    """WhisparrClient uses /api/v3/queue/status."""
     route = respx.get("http://whisparr:6969/api/v3/queue/status").mock(
         return_value=httpx.Response(200, json={"totalCount": 0}),
     )
-    async with WhisparrV2Client(url="http://whisparr:6969", api_key="test") as client:
+    async with WhisparrClient(url="http://whisparr:6969", api_key="test") as client:
         result = await client.get_queue_status()
     assert route.called
-    assert result.total_count == 0
+    assert result["totalCount"] == 0
 
 
 # ---------------------------------------------------------------------------
@@ -105,27 +104,25 @@ async def test_whisparr_v2_queue_status_uses_v3_path() -> None:
 @pytest.mark.asyncio()
 @respx.mock
 async def test_queue_status_http_500_raises() -> None:
-    """HTTP 500 on queue/status raises ``ClientHTTPError`` wrapping the status error."""
+    """HTTP 500 on queue/status raises HTTPStatusError."""
     respx.get("http://sonarr:8989/api/v3/queue/status").mock(
         return_value=httpx.Response(500),
     )
     async with SonarrClient(url="http://sonarr:8989", api_key="test") as client:
-        with pytest.raises(ClientHTTPError) as exc_info:
+        with pytest.raises(httpx.HTTPStatusError):
             await client.get_queue_status()
-    assert isinstance(exc_info.value.__cause__, httpx.HTTPStatusError)
 
 
 @pytest.mark.asyncio()
 @respx.mock
 async def test_queue_status_transport_error_propagates() -> None:
-    """ConnectError on queue/status is wrapped in ``ClientTransportError``."""
+    """A ConnectError on queue/status propagates as-is."""
     respx.get("http://sonarr:8989/api/v3/queue/status").mock(
         side_effect=httpx.ConnectError("connection refused"),
     )
     async with SonarrClient(url="http://sonarr:8989", api_key="test") as client:
-        with pytest.raises(ClientTransportError) as exc_info:
+        with pytest.raises(httpx.ConnectError):
             await client.get_queue_status()
-    assert isinstance(exc_info.value.__cause__, httpx.ConnectError)
 
 
 # ---------------------------------------------------------------------------

@@ -1,6 +1,5 @@
 // houndarrClientHelpers (including formatLocalTimestamp) is defined in base.html <head>
 // so it is available on both initial page load and HTMX navigation.
-// The overlay scrollbar module lives in hx-scrollbar.js.
 
 (function () {
   function getCsrfToken() {
@@ -11,59 +10,6 @@
   if (document.body) {
     document.body.setAttribute('hx-headers', JSON.stringify({ 'X-CSRF-Token': getCsrfToken() }));
   }
-})();
-
-(function () {
-  const TOAST_VISIBLE_MS = 2400;
-  const TOAST_LEAVE_MS = 240;
-  let toastTimer = null;
-
-  function showToast(message) {
-    const toast = document.getElementById('toast');
-    if (!toast || !message) return;
-    const label = toast.querySelector('.toast__label');
-    if (label) label.textContent = message;
-    if (toastTimer !== null) {
-      clearTimeout(toastTimer);
-      toastTimer = null;
-    }
-    toast.classList.remove('is-leaving');
-    toast.hidden = false;
-    toastTimer = window.setTimeout(function () {
-      toast.classList.add('is-leaving');
-      toastTimer = window.setTimeout(function () {
-        toast.hidden = true;
-        toast.classList.remove('is-leaving');
-        toastTimer = null;
-      }, TOAST_LEAVE_MS);
-    }, TOAST_VISIBLE_MS);
-  }
-
-  window.houndarrShowToast = showToast;
-
-  document.body.addEventListener('houndarr-toast', function (evt) {
-    const payload = evt.detail;
-    let msg = '';
-    if (typeof payload === 'string') msg = payload;
-    else if (payload && typeof payload.value === 'string') msg = payload.value;
-    else if (payload && typeof payload.message === 'string') msg = payload.message;
-    if (msg) showToast(msg);
-  });
-
-  function consumeFlashCookie() {
-    const match = document.cookie.match(/(?:^|;\s*)houndarr_flash=([^;]*)/);
-    if (!match) return;
-    let raw = match[1];
-    document.cookie = 'houndarr_flash=; Max-Age=0; path=/';
-    if (!raw) return;
-    if (raw.length >= 2 && raw.startsWith('"') && raw.endsWith('"')) {
-      raw = raw.slice(1, -1);
-    }
-    let msg = '';
-    try { msg = decodeURIComponent(raw); } catch { msg = raw; }
-    if (msg) showToast(msg);
-  }
-  consumeFlashCookie();
 })();
 
 (function () {
@@ -80,27 +26,16 @@
   }
 
   function syncShellNavState() {
-    // Two variants share the same data-shell-nav selector but use
-    // different active-state class sets: the pill tabs in the desktop
-    // header flip a single BEM modifier, while the mobile drawer rows
-    // keep the original Tailwind utility swap. Branch on the nearest
-    // .pill-nav ancestor so a single pass handles both.
     const path = window.location.pathname;
     navLinks().forEach((link) => {
       const route = link.getAttribute('data-shell-route') || '';
       const isActive = routeIsActive(route, path);
-      const isPill = link.closest('.pill-nav') !== null;
 
-      if (isPill) {
-        link.classList.toggle('pill-nav__tab--active', isActive);
-      } else {
-        link.classList.toggle('bg-surface-3', isActive);
-        link.classList.toggle('text-white', isActive);
-        link.classList.toggle('text-slate-400', !isActive);
-        link.classList.toggle('hover:text-white', !isActive);
-        link.classList.toggle('hover:bg-surface-2', !isActive);
-      }
-
+      link.classList.toggle('bg-surface-3', isActive);
+      link.classList.toggle('text-white', isActive);
+      link.classList.toggle('text-slate-400', !isActive);
+      link.classList.toggle('hover:text-white', !isActive);
+      link.classList.toggle('hover:bg-surface-2', !isActive);
       if (isActive) {
         link.setAttribute('aria-current', 'page');
       } else {
@@ -205,12 +140,6 @@
     setShellLoading(false);
     syncShellUi();
     triggerShellEnter();
-    // Treat every #app-content swap as a page navigation and jump to the
-    // top of the viewport, matching the browser's native behaviour for
-    // full-page loads. htmx:historyRestore (browser back/forward) has its
-    // own handler below and intentionally does NOT reset scroll so the
-    // user's prior scroll position is preserved on back navigation.
-    window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
   });
 
   document.body.addEventListener('htmx:responseError', function () {
@@ -233,4 +162,3 @@
     }, 0);
   });
 })();
-

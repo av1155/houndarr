@@ -51,9 +51,3 @@ data-dev/
 
 # CI/CD
 .github/
-
-# Node build artifacts (multi-stage build fetches its own node_modules)
-node_modules/
-
-# Locally-built CSS (the css-build stage regenerates this in-image)
-src/houndarr/static/css/app.built.css

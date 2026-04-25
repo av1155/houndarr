@@ -34,7 +34,7 @@ async def test_ping_success(client: SonarrClient) -> None:
     )
     result = await client.ping()
     assert result is not None
-    assert result.app_name == "Sonarr"
+    assert result["appName"] == "Sonarr"
 
 
 @pytest.mark.asyncio()
@@ -121,17 +121,17 @@ async def test_get_missing_non_2xx_raises(client: SonarrClient) -> None:
 
 
 # ---------------------------------------------------------------------------
-# search
+# search / search_episode
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio()
 @respx.mock
-async def test_search_posts_correct_payload(client: SonarrClient) -> None:
+async def test_search_episode_posts_correct_payload(client: SonarrClient) -> None:
     route = respx.post(f"{BASE}/api/v3/command").mock(
         return_value=httpx.Response(201, json={"id": 1, "name": "EpisodeSearch"})
     )
-    await client.search(101)
+    await client.search_episode(101)
     assert route.called
     sent = route.calls[0].request
     import json
@@ -139,6 +139,16 @@ async def test_search_posts_correct_payload(client: SonarrClient) -> None:
     body = json.loads(sent.content)
     assert body["name"] == "EpisodeSearch"
     assert body["episodeIds"] == [101]
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_search_alias_works(client: SonarrClient) -> None:
+    route = respx.post(f"{BASE}/api/v3/command").mock(
+        return_value=httpx.Response(201, json={"id": 2})
+    )
+    await client.search(202)
+    assert route.called
 
 
 @pytest.mark.asyncio()
@@ -163,7 +173,7 @@ async def test_search_season_posts_correct_payload(client: SonarrClient) -> None
 async def test_search_non_2xx_raises(client: SonarrClient) -> None:
     respx.post(f"{BASE}/api/v3/command").mock(return_value=httpx.Response(500))
     with pytest.raises(httpx.HTTPStatusError):
-        await client.search(101)
+        await client.search_episode(101)
 
 
 # ---------------------------------------------------------------------------

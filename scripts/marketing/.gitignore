@@ -1,4 +1,0 @@
-# Scratch data directory written by seed_demo_data.py. Contains the
-# SQLite DB, WAL files, and the Fernet master key that encrypts the
-# demo admin credentials. Safe to delete between runs; do not commit.
-marketing-data/

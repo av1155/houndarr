@@ -5,50 +5,21 @@ Its API mirrors Radarr's ``/api/v3/movie`` structure, but unlike Radarr it
 does not expose ``/api/v3/wanted/missing`` or ``/api/v3/wanted/cutoff``
 endpoints.  Missing and cutoff-unmet items are identified by fetching the
 full library via ``GET /api/v3/movie`` and filtering client-side.
-
-Outlier status.  Sonarr, Radarr, Lidarr, Readarr, and Whisparr v2
-share the
-:meth:`~houndarr.clients.base.ArrClient._fetch_wanted_page` /
-:meth:`~houndarr.clients.base.ArrClient._fetch_wanted_total`
-template on the base ABC; this module deliberately does not.  No
-paginated ``/wanted`` endpoint exists upstream, so the four
-``_WANTED_*`` hooks on the base ABC stay at their defaults
-(``_WANTED_ENVELOPE`` is ``None``); calling
-:meth:`~ArrClient._fetch_wanted_page` here would raise
-:class:`NotImplementedError` by design.
-
-Instead, this client fetches the entire library once per client
-lifetime and filters in memory: missing = ``monitored and not
-hasFile``; cutoff = ``monitored and hasFile and qualityCutoffNotMet``.
-Pagination at the API surface (``page`` / ``page_size`` on
-:meth:`get_missing` / :meth:`get_cutoff_unmet`) slices the filtered
-list rather than triggering further network calls.
-
-The cache lives on ``self._movie_cache`` and survives for the
-context manager's lifetime (one search pass).  This keeps the
-upgrade pass, the missing pass, and the dashboard snapshot from
-each issuing their own ``/api/v3/movie`` request.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any, Literal
 
 import httpx
-from pydantic import ValidationError
 
-from houndarr.clients._wire_models import WhisparrV3LibraryMovie
-from houndarr.clients.base import ArrClient, WantedKind
-from houndarr.errors import (
-    ClientHTTPError,
-    ClientTransportError,
-    ClientValidationError,
-)
+from houndarr.clients.base import ArrClient
 
 __all__ = ["LibraryWhisparrV3Movie", "MissingWhisparrV3Movie", "WhisparrV3Client"]
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class MissingWhisparrV3Movie:
     """A missing or cutoff-unmet movie/scene from the Whisparr v3 library."""
 
@@ -64,7 +35,7 @@ class MissingWhisparrV3Movie:
     digital_release: str | None
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class LibraryWhisparrV3Movie:
     """A movie/scene from Whisparr v3's full library with file and cutoff metadata."""
 
@@ -77,27 +48,16 @@ class LibraryWhisparrV3Movie:
     in_cinemas: str | None
     physical_release: str | None
     digital_release: str | None
-    release_date: str | None
 
 
 class WhisparrV3Client(ArrClient):
     """Async client for the Whisparr v3 REST API.
 
-    Whisparr v3 has no ``wanted/missing`` or ``wanted/cutoff`` endpoints,
-    so it does not use the shared ``/wanted`` template the other five
-    clients adopted in C.1 - C.5.  All four ``_WANTED_*`` class-level
-    hooks stay at the base defaults; ``_WANTED_ENVELOPE`` remains
-    ``None`` so an accidental call to
-    :meth:`~houndarr.clients.base.ArrClient._fetch_wanted_page` raises
-    :class:`NotImplementedError` rather than silently producing an
-    empty page.
-
-    Missing and cutoff-unmet items are computed from a one-shot
-    ``GET /api/v3/movie`` fetch, cached for the lifetime of the client
-    instance.  :meth:`get_wanted_total`, :meth:`get_library`, and the
-    adapter's ``fetch_instance_snapshot`` / ``fetch_reconcile_sets``
-    all reuse the same cache so a single network call answers every
-    per-pass query.
+    Whisparr v3 has no ``wanted/missing`` or ``wanted/cutoff`` endpoints.
+    This client fetches the full library via ``GET /api/v3/movie`` and
+    filters client-side for missing and cutoff-unmet items.  The library
+    response is cached for the lifetime of the client instance (one search
+    pass) to avoid redundant fetches as pagination advances.
     """
 
     def __init__(
@@ -107,13 +67,13 @@ class WhisparrV3Client(ArrClient):
         timeout: httpx.Timeout = httpx.Timeout(30.0, connect=5.0),
     ) -> None:
         super().__init__(url=url, api_key=api_key, timeout=timeout)
-        self._movie_cache: list[WhisparrV3LibraryMovie] | None = None
+        self._movie_cache: list[dict[str, Any]] | None = None
 
-    async def _get_all_movies(self) -> list[WhisparrV3LibraryMovie]:
+    async def _get_all_movies(self) -> list[dict[str, Any]]:
         """Fetch and cache the full movie library from ``GET /api/v3/movie``."""
         if self._movie_cache is None:
-            result = await self._get("/api/v3/movie")
-            self._movie_cache = [WhisparrV3LibraryMovie.model_validate(r) for r in result]
+            result: list[dict[str, Any]] = await self._get("/api/v3/movie")
+            self._movie_cache = result
         return self._movie_cache
 
     async def get_missing(
@@ -136,7 +96,11 @@ class WhisparrV3Client(ArrClient):
         """
         movies = await self._get_all_movies()
         missing = sorted(
-            [_parse_movie(m) for m in movies if m.monitored and not m.has_file],
+            [
+                _parse_movie(r)
+                for r in movies
+                if r.get("monitored", False) and not r.get("hasFile", False)
+            ],
             key=lambda m: m.in_cinemas or "",
         )
         start = (page - 1) * page_size
@@ -175,65 +139,33 @@ class WhisparrV3Client(ArrClient):
         """
         movies = await self._get_all_movies()
         cutoff: list[MissingWhisparrV3Movie] = []
-        for m in movies:
-            if not m.monitored or not m.has_file:
+        for r in movies:
+            if not r.get("monitored", False) or not r.get("hasFile", False):
                 continue
-            cutoff_not_met = True
-            if m.movie_file is not None and m.movie_file.quality_cutoff_not_met is not None:
-                cutoff_not_met = m.movie_file.quality_cutoff_not_met
-            if cutoff_not_met:
-                cutoff.append(_parse_movie(m))
+            movie_file: dict[str, Any] = r.get("movieFile") or {}
+            if movie_file.get("qualityCutoffNotMet", True):
+                cutoff.append(_parse_movie(r))
         cutoff.sort(key=lambda m: m.in_cinemas or "")
         start = (page - 1) * page_size
         return cutoff[start : start + page_size]
 
-    async def get_wanted_total(self, kind: WantedKind) -> int:
+    async def get_wanted_total(self, kind: Literal["missing", "cutoff"]) -> int:
         """Return the count of wanted items for *kind* from the cached library.
 
-        Overrides the base default
-        (:meth:`~houndarr.clients.base.ArrClient._fetch_wanted_total`)
-        because there is no ``/wanted`` endpoint to probe here; the
-        total is derived from the cached ``/api/v3/movie`` payload.
-
-        Reuses :meth:`_get_all_movies` (one fetch per client lifetime) so
-        the probe does not trigger an extra network call during a pass.
-
-        Raw ``httpx`` and ``pydantic`` failures from the first (uncached)
-        ``_get_all_movies`` call are wrapped in typed
-        :class:`~houndarr.errors.ClientError` subclasses; once the cache
-        is populated subsequent calls are pure Python and cannot raise.
-
-        Raises:
-            ClientHTTPError: Non-2xx response from ``/api/v3/movie``.
-            ClientTransportError: Transport failure (connect, timeout,
-                malformed URL, etc.).
-            ClientValidationError: Any movie in the response failed
-                wire-model validation.
+        Reuses :meth:`_get_all_movies` (one fetch per client lifetime) so the
+        probe does not trigger an extra network call during a pass.
         """
-        path = "/api/v3/movie"
-        try:
-            movies = await self._get_all_movies()
-        except httpx.HTTPStatusError as exc:
-            raise ClientHTTPError(
-                f"wanted total: HTTP {exc.response.status_code} from {path}"
-            ) from exc
-        except (httpx.RequestError, httpx.InvalidURL) as exc:
-            raise ClientTransportError(
-                f"wanted total: transport error reaching {path}: {exc}"
-            ) from exc
-        except ValidationError as exc:
-            raise ClientValidationError(f"wanted total: malformed payload from {path}") from exc
-
+        movies = await self._get_all_movies()
         if kind == "missing":
-            return sum(1 for m in movies if m.monitored and not m.has_file)
+            return sum(
+                1 for r in movies if r.get("monitored", False) and not r.get("hasFile", False)
+            )
         count = 0
-        for m in movies:
-            if not m.monitored or not m.has_file:
+        for r in movies:
+            if not r.get("monitored", False) or not r.get("hasFile", False):
                 continue
-            cutoff_not_met = True
-            if m.movie_file is not None and m.movie_file.quality_cutoff_not_met is not None:
-                cutoff_not_met = m.movie_file.quality_cutoff_not_met
-            if cutoff_not_met:
+            movie_file: dict[str, Any] = r.get("movieFile") or {}
+            if movie_file.get("qualityCutoffNotMet", True):
                 count += 1
         return count
 
@@ -247,7 +179,7 @@ class WhisparrV3Client(ArrClient):
             List of :class:`LibraryWhisparrV3Movie` dataclasses.
         """
         movies = await self._get_all_movies()
-        return [_parse_library_movie(m) for m in movies]
+        return [_parse_library_movie(r) for r in movies]
 
 
 # ---------------------------------------------------------------------------
@@ -255,35 +187,47 @@ class WhisparrV3Client(ArrClient):
 # ---------------------------------------------------------------------------
 
 
-def _parse_library_movie(wire: WhisparrV3LibraryMovie) -> LibraryWhisparrV3Movie:
-    has_file = bool(wire.has_file)
-    cutoff_not_met = True
-    if wire.movie_file is not None and wire.movie_file.quality_cutoff_not_met is not None:
-        cutoff_not_met = wire.movie_file.quality_cutoff_not_met
+def _parse_library_movie(record: dict[str, Any]) -> LibraryWhisparrV3Movie:
+    has_file = bool(record.get("hasFile", False))
+    movie_file: dict[str, Any] = record.get("movieFile") or {}
+    cutoff_not_met = movie_file.get("qualityCutoffNotMet", True)
     return LibraryWhisparrV3Movie(
-        movie_id=wire.id,
-        title=wire.title or "",
-        year=wire.year or 0,
-        monitored=bool(wire.monitored),
+        movie_id=record["id"],
+        title=record.get("title") or "",
+        year=record.get("year", 0),
+        monitored=bool(record.get("monitored", False)),
         has_file=has_file,
         cutoff_met=not cutoff_not_met if has_file else False,
-        in_cinemas=wire.in_cinemas,
-        physical_release=wire.physical_release,
-        digital_release=wire.digital_release,
-        release_date=wire.release_date,
+        in_cinemas=record.get("inCinemas"),
+        physical_release=record.get("physicalRelease"),
+        digital_release=record.get("digitalRelease"),
     )
 
 
-def _parse_movie(wire: WhisparrV3LibraryMovie) -> MissingWhisparrV3Movie:
+def _parse_movie(record: dict[str, Any]) -> MissingWhisparrV3Movie:
     return MissingWhisparrV3Movie(
-        movie_id=wire.id,
-        title=wire.title or "",
-        year=wire.year or 0,
-        status=wire.status,
-        minimum_availability=wire.minimum_availability,
-        is_available=wire.is_available,
-        in_cinemas=wire.in_cinemas,
-        physical_release=wire.physical_release,
-        release_date=wire.release_date,
-        digital_release=wire.digital_release,
+        movie_id=record["id"],
+        title=record.get("title") or "",
+        year=record.get("year", 0),
+        status=record.get("status"),
+        minimum_availability=record.get("minimumAvailability"),
+        is_available=record.get("isAvailable"),
+        in_cinemas=record.get("inCinemas"),
+        physical_release=record.get("physicalRelease"),
+        release_date=record.get("releaseDate"),
+        digital_release=record.get("digitalRelease"),
     )
+
+
+# ---------------------------------------------------------------------------
+# Convenience factory
+# ---------------------------------------------------------------------------
+
+
+def make_whisparr_v3_client(
+    url: str,
+    api_key: str,
+    timeout: httpx.Timeout = httpx.Timeout(30.0, connect=5.0),
+) -> WhisparrV3Client:
+    """Return a :class:`WhisparrV3Client` ready for use as an async context manager."""
+    return WhisparrV3Client(url=url, api_key=api_key, timeout=timeout)

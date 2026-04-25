@@ -9,7 +9,6 @@ are intercepted by respx.
 from __future__ import annotations
 
 import asyncio
-from dataclasses import replace
 from typing import Any
 from unittest.mock import patch
 
@@ -34,7 +33,7 @@ SONARR_URL = "http://sonarr:8989"
 RADARR_URL = "http://radarr:7878"
 LIDARR_URL = "http://lidarr:8686"
 READARR_URL = "http://readarr:8787"
-WHISPARR_V2_URL = "http://whisparr:6969"
+WHISPARR_URL = "http://whisparr:6969"
 
 _EPISODE: dict[str, Any] = {
     "id": 101,
@@ -64,21 +63,21 @@ _BOOK: dict[str, Any] = {
     "releaseDate": "2023-06-01T00:00:00Z",
     "author": {"id": 60, "authorName": "Test Author"},
 }
-_WHISPARR_V2_EP: dict[str, Any] = {
+_WHISPARR_EP: dict[str, Any] = {
     "id": 501,
     "seriesId": 70,
     "title": "Scene Title",
     "seasonNumber": 1,
     "absoluteEpisodeNumber": 5,
     "releaseDate": {"year": 2023, "month": 9, "day": 1},
-    "series": {"id": 70, "title": "My Whisparr v2 Show"},
+    "series": {"id": 70, "title": "My Whisparr Show"},
 }
 
 _MISSING_SONARR_1 = {"records": [_EPISODE]}
 _MISSING_RADARR_1 = {"records": [_MOVIE]}
 _MISSING_LIDARR_1 = {"records": [_ALBUM]}
 _MISSING_READARR_1 = {"records": [_BOOK]}
-_MISSING_WHISPARR_V2_1 = {"records": [_WHISPARR_V2_EP]}
+_MISSING_WHISPARR_1 = {"records": [_WHISPARR_EP]}
 _MISSING_EMPTY = {"records": []}
 _FUTURE_AIR_DATE = "2999-01-01T00:00:00Z"
 
@@ -155,7 +154,6 @@ async def _cooldown_rows(instance_id: int) -> list[dict[str, Any]]:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.integration
 @pytest.mark.asyncio()
 @respx.mock
 async def test_full_cycle_sonarr(sonarr_instance: Instance, master_key: bytes) -> None:
@@ -175,16 +173,15 @@ async def test_full_cycle_sonarr(sonarr_instance: Instance, master_key: bytes) -
     assert logs[0]["action"] == "searched"
     assert logs[0]["item_id"] == 101
     assert logs[0]["item_type"] == "episode"
-    assert logs[0]["instance_id"] == sonarr_instance.core.id
+    assert logs[0]["instance_id"] == sonarr_instance.id
 
     # cooldowns must have one row for episode 101
-    cds = await _cooldown_rows(sonarr_instance.core.id)
+    cds = await _cooldown_rows(sonarr_instance.id)
     assert len(cds) == 1
     assert cds[0]["item_id"] == 101
     assert cds[0]["item_type"] == "episode"
 
 
-@pytest.mark.integration
 @pytest.mark.asyncio()
 @respx.mock
 async def test_full_cycle_radarr(radarr_instance: Instance, master_key: bytes) -> None:
@@ -206,7 +203,7 @@ async def test_full_cycle_radarr(radarr_instance: Instance, master_key: bytes) -
     assert logs[0]["item_id"] == 201
     assert logs[0]["item_type"] == "movie"
 
-    cds = await _cooldown_rows(radarr_instance.core.id)
+    cds = await _cooldown_rows(radarr_instance.id)
     assert len(cds) == 1
     assert cds[0]["item_id"] == 201
 
@@ -216,7 +213,6 @@ async def test_full_cycle_radarr(radarr_instance: Instance, master_key: bytes) -
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.integration
 @pytest.mark.asyncio()
 @respx.mock
 async def test_second_cycle_items_skipped_on_cooldown(
@@ -248,7 +244,7 @@ async def test_second_cycle_items_skipped_on_cooldown(
     assert "skipped" in actions
 
     # cooldown row must still be exactly one (upsert, not duplicate)
-    cds = await _cooldown_rows(sonarr_instance.core.id)
+    cds = await _cooldown_rows(sonarr_instance.id)
     assert len(cds) == 1
 
 
@@ -257,7 +253,6 @@ async def test_second_cycle_items_skipped_on_cooldown(
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.integration
 @pytest.mark.asyncio()
 @respx.mock
 async def test_hourly_cap_enforced(
@@ -303,7 +298,7 @@ async def test_hourly_cap_enforced(
     assert actions.count("searched") == 1
     assert actions.count("skipped") == 1
     skipped = next(r for r in logs if r["action"] == "skipped")
-    assert "hourly limit" in (skipped["reason"] or "")
+    assert "hourly cap" in (skipped["reason"] or "")
 
 
 # ---------------------------------------------------------------------------
@@ -311,7 +306,6 @@ async def test_hourly_cap_enforced(
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.integration
 @pytest.mark.asyncio()
 @respx.mock
 async def test_supervisor_graceful_shutdown(
@@ -335,7 +329,6 @@ async def test_supervisor_graceful_shutdown(
     assert sup._tasks == {}  # noqa: SLF001
 
 
-@pytest.mark.integration
 @pytest.mark.asyncio()
 async def test_supervisor_no_instances_starts_cleanly(db: None, master_key: bytes) -> None:
     """Supervisor with zero instances should start and stop without error."""
@@ -350,7 +343,6 @@ async def test_supervisor_no_instances_starts_cleanly(db: None, master_key: byte
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.integration
 @pytest.mark.asyncio()
 @respx.mock
 async def test_supervisor_runs_both_instances(
@@ -390,18 +382,17 @@ async def test_supervisor_runs_both_instances(
     # Filter out the supervisor info row (instance_id=None)
     searched = [r for r in logs if r["action"] == "searched"]
     instance_ids = {r["instance_id"] for r in searched}
-    assert sonarr_instance.core.id in instance_ids
-    assert radarr_instance.core.id in instance_ids
+    assert sonarr_instance.id in instance_ids
+    assert radarr_instance.id in instance_ids
 
 
-@pytest.mark.integration
 @pytest.mark.asyncio()
 @respx.mock
 async def test_missing_pass_reaches_deeper_page_when_top_items_are_ineligible(
     sonarr_instance: Instance, master_key: bytes
 ) -> None:
     """Fair scanning should reach page 2 when page 1 candidates are blocked."""
-    await record_search(sonarr_instance.core.id, 601, "episode")
+    await record_search(sonarr_instance.id, 601, "episode")
 
     page_1 = {
         "records": [
@@ -422,9 +413,7 @@ async def test_missing_pass_reaches_deeper_page_when_top_items_are_ineligible(
     )
 
     # Use a small target to ensure we stop once we find one eligible candidate.
-    sonarr_instance = replace(
-        sonarr_instance, missing=replace(sonarr_instance.missing, batch_size=1)
-    )
+    sonarr_instance.batch_size = 1
     count = await run_instance_search(sonarr_instance, master_key)
 
     assert count == 1
@@ -435,7 +424,6 @@ async def test_missing_pass_reaches_deeper_page_when_top_items_are_ineligible(
     assert any(row["item_id"] == 602 and row["action"] == "searched" for row in logs)
 
 
-@pytest.mark.integration
 @pytest.mark.asyncio()
 @respx.mock
 async def test_missing_list_calls_are_bounded_per_cycle(
@@ -462,11 +450,8 @@ async def test_missing_list_calls_are_bounded_per_cycle(
     # This test measures the ``_MAX_LIST_PAGES_PER_PASS`` page-fetch bound.
     # Random mode adds one probe call which would muddy the assertion, so
     # pin the instance to chronological for this specific check.
-    sonarr_instance = replace(
-        sonarr_instance,
-        schedule=replace(sonarr_instance.schedule, search_order=SearchOrder.chronological),
-        missing=replace(sonarr_instance.missing, batch_size=2),
-    )
+    sonarr_instance.search_order = SearchOrder.chronological
+    sonarr_instance.batch_size = 2
     count = await run_instance_search(sonarr_instance, master_key)
 
     assert count == 0
@@ -475,7 +460,7 @@ async def test_missing_list_calls_are_bounded_per_cycle(
 
 
 # ---------------------------------------------------------------------------
-# Fixtures - Lidarr, Readarr, Whisparr v2
+# Fixtures - Lidarr, Readarr, Whisparr
 # ---------------------------------------------------------------------------
 
 
@@ -512,14 +497,14 @@ async def readarr_instance(db: None, master_key: bytes) -> Instance:
 
 
 @pytest_asyncio.fixture()
-async def whisparr_v2_instance(db: None, master_key: bytes) -> Instance:
-    """Create a real Whisparr v2 instance row (with encrypted API key)."""
+async def whisparr_instance(db: None, master_key: bytes) -> Instance:
+    """Create a real Whisparr instance row (with encrypted API key)."""
     return await create_instance(
         master_key=master_key,
-        name="E2E Whisparr v2",
+        name="E2E Whisparr",
         type=InstanceType.whisparr_v2,
-        url=WHISPARR_V2_URL,
-        api_key="whisparr-v2-key",
+        url=WHISPARR_URL,
+        api_key="whisparr-key",
         batch_size=5,
         hourly_cap=10,
         cooldown_days=7,
@@ -532,7 +517,6 @@ async def whisparr_v2_instance(db: None, master_key: bytes) -> Instance:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.integration
 @pytest.mark.asyncio()
 @respx.mock
 async def test_full_cycle_lidarr(lidarr_instance: Instance, master_key: bytes) -> None:
@@ -552,9 +536,9 @@ async def test_full_cycle_lidarr(lidarr_instance: Instance, master_key: bytes) -
     assert logs[0]["action"] == "searched"
     assert logs[0]["item_id"] == 301
     assert logs[0]["item_type"] == "album"
-    assert logs[0]["instance_id"] == lidarr_instance.core.id
+    assert logs[0]["instance_id"] == lidarr_instance.id
 
-    cds = await _cooldown_rows(lidarr_instance.core.id)
+    cds = await _cooldown_rows(lidarr_instance.id)
     assert len(cds) == 1
     assert cds[0]["item_id"] == 301
     assert cds[0]["item_type"] == "album"
@@ -565,7 +549,6 @@ async def test_full_cycle_lidarr(lidarr_instance: Instance, master_key: bytes) -
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.integration
 @pytest.mark.asyncio()
 @respx.mock
 async def test_full_cycle_readarr(readarr_instance: Instance, master_key: bytes) -> None:
@@ -586,39 +569,38 @@ async def test_full_cycle_readarr(readarr_instance: Instance, master_key: bytes)
     assert logs[0]["item_id"] == 401
     assert logs[0]["item_type"] == "book"
 
-    cds = await _cooldown_rows(readarr_instance.core.id)
+    cds = await _cooldown_rows(readarr_instance.id)
     assert len(cds) == 1
     assert cds[0]["item_id"] == 401
     assert cds[0]["item_type"] == "book"
 
 
 # ---------------------------------------------------------------------------
-# Test - Full cycle: Whisparr v2
+# Test - Full cycle: Whisparr
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.integration
 @pytest.mark.asyncio()
 @respx.mock
-async def test_full_cycle_whisparr_v2(whisparr_v2_instance: Instance, master_key: bytes) -> None:
-    """One complete Whisparr v2 search cycle - episode is searched, log and cooldown written."""
-    respx.get(f"{WHISPARR_V2_URL}/api/v3/wanted/missing").mock(
-        return_value=httpx.Response(200, json=_MISSING_WHISPARR_V2_1)
+async def test_full_cycle_whisparr(whisparr_instance: Instance, master_key: bytes) -> None:
+    """One complete Whisparr search cycle - episode is searched, log and cooldown written."""
+    respx.get(f"{WHISPARR_URL}/api/v3/wanted/missing").mock(
+        return_value=httpx.Response(200, json=_MISSING_WHISPARR_1)
     )
-    respx.post(f"{WHISPARR_V2_URL}/api/v3/command").mock(
+    respx.post(f"{WHISPARR_URL}/api/v3/command").mock(
         return_value=httpx.Response(201, json={"id": 5})
     )
 
-    count = await run_instance_search(whisparr_v2_instance, master_key)
+    count = await run_instance_search(whisparr_instance, master_key)
 
     assert count == 1
     logs = await _log_rows()
     assert len(logs) == 1
     assert logs[0]["action"] == "searched"
     assert logs[0]["item_id"] == 501
-    assert logs[0]["item_type"] == "whisparr_v2_episode"
+    assert logs[0]["item_type"] == "whisparr_episode"
 
-    cds = await _cooldown_rows(whisparr_v2_instance.core.id)
+    cds = await _cooldown_rows(whisparr_instance.id)
     assert len(cds) == 1
     assert cds[0]["item_id"] == 501
-    assert cds[0]["item_type"] == "whisparr_v2_episode"
+    assert cds[0]["item_type"] == "whisparr_episode"

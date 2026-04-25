@@ -55,12 +55,8 @@ this file. The coverage fans out across these areas:
 - **CSRF enforcement.** All mutating authenticated routes return
   HTTP 403 without a valid token. Token comparison via
   `hmac.compare_digest()` is verified in source.
-- **Rate limiting.** After 5 failed login attempts within a
-  60-second window, further attempts from the same IP return HTTP
-  429 from the in-memory limiter. The same IP bucket covers the
-  post-auth password surfaces, so a stolen session cannot
-  brute-force the admin password through
-  `POST /settings/admin/factory-reset` either.
+- **Rate limiting.** 7 rapid failed login attempts trigger HTTP
+  429 from the in-memory limiter.
 
 ### Live smoke test
 

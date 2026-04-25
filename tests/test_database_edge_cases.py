@@ -6,9 +6,7 @@ import asyncio
 
 import pytest
 
-from houndarr.database import get_db
-from houndarr.repositories.search_log import purge_old_logs
-from houndarr.repositories.settings import get_setting, set_setting
+from houndarr.database import get_db, get_setting, purge_old_logs, set_setting
 
 # ---------------------------------------------------------------------------
 # purge_old_logs
@@ -104,14 +102,17 @@ async def test_purge_old_logs_returns_count(db: None) -> None:
 
 
 @pytest.mark.asyncio()
-async def test_get_setting_missing_key_returns_none(db: None) -> None:
-    """A missing key returns ``None``; callers compose any fallback themselves.
+async def test_get_setting_missing_key_returns_default(db: None) -> None:
+    """A missing key returns the provided default."""
+    result = await get_setting("nonexistent", default="fallback")
+    assert result == "fallback"
 
-    The repository contract is ``str | None``; route callers use the
-    ``(await get_setting(key)) == "1"`` / ``or <fallback>`` idiom
-    when they need a default value.
-    """
-    assert await get_setting("nonexistent") is None
+
+@pytest.mark.asyncio()
+async def test_get_setting_missing_key_no_default_returns_none(db: None) -> None:
+    """A missing key with no default returns None."""
+    result = await get_setting("nonexistent")
+    assert result is None
 
 
 @pytest.mark.asyncio()

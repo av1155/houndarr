@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
+
 import pytest
 
 from houndarr.engine.candidates import (
     SearchCandidate,
+    _is_within_unreleased_delay,
     _parse_iso_utc,
 )
 
@@ -111,3 +114,51 @@ class TestParseIsoUtc:
         result = _parse_iso_utc("  2024-01-15T10:30:00Z  ")
         assert result is not None
         assert result.year == 2024
+
+
+# ---------------------------------------------------------------------------
+# _is_within_unreleased_delay
+# ---------------------------------------------------------------------------
+
+
+class TestIsWithinUnreleasedDelay:
+    """Verify unreleased-delay checking matches the search_loop.py original."""
+
+    def test_within_delay(self):
+        """Item released recently is within the delay window."""
+        recent = (datetime.now(UTC) - timedelta(hours=1)).isoformat()
+        assert _is_within_unreleased_delay(recent, 24) is True
+
+    def test_past_delay(self):
+        """Item released long ago is past the delay window."""
+        old = (datetime.now(UTC) - timedelta(hours=48)).isoformat()
+        assert _is_within_unreleased_delay(old, 24) is False
+
+    def test_zero_delay_hrs(self):
+        """Zero delay hours always returns False."""
+        recent = (datetime.now(UTC) - timedelta(hours=1)).isoformat()
+        assert _is_within_unreleased_delay(recent, 0) is False
+
+    def test_negative_delay_hrs(self):
+        """Negative delay hours always returns False."""
+        recent = (datetime.now(UTC) - timedelta(hours=1)).isoformat()
+        assert _is_within_unreleased_delay(recent, -5) is False
+
+    def test_none_date(self):
+        """None release date returns False."""
+        assert _is_within_unreleased_delay(None, 24) is False
+
+    def test_empty_date(self):
+        """Empty string release date returns False."""
+        assert _is_within_unreleased_delay("", 24) is False
+
+    def test_future_release(self):
+        """Future release date is within any positive delay window."""
+        future = (datetime.now(UTC) + timedelta(hours=100)).isoformat()
+        assert _is_within_unreleased_delay(future, 1) is True
+
+    def test_boundary_exact(self):
+        """Item at exactly the delay boundary is not within the delay."""
+        boundary = (datetime.now(UTC) - timedelta(hours=24)).isoformat()
+        # At exactly the boundary, now < (release + delay) is False
+        assert _is_within_unreleased_delay(boundary, 24) is False

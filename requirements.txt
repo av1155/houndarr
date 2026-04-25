@@ -1,8 +1,6 @@
 fastapi>=0.135.3
-starlette>=0.52.1
 uvicorn[standard]>=0.44.0
 jinja2>=3.1.6
-markupsafe>=3.0.3
 aiosqlite>=0.22.1
 httpx>=0.28.1
 bcrypt>=5.0.0
@@ -10,4 +8,3 @@ cryptography>=46.0.7
 itsdangerous>=2.2.0
 python-multipart>=0.0.26
 click>=8.3.2
-pydantic>=2.10.0

@@ -1,27 +1,19 @@
-{%- import "_macros/alerts.html" as alerts -%}
-{%- import "_macros/modals.html" as modals -%}
 <div class="sr-only" data-page-key="settings" data-page-title="Settings | Houndarr" aria-hidden="true"></div>
 
 <style>
   #add-instance-modal {
     opacity: 0;
-    transform: translateY(0.75rem) scale(0.98);
+    transform: translateY(12px) scale(0.98);
   }
-
-  /* Keyframes live in app.css (hx-modal-*, hx-backdrop-*); this block
-     only sets per-modal durations/eases and the heavier 0.8 backdrop
-     opacity (the add-instance form wants more focus than the
-     changelog sheet). */
-  #add-instance-modal { --hx-backdrop-opacity: 0.8; }
 
   #add-instance-modal[open] {
     opacity: 1;
     transform: translateY(0) scale(1);
-    animation: hx-modal-in 180ms ease-out;
+    animation: add-instance-modal-in 180ms ease-out;
   }
 
   #add-instance-modal[open].is-closing {
-    animation: hx-modal-out 160ms ease-in forwards;
+    animation: add-instance-modal-out 160ms ease-in forwards;
   }
 
   #add-instance-modal::backdrop {
@@ -29,12 +21,56 @@
   }
 
   #add-instance-modal[open]::backdrop {
-    animation: hx-backdrop-in var(--dur-base, 180ms) var(--ease-station, cubic-bezier(0.16,1,0.3,1)) forwards;
+    animation: add-instance-backdrop-in var(--dur-base, 180ms) var(--ease-station, cubic-bezier(0.16,1,0.3,1)) forwards;
     backdrop-filter: blur(3px);
   }
 
   #add-instance-modal[open].is-closing::backdrop {
-    animation: hx-backdrop-out 160ms ease-in forwards;
+    animation: add-instance-backdrop-out 160ms ease-in forwards;
+  }
+
+  @keyframes add-instance-modal-in {
+    from {
+      opacity: 0;
+      transform: translateY(12px) scale(0.98);
+    }
+
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+
+  @keyframes add-instance-backdrop-in {
+    from {
+      background: rgba(2, 6, 23, 0);
+    }
+
+    to {
+      background: rgba(2, 6, 23, 0.8);
+    }
+  }
+
+  @keyframes add-instance-modal-out {
+    from {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+
+    to {
+      opacity: 0;
+      transform: translateY(8px) scale(0.985);
+    }
+  }
+
+  @keyframes add-instance-backdrop-out {
+    from {
+      background: rgba(2, 6, 23, 0.8);
+    }
+
+    to {
+      background: rgba(2, 6, 23, 0);
+    }
   }
 
   @media (prefers-reduced-motion: reduce) {
@@ -50,28 +86,26 @@
   }
 
   #instance-test-connection-btn {
-    transition: background-color var(--dur-base) var(--ease-station),
-      color var(--dur-base) var(--ease-station),
-      box-shadow var(--dur-base) var(--ease-station),
-      transform var(--dur-base) var(--ease-station);
+    transition: background-color 180ms ease, color 180ms ease, box-shadow 180ms ease,
+      transform 180ms ease;
   }
 
   #instance-test-connection-btn.is-testing {
-    background-color: var(--color-surface-3);
-    color: var(--color-text-primary);
+    background-color: rgb(51 65 85);
+    color: rgb(226 232 240);
     box-shadow: 0 0 0 1px rgba(148, 163, 184, 0.55) inset;
   }
 
   #instance-test-connection-btn.is-success {
-    background-color: var(--color-success-bg);
-    color: #dcfce7;
-    box-shadow: 0 0 0 1px var(--color-success-border) inset;
+    background-color: rgb(22 101 52);
+    color: rgb(220 252 231);
+    box-shadow: 0 0 0 1px rgba(74, 222, 128, 0.4) inset;
   }
 
   #instance-test-connection-btn.is-error {
-    background-color: var(--color-danger-bg);
-    color: #fee2e2;
-    box-shadow: 0 0 0 1px var(--color-danger-border) inset;
+    background-color: rgb(153 27 27);
+    color: rgb(254 226 226);
+    box-shadow: 0 0 0 1px rgba(248, 113, 113, 0.45) inset;
     animation: test-connection-shake 320ms ease;
   }
 
@@ -156,7 +190,7 @@
     #instance-tbody {
       display: flex;
       flex-direction: column;
-      gap: 0.5rem;
+      gap: 8px;
     }
 
     /* Instance rows → cards
@@ -168,12 +202,12 @@
       display: grid;
       grid-template-columns: 1fr auto auto;
       grid-template-rows: auto auto auto auto;
-      column-gap: 0.5rem;
-      row-gap: 0.3125rem;
-      padding: 0.75rem;
-      background: var(--color-surface-1);
-      border: 1px solid var(--color-border-subtle) !important;
-      border-radius: var(--radius-container);
+      column-gap: 8px;
+      row-gap: 5px;
+      padding: 12px;
+      background: #0e1117;
+      border: 1px solid #1e2638 !important;
+      border-radius: 10px;
       align-items: start;
     }
 
@@ -186,17 +220,23 @@
       white-space: normal;
     }
 
-    /* Row 1: name (col 1-2) | type badge (col 3). Status dot moves to the
-       actions row so the top line reads cleanly as "what is this" with the
-       badge next to the name, and the live/disabled indicator sits where
-       the eye naturally lands after scanning the actions. */
+    /* Row 1: name (left) | status dot (middle) | type badge (right) */
     tr[id^='instance-row-'] td[data-col='name'] {
-      grid-column: 1 / 3;
+      grid-column: 1;
       grid-row: 1;
-      font-size: 0.9375rem;
+      font-size: 15px;
       font-weight: 600;
       align-self: center;
-      padding-right: 0.25rem;
+      padding-right: 4px;
+    }
+
+    tr[id^='instance-row-'] td[data-col='status'] {
+      grid-column: 2;
+      grid-row: 1;
+      display: flex;
+      align-items: center;
+      align-self: center;
+      text-align: left;
     }
 
     tr[id^='instance-row-'] td[data-col='type'] {
@@ -205,7 +245,6 @@
       display: flex;
       align-items: center;
       align-self: center;
-      justify-self: end;
     }
 
     /* Row 2: url */
@@ -213,39 +252,24 @@
       grid-column: 1 / -1;
       grid-row: 2;
       word-break: break-all;
-      font-size: 0.625rem;
+      font-size: 10px;
       white-space: normal;
-      color: var(--color-text-subtle);
+      color: #475569;
     }
 
     /* Row 3: batch */
     tr[id^='instance-row-'] td[data-col='batch'] {
       grid-column: 1 / -1;
       grid-row: 3;
-      font-size: 0.6875rem;
-      color: var(--color-text-muted);
+      font-size: 11px;
+      color: #64748b;
     }
 
-    /* Row 4: actions (col 1-2) + status dot (col 3, right). The dot sits
-       opposite the action buttons so "Disable/Edit/Delete" and the live
-       indicator share one row without crowding the top of the card. */
+    /* Row 4: actions */
     tr[id^='instance-row-'] td[data-col='actions'] {
-      grid-column: 1 / 3;
+      grid-column: 1 / -1;
       grid-row: 4;
-      padding-top: 0.25rem;
-    }
-
-    tr[id^='instance-row-'] td[data-col='status'] {
-      grid-column: 3;
-      grid-row: 4;
-      display: flex;
-      align-items: center;
-      align-self: center;
-      justify-self: end;
-      padding-top: 0.25rem;
-    }
-    tr[id^='instance-row-'] td[data-col='status'] > span {
-      min-width: 0;
+      padding-top: 4px;
     }
 
     tr[id^='instance-row-'] td[data-col='actions'] .flex {
@@ -256,9 +280,9 @@
     /* No-instances row */
     tr#no-instances-row {
       display: block;
-      border-radius: var(--radius-container);
-      border: 1px solid var(--color-border-subtle) !important;
-      background: var(--color-surface-1);
+      border-radius: 10px;
+      border: 1px solid #1e2638 !important;
+      background: #0e1117;
     }
 
     tr#no-instances-row > td {
@@ -266,199 +290,53 @@
     }
   }
 
-  /* ───── Admin dropdown ─────────────────────────────────────────
-     Ported from settings-redesign.css.  The panel collapses like the
-     instance table's modal, but uses JS-driven height animation so
-     the inner sub-sections can grow/shrink without a fixed height. */
-  .admin-panel { box-shadow: var(--shadow-2); }
-  .admin-panel__header {
-    cursor: pointer; background: transparent; border: 0;
-    font: inherit; color: inherit;
-    transition: background-color 180ms ease;
+  #account-settings > summary::-webkit-details-marker {
+    display: none;
   }
-  .admin-panel__header:hover {
-    background: var(--color-surface-2);
+
+  #account-settings > summary {
+    transition: background-color 180ms ease, color 180ms ease;
   }
-  .admin-panel__header:focus-visible {
-    outline: 2px solid var(--color-brand-400); outline-offset: -2px;
+
+  .account-details-chevron {
+    transition: transform 180ms ease, color 180ms ease;
   }
-  .admin-panel__body {
+
+  #account-settings[open] .account-details-chevron {
+    transform: rotate(180deg);
+  }
+
+  .account-details-content {
     overflow: hidden;
     height: 0;
     opacity: 0;
-    border-top: 1px solid transparent;
-    will-change: height, opacity;
   }
-  .admin-panel[data-open="true"] .admin-panel__body {
+
+  #account-settings[open] .account-details-content {
     height: auto;
     opacity: 1;
-    border-top-color: var(--color-border-subtle);
   }
-  .admin-chevron {
-    transition: transform 200ms var(--ease-station), color 180ms ease;
-    transform: rotate(-90deg);
-  }
-  .admin-panel[data-open="true"] .admin-chevron { transform: rotate(0deg); }
 
   @media (prefers-reduced-motion: reduce) {
-    .admin-panel__header,
-    .admin-panel__body,
-    .admin-chevron { transition: none; }
-  }
-
-  /* ───── Admin sub-section primitives ─────────────────────────── */
-  .toggle-row {
-    display: flex; align-items: center; justify-content: space-between;
-    gap: 1rem; padding: 0.625rem 0.75rem;
-    border-radius: var(--radius-inset);
-    background: var(--color-surface-2);
-    border: 1px solid var(--color-border-subtle);
-    cursor: pointer;
-    transition:
-      border-color var(--dur-base) var(--ease-station),
-      background var(--dur-base) var(--ease-station);
-  }
-  .toggle-row:hover { border-color: var(--color-border-default); }
-  .toggle-row__title { display: block; font-size: 0.8125rem; font-weight: 500; color: var(--color-text-primary); }
-
-  .switch {
-    position: relative;
-    display: inline-block;
-    width: 2.5rem;
-    height: 1.375rem;
-    flex-shrink: 0;
-  }
-  .switch input {
-    position: absolute;
-    inset: 0;
-    width: 100%;
-    height: 100%;
-    margin: 0;
-    opacity: 0;
-    cursor: pointer;
-  }
-  .switch__track {
-    position: absolute;
-    inset: 0;
-    background: var(--color-surface-3);
-    border: 1px solid var(--color-border-default);
-    border-radius: 999px;
-    transition:
-      background 240ms var(--ease-station),
-      border-color 240ms var(--ease-station),
-      box-shadow 240ms var(--ease-station);
-  }
-  .switch__thumb {
-    position: absolute;
-    top: 50%;
-    left: 2px;
-    transform: translate(0, -50%);
-    width: 1rem;
-    height: 1rem;
-    background: #cbd5e1;
-    border-radius: 999px;
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
-    /* Spring easing on the slide gives the toggle a subtle bounce at the
-       end of travel so the flip feels deliberate. Colour + shadow ride
-       the standard Station curve so the track stays calm. */
-    transition:
-      transform 280ms var(--ease-spring),
-      background 240ms var(--ease-station),
-      box-shadow 240ms var(--ease-station);
-  }
-  .switch input:checked + .switch__track {
-    background: color-mix(in srgb, var(--color-brand-500) 55%, transparent);
-    border-color: var(--color-brand-500);
-    box-shadow: var(--glow-brand);
-  }
-  .switch input:checked + .switch__track .switch__thumb {
-    transform: translate(1.125rem, -50%);
-    background: #ffffff;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 255, 255, 0.06);
-  }
-  /* A brief press-in while the user is holding the switch; reads as
-     tactile feedback, settles back on release via the spring curve. */
-  .switch input:active + .switch__track .switch__thumb {
-    transform: translate(0, -50%) scale(0.92);
-  }
-  .switch input:checked:active + .switch__track .switch__thumb {
-    transform: translate(1.125rem, -50%) scale(0.92);
-  }
-  .switch input:focus-visible + .switch__track {
-    box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-brand-500) 25%, transparent);
-  }
-  @media (prefers-reduced-motion: reduce) {
-    .switch__track,
-    .switch__thumb { transition: none; }
-  }
-
-  .neutral-row,
-  .danger-row {
-    display: flex; align-items: center; justify-content: space-between;
-    gap: 1rem; padding: 0.875rem 1rem;
-    border-radius: var(--radius-inset);
-    flex-wrap: wrap;
-  }
-  .neutral-row {
-    border: 1px solid var(--color-border-subtle);
-    background: var(--color-surface-2);
-  }
-  .danger-row {
-    border: 1px solid color-mix(in srgb, var(--color-danger) 18%, var(--color-border-subtle));
-    background: rgba(153, 27, 27, 0.06);
-  }
-  .danger-row h4 { color: #fee2e2; }
-  .neutral-row > .min-w-0,
-  .danger-row > .min-w-0 { flex: 1 1 0; min-width: 13.75rem; }
-  .neutral-row > button,
-  .danger-row > button { flex-shrink: 0; margin-left: auto; }
-
-  @media (max-width: 640px) {
-    .neutral-row, .danger-row {
-      flex-direction: column;
-      align-items: stretch;
-      gap: 0.5rem;
-      padding: 1rem 1.25rem;
+    #account-settings > summary,
+    .account-details-chevron {
+      transition: none;
     }
-    .neutral-row > button,
-    .danger-row > button { align-self: flex-end; margin-left: 0; }
-  }
-
-  /* ───── Confirm dialog ─────────────────────────────────────── */
-  .confirm-dialog { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; }
-  .confirm-dialog.hidden { display: none; }
-  .confirm-dialog__backdrop {
-    position: absolute; inset: 0;
-    background: rgba(2, 6, 23, 0.72);
-    backdrop-filter: blur(3px);
-  }
-  .confirm-dialog__panel {
-    position: relative;
-    width: min(94vw, 30rem);
-    box-shadow: var(--shadow-4), 0 0 0 1px rgba(30, 38, 56, 0.8);
-    animation: confirm-in 220ms var(--ease-station);
-  }
-  @keyframes confirm-in {
-    from { opacity: 0; transform: translateY(0.625rem) scale(0.985); }
-    to   { opacity: 1; transform: translateY(0) scale(1); }
-  }
-  @media (prefers-reduced-motion: reduce) {
-    .confirm-dialog__panel { animation: none; }
-  }
-
-  /* ───── Admin flash toast auto-fade ────────────────────────── */
-  #admin-flash[data-admin-flash].is-fading {
-    opacity: 0;
-    transition: opacity 280ms var(--ease-station);
   }
 </style>
 
+<div class="flex items-center justify-between mb-6">
+  <h1 class="text-xl font-bold text-white tracking-tight">Settings</h1>
+</div>
+
 {% if error is defined and error %}
-{% call alerts.alert("error", prefix="mb-4", extra="text-sm font-sans") %}{{ error }}{% endcall %}
+<div class="mb-4 border-l-4 border-red-500 bg-red-950/30 text-red-300 rounded-r-lg px-4 py-3 text-sm font-sans">
+  {{ error }}
+</div>
 {% endif %}
 
 <section class="mb-10">
-  <div class="flex flex-wrap items-start justify-between gap-2 mb-3">
+  <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
     <h2 class="text-base font-semibold text-slate-200">Instances</h2>
     <div class="flex flex-wrap items-center gap-2">
       <a
@@ -467,7 +345,7 @@
         hx-target="#app-content"
         hx-swap="innerHTML"
         hx-push-url="true"
-        class="btn btn-soft btn-neutral px-3 py-1.5 text-sm font-medium font-sans"
+        class="px-3 py-1.5 rounded border border-[#2a3448] bg-[#151b27] hover:bg-[#1e2638] text-slate-200 text-sm font-medium font-sans transition-colors"
       >
         Settings Guide
       </a>
@@ -478,16 +356,16 @@
         hx-target="#add-instance-modal-content"
         hx-swap="innerHTML"
         id="add-instance-btn"
-        class="btn btn-primary px-3 py-1.5 text-sm font-medium font-sans"
+        class="px-3 py-1.5 rounded bg-brand-600 hover:bg-brand-500 text-white text-sm font-medium font-sans transition-colors"
       >
         + Add Instance
       </button>
     </div>
   </div>
 
-  <div class="instance-table-wrapper rounded-container border border-border-subtle overflow-x-auto">
-    <table id="instance-table" class="w-full sm:min-w-[47.5rem] text-sm">
-      <thead class="bg-surface-2 text-[0.625rem] text-slate-500 uppercase tracking-widest font-sans border-b border-border-subtle">
+  <div class="instance-table-wrapper rounded-xl border border-[#1e2638] overflow-x-auto">
+    <table id="instance-table" class="w-full sm:min-w-[760px] text-sm">
+      <thead class="bg-[#151b27] text-[10px] text-slate-500 uppercase tracking-widest font-sans border-b border-[#1e2638]">
         <tr>
           <th class="px-4 py-3 text-left font-medium">Name</th>
           <th class="px-4 py-3 text-left font-medium">Type</th>
@@ -497,7 +375,7 @@
           <th class="px-4 py-3 text-right font-medium">Actions</th>
         </tr>
       </thead>
-      <tbody id="instance-tbody" class="divide-y divide-border-subtle">
+      <tbody id="instance-tbody" class="divide-y divide-[#1e2638]">
         {% for instance in instances %} {% include "partials/instance_row.html" %} {% else %}
         <tr id="no-instances-row">
           <td colspan="6" class="px-4 py-12 text-center">
@@ -510,70 +388,126 @@
     </table>
   </div>
 
-  <!-- ═══════════ ADMIN PARENT DROPDOWN ═══════════ -->
-  <section
-    id="admin-grouped"
-    class="admin-panel mt-10 rounded-container border border-border-subtle bg-surface-1 overflow-hidden"
-    data-open="false"
-  >
-    <button
-      type="button"
-      id="admin-toggle"
-      class="admin-panel__header w-full text-left flex items-center justify-between gap-4 px-5 sm:px-6 py-4 sm:py-5"
-      aria-expanded="false"
-      aria-controls="admin-body"
-    >
-      <div class="flex items-center gap-3 min-w-0">
-        <div
-          class="admin-icon shrink-0 w-9 h-9 rounded-inset bg-surface-2 border border-border-subtle grid place-items-center text-brand-300"
-          aria-hidden="true"
-        >
-          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M12 3l8 3v5c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10V6l8-3z"/>
-            <circle cx="12" cy="12" r="2.2"/>
-            <path d="M12 9v1.2M12 13.8V15M14.6 10.5l-1 .6M10.4 13l-1 .6M14.6 13.5l-1-.6M10.4 11l-1-.6"/>
-          </svg>
-        </div>
-        <div class="min-w-0">
-          <h2 class="text-base font-semibold text-slate-100">Admin</h2>
-          <p class="text-xs text-slate-500 mt-0.5">
-            Security, updates, maintenance, and factory-reset actions.
-          </p>
-        </div>
-      </div>
-      <svg
-        class="admin-chevron w-4 h-4 text-slate-400 shrink-0"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="2"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-        aria-hidden="true"
+  {% include "partials/changelog_settings_section.html" %}
+
+  {% if auth_mode != "proxy" %}
+  <section id="account-section" class="mt-8 rounded-xl border border-[#1e2638] bg-[#0e1117] p-4 sm:p-5">
+    <details id="account-settings" {% if account_error or account_success %}open{% endif %}>
+      <summary
+        class="cursor-pointer list-none flex items-center justify-between rounded-lg px-2 py-2 text-slate-200 hover:bg-[#151b27] focus:outline-none focus:ring-2 focus:ring-brand-400/30"
       >
-        <polyline points="6 9 12 15 18 9"/>
-      </svg>
-    </button>
+        <span>
+          <span class="block text-base font-semibold">Account</span>
+          <span class="block text-sm text-slate-400 mt-0.5"
+            >Manage admin credentials for this Houndarr instance.</span
+          >
+        </span>
+        <span class="account-details-chevron text-slate-400" aria-hidden="true">
+          <svg class="w-4 h-4" viewBox="0 0 20 20" fill="currentColor">
+            <path
+              fill-rule="evenodd"
+              d="M5.23 7.21a.75.75 0 0 1 1.06.02L10 11.118l3.71-3.89a.75.75 0 1 1 1.08 1.04l-4.25 4.46a.75.75 0 0 1-1.08 0l-4.25-4.46a.75.75 0 0 1 .02-1.06Z"
+              clip-rule="evenodd"
+            />
+          </svg>
+        </span>
+      </summary>
 
-    <div id="admin-body" class="admin-panel__body">
-      <div class="px-5 sm:px-6 py-5 sm:py-6 space-y-8">
-        {% include "partials/admin/security.html" %}
-        {% include "partials/admin/updates.html" %}
-        {% include "partials/admin/maintenance.html" %}
-        {% include "partials/admin/danger.html" %}
+      <div class="account-details-content">
+        <div class="account-details-inner pt-4 space-y-4">
+          <div
+            class="inline-flex items-center gap-2 rounded-md border border-[#1e2638] bg-[#07080f]/70 px-3 py-1.5 text-xs text-slate-400 font-sans"
+          >
+            <span class="text-slate-500">Signed in as</span>
+            <span class="font-medium text-slate-200">{{ username or "admin" }}</span>
+          </div>
 
-        <!-- Flash slot: the three admin endpoints outerHTML-swap their
-             toast partials into this div. Stays empty on initial
-             render, auto-clears after 3.2s via the admin JS. -->
-        <div id="admin-flash" aria-live="polite"></div>
+          <form
+            hx-post="/settings/account/password"
+            hx-target="#account-section"
+            hx-select="#account-section"
+            hx-swap="outerHTML"
+            class="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4"
+          >
+            <div>
+              <label class="block text-xs font-medium text-slate-400 mb-1.5" for="current-password"
+                >Current Password</label
+              >
+              <input
+                id="current-password"
+                name="current_password"
+                type="password"
+                required
+                autocomplete="current-password"
+                class="w-full h-11 rounded-lg border border-[#2a3448] bg-[#0e1117] px-3 text-base text-white placeholder:text-slate-600 font-sans
+                           focus:outline-none focus:border-brand-400/70 focus:ring-2 focus:ring-brand-500/25"
+              />
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-slate-400 mb-1.5" for="new-password"
+                >New Password</label
+              >
+              <input
+                id="new-password"
+                name="new_password"
+                type="password"
+                required
+                minlength="8"
+                autocomplete="new-password"
+                class="w-full h-11 rounded-lg border border-[#2a3448] bg-[#0e1117] px-3 text-base text-white placeholder:text-slate-600 font-sans
+                           focus:outline-none focus:border-brand-400/70 focus:ring-2 focus:ring-brand-500/25"
+              />
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-slate-400 mb-1.5" for="confirm-password"
+                >Confirm Password</label
+              >
+              <input
+                id="confirm-password"
+                name="new_password_confirm"
+                type="password"
+                required
+                minlength="8"
+                autocomplete="new-password"
+                class="w-full h-11 rounded-lg border border-[#2a3448] bg-[#0e1117] px-3 text-base text-white placeholder:text-slate-600 font-sans
+                           focus:outline-none focus:border-brand-400/70 focus:ring-2 focus:ring-brand-500/25"
+              />
+            </div>
+
+            <div class="sm:col-span-3 flex flex-wrap items-center gap-3 pt-1">
+              <button
+                type="submit"
+                class="px-4 py-2.5 rounded-lg bg-brand-500 hover:bg-brand-400 text-white text-sm font-semibold font-sans transition-colors focus:outline-none focus:ring-2 focus:ring-brand-400/35"
+              >
+                Update Password
+              </button>
+              <p class="text-xs text-slate-500">Current password is required for security.</p>
+            </div>
+
+            {% if account_error is defined and account_error %}
+            <div class="sm:col-span-3 border-l-4 border-red-500 bg-red-950/30 rounded-r-lg px-3 py-2 text-sm text-red-300 font-sans">
+              {{ account_error }}
+            </div>
+            {% endif %} {% if account_success is defined and account_success %}
+            <div
+              class="sm:col-span-3 border-l-4 border-emerald-500 bg-emerald-950/30 rounded-r-lg px-3 py-2 text-sm text-emerald-300 font-sans"
+            >
+              {{ account_success }}
+            </div>
+            {% endif %}
+          </form>
+        </div>
       </div>
-    </div>
+    </details>
   </section>
+  {% endif %}
 
-  {% include "partials/admin/confirm_dialog.html" %}
-
-  {% call modals.dialog_shell(id="add-instance-modal", width="52rem") %}
-    <div class="flex items-start justify-between border-b border-border-subtle px-6 py-5">
+  <dialog
+    id="add-instance-modal"
+    class="m-auto p-0 w-[min(94vw,52rem)] rounded-2xl border border-[#1e2638] bg-[#0e1117] text-slate-100"
+    style="box-shadow:0 30px 80px rgba(0,0,0,0.7), 0 0 0 1px rgba(30,38,56,0.8);"
+  >
+    <div class="flex items-start justify-between border-b border-[#1e2638] px-6 py-5">
       <div>
         <h3 id="add-instance-modal-title" class="text-xl font-semibold tracking-tight text-white">
           Add Instance
@@ -597,9 +531,9 @@
         autofocus
         aria-label="Close add instance dialog"
         data-close-add-instance-modal="true"
-        class="ml-4 flex-shrink-0 rounded-inset border border-border-default bg-surface-2 p-2 text-slate-400 hover:bg-surface-3 hover:text-slate-200 transition-colors duration-base ease-station focus:outline-none focus:ring-2 focus:ring-brand-400/30"
+        class="ml-4 flex-shrink-0 rounded-lg border border-[#2a3448] bg-[#151b27] p-2 text-slate-400 hover:bg-[#1e2638] hover:text-slate-200 transition-colors focus:outline-none focus:ring-2 focus:ring-brand-400/30"
       >
-        <svg aria-hidden="true" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+        <span aria-hidden="true" class="text-xl leading-none">&times;</span>
       </button>
     </div>
 
@@ -608,9 +542,564 @@
       role="dialog"
       aria-modal="true"
       aria-labelledby="add-instance-modal-title"
-      data-modal-scroll
       class="max-h-[min(calc(100dvh-12rem),44rem)] overflow-y-auto px-6 py-5"
     ></div>
-  {% endcall %}
+  </dialog>
 </section>
 
+<script>
+  (function () {
+    window.__houndarrSettingsPageController?.abort();
+    const controller = new AbortController();
+    window.__houndarrSettingsPageController = controller;
+    const { signal } = controller;
+
+    const addInstanceBtn = document.getElementById('add-instance-btn');
+    const addInstanceModal = document.getElementById('add-instance-modal');
+    const addInstanceModalContent = document.getElementById('add-instance-modal-content');
+    const addInstanceModalTitle = document.getElementById('add-instance-modal-title');
+    const addInstanceModalSubtitle = document.getElementById('add-instance-modal-subtitle');
+    const accountSettings = document.getElementById('account-settings');
+    const accountSummary = accountSettings ? accountSettings.querySelector('summary') : null;
+    const accountContent = accountSettings ? accountSettings.querySelector('.account-details-content') : null;
+    const closeAnimationMs = 160;
+    const accountAnimationMs = 180;
+    const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    let isClosingAddInstanceModal = false;
+    let pendingModalShow = false;
+    let isAccountAnimating = false;
+    let connectionStatusTimer = null;
+
+    if (!addInstanceBtn || !addInstanceModal || !addInstanceModalContent) {
+      return;
+    }
+
+    function flashUpdatedInstanceRow(row) {
+      if (!row) {
+        return;
+      }
+      row.classList.remove('just-updated');
+      void row.offsetWidth;
+      row.classList.add('just-updated');
+      window.setTimeout(() => {
+        row.classList.remove('just-updated');
+      }, 450);
+    }
+
+    function initializeAccountContent() {
+      if (!accountSettings || !accountContent) {
+        return;
+      }
+
+      accountContent.style.transition = '';
+      accountContent.style.height = accountSettings.open ? 'auto' : '0px';
+      accountContent.style.opacity = accountSettings.open ? '1' : '0';
+    }
+
+    function toggleAccountDetails(shouldOpen) {
+      if (!accountSettings || !accountContent || isAccountAnimating) {
+        return;
+      }
+
+      if (prefersReducedMotion) {
+        accountSettings.open = shouldOpen;
+        initializeAccountContent();
+        return;
+      }
+
+      const startHeight = accountContent.getBoundingClientRect().height;
+      isAccountAnimating = true;
+
+      if (shouldOpen) {
+        accountSettings.open = true;
+        const endHeight = accountContent.scrollHeight;
+
+        accountContent.style.height = `${startHeight}px`;
+        accountContent.style.opacity = '0';
+
+        requestAnimationFrame(() => {
+          accountContent.style.transition = `height ${accountAnimationMs}ms ease, opacity ${accountAnimationMs}ms ease`;
+          accountContent.style.height = `${endHeight}px`;
+          accountContent.style.opacity = '1';
+        });
+
+        window.setTimeout(() => {
+          accountContent.style.transition = '';
+          accountContent.style.height = 'auto';
+          isAccountAnimating = false;
+        }, accountAnimationMs);
+        return;
+      }
+
+      accountContent.style.height = `${startHeight}px`;
+      accountContent.style.opacity = '1';
+
+      requestAnimationFrame(() => {
+        accountContent.style.transition = `height ${accountAnimationMs}ms ease, opacity ${accountAnimationMs}ms ease`;
+        accountContent.style.height = '0px';
+        accountContent.style.opacity = '0';
+      });
+
+      window.setTimeout(() => {
+        accountSettings.open = false;
+        accountContent.style.transition = '';
+        accountContent.style.height = '0px';
+        isAccountAnimating = false;
+      }, accountAnimationMs);
+    }
+
+    initializeAccountContent();
+
+    if (accountSummary) {
+      accountSummary.addEventListener(
+        'click',
+        function (event) {
+          event.preventDefault();
+          if (!accountSettings) {
+            return;
+          }
+          toggleAccountDetails(!accountSettings.open);
+        },
+        { signal },
+      );
+    }
+
+    function setAddInstanceModalChrome(mode, instanceName) {
+      if (mode === 'edit') {
+        addInstanceModalTitle.textContent = 'Edit Instance';
+        addInstanceModalSubtitle.textContent = instanceName
+          ? `Update settings for ${instanceName}.`
+          : 'Update instance settings.';
+        return;
+      }
+
+      addInstanceModalTitle.textContent = 'Add Instance';
+      addInstanceModalSubtitle.textContent = 'Configure an *arr instance.';
+    }
+
+    function getModalForm() {
+      return addInstanceModalContent.querySelector('form[data-form-mode]');
+    }
+
+    function getModalFormMode() {
+      const modalForm = getModalForm();
+      return modalForm ? modalForm.dataset.formMode : null;
+    }
+
+    function getConnectionTestButton() {
+      return addInstanceModalContent.querySelector('#instance-test-connection-btn');
+    }
+
+    function isConnectionGuardedFormLoaded() {
+      return Boolean(addInstanceModalContent.querySelector('#instance-connection-verified'));
+    }
+
+    function syncAddInstancePlaceholders() {
+      const typeSelect = addInstanceModalContent.querySelector('[data-instance-field="type"]');
+      const nameInput = addInstanceModalContent.querySelector('[data-instance-field="name"]');
+      const urlInput = addInstanceModalContent.querySelector('[data-instance-field="url"]');
+
+      if (!typeSelect || !nameInput || !urlInput) {
+        return;
+      }
+
+      const t = typeSelect.value;
+      nameInput.placeholder = nameInput.dataset[t + 'Placeholder'] || nameInput.dataset.sonarrPlaceholder;
+      urlInput.placeholder = urlInput.dataset[t + 'Placeholder'] || urlInput.dataset.sonarrPlaceholder;
+    }
+
+    function syncAppOnlyControls() {
+      const typeSelect = addInstanceModalContent.querySelector('[data-instance-field="type"]');
+      if (!typeSelect) {
+        return;
+      }
+
+      const t = typeSelect.value;
+      const appOnlyAttrs = ['data-sonarr-only', 'data-lidarr-only', 'data-readarr-only', 'data-whisparr_v2-only', 'data-whisparr_v3-only'];
+      appOnlyAttrs.forEach(function (attr) {
+        const appType = attr.replace('data-', '').replace('-only', '');
+        addInstanceModalContent.querySelectorAll('[' + attr + '="true"]').forEach(function (el) {
+          if (!(el instanceof HTMLElement)) {
+            return;
+          }
+          el.style.display = (t === appType) ? '' : 'none';
+        });
+      });
+    }
+
+    function addConnectionStatusClass(statusTone) {
+      if (statusTone === 'success') {
+        return 'text-xs text-green-400';
+      }
+      if (statusTone === 'error') {
+        return 'text-xs text-red-400';
+      }
+      return 'text-xs text-slate-400';
+    }
+
+    function isConnectionVerified() {
+      const verifiedInput = addInstanceModalContent.querySelector('#instance-connection-verified');
+      return verifiedInput && verifiedInput.value === 'true';
+    }
+
+    function setConnectionState(isVerified, statusText, statusTone) {
+      const verifiedInput = addInstanceModalContent.querySelector('#instance-connection-verified');
+      const submitBtn = addInstanceModalContent.querySelector('#instance-submit-btn');
+      const statusEl = addInstanceModalContent.querySelector('#instance-connection-status');
+
+      if (verifiedInput) {
+        verifiedInput.value = isVerified ? 'true' : 'false';
+      }
+      if (submitBtn) {
+        submitBtn.disabled = !isVerified;
+      }
+      if (statusEl && statusText) {
+        if (connectionStatusTimer) {
+          window.clearTimeout(connectionStatusTimer);
+          connectionStatusTimer = null;
+        }
+
+        if (prefersReducedMotion) {
+          statusEl.textContent = statusText;
+          statusEl.className = addConnectionStatusClass(statusTone);
+          return;
+        }
+
+        statusEl.classList.add('is-updating');
+        connectionStatusTimer = window.setTimeout(() => {
+          statusEl.textContent = statusText;
+          statusEl.className = addConnectionStatusClass(statusTone);
+          requestAnimationFrame(() => {
+            statusEl.classList.remove('is-updating');
+          });
+          connectionStatusTimer = null;
+        }, 80);
+      }
+    }
+
+    function setConnectionTestButtonState(state) {
+      const testBtn = getConnectionTestButton();
+      if (!testBtn) {
+        return;
+      }
+
+      testBtn.classList.remove('is-testing', 'is-success', 'is-error');
+
+      if (state === 'testing') {
+        testBtn.classList.add('is-testing');
+      }
+      if (state === 'success') {
+        testBtn.classList.add('is-success');
+      }
+      if (state === 'error') {
+        void testBtn.offsetWidth;
+        testBtn.classList.add('is-error');
+      }
+    }
+
+    function neutralConnectionPromptForMode(mode) {
+      if (mode === 'edit') {
+        return 'Test connection before saving changes.';
+      }
+      return 'Test connection before adding this instance.';
+    }
+
+    function resetConnectionStateOnFieldChange(target) {
+      const mode = getModalFormMode();
+      if (!isConnectionGuardedFormLoaded() || mode === null) {
+        return;
+      }
+
+      if (
+        !target.matches(
+          '[data-instance-field="type"], [data-instance-field="url"], form[data-form-mode] [name="api_key"]',
+        )
+      ) {
+        return;
+      }
+
+      const actionLabel = mode === 'edit' ? 'Save Changes' : 'Add Instance';
+      if (isConnectionVerified()) {
+        setConnectionState(
+          false,
+          `Connection details changed. Test again to enable ${actionLabel}.`,
+          'error',
+        );
+        setConnectionTestButtonState('neutral');
+        return;
+      }
+
+      setConnectionState(false, neutralConnectionPromptForMode(mode), 'neutral');
+      setConnectionTestButtonState('neutral');
+    }
+
+    function resetInstanceFormToDefaults() {
+      if (!addInstanceModalContent) {
+        return;
+      }
+
+      addInstanceModalContent.querySelectorAll('[data-default-value]').forEach(function (el) {
+        if (!(el instanceof HTMLInputElement) && !(el instanceof HTMLSelectElement)) {
+          return;
+        }
+        el.value = el.dataset.defaultValue || '';
+        el.dispatchEvent(new Event('change', { bubbles: true }));
+      });
+
+      addInstanceModalContent.querySelectorAll('[data-default-checked]').forEach(function (el) {
+        if (!(el instanceof HTMLInputElement)) {
+          return;
+        }
+        el.checked = el.dataset.defaultChecked === '1';
+        el.dispatchEvent(new Event('change', { bubbles: true }));
+      });
+
+      syncAppOnlyControls();
+    }
+
+    window.houndarrOpenAddInstanceModal = function () {
+      addInstanceModal.classList.remove('is-closing');
+      isClosingAddInstanceModal = false;
+      pendingModalShow = !addInstanceModal.open;
+      setAddInstanceModalChrome('add');
+    };
+
+    window.houndarrCloseAddInstanceModal = function () {
+      if (!addInstanceModal.open || isClosingAddInstanceModal) {
+        return;
+      }
+
+      const finalizeClose = function () {
+        addInstanceModal.classList.remove('is-closing');
+        if (addInstanceModal.open) {
+          addInstanceModal.close();
+        }
+        addInstanceModalContent.innerHTML = '';
+        isClosingAddInstanceModal = false;
+        pendingModalShow = false;
+        setAddInstanceModalChrome('add');
+        document.body.style.overflow = '';
+        addInstanceBtn.focus();
+      };
+
+      if (prefersReducedMotion) {
+        finalizeClose();
+        return;
+      }
+
+      isClosingAddInstanceModal = true;
+      addInstanceModal.classList.add('is-closing');
+      window.setTimeout(finalizeClose, closeAnimationMs);
+    };
+
+    document.body.addEventListener(
+      'click',
+      function (event) {
+        const target = event.target;
+        if (!(target instanceof Element)) {
+          return;
+        }
+
+        const openBtn = target.closest('[data-open-add-instance-modal="true"]');
+        if (openBtn) {
+          window.houndarrOpenAddInstanceModal();
+          return;
+        }
+
+        const closeBtn = target.closest('[data-close-add-instance-modal="true"]');
+        if (closeBtn) {
+          window.houndarrCloseAddInstanceModal();
+        }
+      },
+      { signal },
+    );
+
+    addInstanceModal.addEventListener(
+      'cancel',
+      function (event) {
+        event.preventDefault();
+        window.houndarrCloseAddInstanceModal();
+      },
+      { signal },
+    );
+
+    addInstanceModal.addEventListener(
+      'click',
+      function (event) {
+        if (event.target === addInstanceModal) {
+          window.houndarrCloseAddInstanceModal();
+        }
+      },
+      { signal },
+    );
+
+    addInstanceModalContent.addEventListener(
+      'change',
+      function (event) {
+        if (event.target.matches('[data-instance-field="type"]')) {
+          syncAddInstancePlaceholders();
+          syncAppOnlyControls();
+        }
+        resetConnectionStateOnFieldChange(event.target);
+      },
+      { signal },
+    );
+
+    addInstanceModalContent.addEventListener(
+      'input',
+      function (event) {
+        resetConnectionStateOnFieldChange(event.target);
+      },
+      { signal },
+    );
+
+    addInstanceModalContent.addEventListener(
+      'click',
+      function (event) {
+        const target = event.target;
+        if (!(target instanceof Element)) {
+          return;
+        }
+        const resetBtn = target.closest('[data-reset-instance-form="true"]');
+        if (!resetBtn) {
+          return;
+        }
+        event.preventDefault();
+        resetInstanceFormToDefaults();
+      },
+      { signal },
+    );
+
+    document.body.addEventListener(
+      'htmx:beforeRequest',
+      function (evt) {
+        const triggerEl = evt.detail.elt;
+        if (!triggerEl || !triggerEl.matches('[data-test-connection-btn="true"]')) {
+          return;
+        }
+        setConnectionTestButtonState('testing');
+      },
+      { signal },
+    );
+
+    document.body.addEventListener(
+      'houndarr-connection-test-success',
+      function () {
+        if (!isConnectionGuardedFormLoaded() || getModalFormMode() === null) {
+          return;
+        }
+        // Server response already contains the full message via HTMX swap;
+        // only update form state (verified flag + submit button).
+        setConnectionState(true, null, 'success');
+        setConnectionTestButtonState('success');
+      },
+      { signal },
+    );
+
+    document.body.addEventListener(
+      'houndarr-connection-test-failure',
+      function () {
+        if (!isConnectionGuardedFormLoaded()) {
+          return;
+        }
+        // Server response already contains the specific error via HTMX swap;
+        // only update form state.
+        setConnectionState(false, null, 'error');
+        setConnectionTestButtonState('error');
+      },
+      { signal },
+    );
+
+    document.body.addEventListener(
+      'htmx:afterRequest',
+      function (evt) {
+        const triggerEl = evt.detail.elt;
+        if (!triggerEl || !triggerEl.matches('[data-test-connection-btn="true"]')) {
+          return;
+        }
+
+        const testBtn = getConnectionTestButton();
+        if (!testBtn) {
+          return;
+        }
+        testBtn.classList.remove('is-testing');
+      },
+      { signal },
+    );
+
+    document.body.addEventListener(
+      'htmx:afterSwap',
+      function (evt) {
+        if (evt.detail.target.id === 'app-content') {
+          document.body.style.overflow = '';
+        }
+
+        if (evt.detail.target.id === 'instance-tbody') {
+          window.houndarrCloseAddInstanceModal();
+        }
+
+        if (evt.detail.target.id.startsWith('instance-row-')) {
+          window.houndarrCloseAddInstanceModal();
+        }
+
+        if (evt.detail.target.id === 'account-section') {
+          // When the password form re-renders (success or validation
+          // error), the submit button the user just clicked is
+          // replaced, so focus falls to <body>.  Keep the <details>
+          // expanded and return focus to the first password field so
+          // keyboard users do not lose their place.
+          const details = document.querySelector('#account-settings');
+          if (details) {
+            details.open = true;
+          }
+          const firstPwInput = document.querySelector('#current-password');
+          if (firstPwInput) {
+            firstPwInput.focus();
+          }
+        }
+
+        if (evt.detail.target.id === 'add-instance-modal-content') {
+          if (pendingModalShow) {
+            pendingModalShow = false;
+            addInstanceModal.showModal();
+            document.body.style.overflow = 'hidden';
+          }
+
+          const modalForm = addInstanceModalContent.querySelector('form[data-form-mode]');
+          if (modalForm) {
+            setAddInstanceModalChrome(modalForm.dataset.formMode, modalForm.dataset.instanceName);
+          }
+
+          const firstInput = addInstanceModalContent.querySelector('input:not([type="hidden"]), select, textarea, button');
+          if (firstInput) {
+            firstInput.focus();
+          }
+          syncAddInstancePlaceholders();
+          syncAppOnlyControls();
+
+          if (isConnectionGuardedFormLoaded()) {
+            setConnectionState(false, neutralConnectionPromptForMode(getModalFormMode()), 'neutral');
+            setConnectionTestButtonState('neutral');
+          }
+        }
+      },
+      { signal },
+    );
+
+    document.body.addEventListener(
+      'htmx:responseError',
+      function () {
+        pendingModalShow = false;
+      },
+      { signal },
+    );
+
+    document.body.addEventListener(
+      'htmx:sendError',
+      function () {
+        pendingModalShow = false;
+      },
+      { signal },
+    );
+  })();
+</script>

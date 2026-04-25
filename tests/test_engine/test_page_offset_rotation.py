@@ -186,7 +186,7 @@ async def test_missing_page_offset_persisted_after_cycle(
     # Verify the offset was persisted (should be page 2 after consuming page 1)
     updated = await get_instance(1, master_key=MASTER_KEY)
     assert updated is not None
-    assert updated.schedule.missing_page_offset == 2
+    assert updated.missing_page_offset == 2
 
 
 @pytest.mark.asyncio()
@@ -221,7 +221,7 @@ async def test_missing_offset_advances_across_cycles(
     updated = await get_instance(1, master_key=MASTER_KEY)
     assert updated is not None
     # The pass consumed pages 1 and 2, so next start is page 3
-    assert updated.schedule.missing_page_offset == 3
+    assert updated.missing_page_offset == 3
 
 
 # ---------------------------------------------------------------------------
@@ -303,7 +303,7 @@ async def test_cutoff_page_offset_persisted_after_cycle(
 
     updated = await get_instance(1, master_key=MASTER_KEY)
     assert updated is not None
-    assert updated.schedule.cutoff_page_offset == 2
+    assert updated.cutoff_page_offset == 2
 
 
 # ---------------------------------------------------------------------------
@@ -344,7 +344,7 @@ async def test_batch_fills_mid_page_does_not_skip_page(
     # was only partially consumed.
     updated = await get_instance(1, master_key=MASTER_KEY)
     assert updated is not None
-    assert updated.schedule.missing_page_offset == 1
+    assert updated.missing_page_offset == 1
 
 
 # ---------------------------------------------------------------------------

@@ -1,12 +1,9 @@
 """Structural Protocol mirroring the AppAdapter dataclass shape.
 
-Track B.18 declaration.  The :class:`AppAdapter` dataclass today
-holds six callables.  This Protocol captures the same shape so
-future Track C.10 can migrate the registry to Protocol-typed class
-instances without a call-site cascade.
-
-Runtime-checkable so tests can ``isinstance(adapter, AppAdapterProto)``
-as a conformance check when the registry is rewired.
+Every adapter (per-app class with eight staticmethod attributes) must
+satisfy this Protocol.  Runtime-checkable so tests can
+``isinstance(adapter, AppAdapterProto)`` as a conformance check
+against the :data:`ADAPTERS` registry.
 
 Each member is declared via ``@property`` so the Protocol advertises
 read-only attributes.  That matters because :class:`AppAdapter` is a

@@ -2,10 +2,11 @@
 
 Each per-app adapter module exposes an ``XAdapter`` class that
 structurally satisfies
-:class:`~houndarr.engine.adapters.protocols.AppAdapterProto` via six
+:class:`~houndarr.engine.adapters.protocols.AppAdapterProto` via eight
 staticmethod attributes (``adapt_missing``, ``adapt_cutoff``,
 ``adapt_upgrade``, ``fetch_upgrade_pool``, ``dispatch_search``,
-``make_client``).  The :data:`ADAPTERS` dict maps each
+``make_client``, ``fetch_reconcile_sets``,
+``fetch_instance_snapshot``).  The :data:`ADAPTERS` dict maps each
 :class:`~houndarr.services.instances.InstanceType` to a single
 process-lifetime instance of the matching adapter class; per-cycle
 state lives on the *arr clients themselves, not on the adapters.

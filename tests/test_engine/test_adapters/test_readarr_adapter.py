@@ -341,7 +341,13 @@ class TestMakeClient:
 
 
 class TestFetchInstanceSnapshot:
-    """Verify the snapshot composition for Readarr."""
+    """Verify the snapshot composition for Readarr.
+
+    Marked ``pinning`` because ``fetch_instance_snapshot`` is a new
+    behavioural contract.
+    """
+
+    pytestmark = pytest.mark.pinning
 
     @pytest.mark.asyncio()
     async def test_paginated_walk_counts_future_anchors(self):

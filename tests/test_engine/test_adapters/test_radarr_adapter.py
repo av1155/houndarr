@@ -391,7 +391,13 @@ class TestFetchInstanceSnapshot:
     Reuses :func:`_radarr_release_anchor` so the unreleased count uses
     the same digital → physical → release → in-cinemas fallback the
     search-loop's :func:`_radarr_unreleased_reason` applies.
+
+    Marked ``pinning`` because ``fetch_instance_snapshot`` is a new
+    behavioural contract (anchor selection, monitored vs cutoff sums,
+    unreleased semantics).
     """
+
+    pytestmark = pytest.mark.pinning
 
     @pytest.mark.asyncio()
     async def test_uses_radarr_release_anchor_priority(self):
@@ -437,10 +443,11 @@ class TestFetchInstanceSnapshot:
 
         snap = await fetch_instance_snapshot(client, _make_instance())
 
-        # Note: id 3 counts because the priority ladder picks digital
-        # first if non-None, otherwise physical, otherwise releaseDate;
-        # here digital is None, physical is past so it wins (not future).
-        # Only id 2 (digital in future) ends up unreleased.
+        # Note: id 3 does NOT count because the priority ladder picks
+        # digital first if non-None, otherwise physical, otherwise
+        # releaseDate; here digital is None, physical is past so it
+        # wins (not future).  Only id 2 (digital in future) ends up
+        # unreleased.
         assert snap.monitored_total == 4
         assert snap.unreleased_count == 1
 

@@ -435,7 +435,7 @@ class WhisparrV2Adapter:
     """Class-form Whisparr v2 adapter for the :data:`ADAPTERS` registry.
 
     Conforms to :class:`~houndarr.engine.adapters.protocols.AppAdapterProto`
-    structurally via the seven staticmethod attributes below; the
+    structurally via the eight staticmethod attributes below; the
     module-level functions remain importable for direct unit-test use.
     Track C.10 introduces this class form to replace the prior
     ``AppAdapter`` dataclass-of-callables registry shape.

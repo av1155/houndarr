@@ -1,77 +1,95 @@
 {% extends "base.html" %}
 {% set show_nav = false %}
+{%- import "_macros/forms.html" as forms -%}
 
 {% block title %}Login | Houndarr{% endblock %}
 
+{% block head %}{% endblock %}
+
 {% block content %}
-<div class="auth-glow-bg flex items-center justify-center min-h-[calc(100vh-8rem)] -mx-4 sm:-mx-6 lg:-mx-8 -my-6 sm:-my-8 px-4">
-  <div class="w-full max-w-sm">
-    <!-- Wordmark / header -->
-    <div class="text-center mb-8">
-      <img
-        src="/static/img/houndarr-logo-dark-ui.png"
-        alt="Houndarr logo"
-        class="mx-auto w-16 h-16 pb-1 object-contain"
-        style="filter: drop-shadow(var(--glow-logo));"
-      />
-      <h1 class="mt-3 text-2xl font-bold text-white tracking-tight">Houndarr</h1>
-      <p class="mt-1.5 text-slate-400 text-sm">Sign in to your instance</p>
-    </div>
+<div class="auth-card auth-card--login">
+  <div class="auth-card__topbar">
+    <span class="auth-card__brand">
+      <img src="/static/img/houndarr-logo-dark.png" alt="Houndarr logo" />
+      <span>Houndarr</span>
+    </span>
+  </div>
 
-    <!-- Login card -->
-    <div class="bg-[#0e1117] border border-[#1e2638] rounded-xl p-6" style="box-shadow:var(--shadow-4);">
-      {% if error %}
-      <div class="mb-4 border-l-4 border-red-500 bg-red-950/30 text-red-200 rounded-r-lg px-4 py-3 text-sm" role="alert">
-        {{ error }}
+  <section class="auth-form">
+    <h1>Welcome <span class="accent">back</span>.</h1>
+    <p class="auth-subhead">Sign in to your instance.</p>
+
+    {% if error %}
+    <div class="auth-alert" role="alert">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+           stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <circle cx="12" cy="12" r="10"/>
+        <line x1="12" y1="8" x2="12" y2="12"/>
+        <line x1="12" y1="16" x2="12.01" y2="16"/>
+      </svg>
+      <div>{{ error }}</div>
+    </div>
+    {% endif %}
+
+    <form action="/login" method="post" data-auth-form>
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+
+      <div class="field">
+        <label class="field__label" for="login-username"><span>Username</span></label>
+        <div class="input-wrap">
+          <svg class="leading" width="16" height="16" viewBox="0 0 24 24" fill="none"
+               stroke="currentColor" stroke-width="2" stroke-linecap="round"
+               stroke-linejoin="round" aria-hidden="true">
+            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+            <circle cx="12" cy="7" r="4"/>
+          </svg>
+          <input id="login-username" name="username" type="text"
+                 class="station-input"
+                 autocomplete="username" required
+                 minlength="3" maxlength="32" pattern="[A-Za-z0-9_.\-]+"
+                 placeholder="admin" autofocus
+                 {% if error %}aria-invalid="true"{% endif %} />
+        </div>
       </div>
-      {% endif %}
 
-      <form action="/login" method="post" class="space-y-5">
-        <div>
-          <label for="username" class="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide">
-            Username
-          </label>
-          <input
-            id="username"
-            name="username"
-            type="text"
-            autocomplete="username"
-            required
-            minlength="3"
-            maxlength="32"
-            pattern="[-A-Za-z0-9_.]+"
-            class="w-full bg-[#151b27] border border-[#2a3448] rounded-lg px-4 py-2.5 text-white font-sans placeholder-slate-600
-                   focus:outline-none focus:border-brand-400/70 focus:ring-2 focus:ring-brand-500/25 transition-colors text-base"
-            placeholder="your-username"
-            autofocus
-          />
-        </div>
+      <div class="field">
+        {{ forms.password_input(
+            id="login-password",
+            name="password",
+            label="Password",
+            variant="auth",
+            leading="padlock",
+            autocomplete="current-password",
+            placeholder="••••••••",
+            aria_invalid=error,
+        ) }}
+      </div>
 
-        <div>
-          <label for="password" class="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide">
-            Password
-          </label>
-          <input
-            id="password"
-            name="password"
-            type="password"
-            autocomplete="current-password"
-            required
-            class="w-full bg-[#151b27] border border-[#2a3448] rounded-lg px-4 py-2.5 text-white font-mono placeholder-slate-600
-                   focus:outline-none focus:border-brand-400/70 focus:ring-2 focus:ring-brand-500/25 transition-colors text-base"
-            placeholder="••••••••"
-          />
-        </div>
+      <button type="submit" class="station-button">
+        <span class="spinner" aria-hidden="true"></span>
+        <span class="btn-label">Sign in</span>
+        <svg class="btn-arrow" width="14" height="14" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="2.5" stroke-linecap="round"
+             stroke-linejoin="round" aria-hidden="true">
+          <path d="M5 12h14"/>
+          <path d="m12 5 7 7-7 7"/>
+        </svg>
+      </button>
+    </form>
+  </section>
 
-        <button
-          type="submit"
-          class="w-full bg-brand-600 hover:bg-brand-500 text-white font-semibold py-2.5 rounded-lg transition-colors
-                 focus:outline-none focus:ring-2 focus:ring-brand-400/50 focus:ring-offset-2 focus:ring-offset-[#0e1117]
-                 text-sm tracking-wide">
-          Sign In
-        </button>
-      </form>
-    </div>
+  <div class="auth-card__footer">
+    <span>Houndarr v{{ version }}</span>
+    <a href="https://github.com/av1155/houndarr" target="_blank" rel="noopener noreferrer"
+       aria-label="Houndarr on GitHub">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+        <path d="M12 .5C5.65.5.5 5.65.5 12a11.5 11.5 0 0 0 7.86 10.92c.58.1.79-.25.79-.56 0-.27-.01-.99-.02-1.94-3.2.7-3.88-1.54-3.88-1.54-.52-1.33-1.28-1.69-1.28-1.69-1.04-.72.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.77 2.7 1.26 3.36.96.1-.75.4-1.26.73-1.55-2.56-.29-5.25-1.28-5.25-5.7 0-1.26.45-2.29 1.18-3.1-.12-.29-.51-1.46.11-3.04 0 0 .97-.31 3.18 1.18a11.01 11.01 0 0 1 5.79 0c2.21-1.49 3.18-1.18 3.18-1.18.62 1.58.23 2.75.11 3.04.74.81 1.18 1.84 1.18 3.1 0 4.43-2.7 5.4-5.27 5.69.41.35.78 1.05.78 2.12 0 1.53-.01 2.77-.01 3.14 0 .31.21.67.8.56A11.5 11.5 0 0 0 23.5 12C23.5 5.65 18.35.5 12 .5Z"/>
+      </svg>
+    </a>
   </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/auth.js?v={{ version }}" defer></script>
 {% endblock %}

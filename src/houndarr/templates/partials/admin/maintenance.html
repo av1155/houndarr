@@ -1,0 +1,38 @@
+{#
+  Admin > Maintenance sub-section.  Two action rows: each button
+  triggers the shared confirm dialog via data-confirm-reset, not the
+  endpoint directly, so the admin has to acknowledge before the POST
+  fires. The dialog's JS switches visuals based on the reset kind.
+#}
+{%- import "_macros/buttons.html" as buttons -%}
+{%- import "_macros/layout.html" as layout -%}
+{% call layout.admin_section(id="admin-maintenance", title="Maintenance") %}
+  <div class="rounded-container border border-border-subtle bg-surface-1 p-5 sm:p-6 space-y-4">
+    <div class="neutral-row">
+      <div class="min-w-0">
+        <h4 class="text-sm font-semibold text-slate-100">Reset all instance settings</h4>
+        <p class="text-xs text-slate-500 mt-0.5">
+          Reverts policy settings (batch, cadence, cooldowns, cutoff, upgrade)
+          to defaults. Connections, API keys, and enabled state are kept.
+        </p>
+      </div>
+      {% call buttons.btn(variant="soft-neutral", size="sm", extra="font-medium shrink-0", attrs={
+          "type": "button",
+          "data-confirm-reset": "instances",
+      }) %}Reset settings{% endcall %}
+    </div>
+    <div class="neutral-row">
+      <div class="min-w-0">
+        <h4 class="text-sm font-semibold text-slate-100">Clear all logs</h4>
+        <p class="text-xs text-slate-500 mt-0.5">
+          Empties the Activity log on disk. A single audit breadcrumb stays
+          so you know when the wipe happened.
+        </p>
+      </div>
+      {% call buttons.btn(variant="soft-neutral", size="sm", extra="font-medium shrink-0", attrs={
+          "type": "button",
+          "data-confirm-reset": "logs",
+      }) %}Clear logs{% endcall %}
+    </div>
+  </div>
+{% endcall %}

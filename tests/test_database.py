@@ -7,7 +7,9 @@ from pathlib import Path
 import aiosqlite
 import pytest
 
-from houndarr.database import get_db, get_setting, init_db, purge_old_logs, set_db_path, set_setting
+from houndarr.database import get_db, init_db, set_db_path
+from houndarr.repositories.search_log import purge_old_logs
+from houndarr.repositories.settings import get_setting, set_setting
 
 
 @pytest.mark.asyncio()
@@ -29,7 +31,7 @@ async def test_schema_created(db: None) -> None:
 async def test_schema_version_set(db: None) -> None:
     """Schema version should be set after init."""
     version = await get_setting("schema_version")
-    assert version == "12"
+    assert version == "17"
 
 
 @pytest.mark.asyncio()
@@ -52,7 +54,7 @@ async def test_search_log_and_instance_v3_columns_exist(db: None) -> None:
     assert "sonarr_search_mode" in instance_columns
     assert "lidarr_search_mode" in instance_columns
     assert "readarr_search_mode" in instance_columns
-    assert "whisparr_search_mode" in instance_columns
+    assert "whisparr_v2_search_mode" in instance_columns
     assert "post_release_grace_hrs" in instance_columns
 
 
@@ -110,7 +112,7 @@ async def test_init_db_migrates_v1_schema_to_v3(tmp_path: Path) -> None:
         search_log_columns = {row[1] async for row in search_log_cur}
         instance_columns = {row[1] async for row in instances_cur}
 
-    assert await get_setting("schema_version") == "12"
+    assert await get_setting("schema_version") == "17"
     assert "item_label" in search_log_columns
     assert "search_kind" in search_log_columns
     assert "cycle_id" in search_log_columns
@@ -120,7 +122,7 @@ async def test_init_db_migrates_v1_schema_to_v3(tmp_path: Path) -> None:
     assert "sonarr_search_mode" in instance_columns
     assert "lidarr_search_mode" in instance_columns
     assert "readarr_search_mode" in instance_columns
-    assert "whisparr_search_mode" in instance_columns
+    assert "whisparr_v2_search_mode" in instance_columns
     assert "post_release_grace_hrs" in instance_columns
     assert "unreleased_delay_hrs" not in instance_columns
 
@@ -179,7 +181,7 @@ async def test_init_db_migrates_v2_schema_to_v4(tmp_path: Path) -> None:
         async with conn.execute("PRAGMA table_info(search_log)") as cur:
             search_log_columns = {row[1] async for row in cur}
 
-    assert await get_setting("schema_version") == "12"
+    assert await get_setting("schema_version") == "17"
     assert "cycle_id" in search_log_columns
     assert "cycle_trigger" in search_log_columns
 
@@ -189,7 +191,7 @@ async def test_init_db_migrates_v2_schema_to_v4(tmp_path: Path) -> None:
     assert "sonarr_search_mode" in instance_columns
     assert "lidarr_search_mode" in instance_columns
     assert "readarr_search_mode" in instance_columns
-    assert "whisparr_search_mode" in instance_columns
+    assert "whisparr_v2_search_mode" in instance_columns
     assert "post_release_grace_hrs" in instance_columns
     assert "unreleased_delay_hrs" not in instance_columns
 
@@ -246,14 +248,14 @@ async def test_init_db_migrates_v3_schema_to_v4(tmp_path: Path) -> None:
     set_db_path(str(db_path))
     await init_db()
 
-    assert await get_setting("schema_version") == "12"
+    assert await get_setting("schema_version") == "17"
     async with get_db() as conn:
         async with conn.execute("PRAGMA table_info(instances)") as cur:
             instance_columns = {row[1] async for row in cur}
     assert "sonarr_search_mode" in instance_columns
     assert "lidarr_search_mode" in instance_columns
     assert "readarr_search_mode" in instance_columns
-    assert "whisparr_search_mode" in instance_columns
+    assert "whisparr_v2_search_mode" in instance_columns
     assert "post_release_grace_hrs" in instance_columns
     assert "unreleased_delay_hrs" not in instance_columns
 
@@ -329,7 +331,7 @@ async def test_init_db_migrates_v4_schema_to_v6(tmp_path: Path) -> None:
     set_db_path(str(db_path))
     await init_db()
 
-    assert await get_setting("schema_version") == "12"
+    assert await get_setting("schema_version") == "17"
 
     async with get_db() as conn:
         # Verify new columns exist
@@ -337,7 +339,7 @@ async def test_init_db_migrates_v4_schema_to_v6(tmp_path: Path) -> None:
             instance_columns = {row[1] async for row in cur}
         assert "lidarr_search_mode" in instance_columns
         assert "readarr_search_mode" in instance_columns
-        assert "whisparr_search_mode" in instance_columns
+        assert "whisparr_v2_search_mode" in instance_columns
         assert "post_release_grace_hrs" in instance_columns
         assert "unreleased_delay_hrs" not in instance_columns
 
@@ -463,7 +465,7 @@ async def test_init_db_migrates_v5_schema_to_v6(tmp_path: Path) -> None:
     set_db_path(str(db_path))
     await init_db()
 
-    assert await get_setting("schema_version") == "12"
+    assert await get_setting("schema_version") == "17"
 
     async with get_db() as conn:
         async with conn.execute("PRAGMA table_info(instances)") as cur:
@@ -560,7 +562,7 @@ async def test_init_db_migrates_v6_schema_to_v7(tmp_path: Path) -> None:
     set_db_path(str(db_path))
     await init_db()
 
-    assert await get_setting("schema_version") == "12"
+    assert await get_setting("schema_version") == "17"
 
     async with get_db() as conn:
         async with conn.execute("PRAGMA table_info(instances)") as cur:
@@ -673,7 +675,7 @@ async def test_init_db_self_heals_v9_and_v10_when_version_already_current(
     set_db_path(str(db_path))
     await init_db()
 
-    assert await get_setting("schema_version") == "12"
+    assert await get_setting("schema_version") == "17"
 
     async with get_db() as conn:
         async with conn.execute("PRAGMA table_info(instances)") as cur:
@@ -814,7 +816,7 @@ async def test_init_db_is_idempotent_on_healthy_v12(tmp_path: Path) -> None:
 
     # Second call: should be a no-op through the self-heal branch.
     await init_db()
-    assert await get_setting("schema_version") == first_version == "12"
+    assert await get_setting("schema_version") == first_version == "17"
 
     async with get_db() as conn:
         async with conn.execute("PRAGMA table_info(instances)") as cur:
@@ -909,7 +911,7 @@ async def test_migrate_to_v12_adds_search_order_column(tmp_path: Path) -> None:
     set_db_path(str(db_path))
     await init_db()
 
-    assert await get_setting("schema_version") == "12"
+    assert await get_setting("schema_version") == "17"
 
     async with get_db() as conn:
         async with conn.execute("PRAGMA table_info(instances)") as cur:
@@ -925,6 +927,150 @@ async def test_migrate_to_v12_adds_search_order_column(tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio()
+async def test_cooldowns_search_kind_check_enforced(db: None) -> None:  # noqa: ARG001
+    """Every initialised DB rejects search_kind values outside the CHECK.
+
+    Fresh installs pick this up from ``_SCHEMA_SQL``; databases that
+    migrated through v14 used to silently accept any string (SQLite
+    cannot attach a CHECK via ALTER TABLE ADD COLUMN).  v15 rebuilds
+    the table so the invariant holds everywhere.
+    """
+    async with get_db() as conn:
+        await conn.execute(
+            "INSERT INTO instances (id, name, type, url, encrypted_api_key)"
+            " VALUES (1, 'Sonarr', 'sonarr', 'http://sonarr:8989', 'fake-key')"
+        )
+        await conn.commit()
+
+        with pytest.raises(aiosqlite.IntegrityError):
+            await conn.execute(
+                "INSERT INTO cooldowns"
+                " (instance_id, item_id, item_type, search_kind, searched_at)"
+                " VALUES (1, 999, 'episode', 'not_a_kind', '2024-01-01T00:00:00.000Z')"
+            )
+
+
+@pytest.mark.asyncio()
+async def test_migrate_to_v15_coerces_invalid_search_kind(tmp_path: Path) -> None:
+    """Pre-existing rows with an invalid ``search_kind`` are coerced to
+    ``'missing'`` during the v14→v15 rebuild so the new CHECK does not
+    reject them.  The app itself never writes a bad kind, but a
+    corrupted snapshot or a hand-edited DB might; the defensive CASE
+    in the INSERT SELECT keeps the rebuild from failing."""
+    db_path = tmp_path / "migrate-v14-to-v15.db"
+
+    async with aiosqlite.connect(str(db_path)) as conn:
+        # Minimal v14-shaped schema.  The v9-v12 self-heal migrations
+        # only run when their target columns are absent, so the
+        # instances table must already carry every post-v8 column; we
+        # mirror the v12-test's full column list below.
+        await conn.executescript(
+            """
+            CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+            INSERT INTO settings (key, value) VALUES ('schema_version', '14');
+
+            CREATE TABLE instances (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                type TEXT NOT NULL CHECK(type IN (
+                    'radarr','sonarr','lidarr','readarr','whisparr_v2','whisparr_v3'
+                )),
+                url TEXT NOT NULL,
+                encrypted_api_key TEXT NOT NULL DEFAULT '',
+                batch_size INTEGER NOT NULL DEFAULT 2,
+                sleep_interval_mins INTEGER NOT NULL DEFAULT 30,
+                hourly_cap INTEGER NOT NULL DEFAULT 4,
+                cooldown_days INTEGER NOT NULL DEFAULT 14,
+                post_release_grace_hrs INTEGER NOT NULL DEFAULT 6,
+                queue_limit INTEGER NOT NULL DEFAULT 0,
+                cutoff_enabled INTEGER NOT NULL DEFAULT 0,
+                cutoff_batch_size INTEGER NOT NULL DEFAULT 1,
+                cutoff_cooldown_days INTEGER NOT NULL DEFAULT 21,
+                cutoff_hourly_cap INTEGER NOT NULL DEFAULT 1,
+                sonarr_search_mode TEXT NOT NULL DEFAULT 'episode',
+                lidarr_search_mode TEXT NOT NULL DEFAULT 'album',
+                readarr_search_mode TEXT NOT NULL DEFAULT 'book',
+                whisparr_search_mode TEXT NOT NULL DEFAULT 'episode',
+                upgrade_enabled INTEGER NOT NULL DEFAULT 0,
+                upgrade_batch_size INTEGER NOT NULL DEFAULT 1,
+                upgrade_cooldown_days INTEGER NOT NULL DEFAULT 90,
+                upgrade_hourly_cap INTEGER NOT NULL DEFAULT 1,
+                upgrade_sonarr_search_mode TEXT NOT NULL DEFAULT 'episode',
+                upgrade_lidarr_search_mode TEXT NOT NULL DEFAULT 'album',
+                upgrade_readarr_search_mode TEXT NOT NULL DEFAULT 'book',
+                upgrade_whisparr_search_mode TEXT NOT NULL DEFAULT 'episode',
+                upgrade_item_offset INTEGER NOT NULL DEFAULT 0,
+                upgrade_series_offset INTEGER NOT NULL DEFAULT 0,
+                missing_page_offset INTEGER NOT NULL DEFAULT 1,
+                cutoff_page_offset INTEGER NOT NULL DEFAULT 1,
+                allowed_time_window TEXT NOT NULL DEFAULT '',
+                search_order TEXT NOT NULL DEFAULT 'chronological',
+                monitored_total INTEGER NOT NULL DEFAULT 0,
+                unreleased_count INTEGER NOT NULL DEFAULT 0,
+                snapshot_refreshed_at TEXT NOT NULL DEFAULT '',
+                enabled INTEGER NOT NULL DEFAULT 1,
+                created_at TEXT NOT NULL DEFAULT '2024-01-01T00:00:00.000Z',
+                updated_at TEXT NOT NULL DEFAULT '2024-01-01T00:00:00.000Z'
+            );
+
+            CREATE TABLE cooldowns (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                instance_id INTEGER NOT NULL
+                    REFERENCES instances(id) ON DELETE CASCADE,
+                item_id INTEGER NOT NULL,
+                item_type TEXT NOT NULL,
+                search_kind TEXT NOT NULL DEFAULT 'missing',
+                searched_at TEXT NOT NULL,
+                UNIQUE(instance_id, item_id, item_type)
+            );
+
+            CREATE TABLE search_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                instance_id INTEGER,
+                item_id INTEGER,
+                item_type TEXT,
+                search_kind TEXT,
+                cycle_id TEXT,
+                cycle_trigger TEXT,
+                item_label TEXT,
+                action TEXT NOT NULL,
+                reason TEXT,
+                message TEXT,
+                timestamp TEXT NOT NULL DEFAULT '2024-01-01T00:00:00.000Z'
+            );
+
+            INSERT INTO instances (id, name, type, url)
+            VALUES (1, 'Sonarr', 'sonarr', 'http://sonarr:8989');
+
+            INSERT INTO cooldowns (instance_id, item_id, item_type, search_kind, searched_at)
+            VALUES (1, 100, 'episode', 'missing', '2024-01-01T00:00:00.000Z'),
+                   (1, 101, 'episode', 'cutoff',  '2024-01-01T00:00:00.000Z'),
+                   (1, 102, 'episode', 'upgrade', '2024-01-01T00:00:00.000Z'),
+                   (1, 103, 'episode', 'BOGUS',   '2024-01-01T00:00:00.000Z');
+            """
+        )
+        await conn.commit()
+
+    set_db_path(str(db_path))
+    await init_db()
+
+    assert await get_setting("schema_version") == "17"
+
+    async with get_db() as conn:
+        await conn.execute("PRAGMA foreign_keys=ON")
+        async with conn.execute(
+            "SELECT item_id, search_kind FROM cooldowns ORDER BY item_id"
+        ) as cur:
+            rows = [(int(r[0]), str(r[1])) async for r in cur]
+        assert rows == [
+            (100, "missing"),
+            (101, "cutoff"),
+            (102, "upgrade"),
+            (103, "missing"),
+        ]
+
+
+@pytest.mark.asyncio()
 async def test_set_and_get_setting(db: None) -> None:
     """set_setting / get_setting round-trip."""
     await set_setting("test_key", "hello")
@@ -933,10 +1079,10 @@ async def test_set_and_get_setting(db: None) -> None:
 
 
 @pytest.mark.asyncio()
-async def test_get_setting_default(db: None) -> None:
-    """get_setting returns default when key not found."""
-    value = await get_setting("nonexistent_key", default="fallback")
-    assert value == "fallback"
+async def test_get_setting_missing_key_returns_none(db: None) -> None:
+    """Missing keys return ``None``; callers compose the fallback themselves."""
+    value = await get_setting("nonexistent_key")
+    assert value is None
 
 
 @pytest.mark.asyncio()

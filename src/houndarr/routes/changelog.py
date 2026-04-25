@@ -2,16 +2,16 @@
 
 Four endpoints, all authenticated (handled by ``AuthMiddleware``):
 
-- ``GET  /settings/changelog/popup`` — returns the modal HTML partial if the
+- ``GET  /settings/changelog/popup`` returns the modal HTML partial if the
   running version is newer than ``changelog_last_seen_version`` and popups
   are not disabled; otherwise returns an empty placeholder div.  Supports
   ``?force=1`` to bypass the decision and always render (used by the
-  Settings page "Show last changelog" button).
-- ``POST /settings/changelog/dismiss`` — writes ``changelog_last_seen_version``
+  Settings page "What's new" button).
+- ``POST /settings/changelog/dismiss``: writes ``changelog_last_seen_version``
   to the running version.  Idempotent.
-- ``POST /settings/changelog/disable`` — writes the last-seen marker AND
+- ``POST /settings/changelog/disable``: writes the last-seen marker AND
   ``changelog_popups_disabled = "1"``.
-- ``POST /settings/changelog/preferences`` — toggles
+- ``POST /settings/changelog/preferences``: toggles
   ``changelog_popups_disabled`` from the Settings page; re-renders the
   Settings section partial.
 """
@@ -20,21 +20,23 @@ from __future__ import annotations
 
 import re
 from html import escape
-from pathlib import Path
 from typing import Annotated
 
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse, Response
-from fastapi.templating import Jinja2Templates
 from markupsafe import Markup
 
 from houndarr import __version__
-from houndarr.database import get_setting, set_setting
-from houndarr.services.changelog import ReleaseEntry, releases_between, should_show
+from houndarr.repositories.settings import get_setting, set_setting
+from houndarr.routes._htmx import hx_trigger_after_swap
+from houndarr.routes._templates import get_templates
+from houndarr.services.changelog import (
+    ReleaseEntry,
+    releases_between,
+    should_show,
+)
 
 router = APIRouter(prefix="/settings/changelog", tags=["changelog"])
-
-_templates: Jinja2Templates | None = None
 
 _GITHUB_ISSUES_URL = "https://github.com/av1155/houndarr/issues"
 
@@ -113,15 +115,6 @@ def _render_changelog_bullet(raw: str) -> Markup:
     return Markup(safe)  # noqa: S704  # nosec B704
 
 
-def _get_templates() -> Jinja2Templates:
-    """Lazy Jinja2Templates singleton, matches ``routes/pages.py:get_templates``."""
-    global _templates  # noqa: PLW0603
-    if _templates is None:
-        _templates = Jinja2Templates(directory=str(Path(__file__).parent.parent / "templates"))
-        _templates.env.filters["changelog_bullet"] = _render_changelog_bullet
-    return _templates
-
-
 def _empty_slot_response() -> HTMLResponse:
     """Return a no-op placeholder that replaces ``#changelog-slot`` without a trigger."""
     return HTMLResponse(
@@ -186,7 +179,7 @@ async def popup(request: Request, force: int = 0) -> HTMLResponse:
     newest = releases[0]
     older = releases[1:]
 
-    response = _get_templates().TemplateResponse(
+    response = get_templates().TemplateResponse(
         request=request,
         name="partials/changelog_modal.html",
         context={
@@ -197,10 +190,7 @@ async def popup(request: Request, force: int = 0) -> HTMLResponse:
             "manual": is_manual,
         },
     )
-    # After-Swap fires once the <dialog> is actually in the DOM; plain
-    # HX-Trigger fires before the swap, so getElementById would return null.
-    response.headers["HX-Trigger-After-Swap"] = "houndarr-show-changelog"
-    return response
+    return hx_trigger_after_swap(response, "houndarr-show-changelog")
 
 
 @router.post("/dismiss", response_class=Response)
@@ -218,20 +208,20 @@ async def disable(request: Request) -> Response:
     return Response(status_code=204)
 
 
-@router.post("/preferences", response_class=HTMLResponse)
+@router.post("/preferences", response_class=Response)
 async def preferences(
     request: Request,
     enabled: Annotated[str, Form()] = "",
-) -> HTMLResponse:
-    """Toggle ``changelog_popups_disabled`` from the Settings page checkbox.
+) -> Response:
+    """Toggle ``changelog_popups_disabled`` from the Settings page switch.
 
     Checkbox sends ``enabled=on`` when checked, omits the field when
-    unchecked.  Re-renders the Settings section partial for outerHTML swap.
+    unchecked. Returns ``204 No Content`` so HTMX skips the swap (per
+    the htmx-config in ``base.html``). The switch's CSS transition runs
+    to completion on the in-place DOM element instead of being
+    interrupted by an outerHTML replacement that would snap the thumb
+    to its final position without animating.
     """
     new_disabled = "0" if enabled == "on" else "1"
     await set_setting("changelog_popups_disabled", new_disabled)
-    return _get_templates().TemplateResponse(
-        request=request,
-        name="partials/changelog_settings_section.html",
-        context={"changelog_popups_enabled": new_disabled == "0"},
-    )
+    return Response(status_code=204)

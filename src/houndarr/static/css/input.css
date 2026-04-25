@@ -1,0 +1,519 @@
+/* ─────────────────────────────────────────────────────────────────────── */
+/* Houndarr: Tailwind CSS v4 build entry point                            */
+/*                                                                        */
+/* Compiled at Docker build time to src/houndarr/static/css/app.built.css  */
+/* by the css-build stage in the Dockerfile. The runtime image ships only  */
+/* the compiled output; neither Node nor this file is present in the       */
+/* final Python image.                                                     */
+/*                                                                        */
+/* The @theme block below mirrors what used to be the inline               */
+/* tailwind.config = { theme: { extend: { ... } } } script in base.html,   */
+/* so the same utility classes (bg-brand-400, rounded-inset, etc.) still   */
+/* resolve. Palette/radius/duration values stay in sync with tokens.css,   */
+/* which is still the source of truth for design decisions.                */
+/* ─────────────────────────────────────────────────────────────────────── */
+
+/* Permanent-dark posture.
+   Houndarr has no theme toggle and no light-mode stylesheet; the
+   application shell renders against #07080f (--color-surface-base) at
+   all times and there is no plan to add a `prefers-color-scheme: light`
+   branch.  Every @theme token below, every --color-*-bg tint in
+   tokens.css, and every daisyUI override in this file is calibrated
+   against that dark surface: soft-badge bg tokens use rgba values
+   tuned to read over #07080f, the daisyUI theme sets
+   `color-scheme: dark` + `prefersdark: true`, and the login / setup
+   forms rely on auth.css rules that assume a dark card.  Authors
+   editing this file should pick colours with that context in mind
+   and not hedge the palette for a light variant that does not exist. */
+
+/* Google Fonts @import must precede all other rules per CSS spec. Inlined
+   from the former fonts.css so the compiled output keeps the import at the
+   top of the generated stylesheet. */
+@import url('https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,400;0,14..32,500;0,14..32,600;0,14..32,700;0,14..32,800;1,14..32,400&family=JetBrains+Mono:ital,wght@0,400;0,500;1,400&display=swap');
+
+@import "tailwindcss";
+
+/* Content scanning: Tailwind v4 auto-discovers templates, but pin an
+   explicit source so the build never misses Jinja partials. */
+@source "../../templates";
+
+/* daisyUI v5 component plugin. Runs at Tailwind build time; nothing
+   ships to the browser except compiled CSS. themes: false disables
+   the built-in theme set because we define our own "station" theme
+   below; having both would inflate the bundle with unused OKLCH
+   palettes. */
+@plugin "daisyui" {
+  themes: false;
+}
+
+/* Station theme: maps daisyUI's semantic slots to Houndarr's palette.
+   Kept in parity with tokens.css (source of truth for design decisions)
+   and @theme above (Tailwind utility generation). Component radii use
+   the existing 3-tier Station radius tokens so daisyUI buttons, inputs,
+   and cards match the rest of the app. */
+@plugin "daisyui/theme" {
+  name: "station";
+  default: true;
+  prefersdark: true;
+  color-scheme: dark;
+
+  /* Surfaces (dark-first) */
+  --color-base-100: #07080f;
+  --color-base-200: #0e1117;
+  --color-base-300: #151b27;
+  --color-base-content: #e2e8f0;
+
+  /* Brand primary = Station cyan */
+  --color-primary: #06b6d4;
+  --color-primary-content: #ffffff;
+  --color-secondary: #22d3ee;
+  --color-secondary-content: #07080f;
+  --color-accent: #67e8f9;
+  --color-accent-content: #07080f;
+
+  /* Neutral bg for subdued controls */
+  --color-neutral: #151b27;
+  --color-neutral-content: #cbd5e1;
+
+  /* Semantic states (match --color-* tokens in tokens.css) */
+  --color-info: #67e8f9;
+  --color-info-content: #07080f;
+  --color-success: #4ade80;
+  --color-success-content: #07080f;
+  --color-warning: #fbbf24;
+  --color-warning-content: #07080f;
+  --color-error: #f87171;
+  --color-error-content: #07080f;
+
+  /* Radii: three-tier Station scale */
+  --radius-selector: 9999px;  /* pill badges + toggles */
+  --radius-field:    4px;      /* inputs, buttons */
+  --radius-box:      6px;      /* cards, modals */
+
+  /* Sizing / borders / depth */
+  --size-selector: 0.25rem;
+  --size-field:    0.25rem;
+  --border:        1px;
+  --depth:         0;
+  --noise:         0;
+}
+
+@theme {
+  /* ── Brand palette (refined Station cyan) ─────────────────────────── */
+  --color-brand-50:  #ecfeff;
+  --color-brand-100: #cffafe;
+  --color-brand-200: #a5f3fc;
+  --color-brand-300: #67e8f9;
+  --color-brand-400: #22d3ee;
+  --color-brand-500: #06b6d4;
+  --color-brand-600: #0891b2;
+  --color-brand-700: #0e7490;
+  --color-brand-800: #155e75;
+  --color-brand-900: #164e63;
+
+  /* ── Surface scale ────────────────────────────────────────────────── */
+  --color-surface-base: #07080f;
+  --color-surface-1:    #0e1117;
+  --color-surface-2:    #151b27;
+  --color-surface-3:    #1e2638;
+
+  /* ── Border scale ─────────────────────────────────────────────────── */
+  --color-border-subtle:  #1e2638;
+  --color-border-default: #2a3448;
+  --color-border-strong:  #3d4f6b;
+
+  /* Semantic state colours.
+     Each state (danger / success / warning / info) ships as a family
+     of up to three tokens:
+
+       --color-<state>         Opaque hex (e.g. #f87171 danger).
+                               Use for foreground: text, icon fills,
+                               left-rules on soft alerts.
+       --color-<state>-bg      Low-alpha rgba tuned to layer over
+                               --color-surface-base (#07080f).  Use
+                               for soft-badge / soft-alert / soft-btn
+                               backgrounds; pairs with the `-border`
+                               sibling.  daisyUI's own `badge-soft` /
+                               `alert-soft` defaults mix the state
+                               against --color-base-100 at 8%, which
+                               disappears on Houndarr's near-black
+                               surface: the `-bg` tokens are the
+                               replacement.
+       --color-<state>-border  rgba stroke calibrated to read against
+                               the same dark surface without a
+                               hairline vanishing.
+
+     Use `*-bg` for UI chrome that needs a state tint behind text;
+     pair with `--color-<state>` for the foreground.  Info currently
+     ships only the foreground colour because no surface uses a
+     standalone info tint; when one does, add --color-info-bg at
+     ~15% alpha to match the pattern. */
+  --color-danger:        #f87171;
+  --color-danger-bg:     rgba(153, 27, 27, 0.30);
+  --color-danger-border: rgba(248, 113, 113, 0.35);
+
+  --color-success:        #4ade80;
+  --color-success-bg:     rgba(22, 101, 52, 0.35);
+  --color-success-border: rgba(74, 222, 128, 0.35);
+
+  --color-warning:        #fbbf24;
+  --color-warning-bg:     rgba(120, 53, 15, 0.30);
+  --color-warning-border: rgba(251, 191, 36, 0.30);
+
+  --color-info: #67e8f9;
+
+  /* Library-health segment colours.
+     Distinct from --color-<state>-bg: these are solid opaque hex
+     values designed to render as chart segment fills on the
+     dashboard's library-health bar.  A segment pixel IS the colour,
+     so transparency would muddy the rendering against the surface
+     behind it.  When adding a new `seg-*` token, pick a hex that
+     reads clearly next to the adjacent segments; do not reuse a
+     `*-bg` rgba because the dashboard bar composites segments on a
+     panel, not on --color-surface-base.
+
+     Naming suffix convention: `*-cd` means "cooldown" (cutoff-cd =
+     cutoff cooldown, upgrade-cd = upgrade cooldown).  The five
+     segments map directly to the five tick states tracked in
+     services/metrics.py. */
+  --color-seg-eligible:    #4ade80;
+  --color-seg-cooldown:    #22d3ee;
+  --color-seg-cutoff-cd:   #fcd34d;
+  --color-seg-upgrade-cd:  #a78bfa;
+  --color-seg-unreleased:  #64748b;
+
+  /* Instance-type signature colours.
+     Per-`*arr` family palette: each entry ships a foreground
+     (`--color-<app>`) and a dark-tinted background
+     (`--color-<app>-bg`) used by `instance_type_badge` in
+     _macros/badges.html.  The `-bg` rgba uses the same
+     layer-over-#07080f calibration as the semantic `*-bg` tokens
+     above, which is why the alpha values sit around 0.50 (Station's
+     branded chip wants more saturation than a success badge). */
+  --color-sonarr:       #7dd3fc;
+  --color-sonarr-bg:    rgba(8, 47, 73, 0.50);
+  --color-radarr:       #fcd34d;
+  --color-radarr-bg:    rgba(69, 26, 3, 0.50);
+  --color-lidarr:       #6ee7b7;
+  --color-lidarr-bg:    rgba(6, 78, 59, 0.50);
+  --color-readarr:      #fca5a5;
+  --color-readarr-bg:   rgba(127, 29, 29, 0.50);
+  --color-whisparr-v2:    #f9a8d4;
+  --color-whisparr-v2-bg: rgba(80, 7, 36, 0.50);
+  --color-whisparr-v3:    #e879f9;
+  --color-whisparr-v3-bg: rgba(86, 19, 88, 0.50);
+
+  /* Border-radius scale (Station four-tier system).
+     Each step halves the visual softness as the element gets smaller,
+     so nested elements always read as tighter than their parents:
+
+       --radius-container (6px)  Use for rounded-container.  Cards,
+                                 modals, tablet-width panels, section
+                                 shells.  The app's outermost radii.
+       --radius-inset     (4px)  Use for rounded-inset.  Inputs,
+                                 buttons, inline-flex pills inside a
+                                 container.  Matches daisyUI's
+                                 --radius-field so .btn / .input
+                                 round consistently.
+       --radius-chip      (3px)  Use for rounded-chip.  Badges,
+                                 pill-shaped log markers, dash-pill
+                                 dot chrome.  Matches daisyUI badge
+                                 override (.badge { border-radius:
+                                 var(--radius-chip) }).
+       --radius-bar       (2px)  Accessed only through var(--radius-bar)
+                                 (e.g. dashboard legend swatches,
+                                 auth.css strength-meter segs, app.css
+                                 status bars).  No template uses the
+                                 Tailwind utility `rounded-bar`
+                                 directly; the token still earns its
+                                 place so the var() consumers share
+                                 the same scale step.
+
+     Tailwind v4 generates `rounded-container`, `rounded-inset`,
+     `rounded-chip`, and `rounded-bar` utilities automatically from
+     these --radius-* keys; templates should prefer those utilities
+     over arbitrary values so retuning a tier propagates everywhere. */
+  --radius-container: 6px;
+  --radius-inset:     4px;
+  --radius-chip:      3px;
+  --radius-bar:       2px;
+
+  /* ── Transition timing functions ──────────────────────────────────── */
+  --ease-station: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-spring:  cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  /* ── Font families ────────────────────────────────────────────────── */
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system,
+               BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "JetBrains Mono", "Fira Code", "Cascadia Code",
+               ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+}
+
+/* Layered imports: custom design tokens and component primitives.
+   Order matters for cascade: tokens first (variables), then layout,
+   then per-page. Tailwind utilities always win regardless of order. */
+@import "./tokens.css";
+@import "./app.css";
+@import "./auth.css";
+@import "./auth-fields.css";
+@import "./logs.css";
+
+/* Named duration utilities.  Tailwind v4 has no `--duration-*` theme
+   namespace (durations normally go via numeric arbitrary values), so
+   register fast / base as custom utilities driven by CSS variables
+   declared on :root in tokens.css.  Only the two durations with
+   Tailwind consumers are registered; the 280ms `--dur-slow` token is
+   consumed directly by app.css + logs.css (collapsible max-height
+   transition, cycle__body expand/collapse) so the token survives
+   without a matching `duration-slow` utility. */
+@utility duration-fast { transition-duration: var(--dur-fast); }
+@utility duration-base { transition-duration: var(--dur-base); }
+
+/* Inline-shadow + brand-rule utilities.  Six inline `style=` attributes
+   in the templates previously carried these exact declarations; three
+   of the four utilities below reference a token (--glow-logo,
+   --shadow-4, --color-brand-500), so a token retune in tokens.css
+   propagates everywhere without touching the HTML.  shadow-modal is
+   intentionally literal: no `--shadow-modal` token exists and the
+   modal drop-shadow is not a reuse of --shadow-4 (different
+   magnitudes), so a future retune would edit the declaration body
+   directly.  Add a --shadow-modal token if a second modal surface
+   ever needs to share the value.
+
+   The ten JS-toggled `style="display:none"` attributes in
+   partials/instance_form.html deliberately stay inline because the
+   toggle is driven by runtime JS that writes element.style.display
+   directly, and a utility class cannot be toggled by mutating a
+   style string. */
+@utility logo-glow          { filter: drop-shadow(var(--glow-logo)); }
+@utility shadow-4           { box-shadow: var(--shadow-4); }
+@utility shadow-modal       { box-shadow: 0 30px 80px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(30, 38, 56, 0.8); }
+@utility border-l-brand-rule { border-left: 3px solid var(--color-brand-500); }
+
+/* Component layer.  Houses the Houndarr-specific component classes
+   (.field-label, .status-pill variants).  Positioned between the
+   @utility duration rules and the unlayered daisyUI overrides so
+   custom components compose into Tailwind's components layer while
+   daisyUI's own layered rules still sit above them and unlayered
+   overrides below beat both. */
+@layer components {
+  /* .field-label centralises the uppercase-tracking label treatment
+     used by every form_field / select_field call in the instance
+     form.  @apply emits the same utility bundle the macros used to
+     inline so the computed styles are byte-equal per cascade rules
+     (both `.field-label` and the utilities live at (0,1,0)).  Keeping
+     the definition in @layer components means the utilities layer
+     still wins if a caller passes extra Tailwind classes alongside
+     `field-label`. */
+  .field-label {
+    @apply block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide;
+  }
+
+  /* .status-pill centralises the instance-row status indicator (dot +
+     label) used on the settings page.  The base class captures the
+     shared flex shell; BEM-style `--active / --error / --disabled`
+     modifiers layer on the state colour.  The inner dot is the
+     shared `.status-dot` component (app.css), which carries size,
+     shape, and the active/error pulse. */
+  .status-pill {
+    @apply inline-flex items-center justify-center gap-1 text-xs min-w-[4.5rem];
+  }
+  .status-pill--active   { @apply text-success; }
+  .status-pill--error    { @apply text-danger; }
+  .status-pill--disabled { @apply text-slate-500; }
+}
+
+/* ── daisyUI component overrides (Station parity) ─────────────────────
+   daisyUI's defaults produce 40px-tall buttons, pill-shaped sans-serif
+   badges, and full-border alerts. Houndarr's aesthetic is tighter: 32px
+   buttons, chip-radius mono badges, left-border-only alerts. Rules below
+   are intentionally unlayered so they beat daisyUI's `@layer daisyui`
+   and `@layer utilities` rules in the CSS cascade (unlayered styles win
+   over any layered styles by spec). */
+
+/* Let per-use py-* utilities determine button height; daisyUI's
+   height: 2.5rem would otherwise pin every button to 40px tall. The
+   medium font-weight (500) matches the .station-button baseline the
+   app used before daisyUI; explicit font-semibold utilities in the
+   templates still override for CTAs that want the heavier weight. */
+.btn {
+  height: auto;
+  min-height: 0;
+  font-weight: 500;
+}
+
+/* Station's primary button brightens on hover (brand-600 → brand-500)
+   rather than daisyUI's default darken. Preserve that direction so the
+   interaction reads the same as every other cyan-tinted affordance in
+   the Station system. */
+.btn-primary {
+  background-color: var(--color-brand-600);
+  border-color: var(--color-brand-500);
+}
+.btn-primary:hover:not(:disabled) {
+  background-color: var(--color-brand-500);
+  border-color: var(--color-brand-400);
+}
+
+/* Station badges: chip-radius (3px), monospace, tight padding. */
+.badge {
+  border-radius: var(--radius-chip);
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  font-weight: 500;
+  padding: 0.125rem 0.5rem;
+  min-height: 0;
+  height: auto;
+  gap: 0.25rem;
+}
+
+/* daisyUI's default `.badge-soft` tints the state color at 8% against
+   `--color-base-100`. On Houndarr's near-black base (#07080f) that mix
+   is visually imperceptible, so the badges lose their tinted background
+   entirely. Re-use the existing Station state-bg / state-border tokens
+   (already tuned for dark surfaces) to restore the visible chip. */
+.badge-soft.badge-success {
+  background-color: var(--color-success-bg);
+  border-color: var(--color-success-border);
+  color: var(--color-success);
+}
+.badge-soft.badge-warning {
+  background-color: var(--color-warning-bg);
+  border-color: var(--color-warning-border);
+  color: var(--color-warning);
+}
+.badge-soft.badge-error {
+  background-color: var(--color-danger-bg);
+  border-color: var(--color-danger-border);
+  color: var(--color-danger);
+}
+.badge-soft.badge-info {
+  background-color: color-mix(in srgb, var(--color-info) 15%, transparent);
+  border-color: color-mix(in srgb, var(--color-info) 40%, transparent);
+  color: var(--color-info);
+}
+.badge-soft.badge-primary {
+  background-color: color-mix(in srgb, var(--color-brand-500) 15%, transparent);
+  border-color: color-mix(in srgb, var(--color-brand-500) 40%, transparent);
+  color: var(--color-brand-300);
+}
+.badge-soft.badge-neutral {
+  background-color: var(--color-surface-3);
+  border-color: var(--color-border-default);
+  color: var(--color-text-emphasis);
+}
+
+/* Station alerts: tinted background with a state-colored left border
+   only, instead of daisyUI's full-bordered box. The per-state
+   border-left-color lets the text color stay independent (e.g. flash
+   messages use white text but still need a red left rule). Background
+   tint uses the existing --color-*-bg tokens because daisyUI's soft
+   variant has the same 8%-against-base-100 invisibility problem on
+   dark themes. */
+.alert {
+  grid-auto-flow: column;
+  border: none;
+  border-left: 3px solid var(--color-border-default);
+  border-radius: 0 var(--radius-inset) var(--radius-inset) 0;
+  padding: 0.75rem 1rem;
+}
+.alert-soft.alert-success {
+  background-color: var(--color-success-bg);
+  color: var(--color-success);
+  border-left-color: var(--color-success);
+}
+.alert-soft.alert-warning {
+  background-color: var(--color-warning-bg);
+  color: var(--color-warning);
+  border-left-color: var(--color-warning);
+}
+.alert-soft.alert-error {
+  background-color: var(--color-danger-bg);
+  color: var(--color-danger);
+  border-left-color: var(--color-danger);
+}
+.alert-soft.alert-info {
+  background-color: color-mix(in srgb, var(--color-info) 15%, transparent);
+  color: var(--color-info);
+  border-left-color: var(--color-info);
+}
+
+/* Copy-button flash state (logs page, Copy as TSV split-button). Tailwind
+   v4 sorts custom @theme colors *after* the built-in palette, so Tailwind
+   classes like `bg-emerald-700` added dynamically by the flash JS end up
+   losing the cascade against the static `bg-surface-2` on the button.
+   These semantic state classes are unlayered and win cleanly; the
+   button's existing `transition-colors duration-base` utility animates
+   background + border smoothly in and back out. */
+.copy-main-btn.is-copy-success {
+  background-color: #047857;             /* emerald-700 */
+  border-color: rgba(16, 185, 129, 0.6); /* emerald-500/60 */
+  color: var(--color-text-inverse);
+}
+.copy-main-btn.is-copy-success:hover {
+  background-color: #059669;             /* emerald-600 */
+}
+.copy-main-btn.is-copy-error {
+  background-color: #991b1b;             /* red-800 */
+  border-color: rgba(220, 38, 38, 0.6);  /* red-600/60 */
+  color: var(--color-text-inverse);
+}
+.copy-main-btn.is-copy-error:hover {
+  background-color: #b91c1c;             /* red-700 */
+}
+
+/* `.btn-soft.btn-*` has the same 8%-against-base invisibility problem
+   as `.badge-soft` and `.alert-soft`. For the three soft-btn variants
+   Houndarr uses (neutral cancel/secondary, error destructive), layer
+   Station state colors on top so the bg actually reads against the
+   dark surface. */
+.btn-soft.btn-neutral {
+  background-color: var(--color-surface-2);
+  border-color: var(--color-border-default);
+  color: var(--color-text-emphasis);
+}
+.btn-soft.btn-neutral:hover:not(:disabled) {
+  background-color: var(--color-surface-3);
+  border-color: var(--color-border-strong);
+  color: var(--color-text-heading);
+}
+.btn-soft.btn-error {
+  background-color: transparent;
+  border-color: color-mix(in srgb, var(--color-danger) 50%, transparent);
+  color: var(--color-danger);
+}
+.btn-soft.btn-error:hover:not(:disabled) {
+  background-color: var(--color-danger-bg);
+  border-color: var(--color-danger);
+}
+
+/* Tailwind v4 Preflight compatibility shims.
+   Preflight removed the automatic `margin: auto` on <dialog>, which
+   Houndarr relies on for centered modals (changelog, add-instance,
+   confirm), so it's restored here. Preflight also flipped the default
+   button cursor back to the UA default; an interactive sysadmin button
+   should still read as clickable, so pointer is re-enabled. */
+@layer base {
+  dialog {
+    margin: auto;
+  }
+  button:not(:disabled):not([aria-disabled="true"]),
+  [role="button"]:not(:disabled):not([aria-disabled="true"]) {
+    cursor: pointer;
+  }
+}
+
+/* Baseline-aligned link-arrow sized for inline use next to link text. */
+.inline-link-icon {
+  display: inline-block;
+  width: 0.875rem;
+  height: 0.875rem;
+  vertical-align: -0.1875em;
+  margin-inline-start: 0.25rem;
+}
+
+.dash-sub__eyebrow-icon {
+  width: 0.75rem;
+  height: 0.75rem;
+  flex-shrink: 0;
+}

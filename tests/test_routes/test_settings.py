@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 import pytest
 from fastapi.testclient import TestClient
 
+from houndarr.clients._wire_models import SystemStatus
 from houndarr.clients.base import ArrClient
 from tests.conftest import csrf_headers
 
@@ -26,9 +25,9 @@ _VALID_FORM = {
 
 @pytest.fixture(autouse=True)
 def _mock_connection_ping(monkeypatch: pytest.MonkeyPatch) -> None:
-    async def _always_ok(self: ArrClient) -> dict[str, Any] | None:
+    async def _always_ok(self: ArrClient) -> SystemStatus | None:
         name = type(self).__name__.replace("Client", "")
-        return {"appName": name, "version": "4.0.0"}
+        return SystemStatus(app_name=name, version="4.0.0")
 
     monkeypatch.setattr(ArrClient, "ping", _always_ok)
 
@@ -114,7 +113,14 @@ def test_settings_page_renders(app: TestClient) -> None:
     assert b"https://github.com/av1155/houndarr" in resp.content
     assert b"Settings Guide" in resp.content
     assert b'href="/settings/help"' in resp.content
-    assert b"Account" in resp.content
+    # Admin dropdown replaces the old Account section; the four sub-sections
+    # collectively cover password change, changelog prefs, maintenance, and
+    # factory reset.
+    assert b'id="admin-grouped"' in resp.content
+    assert b'id="admin-security"' in resp.content
+    assert b'id="admin-updates"' in resp.content
+    assert b'id="admin-maintenance"' in resp.content
+    assert b'id="admin-danger"' in resp.content
     assert b"Update Password" in resp.content
     assert b"Signed in as" in resp.content
 
@@ -123,15 +129,20 @@ def test_settings_page_includes_changelog_section(app: TestClient) -> None:
     _login(app)
     resp = app.get("/settings")
     assert resp.status_code == 200
-    assert b'id="changelog-section"' in resp.content
-    assert b"Changelog notifications" in resp.content
-    assert b"Show last changelog" in resp.content
-    # Fresh install defaults to enabled → checkbox checked.
+    assert b'id="admin-updates"' in resp.content
+    assert b"Show changelog after each update" in resp.content
+    assert b"Automatically check for new releases" in resp.content
+    assert b"What&#39;s new" in resp.content
+    # Second full-changelog surface (local /settings/changelog/full) was
+    # removed: GitHub is now the single source for the upstream view.
+    assert b"Latest on GitHub" in resp.content
+    assert b"View full CHANGELOG.md" not in resp.content
+    # Fresh install defaults to enabled for popups, disabled for update-check.
     assert b"checked" in resp.content
 
 
 async def test_settings_page_reflects_disabled_changelog(app: TestClient) -> None:
-    from houndarr.database import set_setting
+    from houndarr.repositories.settings import set_setting
 
     _login(app)
     await set_setting("changelog_popups_disabled", "1")
@@ -143,8 +154,7 @@ async def test_settings_page_reflects_disabled_changelog(app: TestClient) -> Non
     input_match = re.search(rb'<input[^>]*name="enabled"[^>]*>', resp.content)
     assert input_match is not None
     assert b"checked" not in input_match.group(0)
-    assert b'id="account-settings"' in resp.content
-    assert b'id="account-settings" open' not in resp.content
+    assert b'id="admin-grouped"' in resp.content
     assert b"What do these settings mean?" in resp.content
 
 
@@ -364,8 +374,8 @@ def test_update_rejects_type_mismatch(app: TestClient, monkeypatch: pytest.Monke
     app.post("/settings/instances", data=_VALID_FORM, headers=csrf_headers(app))
 
     # Now switch the mock to return a different appName.
-    async def _radarr_response(self: ArrClient) -> dict[str, Any] | None:
-        return {"appName": "Radarr", "version": "6.0.0"}
+    async def _radarr_response(self: ArrClient) -> SystemStatus | None:
+        return SystemStatus(app_name="Radarr", version="6.0.0")
 
     monkeypatch.setattr(ArrClient, "ping", _radarr_response)
     resp = app.post("/settings/instances/1", data=_VALID_FORM, headers=csrf_headers(app))
@@ -542,8 +552,8 @@ def test_connection_check_endpoint_success(app: TestClient) -> None:
 def test_connection_check_type_mismatch(app: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
     """Selecting Radarr for a Sonarr URL should report the mismatch."""
 
-    async def _sonarr_response(self: ArrClient) -> dict[str, Any] | None:
-        return {"appName": "Sonarr", "version": "4.0.0"}
+    async def _sonarr_response(self: ArrClient) -> SystemStatus | None:
+        return SystemStatus(app_name="Sonarr", version="4.0.0")
 
     monkeypatch.setattr(ArrClient, "ping", _sonarr_response)
     _login(app)
@@ -560,8 +570,8 @@ def test_connection_check_type_mismatch(app: TestClient, monkeypatch: pytest.Mon
 def test_connection_check_appname_null(app: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
     """Missing appName in system/status response should still succeed."""
 
-    async def _no_appname(self: ArrClient) -> dict[str, Any] | None:
-        return {"version": "4.0.0"}
+    async def _no_appname(self: ArrClient) -> SystemStatus | None:
+        return SystemStatus(version="4.0.0")
 
     monkeypatch.setattr(ArrClient, "ping", _no_appname)
     _login(app)
@@ -577,8 +587,8 @@ def test_connection_check_appname_null(app: TestClient, monkeypatch: pytest.Monk
 def test_connection_check_appname_unknown(app: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
     """Unrecognized appName (e.g. a Readarr fork) should still succeed."""
 
-    async def _fork_response(self: ArrClient) -> dict[str, Any] | None:
-        return {"appName": "Bookshelf", "version": "1.0.0"}
+    async def _fork_response(self: ArrClient) -> SystemStatus | None:
+        return SystemStatus(app_name="Bookshelf", version="1.0.0")
 
     monkeypatch.setattr(ArrClient, "ping", _fork_response)
     _login(app)
@@ -594,8 +604,8 @@ def test_connection_check_appname_unknown(app: TestClient, monkeypatch: pytest.M
 def test_create_rejects_type_mismatch(app: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
     """Instance creation should be blocked if the remote app type mismatches."""
 
-    async def _radarr_response(self: ArrClient) -> dict[str, Any] | None:
-        return {"appName": "Radarr", "version": "6.0.0"}
+    async def _radarr_response(self: ArrClient) -> SystemStatus | None:
+        return SystemStatus(app_name="Radarr", version="6.0.0")
 
     monkeypatch.setattr(ArrClient, "ping", _radarr_response)
     _login(app)
@@ -637,7 +647,7 @@ def test_password_change_success(app: TestClient) -> None:
     )
     assert resp.status_code == 200
     assert b"Password updated successfully" in resp.content
-    assert b'id="account-settings" open' in resp.content
+    assert b'id="admin-security"' in resp.content
 
     app.post("/logout", headers=csrf_headers(app))
     login_resp = app.post(
@@ -661,7 +671,7 @@ def test_password_change_requires_correct_current_password(app: TestClient) -> N
     )
     assert resp.status_code == 422
     assert b"Current password is incorrect" in resp.content
-    assert b'id="account-settings" open' in resp.content
+    assert b'id="admin-security"' in resp.content
 
 
 def test_password_change_requires_matching_confirmation(app: TestClient) -> None:
@@ -677,7 +687,7 @@ def test_password_change_requires_matching_confirmation(app: TestClient) -> None
     )
     assert resp.status_code == 422
     assert b"New passwords do not match" in resp.content
-    assert b'id="account-settings" open' in resp.content
+    assert b'id="admin-security"' in resp.content
 
 
 def test_password_change_htmx(app: TestClient) -> None:
@@ -694,6 +704,92 @@ def test_password_change_htmx(app: TestClient) -> None:
     )
     assert resp.status_code == 200
     assert b"Password updated successfully" in resp.content
+
+
+def test_password_change_sets_hx_refresh_header(app: TestClient) -> None:
+    """After rotation the response body still embeds the OLD csrf_token
+    (it was rendered before create_session ran) and app.js stamps
+    hx-headers once at page load. HX-Refresh forces the tab to reload so
+    the new cookies populate every form and the body attribute alike.
+    """
+    _login(app)
+    resp = app.post(
+        "/settings/account/password",
+        data={
+            "current_password": "ValidPass1!",
+            "new_password": "BetterPass2!",
+            "new_password_confirm": "BetterPass2!",
+        },
+        headers=csrf_headers(app),
+    )
+    assert resp.status_code == 200
+    assert resp.headers.get("HX-Refresh") == "true"
+
+
+def test_password_change_invalidates_prior_session_cookie(app: TestClient) -> None:
+    """Old session cookies stop validating after rotate_session_secret.
+
+    Models the stolen-cookie scenario: an attacker holds a valid session
+    cookie; the admin changes their password; the attacker's cookie must
+    not validate against the next protected request.
+    """
+    from houndarr.auth import SESSION_COOKIE_NAME
+
+    _login(app)
+    old_session = app.cookies.get(SESSION_COOKIE_NAME)
+    assert old_session, "login did not issue a session cookie"
+
+    resp = app.post(
+        "/settings/account/password",
+        data={
+            "current_password": "ValidPass1!",
+            "new_password": "BetterPass2!",
+            "new_password_confirm": "BetterPass2!",
+        },
+        headers=csrf_headers(app),
+    )
+    assert resp.status_code == 200
+
+    # Pin only the OLD cookie back; the serializer has rotated so the old
+    # signature is no longer verifiable and the middleware must redirect
+    # to /login instead of serving the protected page.
+    app.cookies.clear()
+    app.cookies.set(SESSION_COOKIE_NAME, old_session)
+    resp = app.get("/settings", follow_redirects=False)
+    assert resp.status_code == 302
+    assert resp.headers["location"].endswith("/login")
+
+
+def test_password_change_rate_limit_returns_429_after_five_bad_attempts(
+    app: TestClient,
+) -> None:
+    """Six failed attempts from one IP must trip the shared /login bucket.
+
+    Guards the rate-limit wiring: a session-compromised attacker trying
+    to brute-force the current password through /settings/account/password
+    gets the same 5-per-60s ceiling as /login.
+    """
+    _login(app)
+    wrong = {
+        "current_password": "WrongPass1!",
+        "new_password": "AnotherGoodPass2!",
+        "new_password_confirm": "AnotherGoodPass2!",
+    }
+    for _ in range(5):
+        resp = app.post(
+            "/settings/account/password",
+            data=wrong,
+            headers=csrf_headers(app),
+        )
+        assert resp.status_code == 422
+
+    resp = app.post(
+        "/settings/account/password",
+        data=wrong,
+        headers=csrf_headers(app),
+    )
+    assert resp.status_code == 429
+    assert b"Too many password attempts" in resp.content
 
 
 # ---------------------------------------------------------------------------

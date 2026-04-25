@@ -4,42 +4,176 @@
   swapped back after a successful save.  When adding (editing=False / unset)
   the form POSTs to /settings/instances and the table body is refreshed.
 #}
+{%- import "_macros/forms.html" as forms -%}
+{%- import "_macros/alerts.html" as alerts -%}
+{%- import "_macros/instances.html" as instances -%}
 {% set is_edit = editing is defined and editing %}
-{% set form_id = "edit-form-" ~ instance.id if is_edit else "add-instance-form" %}
-{% set post_url = "/settings/instances/" ~ instance.id if is_edit else "/settings/instances" %}
-{% set target  = "#instance-row-" ~ instance.id if is_edit else "#instance-tbody" %}
-{% set swap    = "outerHTML" if is_edit else "innerHTML" %}
 
-{# Shared input class: Station style #}
-{% set input_cls = "w-full h-11 bg-[#0e1117] border border-[#2a3448] rounded-lg px-3 text-base text-white placeholder:text-slate-600 font-sans focus:outline-none focus:border-brand-400/70 focus:ring-2 focus:ring-brand-500/25 transition-colors" %}
-{% set mono_input_cls = "w-full h-11 bg-[#0e1117] border border-[#2a3448] rounded-lg px-3 text-base text-white placeholder:text-slate-600 font-mono focus:outline-none focus:border-brand-400/70 focus:ring-2 focus:ring-brand-500/25 transition-colors" %}
-{# Select variant: strip the native chevron so every dropdown in this form
-   gets the same inset SVG chevron and padding-right.  Native chevron
-   positions diverge across browsers and option widths, so a custom chevron
-   keeps the form visually consistent. #}
-{% set select_cls = input_cls + " hd-select-chevron appearance-none pr-10 bg-no-repeat" %}
+{# Shared input class: Station style. Reuses the .station-input helper
+   from app.css so every form on the site shares the exact same token-
+   backed input treatment. #}
+{% set input_cls = "station-input h-11 text-base text-white placeholder:text-slate-600 font-sans" %}
+{% set mono_input_cls = "station-input h-11 text-base text-white placeholder:text-slate-600 font-mono" %}
+{# Select variant: pair .station-input with .station-select so the form's
+   dropdowns get the custom SVG caret and consistent right padding,
+   instead of the native browser chevron (which sits flush against the
+   border and varies across browsers). #}
+{% set select_cls = input_cls + " station-select" %}
 
-<div id="{{ 'edit-instance-form-shell-' ~ instance.id if is_edit else 'add-instance-form-shell' }}">
+{#- tip_icon: inline helper that emits a Lucide help-circle trigger for
+    the tooltip controller (tooltip.js + .app-tooltip CSS).  The
+    instance-form has eight hand-authored per-type select labels outside
+    the forms.form_field / forms.select_field macros, so this keeps the
+    SVG body from repeating eight times.  For fields rendered via those
+    macros, pass tip_ref= directly instead. -#}
+{%- macro tip_icon(slug, aria_label) -%}
+<button type="button" class="tip-trigger" data-tip-ref="{{ slug }}" aria-label="Help: {{ aria_label }}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg></button>
+{%- endmacro -%}
+
+{#- Tooltip bodies.  tooltip.js resolves `data-tip-ref="slug"` to
+    `<template id="tip-slug">` and clones its content into the shared
+    floating panel on open.  Copy is paraphrased from
+    settings_help_content.html so voice matches the in-app guide.
+    Hidden at render time; zero layout cost. -#}
+<template id="tip-batch_size">
+  <p class="tip__eyebrow">Batch size · per cycle</p>
+  <p>Maximum missing items considered per search cycle. Start low, raise gradually once indexers stay stable; this is the first knob to tune if backlog is not clearing.</p>
+  <p class="tip__hint">Default 2.</p>
+</template>
+<template id="tip-sleep_interval_mins">
+  <p class="tip__eyebrow">Cycle interval · minutes</p>
+  <p>Wait time between cycles for this instance. Lower values run more frequently; watch the logs for indexer errors if you reduce it aggressively.</p>
+  <p class="tip__hint">Default 30.</p>
+</template>
+<template id="tip-hourly_cap">
+  <p class="tip__eyebrow">Hourly cap · missing</p>
+  <p>Maximum successful missing searches per hour, independent of batch size. Houndarr pauses once you hit the cap so indexers do not ban you.</p>
+  <p class="tip__hint">Default 4. 0 disables the cap; only set 0 if you know your indexer's own per-hour limit.</p>
+</template>
+<template id="tip-cooldown_days">
+  <p class="tip__eyebrow">Cooldown · missing</p>
+  <p>Minimum days before the same missing item can be searched again. Higher values reduce repeat-search noise; release-aware retry still kicks in for freshly-released items.</p>
+  <p class="tip__hint">Default 14 days.</p>
+</template>
+<template id="tip-post_release_grace_hrs">
+  <p class="tip__eyebrow">Post-release grace</p>
+  <p>Hours to wait after an item's release date before searching. Items still inside this window log as <code>post-release grace (Nh)</code> and skip; items with no date log as <code>not yet released</code>.</p>
+  <p class="tip__hint">Default 6 hours. Release-date priority differs per *arr (see the docs).</p>
+</template>
+<template id="tip-queue_limit">
+  <p class="tip__eyebrow">Queue backpressure</p>
+  <p>Skip the cycle if the download-client queue is at or above this count. Keeps Houndarr from piling on when downloads are already backed up; an unreachable queue endpoint lets the cycle proceed.</p>
+  <p class="tip__hint">0 disables the check.</p>
+</template>
+<template id="tip-allowed_time_window">
+  <p class="tip__eyebrow">Allowed search window</p>
+  <p>Restrict scheduled cycles to one or more <code>HH:MM-HH:MM</code> ranges in the container's local time. Manual Run Now bypasses the window.</p>
+  <p class="tip__hint">Blank = always allowed. Ranges can wrap past midnight (e.g. <code>22:00-06:00</code>).</p>
+</template>
+<template id="tip-search_order">
+  <p class="tip__eyebrow">Search order</p>
+  <p>Chronological walks the wanted list oldest-first with a persistent page offset so items further down do not starve. Random picks a different slice each cycle so searches feel spread across the catalogue rather than clustered by release date.</p>
+  <p class="tip__hint">Random is the default on fresh installs.</p>
+</template>
+<template id="tip-sonarr_search_mode">
+  <p class="tip__eyebrow">Sonarr missing search mode</p>
+  <p>Episode (default) fires one command per missing episode. Season-context groups missing episodes by season and sends one SeasonSearch per season: fewer API calls but can surface noisier results.</p>
+  <p class="tip__hint">Cooldown is tracked at the season level in season-context mode.</p>
+</template>
+<template id="tip-lidarr_search_mode">
+  <p class="tip__eyebrow">Lidarr missing search mode</p>
+  <p>Album (default) fires one command per missing album. Artist-context groups missing albums by artist and searches all of them in one request: fewer calls, broader sweep.</p>
+  <p class="tip__hint">Cooldown is tracked at the artist level in artist-context mode.</p>
+</template>
+<template id="tip-readarr_search_mode">
+  <p class="tip__eyebrow">Readarr missing search mode</p>
+  <p>Book (default) fires one command per missing book. Author-context groups missing books by author and searches all of them in one request: fewer calls, broader sweep.</p>
+  <p class="tip__hint">Cooldown is tracked at the author level in author-context mode.</p>
+</template>
+<template id="tip-whisparr_v2_search_mode">
+  <p class="tip__eyebrow">Whisparr v2 missing search mode</p>
+  <p>Episode (default) fires one command per missing episode. Season-context groups by season with a single SeasonSearch: fewer calls but may pull noisier results.</p>
+  <p class="tip__hint">Cooldown is tracked at the season level in season-context mode.</p>
+</template>
+<template id="tip-cutoff_enabled">
+  <p class="tip__eyebrow">Cutoff search</p>
+  <p>Optional second pass that searches items below your quality cutoff. Keep it off until the missing backlog is stable; enabling both passes at once competes for indexer budget.</p>
+  <p class="tip__hint">Uses a separate batch, cap, and cooldown from the missing pass.</p>
+</template>
+<template id="tip-cutoff_batch_size">
+  <p class="tip__eyebrow">Cutoff batch · per cycle</p>
+  <p>Maximum cutoff items considered per cutoff cycle. Cutoff is a secondary pass, so keep this smaller than the missing batch.</p>
+  <p class="tip__hint">Default 1.</p>
+</template>
+<template id="tip-cutoff_cooldown_days">
+  <p class="tip__eyebrow">Cutoff cooldown</p>
+  <p>Minimum days before the same cutoff item can be searched again. Separate from the missing cooldown so the two passes do not draw from the same retry budget.</p>
+  <p class="tip__hint">Default 21 days.</p>
+</template>
+<template id="tip-cutoff_hourly_cap">
+  <p class="tip__eyebrow">Cutoff hourly cap</p>
+  <p>Maximum successful cutoff searches per hour, independent of the missing cap. Keeps the cutoff pass from eating your missing-pass budget.</p>
+  <p class="tip__hint">Default 1. 0 disables the cutoff cap.</p>
+</template>
+<template id="tip-upgrade_enabled">
+  <p class="tip__eyebrow">Upgrade search</p>
+  <p>Opt-in third pass that re-searches items already meeting your quality cutoff, letting your *arr find better releases. Different from cutoff search, which targets items <em>below</em> cutoff.</p>
+  <p class="tip__hint">Enable last, only after missing and cutoff backlogs are stable.</p>
+</template>
+<template id="tip-upgrade_batch_size">
+  <p class="tip__eyebrow">Upgrade batch · per cycle</p>
+  <p>Maximum upgrade items considered per upgrade cycle. Lowest priority of the three passes; keep small so upgrades stay a trickle, not a sweep.</p>
+  <p class="tip__hint">Default 1. Hard cap: 5 (values above 5 are clamped).</p>
+</template>
+<template id="tip-upgrade_cooldown_days">
+  <p class="tip__eyebrow">Upgrade cooldown</p>
+  <p>Minimum days before the same upgrade item is re-searched. Default is deliberately long: upgrades are a quality-of-life pass, not a priority.</p>
+  <p class="tip__hint">Default 90 days. Minimum 7 (values below 7 are clamped).</p>
+</template>
+<template id="tip-upgrade_hourly_cap">
+  <p class="tip__eyebrow">Upgrade hourly cap</p>
+  <p>Maximum successful upgrade searches per hour. Separate budget so the upgrade pass cannot starve missing or cutoff.</p>
+  <p class="tip__hint">Default 1. Hard cap: 5. 0 disables the upgrade cap.</p>
+</template>
+<template id="tip-upgrade_series_window_size">
+  <p class="tip__eyebrow">Upgrade series window · Sonarr / Whisparr v2 only</p>
+  <p>How many monitored series the upgrade pass samples per cycle for Sonarr-shaped instances. The series offset rotates by this amount each cycle, so the whole library cycles through over time. Larger windows finish a full rotation faster but make every upgrade cycle hit more series at once.</p>
+  <p class="tip__hint">Default 5. Range 1 to 100. Has no effect on Radarr, Whisparr v3, Lidarr, or Readarr.</p>
+</template>
+<template id="tip-upgrade_sonarr_search_mode">
+  <p class="tip__eyebrow">Sonarr upgrade search mode</p>
+  <p>Strategy for upgrade-pass commands, independent of the missing mode. Episode fires per-episode; season-context groups by season for fewer, broader commands.</p>
+</template>
+<template id="tip-upgrade_lidarr_search_mode">
+  <p class="tip__eyebrow">Lidarr upgrade search mode</p>
+  <p>Strategy for upgrade-pass commands, independent of the missing mode. Album fires per-album; artist-context groups by artist for fewer, broader commands.</p>
+</template>
+<template id="tip-upgrade_readarr_search_mode">
+  <p class="tip__eyebrow">Readarr upgrade search mode</p>
+  <p>Strategy for upgrade-pass commands, independent of the missing mode. Book fires per-book; author-context groups by author for fewer, broader commands.</p>
+</template>
+<template id="tip-upgrade_whisparr_v2_search_mode">
+  <p class="tip__eyebrow">Whisparr v2 upgrade search mode</p>
+  <p>Strategy for upgrade-pass commands, independent of the missing mode. Episode fires per-episode; season-context groups by season for fewer, broader commands.</p>
+</template>
+
+<div id="{{ 'edit-instance-form-shell-' ~ instance.core.id if is_edit else 'add-instance-form-shell' }}">
   {% if error is defined and error %}
-  <div class="mb-3 border-l-4 border-red-500 bg-red-950/30 text-red-300 rounded-r-lg px-3 py-2 text-sm">
-    {{ error }}
-  </div>
+  {% call alerts.alert("error", prefix="mb-3") %}{{ error }}{% endcall %}
   {% endif %}
 
-  <form id="{{ form_id }}"
-        data-form-mode="{{ 'edit' if is_edit else 'add' }}"
-        data-instance-name="{{ instance.name if is_edit else '' }}"
-        hx-post="{{ post_url }}"
-        hx-target="{{ target }}"
-        hx-swap="{{ swap }}"
-        class="space-y-4">
+  {% call(form_id) instances.form_context(
+      is_edit=is_edit,
+      instance_id=instance.core.id if is_edit else none,
+      instance_name=instance.core.name if is_edit else "",
+  ) %}
     <input type="hidden"
            id="instance-connection-verified"
            name="connection_verified"
            value="false" />
 
     <!-- Connection section -->
-    <section class="rounded-xl border border-[#1e2638] bg-[#07080f]/50 p-4 sm:p-5 space-y-4">
+    <section class="rounded-container border border-border-subtle bg-surface-base/50 p-4 sm:p-5 space-y-4">
       <div>
         <h4 class="text-sm font-semibold text-slate-200">Connection</h4>
         <p class="text-xs text-slate-500 mt-0.5">Basic identity and API access for this instance.</p>
@@ -55,7 +189,7 @@
                  data-readarr-placeholder="My Readarr"
                  data-whisparr_v2-placeholder="My Whisparr v2"
                  data-whisparr_v3-placeholder="My Whisparr v3"
-                 value="{{ instance.name if is_edit else '' }}"
+                 value="{{ instance.core.name if is_edit else '' }}"
                  placeholder="My Sonarr"
                  class="{{ input_cls }}" />
         </div>
@@ -64,19 +198,19 @@
           <select id="{{ form_id }}-type" name="type" required
                   data-instance-field="type"
                   class="{{ select_cls }}">
-            <option value="radarr"   {% if is_edit and instance.type.value == 'radarr'   %}selected{% endif %}>Radarr</option>
-            <option value="sonarr"   {% if is_edit and instance.type.value == 'sonarr'   %}selected{% endif %}>Sonarr</option>
-            <option value="lidarr"   {% if is_edit and instance.type.value == 'lidarr'   %}selected{% endif %}>Lidarr</option>
-            <option value="readarr"  {% if is_edit and instance.type.value == 'readarr'  %}selected{% endif %}>Readarr</option>
-            <option value="whisparr_v2" {% if is_edit and instance.type.value == 'whisparr_v2' %}selected{% endif %}>Whisparr v2</option>
-            <option value="whisparr_v3" {% if is_edit and instance.type.value == 'whisparr_v3' %}selected{% endif %}>Whisparr v3</option>
+            <option value="radarr"   {% if is_edit and instance.core.type.value == 'radarr'   %}selected{% endif %}>Radarr</option>
+            <option value="sonarr"   {% if is_edit and instance.core.type.value == 'sonarr'   %}selected{% endif %}>Sonarr</option>
+            <option value="lidarr"   {% if is_edit and instance.core.type.value == 'lidarr'   %}selected{% endif %}>Lidarr</option>
+            <option value="readarr"  {% if is_edit and instance.core.type.value == 'readarr'  %}selected{% endif %}>Readarr</option>
+            <option value="whisparr_v2" {% if is_edit and instance.core.type.value == 'whisparr_v2' %}selected{% endif %}>Whisparr v2</option>
+            <option value="whisparr_v3" {% if is_edit and instance.core.type.value == 'whisparr_v3' %}selected{% endif %}>Whisparr v3</option>
           </select>
           <p class="mt-1 text-xs text-slate-500"
              data-whisparr_v2-only="true"
-             {% if not is_edit or instance.type.value != 'whisparr_v2' %}style="display:none;"{% endif %}>Sonarr-based, focuses on studios.<br>Docker: <code class="text-slate-400">hotio/whisparr:latest</code></p>
+             {% if not is_edit or instance.core.type.value != 'whisparr_v2' %}style="display:none;"{% endif %}>Sonarr-based, focuses on studios.<br>Docker: <code class="text-slate-400">hotio/whisparr:latest</code></p>
           <p class="mt-1 text-xs text-slate-500"
              data-whisparr_v3-only="true"
-             {% if not is_edit or instance.type.value != 'whisparr_v3' %}style="display:none;"{% endif %}>Radarr-based, focuses on scenes.<br>Docker: <code class="text-slate-400">hotio/whisparr:v3</code></p>
+             {% if not is_edit or instance.core.type.value != 'whisparr_v3' %}style="display:none;"{% endif %}>Radarr-based, focuses on scenes.<br>Docker: <code class="text-slate-400">hotio/whisparr:v3</code></p>
         </div>
         <div>
           <label class="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide" for="{{ form_id }}-url">URL</label>
@@ -88,7 +222,7 @@
                  data-readarr-placeholder="http://readarr:8787"
                  data-whisparr_v2-placeholder="http://whisparr:6969"
                  data-whisparr_v3-placeholder="http://whisparr:6969"
-                 value="{{ instance.url if is_edit else '' }}"
+                 value="{{ instance.core.url if is_edit else '' }}"
                  placeholder="http://radarr:7878"
                  class="{{ mono_input_cls }}" />
         </div>
@@ -103,126 +237,170 @@
     </section>
 
     <!-- Search Policy section -->
-    <section class="rounded-xl border border-[#1e2638] bg-[#07080f]/50 p-4 sm:p-5 space-y-4">
+    <section class="rounded-container border border-border-subtle bg-surface-base/50 p-4 sm:p-5 space-y-4">
       <div>
         <h4 class="text-sm font-semibold text-slate-200">Search Policy</h4>
         <p class="text-xs text-slate-500 mt-0.5">Cadence and guardrails for missing-item searches.</p>
       </div>
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
-          <label class="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide" for="{{ form_id }}-batch">Batch Size</label>
-          <input id="{{ form_id }}-batch" name="batch_size" type="number" min="1" max="250"
-                 value="{{ instance.batch_size }}"
-                 data-default-value="{{ defaults.batch_size }}"
-                 class="{{ mono_input_cls }}" />
+          {{ forms.form_field(
+              id=form_id ~ "-batch",
+              name="batch_size",
+              type="number",
+              min=1, max=250,
+              value=instance.missing.batch_size,
+              data_default_value=defaults.missing.batch_size,
+              input_class=mono_input_cls,
+              label="Batch Size",
+              tip_ref="batch_size",
+          ) }}
         </div>
         <div>
-          <label class="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide" for="{{ form_id }}-sleep">Sleep (minutes)</label>
-          <input id="{{ form_id }}-sleep" name="sleep_interval_mins" type="number" min="1"
-                 value="{{ instance.sleep_interval_mins }}"
-                 data-default-value="{{ defaults.sleep_interval_mins }}"
-                 class="{{ mono_input_cls }}" />
+          {{ forms.form_field(
+              id=form_id ~ "-sleep",
+              name="sleep_interval_mins",
+              type="number",
+              min=1,
+              value=instance.missing.sleep_interval_mins,
+              data_default_value=defaults.missing.sleep_interval_mins,
+              input_class=mono_input_cls,
+              label="Sleep (minutes)",
+              tip_ref="sleep_interval_mins",
+          ) }}
         </div>
         <div>
-          <label class="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide" for="{{ form_id }}-hcap">Hourly Cap</label>
-          <input id="{{ form_id }}-hcap" name="hourly_cap" type="number" min="0"
-                 value="{{ instance.hourly_cap }}"
-                 data-default-value="{{ defaults.hourly_cap }}"
-                 class="{{ mono_input_cls }}" />
+          {{ forms.form_field(
+              id=form_id ~ "-hcap",
+              name="hourly_cap",
+              type="number",
+              min=0,
+              value=instance.missing.hourly_cap,
+              data_default_value=defaults.missing.hourly_cap,
+              input_class=mono_input_cls,
+              label="Hourly Cap",
+              tip_ref="hourly_cap",
+          ) }}
         </div>
         <div>
-          <label class="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide" for="{{ form_id }}-cool">Cooldown (days)</label>
-          <input id="{{ form_id }}-cool" name="cooldown_days" type="number" min="0"
-                 value="{{ instance.cooldown_days }}"
-                 data-default-value="{{ defaults.cooldown_days }}"
-                 class="{{ mono_input_cls }}" />
+          {{ forms.form_field(
+              id=form_id ~ "-cool",
+              name="cooldown_days",
+              type="number",
+              min=0,
+              value=instance.missing.cooldown_days,
+              data_default_value=defaults.missing.cooldown_days,
+              input_class=mono_input_cls,
+              label="Cooldown (days)",
+              tip_ref="cooldown_days",
+          ) }}
         </div>
         <div>
-          <label class="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide" for="{{ form_id }}-delay">Post-Release Grace (hrs)</label>
-          <input id="{{ form_id }}-delay" name="post_release_grace_hrs" type="number" min="0"
-                 value="{{ instance.post_release_grace_hrs }}"
-                 data-default-value="{{ defaults.post_release_grace_hrs }}"
-                 class="{{ mono_input_cls }}" />
-          <p class="mt-1.5 text-xs text-slate-600">Hours to wait after release date. Unreleased items are always skipped.</p>
+          {{ forms.form_field(
+              id=form_id ~ "-delay",
+              name="post_release_grace_hrs",
+              type="number",
+              min=0,
+              value=instance.missing.post_release_grace_hrs,
+              data_default_value=defaults.missing.post_release_grace_hrs,
+              input_class=mono_input_cls,
+              label="Post-Release Grace (hrs)",
+              help_text="Hours to wait after release date. Unreleased items are always skipped.",
+              tip_ref="post_release_grace_hrs",
+          ) }}
         </div>
         <div>
-          <label class="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide" for="{{ form_id }}-qlimit">Queue Limit</label>
-          <input id="{{ form_id }}-qlimit" name="queue_limit" type="number" min="0"
-                 value="{{ instance.queue_limit }}"
-                 data-default-value="{{ defaults.queue_limit }}"
-                 class="{{ mono_input_cls }}" />
-          <p class="mt-1.5 text-xs text-slate-600">Skip searches when the queue exceeds this. 0 = disabled.</p>
+          {{ forms.form_field(
+              id=form_id ~ "-qlimit",
+              name="queue_limit",
+              type="number",
+              min=0,
+              value=instance.missing.queue_limit,
+              data_default_value=defaults.missing.queue_limit,
+              input_class=mono_input_cls,
+              label="Queue Limit",
+              help_text="Skip searches when the queue exceeds this. 0 = disabled.",
+              tip_ref="queue_limit",
+          ) }}
         </div>
         <div class="sm:col-span-2">
-          <label class="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide" for="{{ form_id }}-window">Allowed Search Window</label>
-          <input id="{{ form_id }}-window" name="allowed_time_window" type="text"
-                 value="{{ instance.allowed_time_window }}"
-                 data-default-value="{{ defaults.allowed_time_window }}"
-                 placeholder="e.g. 09:00-23:00 or 09:00-12:00,18:00-22:00"
-                 class="{{ mono_input_cls }}" />
+          {{ forms.form_field(
+              id=form_id ~ "-window",
+              name="allowed_time_window",
+              type="text",
+              value=instance.schedule.allowed_time_window,
+              data_default_value=defaults.schedule.allowed_time_window,
+              placeholder="e.g. 09:00-23:00 or 09:00-12:00,18:00-22:00",
+              input_class=mono_input_cls,
+              label="Allowed Search Window",
+              tip_ref="allowed_time_window",
+          ) }}
           <p class="mt-1.5 text-xs text-slate-600">Restrict scheduled cycles to one or more <code>HH:MM-HH:MM</code> windows (container local time via <code>TZ</code>). Blank = always allowed. Run Now bypasses the window.</p>
         </div>
         <div class="sm:col-span-2">
-          <label class="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide" for="{{ form_id }}-order">
-            Search Order
-          </label>
-          <select id="{{ form_id }}-order" name="search_order"
-                  data-default-value="{{ defaults.search_order.value }}"
-                  class="{{ select_cls }}">
-            <option value="chronological" {% if instance.search_order.value == 'chronological' %}selected{% endif %}>Chronological</option>
-            <option value="random"        {% if instance.search_order.value == 'random'        %}selected{% endif %}>Random (default)</option>
-          </select>
-          <p class="mt-1.5 text-xs text-slate-600">Chronological walks the library oldest-first in small rotations. Random picks a different slice of the library each cycle, so searches feel spread across the catalogue instead of clustered by release date.</p>
+          {{ forms.select_field(
+              id=form_id ~ "-order",
+              name="search_order",
+              options=[
+                  ("chronological", "Chronological"),
+                  ("random", "Random (default)"),
+              ],
+              selected=instance.schedule.search_order.value,
+              data_default_value=defaults.schedule.search_order.value,
+              select_class=select_cls,
+              label="Search Order",
+              tip_ref="search_order",
+          ) }}
         </div>
         <div class="sm:col-span-2" data-sonarr-only="true"
-             {% if instance.type.value != 'sonarr' %}style="display:none;"{% endif %}>
+             {% if instance.core.type.value != 'sonarr' %}style="display:none;"{% endif %}>
           <label class="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide" for="{{ form_id }}-sonarr-mode">
-            Sonarr Missing Search Mode
+            Sonarr Missing Search Mode{{ tip_icon("sonarr_search_mode", "Sonarr missing search mode") }}
           </label>
           <select id="{{ form_id }}-sonarr-mode" name="sonarr_search_mode"
-                  data-default-value="{{ defaults.sonarr_search_mode.value }}"
+                  data-default-value="{{ defaults.missing.sonarr_search_mode.value }}"
                   class="{{ select_cls }}">
-            <option value="episode"        {% if instance.sonarr_search_mode.value == 'episode'        %}selected{% endif %}>Episode search (default)</option>
-            <option value="season_context" {% if instance.sonarr_search_mode.value == 'season_context' %}selected{% endif %}>Season-context search (advanced)</option>
+            <option value="episode"        {% if instance.missing.sonarr_search_mode.value == 'episode'        %}selected{% endif %}>Episode search (default)</option>
+            <option value="season_context" {% if instance.missing.sonarr_search_mode.value == 'season_context' %}selected{% endif %}>Season-context search (advanced)</option>
           </select>
           <p class="mt-1.5 text-xs text-amber-400/80">Advanced mode: season search is not pack-only and may pull noisier results.</p>
         </div>
         <div class="sm:col-span-2" data-lidarr-only="true"
-             {% if instance.type.value != 'lidarr' %}style="display:none;"{% endif %}>
+             {% if instance.core.type.value != 'lidarr' %}style="display:none;"{% endif %}>
           <label class="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide" for="{{ form_id }}-lidarr-mode">
-            Lidarr Missing Search Mode
+            Lidarr Missing Search Mode{{ tip_icon("lidarr_search_mode", "Lidarr missing search mode") }}
           </label>
           <select id="{{ form_id }}-lidarr-mode" name="lidarr_search_mode"
-                  data-default-value="{{ defaults.lidarr_search_mode.value }}"
+                  data-default-value="{{ defaults.missing.lidarr_search_mode.value }}"
                   class="{{ select_cls }}">
-            <option value="album"          {% if instance.lidarr_search_mode.value == 'album'          %}selected{% endif %}>Album search (default)</option>
-            <option value="artist_context" {% if instance.lidarr_search_mode.value == 'artist_context' %}selected{% endif %}>Artist-context search (advanced)</option>
+            <option value="album"          {% if instance.missing.lidarr_search_mode.value == 'album'          %}selected{% endif %}>Album search (default)</option>
+            <option value="artist_context" {% if instance.missing.lidarr_search_mode.value == 'artist_context' %}selected{% endif %}>Artist-context search (advanced)</option>
           </select>
           <p class="mt-1.5 text-xs text-amber-400/80">Advanced mode: searches all missing albums by artist in one request.</p>
         </div>
         <div class="sm:col-span-2" data-readarr-only="true"
-             {% if instance.type.value != 'readarr' %}style="display:none;"{% endif %}>
+             {% if instance.core.type.value != 'readarr' %}style="display:none;"{% endif %}>
           <label class="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide" for="{{ form_id }}-readarr-mode">
-            Readarr Missing Search Mode
+            Readarr Missing Search Mode{{ tip_icon("readarr_search_mode", "Readarr missing search mode") }}
           </label>
           <select id="{{ form_id }}-readarr-mode" name="readarr_search_mode"
-                  data-default-value="{{ defaults.readarr_search_mode.value }}"
+                  data-default-value="{{ defaults.missing.readarr_search_mode.value }}"
                   class="{{ select_cls }}">
-            <option value="book"           {% if instance.readarr_search_mode.value == 'book'           %}selected{% endif %}>Book search (default)</option>
-            <option value="author_context" {% if instance.readarr_search_mode.value == 'author_context' %}selected{% endif %}>Author-context search (advanced)</option>
+            <option value="book"           {% if instance.missing.readarr_search_mode.value == 'book'           %}selected{% endif %}>Book search (default)</option>
+            <option value="author_context" {% if instance.missing.readarr_search_mode.value == 'author_context' %}selected{% endif %}>Author-context search (advanced)</option>
           </select>
           <p class="mt-1.5 text-xs text-amber-400/80">Advanced mode: searches all missing books by author in one request.</p>
         </div>
         <div class="sm:col-span-2" data-whisparr_v2-only="true"
-             {% if instance.type.value != 'whisparr_v2' %}style="display:none;"{% endif %}>
-          <label class="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide" for="{{ form_id }}-whisparr-mode">
-            Whisparr v2 Missing Search Mode
+             {% if instance.core.type.value != 'whisparr_v2' %}style="display:none;"{% endif %}>
+          <label class="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide" for="{{ form_id }}-whisparr-v2-mode">
+            Whisparr v2 Missing Search Mode{{ tip_icon("whisparr_v2_search_mode", "Whisparr v2 missing search mode") }}
           </label>
-          <select id="{{ form_id }}-whisparr-mode" name="whisparr_search_mode"
-                  data-default-value="{{ defaults.whisparr_search_mode.value }}"
+          <select id="{{ form_id }}-whisparr-v2-mode" name="whisparr_v2_search_mode"
+                  data-default-value="{{ defaults.missing.whisparr_v2_search_mode.value }}"
                   class="{{ select_cls }}">
-            <option value="episode"        {% if instance.whisparr_search_mode.value == 'episode'        %}selected{% endif %}>Episode search (default)</option>
-            <option value="season_context" {% if instance.whisparr_search_mode.value == 'season_context' %}selected{% endif %}>Season-context search (advanced)</option>
+            <option value="episode"        {% if instance.missing.whisparr_v2_search_mode.value == 'episode'        %}selected{% endif %}>Episode search (default)</option>
+            <option value="season_context" {% if instance.missing.whisparr_v2_search_mode.value == 'season_context' %}selected{% endif %}>Season-context search (advanced)</option>
           </select>
           <p class="mt-1.5 text-xs text-amber-400/80">Advanced mode: season search may pull noisier results.</p>
         </div>
@@ -230,144 +408,205 @@
     </section>
 
     <!-- Cutoff Upgrades section -->
-    <section class="rounded-xl border border-[#1e2638] bg-[#07080f]/50 p-4 sm:p-5 space-y-4">
+    <section class="rounded-container border border-border-subtle bg-surface-base/50 p-4 sm:p-5 space-y-4">
       <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <h4 class="text-sm font-semibold text-slate-200">Cutoff Upgrades</h4>
           <p class="text-xs text-slate-500 mt-0.5">Optional lower-priority pass for quality upgrades.</p>
         </div>
-        <label class="inline-flex items-center gap-2 cursor-pointer select-none rounded-md border border-[#2a3448] bg-[#0e1117] px-3 py-2">
-          <input type="checkbox" name="cutoff_enabled" value="on"
-                 {% if is_edit and instance.cutoff_enabled %}checked{% endif %}
-                 data-default-checked="{{ 1 if defaults.cutoff_enabled else 0 }}"
-                 class="rounded border-[#2a3448] bg-[#0e1117] text-brand-500 focus:ring-brand-500 focus:ring-offset-[#07080f]" />
-          <span class="text-xs font-medium text-slate-300">Enable cutoff search</span>
-        </label>
+        {# sm:flex-row-reverse puts the help icon to the LEFT of the
+           toggle once the section header + toggle share a row, and
+           falls back to icon-right below the sm breakpoint so the
+           mobile stack reads label then icon top-to-bottom. #}
+        <div class="inline-flex items-center gap-1.5 sm:flex-row-reverse">
+          {{ forms.checkbox(
+              name="cutoff_enabled",
+              label="Enable cutoff search",
+              checked=is_edit and instance.cutoff.cutoff_enabled,
+              data_default_checked=1 if defaults.cutoff.cutoff_enabled else 0,
+          ) }}
+          {{ tip_icon("cutoff_enabled", "Cutoff search") }}
+        </div>
       </div>
       <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div>
-          <label class="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide" for="{{ form_id }}-cbatch">Cutoff Batch</label>
-          <input id="{{ form_id }}-cbatch" name="cutoff_batch_size" type="number" min="1" max="250"
-                 value="{{ instance.cutoff_batch_size }}"
-                 data-default-value="{{ defaults.cutoff_batch_size }}"
-                 class="{{ mono_input_cls }}" />
+          {{ forms.form_field(
+              id=form_id ~ "-cbatch",
+              name="cutoff_batch_size",
+              type="number",
+              min=1, max=250,
+              value=instance.cutoff.cutoff_batch_size,
+              data_default_value=defaults.cutoff.cutoff_batch_size,
+              input_class=mono_input_cls,
+              label="Cutoff Batch",
+              tip_ref="cutoff_batch_size",
+          ) }}
         </div>
         <div>
-          <label class="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide" for="{{ form_id }}-ccool">Cutoff Cooldown</label>
-          <input id="{{ form_id }}-ccool" name="cutoff_cooldown_days" type="number" min="0"
-                 value="{{ instance.cutoff_cooldown_days }}"
-                 data-default-value="{{ defaults.cutoff_cooldown_days }}"
-                 class="{{ mono_input_cls }}" />
+          {{ forms.form_field(
+              id=form_id ~ "-ccool",
+              name="cutoff_cooldown_days",
+              type="number",
+              min=0,
+              value=instance.cutoff.cutoff_cooldown_days,
+              data_default_value=defaults.cutoff.cutoff_cooldown_days,
+              input_class=mono_input_cls,
+              label="Cutoff Cooldown",
+              tip_ref="cutoff_cooldown_days",
+          ) }}
         </div>
         <div>
-          <label class="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide" for="{{ form_id }}-chcap">Cutoff Cap</label>
-          <input id="{{ form_id }}-chcap" name="cutoff_hourly_cap" type="number" min="0"
-                 value="{{ instance.cutoff_hourly_cap }}"
-                 data-default-value="{{ defaults.cutoff_hourly_cap }}"
-                 class="{{ mono_input_cls }}" />
+          {{ forms.form_field(
+              id=form_id ~ "-chcap",
+              name="cutoff_hourly_cap",
+              type="number",
+              min=0,
+              value=instance.cutoff.cutoff_hourly_cap,
+              data_default_value=defaults.cutoff.cutoff_hourly_cap,
+              input_class=mono_input_cls,
+              label="Cutoff Cap",
+              tip_ref="cutoff_hourly_cap",
+          ) }}
         </div>
       </div>
     </section>
 
     <!-- Library Upgrades section -->
-    <section class="rounded-xl border border-[#1e2638] bg-[#07080f]/50 p-4 sm:p-5 space-y-4">
+    <section class="rounded-container border border-border-subtle bg-surface-base/50 p-4 sm:p-5 space-y-4">
       <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <h4 class="text-sm font-semibold text-slate-200">Library Upgrades</h4>
           <p class="text-xs text-slate-500 mt-0.5">Opt-in third pass. Searches items that already meet cutoff for better releases.</p>
         </div>
-        <label class="inline-flex items-center gap-2 cursor-pointer select-none rounded-md border border-[#2a3448] bg-[#0e1117] px-3 py-2">
-          <input type="checkbox" name="upgrade_enabled" value="on"
-                 {% if is_edit and instance.upgrade_enabled %}checked{% endif %}
-                 data-default-checked="{{ 1 if defaults.upgrade_enabled else 0 }}"
-                 class="rounded border-[#2a3448] bg-[#0e1117] text-brand-500 focus:ring-brand-500 focus:ring-offset-[#07080f]" />
-          <span class="text-xs font-medium text-slate-300">Enable upgrade search</span>
-        </label>
+        {# sm:flex-row-reverse puts the help icon to the LEFT of the
+           toggle on desktop and falls back to icon-right on mobile. #}
+        <div class="inline-flex items-center gap-1.5 sm:flex-row-reverse">
+          {{ forms.checkbox(
+              name="upgrade_enabled",
+              label="Enable upgrade search",
+              checked=is_edit and instance.upgrade.upgrade_enabled,
+              data_default_checked=1 if defaults.upgrade.upgrade_enabled else 0,
+          ) }}
+          {{ tip_icon("upgrade_enabled", "Upgrade search") }}
+        </div>
       </div>
       <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div>
-          <label class="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide" for="{{ form_id }}-ubatch">Upgrade Batch</label>
-          <input id="{{ form_id }}-ubatch" name="upgrade_batch_size" type="number" min="1" max="250"
-                 value="{{ instance.upgrade_batch_size }}"
-                 data-default-value="{{ defaults.upgrade_batch_size }}"
-                 class="{{ mono_input_cls }}" />
-          <p class="mt-1.5 text-xs text-slate-600">Hard cap: 5 per cycle.</p>
+          {{ forms.form_field(
+              id=form_id ~ "-ubatch",
+              name="upgrade_batch_size",
+              type="number",
+              min=1, max=250,
+              value=instance.upgrade.upgrade_batch_size,
+              data_default_value=defaults.upgrade.upgrade_batch_size,
+              input_class=mono_input_cls,
+              label="Upgrade Batch",
+              tip_ref="upgrade_batch_size",
+          ) }}
         </div>
         <div>
-          <label class="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide" for="{{ form_id }}-ucool">Upgrade Cooldown (days)</label>
-          <input id="{{ form_id }}-ucool" name="upgrade_cooldown_days" type="number" min="7"
-                 value="{{ instance.upgrade_cooldown_days }}"
-                 data-default-value="{{ defaults.upgrade_cooldown_days }}"
-                 class="{{ mono_input_cls }}" />
-          <p class="mt-1.5 text-xs text-slate-600">Minimum: 7 days.</p>
+          {{ forms.form_field(
+              id=form_id ~ "-ucool",
+              name="upgrade_cooldown_days",
+              type="number",
+              min=7,
+              value=instance.upgrade.upgrade_cooldown_days,
+              data_default_value=defaults.upgrade.upgrade_cooldown_days,
+              input_class=mono_input_cls,
+              label="Upgrade Cooldown (days)",
+              tip_ref="upgrade_cooldown_days",
+          ) }}
         </div>
         <div>
-          <label class="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide" for="{{ form_id }}-uhcap">Upgrade Hourly Cap</label>
-          <input id="{{ form_id }}-uhcap" name="upgrade_hourly_cap" type="number" min="0"
-                 value="{{ instance.upgrade_hourly_cap }}"
-                 data-default-value="{{ defaults.upgrade_hourly_cap }}"
-                 class="{{ mono_input_cls }}" />
-          <p class="mt-1.5 text-xs text-slate-600">Hard cap: 5. 0 = unlimited.</p>
+          {{ forms.form_field(
+              id=form_id ~ "-uhcap",
+              name="upgrade_hourly_cap",
+              type="number",
+              min=0,
+              value=instance.upgrade.upgrade_hourly_cap,
+              data_default_value=defaults.upgrade.upgrade_hourly_cap,
+              input_class=mono_input_cls,
+              label="Upgrade Hourly Cap",
+              tip_ref="upgrade_hourly_cap",
+          ) }}
         </div>
+      </div>
+      {# Sonarr / Whisparr v2 only: per-cycle series rotation window. #}
+      <div data-sonarr-or-whisparr-v2-only="true"
+           {% if instance.core.type.value not in ('sonarr', 'whisparr_v2') %}style="display:none;"{% endif %}>
+        {{ forms.form_field(
+            id=form_id ~ "-uwin",
+            name="upgrade_series_window_size",
+            type="number",
+            min=1, max=100,
+            value=instance.upgrade.upgrade_series_window_size,
+            data_default_value=defaults.upgrade.upgrade_series_window_size,
+            input_class=mono_input_cls,
+            label="Upgrade Series Window (per cycle)",
+            tip_ref="upgrade_series_window_size",
+        ) }}
       </div>
       {# Per-app upgrade search mode selectors #}
       <div data-sonarr-only="true"
-           {% if instance.type.value != 'sonarr' %}style="display:none;"{% endif %}>
+           {% if instance.core.type.value != 'sonarr' %}style="display:none;"{% endif %}>
         <label class="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide" for="{{ form_id }}-upgrade-sonarr-mode">
-          Sonarr Upgrade Search Mode
+          Sonarr Upgrade Search Mode{{ tip_icon("upgrade_sonarr_search_mode", "Sonarr upgrade search mode") }}
         </label>
         <select id="{{ form_id }}-upgrade-sonarr-mode" name="upgrade_sonarr_search_mode"
-                data-default-value="{{ defaults.upgrade_sonarr_search_mode.value }}"
+                data-default-value="{{ defaults.upgrade.upgrade_sonarr_search_mode.value }}"
                 class="{{ select_cls }}">
-          <option value="episode"        {% if instance.upgrade_sonarr_search_mode.value == 'episode'        %}selected{% endif %}>Episode search (default)</option>
-          <option value="season_context" {% if instance.upgrade_sonarr_search_mode.value == 'season_context' %}selected{% endif %}>Season-context search</option>
+          <option value="episode"        {% if instance.upgrade.upgrade_sonarr_search_mode.value == 'episode'        %}selected{% endif %}>Episode search (default)</option>
+          <option value="season_context" {% if instance.upgrade.upgrade_sonarr_search_mode.value == 'season_context' %}selected{% endif %}>Season-context search</option>
         </select>
       </div>
       <div data-lidarr-only="true"
-           {% if instance.type.value != 'lidarr' %}style="display:none;"{% endif %}>
+           {% if instance.core.type.value != 'lidarr' %}style="display:none;"{% endif %}>
         <label class="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide" for="{{ form_id }}-upgrade-lidarr-mode">
-          Lidarr Upgrade Search Mode
+          Lidarr Upgrade Search Mode{{ tip_icon("upgrade_lidarr_search_mode", "Lidarr upgrade search mode") }}
         </label>
         <select id="{{ form_id }}-upgrade-lidarr-mode" name="upgrade_lidarr_search_mode"
-                data-default-value="{{ defaults.upgrade_lidarr_search_mode.value }}"
+                data-default-value="{{ defaults.upgrade.upgrade_lidarr_search_mode.value }}"
                 class="{{ select_cls }}">
-          <option value="album"          {% if instance.upgrade_lidarr_search_mode.value == 'album'          %}selected{% endif %}>Album search (default)</option>
-          <option value="artist_context" {% if instance.upgrade_lidarr_search_mode.value == 'artist_context' %}selected{% endif %}>Artist-context search</option>
+          <option value="album"          {% if instance.upgrade.upgrade_lidarr_search_mode.value == 'album'          %}selected{% endif %}>Album search (default)</option>
+          <option value="artist_context" {% if instance.upgrade.upgrade_lidarr_search_mode.value == 'artist_context' %}selected{% endif %}>Artist-context search</option>
         </select>
       </div>
       <div data-readarr-only="true"
-           {% if instance.type.value != 'readarr' %}style="display:none;"{% endif %}>
+           {% if instance.core.type.value != 'readarr' %}style="display:none;"{% endif %}>
         <label class="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide" for="{{ form_id }}-upgrade-readarr-mode">
-          Readarr Upgrade Search Mode
+          Readarr Upgrade Search Mode{{ tip_icon("upgrade_readarr_search_mode", "Readarr upgrade search mode") }}
         </label>
         <select id="{{ form_id }}-upgrade-readarr-mode" name="upgrade_readarr_search_mode"
-                data-default-value="{{ defaults.upgrade_readarr_search_mode.value }}"
+                data-default-value="{{ defaults.upgrade.upgrade_readarr_search_mode.value }}"
                 class="{{ select_cls }}">
-          <option value="book"           {% if instance.upgrade_readarr_search_mode.value == 'book'           %}selected{% endif %}>Book search (default)</option>
-          <option value="author_context" {% if instance.upgrade_readarr_search_mode.value == 'author_context' %}selected{% endif %}>Author-context search</option>
+          <option value="book"           {% if instance.upgrade.upgrade_readarr_search_mode.value == 'book'           %}selected{% endif %}>Book search (default)</option>
+          <option value="author_context" {% if instance.upgrade.upgrade_readarr_search_mode.value == 'author_context' %}selected{% endif %}>Author-context search</option>
         </select>
       </div>
       <div data-whisparr_v2-only="true"
-           {% if instance.type.value != 'whisparr_v2' %}style="display:none;"{% endif %}>
-        <label class="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide" for="{{ form_id }}-upgrade-whisparr-mode">
-          Whisparr v2 Upgrade Search Mode
+           {% if instance.core.type.value != 'whisparr_v2' %}style="display:none;"{% endif %}>
+        <label class="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide" for="{{ form_id }}-upgrade-whisparr-v2-mode">
+          Whisparr v2 Upgrade Search Mode{{ tip_icon("upgrade_whisparr_v2_search_mode", "Whisparr v2 upgrade search mode") }}
         </label>
-        <select id="{{ form_id }}-upgrade-whisparr-mode" name="upgrade_whisparr_search_mode"
-                data-default-value="{{ defaults.upgrade_whisparr_search_mode.value }}"
+        <select id="{{ form_id }}-upgrade-whisparr-v2-mode" name="upgrade_whisparr_v2_search_mode"
+                data-default-value="{{ defaults.upgrade.upgrade_whisparr_v2_search_mode.value }}"
                 class="{{ select_cls }}">
-          <option value="episode"        {% if instance.upgrade_whisparr_search_mode.value == 'episode'        %}selected{% endif %}>Episode search (default)</option>
-          <option value="season_context" {% if instance.upgrade_whisparr_search_mode.value == 'season_context' %}selected{% endif %}>Season-context search</option>
+          <option value="episode"        {% if instance.upgrade.upgrade_whisparr_v2_search_mode.value == 'episode'        %}selected{% endif %}>Episode search (default)</option>
+          <option value="season_context" {% if instance.upgrade.upgrade_whisparr_v2_search_mode.value == 'season_context' %}selected{% endif %}>Season-context search</option>
         </select>
       </div>
     </section>
 
     <!-- Actions footer -->
-    <div class="border-t border-[#1e2638] pt-4 space-y-3">
+    <div class="border-t border-border-subtle pt-4 space-y-3">
       {% if is_edit %}
-      <input type="hidden" name="instance_id" value="{{ instance.id }}" />
+      <input type="hidden" name="instance_id" value="{{ instance.core.id }}" />
       {% endif %}
 
       <div class="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center sm:gap-3">
+        {# Only the three connection fields (plus instance_id in edit mode) go
+           to /settings/instances/test-connection; search-policy fields would
+           pollute the probe payload and break the connection-only validation. #}
         <button type="button"
                 id="instance-test-connection-btn"
                 data-test-connection-btn="true"
@@ -375,26 +614,26 @@
                 hx-include="#{{ form_id }} [name='type'],#{{ form_id }} [name='url'],#{{ form_id }} [name='api_key']{% if is_edit %},#{{ form_id }} [name='instance_id']{% endif %}"
                 hx-target="#instance-connection-status"
                 hx-swap="innerHTML"
-                class="px-4 py-2.5 rounded-lg border border-[#2a3448] bg-[#151b27] hover:bg-[#1e2638] text-slate-200 text-sm font-medium transition-colors sm:w-[10.5rem]">
+                class="btn btn-soft btn-neutral px-4 py-2.5 text-sm font-medium sm:w-[10.5rem]">
           Test Connection
         </button>
         <button type="button"
                 id="instance-reset-btn"
                 data-reset-instance-form="true"
-                class="px-4 py-2.5 rounded-lg border border-[#2a3448] bg-[#151b27] hover:bg-[#1e2638] text-slate-200 text-sm font-medium transition-colors sm:w-[10.5rem]">
+                class="btn btn-soft btn-neutral px-4 py-2.5 text-sm font-medium sm:w-[10.5rem]">
           Reset to Defaults
         </button>
         <button id="instance-submit-btn"
                 type="submit"
                 disabled
-                class="col-span-2 sm:col-auto px-4 py-2.5 rounded-lg bg-brand-500 text-white text-sm font-semibold transition-colors
-                       disabled:cursor-not-allowed disabled:opacity-40 hover:enabled:bg-brand-400
+                class="btn btn-primary col-span-2 sm:col-auto px-4 py-2.5 text-sm font-semibold
+                       disabled:cursor-not-allowed disabled:opacity-40
                        focus:outline-none focus:ring-2 focus:ring-brand-500/35">
           {{ 'Save Changes' if is_edit else 'Add Instance' }}
         </button>
         <button type="button"
                 data-close-add-instance-modal="true"
-                class="col-span-2 sm:col-auto px-4 py-2.5 rounded-lg border border-[#2a3448] bg-[#0e1117] hover:bg-[#151b27] text-slate-300 text-sm font-medium transition-colors">
+                class="btn btn-soft btn-neutral col-span-2 sm:col-auto px-4 py-2.5 text-sm font-medium">
           Cancel
         </button>
       </div>
@@ -405,5 +644,5 @@
         {{ 'Test connection before saving changes.' if is_edit else 'Test connection before adding this instance.' }}
       </div>
     </div>
-  </form>
+  {% endcall %}
 </div>

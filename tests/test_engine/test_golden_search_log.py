@@ -1,13 +1,13 @@
 """Golden tests for search_log row sequences.
 
-These tests capture the exact ``search_log`` output for known input scenarios
-and prove that the Phase 1–2 refactor (adapter pattern + unified pipeline)
-produces bit-identical results to the pre-refactor engine.
+These tests capture the exact ``search_log`` output for known
+input scenarios and act as a bit-identical regression snapshot for
+the adapter pattern plus unified search pipeline.
 
-Each test asserts the complete row sequence - field values and ordering - for
-a multi-step search cycle.  They are regression snapshots, not behavioural
-unit tests, and should break only when someone intentionally changes search
-engine output.
+Each test asserts the complete row sequence (field values and
+ordering) for a multi-step search cycle.  They are regression
+snapshots, not behavioural unit tests, and should break only when
+someone intentionally changes search engine output.
 """
 
 from __future__ import annotations
@@ -24,12 +24,20 @@ from cryptography.fernet import Fernet
 from houndarr.database import get_db
 from houndarr.engine.search_loop import run_instance_search
 from houndarr.services.instances import (
+    CutoffPolicy,
     Instance,
+    InstanceCore,
+    InstanceTimestamps,
     InstanceType,
     LidarrSearchMode,
+    MissingPolicy,
     ReadarrSearchMode,
+    RuntimeSnapshot,
+    SchedulePolicy,
+    SearchOrder,
     SonarrSearchMode,
-    WhisparrSearchMode,
+    UpgradePolicy,
+    WhisparrV2SearchMode,
 )
 
 # ---------------------------------------------------------------------------
@@ -40,7 +48,7 @@ SONARR_URL = "http://sonarr:8989"
 RADARR_URL = "http://radarr:7878"
 LIDARR_URL = "http://lidarr:8686"
 READARR_URL = "http://readarr:8787"
-WHISPARR_URL = "http://whisparr:6969"
+WHISPARR_V2_URL = "http://whisparr:6969"
 MASTER_KEY: bytes = Fernet.generate_key()
 
 # Two distinct Sonarr episodes - same series, different seasons.
@@ -113,31 +121,42 @@ def _make_instance(
     sonarr_search_mode: SonarrSearchMode = SonarrSearchMode.episode,
     lidarr_search_mode: LidarrSearchMode = LidarrSearchMode.album,
     readarr_search_mode: ReadarrSearchMode = ReadarrSearchMode.book,
-    whisparr_search_mode: WhisparrSearchMode = WhisparrSearchMode.episode,
+    whisparr_v2_search_mode: WhisparrV2SearchMode = WhisparrV2SearchMode.episode,
 ) -> Instance:
     return Instance(
-        id=instance_id,
-        name="Golden Test",
-        type=itype,
-        url=url,
-        api_key="test-api-key",
-        enabled=True,
-        batch_size=batch_size,
-        sleep_interval_mins=15,
-        hourly_cap=hourly_cap,
-        cooldown_days=cooldown_days,
-        post_release_grace_hrs=post_release_grace_hrs,
-        queue_limit=0,
-        cutoff_enabled=cutoff_enabled,
-        cutoff_batch_size=cutoff_batch_size,
-        cutoff_cooldown_days=cutoff_cooldown_days,
-        cutoff_hourly_cap=cutoff_hourly_cap,
-        created_at="2024-01-01T00:00:00Z",
-        updated_at="2024-01-01T00:00:00Z",
-        sonarr_search_mode=sonarr_search_mode,
-        lidarr_search_mode=lidarr_search_mode,
-        readarr_search_mode=readarr_search_mode,
-        whisparr_search_mode=whisparr_search_mode,
+        core=InstanceCore(
+            id=instance_id,
+            name="Golden Test",
+            type=itype,
+            url=url,
+            api_key="test-api-key",
+            enabled=True,
+        ),
+        missing=MissingPolicy(
+            batch_size=batch_size,
+            sleep_interval_mins=15,
+            hourly_cap=hourly_cap,
+            cooldown_days=cooldown_days,
+            post_release_grace_hrs=post_release_grace_hrs,
+            queue_limit=0,
+            sonarr_search_mode=sonarr_search_mode,
+            lidarr_search_mode=lidarr_search_mode,
+            readarr_search_mode=readarr_search_mode,
+            whisparr_v2_search_mode=whisparr_v2_search_mode,
+        ),
+        cutoff=CutoffPolicy(
+            cutoff_enabled=cutoff_enabled,
+            cutoff_batch_size=cutoff_batch_size,
+            cutoff_cooldown_days=cutoff_cooldown_days,
+            cutoff_hourly_cap=cutoff_hourly_cap,
+        ),
+        upgrade=UpgradePolicy(),
+        schedule=SchedulePolicy(search_order=SearchOrder.chronological),
+        snapshot=RuntimeSnapshot(),
+        timestamps=InstanceTimestamps(
+            created_at="2024-01-01T00:00:00Z",
+            updated_at="2024-01-01T00:00:00Z",
+        ),
     )
 
 
@@ -162,7 +181,7 @@ async def seeded_instances(db: None) -> AsyncGenerator[None, None]:
                 (2, "Radarr Test", "radarr", RADARR_URL, encrypted),
                 (3, "Lidarr Test", "lidarr", LIDARR_URL, encrypted),
                 (4, "Readarr Test", "readarr", READARR_URL, encrypted),
-                (5, "Whisparr Test", "whisparr_v2", WHISPARR_URL, encrypted),
+                (5, "Whisparr Test", "whisparr_v2", WHISPARR_V2_URL, encrypted),
             ],
         )
         await conn.commit()
@@ -431,14 +450,14 @@ async def test_golden_mixed_eligibility(seeded_instances: None) -> None:
       - ep 102: unreleased (future air date → skipped before cap check)
       - ep 103: on cooldown (passes unreleased + cap, hits cooldown)
       - ep 104: eligible (searched - uses 2 of 2 cap slots)
-      - ep 105: hourly cap reached (cap=2 exhausted → skipped, stop_pass)
+      - ep 105: hourly limit reached (cap=2 exhausted → skipped, stop_pass)
 
     Expected sequence:
       1. searched - ep 101
       2. skipped  - ep 102, "not yet released"
       3. skipped  - ep 103, "on cooldown (7d)"
       4. searched - ep 104
-      5. skipped  - ep 105, "hourly cap reached (2)"
+      5. skipped  - ep 105, "hourly limit reached (2/hr)"
     """
     from houndarr.services.cooldown import record_search
 
@@ -537,7 +556,7 @@ async def test_golden_mixed_eligibility(seeded_instances: None) -> None:
     assert rows[4]["item_type"] == "episode"
     assert rows[4]["item_label"] == "My Show - S01E05 - Capped"
     assert rows[4]["search_kind"] == "missing"
-    assert rows[4]["reason"] == "hourly cap reached (2)"
+    assert rows[4]["reason"] == "hourly limit reached (2/hr)"
     assert rows[4]["cycle_id"] == "golden-g4"
 
 
@@ -726,51 +745,51 @@ async def test_golden_readarr_book_missing_and_cutoff(seeded_instances: None) ->
 
 
 # ---------------------------------------------------------------------------
-# G7: Whisparr missing (episode mode)
+# G7: Whisparr v2 missing (episode mode)
 # ---------------------------------------------------------------------------
 
-_WHISPARR_EP_A: dict[str, Any] = {
+_WHISPARR_V2_EP_A: dict[str, Any] = {
     "id": 501,
     "seriesId": 70,
     "title": "Scene A",
     "seasonNumber": 1,
     "absoluteEpisodeNumber": 1,
     "releaseDate": {"year": 2023, "month": 3, "day": 1},
-    "series": {"id": 70, "title": "Whisparr Show"},
+    "series": {"id": 70, "title": "Whisparr v2 Show"},
 }
-_WHISPARR_EP_B: dict[str, Any] = {
+_WHISPARR_V2_EP_B: dict[str, Any] = {
     "id": 502,
     "seriesId": 70,
     "title": "Scene B",
     "seasonNumber": 2,
     "absoluteEpisodeNumber": 2,
     "releaseDate": {"year": 2023, "month": 6, "day": 1},
-    "series": {"id": 70, "title": "Whisparr Show"},
+    "series": {"id": 70, "title": "Whisparr v2 Show"},
 }
 
 
 @pytest.mark.asyncio()
 @respx.mock
-async def test_golden_whisparr_episode_missing(seeded_instances: None) -> None:
-    """Whisparr episode-mode missing pass with two episodes.
+async def test_golden_whisparr_v2_episode_missing(seeded_instances: None) -> None:
+    """Whisparr v2 episode-mode missing pass with two episodes.
 
     Expected sequence:
-      1. searched - ep 501, missing, item_type=whisparr_episode
-      2. searched - ep 502, missing, item_type=whisparr_episode
+      1. searched - ep 501, missing, item_type=whisparr_v2_episode
+      2. searched - ep 502, missing, item_type=whisparr_v2_episode
     """
-    missing_page = {"records": [_WHISPARR_EP_A, _WHISPARR_EP_B]}
+    missing_page = {"records": [_WHISPARR_V2_EP_A, _WHISPARR_V2_EP_B]}
 
-    respx.get(f"{WHISPARR_URL}/api/v3/wanted/missing").mock(
+    respx.get(f"{WHISPARR_V2_URL}/api/v3/wanted/missing").mock(
         return_value=httpx.Response(200, json=missing_page)
     )
-    respx.post(f"{WHISPARR_URL}/api/v3/command").mock(
+    respx.post(f"{WHISPARR_V2_URL}/api/v3/command").mock(
         return_value=httpx.Response(201, json=_COMMAND_RESP)
     )
 
     instance = _make_instance(
         instance_id=5,
         itype=InstanceType.whisparr_v2,
-        url=WHISPARR_URL,
+        url=WHISPARR_V2_URL,
     )
     count = await run_instance_search(instance, MASTER_KEY, cycle_id="golden-g7")
 
@@ -780,13 +799,13 @@ async def test_golden_whisparr_episode_missing(seeded_instances: None) -> None:
 
     assert rows[0]["action"] == "searched"
     assert rows[0]["item_id"] == 501
-    assert rows[0]["item_type"] == "whisparr_episode"
-    assert rows[0]["item_label"] == "Whisparr Show - S01 - Scene A"
+    assert rows[0]["item_type"] == "whisparr_v2_episode"
+    assert rows[0]["item_label"] == "Whisparr v2 Show - S01 - Scene A"
     assert rows[0]["search_kind"] == "missing"
     assert rows[0]["cycle_id"] == "golden-g7"
 
     assert rows[1]["action"] == "searched"
     assert rows[1]["item_id"] == 502
-    assert rows[1]["item_type"] == "whisparr_episode"
-    assert rows[1]["item_label"] == "Whisparr Show - S02 - Scene B"
+    assert rows[1]["item_type"] == "whisparr_v2_episode"
+    assert rows[1]["item_label"] == "Whisparr v2 Show - S02 - Scene B"
     assert rows[1]["search_kind"] == "missing"

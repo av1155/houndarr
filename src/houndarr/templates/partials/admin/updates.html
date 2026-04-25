@@ -1,0 +1,103 @@
+{#
+  Admin > Updates sub-section. Two groups inside one card, split by a
+  thin divider:
+
+  1. Release check (top)
+     - Toggle: "Automatically check for new releases". Opt-in; never
+       contacts github.com while off.
+     - Status row (partials/admin/update_check_row.html) with the
+       Check now button and last-checked timestamp.
+
+  2. Changelog (bottom)
+     - Toggle: "Show changelog after each update".
+     - "What's new" opens the current-version modal with the
+       accordion of older versions embedded in the running image.
+     - "Latest on GitHub" opens CHANGELOG.md so the remote view is
+       always one click away, independent of the image a user is on.
+
+  The section id #admin-updates is the swap target for the changelog
+  preferences endpoint; the update-check preferences endpoint targets
+  the narrower #update-check-status slot.
+#}
+{%- import "_macros/layout.html" as layout -%}
+{% call layout.admin_section(id="admin-updates", title="Updates") %}
+  <div class="rounded-container border border-border-subtle bg-surface-1 p-5 sm:p-6 space-y-3">
+    <form
+      hx-post="/settings/admin/update-check/preferences"
+      hx-target="#update-check-status"
+      hx-swap="outerHTML"
+    >
+      <label class="toggle-row">
+        <span class="toggle-row__title">Automatically check for new releases</span>
+        <span class="switch" role="switch">
+          <input
+            type="checkbox"
+            name="enabled"
+            value="on"
+            {% if update_check_enabled %}checked{% endif %}
+            onchange="this.form.requestSubmit()"
+            aria-label="Automatically check for new releases"
+          />
+          <span class="switch__track"><span class="switch__thumb"></span></span>
+        </span>
+      </label>
+    </form>
+
+    {# First paint leaves the slot empty; the hx-trigger fires the GET
+       after the panel renders so the network call never blocks the
+       admin card. Subsequent swaps come from POST /refresh or
+       /preferences. #}
+    <div
+      id="update-check-status"
+      hx-get="/settings/admin/update-check"
+      hx-trigger="load once delay:200ms"
+      hx-swap="outerHTML"
+    ></div>
+
+    <div class="pt-3 mt-3 border-t border-border-subtle/60 space-y-3">
+      <form
+        hx-post="/settings/changelog/preferences"
+        hx-target="#admin-updates"
+        hx-swap="outerHTML"
+      >
+        <label class="toggle-row">
+          <span class="toggle-row__title">Show changelog after each update</span>
+          <span class="switch" role="switch">
+            <input
+              type="checkbox"
+              name="enabled"
+              value="on"
+              {% if changelog_popups_enabled %}checked{% endif %}
+              onchange="this.form.requestSubmit()"
+              aria-label="Show changelog after each update"
+            />
+            <span class="switch__track"><span class="switch__thumb"></span></span>
+          </span>
+        </label>
+      </form>
+
+      <div class="flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          hx-get="/settings/changelog/popup?force=1"
+          hx-target="#changelog-slot"
+          hx-swap="outerHTML"
+          class="btn btn-soft btn-neutral px-3 py-1.5 text-xs font-medium font-sans"
+        >
+          <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M14 3h7v7"/><path d="M21 3l-9 9"/><path d="M21 14v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5"/>
+          </svg>
+          What&#39;s new
+        </button>
+        <a
+          href="https://github.com/av1155/houndarr/blob/main/CHANGELOG.md"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="text-xs text-brand-300 hover:text-brand-200 underline underline-offset-4 decoration-dotted ml-1"
+        >
+          Latest on GitHub<svg class="inline-link-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 7h10v10"/><path d="M7 17 17 7"/></svg>
+        </a>
+      </div>
+    </div>
+  </div>
+{% endcall %}

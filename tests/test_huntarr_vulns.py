@@ -6,7 +6,7 @@ VUL-20) documented at https://github.com/rfsbraz/huntarr-security-review.
 Tests are organised by attack category rather than VUL number so related
 assertions live together.
 
-TODO(#398): add a CI-only test that fails if the collected test count
+TODO(av1155, #398): add a CI-only test that fails if the collected test count
 cited in website/docs/security/audit.md drifts from the actual count
 in this file. Expected value today: 63 collected cases from 25 test
 functions via parametrization. When it drifts, the doc number must be
@@ -16,7 +16,6 @@ updated in the same PR that changes the tests.
 from __future__ import annotations
 
 import inspect
-from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
@@ -28,6 +27,7 @@ from houndarr.auth import (
     SESSION_COOKIE_NAME,
     SESSION_MAX_AGE_SECONDS,
 )
+from houndarr.clients._wire_models import SystemStatus
 from houndarr.clients.base import ArrClient
 from tests.conftest import csrf_headers
 
@@ -253,9 +253,9 @@ class TestNoDangerousEndpoints:
     def _mock_ping(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Prevent real network calls during instance creation in this class."""
 
-        async def _always_ok(self: ArrClient) -> dict[str, Any] | None:
+        async def _always_ok(self: ArrClient) -> SystemStatus | None:
             name = type(self).__name__.replace("Client", "")
-            return {"appName": name, "version": "4.0.0"}
+            return SystemStatus(app_name=name, version="4.0.0")
 
         monkeypatch.setattr(ArrClient, "ping", _always_ok)
 
@@ -399,9 +399,9 @@ class TestAPIKeyNeverExposed:
     def _mock_ping(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Prevent real network calls for instance creation in this class."""
 
-        async def _always_ok(self: ArrClient) -> dict[str, Any] | None:
+        async def _always_ok(self: ArrClient) -> SystemStatus | None:
             name = type(self).__name__.replace("Client", "")
-            return {"appName": name, "version": "4.0.0"}
+            return SystemStatus(app_name=name, version="4.0.0")
 
         monkeypatch.setattr(ArrClient, "ping", _always_ok)
 
@@ -410,9 +410,9 @@ class TestAPIKeyNeverExposed:
         _login(app)
         resp = app.get("/api/status")
         assert resp.status_code == 200
-        items = resp.json()
-        assert isinstance(items, list)
-        for item in items:
+        body = resp.json()
+        assert isinstance(body, dict)
+        for item in body.get("instances", []):
             assert "api_key" not in item, (
                 f"Instance {item.get('name')!r} exposed api_key in /api/status"
             )

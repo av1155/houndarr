@@ -1,57 +1,6 @@
 <div class="sr-only" data-page-key="dashboard" data-page-title="Dashboard | Houndarr" aria-hidden="true"></div>
 
 <style>
-  #instance-grid.is-entering {
-    animation: instance-grid-enter var(--dur-base, 180ms) var(--ease-station, cubic-bezier(0.16,1,0.3,1));
-  }
-
-  @keyframes instance-grid-enter {
-    from { opacity: 0.65; transform: translateY(4px); }
-    to   { opacity: 1; transform: translateY(0); }
-  }
-
-  .metric-changed {
-    animation: metric-pulse 360ms var(--ease-station, cubic-bezier(0.16,1,0.3,1));
-  }
-
-  @keyframes metric-pulse {
-    0% {
-      background-color: rgba(6, 182, 212, 0.20);
-      box-shadow: 0 0 0 1px rgba(34, 211, 238, 0.28) inset;
-    }
-    100% {
-      background-color: rgba(21, 27, 39, 0.70);
-      box-shadow: 0 0 0 0 rgba(34, 211, 238, 0);
-    }
-  }
-
-  [data-run-now-btn="true"] {
-    transition:
-      background-color var(--dur-base, 180ms) var(--ease-station, cubic-bezier(0.16,1,0.3,1)),
-      color            var(--dur-base, 180ms) var(--ease-station, cubic-bezier(0.16,1,0.3,1)),
-      box-shadow       var(--dur-base, 180ms) var(--ease-station, cubic-bezier(0.16,1,0.3,1)),
-      transform        var(--dur-base, 180ms) var(--ease-station, cubic-bezier(0.16,1,0.3,1));
-  }
-
-  [data-run-now-btn="true"].is-running {
-    background-color: rgb(14 116 144);
-    color: rgb(207 250 254);
-    box-shadow: 0 0 0 1px rgba(34, 211, 238, 0.35) inset;
-  }
-
-  [data-run-now-btn="true"].is-success {
-    background-color: rgb(22 101 52);
-    color: rgb(220 252 231);
-    box-shadow: 0 0 0 1px rgba(74, 222, 128, 0.38) inset;
-  }
-
-  [data-run-now-btn="true"].is-error {
-    background-color: rgb(127 29 29);
-    color: rgb(254 226 226);
-    box-shadow: 0 0 0 1px rgba(248, 113, 113, 0.40) inset;
-    animation: run-now-shake 280ms var(--ease-station, cubic-bezier(0.16,1,0.3,1));
-  }
-
   @keyframes run-now-shake {
     0%, 100% { transform: translateX(0); }
     20%      { transform: translateX(-3px); }
@@ -61,376 +10,769 @@
   }
 
   @media (prefers-reduced-motion: reduce) {
-    #instance-grid.is-entering,
-    .metric-changed {
-      transition: none;
-      animation: none;
-      opacity: 1;
-      transform: none;
+    .dash-run-now.is-error { animation: none; }
+  }
+
+  /* ── Dashboard redesign: top section ─────────────────────────────── */
+  .dash-main {
+    display: flex;
+    flex-direction: column;
+    gap: 1.75rem;
+  }
+  /* #dash-top wraps the polled top-of-page sections (subheader, alert,
+     library-health, recent hunts, section heading). Apply the same flex
+     column + gap here so those sections get the 1.75rem rhythm from the
+     preview; otherwise they collapse flush against one another. */
+  #dash-top {
+    display: flex;
+    flex-direction: column;
+    gap: 1.75rem;
+  }
+
+  .dash-sub__eyebrow {
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+    font-family: var(--font-mono);
+    font-size: 0.6875rem;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--color-brand-400);
+    margin: 0 0 0.5rem;
+    font-weight: 500;
+  }
+  .dash-sub__sentence {
+    font-size: 1.875rem;
+    font-weight: 600;
+    color: var(--color-text-primary);
+    margin: 0;
+    letter-spacing: -0.02em;
+    line-height: 1.25;
+  }
+  .dash-sub__sentence .attn  { color: var(--color-danger); }
+  .dash-sub__sentence .muted { color: var(--color-text-muted); font-weight: 500; }
+
+  .dash-alert {
+    background: linear-gradient(135deg, rgba(248, 113, 113, 0.08), transparent 60%), var(--color-surface-1);
+    border: 1px solid var(--color-danger-border);
+    border-left: 3px solid var(--color-danger);
+    border-radius: var(--radius-container);
+    padding: 1rem 1.25rem;
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    grid-template-areas: "icon body link";
+    align-items: start;
+    gap: 0.875rem 1rem;
+  }
+  .dash-alert__icon { grid-area: icon; font-size: 1.125rem; color: var(--color-danger); line-height: 1; margin-top: 1px; }
+  .dash-alert__body { grid-area: body; min-width: 0; }
+  .dash-alert__head {
+    font-family: var(--font-mono);
+    font-size: 0.625rem;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--color-danger-text);
+    margin: 0 0 0.375rem;
+    font-weight: 600;
+  }
+  /* One row per errored instance.  Layout is a single inline sentence:
+     "name: could not reach <url> · N failures · last Xm ago" so the
+     meta hugs the URL instead of floating in a right-aligned column.
+     overflow-wrap on the row keeps long URLs from breaking the grid
+     at narrow widths. */
+  .dash-alert__list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+  .dash-alert__row {
+    font-size: 0.8125rem;
+    color: var(--color-text-primary);
+    line-height: 1.5;
+    overflow-wrap: anywhere;
+  }
+  .dash-alert__row .mono  { font-family: var(--font-mono); color: var(--color-danger-text); }
+  .dash-alert__row .muted { color: var(--color-text-muted); }
+  .dash-alert__row-meta { color: var(--color-text-muted); white-space: nowrap; }
+  .dash-alert__link {
+    grid-area: link;
+    font-size: 0.75rem;
+    color: var(--color-danger-text);
+    text-decoration: none;
+    font-weight: 500;
+    padding: 0.375rem 0.625rem;
+    border: 1px solid rgba(252, 165, 165, 0.35);
+    border-radius: var(--radius-inset);
+    white-space: nowrap;
+    align-self: center;
+    transition: background var(--dur-base) var(--ease-station);
+  }
+  .dash-alert__link:hover { background: rgba(248, 113, 113, 0.12); }
+
+  .dash-lh {
+    background: var(--color-surface-1);
+    border: 1px solid var(--color-border-subtle);
+    border-radius: var(--radius-container);
+    padding: 1.375rem 1.625rem;
+    box-shadow: var(--shadow-1);
+  }
+  .dash-lh__eyebrow {
+    font-size: 0.625rem;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--color-text-muted);
+    font-weight: 600;
+    margin: 0 0 0.875rem;
+  }
+  .dash-lh__headline {
+    display: flex;
+    gap: 2.5rem;
+    flex-wrap: wrap;
+    align-items: baseline;
+    margin-bottom: 1.125rem;
+  }
+  .dash-lh__stat { display: flex; align-items: baseline; gap: 0.625rem; }
+  .dash-lh__stat-value {
+    font-family: var(--font-mono);
+    font-size: 2.25rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+  }
+  .dash-lh__stat-value--eligible { color: var(--seg-eligible); }
+  .dash-lh__stat-value--gated,
+  .dash-lh__stat-value--unrel    { color: var(--color-text-emphasis); }
+  .dash-lh__stat-label {
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--color-text-muted);
+    font-weight: 500;
+  }
+  .dash-lh__stat-label--eligible { color: var(--seg-eligible); opacity: 0.9; }
+  .dash-lh__bar {
+    display: flex;
+    height: 0.875rem;
+    width: 100%;
+    border-radius: var(--radius-bar);
+    overflow: hidden;
+    background: #0b0e14;
+  }
+  .dash-lh__segment { height: 100%; }
+  .dash-lh__segment--eligible   { background: var(--seg-eligible);   opacity: 0.88; }
+  .dash-lh__segment--cutoff-cd  { background: var(--seg-cutoff-cd);  opacity: 0.88; }
+  .dash-lh__segment--cooldown   { background: var(--seg-cooldown);   opacity: 0.85; }
+  .dash-lh__segment--upgrade-cd { background: var(--seg-upgrade-cd); opacity: 0.85; }
+  .dash-lh__segment--unreleased { background: var(--seg-unreleased); opacity: 0.85; }
+  .dash-lh__legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    margin-top: 0.875rem;
+    font-family: var(--font-mono);
+    font-size: 0.6875rem;
+    color: var(--color-text-muted);
+  }
+  .dash-lh__legend-item { display: inline-flex; align-items: center; gap: 0.5rem; }
+  .dash-lh__legend-swatch { width: 0.625rem; height: 0.625rem; border-radius: var(--radius-bar); flex-shrink: 0; }
+  .dash-lh__legend-swatch--eligible   { background: var(--seg-eligible); }
+  .dash-lh__legend-swatch--cutoff-cd  { background: var(--seg-cutoff-cd); }
+  .dash-lh__legend-swatch--cooldown   { background: var(--seg-cooldown); }
+  .dash-lh__legend-swatch--upgrade-cd { background: var(--seg-upgrade-cd); }
+  .dash-lh__legend-swatch--unreleased { background: var(--seg-unreleased); }
+
+
+  .dash-trail {
+    background: var(--color-surface-1);
+    border: 1px solid var(--color-border-subtle);
+    border-radius: var(--radius-container);
+    padding: 1.25rem 1.625rem;
+  }
+  .dash-trail__head {
+    font-family: var(--font-mono);
+    font-size: 0.625rem;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--seg-eligible);
+    margin: 0 0 0.875rem;
+    font-weight: 600;
+  }
+  .dash-trail__list { display: flex; flex-direction: column; gap: 0; }
+  /* Desktop grid: icon | title (expands) | inst | when.  Four
+     columns put the kind icon adjacent to the title instead of
+     stranding it at the far left of the row while title + inst
+     clump on the right.  The mobile override below stacks these
+     across three rows; placements there are explicit so the icon
+     does not disturb the established visual hierarchy. */
+  .dash-trail__row {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto auto;
+    align-items: center;
+    gap: 0.875rem;
+    padding: 0.6875rem 0.75rem;
+    margin: 0 -0.75rem;
+    border-top: 1px solid var(--color-border-subtle);
+    border-radius: var(--radius-bar);
+    transition: background var(--dur-fast) var(--ease-station);
+  }
+  .dash-trail__row:hover { background: rgba(148, 163, 184, 0.04); }
+  .dash-trail__row:last-child { padding-bottom: 2px; }
+  .dash-trail__title {
+    font-size: 0.84375rem;
+    color: var(--color-text-primary);
+    font-weight: 500;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .dash-trail__inst {
+    font-family: var(--font-mono);
+    font-size: 0.625rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    font-weight: 600;
+  }
+  .dash-trail__when {
+    font-family: var(--font-mono);
+    font-size: 0.6875rem;
+    color: var(--color-text-muted);
+    min-width: 3.5rem;
+    text-align: right;
+  }
+  .dash-trail__empty {
+    font-size: 0.8125rem;
+    color: var(--color-text-muted);
+    font-style: italic;
+    padding: 0.625rem 0 2px;
+    margin: 0;
+  }
+
+  .dash-section-head {
+    display: flex;
+    align-items: center;
+    gap: 1.25rem;
+    padding: 0.5rem 0 0;
+    flex-wrap: wrap;
+  }
+  .dash-section-head__title {
+    font-size: 1.75rem;
+    font-weight: 600;
+    color: var(--color-text-primary);
+    margin: 0;
+    letter-spacing: -0.02em;
+    line-height: 1.2;
+    flex: 0 0 auto;
+  }
+  .dash-section-head__rule {
+    flex: 1 1 2.5rem;
+    min-width: 2.5rem;
+    height: 1px;
+    background: linear-gradient(
+      to right,
+      var(--color-border-default) 0%,
+      var(--color-border-subtle) 85%,
+      transparent 100%
+    );
+  }
+  .dash-section-head__add {
+    font-size: 0.8125rem;
+    color: var(--color-brand-400);
+    text-decoration: none;
+    font-weight: 500;
+    transition: color var(--dur-base) var(--ease-station);
+    flex: 0 0 auto;
+  }
+  .dash-section-head__add:hover { color: var(--color-brand-300); }
+
+  @media (max-width: 640px) {
+    .dash-sub__sentence { font-size: 1.375rem; }
+    /* Break the "X of Y on patrol / N need attention" sentence onto
+       two lines so the danger callout never wraps mid-phrase on a
+       phone-width viewport. */
+    .dash-sub__sentence .attn { display: block; }
+    /* Same treatment for the muted "Last dispatch X ago" tail: keep it
+       inline on desktop where horizontal space is plentiful, force it
+       onto a fresh line on phone widths so the headline above it does
+       not hyphenate awkwardly. */
+    .dash-sub__sentence .muted { display: block; }
+    .dash-section-head__title { font-size: 1.375rem; }
+    .dash-lh { padding: 1.125rem 1.125rem; }
+    .dash-lh__headline { gap: 1.375rem; }
+    .dash-lh__stat-value { font-size: 1.875rem; }
+    .dash-trail { padding: 1rem 1.125rem; }
+    .dash-trail__row {
+      grid-template-columns: auto minmax(0, 1fr) auto;
+      row-gap: 0.25rem;
+      column-gap: 0.75rem;
     }
-    [data-run-now-btn="true"].is-error {
-      animation: none;
+    /* Mobile layout:
+         RADARR                                          32m ago
+         [icon] Limitless (2011)
+       Top row holds the instance badge and the relative timestamp.
+       Bottom row places the search-kind icon adjacent to the hunted
+       title (the user's eye lands on the title first; the icon next
+       to it identifies the action without burying it next to the
+       instance label). */
+    .dash-trail__inst { grid-column: 1 / 3; grid-row: 1; align-self: center; }
+    .dash-trail__when { grid-column: 3 / 4; grid-row: 1; align-self: center; }
+    .dash-trail__row .kind-icon { grid-column: 1 / 2; grid-row: 2; align-self: center; }
+    .dash-trail__title { grid-column: 2 / -1; grid-row: 2; }
+    .dash-alert {
+      grid-template-columns: auto 1fr;
+      grid-template-areas:
+        "icon body"
+        "link link";
+      padding: 0.875rem 1rem;
+      gap: 0.75rem 0.875rem;
     }
+    .dash-alert__link {
+      justify-self: stretch;
+      text-align: center;
+      padding: 0.625rem 0.875rem;
+      font-size: 0.8125rem;
+    }
+    /* On narrow viewports each error row stacks three lines:
+       "<name>: Could not reach" / "<url>" / "N failures · last Xm ago".
+       The URL (wrapped in .mono by renderAlertMessage) and the meta
+       span switch to block; the leading middle-dot hides so the meta
+       line starts cleanly with the failure count. */
+    .dash-alert__row .mono { display: block; word-break: break-all; }
+    .dash-alert__row-meta { display: block; }
+    .dash-alert__row-meta-lead { display: none; }
+    .dash-alert__list { gap: 0.625rem; }
+  }
+
+  @media (max-width: 420px) {
+    .dash-lh__headline { gap: 1.125rem; }
+    .dash-lh__stat-value { font-size: 1.625rem; }
+    .dash-lh__legend { gap: 0.625rem; font-size: 0.625rem; }
+  }
+
+  /* ── Instance card (PR 3 redesign) ────────────────────────────────── */
+  .dash-grid {
+    display: grid;
+    gap: 1rem;
+    grid-template-columns: 1fr;
+  }
+  @media (min-width: 640px) {
+    .dash-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .dash-trail__row { transition: none; }
+  }
+
+  .dash-card {
+    --type-color: var(--color-brand-400);
+    background: var(--color-surface-1);
+    border: 1px solid var(--color-border-subtle);
+    border-top: 3px solid var(--type-color);
+    border-radius: var(--radius-container);
+    padding: 1.375rem 1.5rem 1.25rem;
+    max-width: 40rem;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 1.125rem;
+    box-shadow: var(--shadow-2);
+  }
+  .dash-card[data-type="sonarr"]      { --type-color: var(--color-sonarr); }
+  .dash-card[data-type="radarr"]      { --type-color: var(--color-radarr); }
+  .dash-card[data-type="lidarr"]      { --type-color: var(--color-lidarr); }
+  .dash-card[data-type="readarr"]     { --type-color: var(--color-readarr); }
+  .dash-card[data-type="whisparr_v2"] { --type-color: var(--color-whisparr-v2); }
+  .dash-card[data-type="whisparr_v3"] { --type-color: var(--color-whisparr-v3); }
+
+  .dash-card[data-disabled="true"]               { --type-color: #64748b; }
+  .dash-card[data-disabled="true"] .dash-card__name    { color: var(--color-text-muted); }
+  .dash-card[data-disabled="true"] .dash-card__eyebrow { opacity: 0.6; }
+  .dash-card[data-disabled="true"] .dash-policy        { opacity: 0.55; }
+
+  .dash-card__head {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 0.625rem;
+    align-items: start;
+  }
+  .dash-card__eyebrow {
+    font-family: var(--font-mono);
+    font-size: 0.625rem;
+    letter-spacing: 0.24em;
+    text-transform: uppercase;
+    color: var(--type-color);
+    font-weight: 600;
+    margin: 0;
+  }
+  .dash-card__name {
+    font-family: var(--font-sans);
+    font-size: 1.375rem;
+    font-weight: 600;
+    color: var(--color-text-inverse);
+    margin: 0.25rem 0 0;
+    letter-spacing: -0.02em;
+    line-height: 1.15;
+  }
+
+  .dash-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    font-size: 0.6875rem;
+    font-weight: 500;
+    padding: 3px 0.625rem;
+    border-radius: var(--radius-full);
+    font-family: var(--font-sans);
+    white-space: nowrap;
+    align-self: start;
+    margin-top: 2px;
+    text-decoration: none;
+  }
+  .dash-pill--active {
+    background: rgba(22, 101, 52, 0.28);
+    border: 1px solid rgba(74, 222, 128, 0.28);
+    color: var(--color-success-text);
+  }
+  .dash-pill--error {
+    background: rgba(153, 27, 27, 0.25);
+    border: 1px solid rgba(248, 113, 113, 0.42);
+    color: var(--color-danger-text);
+    cursor: pointer;
+  }
+  .dash-pill--error:hover { background: rgba(153, 27, 27, 0.40); }
+  .dash-pill--error svg { width: 0.75rem; height: 0.75rem; flex-shrink: 0; }
+  .dash-pill--disabled {
+    background: var(--color-surface-2);
+    border: 1px solid var(--color-border-default);
+    color: var(--color-text-muted);
+  }
+  .dash-card__stats {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.625rem;
+  }
+  .dash-card__stats > div {
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.375rem;
+    padding: 0.25rem 0;
+    position: relative;
+  }
+  .dash-card__stats > div + div::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 20%;
+    bottom: 20%;
+    width: 1px;
+    background: var(--color-border-subtle);
+  }
+  .dash-card__stat-label {
+    font-family: var(--font-mono);
+    font-size: 0.625rem;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--color-text-muted);
+    font-weight: 600;
+    margin: 0;
+  }
+  .dash-card__stat-value {
+    font-family: var(--font-mono);
+    font-size: 1.625rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    color: var(--color-text-inverse);
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+    margin: 0;
+  }
+  .dash-card__stat-value--eligible { color: var(--seg-eligible); }
+  .dash-card__stat-value--searched { color: var(--color-brand-300); }
+  .dash-card__stat-value--muted    { color: var(--color-text-muted); }
+
+  .dash-unlocks {
+    background: #0b0e14;
+    border: 1px solid var(--color-border-subtle);
+    border-radius: var(--radius-inset);
+    padding: 0.875rem 1rem;
+    /* Absorb the card's extra vertical space so disabled / short-list
+       cards align with taller siblings in the same grid row. The card
+       is flex-column; the grid stretches siblings to a shared height.
+       Without this the cooldown box hugs its natural height and the
+       footer drifts up, leaving the card feeling top-heavy. */
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+  }
+  .dash-unlocks__head {
+    font-family: var(--font-mono);
+    font-size: 0.5625rem;
+    letter-spacing: 0.24em;
+    text-transform: uppercase;
+    color: var(--color-text-muted);
+    font-weight: 600;
+    margin: 0 0 0.625rem;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem 0.625rem;
+  }
+  .dash-unlocks__head .tally {
+    color: var(--color-text-muted);
+    font-weight: 500;
+    margin-left: auto;
+    text-align: right;
+  }
+  .dash-unlocks__list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    /* Centre a short list vertically in the expanded cooldown box so
+       a 1- or 2-item card doesn't cluster at the top like the empty
+       state used to. 3+ items fill naturally (auto margins collapse
+       to 0 when there's no slack). */
+    margin: auto 0;
+  }
+  .dash-unlocks__row {
+    display: grid;
+    /* Three columns: icon | title (expands, ellipsizes) | unlock time.
+       Matches the recent-hunts fix so the kind icon sits adjacent to
+       the title on every card, not stranded in an empty-column 1fr. */
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    gap: 0.625rem;
+    align-items: center;
+    font-size: 0.8125rem;
+    color: var(--color-text-emphasis);
+  }
+  .dash-unlocks__title {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .dash-unlocks__time {
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    color: var(--type-color);
+    font-weight: 500;
+    white-space: nowrap;
+  }
+  .dash-unlocks--empty {
+    font-size: 0.75rem;
+    color: var(--color-text-muted);
+    font-style: italic;
+    text-align: center;
+    padding: 1.125rem 0.5rem;
+    /* Same auto-margin trick as __list: centres the empty message
+       vertically in the expanded cooldown box so a disabled or
+       all-caught-up card stays visually balanced with sibling cards. */
+    margin: auto 0;
+  }
+
+  .dash-policy {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem 0.3125rem;
+    font-family: var(--font-mono);
+    margin: 0;
+    padding: 0;
+  }
+  .dash-policy__chip {
+    display: inline-flex;
+    /* Align label + value on their shared text baseline. With
+       align-items: center the bounding boxes are centered but the
+       different font sizes leave visible ~1px baseline offset. */
+    align-items: baseline;
+    gap: 0.3125rem;
+    padding: 0.25rem 0.5rem 3px;
+    background: rgba(11, 14, 20, 0.8);
+    border: 1px solid var(--color-border-subtle);
+    border-radius: var(--radius-chip);
+    transition: border-color var(--dur-base) var(--ease-station);
+  }
+  .dash-policy__chip:hover { border-color: var(--color-border-default); }
+  .dash-policy__label {
+    font-size: 0.5625rem;
+    color: var(--color-text-muted);
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    font-weight: 500;
+    line-height: 1;
+  }
+  .dash-policy__value {
+    font-size: 0.71875rem;
+    color: var(--color-text-emphasis);
+    font-weight: 500;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+  }
+  .dash-policy__value[data-state="on"]  { color: var(--seg-eligible); }
+  .dash-policy__value[data-state="off"] { color: var(--color-text-muted); }
+
+  .dash-card__foot {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.875rem;
+    padding-top: 0.875rem;
+    border-top: 1px solid var(--color-border-subtle);
+    font-family: var(--font-mono);
+    font-size: 0.6875rem;
+    color: var(--color-text-muted);
+    flex-wrap: wrap;
+  }
+  .dash-card__foot-text { line-height: 1.4; }
+  .dash-card__foot-text .sep { color: #334155; margin: 0 0.3125rem; }
+
+  .dash-run-now {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    /* Fixed min-width so label swaps (Run now → Running… → Queued → Failed)
+       don't reflow the button dimensions mid-interaction. Sized for the
+       widest label ("Running…") plus icon + gap + 2× padding at the
+       font-size / letter-spacing / font-mono metrics below. */
+    min-width: 7rem;
+    gap: 0.375rem;
+    padding: 0.375rem 0.75rem;
+    /* Pin to the right edge of whichever flex line this ends up on: when
+       the footer wraps at narrow viewports the button becomes the only
+       item on its own line, and space-between alone would left-align it. */
+    margin-left: auto;
+    border: 1px solid color-mix(in srgb, var(--type-color) 50%, transparent);
+    color: var(--type-color);
+    background: transparent;
+    border-radius: var(--radius-inset);
+    font-family: var(--font-mono);
+    font-size: 0.6875rem;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    cursor: pointer;
+    transition:
+      background var(--dur-base) var(--ease-station),
+      border-color var(--dur-base) var(--ease-station),
+      transform var(--dur-base) var(--ease-station);
+  }
+  .dash-run-now:hover {
+    background: color-mix(in srgb, var(--type-color) 14%, transparent);
+    border-color: var(--type-color);
+  }
+  .dash-run-now:active { transform: translateY(1px); }
+  .dash-run-now:disabled { opacity: 0.4; cursor: not-allowed; }
+  .dash-run-now svg { width: 0.875rem; height: 0.875rem; flex-shrink: 0; }
+
+  /* Run-now state machine overrides (reuse existing data-run-now-btn hook). */
+  .dash-run-now.is-running {
+    background: color-mix(in srgb, var(--type-color) 18%, transparent);
+    border-color: var(--type-color);
+  }
+  .dash-run-now.is-success {
+    background: color-mix(in srgb, var(--seg-eligible) 22%, transparent);
+    border-color: var(--seg-eligible);
+    color: var(--seg-eligible);
+  }
+  .dash-run-now.is-error {
+    background: color-mix(in srgb, var(--color-danger) 22%, transparent);
+    border-color: var(--color-danger);
+    color: var(--color-danger);
+    animation: run-now-shake 280ms var(--ease-station);
+  }
+
+  /* Empty-dashboard panel (State C in the preview). */
+  .dash-empty-state {
+    background: var(--color-surface-1);
+    border: 1px solid var(--color-border-subtle);
+    border-radius: var(--radius-container);
+    padding: 3.5rem 1.5rem;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.875rem;
+  }
+  .dash-empty-state__icon {
+    width: 2.75rem;
+    height: 2.75rem;
+    border-radius: 50%;
+    border: 1px dashed var(--color-border-default);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 0.25rem;
+  }
+  .dash-empty-state__icon::before {
+    content: "";
+    width: 0.75rem;
+    height: 0.75rem;
+    border: 1px solid var(--color-state-disabled);
+    border-radius: 50%;
+  }
+  .dash-empty-state__title {
+    font-size: 1.125rem;
+    font-weight: 600;
+    color: var(--color-text-emphasis);
+    margin: 0;
+    letter-spacing: -0.01em;
+  }
+  .dash-empty-state__body {
+    font-size: 0.84375rem;
+    color: var(--color-text-muted);
+    margin: 0;
+    max-width: 27.5rem;
+    line-height: 1.55;
+  }
+  .dash-empty-state__cta {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    margin-top: 0.625rem;
+    padding: 0.625rem 1.25rem;
+    background: var(--color-brand-600);
+    color: var(--color-text-inverse);
+    border: 1px solid var(--color-brand-500);
+    border-radius: var(--radius-inset);
+    font-size: 0.8125rem;
+    font-weight: 500;
+    text-decoration: none;
+    transition: background var(--dur-base) var(--ease-station);
+  }
+  .dash-empty-state__cta:hover { background: var(--color-brand-500); }
+
+  @media (max-width: 640px) {
+    .dash-card { padding: 1.125rem 1.125rem 1rem; }
+    .dash-card__name { font-size: 1.1875rem; }
+    .dash-card__stat-value { font-size: 1.375rem; }
+    .dash-card__foot { font-size: 0.65625rem; }
   }
 </style>
 
-<div class="flex items-center justify-between mb-6">
-  <h1 class="text-xl font-bold text-white tracking-tight">Dashboard</h1>
-  <a
-    href="/settings"
-    hx-get="/settings"
-    hx-target="#app-content"
+<main class="dash-main">
+  <!-- Top section populated on each poll: subheader, alert, library-health,
+       recent hunts, section heading. -->
+  <section id="dash-top" aria-live="polite"></section>
+
+  <!-- Instance grid: hydrated on first paint from the inline JSON blob
+       below so the shell animation ships with content already in place
+       (matching how logs and settings render).  HTMX polls every 30 s
+       for subsequent updates; the beforeSwap listener parses those
+       responses and rewrites the grid + top section. -->
+  <div
+    id="instance-grid"
+    hx-get="/api/status"
+    hx-trigger="every 30s"
     hx-swap="innerHTML"
-    hx-push-url="true"
-    class="text-sm text-brand-400 hover:text-brand-300 transition-colors font-medium"
-  >+ Add Instance</a>
-</div>
+    hx-target="#instance-grid"
+  ></div>
+</main>
 
-<!-- Instance grid: polled every 15 s via HTMX -->
-<div
-  id="instance-grid"
-  data-hydrated="false"
-  hx-get="/api/status"
-  hx-trigger="load, every 30s"
-  hx-swap="innerHTML"
-  hx-target="#instance-grid"
-></div>
-
-<script>
-  (function () {
-    window.__houndarrDashboardPageController?.abort();
-    const controller = new AbortController();
-    window.__houndarrDashboardPageController = controller;
-    const { signal } = controller;
-
-    const RUN_NOW_MIN_RUNNING_MS  = 700;
-    const RUN_NOW_SUCCESS_HOLD_MS = 900;
-    const RUN_NOW_ERROR_HOLD_MS   = 1100;
-    const previousMetrics = new Map();
-    let gridInitialHydration = false;
-
-    function toNumber(value) {
-      const parsed = Number(value);
-      return Number.isFinite(parsed) ? parsed : 0;
-    }
-
-    function setRunNowButtonState(button, state) {
-      const label = button.querySelector('[data-run-now-label]');
-      const icon  = button.querySelector('[data-run-now-icon]');
-
-      button.classList.remove('is-running', 'is-success', 'is-error');
-      if (icon) icon.classList.remove('animate-spin');
-
-      if (state === 'running') {
-        button.classList.add('is-running');
-        button.disabled = true;
-        button.setAttribute('aria-busy', 'true');
-        if (label) label.textContent = 'Running…';
-        if (icon)  icon.classList.add('animate-spin');
-        return;
-      }
-
-      button.disabled = false;
-      button.setAttribute('aria-busy', 'false');
-
-      if (state === 'success') {
-        button.classList.add('is-success');
-        if (label) label.textContent = 'Queued';
-        return;
-      }
-      if (state === 'error') {
-        button.classList.add('is-error');
-        if (label) label.textContent = 'Failed';
-        return;
-      }
-      if (label) label.textContent = 'Run now';
-    }
-
-    function completeRunNowRequest(button, statusCode) {
-      const startedAt  = Number(button.dataset.runNowStartedAt || 0);
-      const elapsed    = Math.max(0, Date.now() - startedAt);
-      const waitForMin = Math.max(0, RUN_NOW_MIN_RUNNING_MS - elapsed);
-      const outcome    = statusCode >= 200 && statusCode < 300 ? 'success' : 'error';
-      const holdMs     = outcome === 'success' ? RUN_NOW_SUCCESS_HOLD_MS : RUN_NOW_ERROR_HOLD_MS;
-
-      window.setTimeout(function () {
-        if (!document.body.contains(button)) return;
-        setRunNowButtonState(button, outcome);
-        window.setTimeout(function () {
-          if (!document.body.contains(button)) return;
-          setRunNowButtonState(button, 'idle');
-        }, holdMs);
-      }, waitForMin);
-    }
-
-    // Type → color map (Station palette, unified saturation)
-    const TYPE_COLOR_MAP = {
-      sonarr:   '#7dd3fc',
-      radarr:   '#fcd34d',
-      lidarr:   '#6ee7b7',
-      readarr:  '#fca5a5',
-      whisparr_v2: '#f9a8d4',
-      whisparr_v3: '#e879f9',
-    };
-
-    document.body.addEventListener(
-      'htmx:beforeSwap',
-      function (evt) {
-        if (evt.detail.target.id !== 'instance-grid') return;
-
-        let data;
-        try { data = JSON.parse(evt.detail.serverResponse); } catch { return; }
-        if (!Array.isArray(data)) return;
-
-        // ── Empty state ────────────────────────────────────────────────
-        if (data.length === 0) {
-          evt.detail.serverResponse = `
-<div class="text-center py-20 text-slate-500">
-  <svg class="w-14 h-14 mx-auto mb-5 opacity-20" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
-      d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-  </svg>
-  <p class="text-base font-semibold text-slate-400 tracking-tight">No instances configured yet</p>
-  <p class="mt-2 text-sm text-slate-500">
-    <a href="/settings" hx-get="/settings" hx-target="#app-content" hx-swap="innerHTML"
-       hx-push-url="true" class="text-brand-400 hover:text-brand-300 underline underline-offset-2">Add an instance</a>
-    in Settings to get started.
-  </p>
-</div>`;
-          return;
-        }
-
-        const isInitialHydration = evt.detail.target.dataset.hydrated !== 'true';
-        gridInitialHydration = isInitialHydration;
-
-        // ── Summary strip totals ───────────────────────────────────────
-        const totals24h = data.reduce(
-          function (acc, inst) {
-            acc.searched += toNumber(inst.searched_24h);
-            acc.skipped  += toNumber(inst.skipped_24h);
-            acc.errors   += toNumber(inst.errors_24h);
-            return acc;
-          },
-          { searched: 0, skipped: 0, errors: 0 },
-        );
-
-        const summaryStripMarkup = `
-<section class="mb-6 grid grid-cols-3 gap-3" aria-label="Search activity (24h)">
-  <div class="rounded-xl border border-[#1e2638] border-t-2 border-t-emerald-500/70 bg-[#0e1117] px-4 py-4 text-center" style="box-shadow:var(--shadow-1);">
-    <p class="text-[10px] leading-4 uppercase tracking-widest font-sans text-emerald-400/75">Searched</p>
-    <p class="mt-2 text-2xl font-bold tabular-nums font-mono text-emerald-200">${totals24h.searched}</p>
-  </div>
-  <div class="rounded-xl border border-[#1e2638] border-t-2 border-t-amber-500/60 bg-[#0e1117] px-4 py-4 text-center" style="box-shadow:var(--shadow-1);">
-    <p class="text-[10px] leading-4 uppercase tracking-widest font-sans text-amber-400/75">Skipped</p>
-    <p class="mt-2 text-2xl font-bold tabular-nums font-mono text-amber-200">${totals24h.skipped}</p>
-  </div>
-  <div class="rounded-xl border border-[#1e2638] border-t-2 border-t-rose-500/60 bg-[#0e1117] px-4 py-4 text-center" style="box-shadow:var(--shadow-1);">
-    <p class="text-[10px] leading-4 uppercase tracking-widest font-sans text-rose-400/75">Errors</p>
-    <p class="mt-2 text-2xl font-bold tabular-nums font-mono text-rose-200">${totals24h.errors}</p>
-  </div>
-</section>`;
-
-        // ── Instance cards ─────────────────────────────────────────────
-        const cards = data
-          .map((inst, index) => {
-            const previous         = previousMetrics.get(inst.id);
-            const lastHourChanged  = previous && previous.searches_last_hour !== inst.searches_last_hour;
-            const todayChanged     = previous && previous.searches_today     !== inst.searches_today;
-            const totalChanged     = previous && previous.items_found_total  !== inst.items_found_total;
-            const searched24hChanged = previous && previous.searched_24h !== toNumber(inst.searched_24h);
-            const skipped24hChanged  = previous && previous.skipped_24h  !== toNumber(inst.skipped_24h);
-            const errors24hChanged   = previous && previous.errors_24h   !== toNumber(inst.errors_24h);
-
-            // Status badge: pulsing dot for active
-            const badge = inst.enabled
-              ? `<span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-950/50 text-emerald-300 border border-emerald-800/40">
-                   <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block station-pulse-dot"></span> Active
-                 </span>`
-              : `<span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium bg-[#151b27] text-slate-500 border border-[#2a3448]">
-                   <span class="w-1.5 h-1.5 rounded-full bg-slate-600 inline-block"></span> Disabled
-                 </span>`;
-
-            // Type badge
-            const typeBadgeMap = {
-              sonarr:   `<span class="text-xs font-mono bg-sky-950/60 text-sky-300 px-2 py-0.5 rounded border border-sky-900/50">Sonarr</span>`,
-              radarr:   `<span class="text-xs font-mono bg-amber-950/60 text-amber-300 px-2 py-0.5 rounded border border-amber-900/50">Radarr</span>`,
-              lidarr:   `<span class="text-xs font-mono bg-emerald-950/60 text-emerald-300 px-2 py-0.5 rounded border border-emerald-900/50">Lidarr</span>`,
-              readarr:  `<span class="text-xs font-mono bg-rose-950/60 text-rose-300 px-2 py-0.5 rounded border border-rose-900/50">Readarr</span>`,
-              whisparr_v2: `<span class="text-xs font-mono bg-pink-950/60 text-pink-300 px-2 py-0.5 rounded border border-pink-900/50">Whisparr v2</span>`,
-              whisparr_v3: `<span class="text-xs font-mono bg-fuchsia-950/60 text-fuchsia-300 px-2 py-0.5 rounded border border-fuchsia-900/50">Whisparr v3</span>`,
-            };
-            const typeBadge = typeBadgeMap[inst.type] || typeBadgeMap.sonarr;
-
-            // Left border color: signature Station type indicator
-            const typeColor = TYPE_COLOR_MAP[inst.type] || TYPE_COLOR_MAP.sonarr;
-
-            const lastSearch   = inst.last_search_at ? formatLocalTimestamp(inst.last_search_at) : 'Never';
-
-            const activityLabelMap = { searched: 'Searched', skipped: 'Skipped', error: 'Error' };
-            const lastActivity = inst.last_activity_at
-              ? `${activityLabelMap[inst.last_activity_action] || 'Activity'} at ${formatLocalTimestamp(inst.last_activity_at)}`
-              : 'No activity in recent history';
-
-            const queueLimit = toNumber(inst.queue_limit);
-            const policyChips = [
-              `Every ${toNumber(inst.sleep_interval_mins)}m`,
-              `Batch ${toNumber(inst.batch_size)}`,
-              `Cap/h ${toNumber(inst.hourly_cap)}`,
-              `Cooldown ${toNumber(inst.cooldown_days)}d`,
-              `Grace ${toNumber(inst.post_release_grace_hrs)}h`,
-              queueLimit > 0 ? `Queue ≤${queueLimit}` : null,
-              inst.cutoff_enabled ? `Cutoff (${toNumber(inst.cutoff_batch_size)})` : 'No cutoff',
-            ].filter(Boolean)
-              .map(function (label) {
-                return `<span class="rounded border border-[#2a3448] bg-[#151b27] px-2 py-0.5 text-[10px] font-mono text-slate-400">${label}</span>`;
-              })
-              .join('');
-
-            previousMetrics.set(inst.id, {
-              searches_last_hour: inst.searches_last_hour,
-              searches_today:     inst.searches_today,
-              items_found_total:  inst.items_found_total,
-              searched_24h: toNumber(inst.searched_24h),
-              skipped_24h:  toNumber(inst.skipped_24h),
-              errors_24h:   toNumber(inst.errors_24h),
-            });
-
-            return `
-<div class="instance-card bg-[#0e1117] border border-[#1e2638] rounded-xl p-5 flex flex-col gap-4"
-     style="border-left:3px solid ${typeColor}; box-shadow:var(--shadow-2);">
-
-  <!-- Header: name + type, status badge, run-now -->
-  <div class="flex items-start justify-between gap-3">
-    <div>
-      <div class="flex items-center gap-2 flex-wrap">
-        <h2 class="text-base font-semibold text-white tracking-tight">${escHtml(inst.name)}</h2>
-        ${typeBadge}
-      </div>
-      <div class="mt-1.5">${badge}</div>
-    </div>
-    <button
-      hx-post="/api/instances/${inst.id}/run-now"
-      hx-swap="none"
-      data-run-now-btn="true"
-      data-instance-id="${inst.id}"
-      title="Trigger search now"
-      class="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium
-             bg-brand-600 hover:bg-brand-500 text-white transition-colors disabled:opacity-50">
-      <svg data-run-now-icon class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-          d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/>
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-          d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
-      </svg>
-      <span data-run-now-label>Run now</span>
-    </button>
-  </div>
-
-  <!-- Search count grid -->
-  <dl class="grid grid-cols-3 gap-2 text-center">
-    <div class="bg-[#151b27] border border-[#1e2638] rounded-lg px-3 py-2 ${lastHourChanged ? 'metric-changed' : ''}">
-      <dt class="text-[10px] text-slate-500 uppercase tracking-widest font-sans">Last hour</dt>
-      <dd class="text-lg font-bold tabular-nums font-mono text-white mt-1">${inst.searches_last_hour}</dd>
-    </div>
-    <div class="bg-[#151b27] border border-[#1e2638] rounded-lg px-3 py-2 ${todayChanged ? 'metric-changed' : ''}">
-      <dt class="text-[10px] text-slate-500 uppercase tracking-widest font-sans">Today</dt>
-      <dd class="text-lg font-bold tabular-nums font-mono text-white mt-1">${inst.searches_today}</dd>
-    </div>
-    <div class="bg-[#151b27] border border-[#1e2638] rounded-lg px-3 py-2 ${totalChanged ? 'metric-changed' : ''}">
-      <dt class="text-[10px] text-slate-500 uppercase tracking-widest font-sans">Total</dt>
-      <dd class="text-lg font-bold tabular-nums font-mono text-white mt-1">${inst.items_found_total}</dd>
-    </div>
-  </dl>
-
-  <!-- 24h status grid -->
-  <dl class="grid grid-cols-3 gap-2 text-center">
-    <div class="bg-emerald-950/30 rounded-lg px-3 py-2 border border-emerald-900/35 ${searched24hChanged ? 'metric-changed' : ''}">
-      <dt class="text-[10px] text-emerald-400/75 uppercase tracking-widest font-sans">24h searched</dt>
-      <dd class="text-lg font-bold tabular-nums font-mono text-emerald-200 mt-1">${toNumber(inst.searched_24h)}</dd>
-    </div>
-    <div class="bg-amber-950/25 rounded-lg px-3 py-2 border border-amber-900/35 ${skipped24hChanged ? 'metric-changed' : ''}">
-      <dt class="text-[10px] text-amber-400/75 uppercase tracking-widest font-sans">24h skipped</dt>
-      <dd class="text-lg font-bold tabular-nums font-mono text-amber-200 mt-1">${toNumber(inst.skipped_24h)}</dd>
-    </div>
-    <div class="bg-rose-950/25 rounded-lg px-3 py-2 border border-rose-900/35 ${errors24hChanged ? 'metric-changed' : ''}">
-      <dt class="text-[10px] text-rose-400/75 uppercase tracking-widest font-sans">24h errors</dt>
-      <dd class="text-lg font-bold tabular-nums font-mono text-rose-200 mt-1">${toNumber(inst.errors_24h)}</dd>
-    </div>
-  </dl>
-
-  <!-- Activity timestamps -->
-  <div class="space-y-1 text-xs text-slate-500">
-    <p class="font-sans">Last activity: <span class="text-slate-300 font-mono">${lastActivity}</span></p>
-    <p class="font-sans">Last searched: <span class="text-slate-300 font-mono">${lastSearch}</span></p>
-  </div>
-
-  <!-- Policy chips -->
-  <div class="flex flex-wrap gap-1.5">
-    ${policyChips}
-  </div>
-</div>`;
-          })
-          .join('');
-
-        evt.detail.serverResponse = `${summaryStripMarkup}<div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">${cards}</div>`;
-        evt.detail.target.dataset.hydrated = 'true';
-      },
-      { signal },
-    );
-
-    function escHtml(s) {
-      return String(s)
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;');
-    }
-
-    const formatLocalTimestamp =
-      window.houndarrClientHelpers?.formatLocalTimestamp ||
-      function (isoTimestamp) {
-        const parsed = new Date(isoTimestamp);
-        if (Number.isNaN(parsed.getTime())) return isoTimestamp;
-        return new Intl.DateTimeFormat(undefined, {
-          year: 'numeric', month: '2-digit', day: '2-digit',
-          hour: '2-digit', minute: '2-digit', second: '2-digit',
-          hour12: false, timeZoneName: 'short',
-        }).format(parsed);
-      };
-
-    document.body.addEventListener(
-      'htmx:afterSwap',
-      function (evt) {
-        if (evt.detail.target.id !== 'instance-grid') return;
-        if (!gridInitialHydration) return;
-        gridInitialHydration = false;
-        const grid = evt.detail.target;
-        grid.classList.add('is-entering');
-        window.setTimeout(function () { grid.classList.remove('is-entering'); }, 200);
-      },
-      { signal },
-    );
-
-    document.body.addEventListener(
-      'htmx:beforeRequest',
-      function (evt) {
-        const triggerEl = evt.detail.elt;
-        if (!triggerEl || !triggerEl.matches('[data-run-now-btn="true"]')) return;
-        triggerEl.dataset.runNowStartedAt = String(Date.now());
-        setRunNowButtonState(triggerEl, 'running');
-      },
-      { signal },
-    );
-
-    document.body.addEventListener(
-      'htmx:afterRequest',
-      function (evt) {
-        const triggerEl = evt.detail.elt;
-        if (!triggerEl || !triggerEl.matches('[data-run-now-btn="true"]')) return;
-        const statusCode = evt.detail.xhr ? evt.detail.xhr.status : 0;
-        completeRunNowRequest(triggerEl, statusCode);
-      },
-      { signal },
-    );
-  })();
-</script>
+{# Inline /api/status envelope consumed by dashboard.js on init.  Using
+   <script type="application/json"> keeps the payload out of any HTML
+   parser path; `tojson` escapes `</script>` sequences.  Letting the
+   page ship with data avoids the ~100-200 ms HTMX round-trip gap that
+   used to make the dashboard entrance pop in a beat after the shell
+   animation had already settled. #}
+<script id="dash-initial-status" type="application/json">{{ initial_status_envelope | tojson }}</script>

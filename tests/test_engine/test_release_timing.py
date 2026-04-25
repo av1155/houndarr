@@ -12,6 +12,7 @@ from houndarr.engine.search_loop import (
     _is_release_timing_reason,
     run_instance_search,
 )
+from houndarr.services.cooldown import should_log_skip
 from houndarr.services.instances import InstanceType
 
 from .conftest import (
@@ -439,3 +440,45 @@ async def test_release_timing_retry_increments_count(
     count = await run_instance_search(inst, MASTER_KEY)
 
     assert count == 1
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_release_timing_retry_fires_when_sentinel_primed(
+    seeded_instances: None,
+) -> None:
+    """Skip-log sentinel must not suppress the release-timing retry.
+
+    Simulates a prior cycle that already logged a cooldown skip (the
+    sentinel holds an entry for ``(instance, item, missing, cooldown)``).
+    The retry path lives above the sentinel-gated skip-write and must
+    still dispatch and record a ``searched`` row.
+    """
+    await seed_release_timing_retry(
+        instance_id=1,
+        item_id=101,
+        item_type="episode",
+        reason="not yet released",
+    )
+
+    # Prime the sentinel as if a previous cycle already logged the skip.
+    primed = await should_log_skip((1, 101, "missing", "cooldown"))
+    assert primed is True
+    second = await should_log_skip((1, 101, "missing", "cooldown"))
+    assert second is False  # sanity: second call is suppressed
+
+    ep = {**_EPISODE_RECORD, "airDateUtc": "2023-09-01T00:00:00Z"}
+    respx.get(f"{SONARR_URL}/api/v3/wanted/missing").mock(
+        return_value=httpx.Response(200, json=_page([ep])),
+    )
+    respx.post(f"{SONARR_URL}/api/v3/command").mock(
+        return_value=httpx.Response(201, json=_COMMAND_RESP),
+    )
+
+    inst = _sonarr_instance(post_release_grace_hrs=0, batch_size=1)
+    count = await run_instance_search(inst, MASTER_KEY)
+
+    assert count == 1
+    rows = await get_log_rows()
+    searched = [r for r in rows if r["action"] == "searched" and r["item_id"] == 101]
+    assert len(searched) == 1

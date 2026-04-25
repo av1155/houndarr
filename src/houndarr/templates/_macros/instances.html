@@ -1,0 +1,154 @@
+{#-
+  Shared instance macros.
+
+  Two macros centralise the duplication that lived across
+  partials/instance_row.html and the top of
+  partials/instance_form.html.
+
+  instance_row:  the entire <tr> rendered for every instance in
+                 the settings table.  Composes the
+                 instance_type_badge and status_pill macros from
+                 _macros/badges.html for the visual surface and
+                 keeps the three action buttons (toggle / edit /
+                 delete) inline because each carries unique
+                 HTMX attributes that do not factor into a
+                 reusable button shape.
+
+  form_context:  the <form> opening / closing for the add-edit
+                 instance form.  Centralises the four derived
+                 strings (form_id, post_url, target, swap) the
+                 form sets at the top of instance_form.html so
+                 the consumer no longer maintains the if-edit
+                 ternary in four places.  The body of the form
+                 is rendered via the call block; the macro
+                 invokes `caller(form_id)` so the body can use
+                 the computed id without recomputing it.
+
+  HIGH RISK: every data-* attribute, HTMX swap target, hx-*
+  attribute, and rendered class string here is observed by the
+  render-pinning suite and the HX-header parity tests.  Changing
+  any one of them without updating the matching assertion fails
+  the pinning gate; a rename or a dropped class fails loudly.
+
+  Macro-internal whitespace is pinned byte-equal by
+  tests/test_templates/test_macros_instances.py.  The status pill
+  renders on a single line via badges.status_pill; browsers
+  collapse inter-tag whitespace between inline elements so the
+  rendered surface stays identical to any pre-existing
+  multi-line consumer spelling.
+-#}
+
+
+{#- instance_row: render one <tr> for an Instance facade.
+
+    Args:
+      instance:          the Instance facade (D.14 sub-struct
+                         shape).  Reads instance.core.id, .name,
+                         .url, .type.value, .enabled and
+                         instance.missing.batch_size,
+                         .sleep_interval_mins.
+      active_error_ids:  iterable of instance ids currently in an
+                         error state.  Pass an empty list (or
+                         None, treated as empty) if no instance
+                         is reporting errors.  An enabled
+                         instance whose id is in this set
+                         renders the "Error" pill; otherwise an
+                         enabled instance renders the "Active"
+                         pill and a disabled one renders the
+                         "Disabled" pill. -#}
+{%- macro instance_row(instance, active_error_ids) -%}
+{%- import "_macros/badges.html" as badges -%}
+{%- if instance.core.enabled and instance.core.id in (active_error_ids or []) -%}
+{%- set _state = "error" -%}
+{%- elif instance.core.enabled -%}
+{%- set _state = "active" -%}
+{%- else -%}
+{%- set _state = "disabled" -%}
+{%- endif -%}
+<tr id="instance-row-{{ instance.core.id }}"
+    class="border-b border-border-subtle hover:bg-surface-2 transition-colors duration-fast ease-station">
+  <td data-col="name" class="px-4 py-3 font-medium text-white font-sans">{{ instance.core.name }}</td>
+  <td data-col="type" class="px-4 py-3">
+    {{ badges.instance_type_badge(instance.core.type.value) }}
+  </td>
+  <td data-col="url" class="px-4 py-3 text-slate-400 text-sm truncate max-w-xs font-mono text-xs">{{ instance.core.url }}</td>
+  <td data-col="status" class="px-4 py-3 text-center">
+    {{ badges.status_pill(_state) }}
+  </td>
+  <td data-col="batch" class="px-4 py-3 text-sm text-slate-400 font-mono">
+    {{ instance.missing.batch_size }} / {{ instance.missing.sleep_interval_mins }}m
+  </td>
+  <td data-col="actions" class="px-4 py-3 text-right">
+    <div class="flex items-center justify-end gap-2">
+      <button
+        hx-post="/settings/instances/{{ instance.core.id }}/toggle-enabled"
+        hx-target="#instance-row-{{ instance.core.id }}"
+        hx-swap="outerHTML"
+        class="px-3 py-1 text-xs rounded-inset transition-colors duration-base ease-station min-w-[4.25rem] text-center {% if instance.core.enabled %}bg-warning-bg hover:bg-warning/20 text-warning border border-warning-border{% else %}bg-success-bg hover:bg-success/20 text-success border border-success-border{% endif %}">
+        {{ 'Disable' if instance.core.enabled else 'Enable' }}
+      </button>
+      <button
+        type="button"
+        data-open-add-instance-modal="true"
+        hx-get="/settings/instances/{{ instance.core.id }}/edit"
+        hx-target="#add-instance-modal-content"
+        hx-swap="innerHTML"
+        class="px-3 py-1 text-xs rounded-inset bg-surface-3 hover:bg-border-default text-slate-200 border border-border-default transition-colors duration-base ease-station">
+        Edit
+      </button>
+      <button
+        hx-delete="/settings/instances/{{ instance.core.id }}"
+        hx-target="#instance-row-{{ instance.core.id }}"
+        hx-swap="outerHTML"
+        hx-confirm="Delete '{{ instance.core.name }}'? This cannot be undone."
+        class="px-3 py-1 text-xs rounded-inset bg-danger-bg hover:bg-danger/20 text-danger border border-danger-border transition-colors duration-base ease-station">
+        Delete
+      </button>
+    </div>
+  </td>
+</tr>
+{%- endmacro %}
+
+
+{#- form_context: open / close the add-edit instance <form>.
+
+    Centralises the four derived strings (form_id, post_url,
+    target, swap) that the add-mode and edit-mode forms need.
+    The form body comes from the call block and is invoked with
+    `caller(form_id)` so the body can use the computed id
+    without recomputing it from is_edit + instance_id.
+
+    Args:
+      is_edit:        True for the edit-mode form, False for
+                      the add-mode form.  Drives every derived
+                      string below.
+      instance_id:    primary-key id of the instance being
+                      edited.  Required when is_edit is True;
+                      ignored when False.
+      instance_name:  display name of the instance being
+                      edited.  Renders into data-instance-name
+                      so the JS confirm-delete dialog can label
+                      the modal with the right name.  Pass ""
+                      (the default) when adding a new instance. -#}
+{%- macro form_context(is_edit, instance_id=none, instance_name="") -%}
+{%- if is_edit -%}
+{%- set form_id = "edit-form-" ~ instance_id -%}
+{%- set post_url = "/settings/instances/" ~ instance_id -%}
+{%- set target = "#instance-row-" ~ instance_id -%}
+{%- set swap = "outerHTML" -%}
+{%- else -%}
+{%- set form_id = "add-instance-form" -%}
+{%- set post_url = "/settings/instances" -%}
+{%- set target = "#instance-tbody" -%}
+{%- set swap = "innerHTML" -%}
+{%- endif -%}
+<form id="{{ form_id }}"
+      data-form-mode="{{ 'edit' if is_edit else 'add' }}"
+      data-instance-name="{{ instance_name }}"
+      hx-post="{{ post_url }}"
+      hx-target="{{ target }}"
+      hx-swap="{{ swap }}"
+      class="space-y-4">
+{{ caller(form_id) }}
+</form>
+{%- endmacro %}

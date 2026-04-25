@@ -1,0 +1,58 @@
+{#-
+  Shared layout macros.
+
+  admin_section centralises the section + heading wrapper that
+  every Admin sub-section partial repeats verbatim:
+
+      <section id="admin-X" class="space-y-3">
+        <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+          <h3 class="text-base font-semibold {color}">Title</h3>
+        </div>
+        ...body...
+      </section>
+
+  Three of the four sub-sections (security, updates, maintenance)
+  use the slate-200 heading colour; the fourth (danger zone) uses
+  text-danger/90 to flag the destructive surface.  The macro
+  exposes that as a `title_color` parameter defaulting to
+  text-slate-200; the danger consumer overrides it.
+
+  The macro takes the FULL id (e.g. "admin-security") rather than
+  just the suffix so the consumer markup reads as the rendered
+  selector and the route handlers' hx-target attributes line up
+  one-for-one with what the partial declares.
+
+  The body of each section comes from the call block; the macro
+  only owns the section + heading wrapper, not the inner card or
+  any of the per-section content.
+
+  Macro-internal whitespace is pinned byte-equal by
+  tests/test_templates/test_macros_layout.py: the section opening
+  tag, the header div, and the heading each sit on their own line;
+  the call-block body drops in unindented after the header div;
+  the closing tags follow on their own lines.  Structural parity
+  (section id, header class string, h3 colour) is also enforced
+  there; update the macro and the test together.
+-#}
+
+
+{#- admin_section: section + header wrapper for an Admin sub-section.
+
+    Args:
+      id:           full element id, including the "admin-"
+                    prefix (e.g. "admin-security").  Used by the
+                    HTMX swap targets that point at this section.
+      title:        text rendered inside the <h3>.
+      title_color:  Tailwind colour class for the heading.
+                    Defaults to "text-slate-200" which matches
+                    the security, updates, and maintenance
+                    sub-sections; the danger sub-section
+                    overrides with "text-danger/90". -#}
+{%- macro admin_section(id, title, title_color="text-slate-200") -%}
+<section id="{{ id }}" class="space-y-3">
+  <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+    <h3 class="text-base font-semibold {{ title_color }}">{{ title }}</h3>
+  </div>
+{{ caller() }}
+</section>
+{%- endmacro %}

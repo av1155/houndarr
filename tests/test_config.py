@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+from collections.abc import Generator
+
 import pytest
 
-from houndarr.config import AppSettings
+from houndarr.config import AppSettings, bootstrap_settings, get_settings
 
 # ---------------------------------------------------------------------------
 # validate_auth_config - builtin mode (default, always valid)
@@ -161,3 +163,89 @@ def test_validate_invalid_auth_mode() -> None:
     assert len(errors) == 1
     assert "builtin" in errors[0]
     assert "proxy" in errors[0]
+
+
+# ---------------------------------------------------------------------------
+# bootstrap_settings: override precedence + singleton lifecycle
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture()
+def _isolate_pin() -> Generator[None, None, None]:
+    """Clear the runtime-settings pin before and after each test in this section.
+
+    bootstrap_settings pins a module-level singleton; without isolation
+    these tests would leak state into each other (and into unrelated
+    tests sharing the worker process under pytest-xdist).
+    """
+    bootstrap_settings()
+    yield
+    bootstrap_settings()
+
+
+def test_bootstrap_settings_with_overrides_pins_into_get_settings(
+    _isolate_pin: None,
+) -> None:
+    """An override survives via get_settings until the next bootstrap_settings call."""
+    bootstrap_settings(data_dir="/tmp/test", port=9000)
+    assert get_settings().port == 9000
+
+
+def test_bootstrap_settings_override_wins_over_env_var(
+    _isolate_pin: None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Explicit overrides take precedence over HOUNDARR_* env vars."""
+    monkeypatch.setenv("HOUNDARR_PORT", "8000")
+    bootstrap_settings(data_dir="/tmp/test", port=9000)
+    assert get_settings().port == 9000
+
+
+def test_bootstrap_settings_unsupplied_keys_take_dataclass_defaults(
+    _isolate_pin: None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Unsupplied override keys take the dataclass default, not the env var.
+
+    The override path builds :class:`AppSettings` from overrides
+    alone; env vars are only consulted on the no-override fallback
+    through :func:`get_settings`.
+    """
+    monkeypatch.setenv("HOUNDARR_PORT", "7777")
+    bootstrap_settings(data_dir="/tmp/test")
+    assert get_settings().port == 8877
+
+
+def test_bootstrap_settings_no_overrides_clears_prior_pin(_isolate_pin: None) -> None:
+    """Calling bootstrap_settings() with no kwargs drops the pinned override."""
+    bootstrap_settings(data_dir="/tmp/test", port=9000)
+    bootstrap_settings()
+    # Singleton is unpinned; get_settings re-resolves from env / defaults.
+    assert get_settings().port == 8877
+
+
+def test_bootstrap_settings_no_overrides_returns_env_resolved(
+    _isolate_pin: None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The no-overrides return value reflects current env vars."""
+    monkeypatch.setenv("HOUNDARR_PORT", "7777")
+    settings = bootstrap_settings()
+    assert settings.port == 7777
+
+
+def test_bootstrap_settings_back_to_back_overrides_replace(_isolate_pin: None) -> None:
+    """Each call replaces the prior pin; earlier overrides do not bleed through."""
+    bootstrap_settings(data_dir="/tmp/a", port=9000)
+    bootstrap_settings(data_dir="/tmp/b", host="127.0.0.1")
+    pinned = get_settings()
+    assert pinned.data_dir == "/tmp/b"
+    assert pinned.host == "127.0.0.1"
+    # port from the first call must not survive into the second pin.
+    assert pinned.port == 8877
+
+
+def test_bootstrap_settings_returns_pinned_instance(_isolate_pin: None) -> None:
+    """The returned AppSettings is the same object get_settings hands back."""
+    pinned = bootstrap_settings(data_dir="/tmp/test", port=9000)
+    assert get_settings() is pinned

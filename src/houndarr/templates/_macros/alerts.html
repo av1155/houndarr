@@ -1,0 +1,60 @@
+{#-
+  Shared alert macro.
+
+  Houndarr renders six daisyUI-style soft alerts across the app:
+  two flash toasts in base.html and four inline form-error /
+  account-status banners in partials/instance_form.html,
+  partials/admin/security.html (x2), and
+  partials/pages/settings_content.html.  Every site composes
+  `alert alert-soft alert-{variant}` from the input.css component
+  layer with a small palette of layout and typography helpers
+  around it: an mb-* or grid-span PREFIX before the alert classes
+  and a text-sm / font-sans / text-slate-100 EXTRA after them.
+
+  This macro keeps the variant + class string byte-equal at every
+  call site by exposing both seams.  `prefix` is the leading
+  layout helper (defaults to none); `extra` is the trailing
+  typography helper (defaults to text-sm because every consumer
+  uses it).  `id` and `role` are also opt-in: only the two
+  base.html flash toasts set both, so the inline banners stay
+  attribute-free.
+
+  Auth-card alerts (login.html, setup.html) use the bespoke
+  .auth-alert class from auth.css and are intentionally NOT
+  rerouted through this macro; the auth surface is off-limits to
+  structural changes.
+
+  Macro-internal whitespace is pinned byte-equal by
+  tests/test_templates/test_macros_alerts.py: the opening tag stays
+  on one line; the call-block body sits indented two spaces; the
+  closing tag follows on its own line.  Structural parity against
+  consumer renders is enforced by the substring assertions in
+  test_pinned_render.py; update macro, pin, and render tests
+  together.
+-#}
+
+
+{#- alert: a daisyUI-style soft banner.
+
+    Args:
+      variant:  one of "error" / "success" / "warning" / "info";
+                appended to the daisyUI `alert-` prefix.  All four
+                variants are styled by input.css :: .alert-soft.
+      prefix:   optional class string emitted BEFORE the alert
+                classes.  Used for layout helpers like "mb-3",
+                "mb-4", or "min-[971px]:col-span-3".
+      extra:    class string emitted AFTER the alert classes.
+                Defaults to "text-sm" because every existing
+                consumer uses it.  Override to add font-sans or
+                text-slate-100; pass "" to omit entirely.
+      id:       optional id attribute for the wrapping <div>.
+                Used by the two base.html flash toasts so the
+                JS auto-dismiss IIFE can target them.
+      role:     optional role attribute.  Both flash toasts in
+                base.html set role="alert"; the inline banners
+                inherit the visible-text role and omit it. -#}
+{%- macro alert(variant, prefix="", extra="text-sm", id=none, role=none) -%}
+<div{% if id %} id="{{ id }}"{% endif %} class="{% if prefix %}{{ prefix }} {% endif %}alert alert-soft alert-{{ variant }}{% if extra %} {{ extra }}{% endif %}"{% if role %} role="{{ role }}"{% endif %}>
+  {{ caller() }}
+</div>
+{%- endmacro %}

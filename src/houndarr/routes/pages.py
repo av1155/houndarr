@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Form, Request
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
-from fastapi.templating import Jinja2Templates
 
 from houndarr import __version__
 from houndarr.auth import (
@@ -20,27 +21,13 @@ from houndarr.auth import (
     set_username,
     validate_username,
 )
-from houndarr.database import set_setting
+from houndarr.deps import get_master_key
+from houndarr.repositories.settings import set_setting
+from houndarr.routes._htmx import is_hx_request
+from houndarr.routes._templates import get_templates
 from houndarr.services.instances import list_instances
 
 router = APIRouter()
-
-# Templates are resolved relative to this file at runtime
-_templates: Jinja2Templates | None = None
-
-
-def _is_hx_request(request: Request) -> bool:
-    """Return True when request is an HTMX request."""
-    return request.headers.get("HX-Request") == "true"
-
-
-def get_templates() -> Jinja2Templates:
-    global _templates  # noqa: PLW0603
-    if _templates is None:
-        from pathlib import Path
-
-        _templates = Jinja2Templates(directory=str(Path(__file__).parent.parent / "templates"))
-    return _templates
 
 
 def _render(
@@ -190,11 +177,39 @@ async def logout(request: Request) -> RedirectResponse:
 
 @router.get("/", response_class=HTMLResponse)
 async def dashboard(request: Request) -> HTMLResponse:
-    """Main dashboard page."""
-    template_name = (
-        "partials/pages/dashboard_content.html" if _is_hx_request(request) else "dashboard.html"
+    """Main dashboard page.
+
+    Renders the /api/status envelope inline as a ``<script
+    type="application/json">`` so dashboard.js can hydrate the
+    top section and instance grid on first paint without waiting
+    on a round-trip.  The HTMX ``every 30s`` trigger takes over
+    for subsequent polls.
+    """
+    from houndarr.database import get_db
+    from houndarr.engine.supervisor import Supervisor
+    from houndarr.services.metrics import gather_dashboard_status
+
+    # Pull the supervisor's in-memory cycle-end timestamps so the
+    # inline SSR envelope renders the same `last_cycle_end` field the
+    # 30-second /api/status poll surfaces.  Without this, the first
+    # paint falls back to `last_activity_at`, which on an instance
+    # whose cycles are all LRU-throttled can be hours stale, pinning
+    # the countdown on "running..." until the first poll lands ~30s
+    # later and overwrites it with the fresh value.
+    supervisor = getattr(request.app.state, "supervisor", None)
+    cycle_ends: dict[int, str] = (
+        supervisor.cycle_end_timestamps() if isinstance(supervisor, Supervisor) else {}
     )
-    return _render(request, template_name)
+    async with get_db() as db:
+        initial_status_envelope = await gather_dashboard_status(db, cycle_ends=cycle_ends)
+    template_name = (
+        "partials/pages/dashboard_content.html" if is_hx_request(request) else "dashboard.html"
+    )
+    return _render(
+        request,
+        template_name,
+        initial_status_envelope=initial_status_envelope,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -203,42 +218,99 @@ async def dashboard(request: Request) -> HTMLResponse:
 
 
 @router.get("/logs", response_class=HTMLResponse)
-async def logs_page(request: Request) -> HTMLResponse:
-    """Search log viewer page: initial render with no filters applied."""
-    from houndarr.routes.api.logs import _compute_load_more_limit, _query_logs, _summarize_rows
+async def logs_page(
+    request: Request,
+    master_key: Annotated[bytes, Depends(get_master_key)],
+    instance_id: list[str] = Query(default_factory=list),
+    action: str | None = Query(default=None),
+    search_kind: str | None = Query(default=None),
+    cycle_trigger: str | None = Query(default=None),
+    hide_system: str | None = Query(default=None),
+    hide_skipped: str | None = Query(default=None),
+) -> HTMLResponse:
+    """Search log viewer page.
 
-    master_key: bytes = request.app.state.master_key
+    Query parameters pre-apply filters so the dashboard's error banner
+    and per-card error pill can deep-link straight to the relevant
+    instance/action rows.  ``instance_id`` is declared as ``list[str]``
+    because the dashboard banner passes one value per errored instance
+    via a repeated query param; FastAPI preserves every occurrence so
+    a URL like ``/logs?instance_id=1&instance_id=2&action=error``
+    hydrates the multi-select filter's checkboxes without a redirect.
+    """
+    from houndarr.routes.api.logs import (
+        parse_cycle_trigger,
+        parse_hide_skipped,
+        parse_hide_system,
+        parse_instance_ids,
+        parse_search_kind,
+    )
+    from houndarr.services.log_query import (
+        compute_load_more_limit,
+        instance_accent_by_name,
+        query_logs,
+    )
+
+    try:
+        parsed_instance_ids = parse_instance_ids(instance_id)
+        parsed_search_kind = parse_search_kind(search_kind)
+        parsed_cycle_trigger = parse_cycle_trigger(cycle_trigger)
+        parsed_hide_system = parse_hide_system(hide_system) if hide_system is not None else True
+        parsed_hide_skipped = (
+            parse_hide_skipped(hide_skipped) if hide_skipped is not None else False
+        )
+    except HTTPException:
+        # Malformed query string: fall back to unfiltered view so the
+        # page still loads rather than bubbling a 422 JSON response.
+        parsed_instance_ids = ()
+        parsed_search_kind = None
+        parsed_cycle_trigger = None
+        parsed_hide_system = True
+        parsed_hide_skipped = False
+
+    parsed_action = action or None
+
     instances = await list_instances(master_key=master_key)
-    rows = await _query_logs(
-        instance_id=None,
-        action=None,
-        search_kind=None,
-        cycle_trigger=None,
-        hide_system=True,
+    rows = await query_logs(
+        instance_ids=parsed_instance_ids,
+        action=parsed_action,
+        search_kind=parsed_search_kind,
+        cycle_trigger=parsed_cycle_trigger,
+        hide_system=parsed_hide_system,
+        hide_skipped=parsed_hide_skipped,
         before=None,
         limit=50,
     )
-    summary = _summarize_rows(rows)
-    template_name = "partials/pages/logs_content.html" if _is_hx_request(request) else "logs.html"
+
+    # Precompute the name -> accent-slug lookup the cycle-card template
+    # uses to set --cycle-accent.  Queries the instances table once,
+    # server-side, so the Jinja loop does not rebuild per-row.  The
+    # partial route calls the same helper on every HTMX append so
+    # paginated pages get identical accents.
+    accent_map = await instance_accent_by_name()
+
+    template_name = "partials/pages/logs_content.html" if is_hx_request(request) else "logs.html"
     return _render(
         request,
         template_name,
         instances=instances,
         rows=rows,
-        summary=summary,
         limit=50,
-        load_more_limit=_compute_load_more_limit(50),
-        selected_instance_id=None,
-        selected_action=None,
-        selected_search_kind=None,
-        selected_cycle_trigger=None,
-        selected_hide_system=True,
-        instance_id=None,
-        action=None,
-        search_kind=None,
-        cycle_trigger=None,
-        hide_system=True,
+        load_more_limit=compute_load_more_limit(50),
+        selected_instance_ids=parsed_instance_ids,
+        selected_action=parsed_action,
+        selected_search_kind=parsed_search_kind,
+        selected_cycle_trigger=parsed_cycle_trigger,
+        selected_hide_system=parsed_hide_system,
+        selected_hide_skipped=parsed_hide_skipped,
+        instance_ids=parsed_instance_ids,
+        action=parsed_action,
+        search_kind=parsed_search_kind,
+        cycle_trigger=parsed_cycle_trigger,
+        hide_system=parsed_hide_system,
+        hide_skipped=parsed_hide_skipped,
         before=None,
+        instance_accent_by_name=accent_map,
     )
 
 
@@ -247,7 +319,7 @@ async def settings_help_page(request: Request) -> HTMLResponse:
     """Settings help page with guidance for instance controls."""
     template_name = (
         "partials/pages/settings_help_content.html"
-        if _is_hx_request(request)
+        if is_hx_request(request)
         else "settings_help.html"
     )
     return _render(request, template_name)

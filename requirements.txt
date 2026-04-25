@@ -10,3 +10,4 @@ cryptography>=46.0.7
 itsdangerous>=2.2.0
 python-multipart>=0.0.26
 click>=8.3.2
+pydantic>=2.10.0

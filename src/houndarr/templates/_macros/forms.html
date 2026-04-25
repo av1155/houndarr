@@ -1,0 +1,321 @@
+{#-
+  Shared form macros.
+
+  The Houndarr web surface repeats a handful of input shapes across
+  login, setup, admin > security, the admin confirm dialog, and the
+  add / edit instance form.  Each macro here captures one of those
+  shapes so a consumer renders identical class strings and data-*
+  markers that auth.js (caps badge, strength meter, confirm-match,
+  show-hide toggle) and CSS (.field, .input-wrap, .input-trailing,
+  .station-input, .has-trailing, .mono, .pw-match, .strength*) rely
+  on.
+
+  Variants are explicit.  password_input branches on variant="auth"
+  (login / setup, with the .field__label + leading SVG treatment
+  from auth-fields.css) versus variant="admin" (security + confirm
+  dialog, with the Tailwind utility label and the h-10 px-3 input
+  class).  The two families render through different CSS language;
+  collapsing them into one variant would lose either the auth-card
+  visual or the admin-page visual.
+
+  Centralising the markup here means a component-class rename
+  lands in one seam instead of across seven inline call sites.
+
+  Whitespace layout per macro is deliberate and pinned by
+  tests/test_templates/test_macros_forms.py: form_field emits every
+  attribute on a single line; password_input variant="auth" keeps
+  the multi-line auth-card attribute layout the auth-fields CSS
+  expects; variant="admin" keeps the one-attribute-per-line admin
+  layout.  Changing any of the three without re-pinning the
+  relevant byte-equal tests will fail the pinning gate.
+-#}
+
+
+{#- form_field: generic label + single-line input.
+
+    Used for standard text / number / url inputs in the add-edit
+    instance form and for the confirm-phrase field in the admin
+    confirm dialog.  For labels that need embedded markup (the
+    dynamic "RESET" word in the confirm dialog), call the macro with
+    a {% call %} block and the block body becomes the label content. -#}
+{%- macro form_field(
+    id,
+    name,
+    type="text",
+    value=none,
+    label="",
+    placeholder=none,
+    required=false,
+    autocomplete=none,
+    min=none,
+    max=none,
+    minlength=none,
+    maxlength=none,
+    pattern=none,
+    input_class="station-input",
+    label_class="field-label",
+    data_default_value=none,
+    help_text=none,
+    tip_ref=none
+) -%}
+<label class="{{ label_class }}" for="{{ id }}">{% if caller %}{{ caller() }}{% else %}{{ label }}{% endif %}{% if tip_ref %}<button type="button" class="tip-trigger" data-tip-ref="{{ tip_ref }}" aria-label="Help: {{ label }}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg></button>{% endif %}</label>
+<input id="{{ id }}" name="{{ name }}" type="{{ type }}"{% if required %} required{% endif %}{% if min is not none %} min="{{ min }}"{% endif %}{% if max is not none %} max="{{ max }}"{% endif %}{% if minlength is not none %} minlength="{{ minlength }}"{% endif %}{% if maxlength is not none %} maxlength="{{ maxlength }}"{% endif %}{% if pattern is not none %} pattern="{{ pattern }}"{% endif %}{% if autocomplete is not none %} autocomplete="{{ autocomplete }}"{% endif %}{% if placeholder is not none %} placeholder="{{ placeholder }}"{% endif %}{% if value is not none %} value="{{ value }}"{% endif %}{% if data_default_value is not none %} data-default-value="{{ data_default_value }}"{% endif %} class="{{ input_class }}" />
+{%- if help_text %}
+<p class="mt-1.5 text-xs text-slate-600">{{ help_text }}</p>
+{%- endif %}
+{%- endmacro %}
+
+
+{#- password_input: password field with caps-lock badge and show-hide toggle.
+
+    variant="auth":  login + setup.  Uses the .field__label + .leading
+                     SVG shape from auth-fields.css.  leading selects
+                     between the padlock (login / setup new) and the
+                     checkmark (setup confirm).
+    variant="admin": admin > security + confirm dialog.  Uses the
+                     block text-xs Tailwind label and the admin-scale
+                     input class.  No leading SVG.
+
+    Optional features:
+      strength_meter        render the 4-segment strength meter after
+                            the input-wrap (auth: setup new; admin:
+                            security new).
+      data_strength_source  set the data-strength-source attribute on
+                            the input (pairs with strength_meter on
+                            the source input).
+      data_pw_confirm       target-id for the confirm-match JS (admin
+                            only; security confirm_password).
+      aria_describedby      associate the input with an aria id (admin
+                            only; security confirm pairs with pw-match).
+      pw_match              render the <p id="pw-match"> sibling that
+                            auth.js fills with the match text (admin
+                            only; security confirm_password).
+      aria_invalid          set aria-invalid="true" when the parent
+                            form is rendering with a validation error
+                            (auth only; login and setup both).
+      required              emit the required attribute.  Defaults true
+                            because every caller except the admin
+                            confirm-dialog password sets it. -#}
+{%- macro password_input(
+    id,
+    name,
+    label,
+    variant="admin",
+    autocomplete="current-password",
+    placeholder="••••••••",
+    required=true,
+    minlength=none,
+    leading=none,
+    strength_meter=false,
+    data_strength_source=false,
+    data_pw_confirm=none,
+    aria_describedby=none,
+    aria_invalid=false,
+    pw_match=false
+) -%}
+{%- if variant == "auth" -%}
+<label class="field__label" for="{{ id }}">
+  <span>{{ label }}</span>
+</label>
+<div class="input-wrap">
+{%- if leading == "padlock" %}
+  <svg class="leading" width="16" height="16" viewBox="0 0 24 24" fill="none"
+       stroke="currentColor" stroke-width="2" stroke-linecap="round"
+       stroke-linejoin="round" aria-hidden="true">
+    <rect x="3" y="11" width="18" height="10" rx="2"/>
+    <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+  </svg>
+{%- elif leading == "checkmark" %}
+  <svg class="leading" width="16" height="16" viewBox="0 0 24 24" fill="none"
+       stroke="currentColor" stroke-width="2" stroke-linecap="round"
+       stroke-linejoin="round" aria-hidden="true">
+    <path d="M20 6 9 17l-5-5"/>
+  </svg>
+{%- endif %}
+  <input id="{{ id }}" name="{{ name }}" type="password"
+         class="station-input has-trailing mono"
+         autocomplete="{{ autocomplete }}"{% if required %} required{% endif %}{% if minlength is not none %} minlength="{{ minlength }}"{% endif %}
+         placeholder="{{ placeholder }}"
+         data-pw-input{% if data_strength_source %} data-strength-source{% endif %}{% if aria_invalid %} aria-invalid="true"{% endif %} />
+  <div class="input-trailing">
+    <span class="caps-badge" role="status" aria-label="Caps Lock is on">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"
+           stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M8 3.2 3.6 7.6h2.5v4h3.8v-4h2.5z"/>
+        <line x1="5.6" y1="13.3" x2="10.4" y2="13.3"/>
+      </svg>
+    </span>
+    <button type="button" class="icon-btn"
+            aria-label="Show password" aria-pressed="false"
+            data-pw-toggle tabindex="-1">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+           stroke="currentColor" stroke-width="2" stroke-linecap="round"
+           stroke-linejoin="round" aria-hidden="true">
+        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8S1 12 1 12z"/>
+        <circle cx="12" cy="12" r="3"/>
+      </svg>
+    </button>
+  </div>
+</div>
+{%- if strength_meter %}
+<div class="strength" data-strength role="meter"
+     aria-label="Password strength"
+     aria-valuemin="0" aria-valuemax="4" aria-valuenow="0" aria-valuetext="—">
+  <div class="strength__track">
+    <div class="strength__seg"></div>
+    <div class="strength__seg"></div>
+    <div class="strength__seg"></div>
+    <div class="strength__seg"></div>
+  </div>
+  <div class="strength__meta">
+    <span>Strength</span>
+    <span class="strength__label">—</span>
+  </div>
+</div>
+{%- endif %}
+{%- else -%}
+<label
+  class="block text-xs font-medium text-slate-400 mb-1.5"
+  for="{{ id }}"
+>
+  {{ label }}
+</label>
+<div class="input-wrap">
+  <input
+    id="{{ id }}"
+    name="{{ name }}"
+    type="password"{% if required %}
+    required{% endif %}{% if minlength is not none %}
+    minlength="{{ minlength }}"{% endif %}
+    autocomplete="{{ autocomplete }}"
+    placeholder="{{ placeholder }}"
+    data-pw-input{% if data_strength_source %}
+    data-strength-source{% endif %}{% if data_pw_confirm %}
+    data-pw-confirm="{{ data_pw_confirm }}"{% endif %}{% if aria_describedby %}
+    aria-describedby="{{ aria_describedby }}"{% endif %}
+    class="station-input has-trailing h-10 px-3 text-sm text-white placeholder:text-slate-600 font-mono"
+  />
+  <div class="input-trailing">
+    <span class="caps-badge" role="status" aria-label="Caps Lock is on">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M8 3.2 3.6 7.6h2.5v4h3.8v-4h2.5z"/>
+        <line x1="5.6" y1="13.3" x2="10.4" y2="13.3"/>
+      </svg>
+    </span>
+    <button
+      type="button"
+      class="icon-btn"
+      data-pw-toggle
+      aria-label="Show password"
+      aria-pressed="false"
+      tabindex="-1"
+    >
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/>
+        <circle cx="12" cy="12" r="3"/>
+      </svg>
+    </button>
+  </div>
+</div>
+{%- if strength_meter %}
+<div
+  class="strength"
+  data-strength
+  role="meter"
+  aria-label="Password strength"
+  aria-valuemin="0"
+  aria-valuemax="4"
+  aria-valuenow="0"
+  aria-valuetext="—"
+>
+  <div class="strength__track">
+    <div class="strength__seg"></div>
+    <div class="strength__seg"></div>
+    <div class="strength__seg"></div>
+    <div class="strength__seg"></div>
+  </div>
+  <div class="strength__meta">
+    <span>Strength</span>
+    <span class="strength__label">—</span>
+  </div>
+</div>
+{%- endif %}
+{%- if pw_match %}
+<p id="pw-match" class="pw-match" aria-live="polite">&nbsp;</p>
+{%- endif %}
+{%- endif %}
+{%- endmacro %}
+
+
+{#- checkbox: bordered-label checkbox toggle.
+
+    Matches the cutoff_enabled and upgrade_enabled toggles in the
+    add / edit instance form.  data_default_checked drives the
+    reset-to-defaults script in static/js. -#}
+{%- macro checkbox(
+    name,
+    label,
+    checked=false,
+    value="on",
+    data_default_checked=none
+) -%}
+<label class="inline-flex items-center gap-2 cursor-pointer select-none rounded-inset border border-border-default bg-surface-1 px-3 py-2">
+  <input type="checkbox" name="{{ name }}" value="{{ value }}"{% if checked %} checked{% endif %}{% if data_default_checked is not none %}
+         data-default-checked="{{ data_default_checked }}"{% endif %}
+         class="rounded-chip border-border-default bg-surface-1 text-brand-500 focus:ring-brand-500 focus:ring-offset-surface-base" />
+  <span class="text-xs font-medium text-slate-300">{{ label }}</span>
+</label>
+{%- endmacro %}
+
+
+{#- select_field: generic label + <select> with (value, text) options.
+
+    Used for search_order and (after their display:none wrappers stay
+    inline) would cover every 2-option mode selector.  options is a
+    sequence of (value, text) pairs; selected is the value to mark
+    with the selected attribute. -#}
+{%- macro select_field(
+    id,
+    name,
+    options,
+    selected=none,
+    label="",
+    label_class="field-label",
+    select_class="station-input station-select",
+    data_default_value=none,
+    help_text=none,
+    tip_ref=none
+) -%}
+<label class="{{ label_class }}" for="{{ id }}">
+  {% if caller %}{{ caller() }}{% else %}{{ label }}{% endif %}{% if tip_ref %}<button type="button" class="tip-trigger" data-tip-ref="{{ tip_ref }}" aria-label="Help: {{ label }}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg></button>{% endif %}
+</label>
+<select id="{{ id }}" name="{{ name }}"{% if data_default_value is not none %} data-default-value="{{ data_default_value }}"{% endif %} class="{{ select_class }}">
+{%- for opt_value, opt_text in options %}
+  <option value="{{ opt_value }}"{% if opt_value == selected %} selected{% endif %}>{{ opt_text }}</option>
+{%- endfor %}
+</select>
+{%- if help_text %}
+<p class="mt-1.5 text-xs text-slate-600">{{ help_text }}</p>
+{%- endif %}
+{%- endmacro %}
+
+
+{#- multiselect_summary: label text for a checkbox-dropdown trigger.
+
+    Mirrors the summary logic the logs page's multi-select JS computes
+    after every change event so the SSR first paint and the post-HTMX
+    swap render identical label text.  Three branches:
+      - no selection: the caller-supplied fallback (e.g. "All instances")
+      - one selection: the matching instance's display name
+      - two or more: "N instances" to keep the trigger width predictable
+
+    Reads the instance name from inst.core.name to match the shape the
+    /logs route passes; the filter-bar trigger sits directly in that
+    template so the call site and the macro stay close together. -#}
+{%- macro multiselect_summary(selected_ids, instances, fallback) -%}
+{%- if not selected_ids -%}{{ fallback }}
+{%- elif selected_ids | length == 1 -%}
+{%- for inst in instances if inst.core.id == selected_ids[0] -%}{{ inst.core.name }}{%- endfor -%}
+{%- else -%}{{ selected_ids | length }} instances
+{%- endif -%}
+{%- endmacro %}

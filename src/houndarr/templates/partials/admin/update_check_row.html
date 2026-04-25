@@ -1,0 +1,98 @@
+{#
+  Update-check status row inside Admin > Updates.
+
+  Visibility rules for the status block (icon + message):
+    * Auto-check ON: persistent. It is the live view of the last
+      background poll.
+    * Auto-check OFF: ephemeral. Rendered only when ``show_result``
+      is True (set by POST /refresh) so the message animates in on
+      click and falls away on the next reload.
+
+  The outer div carries an ``hx-trigger="load"`` only when auto-check
+  is on and no result has landed yet, so the first poll fires async
+  once the partial is swapped in instead of blocking the preferences
+  POST response.
+#}
+<div
+  id="update-check-status"
+  class="mt-1 text-xs text-slate-400 font-sans"
+  {% if s.enabled and not s.checked_at and not s.last_error_at %}
+  hx-get="/settings/admin/update-check"
+  hx-trigger="load delay:50ms"
+  hx-swap="outerHTML"
+  {% endif %}
+>
+  <div class="flex flex-wrap items-center gap-2">
+    <button
+      type="button"
+      hx-post="/settings/admin/update-check/refresh"
+      hx-target="#update-check-status"
+      hx-swap="outerHTML"
+      hx-disabled-elt="this"
+      class="btn btn-soft btn-neutral px-3 py-1.5 text-xs font-medium font-sans"
+    >
+      {# lucide: refresh-cw #}
+      <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/>
+        <path d="M21 3v5h-5"/>
+        <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/>
+        <path d="M8 16H3v5"/>
+      </svg>
+      {% if s.enabled %}Refresh{% else %}Check now{% endif %}
+    </button>
+    {% if s.checked_at %}
+      <span
+        class="text-slate-500 font-mono"
+        data-relative-time="{{ s.checked_at.isoformat() }}"
+      >Last checked {{ s.checked_at | timeago }}</span>
+    {% elif s.enabled %}
+      <span class="text-slate-500 font-mono">Never checked</span>
+    {% endif %}
+  </div>
+
+  {% if show_result or s.enabled %}
+    <div class="mt-1.5 update-status-reveal">
+      {% if s.update_available and s.release_url and s.latest_version %}
+        <div class="flex items-center gap-1.5">
+          {# lucide: arrow-up #}
+          <svg class="w-3.5 h-3.5 text-brand-300 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M12 19V5"/>
+            <path d="m5 12 7-7 7 7"/>
+          </svg>
+          <a
+            href="{{ s.release_url }}"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="text-brand-300 hover:text-brand-200 underline underline-offset-4 decoration-dotted"
+          >v{{ s.latest_version }} available on GitHub<svg class="inline-link-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 7h10v10"/><path d="M7 17 17 7"/></svg></a>
+        </div>
+      {% elif s.latest_version and s.checked_at %}
+        <div class="flex items-center gap-1.5 text-success">
+          {# lucide: check #}
+          <svg class="w-3.5 h-3.5 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M20 6 9 17l-5-5"/>
+          </svg>
+          <span>Up to date on v{{ s.installed_version }}</span>
+        </div>
+      {% elif s.last_error_at %}
+        <div class="flex items-center gap-1.5 text-warning">
+          {# lucide: alert-triangle #}
+          <svg class="w-3.5 h-3.5 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/>
+            <path d="M12 9v4"/>
+            <path d="M12 17h.01"/>
+          </svg>
+          <span>Couldn't reach GitHub. We'll try again in a day.</span>
+        </div>
+      {% elif s.enabled %}
+        <div class="flex items-center gap-1.5 text-slate-500">
+          {# lucide: loader-2 #}
+          <svg class="w-3.5 h-3.5 flex-shrink-0 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
+          </svg>
+          <span>Checking for updates…</span>
+        </div>
+      {% endif %}
+    </div>
+  {% endif %}
+</div>

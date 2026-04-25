@@ -100,8 +100,8 @@ async def test_ping_success(client: WhisparrV3Client) -> None:
     )
     result = await client.ping()
     assert result is not None
-    assert result["appName"] == "Whisparr"
-    assert result["version"] == "3.3.2.604"
+    assert result.app_name == "Whisparr"
+    assert result.version == "3.3.2.604"
 
 
 @pytest.mark.asyncio()

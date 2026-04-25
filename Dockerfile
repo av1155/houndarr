@@ -5,6 +5,32 @@
 # Houndarr — production Docker image
 # Base: python:3.12-slim (Debian bookworm slim)
 # =============================================================================
+
+# -----------------------------------------------------------------------------
+# Stage 1: css-build
+# Compile Tailwind v4 + Houndarr custom CSS into a single static file. Node
+# lives only in this stage; the final runtime image stays Python-only.
+# -----------------------------------------------------------------------------
+FROM node:22-alpine AS css-build
+WORKDIR /build
+
+# Enable pnpm via corepack (bundled with Node 20+). The packageManager field
+# in package.json pins the exact pnpm version.
+RUN corepack enable
+
+# Copy manifest + lockfile first for better layer caching.
+COPY package.json pnpm-lock.yaml ./
+RUN pnpm install --frozen-lockfile
+
+# Copy only the inputs Tailwind needs to scan and import.
+COPY src/houndarr/static/css/ ./src/houndarr/static/css/
+COPY src/houndarr/templates/ ./src/houndarr/templates/
+
+RUN pnpm run build-css
+
+# -----------------------------------------------------------------------------
+# Stage 2: runtime
+# -----------------------------------------------------------------------------
 FROM python:3.12-slim
 
 ARG HOUNDARR_VERSION=dev
@@ -41,6 +67,10 @@ RUN pip install --no-cache-dir --upgrade pip \
 COPY src/ ./src/
 COPY VERSION ./
 COPY CHANGELOG.md ./
+
+# Overlay the compiled Tailwind CSS from the css-build stage.
+COPY --from=css-build /build/src/houndarr/static/css/app.built.css \
+                      ./src/houndarr/static/css/app.built.css
 
 # Create non-root runtime user and data directory
 RUN groupadd -g 1000 appgroup \

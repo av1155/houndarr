@@ -8,9 +8,22 @@ commands via :class:`~houndarr.clients.sonarr.SonarrClient`.
 from __future__ import annotations
 
 import logging
+from collections.abc import Sequence
 from typing import Any
 
+import httpx
+from pydantic import ValidationError
+
+from houndarr.clients._wire_models import ArrSeries
+from houndarr.clients.base import InstanceSnapshot, ReconcileSets
 from houndarr.clients.sonarr import LibraryEpisode, MissingEpisode, SonarrClient
+from houndarr.engine.adapters._common import (
+    ContextOverride,
+    build_cutoff_candidate,
+    build_missing_candidate,
+    compute_default_snapshot,
+    paginate_wanted,
+)
 from houndarr.engine.candidates import (
     SearchCandidate,
     _is_unreleased,
@@ -23,7 +36,7 @@ logger = logging.getLogger(__name__)
 _UPGRADE_MAX_SERIES_PER_CYCLE = 5
 
 # ---------------------------------------------------------------------------
-# Label builders (copied from search_loop.py; originals removed in Phase 2)
+# Label builders
 # ---------------------------------------------------------------------------
 
 
@@ -97,40 +110,37 @@ def adapt_missing(item: MissingEpisode, instance: Instance) -> SearchCandidate:
     Returns:
         A fully populated :class:`SearchCandidate`.
     """
-    episode_mode = instance.sonarr_search_mode == SonarrSearchMode.episode
-
-    use_season_context = not episode_mode and item.series_id is not None and item.season > 0
-
-    if use_season_context:
-        assert item.series_id is not None  # noqa: S101
-        item_id = _season_item_id(item.series_id, item.season)
-        label = _season_context_label(item)
-        group_key: tuple[int, int] | None = (item.series_id, item.season)
-        search_payload = {
-            "command": "SeasonSearch",
-            "series_id": item.series_id,
-            "season_number": item.season,
-        }
-    else:
-        item_id = item.episode_id
-        label = _episode_label(item)
-        group_key = None
-        search_payload = {
-            "command": "EpisodeSearch",
-            "episode_id": item.episode_id,
-        }
-
     unreleased_reason = _sonarr_unreleased_reason(
-        item.air_date_utc, instance.post_release_grace_hrs
+        item.air_date_utc, instance.missing.post_release_grace_hrs
     )
 
-    return SearchCandidate(
-        item_id=item_id,
+    context: ContextOverride | None = None
+    if (
+        instance.missing.sonarr_search_mode != SonarrSearchMode.episode
+        and item.series_id is not None
+        and item.season > 0
+    ):
+        context = ContextOverride(
+            item_id=_season_item_id(item.series_id, item.season),
+            label=_season_context_label(item),
+            group_key=(item.series_id, item.season),
+            search_payload={
+                "command": "SeasonSearch",
+                "series_id": item.series_id,
+                "season_number": item.season,
+            },
+        )
+
+    return build_missing_candidate(
         item_type="episode",
-        label=label,
+        item_id=item.episode_id,
+        label=_episode_label(item),
         unreleased_reason=unreleased_reason,
-        group_key=group_key,
-        search_payload=search_payload,
+        search_payload={
+            "command": "EpisodeSearch",
+            "episode_id": item.episode_id,
+        },
+        context=context,
     )
 
 
@@ -138,7 +148,7 @@ def adapt_cutoff(item: MissingEpisode, instance: Instance) -> SearchCandidate:
     """Convert a Sonarr cutoff-unmet episode into a :class:`SearchCandidate`.
 
     The cutoff pass always uses episode-mode regardless of
-    ``instance.sonarr_search_mode``, matching the current behavior in
+    ``instance.missing.sonarr_search_mode``, matching the current behavior in
     ``search_loop.py``.
 
     Args:
@@ -148,16 +158,13 @@ def adapt_cutoff(item: MissingEpisode, instance: Instance) -> SearchCandidate:
     Returns:
         A fully populated :class:`SearchCandidate`.
     """
-    unreleased_reason = _sonarr_unreleased_reason(
-        item.air_date_utc, instance.post_release_grace_hrs
-    )
-
-    return SearchCandidate(
-        item_id=item.episode_id,
+    return build_cutoff_candidate(
         item_type="episode",
+        item_id=item.episode_id,
         label=_episode_label(item),
-        unreleased_reason=unreleased_reason,
-        group_key=None,
+        unreleased_reason=_sonarr_unreleased_reason(
+            item.air_date_utc, instance.missing.post_release_grace_hrs
+        ),
         search_payload={
             "command": "EpisodeSearch",
             "episode_id": item.episode_id,
@@ -183,7 +190,7 @@ def _library_season_context_label(item: LibraryEpisode) -> str:
 def adapt_upgrade(item: LibraryEpisode, instance: Instance) -> SearchCandidate:
     """Convert a Sonarr library episode into a :class:`SearchCandidate` for upgrade.
 
-    Respects ``instance.upgrade_sonarr_search_mode`` for episode vs season-context.
+    Respects ``instance.upgrade.upgrade_sonarr_search_mode`` for episode vs season-context.
     No unreleased checks: upgrade items already have files.
 
     Args:
@@ -193,7 +200,7 @@ def adapt_upgrade(item: LibraryEpisode, instance: Instance) -> SearchCandidate:
     Returns:
         A fully populated :class:`SearchCandidate`.
     """
-    episode_mode = instance.upgrade_sonarr_search_mode == SonarrSearchMode.episode
+    episode_mode = instance.upgrade.upgrade_sonarr_search_mode == SonarrSearchMode.episode
 
     use_season_context = not episode_mode and item.series_id > 0 and item.season > 0
 
@@ -225,14 +232,45 @@ def adapt_upgrade(item: LibraryEpisode, instance: Instance) -> SearchCandidate:
     )
 
 
+async def _collect_upgrade_episodes(
+    client: SonarrClient,
+    instance: Instance,
+    series_list: Sequence[ArrSeries],
+) -> list[LibraryEpisode]:
+    """Return monitored, on-disk, cutoff-met episodes for the given series.
+
+    Shared loop body between the rotation-windowed search-cycle fetch
+    (:func:`fetch_upgrade_pool`) and the full-library reconcile fetch
+    (:func:`_fetch_all_upgrade_episodes`).  Transport or validation
+    errors on a single series are logged and skipped so one flaky
+    series cannot blank the whole pool.
+    """
+    episodes: list[LibraryEpisode] = []
+    for s in series_list:
+        series_id = s.id or 0
+        try:
+            eps = await client.get_episodes(series_id)
+        except (httpx.HTTPError, httpx.InvalidURL, ValidationError):
+            logger.warning(
+                "[%s] failed to fetch episodes for series %d, skipping",
+                instance.core.name,
+                series_id,
+            )
+            continue
+        episodes.extend(e for e in eps if e.monitored and e.has_file and e.cutoff_met)
+    return episodes
+
+
 async def fetch_upgrade_pool(
     client: SonarrClient,
     instance: Instance,
 ) -> list[LibraryEpisode]:
     """Fetch and filter Sonarr library for upgrade-eligible episodes.
 
-    Uses series rotation: fetches up to ``_UPGRADE_MAX_SERIES_PER_CYCLE``
-    monitored series per cycle, starting from ``instance.upgrade_series_offset``.
+    Uses series rotation: fetches up to
+    ``instance.upgrade.upgrade_series_window_size`` monitored series per
+    cycle (default 5; capped at the module fallback for safety), starting
+    from ``instance.upgrade.upgrade_series_offset``.
 
     Args:
         client: An open :class:`SonarrClient` context.
@@ -243,34 +281,47 @@ async def fetch_upgrade_pool(
     """
     all_series = await client.get_series()
     monitored = sorted(
-        [s for s in all_series if s.get("monitored", False)],
-        key=lambda s: s.get("id", 0),
+        [s for s in all_series if s.monitored],
+        key=lambda s: s.id or 0,
     )
 
     if not monitored:
         return []
 
-    offset = instance.upgrade_series_offset % len(monitored)
-    selected = monitored[offset : offset + _UPGRADE_MAX_SERIES_PER_CYCLE]
-    if len(selected) < _UPGRADE_MAX_SERIES_PER_CYCLE:
-        remaining = _UPGRADE_MAX_SERIES_PER_CYCLE - len(selected)
+    # Per-instance window size lets users with very large libraries trade
+    # higher per-cycle *arr load for faster rotation coverage.  Clamp to
+    # at least 1 so a stored 0 (impossible per CHECK constraint, but
+    # defensive) still makes progress.
+    window = max(1, instance.upgrade.upgrade_series_window_size)
+    offset = instance.upgrade.upgrade_series_offset % len(monitored)
+    selected = monitored[offset : offset + window]
+    if len(selected) < window:
+        remaining = window - len(selected)
         selected += monitored[:remaining]
 
-    episodes: list[LibraryEpisode] = []
-    for s in selected:
-        series_id = s.get("id", 0)
-        try:
-            eps = await client.get_episodes(series_id)
-        except Exception:  # noqa: BLE001
-            logger.warning(
-                "[%s] failed to fetch episodes for series %d, skipping",
-                instance.name,
-                series_id,
-            )
-            continue
-        episodes.extend(e for e in eps if e.monitored and e.has_file and e.cutoff_met)
+    return await _collect_upgrade_episodes(client, instance, selected)
 
-    return episodes
+
+async def _fetch_all_upgrade_episodes(
+    client: SonarrClient,
+    instance: Instance,
+) -> list[LibraryEpisode]:
+    """Return upgrade-eligible episodes across EVERY monitored series.
+
+    The cycle-facing :func:`fetch_upgrade_pool` windows the series list
+    via ``upgrade_series_offset`` so indexer traffic stays polite per
+    cycle.  Reconciliation cannot use that windowed set: it would mark
+    every upgrade cooldown outside the current slice as an orphan and
+    delete it on the next snapshot refresh, collapsing the configured
+    ``upgrade_cooldown_days`` down to roughly one rotation period.
+    This helper ignores the window and walks the full monitored list
+    so the reconcile upgrade set matches everything
+    :func:`adapt_upgrade` could legitimately stamp.  Amortised against
+    the supervisor's 10-minute snapshot cadence.
+    """
+    all_series = await client.get_series()
+    monitored = [s for s in all_series if s.monitored]
+    return await _collect_upgrade_episodes(client, instance, monitored)
 
 
 async def dispatch_search(client: SonarrClient, candidate: SearchCandidate) -> None:
@@ -308,4 +359,102 @@ def make_client(instance: Instance) -> SonarrClient:
     Returns:
         A new (unopened) :class:`SonarrClient`.
     """
-    return SonarrClient(url=instance.url, api_key=instance.api_key)
+    return SonarrClient(url=instance.core.url, api_key=instance.core.api_key)
+
+
+def _episode_leaf_pairs(items: list[MissingEpisode]) -> frozenset[tuple[str, int]]:
+    """Return the ``(item_type, episode_id)`` pairs for a wanted list.
+
+    Shared between the missing and cutoff passes; leaf cooldown rows
+    match episodes by positive episode_id.  Items whose ``episode_id``
+    is missing are dropped (defensive: the Sonarr wire model marks it
+    as ``int`` not optional, so this should not fire in practice).
+    """
+    return frozenset(("episode", it.episode_id) for it in items if it.episode_id)
+
+
+def _season_synth_pairs(items: list[MissingEpisode]) -> frozenset[tuple[str, int]]:
+    """Return ``(item_type, synthetic)`` pairs for season-context rows.
+
+    Collapses the leaf wanted list to the set of ``(series_id,
+    season)`` parents, then renders each parent through
+    :func:`_season_item_id` so the synthetic negative ids match what
+    :func:`adapt_missing` stamps onto cooldowns in season-context
+    mode.  Items without ``series_id`` are skipped; they could not
+    have produced a season-context cooldown in the first place.
+    """
+    parents: set[tuple[int, int]] = set()
+    for it in items:
+        if it.series_id:
+            parents.add((it.series_id, it.season))
+    return frozenset(("episode", _season_item_id(sid, sn)) for sid, sn in parents)
+
+
+async def fetch_reconcile_sets(client: SonarrClient, instance: Instance) -> ReconcileSets:
+    """Return the authoritative wanted / upgrade-pool sets for Sonarr.
+
+    Always unions leaf episode ids into the missing / cutoff sets.
+    When the instance runs in ``season_context`` missing-pass mode, the
+    missing set ALSO carries synthetic negative season ids derived
+    from the same wanted list so cooldown rows stamped under the
+    season-context path keep matching.  Cutoff is always dispatched
+    per-episode, so cutoff cooldown rows never carry synthetic ids;
+    the cutoff reconcile set stays leaf-only.  The upgrade set walks
+    the FULL monitored library via :func:`_fetch_all_upgrade_episodes`
+    rather than the cycle-rotation window, otherwise reconcile would
+    treat every upgrade cooldown outside the current 5-series slice as
+    an orphan and truncate ``upgrade_cooldown_days`` to one rotation.
+    When ``upgrade_enabled`` is false the upgrade set is an empty
+    frozenset so no library traffic is paid; no upgrade cooldowns can
+    exist in that state anyway.
+    """
+    missing_items = await paginate_wanted(client.get_missing)
+    cutoff_items = await paginate_wanted(client.get_cutoff_unmet)
+    missing_set = _episode_leaf_pairs(missing_items)
+    cutoff_set = _episode_leaf_pairs(cutoff_items)
+    if instance.missing.sonarr_search_mode != SonarrSearchMode.episode:
+        missing_set = missing_set | _season_synth_pairs(missing_items)
+    upgrade_set: frozenset[tuple[str, int]] = frozenset()
+    if instance.upgrade.upgrade_enabled:
+        upgrade_candidates = [
+            adapt_upgrade(item, instance)
+            for item in await _fetch_all_upgrade_episodes(client, instance)
+        ]
+        upgrade_set = frozenset((str(c.item_type), c.item_id) for c in upgrade_candidates)
+    return ReconcileSets(missing=missing_set, cutoff=cutoff_set, upgrade=upgrade_set)
+
+
+async def fetch_instance_snapshot(
+    client: SonarrClient,
+    instance: Instance,  # noqa: ARG001
+) -> InstanceSnapshot:
+    """Compose the dashboard snapshot for a Sonarr instance.
+
+    Anchor for unreleased detection is :attr:`MissingEpisode.air_date_utc`
+    (single ISO string).  Episodes without an air date fall through to
+    the "already released" branch in :func:`_is_unreleased`, matching
+    the search-loop's classification — Sonarr-without-air-date is not
+    something Houndarr should flag as pre-release on the dashboard.
+    """
+    return await compute_default_snapshot(
+        client,
+        anchor_fn=lambda ep: ep.air_date_utc,
+    )
+
+
+class SonarrAdapter:
+    """Class-form Sonarr adapter for the :data:`ADAPTERS` registry.
+
+    Conforms to :class:`~houndarr.engine.adapters.protocols.AppAdapterProto`
+    structurally via the eight staticmethod attributes below; the
+    module-level functions remain importable for direct unit-test use.
+    """
+
+    adapt_missing = staticmethod(adapt_missing)
+    adapt_cutoff = staticmethod(adapt_cutoff)
+    adapt_upgrade = staticmethod(adapt_upgrade)
+    fetch_upgrade_pool = staticmethod(fetch_upgrade_pool)
+    dispatch_search = staticmethod(dispatch_search)
+    make_client = staticmethod(make_client)
+    fetch_reconcile_sets = staticmethod(fetch_reconcile_sets)
+    fetch_instance_snapshot = staticmethod(fetch_instance_snapshot)

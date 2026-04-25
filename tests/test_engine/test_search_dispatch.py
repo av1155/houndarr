@@ -16,7 +16,7 @@ from houndarr.services.instances import (
     LidarrSearchMode,
     ReadarrSearchMode,
     SonarrSearchMode,
-    WhisparrSearchMode,
+    WhisparrV2SearchMode,
 )
 
 from .conftest import (
@@ -25,13 +25,13 @@ from .conftest import (
     _COMMAND_RESP,
     _EPISODE_RECORD,
     _MOVIE_RECORD,
-    _WHISPARR_EPISODE_RECORD,
+    _WHISPARR_V2_EPISODE_RECORD,
     LIDARR_URL,
     MASTER_KEY,
     RADARR_URL,
     READARR_URL,
     SONARR_URL,
-    WHISPARR_URL,
+    WHISPARR_V2_URL,
     get_log_rows,
     make_instance,
 )
@@ -105,7 +105,7 @@ def _readarr_instance(**overrides: Any) -> Any:
     return make_instance(**defaults)
 
 
-def _whisparr_instance(**overrides: Any) -> Any:
+def _whisparr_v2_instance(**overrides: Any) -> Any:
     defaults: dict[str, Any] = {
         "instance_id": 5,
         "itype": InstanceType.whisparr_v2,
@@ -392,28 +392,28 @@ async def test_readarr_author_context_dedup(
 
 
 # ---------------------------------------------------------------------------
-# Whisparr dispatch payloads
+# Whisparr v2 dispatch payloads
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio()
 @respx.mock
-async def test_whisparr_episode_mode_payload(
+async def test_whisparr_v2_episode_mode_payload(
     seeded_instances: None,
 ) -> None:
-    """EpisodeSearch dispatches with episodeIds for Whisparr."""
-    respx.get(f"{WHISPARR_URL}/api/v3/wanted/missing").mock(
+    """EpisodeSearch dispatches with episodeIds for Whisparr v2."""
+    respx.get(f"{WHISPARR_V2_URL}/api/v3/wanted/missing").mock(
         return_value=httpx.Response(
             200,
-            json=_page([_WHISPARR_EPISODE_RECORD]),
+            json=_page([_WHISPARR_V2_EPISODE_RECORD]),
         ),
     )
-    cmd_route = respx.post(f"{WHISPARR_URL}/api/v3/command").mock(
+    cmd_route = respx.post(f"{WHISPARR_V2_URL}/api/v3/command").mock(
         return_value=httpx.Response(201, json=_COMMAND_RESP),
     )
 
-    inst = _whisparr_instance(
-        whisparr_search_mode=WhisparrSearchMode.episode,
+    inst = _whisparr_v2_instance(
+        whisparr_v2_search_mode=WhisparrV2SearchMode.episode,
     )
     await run_instance_search(inst, MASTER_KEY)
 
@@ -425,22 +425,22 @@ async def test_whisparr_episode_mode_payload(
 
 @pytest.mark.asyncio()
 @respx.mock
-async def test_whisparr_season_context_payload(
+async def test_whisparr_v2_season_context_payload(
     seeded_instances: None,
 ) -> None:
-    """SeasonSearch dispatches with seriesId and seasonNumber for Whisparr."""
-    respx.get(f"{WHISPARR_URL}/api/v3/wanted/missing").mock(
+    """SeasonSearch dispatches with seriesId and seasonNumber for Whisparr v2."""
+    respx.get(f"{WHISPARR_V2_URL}/api/v3/wanted/missing").mock(
         return_value=httpx.Response(
             200,
-            json=_page([_WHISPARR_EPISODE_RECORD]),
+            json=_page([_WHISPARR_V2_EPISODE_RECORD]),
         ),
     )
-    cmd_route = respx.post(f"{WHISPARR_URL}/api/v3/command").mock(
+    cmd_route = respx.post(f"{WHISPARR_V2_URL}/api/v3/command").mock(
         return_value=httpx.Response(201, json=_COMMAND_RESP),
     )
 
-    inst = _whisparr_instance(
-        whisparr_search_mode=WhisparrSearchMode.season_context,
+    inst = _whisparr_v2_instance(
+        whisparr_v2_search_mode=WhisparrV2SearchMode.season_context,
     )
     await run_instance_search(inst, MASTER_KEY)
 
@@ -453,27 +453,27 @@ async def test_whisparr_season_context_payload(
 
 @pytest.mark.asyncio()
 @respx.mock
-async def test_whisparr_item_type_is_whisparr_episode(
+async def test_whisparr_v2_item_type_is_whisparr_v2_episode(
     seeded_instances: None,
 ) -> None:
-    """Whisparr log rows record item_type='whisparr_episode'."""
-    respx.get(f"{WHISPARR_URL}/api/v3/wanted/missing").mock(
+    """Whisparr v2 log rows record item_type='whisparr_v2_episode'."""
+    respx.get(f"{WHISPARR_V2_URL}/api/v3/wanted/missing").mock(
         return_value=httpx.Response(
             200,
-            json=_page([_WHISPARR_EPISODE_RECORD]),
+            json=_page([_WHISPARR_V2_EPISODE_RECORD]),
         ),
     )
-    respx.post(f"{WHISPARR_URL}/api/v3/command").mock(
+    respx.post(f"{WHISPARR_V2_URL}/api/v3/command").mock(
         return_value=httpx.Response(201, json=_COMMAND_RESP),
     )
 
-    inst = _whisparr_instance()
+    inst = _whisparr_v2_instance()
     await run_instance_search(inst, MASTER_KEY)
 
     rows = await get_log_rows()
     searched = [r for r in rows if r["action"] == "searched"]
     assert len(searched) == 1
-    assert searched[0]["item_type"] == "whisparr_episode"
+    assert searched[0]["item_type"] == "whisparr_v2_episode"
 
 
 # ---------------------------------------------------------------------------
@@ -642,26 +642,26 @@ async def test_readarr_cutoff_uses_book_search(
 
 @pytest.mark.asyncio()
 @respx.mock
-async def test_whisparr_cutoff_uses_episode_search(
+async def test_whisparr_v2_cutoff_uses_episode_search(
     seeded_instances: None,
 ) -> None:
     """Cutoff pass always uses EpisodeSearch even in season_context."""
-    respx.get(f"{WHISPARR_URL}/api/v3/wanted/missing").mock(
+    respx.get(f"{WHISPARR_V2_URL}/api/v3/wanted/missing").mock(
         return_value=httpx.Response(200, json=_EMPTY_PAGE),
     )
-    respx.get(f"{WHISPARR_URL}/api/v3/wanted/cutoff").mock(
+    respx.get(f"{WHISPARR_V2_URL}/api/v3/wanted/cutoff").mock(
         return_value=httpx.Response(
             200,
-            json=_page([_WHISPARR_EPISODE_RECORD]),
+            json=_page([_WHISPARR_V2_EPISODE_RECORD]),
         ),
     )
-    cmd_route = respx.post(f"{WHISPARR_URL}/api/v3/command").mock(
+    cmd_route = respx.post(f"{WHISPARR_V2_URL}/api/v3/command").mock(
         return_value=httpx.Response(201, json=_COMMAND_RESP),
     )
 
-    inst = _whisparr_instance(
+    inst = _whisparr_v2_instance(
         cutoff_enabled=True,
-        whisparr_search_mode=WhisparrSearchMode.season_context,
+        whisparr_v2_search_mode=WhisparrV2SearchMode.season_context,
     )
     await run_instance_search(inst, MASTER_KEY)
 

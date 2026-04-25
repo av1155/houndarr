@@ -1,24 +1,29 @@
-<dialog
-  id="changelog-modal"
-  class="m-auto p-0 w-[min(94vw,38rem)] rounded-2xl border border-[#1e2638] bg-[#0e1117] text-slate-100"
-  aria-labelledby="changelog-modal-title"
-  {% if range_label %}aria-describedby="changelog-modal-subtitle"{% endif %}
-  style="box-shadow: 0 30px 80px rgba(0,0,0,0.7), 0 0 0 1px rgba(30,38,56,0.8);"
->
+{%- import "_macros/modals.html" as modals -%}
+{% call modals.dialog_shell(
+    id="changelog-modal",
+    width="38rem",
+    aria_labelledby="changelog-modal-title",
+    aria_describedby="changelog-modal-subtitle" if range_label else none,
+) %}
   <style>
     #changelog-modal {
       opacity: 0;
-      transform: translateY(12px) scale(0.98);
+      transform: translateY(0.75rem) scale(0.98);
     }
+
+    /* Keyframes live in app.css (hx-modal-*, hx-backdrop-*); this
+       block only picks the per-modal durations, eases, and backdrop
+       opacity via --hx-backdrop-opacity. */
+    #changelog-modal { --hx-backdrop-opacity: 0.65; }
 
     #changelog-modal[open] {
       opacity: 1;
       transform: translateY(0) scale(1);
-      animation: changelog-modal-in 180ms ease-out;
+      animation: hx-modal-in var(--dur-base) var(--ease-station);
     }
 
     #changelog-modal[open].is-closing {
-      animation: changelog-modal-out 160ms ease-in forwards;
+      animation: hx-modal-out var(--dur-fast) ease-in forwards;
     }
 
     #changelog-modal::backdrop {
@@ -26,42 +31,22 @@
     }
 
     #changelog-modal[open]::backdrop {
-      animation: changelog-backdrop-in var(--dur-base, 180ms)
+      animation: hx-backdrop-in var(--dur-base, 180ms)
         var(--ease-station, cubic-bezier(0.16, 1, 0.3, 1)) forwards;
       backdrop-filter: blur(3px);
     }
 
     #changelog-modal[open].is-closing::backdrop {
-      animation: changelog-backdrop-out 160ms ease-in forwards;
-    }
-
-    @keyframes changelog-modal-in {
-      from { opacity: 0; transform: translateY(12px) scale(0.98); }
-      to   { opacity: 1; transform: translateY(0) scale(1); }
-    }
-
-    @keyframes changelog-backdrop-in {
-      from { background: rgba(2, 6, 23, 0); }
-      to   { background: rgba(2, 6, 23, 0.65); }
-    }
-
-    @keyframes changelog-modal-out {
-      from { opacity: 1; transform: translateY(0) scale(1); }
-      to   { opacity: 0; transform: translateY(8px) scale(0.985); }
-    }
-
-    @keyframes changelog-backdrop-out {
-      from { background: rgba(2, 6, 23, 0.65); }
-      to   { background: rgba(2, 6, 23, 0); }
+      animation: hx-backdrop-out 160ms ease-in forwards;
     }
 
     /* Mobile: bottom sheet.  The native <dialog> UA stylesheet sets
        max-width: calc(100% - 38px) and centers via inset; we override
        both so the sheet can pin to the bottom edge and span the full
        containing-block width.  Use `width: 100%` (not 100vw) because
-       `scrollbar-gutter: stable both-edges` on <html> shrinks the
-       containing block for fixed-positioned elements; 100vw would
-       overshoot the right edge by the gutter width. */
+       `scrollbar-gutter: stable` on <html> shrinks the containing block
+       for fixed-positioned elements; 100vw would overshoot the
+       inline-end edge by the gutter width. */
     @media (max-width: 639px) {
       #changelog-modal {
         position: fixed;
@@ -73,27 +58,17 @@
         max-height: 90dvh;
         max-width: 100%;
         width: 100%;
-        border-radius: 16px 16px 0 0;
+        border-radius: 1rem 1rem 0 0;
         transform: translateY(100%);
       }
 
       #changelog-modal[open] {
         transform: translateY(0);
-        animation: changelog-sheet-in 220ms var(--ease-station, cubic-bezier(0.16, 1, 0.3, 1));
+        animation: hx-modal-sheet-in 220ms var(--ease-station, cubic-bezier(0.16, 1, 0.3, 1));
       }
 
       #changelog-modal[open].is-closing {
-        animation: changelog-sheet-out 180ms ease-in forwards;
-      }
-
-      @keyframes changelog-sheet-in {
-        from { transform: translateY(100%); }
-        to   { transform: translateY(0); }
-      }
-
-      @keyframes changelog-sheet-out {
-        from { transform: translateY(0); }
-        to   { transform: translateY(100%); }
+        animation: hx-modal-sheet-out 180ms ease-in forwards;
       }
     }
 
@@ -118,7 +93,7 @@
     }
   </style>
 
-  <div class="flex items-center justify-between border-b border-[#1e2638] px-6 py-4">
+  <div class="flex items-center justify-between border-b border-border-subtle px-6 py-4">
     <div class="min-w-0">
       <h2
         id="changelog-modal-title"
@@ -136,49 +111,44 @@
       type="button"
       aria-label="Close changelog"
       data-close-changelog-modal="true"
-      class="ml-4 flex-shrink-0 rounded-lg border border-[#2a3448] bg-[#151b27] p-2 text-slate-400 hover:bg-[#1e2638] hover:text-slate-200 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400/30"
+      class="ml-4 flex-shrink-0 rounded-inset border border-border-default bg-surface-2 p-2 text-slate-400 hover:bg-surface-3 hover:text-slate-200 transition-colors duration-base ease-station focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400/30"
     >
-      <span aria-hidden="true" class="block leading-none text-xl">&times;</span>
+      <svg aria-hidden="true" class="block w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
     </button>
   </div>
 
-  <div class="max-h-[min(calc(100dvh-14rem),36rem)] overflow-y-auto px-6 py-5">
+  <div data-modal-scroll class="max-h-[min(calc(100dvh-14rem),36rem)] overflow-y-auto px-6 py-5">
     {% include "partials/changelog_content.html" %}
   </div>
 
   <div
-    class="flex flex-wrap items-center justify-between gap-3 border-t border-[#1e2638] px-6 py-4"
+    class="flex flex-wrap items-center justify-between gap-3 border-t border-border-subtle px-6 py-4"
   >
     <a
       href="https://github.com/av1155/houndarr/blob/main/CHANGELOG.md"
       target="_blank"
       rel="noopener noreferrer"
-      class="text-xs font-medium text-brand-300 hover:text-brand-200 underline underline-offset-4 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400/30 rounded-sm"
+      class="text-xs font-medium text-brand-300 hover:text-brand-200 underline underline-offset-4 transition-colors duration-base ease-station focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400/30 rounded-sm"
     >
-      Full changelog on GitHub
+      Latest on GitHub
     </a>
     <div class="flex items-center gap-2">
+      {%- import "_macros/buttons.html" as buttons -%}
       {% if not manual %}
-      <button
-        type="button"
-        data-changelog-disable="true"
-        hx-post="/settings/changelog/disable"
-        hx-swap="none"
-        class="px-3 py-2 rounded-lg text-sm text-slate-300 hover:text-white hover:bg-surface-2 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400/30"
-      >
-        Don't show again
-      </button>
+      {% call buttons.btn(variant="soft-neutral", size="md", attrs={
+          "type": "button",
+          "data-changelog-disable": "true",
+          "hx-post": "/settings/changelog/disable",
+          "hx-swap": "none",
+      }) %}Don't show again{% endcall %}
       {% endif %}
-      <button
-        type="button"
-        autofocus
-        data-changelog-dismiss="true"
-        hx-post="/settings/changelog/dismiss"
-        hx-swap="none"
-        class="px-4 py-2 rounded-lg bg-brand-500 hover:bg-brand-400 text-white text-sm font-semibold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400/35"
-      >
-        Got it
-      </button>
+      {% call buttons.btn(variant="primary", size="md", extra="font-semibold", attrs={
+          "type": "button",
+          "autofocus": true,
+          "data-changelog-dismiss": "true",
+          "hx-post": "/settings/changelog/dismiss",
+          "hx-swap": "none",
+      }) %}Got it{% endcall %}
     </div>
   </div>
-</dialog>
+{% endcall %}

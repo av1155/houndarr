@@ -8,12 +8,12 @@ from houndarr.clients.lidarr import LibraryAlbum, MissingAlbum
 from houndarr.clients.radarr import LibraryMovie, MissingMovie
 from houndarr.clients.readarr import LibraryBook, MissingBook
 from houndarr.clients.sonarr import LibraryEpisode, MissingEpisode
-from houndarr.clients.whisparr_v2 import LibraryWhisparrEpisode, MissingWhisparrEpisode
+from houndarr.clients.whisparr_v2 import LibraryWhisparrV2Episode, MissingWhisparrV2Episode
 from houndarr.engine.adapters import lidarr as lidarr_adapter
 from houndarr.engine.adapters import radarr as radarr_adapter
 from houndarr.engine.adapters import readarr as readarr_adapter
 from houndarr.engine.adapters import sonarr as sonarr_adapter
-from houndarr.engine.adapters import whisparr_v2 as whisparr_adapter
+from houndarr.engine.adapters import whisparr_v2 as whisparr_v2_adapter
 from houndarr.engine.adapters.lidarr import _artist_item_id
 from houndarr.engine.adapters.readarr import _author_item_id
 from houndarr.engine.adapters.sonarr import _season_item_id
@@ -22,7 +22,7 @@ from houndarr.services.instances import (
     LidarrSearchMode,
     ReadarrSearchMode,
     SonarrSearchMode,
-    WhisparrSearchMode,
+    WhisparrV2SearchMode,
 )
 from tests.test_engine.conftest import make_instance
 
@@ -161,17 +161,17 @@ def _library_book(
     )
 
 
-def _missing_whisparr_episode(
+def _missing_whisparr_v2_episode(
     *,
     episode_id: int = 501,
     series_id: int | None = 70,
     season_number: int = 1,
     release_date: datetime | None = None,
-) -> MissingWhisparrEpisode:
-    return MissingWhisparrEpisode(
+) -> MissingWhisparrV2Episode:
+    return MissingWhisparrV2Episode(
         episode_id=episode_id,
         series_id=series_id,
-        series_title="My Whisparr Show",
+        series_title="My Whisparr v2 Show",
         episode_title="Scene Title",
         season_number=season_number,
         absolute_episode_number=5,
@@ -179,16 +179,16 @@ def _missing_whisparr_episode(
     )
 
 
-def _library_whisparr_episode(
+def _library_whisparr_v2_episode(
     *,
     episode_id: int = 501,
     series_id: int = 70,
     season_number: int = 1,
-) -> LibraryWhisparrEpisode:
-    return LibraryWhisparrEpisode(
+) -> LibraryWhisparrV2Episode:
+    return LibraryWhisparrV2Episode(
         episode_id=episode_id,
         series_id=series_id,
-        series_title="My Whisparr Show",
+        series_title="My Whisparr v2 Show",
         episode_title="Scene Title",
         season_number=season_number,
         absolute_episode_number=5,
@@ -478,33 +478,33 @@ def test_readarr_adapt_upgrade_author_context() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Whisparr adapter
+# Whisparr v2 adapter
 # ---------------------------------------------------------------------------
 
 
-def test_whisparr_adapt_missing_episode_mode() -> None:
-    """Episode mode: item_type=whisparr_episode, group_key=None."""
+def test_whisparr_v2_adapt_missing_episode_mode() -> None:
+    """Episode mode: item_type=whisparr_v2_episode, group_key=None."""
     inst = make_instance(
         itype=InstanceType.whisparr_v2,
-        whisparr_search_mode=WhisparrSearchMode.episode,
+        whisparr_v2_search_mode=WhisparrV2SearchMode.episode,
     )
-    item = _missing_whisparr_episode()
-    cand = whisparr_adapter.adapt_missing(item, inst)
+    item = _missing_whisparr_v2_episode()
+    cand = whisparr_v2_adapter.adapt_missing(item, inst)
 
     assert cand.item_id == 501
-    assert cand.item_type == "whisparr_episode"
+    assert cand.item_type == "whisparr_v2_episode"
     assert cand.group_key is None
     assert cand.search_payload["command"] == "EpisodeSearch"
 
 
-def test_whisparr_adapt_missing_season_context() -> None:
+def test_whisparr_v2_adapt_missing_season_context() -> None:
     """Season-context: synthetic item_id, group_key=(series_id, season)."""
     inst = make_instance(
         itype=InstanceType.whisparr_v2,
-        whisparr_search_mode=WhisparrSearchMode.season_context,
+        whisparr_v2_search_mode=WhisparrV2SearchMode.season_context,
     )
-    item = _missing_whisparr_episode(series_id=70, season_number=2)
-    cand = whisparr_adapter.adapt_missing(item, inst)
+    item = _missing_whisparr_v2_episode(series_id=70, season_number=2)
+    cand = whisparr_v2_adapter.adapt_missing(item, inst)
 
     expected_id = -(70 * 1000 + 2)
     assert cand.item_id == expected_id
@@ -512,28 +512,28 @@ def test_whisparr_adapt_missing_season_context() -> None:
     assert cand.search_payload["command"] == "SeasonSearch"
 
 
-def test_whisparr_adapt_cutoff_always_episode_mode() -> None:
-    """Cutoff always uses episode mode for Whisparr."""
+def test_whisparr_v2_adapt_cutoff_always_episode_mode() -> None:
+    """Cutoff always uses episode mode for Whisparr v2."""
     inst = make_instance(
         itype=InstanceType.whisparr_v2,
-        whisparr_search_mode=WhisparrSearchMode.season_context,
+        whisparr_v2_search_mode=WhisparrV2SearchMode.season_context,
     )
-    item = _missing_whisparr_episode(series_id=70, season_number=2)
-    cand = whisparr_adapter.adapt_cutoff(item, inst)
+    item = _missing_whisparr_v2_episode(series_id=70, season_number=2)
+    cand = whisparr_v2_adapter.adapt_cutoff(item, inst)
 
     assert cand.item_id == 501
     assert cand.group_key is None
     assert cand.search_payload["command"] == "EpisodeSearch"
 
 
-def test_whisparr_adapt_upgrade_season_context() -> None:
-    """Upgrade with upgrade_whisparr_search_mode=season_context."""
+def test_whisparr_v2_adapt_upgrade_season_context() -> None:
+    """Upgrade with upgrade_whisparr_v2_search_mode=season_context."""
     inst = make_instance(
         itype=InstanceType.whisparr_v2,
-        upgrade_whisparr_search_mode=WhisparrSearchMode.season_context,
+        upgrade_whisparr_v2_search_mode=WhisparrV2SearchMode.season_context,
     )
-    item = _library_whisparr_episode(series_id=70, season_number=2)
-    cand = whisparr_adapter.adapt_upgrade(item, inst)
+    item = _library_whisparr_v2_episode(series_id=70, season_number=2)
+    cand = whisparr_v2_adapter.adapt_upgrade(item, inst)
 
     expected_id = -(70 * 1000 + 2)
     assert cand.item_id == expected_id
@@ -541,26 +541,26 @@ def test_whisparr_adapt_upgrade_season_context() -> None:
     assert cand.unreleased_reason is None
 
 
-def test_whisparr_unreleased_with_future_datetime() -> None:
+def test_whisparr_v2_unreleased_with_future_datetime() -> None:
     """A future datetime produces unreleased_reason='not yet released'."""
     inst = make_instance(
         itype=InstanceType.whisparr_v2,
-        whisparr_search_mode=WhisparrSearchMode.episode,
+        whisparr_v2_search_mode=WhisparrV2SearchMode.episode,
     )
     future_dt = datetime.now(UTC) + timedelta(days=30)
-    item = _missing_whisparr_episode(release_date=future_dt)
-    cand = whisparr_adapter.adapt_missing(item, inst)
+    item = _missing_whisparr_v2_episode(release_date=future_dt)
+    cand = whisparr_v2_adapter.adapt_missing(item, inst)
 
     assert cand.unreleased_reason == "not yet released"
 
 
-def test_whisparr_unreleased_with_none_release_date() -> None:
+def test_whisparr_v2_unreleased_with_none_release_date() -> None:
     """release_date=None means the item is eligible (unreleased_reason=None)."""
     inst = make_instance(
         itype=InstanceType.whisparr_v2,
-        whisparr_search_mode=WhisparrSearchMode.episode,
+        whisparr_v2_search_mode=WhisparrV2SearchMode.episode,
     )
-    item = _missing_whisparr_episode(release_date=None)
-    cand = whisparr_adapter.adapt_missing(item, inst)
+    item = _missing_whisparr_v2_episode(release_date=None)
+    cand = whisparr_v2_adapter.adapt_missing(item, inst)
 
     assert cand.unreleased_reason is None

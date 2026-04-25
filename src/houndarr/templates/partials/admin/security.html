@@ -1,0 +1,109 @@
+{#
+  Admin > Security sub-section.
+
+  Builtin: renders the password-change form that POSTs to
+  /settings/account/password (the existing endpoint, unchanged). The
+  form reuses static/js/auth.js's strength meter + show-hide + caps-
+  lock + confirm-match via data attributes.
+
+  Proxy: renders a read-only identity card with a pointer at the SSO
+  docs page instead of the form, because there is no local password to
+  change when auth is delegated to the upstream proxy.
+#}
+{%- import "_macros/forms.html" as forms -%}
+{%- import "_macros/alerts.html" as alerts -%}
+{%- import "_macros/layout.html" as layout -%}
+{% call layout.admin_section(id="admin-security", title="Security") %}
+  <div class="rounded-container border border-border-subtle bg-surface-1 p-5 sm:p-6">
+    <div
+      class="inline-flex items-center gap-2 rounded-inset border border-border-subtle bg-surface-2/70 px-3 py-1.5 text-xs text-slate-400 font-sans mb-5"
+    >
+      <span class="text-slate-500">Signed in as</span>
+      <span class="font-medium text-slate-200 font-mono text-[0.6875rem]">{{ signed_in_as }}</span>
+    </div>
+
+    {% if auth_mode == "proxy" %}
+    <p class="text-sm text-slate-400">
+      Password management is handled by your SSO or reverse-proxy provider.
+      Houndarr trusts the authenticated identity forwarded by the configured
+      <code class="text-slate-300">auth header</code> for every request.
+    </p>
+    <p class="mt-2 text-xs text-slate-500">
+      See
+      <a
+        href="https://av1155.github.io/houndarr/docs/guides/sso-proxy-auth"
+        target="_blank"
+        rel="noopener noreferrer"
+        class="text-brand-300 hover:text-brand-200 underline underline-offset-4 decoration-dotted"
+      >
+        SSO / proxy auth guide<svg class="inline-link-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+      </a>
+      for how to rotate credentials at the proxy layer.
+    </p>
+    {% else %}
+    <form
+      data-auth-form
+      hx-post="/settings/account/password"
+      hx-target="#admin-security"
+      hx-select="#admin-security"
+      hx-swap="outerHTML"
+      class="grid grid-cols-1 min-[971px]:grid-cols-3 gap-3 items-start"
+      autocomplete="off"
+    >
+      <div class="field">
+        {{ forms.password_input(
+            id="current-password",
+            name="current_password",
+            label="Current password",
+            autocomplete="current-password",
+            placeholder="••••••••",
+        ) }}
+      </div>
+
+      <div class="field">
+        {{ forms.password_input(
+            id="new-password",
+            name="new_password",
+            label="New password",
+            autocomplete="new-password",
+            placeholder="Minimum 8 characters",
+            minlength=8,
+            strength_meter=true,
+            data_strength_source=true,
+        ) }}
+      </div>
+
+      <div class="field">
+        {{ forms.password_input(
+            id="confirm-password",
+            name="new_password_confirm",
+            label="Confirm password",
+            autocomplete="new-password",
+            placeholder="Repeat new password",
+            minlength=8,
+            data_pw_confirm="new-password",
+            aria_describedby="pw-match",
+            pw_match=true,
+        ) }}
+      </div>
+
+      <div class="min-[971px]:col-span-3 flex flex-wrap items-center gap-3 pt-1">
+        <button
+          type="submit"
+          class="btn btn-primary px-4 py-2 text-sm font-semibold font-sans focus:outline-none focus:ring-2 focus:ring-brand-400/35"
+        >
+          Update Password
+        </button>
+        <p class="text-xs text-slate-500">Changes take effect immediately.</p>
+      </div>
+
+      {% if account_error is defined and account_error %}
+      {% call alerts.alert("error", prefix="min-[971px]:col-span-3", extra="text-sm font-sans") %}{{ account_error }}{% endcall %}
+      {% endif %}
+      {% if account_success is defined and account_success %}
+      {% call alerts.alert("success", prefix="min-[971px]:col-span-3", extra="text-sm font-sans") %}{{ account_success }}{% endcall %}
+      {% endif %}
+    </form>
+    {% endif %}
+  </div>
+{% endcall %}

@@ -1,30 +1,5 @@
-<a href="/"
-   data-shell-nav="true"
-   data-shell-route="/"
-   hx-get="/"
-   hx-target="#app-content"
-   hx-swap="innerHTML"
-   hx-push-url="true"
-   class="shell-nav-link px-3 py-2 rounded-md text-sm font-medium {% if request.url.path == '/' %}bg-surface-3 text-white{% else %}text-slate-400 hover:text-white hover:bg-surface-2{% endif %}">
-  Dashboard
-</a>
-<a href="/logs"
-   data-shell-nav="true"
-   data-shell-route="/logs"
-   hx-get="/logs"
-   hx-target="#app-content"
-   hx-swap="innerHTML"
-   hx-push-url="true"
-   class="shell-nav-link px-3 py-2 rounded-md text-sm font-medium {% if request.url.path == '/logs' %}bg-surface-3 text-white{% else %}text-slate-400 hover:text-white hover:bg-surface-2{% endif %}">
-  Logs
-</a>
-<a href="/settings"
-   data-shell-nav="true"
-   data-shell-route="/settings"
-   hx-get="/settings"
-   hx-target="#app-content"
-   hx-swap="innerHTML"
-   hx-push-url="true"
-   class="shell-nav-link px-3 py-2 rounded-md text-sm font-medium {% if request.url.path == '/settings' or request.url.path.startswith('/settings/') %}bg-surface-3 text-white{% else %}text-slate-400 hover:text-white hover:bg-surface-2{% endif %}">
-  Settings
-</a>
+{%- import "_macros/htmx.html" as hx -%}
+{%- set _variant = nav_variant | default('pill') -%}
+{{ hx.shell_nav_link('/', 'Dashboard', request.url.path == '/', variant=_variant) }}
+{{ hx.shell_nav_link('/logs', 'Logs', request.url.path == '/logs', variant=_variant) }}
+{{ hx.shell_nav_link('/settings', 'Settings', request.url.path == '/settings' or request.url.path.startswith('/settings/'), variant=_variant) }}

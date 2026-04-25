@@ -8,3 +8,11 @@ pytest-cov>=7.1.0
 pytest-xdist>=3.8.0
 respx>=0.23.1
 anyio>=4.13.0
+
+# Playwright tooling for the browser e2e suite under tests/e2e_browser/
+# is pinned separately at tests/e2e_browser/requirements.txt.  It is not
+# pulled in here because chromium weighs ~300 MB and most contributors
+# never touch the e2e tree.  Install those deps only when running
+# `just capture-baselines` / `just verify-baselines` or the full
+# browser workflow; the capture script installs them inside the
+# Playwright docker container for you.

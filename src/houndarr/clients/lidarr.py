@@ -3,16 +3,19 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import ClassVar
 
-import httpx
-
-from houndarr.clients.base import ArrClient
+from houndarr.clients._wire_models import (
+    LidarrLibraryAlbum,
+    LidarrWantedAlbum,
+    PaginatedResponse,
+)
+from houndarr.clients.base import ArrClient, WantedKind
 
 __all__ = ["LidarrClient", "LibraryAlbum", "MissingAlbum"]
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class LibraryAlbum:
     """An album from Lidarr's full library endpoint."""
 
@@ -25,7 +28,7 @@ class LibraryAlbum:
     release_date: str | None
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class MissingAlbum:
     """A single missing album returned by Lidarr's wanted/missing endpoint."""
 
@@ -41,6 +44,14 @@ class LidarrClient(ArrClient):
 
     _SYSTEM_STATUS_PATH: str = "/api/v1/system/status"
     _QUEUE_STATUS_PATH: str = "/api/v1/queue/status"
+    # Lidarr is a v1 API (Sonarr / Radarr / Whisparr v2 are v3); the
+    # override routes the /wanted template at /api/v1/wanted/{kind}.
+    _WANTED_BASE_PATH: ClassVar[str] = "/api/v1/wanted"
+    _WANTED_SORT_KEY: ClassVar[str] = "releaseDate"
+    _WANTED_INCLUDE_PARAM: ClassVar[str | None] = "includeArtist"
+    _WANTED_ENVELOPE: ClassVar[type[PaginatedResponse[LidarrWantedAlbum]]] = PaginatedResponse[
+        LidarrWantedAlbum
+    ]
 
     async def get_missing(
         self,
@@ -60,17 +71,8 @@ class LidarrClient(ArrClient):
         Returns:
             List of :class:`MissingAlbum` dataclasses.
         """
-        data: dict[str, Any] = await self._get(
-            "/api/v1/wanted/missing",
-            page=page,
-            pageSize=page_size,
-            sortKey="releaseDate",
-            sortDirection="ascending",
-            includeArtist="true",
-            monitored="true",
-        )
-        records: list[dict[str, Any]] = data.get("records", [])
-        return [_parse_album(r) for r in records]
+        envelope = await self._fetch_wanted_page("missing", page=page, page_size=page_size)
+        return [_parse_album(w) for w in envelope.records]
 
     async def search(self, item_id: int) -> None:
         """Trigger an automatic album search in Lidarr.
@@ -107,6 +109,8 @@ class LidarrClient(ArrClient):
         """Return a page of monitored albums that have not met their quality cutoff.
 
         Calls ``GET /api/v1/wanted/cutoff`` with ``includeArtist=true``.
+        Lidarr's cutoff endpoint historically omits the sort params, so
+        the call passes ``include_sort=False`` to suppress them.
 
         Args:
             page: 1-based page number.
@@ -115,27 +119,30 @@ class LidarrClient(ArrClient):
         Returns:
             List of :class:`MissingAlbum` dataclasses.
         """
-        data: dict[str, Any] = await self._get(
-            "/api/v1/wanted/cutoff",
+        envelope = await self._fetch_wanted_page(
+            "cutoff",
             page=page,
-            pageSize=page_size,
-            includeArtist="true",
-            monitored="true",
+            page_size=page_size,
+            include_sort=False,
         )
-        records: list[dict[str, Any]] = data.get("records", [])
-        return [_parse_album(r) for r in records]
+        return [_parse_album(w) for w in envelope.records]
 
-    async def get_wanted_total(self, kind: Literal["missing", "cutoff"]) -> int:
-        """Return the totalRecords count for ``wanted/{kind}`` via a size-1 probe."""
-        data: dict[str, Any] = await self._get(
-            f"/api/v1/wanted/{kind}",
-            page=1,
-            pageSize=1,
-            sortKey="releaseDate",
-            sortDirection="ascending",
-            monitored="true",
-        )
-        return int(data.get("totalRecords", 0) or 0)
+    async def get_wanted_total(self, kind: WantedKind) -> int:
+        """Return the totalRecords count for ``wanted/{kind}`` via a size-1 probe.
+
+        Delegates to :meth:`ArrClient._fetch_wanted_total`, which wraps
+        raw ``httpx`` and ``pydantic`` failures in typed
+        :class:`~houndarr.errors.ClientError` subclasses with the
+        original exception preserved on ``__cause__``.
+
+        Raises:
+            ClientHTTPError: Non-2xx response.
+            ClientTransportError: Transport failure (connect, timeout,
+                malformed URL, etc.).
+            ClientValidationError: Response shape did not match the
+                paginated envelope schema.
+        """
+        return await self._fetch_wanted_total(kind)
 
     async def get_albums(self) -> list[LibraryAlbum]:
         """Return the full album library.
@@ -145,53 +152,42 @@ class LidarrClient(ArrClient):
         Returns:
             List of :class:`LibraryAlbum` dataclasses.
         """
-        records: list[dict[str, Any]] = await self._get(
+        records = await self._get(
             "/api/v1/album",
             includeArtist="true",
         )
-        return [_parse_library_album(r) for r in records]
+        return [_parse_library_album(LidarrLibraryAlbum.model_validate(r)) for r in records]
 
 
-# ---------------------------------------------------------------------------
 # Parsing helpers
-# ---------------------------------------------------------------------------
 
 
-def _parse_library_album(record: dict[str, Any]) -> LibraryAlbum:
-    artist: dict[str, Any] = record.get("artist") or {}
-    stats: dict[str, Any] = record.get("statistics") or {}
-    track_file_count = stats.get("trackFileCount", 0)
+def _parse_library_album(wire: LidarrLibraryAlbum) -> LibraryAlbum:
+    track_file_count = (
+        wire.statistics.track_file_count or 0
+        if wire.statistics is not None and wire.statistics.track_file_count is not None
+        else 0
+    )
+    artist_id = wire.artist_id or (wire.artist.id if wire.artist else None) or 0
+    artist_name = (wire.artist.artist_name if wire.artist else None) or ""
     return LibraryAlbum(
-        album_id=record["id"],
-        artist_id=record.get("artistId") or artist.get("id") or 0,
-        artist_name=artist.get("artistName") or "",
-        title=record.get("title") or "",
-        monitored=bool(record.get("monitored", False)),
+        album_id=wire.id,
+        artist_id=artist_id,
+        artist_name=artist_name,
+        title=wire.title or "",
+        monitored=bool(wire.monitored),
         has_file=track_file_count > 0,
-        release_date=record.get("releaseDate"),
+        release_date=wire.release_date,
     )
 
 
-def _parse_album(record: dict[str, Any]) -> MissingAlbum:
-    artist: dict[str, Any] = record.get("artist") or {}
+def _parse_album(wire: LidarrWantedAlbum) -> MissingAlbum:
+    artist_id = wire.artist_id or (wire.artist.id if wire.artist else None) or 0
+    artist_name = (wire.artist.artist_name if wire.artist else None) or ""
     return MissingAlbum(
-        album_id=record["id"],
-        artist_id=record.get("artistId") or artist.get("id") or 0,
-        artist_name=artist.get("artistName") or "",
-        title=record.get("title") or "",
-        release_date=record.get("releaseDate"),
+        album_id=wire.id,
+        artist_id=artist_id,
+        artist_name=artist_name,
+        title=wire.title or "",
+        release_date=wire.release_date,
     )
-
-
-# ---------------------------------------------------------------------------
-# Convenience factory
-# ---------------------------------------------------------------------------
-
-
-def make_lidarr_client(
-    url: str,
-    api_key: str,
-    timeout: httpx.Timeout = httpx.Timeout(30.0, connect=5.0),
-) -> LidarrClient:
-    """Return a :class:`LidarrClient` ready for use as an async context manager."""
-    return LidarrClient(url=url, api_key=api_key, timeout=timeout)

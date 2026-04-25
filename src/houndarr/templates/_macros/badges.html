@@ -1,0 +1,93 @@
+{#-
+  Shared badge macros for instance rows and log rows.
+
+  Every class string matches the palette used by
+  partials/instance_row.html and partials/log_rows.html.
+  Centralising the palette here means a badge's component class
+  can change in one seam instead of across five call sites.
+
+  The dashboard `dash-pill` surface (rendered from
+  static/js/dashboard.js against the BEM CSS in
+  partials/pages/dashboard_content.html) is a distinct visual
+  system and is intentionally NOT represented here.
+-#}
+
+
+{%- macro instance_type_badge(type_value) -%}
+{%- set badge_map = {
+  'sonarr':      {'bg': 'bg-sonarr-bg',      'text': 'text-sonarr',      'border': 'border-sonarr/40',      'label': 'Sonarr'},
+  'radarr':      {'bg': 'bg-radarr-bg',      'text': 'text-radarr',      'border': 'border-radarr/40',      'label': 'Radarr'},
+  'lidarr':      {'bg': 'bg-lidarr-bg',      'text': 'text-lidarr',      'border': 'border-lidarr/40',      'label': 'Lidarr'},
+  'readarr':     {'bg': 'bg-readarr-bg',     'text': 'text-readarr',     'border': 'border-readarr/40',     'label': 'Readarr'},
+  'whisparr_v2': {'bg': 'bg-whisparr-v2-bg', 'text': 'text-whisparr-v2', 'border': 'border-whisparr-v2/40', 'label': 'Whisparr v2'},
+  'whisparr_v3': {'bg': 'bg-whisparr-v3-bg', 'text': 'text-whisparr-v3', 'border': 'border-whisparr-v3/40', 'label': 'Whisparr v3'},
+} -%}
+{#- Unknown type falls back to the Sonarr palette so no row ever
+    renders an unstyled span. -#}
+{%- set b = badge_map.get(type_value, badge_map['sonarr']) -%}
+<span class="inline-flex items-center px-2 py-0.5 rounded-chip text-xs font-mono {{ b.bg }} {{ b.text }} border {{ b.border }}">{{ b.label }}</span>
+{%- endmacro %}
+
+
+{%- macro log_action_badge(action) -%}
+{%- if action == "searched" -%}
+<span class="badge badge-soft badge-success">searched</span>
+{%- elif action == "skipped" -%}
+<span class="badge badge-soft badge-warning">skipped</span>
+{%- elif action == "error" -%}
+<span class="badge badge-soft badge-error">error</span>
+{%- else -%}
+<span class="badge badge-soft badge-neutral">info</span>
+{%- endif -%}
+{%- endmacro %}
+
+
+{%- macro log_kind_badge(kind) -%}
+{%- if kind == "missing" -%}
+<span class="badge badge-soft badge-info">missing</span>
+{%- elif kind == "cutoff" -%}
+<span class="badge badge-soft badge-warning">cutoff</span>
+{%- elif kind == "upgrade" -%}
+{#- Violet (upgrade cooldown) is outside daisyUI's state palette; the
+    explicit seg-upgrade-cd utilities keep the badge on the Station
+    token instead of collapsing to a generic state color. -#}
+<span class="badge badge-soft text-seg-upgrade-cd border-seg-upgrade-cd bg-seg-upgrade-cd/15">upgrade</span>
+{%- else -%}
+<span class="text-slate-600">-</span>
+{%- endif -%}
+{%- endmacro %}
+
+
+{%- macro log_trigger_badge(trigger) -%}
+{%- if trigger == "scheduled" -%}
+<span class="badge badge-soft badge-primary">scheduled</span>
+{%- elif trigger == "run_now" -%}
+<span class="badge badge-soft badge-success">run_now</span>
+{%- elif trigger == "system" -%}
+<span class="badge badge-soft badge-neutral">system</span>
+{%- else -%}
+<span class="text-slate-600">-</span>
+{%- endif -%}
+{%- endmacro %}
+
+
+{%- macro log_cycle_outcome_badge(progress) -%}
+{%- if progress == "progress" -%}
+<span class="badge badge-soft badge-success">searched</span>
+{%- elif progress == "no_progress" -%}
+<span class="badge badge-soft badge-neutral">skips only</span>
+{%- else -%}
+<span class="text-[0.625rem] text-slate-600 font-mono">unknown</span>
+{%- endif -%}
+{%- endmacro %}
+
+
+{%- macro status_pill(state) -%}
+{%- if state == "error" -%}
+<span class="status-pill status-pill--error"><span class="status-dot status-dot--error" title="Instance is reporting errors" aria-label="Instance is reporting errors"></span><span class="hidden sm:inline">Error</span></span>
+{%- elif state == "active" -%}
+<span class="status-pill status-pill--active"><span class="status-dot status-dot--active" title="Search enabled" aria-label="Search enabled"></span><span class="hidden sm:inline">Active</span></span>
+{%- else -%}
+<span class="status-pill status-pill--disabled"><span class="status-dot status-dot--disabled" title="Search disabled" aria-label="Search disabled"></span><span class="hidden sm:inline">Disabled</span></span>
+{%- endif -%}
+{%- endmacro %}

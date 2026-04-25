@@ -43,7 +43,7 @@ class TestAdapterRegistry:
         assert callable(adapter.dispatch_search)
         assert callable(adapter.make_client)
 
-    def test_has_whisparr(self):
+    def test_has_whisparr_v2(self):
         adapter = ADAPTERS[InstanceType.whisparr_v2]
         assert isinstance(adapter, AppAdapter)
         assert callable(adapter.adapt_missing)

@@ -21,50 +21,15 @@
   <link rel="apple-touch-icon" href="/static/img/houndarr-logo-dark.png" />
   <title>{% block title %}Houndarr{% endblock %}</title>
 
-  <!-- Station Design System fonts -->
-  <link rel="stylesheet" href="/static/css/fonts.css" />
-  <!-- Station Design System tokens -->
-  <link rel="stylesheet" href="/static/css/tokens.css" />
+  {# Tailwind CSS v4 + custom design-system CSS, compiled at Docker build
+     time by the css-build stage. Source inputs live in
+     src/houndarr/static/css/: input.css (theme + imports), tokens.css,
+     app.css, auth.css, auth-fields.css. Bundles Google Fonts @import,
+     Tailwind utilities, and all component primitives into one file. #}
+  <link rel="stylesheet" href="/static/css/app.built.css?v={{ version }}" />
 
-  <!-- Tailwind CSS via CDN play script -->
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script>
-    tailwind.config = {
-      darkMode: 'class',
-      theme: {
-        extend: {
-          colors: {
-            brand: {
-              50:  '#ecfeff',
-              100: '#cffafe',
-              200: '#a5f3fc',
-              300: '#67e8f9',
-              400: '#22d3ee',
-              500: '#06b6d4',
-              600: '#0891b2',
-              700: '#0e7490',
-              800: '#155e75',
-              900: '#164e63',
-            },
-            surface: {
-              base: '#07080f',
-              1:    '#0e1117',
-              2:    '#151b27',
-              3:    '#1e2638',
-            },
-          },
-          fontFamily: {
-            sans: ['Inter', 'ui-sans-serif', 'system-ui', '-apple-system', 'BlinkMacSystemFont', '"Segoe UI"', 'Roboto', 'sans-serif'],
-            mono: ['"JetBrains Mono"', '"Fira Code"', '"Cascadia Code"', 'ui-monospace', 'SFMono-Regular', 'monospace'],
-          },
-        }
-      }
-    }
-  </script>
-
-  <!-- HTMX -->
-  <script src="https://unpkg.com/htmx.org@2.0.4/dist/htmx.min.js" defer></script>
-  <link rel="stylesheet" href="/static/css/app.css" />
+  <!-- HTMX (self-hosted; source: https://unpkg.com/htmx.org@2.0.4) -->
+  <script src="/static/js/htmx.min.js?v={{ version }}" defer></script>
 
   <!-- Client helpers: defined early so page scripts can use them on first load -->
   <script>
@@ -91,64 +56,75 @@
 
   {% block head %}{% endblock %}
 </head>
-<body class="bg-surface-base text-slate-100 min-h-screen flex flex-col font-sans">
+<body class="text-slate-100 min-h-dvh flex flex-col font-sans{% if show_nav is defined and not show_nav %} is-auth{% endif %}">
+
+  {%- import "_macros/htmx.html" as hx -%}
 
   {% if show_nav is not defined or show_nav %}
   <!-- Navigation -->
-  <nav class="bg-surface-1 border-b border-surface-3 sticky top-0 z-50">
+  <header class="sticky top-0 z-50">
+  <nav class="bg-surface-1 border-b border-surface-3">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-      <div class="flex items-center justify-between h-16 sm:h-14">
-        <!-- Logo / wordmark -->
-        <a
-          href="/"
-          hx-get="/"
-          hx-target="#app-content"
-          hx-swap="innerHTML"
-          hx-push-url="true"
-          class="-ml-1 flex items-center gap-2 text-brand-400 font-semibold text-lg leading-none hover:text-brand-300 transition-colors"
-        >
+      {# 1fr _ auto _ 1fr grid so the pill container in col 2 sits at
+         true horizontal center regardless of the brand's and the right
+         slot's widths.  At mobile the hamburger lives in col 3 and the
+         logout form hides; at sm+ the logout form takes col 3 and the
+         hamburger hides.  Explicit col-start anchors keep col 3 right-
+         aligned even when col 2 collapses to zero width. #}
+      <div class="grid grid-cols-[1fr_auto_1fr] items-center h-16 sm:h-14 gap-4 sm:gap-6">
+        {% call hx.hx_shell_fetch('/', class_='col-start-1 justify-self-start -ml-1 flex items-center gap-2 text-brand-400 font-semibold text-lg leading-none hover:text-brand-300 transition-colors') -%}
           <img
-            src="/static/img/houndarr-logo-dark-ui.png"
+            src="/static/img/houndarr-logo-dark.png"
             alt="Houndarr logo"
-            class="w-8 h-8 sm:w-9 sm:h-9 object-contain"
-            style="filter: drop-shadow(var(--glow-logo));"
+            class="w-8 h-8 sm:w-9 sm:h-9 object-contain logo-glow"
           />
           Houndarr
-        </a>
+        {%- endcall %}
 
+        <div class="pill-nav hidden sm:inline-flex col-start-2 justify-self-center">
+          {% with nav_variant = 'pill' %}
+            {% include "partials/shell_nav_links.html" %}
+          {% endwith %}
+        </div>
+
+        <!-- Col 3: hamburger at mobile, icon logout at sm+ -->
         <button id="mobile-nav-toggle"
                 type="button"
                 aria-label="Toggle navigation menu"
                 aria-controls="mobile-nav-menu"
                 aria-expanded="false"
-                class="sm:hidden inline-flex h-10 w-10 items-center justify-center rounded-md border border-surface-3 bg-surface-2 text-slate-300 hover:text-white hover:bg-surface-3 transition-colors">
+                class="sm:hidden col-start-3 justify-self-end inline-flex h-10 w-10 items-center justify-center rounded-container border border-border-subtle bg-surface-2 text-slate-300 hover:text-white hover:bg-surface-3 transition-colors duration-base ease-station">
           <svg class="w-4 h-4 mobile-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
           </svg>
         </button>
 
-        <!-- Desktop nav links -->
-        <div class="hidden sm:flex items-center gap-1">
-          {% include "partials/shell_nav_links.html" %}
-          <form action="/logout" method="post" class="ml-2">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
-            <button type="submit"
-                    class="px-3 py-2 rounded-md text-sm font-medium text-slate-400 hover:text-white hover:bg-surface-2 transition-colors">
-              Logout
-            </button>
-          </form>
-        </div>
+        <form action="/logout" method="post" class="hidden sm:flex col-start-3 justify-self-end">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+          <button type="submit"
+                  class="nav-iconbtn nav-logout"
+                  aria-label="Log out"
+                  title="Log out">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/>
+              <polyline points="10 17 15 12 10 7"/>
+              <line x1="15" y1="12" x2="3" y2="12"/>
+            </svg>
+          </button>
+        </form>
       </div>
 
       <!-- Mobile nav menu -->
       <div id="mobile-nav-menu" class="sm:hidden mobile-nav-menu border-t border-surface-3">
         <div class="flex flex-col gap-0.5 py-2 px-1">
-          {% include "partials/shell_nav_links.html" %}
+          {% with nav_variant = 'mobile' %}
+            {% include "partials/shell_nav_links.html" %}
+          {% endwith %}
           <div class="mt-1 pt-1 border-t border-surface-3">
             <form action="/logout" method="post">
               <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
               <button type="submit"
-                      class="w-full text-left px-3 py-2.5 rounded-lg text-sm font-medium text-slate-500 hover:text-slate-300 hover:bg-surface-2 transition-colors">
+                      class="w-full text-left px-3 py-2.5 rounded-container text-sm font-medium text-slate-500 hover:text-slate-300 hover:bg-surface-2 transition-colors duration-base ease-station">
                 Logout
               </button>
             </form>
@@ -157,24 +133,25 @@
       </div>
     </div>
   </nav>
+  </header>
   <!-- Mobile nav backdrop -->
   <div id="mobile-nav-backdrop" class="sm:hidden fixed inset-0 z-40 mobile-nav-backdrop" aria-hidden="true"></div>
   {% endif %}
 
-  <!-- Flash messages: Station left-border style -->
-  {% if flash_error %}
-  <div id="flash-error"
-       class="border-l-4 border-red-500 bg-red-950/30 text-red-200 px-5 py-3 text-sm"
-       role="alert">
-    {{ flash_error }}
+  {# Window-scoped overlay thumb driven by app.js; replaces the hidden
+     native scrollbar (see app.css for why native is hidden). Modal
+     bars are injected per-dialog by a separate IIFE. #}
+  <div class="hx-scrollbar hx-scrollbar--window" aria-hidden="true">
+    <div class="hx-scrollbar__thumb"></div>
   </div>
+
+  <!-- Flash messages: Station left-border style -->
+  {%- import "_macros/alerts.html" as alerts -%}
+  {% if flash_error %}
+  {% call alerts.alert("error", extra="text-slate-100 text-sm", id="flash-error", role="alert") %}{{ flash_error }}{% endcall %}
   {% endif %}
   {% if flash_success %}
-  <div id="flash-success"
-       class="border-l-4 border-emerald-500 bg-emerald-950/30 text-emerald-200 px-5 py-3 text-sm"
-       role="alert">
-    {{ flash_success }}
-  </div>
+  {% call alerts.alert("success", extra="text-slate-100 text-sm", id="flash-success", role="alert") %}{{ flash_success }}{% endcall %}
   {% endif %}
 
   <!-- Main content -->
@@ -182,8 +159,16 @@
     {% block content %}{% endblock %}
   </main>
 
+  {# Global bottom-center toast.  Used by logs.js for the copy-as-TSV
+     feedback and by anything that dispatches a `houndarr-toast`
+     custom event (HX-Trigger response header or direct JS call via
+     window.houndarrShowToast). #}
+  <div class="toast" id="toast" role="status" aria-live="polite" hidden>
+    <span class="toast__label"></span>
+  </div>
+
   <!-- Footer -->
-  <footer class="border-t border-surface-3 py-4 text-xs text-slate-600">
+  <footer class="border-t border-border-subtle py-4 text-xs text-slate-500">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-center gap-3 font-mono">
       <span>Houndarr v{{ version }}</span>
       <a href="https://github.com/av1155/houndarr"
@@ -208,8 +193,21 @@
        hx-target="this"></div>
   {% endif %}
 
-  <script src="/static/js/app.js"></script>
-  <script src="/static/js/changelog.js"></script>
+  <script src="/static/js/app.js?v={{ version }}"></script>
+  <script src="/static/js/hx-dialog.js?v={{ version }}"></script>
+  <script src="/static/js/hx-scrollbar.js?v={{ version }}"></script>
+  <script src="/static/js/tooltip.js?v={{ version }}"></script>
+  <script src="/static/js/settings.js?v={{ version }}"></script>
+  <script src="/static/js/dashboard.js?v={{ version }}"></script>
+  <script src="/static/js/logs.js?v={{ version }}"></script>
+  <script src="/static/js/changelog.js?v={{ version }}"></script>
+  {# auth.js powers password show/hide, caps-lock badge, and strength
+     meter. Login / setup templates load it themselves (they render
+     without the nav shell); elsewhere we ship it from base so the
+     Admin > Security form reuses the same primitives as /login. #}
+  {% if show_nav is not defined or show_nav %}
+  <script src="/static/js/auth.js?v={{ version }}"></script>
+  {% endif %}
 
 </body>
 </html>

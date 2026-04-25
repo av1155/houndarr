@@ -1,14 +1,50 @@
-"""Application configuration and runtime settings."""
+"""Application configuration and runtime settings.
+
+Houndarr keeps two config surfaces and this module owns one of them.
+
+Ops config lives on :class:`AppSettings` and is resolved from environment
+variables at boot.  The CLI in :mod:`houndarr.__main__` propagates its
+flags into ``HOUNDARR_*`` env vars before :func:`bootstrap_settings` pins
+an :class:`AppSettings`, so uvicorn reload children that re-import the
+module pick up the same values via :func:`get_settings`.  Once pinned,
+every field is fixed for the life of the process: the operator changes
+it by editing ``docker-compose.yml`` (or the systemd unit env) and
+restarting the container.  ``HOUNDARR_AUTH_MODE`` is the canonical
+example.  Switching from ``builtin`` to ``proxy`` rewires the auth
+middleware, which only happens at app construction time;
+``HOUNDARR_DATA_DIR``, ``HOUNDARR_TRUSTED_PROXIES``, and
+``HOUNDARR_SECURE_COOKIES`` behave the same way for the same reason.
+
+User config lives in SQLite and is editable at runtime through the web
+UI without any restart.  The key-value ``settings`` table holds
+singletons read and written through
+:mod:`houndarr.repositories.settings`; canonical examples are the
+authenticated ``username`` and bcrypt ``password_hash`` (changed from
+the admin account UI), the boolean ``update_check_enabled`` flag
+(Settings > Maintenance), and the ``schema_version`` migration cursor.
+The ``instances`` table holds per-instance policy (``batch_size``,
+``sleep_interval_mins``, ``hourly_cap``, ``cooldown_days``, the per-app
+search-mode columns) read through
+:mod:`houndarr.repositories.instances`; the engine picks up new values
+on the next supervisor cycle, so the operator can retune the search rate
+from ``/settings/instances/<id>`` and see it take effect within minutes.
+
+The two surfaces never overlap.  Anything that needs a process boot to
+take effect (network bind, cookie attributes, auth wiring, log level)
+lives here as an :class:`AppSettings` field.  Anything an operator
+should be able to retune without redeploying lives in the database.
+"""
 
 from __future__ import annotations
 
 import ipaddress
 import logging
 import os
+import re
 from dataclasses import dataclass, field
 from ipaddress import IPv4Address, IPv4Network, IPv6Address, IPv6Network
 from pathlib import Path
-from typing import Literal
+from typing import Literal, TypedDict, Unpack
 
 logger = logging.getLogger(__name__)
 
@@ -117,6 +153,38 @@ def _parse_bool_env(name: str, default: bool = False) -> bool:
     return default
 
 
+_DEFAULT_UPDATE_CHECK_REPO = "av1155/houndarr"
+_UPDATE_CHECK_REPO_RE = re.compile(r"^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$")
+
+
+def _parse_update_check_repo(raw: str) -> str:
+    """Validate HOUNDARR_UPDATE_CHECK_REPO; fall back to the default on junk.
+
+    The value is interpolated into ``https://api.github.com/repos/{repo}/...``
+    so the GitHub URL parser already keeps the host pinned. This guard is
+    defence in depth: every :func:`get_settings` call that reads env
+    (the no-pin fallback, including the no-override branch of
+    :func:`bootstrap_settings`) flows through here, so a typo (missing
+    slash, accidental query string, absolute URL) is caught before a
+    garbled request hits the GitHub API. CLI overrides bypass this path
+    entirely because :func:`bootstrap_settings` constructs ``AppSettings``
+    from kwargs directly; ``HOUNDARR_UPDATE_CHECK_REPO`` only affects
+    the env-fallback callers (scripts, tests, and any caller that
+    invokes :func:`bootstrap_settings` with no overrides).
+    """
+    value = raw.strip()
+    if not value:
+        return _DEFAULT_UPDATE_CHECK_REPO
+    if not _UPDATE_CHECK_REPO_RE.match(value):
+        logger.warning(
+            "HOUNDARR_UPDATE_CHECK_REPO=%r is not a valid owner/repo slug; falling back to %r",
+            value,
+            _DEFAULT_UPDATE_CHECK_REPO,
+        )
+        return _DEFAULT_UPDATE_CHECK_REPO
+    return value
+
+
 def get_settings() -> AppSettings:
     """Return current runtime settings, falling back to defaults."""
     if _runtime_settings is not None:
@@ -132,7 +200,74 @@ def get_settings() -> AppSettings:
         trusted_proxies=os.environ.get("HOUNDARR_TRUSTED_PROXIES", ""),
         auth_mode=os.environ.get("HOUNDARR_AUTH_MODE", "builtin").lower(),
         auth_proxy_header=os.environ.get("HOUNDARR_AUTH_PROXY_HEADER", ""),
+        update_check_repo=_parse_update_check_repo(
+            os.environ.get("HOUNDARR_UPDATE_CHECK_REPO", "")
+        ),
     )
+
+
+class BootstrapOverrides(TypedDict, total=False):
+    """Optional :class:`AppSettings` field overrides accepted by ``bootstrap_settings``.
+
+    Every key is optional. Supplied keys are forwarded directly to the
+    :class:`AppSettings` constructor; unsupplied keys take whatever default
+    the dataclass declares (the env-var fallback in :func:`get_settings`
+    is only consulted on the no-override branch, never on the explicit
+    override path).
+    """
+
+    data_dir: str
+    host: str
+    port: int
+    dev: bool
+    log_level: str
+    secure_cookies: bool
+    cookie_samesite: SameSitePolicy
+    trusted_proxies: str
+    auth_mode: str
+    auth_proxy_header: str
+    update_check_repo: str
+
+
+def bootstrap_settings(**overrides: Unpack[BootstrapOverrides]) -> AppSettings:
+    """Resolve, pin, and return the runtime ``AppSettings`` honouring overrides.
+
+    This is the single entry point for installing :class:`AppSettings` into
+    the module-level singleton. CLI boot, scripts, and tests all funnel
+    through it instead of reaching into ``_runtime_settings`` directly,
+    so the pin lifecycle is observable in one place.
+
+    With at least one override supplied, an :class:`AppSettings` is
+    constructed from the kwargs and pinned. Subsequent
+    :func:`get_settings` calls return the same instance until the next
+    ``bootstrap_settings`` call (or process restart). Any prior pin is
+    replaced; any env var for an *unsupplied* key is ignored (the kwarg
+    path builds :class:`AppSettings` from overrides alone, so missing
+    fields take the dataclass default rather than the env value).
+
+    With no overrides supplied, any prior pin is cleared and the result of
+    :func:`get_settings` (env-var resolved) is returned *without* pinning.
+    Callers that subsequently change env vars therefore still see those
+    changes through :func:`get_settings`.
+
+    Args:
+        **overrides: Optional :class:`AppSettings` field values.
+
+    Returns:
+        The :class:`AppSettings` now visible to subsequent
+        :func:`get_settings` calls. With overrides this is the freshly
+        pinned instance; without overrides this is an unpinned
+        env-resolved instance.
+    """
+    global _runtime_settings  # noqa: PLW0603
+
+    if not overrides:
+        _runtime_settings = None
+        return get_settings()
+
+    settings = AppSettings(**overrides)
+    _runtime_settings = settings
+    return settings
 
 
 @dataclass
@@ -168,6 +303,11 @@ class AppSettings:
             username from the reverse proxy (e.g. ``Remote-User``).
             Required when ``auth_mode`` is ``proxy``.
             Corresponds to ``HOUNDARR_AUTH_PROXY_HEADER`` env var.
+        update_check_repo: ``owner/repo`` slug the update-check service
+            polls for the latest stable release. Defaults to the upstream
+            Houndarr repository; forks override via
+            ``HOUNDARR_UPDATE_CHECK_REPO`` so no code change is needed to
+            redirect the check at their own release stream.
     """
 
     data_dir: str = "/data"
@@ -180,6 +320,7 @@ class AppSettings:
     trusted_proxies: str = ""
     auth_mode: str = "builtin"
     auth_proxy_header: str = ""
+    update_check_repo: str = _DEFAULT_UPDATE_CHECK_REPO
 
     # Derived paths (computed from data_dir)
     db_path: Path = field(init=False)
@@ -249,7 +390,7 @@ DEFAULT_CUTOFF_HOURLY_CAP: int = 1
 DEFAULT_SONARR_SEARCH_MODE: str = "episode"
 DEFAULT_LIDARR_SEARCH_MODE: str = "album"
 DEFAULT_READARR_SEARCH_MODE: str = "book"
-DEFAULT_WHISPARR_SEARCH_MODE: str = "episode"
+DEFAULT_WHISPARR_V2_SEARCH_MODE: str = "episode"
 DEFAULT_QUEUE_LIMIT: int = 0
 DEFAULT_ALLOWED_TIME_WINDOW: str = ""
 DEFAULT_SEARCH_ORDER: str = "random"
@@ -262,4 +403,12 @@ DEFAULT_UPGRADE_HOURLY_CAP: int = 1
 DEFAULT_UPGRADE_SONARR_SEARCH_MODE: str = "episode"
 DEFAULT_UPGRADE_LIDARR_SEARCH_MODE: str = "album"
 DEFAULT_UPGRADE_READARR_SEARCH_MODE: str = "book"
-DEFAULT_UPGRADE_WHISPARR_SEARCH_MODE: str = "episode"
+DEFAULT_UPGRADE_WHISPARR_V2_SEARCH_MODE: str = "episode"
+# Series window size for the Sonarr / Whisparr v2 upgrade-pool fetch.  A
+# cycle samples up to this many monitored series, advancing the series
+# offset each cycle so the whole library rotates.  Default of 5 stays
+# polite per cycle: full coverage of a large library still scales as
+# ``ceil(monitored_series / window) * batch_size`` per upgrade-eligible
+# item, so users with very large Sonarr libraries can raise the window
+# (and accept higher per-cycle *arr load) to drive coverage faster.
+DEFAULT_UPGRADE_SERIES_WINDOW_SIZE: int = 5

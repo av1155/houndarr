@@ -7,7 +7,8 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from houndarr.clients.sonarr import MissingEpisode, SonarrClient
+from houndarr.clients._wire_models import ArrSeries
+from houndarr.clients.sonarr import LibraryEpisode, MissingEpisode, SonarrClient
 from houndarr.engine.adapters.sonarr import (
     _episode_label,
     _season_context_label,
@@ -15,10 +16,24 @@ from houndarr.engine.adapters.sonarr import (
     adapt_cutoff,
     adapt_missing,
     dispatch_search,
+    fetch_instance_snapshot,
+    fetch_reconcile_sets,
     make_client,
 )
 from houndarr.engine.candidates import SearchCandidate
-from houndarr.services.instances import Instance, InstanceType, SonarrSearchMode
+from houndarr.services.instances import (
+    CutoffPolicy,
+    Instance,
+    InstanceCore,
+    InstanceTimestamps,
+    InstanceType,
+    MissingPolicy,
+    RuntimeSnapshot,
+    SchedulePolicy,
+    SearchOrder,
+    SonarrSearchMode,
+    UpgradePolicy,
+)
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -33,25 +48,36 @@ def _make_instance(
     post_release_grace_hrs: int = 24,
 ) -> Instance:
     return Instance(
-        id=1,
-        name="Sonarr Test",
-        type=InstanceType.sonarr,
-        url="http://sonarr:8989",
-        api_key="test-key",
-        enabled=True,
-        batch_size=10,
-        sleep_interval_mins=15,
-        hourly_cap=20,
-        cooldown_days=7,
-        post_release_grace_hrs=post_release_grace_hrs,
-        queue_limit=0,
-        cutoff_enabled=False,
-        cutoff_batch_size=5,
-        cutoff_cooldown_days=21,
-        cutoff_hourly_cap=1,
-        created_at="2024-01-01T00:00:00Z",
-        updated_at="2024-01-01T00:00:00Z",
-        sonarr_search_mode=sonarr_search_mode,
+        core=InstanceCore(
+            id=1,
+            name="Sonarr Test",
+            type=InstanceType.sonarr,
+            url="http://sonarr:8989",
+            api_key="test-key",
+            enabled=True,
+        ),
+        missing=MissingPolicy(
+            batch_size=10,
+            sleep_interval_mins=15,
+            hourly_cap=20,
+            cooldown_days=7,
+            post_release_grace_hrs=post_release_grace_hrs,
+            queue_limit=0,
+            sonarr_search_mode=sonarr_search_mode,
+        ),
+        cutoff=CutoffPolicy(
+            cutoff_enabled=False,
+            cutoff_batch_size=5,
+            cutoff_cooldown_days=21,
+            cutoff_hourly_cap=1,
+        ),
+        upgrade=UpgradePolicy(),
+        schedule=SchedulePolicy(search_order=SearchOrder.chronological),
+        snapshot=RuntimeSnapshot(),
+        timestamps=InstanceTimestamps(
+            created_at="2024-01-01T00:00:00Z",
+            updated_at="2024-01-01T00:00:00Z",
+        ),
     )
 
 
@@ -349,3 +375,187 @@ class TestMakeClient:
         instance = _make_instance()
         client = make_client(instance)
         assert isinstance(client, SonarrClient)
+
+
+# ---------------------------------------------------------------------------
+# fetch_reconcile_sets
+# ---------------------------------------------------------------------------
+
+
+def _make_library_episode(
+    *,
+    episode_id: int,
+    series_id: int,
+    season: int = 1,
+    episode: int = 1,
+    monitored: bool = True,
+    has_file: bool = True,
+    cutoff_met: bool = True,
+) -> LibraryEpisode:
+    return LibraryEpisode(
+        episode_id=episode_id,
+        series_id=series_id,
+        series_title=f"Series {series_id}",
+        episode_title=f"Ep {episode_id}",
+        season=season,
+        episode=episode,
+        monitored=monitored,
+        has_file=has_file,
+        cutoff_met=cutoff_met,
+    )
+
+
+class TestFetchReconcileSetsUpgrade:
+    """Verify the upgrade bucket covers the FULL monitored library.
+
+    Regression pin for the rotation-window bug: the cycle-facing
+    ``fetch_upgrade_pool`` deliberately windows the series list via
+    ``upgrade_series_offset`` so per-cycle indexer traffic stays
+    polite.  Reconcile cannot use that window because anything
+    outside the current 5-series slice would then be flagged as an
+    orphan and deleted on the next snapshot refresh, silently
+    collapsing ``upgrade_cooldown_days`` to one rotation period.
+    """
+
+    @pytest.mark.asyncio()
+    async def test_upgrade_set_covers_every_monitored_series(self):
+        """With 10 monitored series (rotation window = 5), the upgrade
+        set must contain episodes from all 10, not just the windowed
+        slice."""
+        series_count = 10
+        series_list = [
+            ArrSeries(id=sid, title=f"Series {sid}", monitored=True)
+            for sid in range(1, series_count + 1)
+        ]
+        episodes_by_series = {
+            sid: [_make_library_episode(episode_id=sid * 100, series_id=sid)]
+            for sid in range(1, series_count + 1)
+        }
+
+        client = AsyncMock(spec=SonarrClient)
+        client.get_missing.return_value = []
+        client.get_cutoff_unmet.return_value = []
+        client.get_series.return_value = series_list
+        client.get_episodes.side_effect = lambda series_id: episodes_by_series[series_id]
+
+        instance = _make_instance()
+        instance_with_upgrade = Instance(
+            core=instance.core,
+            missing=instance.missing,
+            cutoff=instance.cutoff,
+            upgrade=UpgradePolicy(upgrade_enabled=True, upgrade_series_offset=0),
+            schedule=instance.schedule,
+            snapshot=instance.snapshot,
+            timestamps=instance.timestamps,
+        )
+
+        sets = await fetch_reconcile_sets(client, instance_with_upgrade)
+
+        expected = frozenset(("episode", sid * 100) for sid in range(1, series_count + 1))
+        assert sets.upgrade == expected
+
+    @pytest.mark.asyncio()
+    async def test_upgrade_disabled_skips_library_fetch(self):
+        """Upgrade-disabled instance returns an empty upgrade set and
+        never touches the ``/series`` endpoint."""
+        client = AsyncMock(spec=SonarrClient)
+        client.get_missing.return_value = []
+        client.get_cutoff_unmet.return_value = []
+
+        instance = _make_instance()  # UpgradePolicy() defaults to upgrade_enabled=False
+
+        sets = await fetch_reconcile_sets(client, instance)
+
+        assert sets.upgrade == frozenset()
+        client.get_series.assert_not_called()
+        client.get_episodes.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# fetch_instance_snapshot
+# ---------------------------------------------------------------------------
+
+
+class TestFetchInstanceSnapshot:
+    """Verify the snapshot composition for Sonarr.
+
+    monitored_total comes from get_wanted_total('missing') +
+    get_wanted_total('cutoff') (cheap pageSize=1 probes).
+    unreleased_count comes from a paginate_wanted walk of /wanted/missing
+    counting items whose ``air_date_utc`` is strictly in the future.
+
+    Marked ``pinning`` because ``fetch_instance_snapshot`` is a new
+    behavioural contract (anchor selection, monitored vs cutoff sums,
+    unreleased semantics); a future refactor of the snapshot path
+    would silently drift it without this safety net.
+    """
+
+    pytestmark = pytest.mark.pinning
+
+    @pytest.mark.asyncio()
+    async def test_paginated_walk_counts_future_anchors(self):
+        future = "2999-01-01T00:00:00Z"
+        past = "2020-01-01T00:00:00Z"
+        client = AsyncMock(spec=SonarrClient)
+        client.get_wanted_total.side_effect = lambda kind: {"missing": 3, "cutoff": 5}[kind]
+        client.get_missing.return_value = [
+            _make_episode(episode_id=1, air_date_utc=future),
+            _make_episode(episode_id=2, air_date_utc=past),
+            _make_episode(episode_id=3, air_date_utc=future),
+        ]
+
+        snap = await fetch_instance_snapshot(client, _make_instance())
+
+        assert snap.monitored_total == 8
+        assert snap.unreleased_count == 2
+
+    @pytest.mark.asyncio()
+    async def test_no_unreleased_when_all_anchors_past(self):
+        client = AsyncMock(spec=SonarrClient)
+        client.get_wanted_total.side_effect = lambda kind: {"missing": 2, "cutoff": 0}[kind]
+        client.get_missing.return_value = [
+            _make_episode(episode_id=1, air_date_utc=_OLD_DATE),
+            _make_episode(episode_id=2, air_date_utc=_OLD_DATE),
+        ]
+
+        snap = await fetch_instance_snapshot(client, _make_instance())
+
+        assert snap.monitored_total == 2
+        assert snap.unreleased_count == 0
+
+    @pytest.mark.asyncio()
+    async def test_null_anchor_treated_as_released(self):
+        """A monitored episode without an air date is not pre-release.
+
+        Mirrors :func:`_is_unreleased`: missing dates fall through to
+        the "already released" branch so dashboards do not inflate the
+        Unreleased bucket from records the *arr just hasn't classified.
+        """
+        client = AsyncMock(spec=SonarrClient)
+        client.get_wanted_total.side_effect = lambda kind: {"missing": 1, "cutoff": 0}[kind]
+        client.get_missing.return_value = [_make_episode(episode_id=1, air_date_utc=None)]
+
+        snap = await fetch_instance_snapshot(client, _make_instance())
+
+        assert snap.monitored_total == 1
+        assert snap.unreleased_count == 0
+
+    @pytest.mark.asyncio()
+    async def test_monitored_total_uses_get_wanted_total(self):
+        """monitored_total stays on the cheap pageSize=1 probe path.
+
+        Not derived from len(get_missing()): the paginated list is
+        used only for unreleased counting, while monitored_total is
+        the live ``totalRecords`` for missing + cutoff so the value
+        does not drift if pagination is mid-walk.
+        """
+        client = AsyncMock(spec=SonarrClient)
+        client.get_wanted_total.side_effect = lambda kind: {"missing": 100, "cutoff": 50}[kind]
+        client.get_missing.return_value = []
+
+        snap = await fetch_instance_snapshot(client, _make_instance())
+
+        assert snap.monitored_total == 150
+        assert snap.unreleased_count == 0
+        client.get_wanted_total.assert_any_await("missing")
+        client.get_wanted_total.assert_any_await("cutoff")

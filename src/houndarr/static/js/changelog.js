@@ -20,7 +20,6 @@
   const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const closeAnimationMs = 160;
   let previouslyFocused = null;
-  let isClosing = false;
 
   function getDialog() {
     return document.getElementById('changelog-modal');
@@ -40,7 +39,7 @@
     }
     previouslyFocused =
       document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    isClosing = false;
+    dialog.__hxClosing = false;
     dialog.classList.remove('is-closing');
     dialog.showModal();
     document.body.style.overflow = 'hidden';
@@ -55,17 +54,8 @@
 
   function closeDialog() {
     const dialog = getDialog();
-    if (!dialog || !dialog.open || isClosing) {
-      return;
-    }
-
-    const finalize = () => {
-      dialog.classList.remove('is-closing');
-      if (dialog.open) {
-        dialog.close();
-      }
-      document.body.style.overflow = '';
-      isClosing = false;
+    if (!dialog) return;
+    hxCloseDialogAnimated(dialog, closeAnimationMs, () => {
       restoreFocus();
       // Replace the dialog with a fresh empty #changelog-slot so future
       // force-opens from Settings (or another auto-trigger after full
@@ -74,16 +64,7 @@
       slot.id = 'changelog-slot';
       slot.setAttribute('aria-hidden', 'true');
       dialog.replaceWith(slot);
-    };
-
-    if (prefersReducedMotion) {
-      finalize();
-      return;
-    }
-
-    isClosing = true;
-    dialog.classList.add('is-closing');
-    window.setTimeout(finalize, closeAnimationMs);
+    });
   }
 
   // Server-triggered custom event (fired by HX-Trigger response header).

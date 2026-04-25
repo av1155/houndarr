@@ -68,7 +68,6 @@ pin:
 test-parallel:
     {{pytest}} -n auto
 
-
 # Apply ruff auto-fixes and reformat in place.
 fix:
     {{python}} -m ruff check --fix src/ tests/
@@ -78,12 +77,47 @@ fix:
 dev:
     {{python}} -m houndarr --data-dir ./data-dev --dev
 
+# Launch the seeded mock *arr server. Mounts all six apps under one process
+# at distinct path prefixes (e.g. http://127.0.0.1:9100/sonarr). `items`
+# controls the approximate leaf count per app; `seed` makes the data
+# deterministic so two runs produce identical IDs.
+mock-arr port='9100' items='500' seed='42':
+    {{python}} -m tests.mock_arr.server --port {{port}} --items {{items}} --seed {{seed}}
+
 # Browser e2e against a Docker-Compose stack. Assumes the image is built
 # and mock-sonarr / mock-radarr are reachable on the shared network.
 # Host env: HOUNDARR_URL, MOCK_SONARR_URL, MOCK_RADARR_URL, HOUNDARR_E2E_USER,
 # HOUNDARR_E2E_PASS.
 test-browser browser="chromium":
     {{pytest}} tests/e2e_browser/ --confcutdir tests/e2e_browser --browser {{browser}} -q
+
+# Build the houndarr:e2e image (idempotent), create the arr-net docker
+# network, start mock-sonarr + mock-radarr + houndarr-e2e, and wait for
+# Houndarr health.  Leaves the stack running so a maintainer can iterate
+# manually (pytest, curl, browser inspection).  Tear down with `just e2e-down`.
+e2e-up:
+    bash scripts/e2e_browser/capture_baselines.sh up
+
+# Tear the e2e stack down: docker rm -f the three containers, remove the
+# arr-net network, delete /tmp/houndarr-e2e-data.  Idempotent.
+e2e-down:
+    bash scripts/e2e_browser/capture_baselines.sh down
+
+# Capture the login + setup visual baselines under
+# tests/e2e_browser/_screenshots/.  Runs pytest inside a Linux Playwright
+# container so fonts antialias the way CI's ubuntu-latest renders them;
+# captures /setup first (pre-admin), creates the admin, then captures
+# /login.  Cleans up the stack on exit.  Re-run when login.html,
+# setup.html, or the auth CSS tokens change.
+capture-baselines:
+    bash scripts/e2e_browser/capture_baselines.sh capture
+
+# Verify the committed login + setup visual baselines without
+# `--update-snapshots`.  Same two-pytest flow as `capture-baselines`
+# but the PNGs on disk must satisfy the assertions; any pixel diff
+# fails the run.
+verify-baselines:
+    bash scripts/e2e_browser/capture_baselines.sh verify
 
 # Print the commit history since the branch last matched main.
 log:

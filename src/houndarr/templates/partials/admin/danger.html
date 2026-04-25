@@ -1,0 +1,26 @@
+{#
+  Admin > Danger zone.  Single action: Factory reset. Triggers the
+  shared confirm dialog which, unlike the neutral maintenance actions,
+  demands a typed phrase plus a second factor (password in builtin,
+  typed proxy username in proxy mode).
+#}
+{%- import "_macros/buttons.html" as buttons -%}
+{%- import "_macros/layout.html" as layout -%}
+{% call layout.admin_section(id="admin-danger", title="Danger zone", title_color="text-danger/90") %}
+  <div class="space-y-2.5">
+    <div class="danger-row">
+      <div class="min-w-0">
+        <h4 class="text-sm font-semibold text-slate-100">Factory reset Houndarr</h4>
+        <p class="text-xs text-slate-500 mt-0.5">
+          Deletes the database and master-key file, then {{ "returns you to the
+          dashboard once you've re-authenticated through your proxy." if auth_mode == "proxy" else "returns you to the
+          sign-up page." }}
+        </p>
+      </div>
+      {% call buttons.btn(variant="soft-error", size="sm", extra="font-medium shrink-0 px-4", attrs={
+          "type": "button",
+          "data-confirm-reset": "factory",
+      }) %}Factory reset{% endcall %}
+    </div>
+  </div>
+{% endcall %}

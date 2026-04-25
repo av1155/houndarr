@@ -443,7 +443,19 @@ function initDashboardPage() {
       }
       const hourlyCap = toNumber(inst.hourly_cap);
       if (hourlyCap <= 0) {
-        return '';
+        // hourly_cap=0 means the user disabled the ceiling.  We still
+        // emit the budget slot so two cards in the same grid row stay
+        // the same height (the cooldown box above has flex:1 1 auto
+        // and would otherwise swell to absorb the missing bar).
+        const tip = `Hourly cap disabled for this instance. No ceiling on searches dispatched per hour.`;
+        return `
+<div class="dash-card__budget dash-card__budget--unlimited" data-tip="${escHtml(tip)}">
+  <dt class="dash-card__budget-label">Hourly budget</dt>
+  <dd class="dash-card__budget-value">Unlimited</dd>
+  <div class="dash-card__budget-bar" aria-hidden="true">
+    <span class="dash-card__budget-fill"></span>
+  </div>
+</div>`;
       }
       const effectiveCap =
         hourlyCap

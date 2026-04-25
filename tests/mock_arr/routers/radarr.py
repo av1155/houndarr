@@ -111,6 +111,7 @@ def make_radarr_router(data: AppData) -> APIRouter:
         sort_direction: str = Query("ascending", alias="sortDirection"),
         monitored: bool = Query(True),
     ) -> dict[str, Any]:
+        data.page_log.entries.append(("missing", page, page_size))
         records = [leaf for leaf in data.leaves if leaf["id"] in data.missing_ids]
         return paginate(
             records,
@@ -128,6 +129,7 @@ def make_radarr_router(data: AppData) -> APIRouter:
         sort_direction: str = Query("ascending", alias="sortDirection"),
         monitored: bool = Query(True),
     ) -> dict[str, Any]:
+        data.page_log.entries.append(("cutoff", page, page_size))
         records = [leaf for leaf in data.leaves if leaf["id"] in data.cutoff_ids]
         return paginate(
             records,

@@ -20,6 +20,18 @@ class CommandLog:
 
 
 @dataclass(slots=True)
+class PageLog:
+    """Records every paginated wanted request so tests can measure distribution.
+
+    Each entry is ``(kind, page, page_size)`` where kind is ``"missing"`` or
+    ``"cutoff"``. This is the ground truth for verifying the random search
+    algorithm's page-selection fairness.
+    """
+
+    entries: list[tuple[str, int, int]] = field(default_factory=list)
+
+
+@dataclass(slots=True)
 class AppData:
     """Per-app mock state.
 
@@ -41,6 +53,7 @@ class AppData:
     cutoff_ids: set[int]
     upgrade_ids: set[int]
     command_log: CommandLog = field(default_factory=CommandLog)
+    page_log: PageLog = field(default_factory=PageLog)
 
 
 @dataclass(slots=True)

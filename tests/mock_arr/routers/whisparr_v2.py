@@ -123,6 +123,7 @@ def make_whisparr_v2_router(data: AppData) -> APIRouter:
         monitored: bool = Query(True),
         include_series: bool = Query(False, alias="includeSeries"),
     ) -> dict[str, Any]:
+        data.page_log.entries.append(("missing", page, page_size))
         records = [leaf for leaf in data.leaves if leaf["id"] in data.missing_ids]
         return paginate(
             records,
@@ -141,6 +142,7 @@ def make_whisparr_v2_router(data: AppData) -> APIRouter:
         monitored: bool = Query(True),
         include_series: bool = Query(False, alias="includeSeries"),
     ) -> dict[str, Any]:
+        data.page_log.entries.append(("cutoff", page, page_size))
         records = [leaf for leaf in data.leaves if leaf["id"] in data.cutoff_ids]
         return paginate(
             records,

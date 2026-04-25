@@ -157,6 +157,30 @@ def create_app(config: SeedConfig | None = None) -> FastAPI:
             return {"error": f"unknown app: {app_name}"}
         return {"commands": store.command_log.entries}
 
+    @app.get("/__page_log__/{app_name}")
+    async def get_page_log(app_name: str) -> dict[str, Any]:
+        """Return every paginated wanted request captured for one app.
+
+        Each entry is ``[kind, page, page_size]`` where kind is one of
+        ``"missing"`` or ``"cutoff"``. This is the ground-truth log for
+        verifying the random search algorithm's page-distribution
+        fairness.
+        """
+        store = getattr(state, app_name, None)
+        if store is None:
+            return {"error": f"unknown app: {app_name}"}
+        return {"entries": list(store.page_log.entries)}
+
+    @app.post("/__reset__/{app_name}")
+    async def reset_app(app_name: str) -> dict[str, Any]:
+        """Wipe command and page logs for one app, leaving seed data intact."""
+        store = getattr(state, app_name, None)
+        if store is None:
+            return {"error": f"unknown app: {app_name}"}
+        store.command_log.entries.clear()
+        store.page_log.entries.clear()
+        return {"reset": app_name}
+
     app.state.mock_state = state
     return app
 

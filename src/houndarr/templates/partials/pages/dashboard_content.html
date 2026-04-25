@@ -295,6 +295,11 @@
        two lines so the danger callout never wraps mid-phrase on a
        phone-width viewport. */
     .dash-sub__sentence .attn { display: block; }
+    /* Same treatment for the muted "Last dispatch X ago" tail: keep it
+       inline on desktop where horizontal space is plentiful, force it
+       onto a fresh line on phone widths so the headline above it does
+       not hyphenate awkwardly. */
+    .dash-sub__sentence .muted { display: block; }
     .dash-section-head__title { font-size: 1.375rem; }
     .dash-lh { padding: 1.125rem 1.125rem; }
     .dash-lh__headline { gap: 1.375rem; }
@@ -306,16 +311,17 @@
       column-gap: 0.75rem;
     }
     /* Mobile layout:
-         [icon]                                        32m ago
-         RADARR
-         Limitless (2011)
-       Icon sits top-left, timestamp top-right, instance badge and
-       title stack left-aligned below.  Keeps the title on its own
-       line so long movie names never truncate on narrow viewports. */
-    .dash-trail__row .kind-icon { grid-column: 1 / 2; grid-row: 1; align-self: center; }
-    .dash-trail__inst { grid-column: 1 / -1; grid-row: 2; }
-    .dash-trail__title { grid-column: 1 / -1; grid-row: 3; }
+         RADARR                                          32m ago
+         [icon] Limitless (2011)
+       Top row holds the instance badge and the relative timestamp.
+       Bottom row places the search-kind icon adjacent to the hunted
+       title (the user's eye lands on the title first; the icon next
+       to it identifies the action without burying it next to the
+       instance label). */
+    .dash-trail__inst { grid-column: 1 / 3; grid-row: 1; align-self: center; }
     .dash-trail__when { grid-column: 3 / 4; grid-row: 1; align-self: center; }
+    .dash-trail__row .kind-icon { grid-column: 1 / 2; grid-row: 2; align-self: center; }
+    .dash-trail__title { grid-column: 2 / -1; grid-row: 2; }
     .dash-alert {
       grid-template-columns: auto 1fr;
       grid-template-areas:

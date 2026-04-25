@@ -336,6 +336,7 @@ async def create_instance(
     upgrade_whisparr_v2_search_mode: WhisparrV2SearchMode = WhisparrV2SearchMode(
         DEFAULT_UPGRADE_WHISPARR_V2_SEARCH_MODE
     ),
+    upgrade_series_window_size: int = DEFAULT_UPGRADE_SERIES_WINDOW_SIZE,
     allowed_time_window: str = DEFAULT_ALLOWED_TIME_WINDOW,
     search_order: SearchOrder = SearchOrder(DEFAULT_SEARCH_ORDER),
 ) -> Instance:
@@ -414,6 +415,7 @@ async def create_instance(
         upgrade_lidarr_search_mode=upgrade_lidarr_search_mode,
         upgrade_readarr_search_mode=upgrade_readarr_search_mode,
         upgrade_whisparr_v2_search_mode=upgrade_whisparr_v2_search_mode,
+        upgrade_series_window_size=upgrade_series_window_size,
         allowed_time_window=allowed_time_window,
         search_order=search_order,
     )

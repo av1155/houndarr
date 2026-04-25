@@ -39,14 +39,14 @@ _UNRELEASED_STATUSES = {"tba", "announced"}
 # ---------------------------------------------------------------------------
 
 
-def _release_anchor(movie: MissingWhisparrV3Movie) -> str | None:
+def _whisparr_v3_release_anchor(movie: MissingWhisparrV3Movie) -> str | None:
     """Return preferred release anchor in fallback order."""
     return movie.digital_release or movie.physical_release or movie.release_date or movie.in_cinemas
 
 
-def _unreleased_reason(movie: MissingWhisparrV3Movie, grace_hrs: int) -> str | None:
+def _whisparr_v3_unreleased_reason(movie: MissingWhisparrV3Movie, grace_hrs: int) -> str | None:
     """Return skip reason when a Whisparr v3 movie should be treated as not yet searchable."""
-    release_anchor = _release_anchor(movie)
+    release_anchor = _whisparr_v3_release_anchor(movie)
     if _is_unreleased(release_anchor):
         return "not yet released"
     if _is_within_post_release_grace(release_anchor, grace_hrs):
@@ -96,7 +96,9 @@ def adapt_missing(item: MissingWhisparrV3Movie, instance: Instance) -> SearchCan
         item_type="whisparr_v3_movie",
         item_id=item.movie_id,
         label=_movie_label(item),
-        unreleased_reason=_unreleased_reason(item, instance.missing.post_release_grace_hrs),
+        unreleased_reason=_whisparr_v3_unreleased_reason(
+            item, instance.missing.post_release_grace_hrs
+        ),
         search_payload={
             "command": "MoviesSearch",
             "movie_id": item.movie_id,
@@ -245,7 +247,7 @@ async def fetch_instance_snapshot(
     ``totalRecords``.  ``unreleased_count`` counts monitored items
     whose first parseable release anchor (digital → physical →
     in-cinemas → release_date) is strictly in the future.  This
-    intentionally stays narrower than :func:`_unreleased_reason` at
+    intentionally stays narrower than :func:`_whisparr_v3_unreleased_reason` at
     dispatch time, which adds ``isAvailable=false`` and status-based
     gates; the dashboard's Unreleased bucket reflects strictly
     pre-release items, while items skipped for those other reasons

@@ -21,7 +21,7 @@ from houndarr.clients.lidarr import LidarrClient
 from houndarr.clients.radarr import RadarrClient
 from houndarr.clients.readarr import ReadarrClient
 from houndarr.clients.sonarr import SonarrClient
-from houndarr.clients.whisparr_v2 import WhisparrClient
+from houndarr.clients.whisparr_v2 import WhisparrV2Client
 
 pytestmark = pytest.mark.pinning
 
@@ -185,7 +185,7 @@ class TestWhisparrV2WireContract:
         route = respx.get("http://whisparr:6969/api/v3/wanted/missing").mock(
             return_value=httpx.Response(200, json=_EMPTY_PAGINATED),
         )
-        async with WhisparrClient(url="http://whisparr:6969", api_key="k") as client:
+        async with WhisparrV2Client(url="http://whisparr:6969", api_key="k") as client:
             await client.get_missing(page=1, page_size=10)
         params = route.calls[0].request.url.params
         assert params["includeSeries"] == "true"
@@ -197,7 +197,7 @@ class TestWhisparrV2WireContract:
         route = respx.get("http://whisparr:6969/api/v3/wanted/cutoff").mock(
             return_value=httpx.Response(200, json=_EMPTY_PAGINATED),
         )
-        async with WhisparrClient(url="http://whisparr:6969", api_key="k") as client:
+        async with WhisparrV2Client(url="http://whisparr:6969", api_key="k") as client:
             await client.get_cutoff_unmet(page=1, page_size=10)
         assert route.called
 

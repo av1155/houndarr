@@ -299,7 +299,7 @@ _PRE_REFACTOR_FLAT_FIELDS = {
     "sonarr_search_mode",
     "lidarr_search_mode",
     "readarr_search_mode",
-    "whisparr_search_mode",
+    "whisparr_v2_search_mode",
     # CutoffPolicy
     "cutoff_enabled",
     "cutoff_batch_size",
@@ -313,7 +313,7 @@ _PRE_REFACTOR_FLAT_FIELDS = {
     "upgrade_sonarr_search_mode",
     "upgrade_lidarr_search_mode",
     "upgrade_readarr_search_mode",
-    "upgrade_whisparr_search_mode",
+    "upgrade_whisparr_v2_search_mode",
     "upgrade_item_offset",
     "upgrade_series_offset",
     # SchedulePolicy

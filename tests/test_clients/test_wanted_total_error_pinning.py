@@ -25,7 +25,7 @@ from houndarr.clients.lidarr import LidarrClient
 from houndarr.clients.radarr import RadarrClient
 from houndarr.clients.readarr import ReadarrClient
 from houndarr.clients.sonarr import SonarrClient
-from houndarr.clients.whisparr_v2 import WhisparrClient
+from houndarr.clients.whisparr_v2 import WhisparrV2Client
 from houndarr.clients.whisparr_v3 import WhisparrV3Client
 from houndarr.errors import (
     ClientHTTPError,
@@ -45,7 +45,7 @@ _PAGINATED_CASES: list[tuple[str, ClientFactory, str, str]] = [
     ("radarr", RadarrClient, "http://radarr:7878", "/api/v3/wanted/missing"),
     ("lidarr", LidarrClient, "http://lidarr:8686", "/api/v1/wanted/missing"),
     ("readarr", ReadarrClient, "http://readarr:8787", "/api/v1/wanted/missing"),
-    ("whisparr_v2", WhisparrClient, "http://whisparr:6969", "/api/v3/wanted/missing"),
+    ("whisparr_v2", WhisparrV2Client, "http://whisparr:6969", "/api/v3/wanted/missing"),
 ]
 
 

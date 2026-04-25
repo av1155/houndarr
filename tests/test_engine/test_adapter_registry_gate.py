@@ -30,7 +30,7 @@ from houndarr.clients.lidarr import LidarrClient
 from houndarr.clients.radarr import RadarrClient
 from houndarr.clients.readarr import ReadarrClient
 from houndarr.clients.sonarr import SonarrClient
-from houndarr.clients.whisparr_v2 import WhisparrClient
+from houndarr.clients.whisparr_v2 import WhisparrV2Client
 from houndarr.clients.whisparr_v3 import WhisparrV3Client
 from houndarr.engine.adapters import ADAPTERS, AppAdapter, get_adapter
 from houndarr.engine.adapters.lidarr import LidarrAdapter
@@ -128,7 +128,7 @@ class TestPaginatedClientHooks:
             (RadarrClient, "/api/v3/wanted", "inCinemas", None),
             (LidarrClient, "/api/v1/wanted", "releaseDate", "includeArtist"),
             (ReadarrClient, "/api/v1/wanted", "releaseDate", "includeAuthor"),
-            (WhisparrClient, "/api/v3/wanted", "releaseDate", "includeSeries"),
+            (WhisparrV2Client, "/api/v3/wanted", "releaseDate", "includeSeries"),
         ],
     )
     def test_wanted_template_hooks(

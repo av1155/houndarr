@@ -33,7 +33,7 @@ from houndarr.config import (
     DEFAULT_SEARCH_ORDER,
     DEFAULT_SLEEP_INTERVAL_MINUTES,
     DEFAULT_SONARR_SEARCH_MODE,
-    DEFAULT_WHISPARR_SEARCH_MODE,
+    DEFAULT_WHISPARR_V2_SEARCH_MODE,
     get_settings,
 )
 from houndarr.routes._htmx import (
@@ -67,7 +67,7 @@ from houndarr.services.instances import (
     SearchOrder,
     SonarrSearchMode,
     UpgradePolicy,
-    WhisparrSearchMode,
+    WhisparrV2SearchMode,
     active_error_instance_ids,
     list_instances,
 )
@@ -156,7 +156,7 @@ def blank_instance() -> Instance:
             sonarr_search_mode=SonarrSearchMode(DEFAULT_SONARR_SEARCH_MODE),
             lidarr_search_mode=LidarrSearchMode(DEFAULT_LIDARR_SEARCH_MODE),
             readarr_search_mode=ReadarrSearchMode(DEFAULT_READARR_SEARCH_MODE),
-            whisparr_search_mode=WhisparrSearchMode(DEFAULT_WHISPARR_SEARCH_MODE),
+            whisparr_v2_search_mode=WhisparrV2SearchMode(DEFAULT_WHISPARR_V2_SEARCH_MODE),
         ),
         cutoff=CutoffPolicy(
             cutoff_enabled=False,

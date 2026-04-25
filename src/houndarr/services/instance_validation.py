@@ -48,14 +48,14 @@ from houndarr.clients.lidarr import LidarrClient
 from houndarr.clients.radarr import RadarrClient
 from houndarr.clients.readarr import ReadarrClient
 from houndarr.clients.sonarr import SonarrClient
-from houndarr.clients.whisparr_v2 import WhisparrClient
+from houndarr.clients.whisparr_v2 import WhisparrV2Client
 from houndarr.clients.whisparr_v3 import WhisparrV3Client
 from houndarr.services.instances import (
     InstanceType,
     LidarrSearchMode,
     ReadarrSearchMode,
     SonarrSearchMode,
-    WhisparrSearchMode,
+    WhisparrV2SearchMode,
     get_instance,
 )
 from houndarr.services.url_validation import validate_instance_url
@@ -212,19 +212,19 @@ class SearchModes:
     buys nothing here.
     """
 
-    __slots__ = ("lidarr", "readarr", "sonarr", "whisparr")
+    __slots__ = ("lidarr", "readarr", "sonarr", "whisparr_v2")
 
     def __init__(
         self,
         sonarr: SonarrSearchMode,
         lidarr: LidarrSearchMode,
         readarr: ReadarrSearchMode,
-        whisparr: WhisparrSearchMode,
+        whisparr_v2: WhisparrV2SearchMode,
     ) -> None:
         self.sonarr = sonarr
         self.lidarr = lidarr
         self.readarr = readarr
-        self.whisparr = whisparr
+        self.whisparr_v2 = whisparr_v2
 
 
 def resolve_search_modes(
@@ -232,7 +232,7 @@ def resolve_search_modes(
     sonarr_raw: str,
     lidarr_raw: str,
     readarr_raw: str,
-    whisparr_raw: str,
+    whisparr_v2_raw: str,
 ) -> SearchModes | str:
     """Validate and resolve per-app search mode strings into enum values.
 
@@ -245,7 +245,7 @@ def resolve_search_modes(
         instance_type: The selected :class:`InstanceType`.  Drives
             which of the four raw strings actually gets parsed;
             the rest fall back to their enum default.
-        sonarr_raw / lidarr_raw / readarr_raw / whisparr_raw: Raw
+        sonarr_raw / lidarr_raw / readarr_raw / whisparr_v2_raw: Raw
             form values.
 
     Returns:
@@ -280,19 +280,19 @@ def resolve_search_modes(
         return "Invalid Readarr search mode."
 
     try:
-        whisparr_mode = (
-            WhisparrSearchMode(whisparr_raw)
+        whisparr_v2_mode = (
+            WhisparrV2SearchMode(whisparr_v2_raw)
             if instance_type == InstanceType.whisparr_v2
-            else WhisparrSearchMode.episode
+            else WhisparrV2SearchMode.episode
         )
     except ValueError:
-        return "Invalid Whisparr search mode."
+        return "Invalid Whisparr v2 search mode."
 
     return SearchModes(
         sonarr=sonarr_mode,
         lidarr=lidarr_mode,
         readarr=readarr_mode,
-        whisparr=whisparr_mode,
+        whisparr_v2=whisparr_v2_mode,
     )
 
 
@@ -301,7 +301,7 @@ _CLIENT_CONSTRUCTORS: dict[InstanceType, type[ArrClient]] = {
     InstanceType.sonarr: SonarrClient,
     InstanceType.lidarr: LidarrClient,
     InstanceType.readarr: ReadarrClient,
-    InstanceType.whisparr_v2: WhisparrClient,
+    InstanceType.whisparr_v2: WhisparrV2Client,
     InstanceType.whisparr_v3: WhisparrV3Client,
 }
 

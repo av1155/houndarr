@@ -100,7 +100,7 @@ async def is_on_cooldown(
         item_id: Item identifier (e.g. episode, movie, album, or book
             ID).
         item_type: ``"episode"``, ``"movie"``, ``"album"``, ``"book"``,
-            ``"whisparr_episode"``, or ``"whisparr_v3_movie"``.  Plain
+            ``"whisparr_v2_episode"``, or ``"whisparr_v3_movie"``.  Plain
             ``str`` values are coerced to :class:`ItemType` for the
             ItemRef construction.
         cooldown_days: Number of days before the same item can be
@@ -132,7 +132,7 @@ async def record_search(
         item_id: Item identifier (e.g. episode, movie, album, or book
             ID).
         item_type: ``"episode"``, ``"movie"``, ``"album"``, ``"book"``,
-            ``"whisparr_episode"``, or ``"whisparr_v3_movie"``.  Plain
+            ``"whisparr_v2_episode"``, or ``"whisparr_v3_movie"``.  Plain
             ``str`` values are coerced to :class:`ItemType` for the
             ItemRef construction.
         search_kind: Defaults to ``"missing"`` to preserve the old

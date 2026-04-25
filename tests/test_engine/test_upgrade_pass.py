@@ -18,7 +18,7 @@ from .conftest import (
     MASTER_KEY,
     RADARR_URL,
     SONARR_URL,
-    WHISPARR_URL,
+    WHISPARR_V2_URL,
     get_log_rows,
     make_instance,
 )
@@ -67,7 +67,7 @@ def _sonarr_instance(**overrides: Any) -> Any:
     return make_instance(**defaults)
 
 
-def _whisparr_instance(**overrides: Any) -> Any:
+def _whisparr_v2_instance(**overrides: Any) -> Any:
     defaults: dict[str, Any] = {
         "instance_id": 5,
         "itype": InstanceType.whisparr_v2,
@@ -588,7 +588,7 @@ async def test_upgrade_offset_zero_no_rotation(
 
 
 # ---------------------------------------------------------------------------
-# Series offset for Sonarr and Whisparr
+# Series offset for Sonarr and Whisparr v2
 # ---------------------------------------------------------------------------
 
 
@@ -656,15 +656,15 @@ async def test_sonarr_series_offset_advanced_by_5(
     "houndarr.engine.search_loop.update_instance",
     new_callable=AsyncMock,
 )
-async def test_whisparr_series_offset_advanced_by_5(
+async def test_whisparr_v2_series_offset_advanced_by_5(
     mock_update: AsyncMock,
     seeded_instances: None,
 ) -> None:
-    """Whisparr: update_instance called with series_offset+5."""
-    respx.get(f"{WHISPARR_URL}/api/v3/wanted/missing").mock(
+    """Whisparr v2: update_instance called with series_offset+5."""
+    respx.get(f"{WHISPARR_V2_URL}/api/v3/wanted/missing").mock(
         return_value=httpx.Response(200, json=_EMPTY_PAGE),
     )
-    respx.get(f"{WHISPARR_URL}/api/v3/series").mock(
+    respx.get(f"{WHISPARR_V2_URL}/api/v3/series").mock(
         return_value=httpx.Response(
             200,
             json=[
@@ -672,7 +672,7 @@ async def test_whisparr_series_offset_advanced_by_5(
             ],
         ),
     )
-    respx.get(f"{WHISPARR_URL}/api/v3/episode").mock(
+    respx.get(f"{WHISPARR_V2_URL}/api/v3/episode").mock(
         return_value=httpx.Response(
             200,
             json=[
@@ -689,11 +689,11 @@ async def test_whisparr_series_offset_advanced_by_5(
             ],
         ),
     )
-    respx.post(f"{WHISPARR_URL}/api/v3/command").mock(
+    respx.post(f"{WHISPARR_V2_URL}/api/v3/command").mock(
         return_value=httpx.Response(201, json=_COMMAND_RESP),
     )
 
-    inst = _whisparr_instance(
+    inst = _whisparr_v2_instance(
         upgrade_series_offset=0,
         upgrade_batch_size=1,
         upgrade_hourly_cap=5,

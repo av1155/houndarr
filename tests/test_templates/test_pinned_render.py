@@ -266,7 +266,7 @@ class TestLogRowsRender:
     @pytest.mark.parametrize(
         ("raw_type", "expected_display"),
         [
-            ("whisparr_episode", "episode"),
+            ("whisparr_v2_episode", "episode"),
             ("whisparr_v3_movie", "movie"),
             ("episode", "episode"),
             ("movie", "movie"),

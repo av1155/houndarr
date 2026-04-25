@@ -37,7 +37,7 @@ from houndarr.services.instances import (
     SearchOrder,
     SonarrSearchMode,
     UpgradePolicy,
-    WhisparrSearchMode,
+    WhisparrV2SearchMode,
 )
 
 # ---------------------------------------------------------------------------
@@ -48,7 +48,7 @@ SONARR_URL = "http://sonarr:8989"
 RADARR_URL = "http://radarr:7878"
 LIDARR_URL = "http://lidarr:8686"
 READARR_URL = "http://readarr:8787"
-WHISPARR_URL = "http://whisparr:6969"
+WHISPARR_V2_URL = "http://whisparr:6969"
 MASTER_KEY: bytes = Fernet.generate_key()
 
 # Two distinct Sonarr episodes - same series, different seasons.
@@ -121,7 +121,7 @@ def _make_instance(
     sonarr_search_mode: SonarrSearchMode = SonarrSearchMode.episode,
     lidarr_search_mode: LidarrSearchMode = LidarrSearchMode.album,
     readarr_search_mode: ReadarrSearchMode = ReadarrSearchMode.book,
-    whisparr_search_mode: WhisparrSearchMode = WhisparrSearchMode.episode,
+    whisparr_v2_search_mode: WhisparrV2SearchMode = WhisparrV2SearchMode.episode,
 ) -> Instance:
     return Instance(
         core=InstanceCore(
@@ -142,7 +142,7 @@ def _make_instance(
             sonarr_search_mode=sonarr_search_mode,
             lidarr_search_mode=lidarr_search_mode,
             readarr_search_mode=readarr_search_mode,
-            whisparr_search_mode=whisparr_search_mode,
+            whisparr_v2_search_mode=whisparr_v2_search_mode,
         ),
         cutoff=CutoffPolicy(
             cutoff_enabled=cutoff_enabled,
@@ -181,7 +181,7 @@ async def seeded_instances(db: None) -> AsyncGenerator[None, None]:
                 (2, "Radarr Test", "radarr", RADARR_URL, encrypted),
                 (3, "Lidarr Test", "lidarr", LIDARR_URL, encrypted),
                 (4, "Readarr Test", "readarr", READARR_URL, encrypted),
-                (5, "Whisparr Test", "whisparr_v2", WHISPARR_URL, encrypted),
+                (5, "Whisparr Test", "whisparr_v2", WHISPARR_V2_URL, encrypted),
             ],
         )
         await conn.commit()
@@ -748,7 +748,7 @@ async def test_golden_readarr_book_missing_and_cutoff(seeded_instances: None) ->
 # G7: Whisparr missing (episode mode)
 # ---------------------------------------------------------------------------
 
-_WHISPARR_EP_A: dict[str, Any] = {
+_WHISPARR_V2_EP_A: dict[str, Any] = {
     "id": 501,
     "seriesId": 70,
     "title": "Scene A",
@@ -757,7 +757,7 @@ _WHISPARR_EP_A: dict[str, Any] = {
     "releaseDate": {"year": 2023, "month": 3, "day": 1},
     "series": {"id": 70, "title": "Whisparr Show"},
 }
-_WHISPARR_EP_B: dict[str, Any] = {
+_WHISPARR_V2_EP_B: dict[str, Any] = {
     "id": 502,
     "seriesId": 70,
     "title": "Scene B",
@@ -770,26 +770,26 @@ _WHISPARR_EP_B: dict[str, Any] = {
 
 @pytest.mark.asyncio()
 @respx.mock
-async def test_golden_whisparr_episode_missing(seeded_instances: None) -> None:
+async def test_golden_whisparr_v2_episode_missing(seeded_instances: None) -> None:
     """Whisparr episode-mode missing pass with two episodes.
 
     Expected sequence:
-      1. searched - ep 501, missing, item_type=whisparr_episode
-      2. searched - ep 502, missing, item_type=whisparr_episode
+      1. searched - ep 501, missing, item_type=whisparr_v2_episode
+      2. searched - ep 502, missing, item_type=whisparr_v2_episode
     """
-    missing_page = {"records": [_WHISPARR_EP_A, _WHISPARR_EP_B]}
+    missing_page = {"records": [_WHISPARR_V2_EP_A, _WHISPARR_V2_EP_B]}
 
-    respx.get(f"{WHISPARR_URL}/api/v3/wanted/missing").mock(
+    respx.get(f"{WHISPARR_V2_URL}/api/v3/wanted/missing").mock(
         return_value=httpx.Response(200, json=missing_page)
     )
-    respx.post(f"{WHISPARR_URL}/api/v3/command").mock(
+    respx.post(f"{WHISPARR_V2_URL}/api/v3/command").mock(
         return_value=httpx.Response(201, json=_COMMAND_RESP)
     )
 
     instance = _make_instance(
         instance_id=5,
         itype=InstanceType.whisparr_v2,
-        url=WHISPARR_URL,
+        url=WHISPARR_V2_URL,
     )
     count = await run_instance_search(instance, MASTER_KEY, cycle_id="golden-g7")
 
@@ -799,13 +799,13 @@ async def test_golden_whisparr_episode_missing(seeded_instances: None) -> None:
 
     assert rows[0]["action"] == "searched"
     assert rows[0]["item_id"] == 501
-    assert rows[0]["item_type"] == "whisparr_episode"
+    assert rows[0]["item_type"] == "whisparr_v2_episode"
     assert rows[0]["item_label"] == "Whisparr Show - S01 - Scene A"
     assert rows[0]["search_kind"] == "missing"
     assert rows[0]["cycle_id"] == "golden-g7"
 
     assert rows[1]["action"] == "searched"
     assert rows[1]["item_id"] == 502
-    assert rows[1]["item_type"] == "whisparr_episode"
+    assert rows[1]["item_type"] == "whisparr_v2_episode"
     assert rows[1]["item_label"] == "Whisparr Show - S02 - Scene B"
     assert rows[1]["search_kind"] == "missing"

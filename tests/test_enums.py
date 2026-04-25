@@ -58,7 +58,7 @@ class TestItemType:
             "movie",
             "album",
             "book",
-            "whisparr_episode",
+            "whisparr_v2_episode",
             "whisparr_v3_movie",
         ],
     )

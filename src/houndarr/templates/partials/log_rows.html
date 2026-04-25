@@ -195,12 +195,12 @@
   </header>
   <div class="cycle__body">
     <div class="entries">
-      {#- Strip the `whisparr_` / `whisparr_v3_` namespace prefix off
+      {#- Strip the `whisparr_v2_` / `whisparr_v3_` namespace prefix off
           the user-facing type label while `data-item-type` keeps the
-          canonical value for copy-as-TSV.  Longer prefix has to match
-          first so `whisparr_v3_movie` becomes `movie`, not `v3_movie`. -#}
+          canonical value for copy-as-TSV.  Both prefixes are the same
+          length so order does not matter. -#}
       {%- for row in group %}
-      {%- set display_type = (row.item_type or '')|replace('whisparr_v3_', '')|replace('whisparr_', '') %}
+      {%- set display_type = (row.item_type or '')|replace('whisparr_v3_', '')|replace('whisparr_v2_', '') %}
       <div class="entry entry--{{ row.action or 'info' }}"
            data-action="{{ row.action or '' }}"
            data-cycle-id="{{ row.cycle_id or '' }}"

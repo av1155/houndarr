@@ -54,7 +54,7 @@ class ItemType(StrEnum):
     """*arr item kind carried on a ``SearchCandidate`` and stored in DB rows.
 
     Mirrors the ``CHECK(item_type IN ('episode','movie','album','book',
-    'whisparr_episode','whisparr_v3_movie'))`` constraint on the
+    'whisparr_v2_episode','whisparr_v3_movie'))`` constraint on the
     ``cooldowns`` and ``search_log`` tables.
     """
 
@@ -62,5 +62,5 @@ class ItemType(StrEnum):
     movie = "movie"
     album = "album"
     book = "book"
-    whisparr_episode = "whisparr_episode"
+    whisparr_v2_episode = "whisparr_v2_episode"
     whisparr_v3_movie = "whisparr_v3_movie"

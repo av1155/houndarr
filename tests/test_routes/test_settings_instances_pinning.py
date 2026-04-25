@@ -27,7 +27,7 @@ from houndarr.services.instances import (
     LidarrSearchMode,
     ReadarrSearchMode,
     SonarrSearchMode,
-    WhisparrSearchMode,
+    WhisparrV2SearchMode,
 )
 
 pytestmark = pytest.mark.pinning
@@ -98,7 +98,7 @@ class TestResolveSearchModes:
         assert result.sonarr == SonarrSearchMode.episode  # default, not validated
         assert result.lidarr == LidarrSearchMode.album
         assert result.readarr == ReadarrSearchMode.book
-        assert result.whisparr == WhisparrSearchMode.episode
+        assert result.whisparr_v2 == WhisparrV2SearchMode.episode
 
     def test_invalid_sonarr_mode_for_sonarr_type(self) -> None:
         result = resolve_search_modes(InstanceType.sonarr, "bogus", "", "", "")
@@ -112,9 +112,9 @@ class TestResolveSearchModes:
         result = resolve_search_modes(InstanceType.readarr, "", "", "bogus", "")
         assert result == "Invalid Readarr search mode."
 
-    def test_invalid_whisparr_mode_for_whisparr_v2(self) -> None:
+    def test_invalid_whisparr_v2_mode_for_whisparr_v2(self) -> None:
         result = resolve_search_modes(InstanceType.whisparr_v2, "", "", "", "bogus")
-        assert result == "Invalid Whisparr search mode."
+        assert result == "Invalid Whisparr v2 search mode."
 
 
 # type_mismatch_message

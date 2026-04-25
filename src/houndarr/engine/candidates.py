@@ -2,7 +2,7 @@
 
 :class:`SearchCandidate` is the unified representation that adapter functions
 produce from app-specific client models (``MissingEpisode``, ``MissingMovie``,
-``MissingAlbum``, ``MissingBook``, ``MissingWhisparrEpisode``).  The engine
+``MissingAlbum``, ``MissingBook``, ``MissingWhisparrV2Episode``).  The engine
 pipeline operates solely on ``SearchCandidate`` instances, removing the need
 for ``isinstance`` checks or per-app branching.
 """
@@ -30,7 +30,7 @@ class SearchCandidate:
         item_id: Episode ID, movie ID, album ID, book ID, or synthetic
             season/artist/author ID.
         item_type: One of ``"episode"``, ``"movie"``, ``"album"``,
-            ``"book"``, or ``"whisparr_episode"``.
+            ``"book"``, or ``"whisparr_v2_episode"``.
         label: Human-readable label for logging.
         unreleased_reason: ``None`` when eligible; a skip-reason string
             when the item should be treated as unreleased.

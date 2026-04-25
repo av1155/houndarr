@@ -32,8 +32,8 @@ from houndarr.config import (
     DEFAULT_UPGRADE_LIDARR_SEARCH_MODE,
     DEFAULT_UPGRADE_READARR_SEARCH_MODE,
     DEFAULT_UPGRADE_SONARR_SEARCH_MODE,
-    DEFAULT_UPGRADE_WHISPARR_SEARCH_MODE,
-    DEFAULT_WHISPARR_SEARCH_MODE,
+    DEFAULT_UPGRADE_WHISPARR_V2_SEARCH_MODE,
+    DEFAULT_WHISPARR_V2_SEARCH_MODE,
 )
 
 
@@ -69,8 +69,8 @@ class ReadarrSearchMode(StrEnum):
     author_context = "author_context"
 
 
-class WhisparrSearchMode(StrEnum):
-    """Supported Whisparr missing-search strategies."""
+class WhisparrV2SearchMode(StrEnum):
+    """Supported Whisparr v2 missing-search strategies."""
 
     episode = "episode"
     season_context = "season_context"
@@ -114,8 +114,9 @@ class MissingPolicy:
     post-release grace window (``post_release_grace_hrs``), the queue
     backpressure gate (``queue_limit``; ``0`` disables the check), and
     the per-app search-strategy mode for the four *arr variants that
-    expose one (Sonarr, Lidarr, Readarr, Whisparr).  Radarr has no
-    strategy knob and so never reads any of the mode fields.
+    expose one (Sonarr, Lidarr, Readarr, Whisparr v2).  Radarr and
+    Whisparr v3 have no strategy knob and so never read any of the
+    mode fields.
 
     Defaults match :mod:`houndarr.config`; the field set matches the
     ``instances`` table columns written on fresh ``INSERT``.
@@ -130,7 +131,9 @@ class MissingPolicy:
     sonarr_search_mode: SonarrSearchMode = SonarrSearchMode(DEFAULT_SONARR_SEARCH_MODE)
     lidarr_search_mode: LidarrSearchMode = LidarrSearchMode(DEFAULT_LIDARR_SEARCH_MODE)
     readarr_search_mode: ReadarrSearchMode = ReadarrSearchMode(DEFAULT_READARR_SEARCH_MODE)
-    whisparr_search_mode: WhisparrSearchMode = WhisparrSearchMode(DEFAULT_WHISPARR_SEARCH_MODE)
+    whisparr_v2_search_mode: WhisparrV2SearchMode = WhisparrV2SearchMode(
+        DEFAULT_WHISPARR_V2_SEARCH_MODE
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -183,8 +186,8 @@ class UpgradePolicy:
     upgrade_readarr_search_mode: ReadarrSearchMode = ReadarrSearchMode(
         DEFAULT_UPGRADE_READARR_SEARCH_MODE
     )
-    upgrade_whisparr_search_mode: WhisparrSearchMode = WhisparrSearchMode(
-        DEFAULT_UPGRADE_WHISPARR_SEARCH_MODE
+    upgrade_whisparr_v2_search_mode: WhisparrV2SearchMode = WhisparrV2SearchMode(
+        DEFAULT_UPGRADE_WHISPARR_V2_SEARCH_MODE
     )
     upgrade_item_offset: int = 0
     upgrade_series_offset: int = 0
@@ -312,7 +315,9 @@ async def create_instance(
     sonarr_search_mode: SonarrSearchMode = SonarrSearchMode(DEFAULT_SONARR_SEARCH_MODE),
     lidarr_search_mode: LidarrSearchMode = LidarrSearchMode(DEFAULT_LIDARR_SEARCH_MODE),
     readarr_search_mode: ReadarrSearchMode = ReadarrSearchMode(DEFAULT_READARR_SEARCH_MODE),
-    whisparr_search_mode: WhisparrSearchMode = WhisparrSearchMode(DEFAULT_WHISPARR_SEARCH_MODE),
+    whisparr_v2_search_mode: WhisparrV2SearchMode = WhisparrV2SearchMode(
+        DEFAULT_WHISPARR_V2_SEARCH_MODE
+    ),
     upgrade_enabled: bool = False,
     upgrade_batch_size: int = DEFAULT_UPGRADE_BATCH_SIZE,
     upgrade_cooldown_days: int = DEFAULT_UPGRADE_COOLDOWN_DAYS,
@@ -326,8 +331,8 @@ async def create_instance(
     upgrade_readarr_search_mode: ReadarrSearchMode = ReadarrSearchMode(
         DEFAULT_UPGRADE_READARR_SEARCH_MODE
     ),
-    upgrade_whisparr_search_mode: WhisparrSearchMode = WhisparrSearchMode(
-        DEFAULT_UPGRADE_WHISPARR_SEARCH_MODE
+    upgrade_whisparr_v2_search_mode: WhisparrV2SearchMode = WhisparrV2SearchMode(
+        DEFAULT_UPGRADE_WHISPARR_V2_SEARCH_MODE
     ),
     allowed_time_window: str = DEFAULT_ALLOWED_TIME_WINDOW,
     search_order: SearchOrder = SearchOrder(DEFAULT_SEARCH_ORDER),
@@ -355,7 +360,7 @@ async def create_instance(
         sonarr_search_mode: Sonarr missing-search strategy mode.
         lidarr_search_mode: Lidarr missing-search strategy mode.
         readarr_search_mode: Readarr missing-search strategy mode.
-        whisparr_search_mode: Whisparr missing-search strategy mode.
+        whisparr_v2_search_mode: Whisparr v2 missing-search strategy mode.
         upgrade_enabled: Whether upgrade searching is active.
         upgrade_batch_size: Number of upgrade items per run.
         upgrade_cooldown_days: Days to wait before re-searching upgrade items.
@@ -363,7 +368,7 @@ async def create_instance(
         upgrade_sonarr_search_mode: Sonarr upgrade-search strategy mode.
         upgrade_lidarr_search_mode: Lidarr upgrade-search strategy mode.
         upgrade_readarr_search_mode: Readarr upgrade-search strategy mode.
-        upgrade_whisparr_search_mode: Whisparr upgrade-search strategy mode.
+        upgrade_whisparr_v2_search_mode: Whisparr v2 upgrade-search strategy mode.
         allowed_time_window: Optional schedule spec (e.g. ``"09:00-23:00"``)
             restricting scheduled cycles to configured windows.  Empty
             string disables the gate (24/7 operation).
@@ -398,7 +403,7 @@ async def create_instance(
         sonarr_search_mode=sonarr_search_mode,
         lidarr_search_mode=lidarr_search_mode,
         readarr_search_mode=readarr_search_mode,
-        whisparr_search_mode=whisparr_search_mode,
+        whisparr_v2_search_mode=whisparr_v2_search_mode,
         upgrade_enabled=upgrade_enabled,
         upgrade_batch_size=upgrade_batch_size,
         upgrade_cooldown_days=upgrade_cooldown_days,
@@ -406,7 +411,7 @@ async def create_instance(
         upgrade_sonarr_search_mode=upgrade_sonarr_search_mode,
         upgrade_lidarr_search_mode=upgrade_lidarr_search_mode,
         upgrade_readarr_search_mode=upgrade_readarr_search_mode,
-        upgrade_whisparr_search_mode=upgrade_whisparr_search_mode,
+        upgrade_whisparr_v2_search_mode=upgrade_whisparr_v2_search_mode,
         allowed_time_window=allowed_time_window,
         search_order=search_order,
     )

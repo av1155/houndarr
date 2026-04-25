@@ -178,24 +178,28 @@ async def dispatch_search(client: RadarrClient, candidate: SearchCandidate) -> N
 
 async def fetch_reconcile_sets(
     client: RadarrClient,
-    instance: Instance,  # noqa: ARG001
+    instance: Instance,
 ) -> ReconcileSets:
     """Return the authoritative wanted / upgrade-pool sets for Radarr.
 
     Radarr has no parent-context mode: cooldown rows always carry the
     leaf ``movie_id``, so the reconciliation sets are just the leaf
-    ids from each pass.  ``instance`` is kept for signature parity
-    with the parent-context adapters.
+    ids from each pass.  When ``upgrade_enabled`` is false the upgrade
+    set short-circuits to empty so the ``/movie`` library call is
+    skipped.
     """
     missing_items = await paginate_wanted(client.get_missing)
     cutoff_items = await paginate_wanted(client.get_cutoff_unmet)
-    upgrade_candidates = [
-        adapt_upgrade(item, instance) for item in await fetch_upgrade_pool(client, instance)
-    ]
+    upgrade_set: frozenset[tuple[str, int]] = frozenset()
+    if instance.upgrade_enabled:
+        upgrade_candidates = [
+            adapt_upgrade(item, instance) for item in await fetch_upgrade_pool(client, instance)
+        ]
+        upgrade_set = frozenset((str(c.item_type), c.item_id) for c in upgrade_candidates)
     return ReconcileSets(
         missing=frozenset(("movie", m.movie_id) for m in missing_items),
         cutoff=frozenset(("movie", m.movie_id) for m in cutoff_items),
-        upgrade=frozenset((str(c.item_type), c.item_id) for c in upgrade_candidates),
+        upgrade=upgrade_set,
     )
 
 

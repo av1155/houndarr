@@ -10,9 +10,15 @@ This probe verifies that under each app's context mode:
 
 1. Every monitored parent group eventually gets dispatched at least
    once over enough cycles for full coverage.
-2. The dispatches are uniformly distributed across parent groups
-   (chi-square against the uniform expected count, with the same
-   thresholds as the per-item probe).
+2. Each parent's dispatch share matches its **share of missing items**
+   in the wanted-list, not a uniform 1/N share.  The earlier version
+   of this probe ran a naive chi-square against equal expected counts
+   per parent; that test is conservative because the engine visits a
+   random page of items, not a random parent, so a parent with twice
+   as many missing leaves is *expected* to be dispatched roughly
+   twice as often.  The weighted chi-square below tests the property
+   that actually matters: do the dispatch counts track the per-parent
+   missing-item shares predicted by the algorithm?
 3. The padding + position-cap fix from the earlier round still holds
    when the dispatch unit is the synthetic parent rather than the
    raw leaf.
@@ -39,6 +45,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 from unittest.mock import patch
 
+import httpx
 import uvicorn
 from cryptography.fernet import Fernet
 
@@ -293,9 +300,105 @@ async def _read_dispatched_per_synthetic_parent() -> Counter[int]:
     return counts
 
 
+def _decode_synthetic_parent(synthetic_id: int, app: str) -> int:
+    """Recover the real parent id from a synthetic negative dispatch id.
+
+    Sonarr and Whisparr v2 encode ``-(series_id * 1000 + season_number)``
+    so the parent identity is ``positive // 1000``.  Lidarr and Readarr
+    encode ``-(parent_id * 1000)`` flat (no season axis), so the parent
+    identity is also ``positive // 1000``.  In every case dividing the
+    absolute value by 1000 returns the parent id the dispatch belongs
+    to, which is what the weighted-chi-square test needs to match the
+    per-parent missing-item shares.
+    """
+    positive = -synthetic_id if synthetic_id < 0 else synthetic_id
+    return positive // 1000
+
+
+async def _missing_items_per_parent(
+    client: httpx.AsyncClient, base_url: str, app: str
+) -> Counter[int]:
+    """Return ``parent_id -> count_of_missing_leaves`` from the live mock.
+
+    The probe pages through every record in ``/wanted/missing`` for the
+    target app and groups leaves by their parent id (``seriesId`` for
+    Sonarr / Whisparr v2, ``artistId`` for Lidarr, ``authorId`` for
+    Readarr).  The resulting per-parent counts feed the weighted chi-
+    square denominator: a parent with three times as many missing
+    leaves should land in the page-shuffled scan three times as often,
+    so its expected dispatch count is three times higher.
+    """
+    if app in ("sonarr", "whisparr_v2"):
+        endpoint = f"{base_url}/{app}/api/v3/wanted/missing"
+        parent_field = "seriesId"
+    elif app == "lidarr":
+        endpoint = f"{base_url}/lidarr/api/v1/wanted/missing"
+        parent_field = "artistId"
+    else:  # readarr
+        endpoint = f"{base_url}/readarr/api/v1/wanted/missing"
+        parent_field = "authorId"
+
+    counts: Counter[int] = Counter()
+    page = 1
+    page_size = 250
+    while True:
+        resp = await client.get(
+            endpoint,
+            params={"page": page, "pageSize": page_size, "monitored": "true"},
+        )
+        resp.raise_for_status()
+        body = resp.json()
+        records = body.get("records", [])
+        if not records:
+            break
+        for r in records:
+            pid = r.get(parent_field)
+            if pid is not None:
+                counts[int(pid)] += 1
+        if len(records) < page_size:
+            break
+        page += 1
+    return counts
+
+
+def _chi_square_critical(df: int) -> float:
+    """Return the 5%-significance chi-square critical value for ``df``.
+
+    Hard-codes the small-df values where the table look-up beats any
+    closed-form approximation, then falls back to the Wilson-Hilferty
+    form for larger df.  Centralised so the weighted and naive chi-
+    square branches share the same threshold logic.
+    """
+    small_crit = {
+        1: 3.84,
+        2: 5.99,
+        3: 7.81,
+        4: 9.49,
+        5: 11.07,
+        6: 12.59,
+        7: 14.07,
+        8: 15.51,
+        9: 16.92,
+        10: 18.31,
+        15: 25.00,
+        20: 31.41,
+        25: 37.65,
+        30: 43.77,
+    }
+    if df in small_crit:
+        return small_crit[df]
+    if df < 30:
+        return 1.5 * df
+    import math as _math
+
+    return 0.5 * (_math.sqrt(2 * df - 1) + 1.645) ** 2
+
+
 async def _run_one(
     *,
     label: str,
+    base_url: str,
+    app: str,
     instance: Instance,
     instance_type_value: str,
     cycles: int,
@@ -309,6 +412,9 @@ async def _run_one(
     def _now() -> datetime:
         return fake_time[0]
 
+    async with httpx.AsyncClient(timeout=30) as client:
+        missing_per_parent = await _missing_items_per_parent(client, base_url, app)
+
     async with _temp_db(master_key, instance_type_value):
         with patch("houndarr.repositories.cooldowns._now_utc", _now):
             for _ in range(cycles):
@@ -316,10 +422,15 @@ async def _run_one(
                 fake_time[0] += advance
         dispatched = await _read_dispatched_per_synthetic_parent()
 
-    counts = list(dispatched.values())
-    parent_count = len(counts)
-    total = sum(counts)
-    if parent_count == 0:
+    # Roll synthetic-parent dispatches up to real parent ids so the
+    # weighted chi-square can compare them against missing-item shares.
+    real_parent_dispatches: Counter[int] = Counter()
+    for synthetic, count in dispatched.items():
+        real_parent_dispatches[_decode_synthetic_parent(synthetic, app)] += count
+
+    parent_count = len(real_parent_dispatches)
+    total = sum(real_parent_dispatches.values())
+    if parent_count == 0 or total == 0:
         return {
             "label": label,
             "cycles": cycles,
@@ -327,45 +438,45 @@ async def _run_one(
             "total_dispatches": 0,
             "verdict": "no dispatches recorded (check fixture)",
         }
-    expected = total / parent_count
-    chi_square = sum(((c - expected) ** 2) / expected for c in counts)
-    df = max(1, parent_count - 1)
-    if df <= 30:
-        small_crit = {
-            1: 3.84,
-            2: 5.99,
-            3: 7.81,
-            4: 9.49,
-            5: 11.07,
-            6: 12.59,
-            7: 14.07,
-            8: 15.51,
-            9: 16.92,
-            10: 18.31,
-            15: 25.00,
-            20: 31.41,
-            25: 37.65,
-            30: 43.77,
-        }
-        crit = small_crit.get(df, 1.5 * df)
-    else:
-        import math as _math
 
-        crit = 0.5 * (_math.sqrt(2 * df - 1) + 1.645) ** 2
+    # Weighted expected: each parent's share is its missing-items share
+    # of the total wanted-list, scaled to the observed dispatch total.
+    # Naive expected: total / parent_count, kept as a sanity-check
+    # comparison so a regression that breaks the weighting also visibly
+    # shifts the naive chi-square.
+    total_missing_leaves = sum(missing_per_parent.values())
+    weighted_chi_square = 0.0
+    for parent_id, observed in real_parent_dispatches.items():
+        share = missing_per_parent.get(parent_id, 0) / max(1, total_missing_leaves)
+        expected = share * total
+        if expected <= 0:
+            continue
+        weighted_chi_square += ((observed - expected) ** 2) / expected
+    naive_expected = total / parent_count
+    naive_chi_square = sum(
+        ((observed - naive_expected) ** 2) / naive_expected
+        for observed in real_parent_dispatches.values()
+    )
+    crit = _chi_square_critical(max(1, parent_count - 1))
 
-    verdict = "uniform" if chi_square <= crit else f"BIASED (chi^2={chi_square:.1f} > {crit:.1f})"
+    verdict = (
+        "uniform-by-share"
+        if weighted_chi_square <= crit
+        else f"BIASED (weighted chi^2={weighted_chi_square:.1f} > {crit:.1f})"
+    )
 
+    counts = list(real_parent_dispatches.values())
     return {
         "label": label,
         "cycles": cycles,
         "parents_touched": parent_count,
         "total_dispatches": total,
-        "expected_per_parent": expected,
         "min_per_parent": min(counts),
         "max_per_parent": max(counts),
         "mean_per_parent": statistics.mean(counts),
         "stdev_per_parent": statistics.stdev(counts) if parent_count > 1 else 0.0,
-        "chi_square": chi_square,
+        "weighted_chi_square": weighted_chi_square,
+        "naive_chi_square": naive_chi_square,
         "chi_square_critical": crit,
         "verdict": verdict,
     }
@@ -404,6 +515,8 @@ async def main() -> None:
             print(f"=== {label} ===")
             result = await _run_one(
                 label=label,
+                base_url=base_url,
+                app=sub_path,
                 instance=inst,
                 instance_type_value=instance_type_value,
                 cycles=300,
@@ -416,12 +529,12 @@ async def main() -> None:
             print(
                 f"  parents_touched={result['parents_touched']}  "
                 f"dispatches={result['total_dispatches']}  "
-                f"E[per-parent]={result['expected_per_parent']:.2f}  "
                 f"min={result['min_per_parent']}  max={result['max_per_parent']}  "
                 f"mean={result['mean_per_parent']:.2f}  stdev={result['stdev_per_parent']:.2f}"
             )
             print(
-                f"  chi^2={result['chi_square']:.2f}  "
+                f"  weighted chi^2={result['weighted_chi_square']:.2f}  "
+                f"(naive chi^2={result['naive_chi_square']:.2f})  "
                 f"critical={result['chi_square_critical']:.2f}  "
                 f"verdict={result['verdict']}\n"
             )
@@ -429,15 +542,23 @@ async def main() -> None:
             _stop_mock(handle)
 
     print("\n=================  CONTEXT-MODE SUMMARY  =================")
-    print(f"{'app / mode':30s}  {'parents':>7}  {'min':>4}  {'max':>4}  {'chi^2':>8}  verdict")
+    print(
+        f"{'app / mode':30s}  {'parents':>7}  {'min':>4}  {'max':>4}  "
+        f"{'weighted':>9}  {'naive':>7}  {'crit':>5}  verdict"
+    )
     for r in rows:
         if r.get("parents_touched", 0) == 0:
-            print(f"{r['label']:30s}  {'-':>7}  {'-':>4}  {'-':>4}  {'-':>8}  {r['verdict']}")
+            print(
+                f"{r['label']:30s}  {'-':>7}  {'-':>4}  {'-':>4}  "
+                f"{'-':>9}  {'-':>7}  {'-':>5}  {r['verdict']}"
+            )
             continue
         print(
             f"{r['label']:30s}  {r['parents_touched']:>7}  "
             f"{r['min_per_parent']:>4}  {r['max_per_parent']:>4}  "
-            f"{r['chi_square']:>8.2f}  {r['verdict']}"
+            f"{r['weighted_chi_square']:>9.2f}  "
+            f"{r['naive_chi_square']:>7.2f}  "
+            f"{r['chi_square_critical']:>5.2f}  {r['verdict']}"
         )
 
 

@@ -30,7 +30,7 @@ from houndarr.services.instances import Instance, ReadarrSearchMode
 
 logger = logging.getLogger(__name__)
 
-_UPGRADE_CUTOFF_EXCLUSION_MAX_PAGES = 10
+_UPGRADE_CUTOFF_EXCLUSION_HARD_CAP = 100
 
 # ---------------------------------------------------------------------------
 # Label builders
@@ -204,6 +204,14 @@ async def fetch_upgrade_pool(
     Builds a cutoff-unmet exclusion set by paginating ``wanted/cutoff``, then
     returns monitored books with files that are NOT in the exclusion set.
 
+    The cutoff pagination stops naturally when a short page is returned
+    (fewer records than the requested page_size).  A safety bound of
+    ``_UPGRADE_CUTOFF_EXCLUSION_HARD_CAP`` pages prevents an unbounded
+    walk if a misconfigured *arr instance returns full pages indefinitely;
+    that bound is sized to cover libraries up to roughly
+    ``hard_cap * 250`` cutoff-unmet books (default 25000), which is well
+    above any real Readarr deployment we have observed.
+
     Args:
         client: An open :class:`ReadarrClient` context.
         instance: The configured Readarr instance.
@@ -212,7 +220,8 @@ async def fetch_upgrade_pool(
         List of upgrade-eligible :class:`LibraryBook` items.
     """
     exclusion: set[int] = set()
-    for page in range(1, _UPGRADE_CUTOFF_EXCLUSION_MAX_PAGES + 1):
+    page = 1
+    while page <= _UPGRADE_CUTOFF_EXCLUSION_HARD_CAP:
         try:
             cutoff_items = await client.get_cutoff_unmet(page=page, page_size=250)
         except (httpx.HTTPError, httpx.InvalidURL, ValidationError):
@@ -226,6 +235,16 @@ async def fetch_upgrade_pool(
             exclusion.add(item.book_id)
         if len(cutoff_items) < 250:
             break
+        page += 1
+    if page > _UPGRADE_CUTOFF_EXCLUSION_HARD_CAP:
+        logger.warning(
+            "[%s] cutoff exclusion walk hit safety cap of %d pages; "
+            "library has more than %d cutoff-unmet books and the "
+            "upgrade pool may include some that are still cutoff-unmet",
+            instance.core.name,
+            _UPGRADE_CUTOFF_EXCLUSION_HARD_CAP,
+            _UPGRADE_CUTOFF_EXCLUSION_HARD_CAP * 250,
+        )
 
     library = await client.get_books()
     return [b for b in library if b.monitored and b.has_file and b.book_id not in exclusion]

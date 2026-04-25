@@ -142,6 +142,17 @@ def _reset_random_deck(instance_id: int, search_kind: SearchKind | str) -> None:
     _random_decks.pop((instance_id, str(search_kind)), None)
 
 
+# Sentinel used to pad partial last pages out to ``page_size`` in random mode
+# so the within-page selection probability is the same on partial and full
+# pages.  Without this padding, items on a short last page would be drained
+# every visit (``actual_items < page_size`` means each item has higher than
+# ``batch_size / page_size`` per-visit dispatch probability), accumulating a
+# small but persistent over-selection of the last 1-9 items in any backlog
+# whose ``totalRecords`` is not a multiple of ``page_size``.  Identity
+# comparison (``item is _SHUFFLE_PAD``) is the cheap and unambiguous gate.
+_SHUFFLE_PAD: object = object()
+
+
 # search_log helpers
 
 
@@ -515,6 +526,20 @@ async def _run_search_pass(  # noqa: C901
             break
 
         items = await fetch_fn(page=page, page_size=page_size)
+        # Pad partial pages out to page_size with sentinels in random mode so
+        # the per-item probability of being in the first batch_size positions
+        # of the shuffle is exactly batch_size / page_size on every page.  We
+        # only pad when there is more than one page in the wanted-list: with
+        # max_page == 1 the partial page is the entire backlog and there is
+        # no other page to compete with, so padding would only reduce
+        # throughput without affecting fairness.  See the cooldown probe and
+        # the AGENTS.md "Verifying Claims About Algorithms" section for the
+        # bias derivation this guards against.
+        pad_partial = use_random_deck and random_max_page > 1 and items and len(items) < page_size
+        if pad_partial:
+            items = list(items)
+            while len(items) < page_size:
+                items.append(_SHUFFLE_PAD)
         if instance.schedule.search_order == SearchOrder.random and items:
             random.shuffle(items)  # noqa: S311  # nosec B311
         logger.debug(
@@ -544,10 +569,30 @@ async def _run_search_pass(  # noqa: C901
 
         stop_pass = False
         page_fully_consumed = True
+        positions_consumed = 0
+        # In random mode each page visit consumes exactly ``batch_size``
+        # shuffled positions: padding sentinels count toward the position
+        # quota but produce no dispatch, so partial pages dispatch fewer
+        # real items per visit, equalising per-item attention across the
+        # backlog.  Hitting the cap is treated as "page work done" so the
+        # outer loop advances to the next deck page instead of re-fetching
+        # this one.  In chronological mode there is no per-page position
+        # cap; the existing ``searched >= target`` gate is the only break.
+        position_cap = batch_size if pad_partial else None
         for item in items:
             if searched >= target or scanned >= scan_budget:
                 page_fully_consumed = False
                 break
+            if position_cap is not None and positions_consumed >= position_cap:
+                break
+            positions_consumed += 1
+
+            if item is _SHUFFLE_PAD:
+                # Sentinel from partial-page padding: no real item to dispatch.
+                # Counts as scanned (consumes scan budget) so the engine still
+                # bounds its outbound work, but contributes zero dispatches.
+                scanned += 1
+                continue
 
             candidate = adapt_fn(item, instance)
             ref = ItemRef(

@@ -102,7 +102,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Instance URLs now accept underscores in hostnames alongside hyphens and dots (e.g. `http://radarr_hd:7878`); underscore-named containers were previously rejected as invalid (#285).
-- Whisparr records with no series linkage, which previously caused repeated search errors labeled `Unknown Series - S00` in the logs, are now skipped instead of producing a failed search entry (#286).
+- Whisparr v2 records with no series linkage, which previously caused repeated search errors labeled `Unknown Series - S00` in the logs, are now skipped instead of producing a failed search entry (#286).
 
 ---
 
@@ -230,7 +230,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- Settings help panel now describes search modes for all four apps that support them (Sonarr, Lidarr, Readarr, Whisparr) instead of Sonarr only (#210)
+- Settings help panel now describes search modes for all four apps that support them (Sonarr, Lidarr, Readarr, Whisparr v2) instead of Sonarr only (#210)
 - All *arr app listings across code, UI, docs, and website now use the canonical order: Radarr, Sonarr, Lidarr, Readarr, Whisparr (#210)
 - Bug report template version field expanded from "Sonarr / Radarr" to include all five apps (#210)
 

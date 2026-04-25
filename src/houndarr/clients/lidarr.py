@@ -44,8 +44,8 @@ class LidarrClient(ArrClient):
 
     _SYSTEM_STATUS_PATH: str = "/api/v1/system/status"
     _QUEUE_STATUS_PATH: str = "/api/v1/queue/status"
-    # Lidarr is a v1 API (Sonarr / Radarr / Whisparr are v3); the override
-    # routes the /wanted template at /api/v1/wanted/{kind}.
+    # Lidarr is a v1 API (Sonarr / Radarr / Whisparr v2 are v3); the
+    # override routes the /wanted template at /api/v1/wanted/{kind}.
     _WANTED_BASE_PATH: ClassVar[str] = "/api/v1/wanted"
     _WANTED_SORT_KEY: ClassVar[str] = "releaseDate"
     _WANTED_INCLUDE_PARAM: ClassVar[str | None] = "includeArtist"

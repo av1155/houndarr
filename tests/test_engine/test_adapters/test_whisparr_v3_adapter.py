@@ -173,15 +173,15 @@ class TestUnreleasedReason:
 
     def test_is_available_false(self) -> None:
         m = _make_movie(is_available=False)
-        assert _unreleased_reason(m, 0) == "whisparr reports not available"
+        assert _unreleased_reason(m, 0) == "whisparr v3 reports not available"
 
     def test_tba_status(self) -> None:
         m = _make_movie(status="tba", is_available=None)
-        assert _unreleased_reason(m, 0) == "whisparr status indicates unreleased"
+        assert _unreleased_reason(m, 0) == "whisparr v3 status indicates unreleased"
 
     def test_announced_status(self) -> None:
         m = _make_movie(status="announced", is_available=None)
-        assert _unreleased_reason(m, 0) == "whisparr status indicates unreleased"
+        assert _unreleased_reason(m, 0) == "whisparr v3 status indicates unreleased"
 
     def test_future_year(self) -> None:
         m = _make_movie(year=2099, status="", is_available=None)

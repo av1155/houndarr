@@ -724,10 +724,10 @@ async def _run_upgrade_pass(
         )
         return 0
 
-    # Advance series offset for series-based apps (Sonarr/Whisparr), but
-    # only when the slice produced something. Rotating through an always-
-    # empty library (no enabled/monitored series yet) would walk the
-    # cursor off into the future for no coverage gain.
+    # Advance series offset for series-based apps (Sonarr/Whisparr v2),
+    # but only when the slice produced something. Rotating through an
+    # always-empty library (no enabled/monitored series yet) would walk
+    # the cursor off into the future for no coverage gain.
     # Unlike upgrade_item_offset, this advances in both chronological and
     # random modes on purpose: the series offset decides which slice of
     # series feeds the upgrade pool, so continuing to rotate it in random

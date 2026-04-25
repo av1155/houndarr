@@ -1,0 +1,157 @@
+"""Houndarr's exception hierarchy.
+
+A single root (:class:`HoundarrError`) plus four layer-specific
+branches (:class:`ClientError`, :class:`EngineError`,
+:class:`ServiceError`, :class:`RouteError`) let call sites catch
+Houndarr-originated failures by layer without rewrapping third-party
+exceptions.  Each concrete subclass documents the surface it covers so
+callers pick the narrowest useful base.
+"""
+
+from __future__ import annotations
+
+
+class HoundarrError(Exception):
+    """Root of every Houndarr-specific exception.
+
+    Callers that want to distinguish Houndarr-originated errors from
+    third-party exceptions (e.g. ``httpx.HTTPError``, ``aiosqlite.Error``)
+    should catch this base.
+    """
+
+
+# Client-layer errors (clients/*.py)
+
+
+class ClientError(HoundarrError):
+    """Any failure raised from a ``*arr`` HTTP client."""
+
+
+class ClientHTTPError(ClientError):
+    """Non-2xx response from an ``*arr`` instance.
+
+    Replaces ``httpx.HTTPStatusError`` bubble-ups at call sites that
+    want to distinguish HTTP status failures from network errors.
+    """
+
+
+class ClientRedirectError(ClientHTTPError):
+    """The *arr response redirected to a target blocked by SSRF rules.
+
+    Raised by the ArrClient response event_hook when a 3xx response
+    carries a ``Location`` header that resolves to a loopback,
+    link-local, or unspecified address range.  Subclass of
+    :class:`ClientHTTPError` so callers that handle broader HTTP
+    status failures still catch redirects; callers that want redirect-
+    specific telemetry can catch this class directly.
+    """
+
+
+class ClientTransportError(ClientError):
+    """TCP / DNS / TLS failure talking to an ``*arr`` instance.
+
+    Replaces ``httpx.TransportError`` bubble-ups at call sites that
+    want to distinguish network failures from HTTP status failures.
+    """
+
+
+class ClientValidationError(ClientError):
+    """The wire payload failed Pydantic validation.
+
+    Replaces bare ``pydantic.ValidationError`` bubble-ups at call
+    sites that want to attribute the failure to the wire boundary.
+    """
+
+
+class ClientUnreachableError(ClientError):
+    """Catch-all for ``ArrClient.ping`` swallow-all failures.
+
+    Currently ``ping()`` collapses four distinct errors
+    (``httpx.HTTPError``, ``httpx.InvalidURL``, ``ValueError``,
+    ``ValidationError``) to ``None``.  This class gives callers a
+    typed way to re-raise the unreachable-state, for example from
+    the supervisor's reconnect loop.
+    """
+
+
+# Engine-layer errors (engine/*.py)
+
+
+class EngineError(HoundarrError):
+    """Any failure raised inside the search engine pipeline."""
+
+
+class EngineDispatchError(EngineError):
+    """A search dispatch (adapter.dispatch_search) raised.
+
+    Replaces ``except Exception`` at ``engine/search_loop.py:400-420``
+    and ``:477-500`` (release-timing-retry and normal dispatch paths).
+    """
+
+
+class EnginePoolFetchError(EngineError):
+    """fetch_upgrade_pool raised while building the upgrade candidate pool.
+
+    Replaces ``except Exception`` at ``engine/search_loop.py:576``.
+    """
+
+
+class EngineOffsetPersistError(EngineError):
+    """Persisting a ``*_page_offset`` / ``upgrade_item_offset`` failed.
+
+    Replaces ``except Exception`` at ``engine/search_loop.py:608, 771,
+    928, 971``.  Non-fatal (the next cycle retries); we log + continue.
+    """
+
+
+class EngineQueueProbeError(EngineError):
+    """The queue-backpressure probe (``get_queue_status``) failed."""
+
+
+# Service-layer errors (services/*.py, routes/admin.py)
+
+
+class ServiceError(HoundarrError):
+    """Any failure raised inside a Houndarr service."""
+
+
+class InstanceValidationError(ServiceError):
+    """An instance config failed service-level validation.
+
+    Distinct from the form-level validators in
+    ``routes/settings/_helpers.py``; those run before the service is
+    called.
+    """
+
+
+class CooldownStateError(ServiceError):
+    """Cooldown state is inconsistent (e.g. negative days).
+
+    Defensive: the service should never raise this today.  Keeping
+    the class lets the service-wide ``except Exception`` guard narrow
+    to a named subclass without losing coverage.
+    """
+
+
+class TimeWindowSpecError(ServiceError):
+    """``allowed_time_window`` spec could not be parsed by the service.
+
+    Mirrors ``parse_time_window`` raising ``ValueError``; wrapping
+    into a typed service error lets callers distinguish it from
+    other validation paths.
+    """
+
+
+# Route-layer errors (routes/*.py, auth.py)
+
+
+class RouteError(HoundarrError):
+    """Any failure raised inside a FastAPI route handler."""
+
+
+class CsrfValidationError(RouteError):
+    """CSRF validation failed for a mutating request."""
+
+
+class AuthRejectedError(RouteError):
+    """Authentication check rejected the current request."""

@@ -5,14 +5,6 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.10.0] - 2026-04-24
-
-### Changed
-
-- All references to Whisparr in code, tests, schema, templates, and docs are now disambiguated as Whisparr v2 or Whisparr v3 wherever they refer to a single version.  Mentions of the product family (where Houndarr supports both) stay as Whisparr.  Includes a schema v16 migration that renames the v2-specific `whisparr_search_mode` columns and the `whisparr_episode` item_type value. (#N)
-
----
-
 ## [1.9.0] - 2026-04-18
 
 ### Added
@@ -110,7 +102,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Instance URLs now accept underscores in hostnames alongside hyphens and dots (e.g. `http://radarr_hd:7878`); underscore-named containers were previously rejected as invalid (#285).
-- Whisparr v2 records with no series linkage, which previously caused repeated search errors labeled `Unknown Series - S00` in the logs, are now skipped instead of producing a failed search entry (#286).
+- Whisparr records with no series linkage, which previously caused repeated search errors labeled `Unknown Series - S00` in the logs, are now skipped instead of producing a failed search entry (#286).
 
 ---
 
@@ -238,7 +230,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- Settings help panel now describes search modes for all four apps that support them (Sonarr, Lidarr, Readarr, Whisparr v2) instead of Sonarr only (#210)
+- Settings help panel now describes search modes for all four apps that support them (Sonarr, Lidarr, Readarr, Whisparr) instead of Sonarr only (#210)
 - All *arr app listings across code, UI, docs, and website now use the canonical order: Radarr, Sonarr, Lidarr, Readarr, Whisparr (#210)
 - Bug report template version field expanded from "Sonarr / Radarr" to include all five apps (#210)
 

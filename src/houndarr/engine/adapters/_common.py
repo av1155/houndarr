@@ -84,6 +84,15 @@ means a 5,000-item wanted list becomes 20 requests at refresh time — a
 one-off cost per instance per snapshot cycle rather than a per-poll
 overhead."""
 
+_RECONCILE_MAX_PAGES = 200
+"""Safety cap on the paginate-wanted loop.
+
+At ``_RECONCILE_PAGE_SIZE=250`` items per page, 200 pages admit a
+50,000-item wanted list, well beyond any realistic *arr library.  The
+cap exists only to bound a misbehaving upstream that always returns
+exactly ``page_size`` items (whether due to an off-by-one bug or a
+hostile endpoint); without it the loop would never terminate."""
+
 
 async def paginate_wanted[T](
     fetch_page: Callable[..., Awaitable[list[T]]],
@@ -94,7 +103,11 @@ async def paginate_wanted[T](
 
     Stops on the first short page (length < *page_size*) since that is
     the last page by contract.  An explicit empty first page yields an
-    empty list without a second request.
+    empty list without a second request.  A hard cap of
+    :data:`_RECONCILE_MAX_PAGES` bounds the loop so a misbehaving *arr
+    that always returns a full page cannot spin forever; hitting the
+    cap returns what has been collected so far and leaves reconcile to
+    act conservatively against a possibly-truncated view.
 
     Used by every adapter's :func:`fetch_reconcile_sets` to walk the
     full wanted list so the reconciler sees a complete picture of which
@@ -111,13 +124,12 @@ async def paginate_wanted[T](
         Flat list of every item across every page, preserving order.
     """
     items: list[T] = []
-    page = 1
-    while True:
+    for page in range(1, _RECONCILE_MAX_PAGES + 1):
         chunk = await fetch_page(page=page, page_size=page_size)
         items.extend(chunk)
         if len(chunk) < page_size:
             return items
-        page += 1
+    return items
 
 
 @dataclass(frozen=True, slots=True)

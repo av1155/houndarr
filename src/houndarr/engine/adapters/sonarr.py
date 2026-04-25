@@ -8,11 +8,13 @@ commands via :class:`~houndarr.clients.sonarr.SonarrClient`.
 from __future__ import annotations
 
 import logging
+from collections.abc import Sequence
 from typing import Any
 
 import httpx
 from pydantic import ValidationError
 
+from houndarr.clients._wire_models import ArrSeries
 from houndarr.clients.base import ReconcileSets
 from houndarr.clients.sonarr import LibraryEpisode, MissingEpisode, SonarrClient
 from houndarr.engine.adapters._common import (
@@ -229,6 +231,35 @@ def adapt_upgrade(item: LibraryEpisode, instance: Instance) -> SearchCandidate:
     )
 
 
+async def _collect_upgrade_episodes(
+    client: SonarrClient,
+    instance: Instance,
+    series_list: Sequence[ArrSeries],
+) -> list[LibraryEpisode]:
+    """Return monitored, on-disk, cutoff-met episodes for the given series.
+
+    Shared loop body between the rotation-windowed search-cycle fetch
+    (:func:`fetch_upgrade_pool`) and the full-library reconcile fetch
+    (:func:`_fetch_all_upgrade_episodes`).  Transport or validation
+    errors on a single series are logged and skipped so one flaky
+    series cannot blank the whole pool.
+    """
+    episodes: list[LibraryEpisode] = []
+    for s in series_list:
+        series_id = s.id or 0
+        try:
+            eps = await client.get_episodes(series_id)
+        except (httpx.HTTPError, httpx.InvalidURL, ValidationError):
+            logger.warning(
+                "[%s] failed to fetch episodes for series %d, skipping",
+                instance.core.name,
+                series_id,
+            )
+            continue
+        episodes.extend(e for e in eps if e.monitored and e.has_file and e.cutoff_met)
+    return episodes
+
+
 async def fetch_upgrade_pool(
     client: SonarrClient,
     instance: Instance,
@@ -260,21 +291,29 @@ async def fetch_upgrade_pool(
         remaining = _UPGRADE_MAX_SERIES_PER_CYCLE - len(selected)
         selected += monitored[:remaining]
 
-    episodes: list[LibraryEpisode] = []
-    for s in selected:
-        series_id = s.id or 0
-        try:
-            eps = await client.get_episodes(series_id)
-        except (httpx.HTTPError, httpx.InvalidURL, ValidationError):
-            logger.warning(
-                "[%s] failed to fetch episodes for series %d, skipping",
-                instance.core.name,
-                series_id,
-            )
-            continue
-        episodes.extend(e for e in eps if e.monitored and e.has_file and e.cutoff_met)
+    return await _collect_upgrade_episodes(client, instance, selected)
 
-    return episodes
+
+async def _fetch_all_upgrade_episodes(
+    client: SonarrClient,
+    instance: Instance,
+) -> list[LibraryEpisode]:
+    """Return upgrade-eligible episodes across EVERY monitored series.
+
+    The cycle-facing :func:`fetch_upgrade_pool` windows the series list
+    via ``upgrade_series_offset`` so indexer traffic stays polite per
+    cycle.  Reconciliation cannot use that windowed set: it would mark
+    every upgrade cooldown outside the current slice as an orphan and
+    delete it on the next snapshot refresh, collapsing the configured
+    ``upgrade_cooldown_days`` down to roughly one rotation period.
+    This helper ignores the window and walks the full monitored list
+    so the reconcile upgrade set matches everything
+    :func:`adapt_upgrade` could legitimately stamp.  Amortised against
+    the supervisor's 10-minute snapshot cadence.
+    """
+    all_series = await client.get_series()
+    monitored = [s for s in all_series if s.monitored]
+    return await _collect_upgrade_episodes(client, instance, monitored)
 
 
 async def dispatch_search(client: SonarrClient, candidate: SearchCandidate) -> None:
@@ -352,9 +391,14 @@ async def fetch_reconcile_sets(client: SonarrClient, instance: Instance) -> Reco
     from the same wanted list so cooldown rows stamped under the
     season-context path keep matching.  Cutoff is always dispatched
     per-episode, so cutoff cooldown rows never carry synthetic ids;
-    the cutoff reconcile set stays leaf-only.  Upgrade-pool ids come
-    from the existing :func:`fetch_upgrade_pool` which already applies
-    the same context-mode branch to each library episode.
+    the cutoff reconcile set stays leaf-only.  The upgrade set walks
+    the FULL monitored library via :func:`_fetch_all_upgrade_episodes`
+    rather than the cycle-rotation window, otherwise reconcile would
+    treat every upgrade cooldown outside the current 5-series slice as
+    an orphan and truncate ``upgrade_cooldown_days`` to one rotation.
+    When ``upgrade_enabled`` is false the upgrade set is an empty
+    frozenset so no library traffic is paid; no upgrade cooldowns can
+    exist in that state anyway.
     """
     missing_items = await paginate_wanted(client.get_missing)
     cutoff_items = await paginate_wanted(client.get_cutoff_unmet)
@@ -362,12 +406,13 @@ async def fetch_reconcile_sets(client: SonarrClient, instance: Instance) -> Reco
     cutoff_set = _episode_leaf_pairs(cutoff_items)
     if instance.missing.sonarr_search_mode != SonarrSearchMode.episode:
         missing_set = missing_set | _season_synth_pairs(missing_items)
-    upgrade_candidates = [
-        adapt_upgrade(item, instance) for item in await fetch_upgrade_pool(client, instance)
-    ]
-    upgrade_set: frozenset[tuple[str, int]] = frozenset(
-        (str(c.item_type), c.item_id) for c in upgrade_candidates
-    )
+    upgrade_set: frozenset[tuple[str, int]] = frozenset()
+    if instance.upgrade.upgrade_enabled:
+        upgrade_candidates = [
+            adapt_upgrade(item, instance)
+            for item in await _fetch_all_upgrade_episodes(client, instance)
+        ]
+        upgrade_set = frozenset((str(c.item_type), c.item_id) for c in upgrade_candidates)
     return ReconcileSets(missing=missing_set, cutoff=cutoff_set, upgrade=upgrade_set)
 
 

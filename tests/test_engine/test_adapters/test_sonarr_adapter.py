@@ -7,7 +7,8 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from houndarr.clients.sonarr import MissingEpisode, SonarrClient
+from houndarr.clients._wire_models import ArrSeries
+from houndarr.clients.sonarr import LibraryEpisode, MissingEpisode, SonarrClient
 from houndarr.engine.adapters.sonarr import (
     _episode_label,
     _season_context_label,
@@ -15,6 +16,7 @@ from houndarr.engine.adapters.sonarr import (
     adapt_cutoff,
     adapt_missing,
     dispatch_search,
+    fetch_reconcile_sets,
     make_client,
 )
 from houndarr.engine.candidates import SearchCandidate
@@ -372,3 +374,97 @@ class TestMakeClient:
         instance = _make_instance()
         client = make_client(instance)
         assert isinstance(client, SonarrClient)
+
+
+# ---------------------------------------------------------------------------
+# fetch_reconcile_sets
+# ---------------------------------------------------------------------------
+
+
+def _make_library_episode(
+    *,
+    episode_id: int,
+    series_id: int,
+    season: int = 1,
+    episode: int = 1,
+    monitored: bool = True,
+    has_file: bool = True,
+    cutoff_met: bool = True,
+) -> LibraryEpisode:
+    return LibraryEpisode(
+        episode_id=episode_id,
+        series_id=series_id,
+        series_title=f"Series {series_id}",
+        episode_title=f"Ep {episode_id}",
+        season=season,
+        episode=episode,
+        monitored=monitored,
+        has_file=has_file,
+        cutoff_met=cutoff_met,
+    )
+
+
+class TestFetchReconcileSetsUpgrade:
+    """Verify the upgrade bucket covers the FULL monitored library.
+
+    Regression pin for the rotation-window bug: the cycle-facing
+    ``fetch_upgrade_pool`` deliberately windows the series list via
+    ``upgrade_series_offset`` so per-cycle indexer traffic stays
+    polite.  Reconcile cannot use that window because anything
+    outside the current 5-series slice would then be flagged as an
+    orphan and deleted on the next snapshot refresh, silently
+    collapsing ``upgrade_cooldown_days`` to one rotation period.
+    """
+
+    @pytest.mark.asyncio()
+    async def test_upgrade_set_covers_every_monitored_series(self):
+        """With 10 monitored series (rotation window = 5), the upgrade
+        set must contain episodes from all 10, not just the windowed
+        slice."""
+        series_count = 10
+        series_list = [
+            ArrSeries(id=sid, title=f"Series {sid}", monitored=True)
+            for sid in range(1, series_count + 1)
+        ]
+        episodes_by_series = {
+            sid: [_make_library_episode(episode_id=sid * 100, series_id=sid)]
+            for sid in range(1, series_count + 1)
+        }
+
+        client = AsyncMock(spec=SonarrClient)
+        client.get_missing.return_value = []
+        client.get_cutoff_unmet.return_value = []
+        client.get_series.return_value = series_list
+        client.get_episodes.side_effect = lambda series_id: episodes_by_series[series_id]
+
+        instance = _make_instance()
+        instance_with_upgrade = Instance(
+            core=instance.core,
+            missing=instance.missing,
+            cutoff=instance.cutoff,
+            upgrade=UpgradePolicy(upgrade_enabled=True, upgrade_series_offset=0),
+            schedule=instance.schedule,
+            snapshot=instance.snapshot,
+            timestamps=instance.timestamps,
+        )
+
+        sets = await fetch_reconcile_sets(client, instance_with_upgrade)
+
+        expected = frozenset(("episode", sid * 100) for sid in range(1, series_count + 1))
+        assert sets.upgrade == expected
+
+    @pytest.mark.asyncio()
+    async def test_upgrade_disabled_skips_library_fetch(self):
+        """Upgrade-disabled instance returns an empty upgrade set and
+        never touches the ``/series`` endpoint."""
+        client = AsyncMock(spec=SonarrClient)
+        client.get_missing.return_value = []
+        client.get_cutoff_unmet.return_value = []
+
+        instance = _make_instance()  # UpgradePolicy() defaults to upgrade_enabled=False
+
+        sets = await fetch_reconcile_sets(client, instance)
+
+        assert sets.upgrade == frozenset()
+        client.get_series.assert_not_called()
+        client.get_episodes.assert_not_called()

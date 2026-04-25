@@ -289,7 +289,9 @@ async def fetch_reconcile_sets(client: LidarrClient, instance: Instance) -> Reco
     artist ids derived from the same wanted list are unioned in so
     cooldown rows written under the context path keep matching.
     Cutoff cooldowns are always leaf (album-level dispatch); no
-    context-mode promotion happens there.
+    context-mode promotion happens there.  When ``upgrade_enabled`` is
+    false the upgrade set short-circuits to empty so the library scan
+    + cutoff-exclusion paginate loop are skipped.
     """
     missing_items = await paginate_wanted(client.get_missing)
     cutoff_items = await paginate_wanted(client.get_cutoff_unmet)
@@ -297,12 +299,12 @@ async def fetch_reconcile_sets(client: LidarrClient, instance: Instance) -> Reco
     cutoff_set = _album_leaf_pairs(cutoff_items)
     if instance.missing.lidarr_search_mode != LidarrSearchMode.album:
         missing_set = missing_set | _artist_synth_pairs(missing_items)
-    upgrade_candidates = [
-        adapt_upgrade(item, instance) for item in await fetch_upgrade_pool(client, instance)
-    ]
-    upgrade_set: frozenset[tuple[str, int]] = frozenset(
-        (str(c.item_type), c.item_id) for c in upgrade_candidates
-    )
+    upgrade_set: frozenset[tuple[str, int]] = frozenset()
+    if instance.upgrade.upgrade_enabled:
+        upgrade_candidates = [
+            adapt_upgrade(item, instance) for item in await fetch_upgrade_pool(client, instance)
+        ]
+        upgrade_set = frozenset((str(c.item_type), c.item_id) for c in upgrade_candidates)
     return ReconcileSets(missing=missing_set, cutoff=cutoff_set, upgrade=upgrade_set)
 
 

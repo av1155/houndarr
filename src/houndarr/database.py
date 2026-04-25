@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Schema version: bump when adding new migrations
 # ---------------------------------------------------------------------------
-SCHEMA_VERSION = 14
+SCHEMA_VERSION = 15
 
 # ---------------------------------------------------------------------------
 # DDL
@@ -179,6 +179,7 @@ async def init_db() -> None:
             await _migrate_to_v12(db)
             await _migrate_to_v13(db)
             await _migrate_to_v14(db)
+            await _migrate_to_v15(db)
             await _ensure_v3_indexes(db)
             await db.commit()
 
@@ -211,6 +212,8 @@ async def _run_migrations(db: aiosqlite.Connection, from_version: int) -> None:
         await _migrate_to_v13(db)
     if from_version < 14:
         await _migrate_to_v14(db)
+    if from_version < 15:
+        await _migrate_to_v15(db)
 
     logger.info("Migrated database from schema version %d to %d", from_version, SCHEMA_VERSION)
     await db.execute(
@@ -820,6 +823,96 @@ async def _migrate_to_v14(db: aiosqlite.Connection) -> None:
     # Index creation lives in _ensure_v3_indexes so fresh installs
     # (which skip migrations) still get it; the helper runs after both
     # the fresh-install DDL and the upgrade migration path.
+
+
+async def _migrate_to_v15(db: aiosqlite.Connection) -> None:
+    """Enforce the ``search_kind`` CHECK constraint on migrated databases.
+
+    v14's ``ALTER TABLE ADD COLUMN`` could only set the ``NOT NULL
+    DEFAULT 'missing'`` clause; SQLite does not let you append a CHECK
+    constraint to an existing column.  Fresh installs already carry
+    the ``CHECK(search_kind IN ('missing', 'cutoff', 'upgrade'))``
+    clause from ``_SCHEMA_SQL``, but databases that migrated through
+    v14 silently accept any string in that column.  Re-create the
+    table with the full CHECK clause and copy the rows across so
+    every install enforces the same invariant.
+
+    The rebuild is idempotent: the sentinel inspects
+    ``sqlite_master.sql`` for the ``CHECK(search_kind IN`` token and
+    returns immediately when the table already carries it.  Any row
+    whose stamped kind falls outside the three allowed values is
+    coerced to ``'missing'`` during the copy so the new CHECK does
+    not reject pre-existing data; such rows should not exist in
+    practice (the app writes only valid kinds) but defence-in-depth
+    keeps the migration from failing on a corrupted snapshot.
+    """
+    if await _cooldowns_has_search_kind_check(db):
+        return
+
+    await db.execute("PRAGMA foreign_keys=OFF")
+    try:
+        await db.execute(
+            f"""
+            CREATE TABLE cooldowns_new (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                instance_id INTEGER NOT NULL
+                                    REFERENCES instances(id) ON DELETE CASCADE,
+                item_id     INTEGER NOT NULL,
+                item_type   TEXT    NOT NULL CHECK(item_type IN ({_ITEM_TYPES})),
+                search_kind TEXT    NOT NULL DEFAULT 'missing'
+                                    CHECK(search_kind IN ('missing', 'cutoff', 'upgrade')),
+                searched_at TEXT    NOT NULL,
+                UNIQUE(instance_id, item_id, item_type)
+            )
+            """
+        )
+        await db.execute(
+            """
+            INSERT INTO cooldowns_new
+                (id, instance_id, item_id, item_type, search_kind, searched_at)
+            SELECT id,
+                   instance_id,
+                   item_id,
+                   item_type,
+                   CASE
+                       WHEN search_kind IN ('missing', 'cutoff', 'upgrade')
+                           THEN search_kind
+                       ELSE 'missing'
+                   END AS search_kind,
+                   searched_at
+              FROM cooldowns
+            """
+        )
+        await db.execute("DROP TABLE cooldowns")
+        await db.execute("ALTER TABLE cooldowns_new RENAME TO cooldowns")
+        # Recreate every index that referenced the old table.  The
+        # search_kind index is also emitted by _ensure_v3_indexes, but
+        # the lookup index lived only in _SCHEMA_SQL so without this
+        # line migrated databases would lose it.
+        await db.execute(
+            "CREATE INDEX IF NOT EXISTS idx_cooldowns_lookup "
+            "ON cooldowns(instance_id, item_type, searched_at)"
+        )
+    finally:
+        await db.execute("PRAGMA foreign_keys=ON")
+
+
+async def _cooldowns_has_search_kind_check(db: aiosqlite.Connection) -> bool:
+    """Return whether the ``cooldowns`` table carries the v15 CHECK clause.
+
+    The fresh-install DDL emits ``CHECK(search_kind IN ('missing', ...))``
+    (sqlite stores whatever whitespace was used).  Strip all whitespace
+    from the stored SQL and look for the compact form so either
+    formatting path is recognised.
+    """
+    async with db.execute(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='cooldowns'"
+    ) as cur:
+        row = await cur.fetchone()
+    if row is None:
+        return False
+    compact = "".join(str(row[0] or "").split())
+    return "CHECK(search_kindIN" in compact
 
 
 async def _ensure_v3_indexes(db: aiosqlite.Connection) -> None:

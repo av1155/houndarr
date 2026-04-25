@@ -165,25 +165,42 @@
 }
 
 /* ── Hero screenshot ─────────────────────────────────────────────────────── */
+/* IdealImage renders <span><img/></span>; .heroScreenshot lands on the span.
+   Layout cap (max-height) + drop shadow stay on the span. Rules that must
+   track the visible bitmap (rounded corners, 1px ring) live on the inner
+   <img>, so the ring follows the image to the point where .heroBanner's
+   overflow: hidden clips it (i.e. it runs behind the next section instead
+   of stopping at 820px). */
 .heroScreenshot {
   border-radius: 10px;
-  box-shadow:
-    0 20px 60px rgba(0, 0, 0, 0.6),
-    0 0 0 1px rgba(30, 38, 56, 0.9);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
   width: 100%;
   height: auto;
+  max-height: 820px;
   transform: perspective(1400px) rotateY(-5deg) rotateX(1.5deg);
   transition:
     transform 0.4s cubic-bezier(0.16, 1, 0.3, 1),
     box-shadow 0.4s ease;
 }
 
+.heroScreenshot img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 10px;
+  box-shadow: 0 0 0 1px rgba(30, 38, 56, 0.9);
+  transition: box-shadow 0.4s ease;
+}
+
 .heroScreenshot:hover {
   transform: perspective(1400px) rotateY(-2deg) rotateX(0.5deg) scale(1.01);
   box-shadow:
     0 24px 72px rgba(0, 0, 0, 0.65),
-    0 0 0 1px rgba(34, 211, 238, 0.12),
     0 0 50px rgba(34, 211, 238, 0.03);
+}
+
+.heroScreenshot:hover img {
+  box-shadow: 0 0 0 1px rgba(34, 211, 238, 0.12);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -256,6 +273,10 @@
 
 .screenshotGallery > div {
   overflow: hidden;
+  /* Round the overflow box, not just the <img>. Without this the hover
+     scale pushes the image's rounded corners outside the rectangular
+     clip, leaving straight edges for the 0.3s transition. */
+  border-radius: 8px;
 }
 
 .screenshotGallery img {

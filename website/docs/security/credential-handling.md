@@ -79,8 +79,10 @@ template output, or JSON API payload. Specifically:
 
 Relevant source files:
 
-- `src/houndarr/routes/settings.py`: sentinel constant and
-  resolution logic
+- `src/houndarr/services/instance_validation.py`: `API_KEY_UNCHANGED`
+  sentinel definition
+- `src/houndarr/services/instance_submit.py`: resolution logic that
+  keeps the stored key when the form submits the sentinel unchanged
 - `src/houndarr/templates/partials/instance_form.html`: form
   pre-fills sentinel, not the key
 - `src/houndarr/routes/api/status.py`: field-level selection
@@ -110,7 +112,19 @@ hours, enforced server-side.
 **Login rate limiting.** 5 failed attempts per IP per 60-second
 sliding window. After that, further attempts return HTTP 429. Error
 messages are generic and never reveal whether the username or
-password was the wrong part.
+password was the wrong part. The same IP bucket also guards the
+post-auth password endpoints (`POST /settings/account/password`
+and `POST /settings/admin/factory-reset`), so a stolen session
+cookie cannot brute-force the current password through those
+surfaces either.
+
+**Password rotation.** Changing the admin password rotates the
+session signing secret. Every cookie signed with the previous
+secret stops validating, so any session the admin wants to revoke
+(another tab, another device, a suspected theft) is invalidated
+by the password change itself. The tab that made the change is
+reissued a fresh cookie and reloaded automatically so it stays
+signed in without a manual refresh.
 
 **X-Forwarded-For.** Honored only when the connecting IP is listed
 in `HOUNDARR_TRUSTED_PROXIES`. With no trusted proxies configured

@@ -52,7 +52,7 @@ Checks:
    there is nothing for Houndarr to search.
 2. Check the Houndarr Logs page for the instance. When the most
    recent entries say `skipped` with reason
-   `hourly cap reached`, wait until the next hour window.
+   `hourly limit reached`, wait until the next hour window.
 3. Confirm the instance is enabled (green toggle in Settings).
 4. Check that the sleep interval has elapsed since the last
    cycle. With a 30-minute sleep, Houndarr runs roughly twice per
@@ -88,9 +88,9 @@ Common causes:
 A stream of connection errors suggests a network or configuration
 problem. A single 404 or 401 usually does not.
 
-## Dashboard shows "Next run" but nothing happens
+## Dashboard shows "next patrol" but nothing happens
 
-The "Next run" time is an estimate based on the sleep interval.
-After a container restart, the first cycle runs after one full
-sleep interval. Check the Logs page to confirm whether a cycle
-actually completed.
+The "next patrol" countdown on each card is an estimate based on the
+sleep interval. After a container restart, the first cycle runs after
+one full sleep interval. Check the Logs page to confirm whether a
+cycle actually completed.

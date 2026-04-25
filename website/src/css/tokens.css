@@ -48,8 +48,8 @@
   --color-lidarr-bg:    rgba(6, 78, 59, 0.50);
   --color-readarr:      #fca5a5;  /* rose */
   --color-readarr-bg:   rgba(127, 29, 29, 0.50);
-  --color-whisparr:     #f9a8d4;  /* pink */
-  --color-whisparr-bg:  rgba(80, 7, 36, 0.50);
+  --color-whisparr-v2:    #f9a8d4;  /* pink (v2) */
+  --color-whisparr-v2-bg: rgba(80, 7, 36, 0.50);
 
   /* ── Typography ─────────────────────────────────────────────────────── */
   --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system,

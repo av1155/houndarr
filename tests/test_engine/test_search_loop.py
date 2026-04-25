@@ -2748,11 +2748,17 @@ async def test_missing_random_picks_random_start_page(seeded_instances: None) ->
         "totalRecords": 1000,
         "records": [_EPISODE_RECORD],
     }
+    # The probe and the start-page fetch consume the first two side effects.
+    # Padding partial pages in random mode can cause the engine to advance
+    # to the next deck-drawn page when a sentinel lands in position zero,
+    # so the test pre-stages enough empty responses to absorb any number
+    # of subsequent fetches; only the first two are asserted on.
+    empty_response = httpx.Response(200, json={"records": []})
     missing_route = respx.get(f"{SONARR_URL}/api/v3/wanted/missing").mock(
         side_effect=[
             httpx.Response(200, json=probe_response),
             httpx.Response(200, json=page_response),
-            httpx.Response(200, json={"records": []}),
+            *[empty_response] * 50,
         ]
     )
     respx.post(f"{SONARR_URL}/api/v3/command").mock(

@@ -282,7 +282,7 @@ class TestLogRowsRender:
             {
                 "id": 1,
                 "instance_id": 1,
-                "instance_name": "Whisparr",
+                "instance_name": "Whisparr v2",
                 "instance_type": "whisparr_v2",
                 "timestamp": "2026-04-22T10:00:00.000Z",
                 "action": "searched",

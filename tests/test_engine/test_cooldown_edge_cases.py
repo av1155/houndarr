@@ -13,7 +13,7 @@ from houndarr.engine.adapters.lidarr import _artist_item_id
 from houndarr.engine.adapters.readarr import _author_item_id
 from houndarr.engine.adapters.sonarr import _season_item_id
 from houndarr.engine.adapters.whisparr_v2 import (
-    _season_item_id as whisparr_season_item_id,
+    _season_item_id as whisparr_v2_season_item_id,
 )
 from houndarr.repositories.cooldowns import _iso
 from houndarr.services.cooldown import (
@@ -131,10 +131,10 @@ def test_readarr_author_synthetic_id_format() -> None:
     assert _author_item_id(60) == -60000
 
 
-def test_whisparr_season_synthetic_id_matches_formula() -> None:
-    """Whisparr uses the same formula as Sonarr."""
-    assert whisparr_season_item_id(70, 2) == -(70 * 1000 + 2)
-    assert whisparr_season_item_id(70, 2) == -70002
+def test_whisparr_v2_season_synthetic_id_matches_formula() -> None:
+    """Whisparr v2 uses the same formula as Sonarr."""
+    assert whisparr_v2_season_item_id(70, 2) == -(70 * 1000 + 2)
+    assert whisparr_v2_season_item_id(70, 2) == -70002
 
 
 # ---------------------------------------------------------------------------

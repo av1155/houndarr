@@ -367,7 +367,7 @@ function initDashboardPage() {
       if (typeName === 'radarr')      return 'var(--color-radarr)';
       if (typeName === 'lidarr')      return 'var(--color-lidarr)';
       if (typeName === 'readarr')     return 'var(--color-readarr)';
-      if (typeName === 'whisparr_v2') return 'var(--color-whisparr)';
+      if (typeName === 'whisparr_v2') return 'var(--color-whisparr-v2)';
       if (typeName === 'whisparr_v3') return 'var(--color-whisparr-v3)';
       return 'var(--color-brand-400)';
     }

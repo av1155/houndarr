@@ -301,9 +301,9 @@ async def query_logs(
 
 
 # Map from Instance.core.type.value to the CSS --inst-<slug> token
-# suffix the Logs page cycle cards consume.  Collapses the two
-# Whisparr variants to slugs Tailwind accepts without an underscore
-# (--inst-whisparr / --inst-whisparr-v3).  Instances whose type is
+# suffix the Logs page cycle cards consume.  Renders the two Whisparr
+# variants as hyphenated slugs Tailwind accepts without an underscore
+# (--inst-whisparr-v2 / --inst-whisparr-v3).  Instances whose type is
 # unknown to this map (future *arr families, legacy rows) fall
 # through to an empty string; the template then omits the accent
 # style attribute entirely.
@@ -312,7 +312,7 @@ _INSTANCE_TYPE_TO_ACCENT_SLUG = {
     "radarr": "radarr",
     "lidarr": "lidarr",
     "readarr": "readarr",
-    "whisparr_v2": "whisparr",
+    "whisparr_v2": "whisparr-v2",
     "whisparr_v3": "whisparr-v3",
 }
 

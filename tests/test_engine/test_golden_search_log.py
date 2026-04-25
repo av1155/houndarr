@@ -745,7 +745,7 @@ async def test_golden_readarr_book_missing_and_cutoff(seeded_instances: None) ->
 
 
 # ---------------------------------------------------------------------------
-# G7: Whisparr missing (episode mode)
+# G7: Whisparr v2 missing (episode mode)
 # ---------------------------------------------------------------------------
 
 _WHISPARR_V2_EP_A: dict[str, Any] = {
@@ -755,7 +755,7 @@ _WHISPARR_V2_EP_A: dict[str, Any] = {
     "seasonNumber": 1,
     "absoluteEpisodeNumber": 1,
     "releaseDate": {"year": 2023, "month": 3, "day": 1},
-    "series": {"id": 70, "title": "Whisparr Show"},
+    "series": {"id": 70, "title": "Whisparr v2 Show"},
 }
 _WHISPARR_V2_EP_B: dict[str, Any] = {
     "id": 502,
@@ -764,14 +764,14 @@ _WHISPARR_V2_EP_B: dict[str, Any] = {
     "seasonNumber": 2,
     "absoluteEpisodeNumber": 2,
     "releaseDate": {"year": 2023, "month": 6, "day": 1},
-    "series": {"id": 70, "title": "Whisparr Show"},
+    "series": {"id": 70, "title": "Whisparr v2 Show"},
 }
 
 
 @pytest.mark.asyncio()
 @respx.mock
 async def test_golden_whisparr_v2_episode_missing(seeded_instances: None) -> None:
-    """Whisparr episode-mode missing pass with two episodes.
+    """Whisparr v2 episode-mode missing pass with two episodes.
 
     Expected sequence:
       1. searched - ep 501, missing, item_type=whisparr_v2_episode
@@ -800,12 +800,12 @@ async def test_golden_whisparr_v2_episode_missing(seeded_instances: None) -> Non
     assert rows[0]["action"] == "searched"
     assert rows[0]["item_id"] == 501
     assert rows[0]["item_type"] == "whisparr_v2_episode"
-    assert rows[0]["item_label"] == "Whisparr Show - S01 - Scene A"
+    assert rows[0]["item_label"] == "Whisparr v2 Show - S01 - Scene A"
     assert rows[0]["search_kind"] == "missing"
     assert rows[0]["cycle_id"] == "golden-g7"
 
     assert rows[1]["action"] == "searched"
     assert rows[1]["item_id"] == 502
     assert rows[1]["item_type"] == "whisparr_v2_episode"
-    assert rows[1]["item_label"] == "Whisparr Show - S02 - Scene B"
+    assert rows[1]["item_label"] == "Whisparr v2 Show - S02 - Scene B"
     assert rows[1]["search_kind"] == "missing"

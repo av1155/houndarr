@@ -64,7 +64,7 @@ _BOOK: dict[str, Any] = {
     "releaseDate": "2023-06-01T00:00:00Z",
     "author": {"id": 60, "authorName": "Test Author"},
 }
-_WHISPARR_EP: dict[str, Any] = {
+_WHISPARR_V2_EP: dict[str, Any] = {
     "id": 501,
     "seriesId": 70,
     "title": "Scene Title",
@@ -78,7 +78,7 @@ _MISSING_SONARR_1 = {"records": [_EPISODE]}
 _MISSING_RADARR_1 = {"records": [_MOVIE]}
 _MISSING_LIDARR_1 = {"records": [_ALBUM]}
 _MISSING_READARR_1 = {"records": [_BOOK]}
-_MISSING_WHISPARR_1 = {"records": [_WHISPARR_EP]}
+_MISSING_WHISPARR_V2_1 = {"records": [_WHISPARR_V2_EP]}
 _MISSING_EMPTY = {"records": []}
 _FUTURE_AIR_DATE = "2999-01-01T00:00:00Z"
 
@@ -475,7 +475,7 @@ async def test_missing_list_calls_are_bounded_per_cycle(
 
 
 # ---------------------------------------------------------------------------
-# Fixtures - Lidarr, Readarr, Whisparr
+# Fixtures - Lidarr, Readarr, Whisparr v2
 # ---------------------------------------------------------------------------
 
 
@@ -512,14 +512,14 @@ async def readarr_instance(db: None, master_key: bytes) -> Instance:
 
 
 @pytest_asyncio.fixture()
-async def whisparr_instance(db: None, master_key: bytes) -> Instance:
-    """Create a real Whisparr instance row (with encrypted API key)."""
+async def whisparr_v2_instance(db: None, master_key: bytes) -> Instance:
+    """Create a real Whisparr v2 instance row (with encrypted API key)."""
     return await create_instance(
         master_key=master_key,
-        name="E2E Whisparr",
+        name="E2E Whisparr v2",
         type=InstanceType.whisparr_v2,
         url=WHISPARR_V2_URL,
-        api_key="whisparr-key",
+        api_key="whisparr-v2-key",
         batch_size=5,
         hourly_cap=10,
         cooldown_days=7,
@@ -593,23 +593,23 @@ async def test_full_cycle_readarr(readarr_instance: Instance, master_key: bytes)
 
 
 # ---------------------------------------------------------------------------
-# Test - Full cycle: Whisparr
+# Test - Full cycle: Whisparr v2
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.integration
 @pytest.mark.asyncio()
 @respx.mock
-async def test_full_cycle_whisparr(whisparr_instance: Instance, master_key: bytes) -> None:
-    """One complete Whisparr search cycle - episode is searched, log and cooldown written."""
+async def test_full_cycle_whisparr_v2(whisparr_v2_instance: Instance, master_key: bytes) -> None:
+    """One complete Whisparr v2 search cycle - episode is searched, log and cooldown written."""
     respx.get(f"{WHISPARR_V2_URL}/api/v3/wanted/missing").mock(
-        return_value=httpx.Response(200, json=_MISSING_WHISPARR_1)
+        return_value=httpx.Response(200, json=_MISSING_WHISPARR_V2_1)
     )
     respx.post(f"{WHISPARR_V2_URL}/api/v3/command").mock(
         return_value=httpx.Response(201, json={"id": 5})
     )
 
-    count = await run_instance_search(whisparr_instance, master_key)
+    count = await run_instance_search(whisparr_v2_instance, master_key)
 
     assert count == 1
     logs = await _log_rows()
@@ -618,7 +618,7 @@ async def test_full_cycle_whisparr(whisparr_instance: Instance, master_key: byte
     assert logs[0]["item_id"] == 501
     assert logs[0]["item_type"] == "whisparr_v2_episode"
 
-    cds = await _cooldown_rows(whisparr_instance.core.id)
+    cds = await _cooldown_rows(whisparr_v2_instance.core.id)
     assert len(cds) == 1
     assert cds[0]["item_id"] == 501
     assert cds[0]["item_type"] == "whisparr_v2_episode"

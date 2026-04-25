@@ -300,7 +300,12 @@ class TestFetchInstanceSnapshot:
     (``isAvailable=false``, ``status in {tba, announced}``) stay at
     the dispatch-time path and intentionally do NOT inflate the
     Unreleased dashboard bucket.
+
+    Marked ``pinning`` because ``fetch_instance_snapshot`` is a new
+    behavioural contract.
     """
+
+    pytestmark = pytest.mark.pinning
 
     @pytest.mark.asyncio()
     async def test_counts_monitored_and_unreleased(self) -> None:

@@ -1,6 +1,6 @@
 """Structural Protocol for the per-app adapter shape.
 
-Every adapter (per-app class with six staticmethod attributes) must
+Every adapter (per-app class with eight staticmethod attributes) must
 satisfy this Protocol.  Runtime-checkable so tests can
 ``isinstance(adapter, AppAdapterProto)`` as a conformance check
 against the :data:`ADAPTERS` registry.

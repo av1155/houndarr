@@ -483,7 +483,14 @@ class TestFetchInstanceSnapshot:
     get_wanted_total('cutoff') (cheap pageSize=1 probes).
     unreleased_count comes from a paginate_wanted walk of /wanted/missing
     counting items whose ``air_date_utc`` is strictly in the future.
+
+    Marked ``pinning`` because ``fetch_instance_snapshot`` is a new
+    behavioural contract (anchor selection, monitored vs cutoff sums,
+    unreleased semantics); a future refactor of the snapshot path
+    would silently drift it without this safety net.
     """
+
+    pytestmark = pytest.mark.pinning
 
     @pytest.mark.asyncio()
     async def test_paginated_walk_counts_future_anchors(self):

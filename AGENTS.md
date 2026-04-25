@@ -40,72 +40,18 @@ Dev server: `http://localhost:8877`.
 
 ## Quality Gates
 
-Run all five before every commit. These are the core local gates; CI
-also enforces them as part of the required checks, alongside additional
-security and container checks.
+Run before every commit. CI enforces the same five plus security
+and container checks.
 
 ```bash
-just check      # lint + format-check + mypy + bandit + full pytest, in CI order
-just quick      # lint + mypy + non-integration pytest (fast feedback loop)
-just fix        # ruff --fix + ruff format, applied in place
+just check      # all gates, CI order: lint + fmt-check + type + sec + test
+just quick      # fast loop: lint + type + non-integration pytest
+just fix        # ruff --fix + ruff format
+just lint | fmt-check | type | sec | test  # individual recipes
 ```
 
-`just` is the source of truth.  Individual gates are also available
-when the full sweep is overkill:
-
-```bash
-just lint       # ruff check src/ tests/
-just fmt-check  # ruff format --check src/ tests/
-just type       # mypy src/ (strict)
-just sec        # bandit -r src/ -c pyproject.toml
-just test       # pytest (full suite)
-```
-
-### Recipe index
-
-```bash
-just            # list every recipe
-just check      # all five gates, CI order
-just quick      # lint + type + non-integration pytest (fast feedback loop)
-just fix        # ruff check --fix + ruff format, in place
-just pin        # pytest -m pinning (characterisation subset)
-just test       # pytest, parallel across CPUs by default
-just test-quick # pytest -m "not integration", parallel
-just test-integration  # pytest -m integration tests/test_e2e/, parallel
-just test-parallel     # alias of `just test` (kept for muscle memory)
-just test-browser chromium  # Playwright e2e against a live stack (serial)
-just dev        # python -m houndarr --data-dir ./data-dev --dev
-```
-
-### Parallel by default
-
-`test`, `test-quick`, `test-integration`, and `pin` all run with
-`pytest -n auto` (pytest-xdist) so the suite uses every physical
-CPU.  Override via env var:
-
-```bash
-PYTEST_WORKERS=0 just test    # serial fallback for ordering-sensitive flakes
-PYTEST_WORKERS=4 just test    # constrain to 4 workers for limited-CPU CI
-```
-
-Browser e2e (`test-browser`) and the visual-baseline recipes
-(`capture-baselines`, `verify-baselines`) stay serial: they share a
-single Houndarr instance + mock-arr stack on fixed ports, which is
-the canonical pytest-xdist anti-pattern.
-
-### Without `just`
-
-If `just` is not installed, every recipe is a thin wrapper; read the
-`justfile` at the repo root for the underlying invocation. The
-authoritative commands the recipes wrap are:
-
-```bash
-.venv/bin/python -m ruff check src/ tests/          # lint
-.venv/bin/python -m ruff format --check src/ tests/  # format check
-.venv/bin/python -m mypy src/                        # type check (strict)
-.venv/bin/python -m bandit -r src/ -c pyproject.toml # SAST
-.venv/bin/pytest                                     # all tests
-```
+If `just` is unavailable, read `justfile` for the underlying
+`.venv/bin/...` invocations.
 
 ### Shortcut: `just`
 
@@ -128,53 +74,44 @@ just dev        # python -m houndarr --data-dir ./data-dev --dev
 
 ## Running Tests
 
+~2580 tests (parametrised expansions + 12 async engine-cycle cases
+tagged `@pytest.mark.integration`).  `just test`, `test-quick`,
+`test-integration`, and `pin` run with `pytest -n auto` by default
+(pytest-xdist).  Override with `PYTEST_WORKERS=0` for serial
+triage, or `PYTEST_WORKERS=4` to constrain.
+
 ```bash
-# Full suite (~2502 tests; count includes parametrised expansions and
-# the 12 async engine-cycle tests tagged @pytest.mark.integration).
-.venv/bin/pytest
-
-# Fast feedback: unit tests only, skip integration + browser trees.
-.venv/bin/pytest -m "not integration"
-
-# Integration-only (the 12 async engine-cycle cases under tests/test_e2e/).
-.venv/bin/pytest -m integration tests/test_e2e/
-
-# Browser e2e (Playwright; needs a running Houndarr + mock *arr stack).
-# Not collected by default (norecursedirs skips tests/e2e_browser/);
-# invoke the tree explicitly:
-.venv/bin/pytest tests/e2e_browser/ --browser chromium
-
-# Single file
-.venv/bin/pytest tests/test_auth.py
-
-# Single test by name
-.venv/bin/pytest tests/test_auth.py::test_check_password_valid -v
-
-# Tests matching a keyword expression
-.venv/bin/pytest -k "csrf" -v
-
-# Single directory
-.venv/bin/pytest tests/test_services/
-
-# With coverage
-.venv/bin/pytest --cov=houndarr --cov-report=term-missing
+just test               # full suite, parallel
+just test-quick         # unit only (-m "not integration"), parallel
+just test-integration   # tests/test_e2e/ (-m integration), parallel
+just pin                # characterisation tests only, parallel
+just test-browser chromium     # Playwright e2e; serial (shared stack on fixed ports)
+just capture-baselines  # rebuild login/setup PNG baselines (Linux Playwright container)
+just verify-baselines   # check committed baselines without --update-snapshots
 ```
 
-### `@pytest.mark.integration`
+For one-off invocations without a `just` recipe:
 
-The 12 cases under `tests/test_e2e/` and the 15 Playwright flows under
-`tests/e2e_browser/` carry the `integration` marker (registered in
-`[tool.pytest.ini_options]`).  Use `-m "not integration"` for the fast
-unit loop and `-m integration` when you need the engine-cycle coverage.
-The `integration` marker is orthogonal to `norecursedirs`: the browser
-tree is excluded from default collection entirely; the `test_e2e/` tree
-is collected and simply filterable by marker.
+```bash
+.venv/bin/pytest tests/test_auth.py                                    # single file
+.venv/bin/pytest tests/test_auth.py::test_check_password_valid -v      # single test
+.venv/bin/pytest -k "csrf" -v                                          # keyword filter
+.venv/bin/pytest --cov=houndarr --cov-report=term-missing              # coverage
+```
 
-**Pytest config** (from `pyproject.toml`):
+### Markers
 
-- `asyncio_mode = "auto"`: async tests run without manual event-loop setup
-- `asyncio_default_fixture_loop_scope = "function"`: each test gets its own loop
-- `addopts = "-q --tb=short"`: default quiet output with short tracebacks
+- `@pytest.mark.integration` — 12 async engine-cycle cases in
+  `tests/test_e2e/` plus 15 Playwright flows in `tests/e2e_browser/`
+  (browser tree excluded from default collection via `norecursedirs`;
+  `test_e2e/` is collected and filterable).
+- `@pytest.mark.pinning` — characterisation tests pinning current
+  behaviour before a refactor batch.  Unit-scope; runs in the default
+  suite.  Add one whenever a refactor needs a behavioural lock.
+
+Pytest config (`pyproject.toml`): `asyncio_mode = "auto"`,
+`asyncio_default_fixture_loop_scope = "function"`,
+`addopts = "-q --tb=short"`.
 
 ---
 
@@ -449,39 +386,26 @@ src/houndarr/
 - **search_log:** Every search attempt writes a row with action
   `searched`/`skipped`/`error`/`info`
 
-### Database schema (SQLite, schema version 13)
+### Database schema (SQLite)
 
 | Table | Purpose | Key constraints |
 |-------|---------|-----------------|
 | `settings` | Key-value config store | `key TEXT PK` |
-| `instances` | *arr instance configs | `type CHECK IN ('radarr','sonarr','lidarr','readarr','whisparr_v2','whisparr_v3')`; per-type `*_search_mode` columns with CHECK constraints; `post_release_grace_hrs` (default 6); `queue_limit` (default 0); `upgrade_enabled` (default 0) with per-type `upgrade_*_search_mode`, `upgrade_batch_size`, `upgrade_cooldown_days`, `upgrade_hourly_cap`, `upgrade_item_offset`, `upgrade_series_offset` columns; `missing_page_offset` (default 1), `cutoff_page_offset` (default 1) for page-rotation across cycles; `allowed_time_window` (default `''`) for per-instance search schedules; `search_order` (default `'random'` on fresh installs, `'chronological'` for migrated rows) with `CHECK(search_order IN ('random','chronological'))`; `monitored_total` / `unreleased_count` / `snapshot_refreshed_at` populated by the supervisor's snapshot refresh task for the dashboard |
-| `cooldowns` | Per-item search cooldown tracking | `instance_id FK→instances ON DELETE CASCADE`; `UNIQUE(instance_id, item_id, item_type)` |
-| `search_log` | Audit trail for every search cycle | `instance_id FK→instances ON DELETE SET NULL`; `action CHECK IN ('searched','skipped','error','info')` |
+| `instances` | *arr instance configs | `type CHECK IN ('radarr','sonarr','lidarr','readarr','whisparr_v2','whisparr_v3')`; many policy columns with CHECK constraints; `monitored_total` / `unreleased_count` / `snapshot_refreshed_at` populated by the supervisor's snapshot refresh task |
+| `cooldowns` | Per-item search cooldown tracking | `instance_id FK→instances ON DELETE CASCADE`; `UNIQUE(instance_id, item_id, item_type)`; `search_kind CHECK IN ('missing','cutoff','upgrade')` (v15) |
+| `search_log` | Audit trail | `instance_id FK→instances ON DELETE SET NULL`; `action CHECK IN ('searched','skipped','error','info')` |
 
-Full DDL, column definitions, indexes, and migrations (`_migrate_to_v2`
-through `_migrate_to_v13`) are in `src/houndarr/database.py`. Bump
-`SCHEMA_VERSION` when adding new migrations.
+Full DDL and migrations live in `src/houndarr/database.py`. Bump
+`SCHEMA_VERSION` and add a `_migrate_to_vN` when changing schema.
 
 ### *arr API reference (local)
 
-Full upstream OpenAPI specs are vendored locally and kept current:
-
-- `docs/api/sonarr_openapi.json`: Sonarr v3 API (OpenAPI 3.0.1)
-- `docs/api/radarr_openapi.json`: Radarr v3 API (OpenAPI 3.0.4)
-- `docs/api/whisparr_v2_openapi.json`: Whisparr v2 API (Sonarr-based, OpenAPI 3.0.1)
-- `docs/api/whisparr_v3_openapi.json`: Whisparr v3 API (Radarr-based, OpenAPI 3.0.0)
-- `docs/api/lidarr_openapi.json`: Lidarr v1 API (OpenAPI 3.0.4)
-- `docs/api/readarr_openapi.json`: Readarr v1 API (OpenAPI 3.0.1)
-
-**Use these as the source of truth** when modifying or creating *arr client
-code. They document every endpoint, parameter, request body, and response
-schema. See `docs/api/README.md` for usage guidelines.
-
-All six specs are actively used by their respective clients in `clients/`.
-
-**Freshness:** `api-snapshot-refresh.yml` auto-fetches all six upstream
-specs weekly (Monday 10:00 UTC) and opens a PR if changed; local specs
-are never more than one week stale.
+Full upstream OpenAPI specs vendored under `docs/api/` (one per app:
+sonarr, radarr, whisparr_v2, whisparr_v3, lidarr, readarr).
+**Source of truth** when touching `clients/` code; see
+`docs/api/README.md`.  Refreshed weekly (Mon 10:00 UTC) by
+`api-snapshot-refresh.yml`, so specs are never more than a week
+stale.
 
 ---
 
@@ -782,117 +706,67 @@ Currently known minor discrepancies:
 
 ## Public-Facing Voice
 
-All text posted to GitHub under the maintainer's account must read as if a
-human wrote it. Agents ghostwrite; they do not narrate, report, or
-self-identify.
+All GitHub-visible text (issues, PRs, comments, commit messages,
+CHANGELOG, releases) must read as if a human wrote it.  Agents
+ghostwrite; they do not narrate, report, or self-identify.
 
-### Prohibited in all GitHub-visible text
+### Forbidden in GitHub-visible text
 
-This applies to issue titles, issue bodies, PR titles, PR bodies, PR/issue
-comments, commit messages, CHANGELOG entries, and release notes.
-
-Never include:
-
-- References to AGENTS.md, CLAUDE.md, or any instruction file
-  (`"I have read AGENTS.md"`, `"per AGENTS.md"`, `"scope discipline"`)
-- Agent compliance declarations
-  (`"this change is within scope"`, `"I verified"`, `"I audited"`)
-- Audit/verification narration
-  (`"truth audit"`, `"verified TRUE"`, `"confirmed against the codebase"`,
-  `"cross-reference audit"`, `"code-grounded"`, `"release-readiness
-  verification"`)
-- Finding-ID numbering schemes (`SEC-1`, `F-1`, `FINDING-1`)
-- Process theater
-  (`"post-fix verification"`, `"remediation plan"`, `"close the remaining
-  gaps"`, `"completed housekeeping"`, `"this task is now complete"`)
-- Exhaustive negative-finding enumerations (listing every file where
-  something was NOT found)
-- Quality-gate recitation with exact tool names and test counts
-  (`"All 5 quality gates pass: ruff check, ruff format, mypy strict,
-  bandit SAST, pytest (312 tests)"`: just say `"all checks pass"`)
-- grep/search verification as proof (`"grep -ri returns zero matches"`)
-- Post-merge instruction lists in PR bodies
-- `"Follow-up recommendations (not in this PR)"` sections
-- Item-count narration (`"9 Q&A entries covering every misconception"`)
-- Prompt-shaped headings (`"Success criteria"`, `"Evidence"`, `"Decision"`)
-- Layer-by-layer audit tables in issue bodies
+- Instruction-file references (`"per AGENTS.md"`, `"scope discipline"`).
+- Compliance declarations (`"I verified"`, `"this change is within scope"`).
+- Audit narration (`"truth audit"`, `"verified TRUE"`,
+  `"confirmed against the codebase"`, `"release-readiness verification"`).
+- Finding-ID schemes (`SEC-1`, `F-1`).
+- Process theatre (`"post-fix verification"`, `"remediation plan"`,
+  `"completed housekeeping"`, `"this task is now complete"`).
+- Exhaustive negative enumerations (listing every file where something
+  was NOT found).
+- Quality-gate recitation with tool names and test counts (just say
+  `"all checks pass"`).
+- grep/search invocations as proof.
+- Post-merge instruction lists in PR bodies.
+- `"Follow-up recommendations (not in this PR)"` sections.
+- Item-count narration, prompt-shaped headings (`"Success criteria"`,
+  `"Evidence"`, `"Decision"`), or layer-by-layer audit tables.
 
 ### Required voice
 
-- Write as the maintainer would: concise, direct, technical.
-- Issue bodies: state the problem and what needs to change. A few sentences
-  for routine issues, more detail for complex ones.
-- PR bodies: say what changed and why. Use the PR template. Do not add
-  custom compliance checklists beyond the template.
-- PR template checklist: only check items that actually apply. Leave
-  inapplicable items unchecked or mark `N/A`.
-- Comments: short and human (`"Done"`, `"Fixed in abc1234"`, `"Merged"`).
-- Commit messages: follow Conventional Commits. Body optional; if present,
-  explain why, not what the agent did.
-- CHANGELOG: follow existing bullet rules (already defined above).
+Write as the maintainer would: concise, direct, technical.  Issues
+state the problem and what needs to change.  PRs say what changed
+and why; use the PR template; don't add custom compliance
+checklists.  Comments are short and human (`"Done"`, `"Fixed in
+abc1234"`, `"Merged"`).  Commit messages follow Conventional Commits;
+body optional, and if present explains why, not what.
 
-### Internal-only text
-
-References to agents, prompts, instruction files, and workflow mechanics
-belong only in:
-
-- `AGENTS.md` itself
-- `.claude/` or `.cursor/` directories
-- Git-ignored local files
-
-They must never appear in any GitHub-visible artifact.
+References to agents, prompts, or workflow mechanics belong only in
+`AGENTS.md` itself, `.claude/` or `.cursor/` directories, or
+git-ignored local files — never in GitHub-visible artifacts.
 
 ### Documentation voice
 
-All user-facing documentation (website pages, README, CONTRIBUTING, SECURITY,
-in-app help text) must read as if a single human maintainer wrote it: direct,
-concise, and conversational. Documentation should feel authored, not assembled.
+User-facing documentation (website pages, README, CONTRIBUTING,
+SECURITY, in-app help text) must read as if a single human
+maintainer wrote it.  Direct, concise, conversational.  Authored,
+not assembled.
 
-**Prohibited in documentation:**
+Forbidden in docs:
 
-- `"Mental model"` as a framing device or callout label
-- Defensive credibility claims about the document itself
-  (`"every claim is based on the source code"`,
-  `"where limitations exist, they are stated plainly"`,
-  `"these are honest trade-offs"`)
-- Summary sections that restate the page's content bullet-by-bullet
-- Worked examples that read like textbook exercises (step-by-step arithmetic
-  with bold emphasis on each subtraction)
-- Exhaustive enumeration of things that are absent (listing many specific
-  analytics services that are not used; just say "no analytics or error
-  tracking")
-- FAQ questions that feel reverse-engineered from a prompt rather than
-  sourced from real user confusion
-- The same concept explained in near-identical phrasing on more than two pages
+- `"Mental model"` as a framing device or callout label.
+- Defensive credibility claims about the document itself (`"every
+  claim is based on the source code"`, `"these are honest trade-offs"`).
+- Summary sections that restate the page bullet-by-bullet.
+- Worked examples that read like textbook exercises (step-by-step
+  arithmetic with bold emphasis on each subtraction).
+- Exhaustive enumeration of things that are absent.
+- FAQ questions that feel reverse-engineered from a prompt rather
+  than sourced from real user confusion.
+- The same concept explained in near-identical phrasing on more than
+  two pages.
 
-**Cross-page repetition rule:**
-
-Each concept (e.g. "skips are normal", "monitored does not mean wanted",
-"conservative defaults are slow by design") should have ONE authoritative
-explanation on one page. Other pages that mention the concept should use a
-brief statement (one sentence) and link to the authority page. Never repeat
-the same reassurance formula verbatim across pages.
-
-**Reassurance discipline:**
-
-Avoid repeating reassurance phrases (`"this is expected"`,
-`"this does not mean Houndarr is stuck"`, `"a high skip count is healthy"`)
-more than once across the entire documentation set. State the fact once,
-clearly, and trust the reader.
-
-**FAQ rules:**
-
-- Keep answers to 2–4 sentences. Link to concept pages for detail.
-- Do not re-explain the full search funnel in every FAQ entry.
-- Write questions in the voice of a real user, not as preemptive
-  corrections of anticipated misconceptions.
-
-**Required voice:**
-
-- Write as a maintainer explaining their own tool to a peer.
-- Be concise. Prefer short paragraphs and direct statements.
-- Vary phrasing across pages; do not use the same sentence structure
-  to explain similar concepts.
-- Use callouts and admonitions sparingly.
-- Headings should be descriptive or action-oriented, not reassuring
-  (`"Check the error count"` not `"Zero errors is a strong health signal"`).
+Each concept gets ONE authoritative explanation on one page; other
+pages link to it.  Avoid repeated reassurance phrases (`"this is
+expected"`, `"a high skip count is healthy"`); state the fact once
+and trust the reader.  Keep FAQ answers to 2–4 sentences and link
+out for detail.  Headings are descriptive or action-oriented, not
+reassuring (`"Check the error count"` not `"Zero errors is a strong
+health signal"`).

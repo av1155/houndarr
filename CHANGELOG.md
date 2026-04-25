@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.10.0] - 2026-04-24
+
+### Changed
+
+- All references to Whisparr in code, tests, schema, templates, and docs are now disambiguated as Whisparr v2 or Whisparr v3 wherever they refer to a single version.  Mentions of the product family (where Houndarr supports both) stay as Whisparr.  Includes a schema v16 migration that renames the v2-specific `whisparr_search_mode` columns and the `whisparr_episode` item_type value. (#N)
+
+---
+
 ## [1.9.0] - 2026-04-18
 
 ### Added

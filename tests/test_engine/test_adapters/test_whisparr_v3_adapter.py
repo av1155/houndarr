@@ -18,8 +18,8 @@ from houndarr.clients.whisparr_v3 import (
 )
 from houndarr.engine.adapters.whisparr_v3 import (
     _movie_label,
-    _release_anchor,
-    _unreleased_reason,
+    _whisparr_v3_release_anchor,
+    _whisparr_v3_unreleased_reason,
     adapt_cutoff,
     adapt_missing,
     adapt_upgrade,
@@ -140,17 +140,17 @@ class TestMovieLabel:
 class TestReleaseAnchor:
     def test_digital_preferred(self) -> None:
         m = _make_movie(digital_release="2024-01-01", physical_release="2024-02-01")
-        assert _release_anchor(m) == "2024-01-01"
+        assert _whisparr_v3_release_anchor(m) == "2024-01-01"
 
     def test_falls_back_to_in_cinemas(self) -> None:
         m = _make_movie(digital_release=None, physical_release=None, release_date=None)
-        assert _release_anchor(m) == _OLD_RELEASE
+        assert _whisparr_v3_release_anchor(m) == _OLD_RELEASE
 
     def test_all_none(self) -> None:
         m = _make_movie(
             digital_release=None, physical_release=None, release_date=None, in_cinemas=None
         )
-        assert _release_anchor(m) is None
+        assert _whisparr_v3_release_anchor(m) is None
 
 
 # ---------------------------------------------------------------------------
@@ -160,32 +160,32 @@ class TestReleaseAnchor:
 
 class TestUnreleasedReason:
     def test_released_returns_none(self) -> None:
-        assert _unreleased_reason(_make_movie(), 6) is None
+        assert _whisparr_v3_unreleased_reason(_make_movie(), 6) is None
 
-    def test_future_release_anchor(self) -> None:
+    def test_future_whisparr_v3_release_anchor(self) -> None:
         m = _make_movie(digital_release=_FUTURE_RELEASE)
-        assert _unreleased_reason(m, 6) == "not yet released"
+        assert _whisparr_v3_unreleased_reason(m, 6) == "not yet released"
 
     def test_post_release_grace(self) -> None:
         recent = (datetime.now(UTC) - timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
         m = _make_movie(digital_release=recent)
-        assert _unreleased_reason(m, 6) == "post-release grace (6h)"
+        assert _whisparr_v3_unreleased_reason(m, 6) == "post-release grace (6h)"
 
     def test_is_available_false(self) -> None:
         m = _make_movie(is_available=False)
-        assert _unreleased_reason(m, 0) == "whisparr v3 reports not available"
+        assert _whisparr_v3_unreleased_reason(m, 0) == "whisparr v3 reports not available"
 
     def test_tba_status(self) -> None:
         m = _make_movie(status="tba", is_available=None)
-        assert _unreleased_reason(m, 0) == "whisparr v3 status indicates unreleased"
+        assert _whisparr_v3_unreleased_reason(m, 0) == "whisparr v3 status indicates unreleased"
 
     def test_announced_status(self) -> None:
         m = _make_movie(status="announced", is_available=None)
-        assert _unreleased_reason(m, 0) == "whisparr v3 status indicates unreleased"
+        assert _whisparr_v3_unreleased_reason(m, 0) == "whisparr v3 status indicates unreleased"
 
     def test_future_year(self) -> None:
         m = _make_movie(year=2099, status="", is_available=None)
-        assert _unreleased_reason(m, 0) == "future title not yet available"
+        assert _whisparr_v3_unreleased_reason(m, 0) == "future title not yet available"
 
 
 # ---------------------------------------------------------------------------

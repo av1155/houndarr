@@ -46,7 +46,7 @@
 {%- if ns.cooldown -%}{%- set _ = parts.append(ns.cooldown ~ ' on cooldown') -%}{%- endif -%}
 {%- if ns.unreleased -%}{%- set _ = parts.append(ns.unreleased ~ ' not yet released') -%}{%- endif -%}
 {%- if ns.capped -%}{%- set _ = parts.append(ns.capped ~ ' hit hourly limit') -%}{%- endif -%}
-{%- if ns.other -%}{%- set _ = parts.append(ns.other ~ ' other') -%}{%- endif -%}
+{%- if ns.other -%}{%- set _ = parts.append(ns.other ~ ' other') -%}{%- endif %}
  <span class="cycle__summary-reason">{{ parts | join(', ') }}</span>. No dispatches needed.
 {%- else -%}
 <strong>{{ instance_name }}</strong> checked the queue. No dispatches needed.

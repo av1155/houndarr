@@ -404,6 +404,30 @@ body {
     animation: station-pulse 2.4s var(--ease-station) 2;
   }
 
+  /* Unlimited variant: rendered when the user sets hourly_cap=0.
+     Keeps the same vertical footprint as a real budget bar so cards
+     in the same grid row stay height-matched.  The value reads
+     "Unlimited" in the muted-text tone; the track itself stays
+     empty (0% fill) with a subtle repeating gradient so the bar is
+     clearly present but reads as "no ceiling to track" rather than
+     "0% used of a real cap". */
+  .dash-card__budget--unlimited .dash-card__budget-value {
+    color: var(--color-text-muted);
+    font-weight: 500;
+    letter-spacing: 0.04em;
+  }
+  .dash-card__budget--unlimited .dash-card__budget-bar {
+    background:
+      repeating-linear-gradient(
+        135deg,
+        color-mix(in srgb, var(--color-border-default) 55%, transparent) 0 4px,
+        transparent 4px 8px
+      );
+  }
+  .dash-card__budget--unlimited .dash-card__budget-fill {
+    display: none;
+  }
+
   /* Stale-snapshot pill on the card footer.  Muted amber chip with a
      12px Lucide alert-triangle.  Only rendered when the snapshot is
      >15 min old; absence = healthy.  Sized to align with the footer

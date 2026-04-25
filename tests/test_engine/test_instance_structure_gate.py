@@ -18,7 +18,7 @@ Locked invariants:
   ``cooldowns``, ``search_log``) expose their public API surfaces.
 * :mod:`houndarr.deps` exports both :func:`get_supervisor` and
   :func:`get_master_key`.
-* The 39-name flat attribute surface an Instance used to expose is
+* The 40-name flat attribute surface an Instance used to expose is
   covered exhaustively by the seven sub-structs' field sets; no
   historical column name is orphaned.
 """
@@ -316,6 +316,7 @@ _PRE_REFACTOR_FLAT_FIELDS = {
     "upgrade_whisparr_v2_search_mode",
     "upgrade_item_offset",
     "upgrade_series_offset",
+    "upgrade_series_window_size",
     # SchedulePolicy
     "allowed_time_window",
     "search_order",
@@ -346,4 +347,4 @@ def test_sub_struct_field_union_covers_pre_refactor_surface() -> None:
     for cls in substructs:
         union.update(f.name for f in dataclasses.fields(cls))
     assert union == _PRE_REFACTOR_FLAT_FIELDS
-    assert len(union) == 39
+    assert len(union) == 40

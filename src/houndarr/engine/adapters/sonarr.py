@@ -267,8 +267,10 @@ async def fetch_upgrade_pool(
 ) -> list[LibraryEpisode]:
     """Fetch and filter Sonarr library for upgrade-eligible episodes.
 
-    Uses series rotation: fetches up to ``_UPGRADE_MAX_SERIES_PER_CYCLE``
-    monitored series per cycle, starting from ``instance.upgrade.upgrade_series_offset``.
+    Uses series rotation: fetches up to
+    ``instance.upgrade.upgrade_series_window_size`` monitored series per
+    cycle (default 5; capped at the module fallback for safety), starting
+    from ``instance.upgrade.upgrade_series_offset``.
 
     Args:
         client: An open :class:`SonarrClient` context.
@@ -286,10 +288,15 @@ async def fetch_upgrade_pool(
     if not monitored:
         return []
 
+    # Per-instance window size lets users with very large libraries trade
+    # higher per-cycle *arr load for faster rotation coverage.  Clamp to
+    # at least 1 so a stored 0 (impossible per CHECK constraint, but
+    # defensive) still makes progress.
+    window = max(1, instance.upgrade.upgrade_series_window_size)
     offset = instance.upgrade.upgrade_series_offset % len(monitored)
-    selected = monitored[offset : offset + _UPGRADE_MAX_SERIES_PER_CYCLE]
-    if len(selected) < _UPGRADE_MAX_SERIES_PER_CYCLE:
-        remaining = _UPGRADE_MAX_SERIES_PER_CYCLE - len(selected)
+    selected = monitored[offset : offset + window]
+    if len(selected) < window:
+        remaining = window - len(selected)
         selected += monitored[:remaining]
 
     return await _collect_upgrade_episodes(client, instance, selected)

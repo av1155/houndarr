@@ -31,6 +31,7 @@ from houndarr.config import (
     DEFAULT_UPGRADE_HOURLY_CAP,
     DEFAULT_UPGRADE_LIDARR_SEARCH_MODE,
     DEFAULT_UPGRADE_READARR_SEARCH_MODE,
+    DEFAULT_UPGRADE_SERIES_WINDOW_SIZE,
     DEFAULT_UPGRADE_SONARR_SEARCH_MODE,
     DEFAULT_UPGRADE_WHISPARR_V2_SEARCH_MODE,
     DEFAULT_WHISPARR_V2_SEARCH_MODE,
@@ -191,6 +192,7 @@ class UpgradePolicy:
     )
     upgrade_item_offset: int = 0
     upgrade_series_offset: int = 0
+    upgrade_series_window_size: int = DEFAULT_UPGRADE_SERIES_WINDOW_SIZE
 
 
 @dataclass(frozen=True, slots=True)

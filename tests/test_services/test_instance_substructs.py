@@ -128,6 +128,7 @@ FLAT_TO_SUB: dict[str, str] = {
     "upgrade_whisparr_v2_search_mode": "upgrade",
     "upgrade_item_offset": "upgrade",
     "upgrade_series_offset": "upgrade",
+    "upgrade_series_window_size": "upgrade",
     # SchedulePolicy
     "allowed_time_window": "schedule",
     "search_order": "schedule",
@@ -299,7 +300,7 @@ def test_cutoff_policy_defaults_match_config() -> None:
 
 
 def test_upgrade_policy_fields_in_declaration_order() -> None:
-    """UpgradePolicy exposes the ten upgrade tunables + pool offsets."""
+    """UpgradePolicy exposes the upgrade tunables + pool offsets + window size."""
     assert _field_names(UpgradePolicy) == [
         "upgrade_enabled",
         "upgrade_batch_size",
@@ -311,6 +312,7 @@ def test_upgrade_policy_fields_in_declaration_order() -> None:
         "upgrade_whisparr_v2_search_mode",
         "upgrade_item_offset",
         "upgrade_series_offset",
+        "upgrade_series_window_size",
     ]
 
 
@@ -427,7 +429,7 @@ def test_substruct_field_union_matches_flat_surface() -> None:
 
 
 def test_substruct_field_union_count_matches_pre_refactor_surface() -> None:
-    """Thirty-nine flat fields, partitioned across seven sub-structs.
+    """Forty flat fields, partitioned across seven sub-structs.
 
     Canary for arithmetic drift: if someone bumps :data:`FLAT_TO_SUB` or
     adds a sub-struct field without updating the other, this test
@@ -435,8 +437,8 @@ def test_substruct_field_union_count_matches_pre_refactor_surface() -> None:
     clearer failure.
     """
     total = sum(len(_field_names(cls)) for cls in SUBSTRUCTS)
-    assert total == 39
-    assert len(FLAT_TO_SUB) == 39
+    assert total == 40
+    assert len(FLAT_TO_SUB) == 40
 
 
 # Instance shape.

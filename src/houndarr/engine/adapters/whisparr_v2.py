@@ -298,9 +298,14 @@ async def fetch_upgrade_pool(
         return []
 
     offset = instance.upgrade.upgrade_series_offset % len(monitored)
-    selected = monitored[offset : offset + _UPGRADE_MAX_SERIES_PER_CYCLE]
-    if len(selected) < _UPGRADE_MAX_SERIES_PER_CYCLE:
-        remaining = _UPGRADE_MAX_SERIES_PER_CYCLE - len(selected)
+    # Per-instance window size lets users with very large libraries trade
+    # higher per-cycle *arr load for faster rotation coverage.  Clamp to
+    # at least 1 so a stored 0 (impossible per CHECK constraint, but
+    # defensive) still makes progress.
+    window = max(1, instance.upgrade.upgrade_series_window_size)
+    selected = monitored[offset : offset + window]
+    if len(selected) < window:
+        remaining = window - len(selected)
         selected += monitored[:remaining]
 
     return await _collect_upgrade_episodes(client, instance, selected)

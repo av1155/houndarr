@@ -354,7 +354,7 @@ async def test_update_search_order_to_random(db: None, master_key: bytes) -> Non
 
 
 # ---------------------------------------------------------------------------
-# PR 5: v13 snapshot columns + update_instance_snapshot helper
+# v13 snapshot columns + update_instance_snapshot helper
 # ---------------------------------------------------------------------------
 
 

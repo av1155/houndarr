@@ -334,7 +334,38 @@ def test_status_v2_includes_redesign_fields(app: TestClient) -> None:
     }
     assert expected_keys.issubset(inst.keys())
     assert inst["id"] == iid
-    assert inst["unreleased_count"] == 0  # PR 1 interim; PR 5 populates real
+
+
+def test_status_unreleased_count_zero_on_fresh_db(app: TestClient) -> None:
+    """Fresh instance with no snapshot run yet reports unreleased_count=0.
+
+    Pins the post-create / pre-supervisor state.  The supervisor's
+    snapshot refresh populates the real value within ~20s of process
+    start (or immediately on enable via the prime-on-enable hook).
+    """
+    _login(app)
+    _create_instance(app)
+    inst = app.get("/api/status").json()["instances"][0]
+    assert inst["unreleased_count"] == 0
+
+
+def test_status_unreleased_count_reflects_snapshot_update(app: TestClient) -> None:
+    """The /api/status envelope echoes whatever the supervisor wrote.
+
+    Direct DB write via update_instance_snapshot stands in for a
+    real supervisor refresh; the route is a passive read of the
+    stored snapshot column.
+    """
+    from houndarr.repositories.instances import update_instance_snapshot
+
+    _login(app)
+    iid = _create_instance(app)
+    asyncio.run(update_instance_snapshot(iid, monitored_total=42, unreleased_count=7))
+
+    inst = app.get("/api/status").json()["instances"][0]
+    assert inst["id"] == iid
+    assert inst["monitored_total"] == 42
+    assert inst["unreleased_count"] == 7
 
 
 def test_status_v2_lifetime_searched_counts_all_time(app: TestClient) -> None:

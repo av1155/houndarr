@@ -53,11 +53,11 @@ def _unreleased_reason(movie: MissingWhisparrV3Movie, grace_hrs: int) -> str | N
         return f"post-release grace ({grace_hrs}h)"
 
     if movie.is_available is False:
-        return "whisparr reports not available"
+        return "whisparr v3 reports not available"
 
     status = (movie.status or "").lower()
     if status in _UNRELEASED_STATUSES and movie.is_available is not True:
-        return "whisparr status indicates unreleased"
+        return "whisparr v3 status indicates unreleased"
 
     if (
         movie.year > datetime.now(UTC).year

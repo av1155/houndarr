@@ -248,7 +248,7 @@ src/houndarr/
     radarr.py          # RadarrClient (movie search, v3 API)
     lidarr.py          # LidarrClient (album/artist search, v1 API)
     readarr.py         # ReadarrClient (book/author search, v1 API)
-    whisparr_v2.py     # WhisparrClient (v2, Sonarr-based, episode/season search)
+    whisparr_v2.py     # WhisparrV2Client (Sonarr-based, episode/season search)
     whisparr_v3.py     # WhisparrV3Client (v3, Radarr-based, movie/scene search)
   engine/
     candidates.py      # SearchCandidate dataclass, ItemType, date helpers

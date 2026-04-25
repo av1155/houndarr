@@ -885,7 +885,7 @@ async def _run_upgrade_pass(
         )
         return 0
 
-    # Advance series offset for series-based apps (Sonarr/Whisparr).
+    # Advance series offset for series-based apps (Sonarr/Whisparr v2).
     # Unlike upgrade_item_offset, this advances in both chronological and
     # random modes on purpose: the series offset decides which slice of
     # series feeds the upgrade pool, so continuing to rotate it in random

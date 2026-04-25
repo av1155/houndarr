@@ -55,7 +55,7 @@ Reverts every instance's policy columns to defaults:
 - Post-release grace hours and queue backpressure limit
 - Cutoff search settings (enabled / batch / cooldown / cap)
 - Upgrade search settings (enabled / batch / cooldown / cap)
-- Per-app search modes (Sonarr / Lidarr / Readarr / Whisparr)
+- Per-app search modes (Sonarr / Lidarr / Readarr / Whisparr v2)
 - Allowed search window and search order
 - Pagination cursors (missing, cutoff) and upgrade-pool offsets
 

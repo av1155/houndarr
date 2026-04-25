@@ -15,6 +15,7 @@ from houndarr.engine.adapters.lidarr import (
     adapt_cutoff,
     adapt_missing,
     dispatch_search,
+    fetch_instance_snapshot,
     make_client,
 )
 from houndarr.engine.candidates import SearchCandidate
@@ -355,3 +356,28 @@ class TestMakeClient:
         instance = _make_instance()
         client = make_client(instance)
         assert isinstance(client, LidarrClient)
+
+
+# ---------------------------------------------------------------------------
+# fetch_instance_snapshot
+# ---------------------------------------------------------------------------
+
+
+class TestFetchInstanceSnapshot:
+    """Verify the snapshot composition for Lidarr."""
+
+    @pytest.mark.asyncio()
+    async def test_paginated_walk_counts_future_anchors(self):
+        future = "2999-01-01T00:00:00Z"
+        client = AsyncMock(spec=LidarrClient)
+        client.get_wanted_total.side_effect = lambda kind: {"missing": 3, "cutoff": 2}[kind]
+        client.get_missing.return_value = [
+            _make_album(album_id=1, release_date=_OLD_DATE),
+            _make_album(album_id=2, release_date=future),
+            _make_album(album_id=3, release_date=None),
+        ]
+
+        snap = await fetch_instance_snapshot(client, _make_instance())
+
+        assert snap.monitored_total == 5
+        assert snap.unreleased_count == 1

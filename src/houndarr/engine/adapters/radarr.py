@@ -9,10 +9,11 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from houndarr.clients.base import ReconcileSets
+from houndarr.clients.base import InstanceSnapshot, ReconcileSets
 from houndarr.clients.radarr import LibraryMovie, MissingMovie, RadarrClient
 from houndarr.engine.adapters._common import (
     build_missing_candidate,
+    compute_default_snapshot,
     fetch_movie_upgrade_pool,
     paginate_wanted,
 )
@@ -215,11 +216,32 @@ def make_client(instance: Instance) -> RadarrClient:
     return RadarrClient(url=instance.core.url, api_key=instance.core.api_key)
 
 
+async def fetch_instance_snapshot(
+    client: RadarrClient,
+    instance: Instance,  # noqa: ARG001
+) -> InstanceSnapshot:
+    """Compose the dashboard snapshot for a Radarr instance.
+
+    Reuses :func:`_radarr_release_anchor` so the unreleased count uses
+    the same digital → physical → release → in-cinemas fallback that
+    :func:`_radarr_unreleased_reason` applies at search-dispatch time.
+    The dashboard's strict-future bucket is intentionally narrower
+    than the dispatch ladder (which also adds ``isAvailable=false`` and
+    status-based gates); items skipped for those reasons surface in
+    logs as ``"radarr reports not available"`` etc. and never sum into
+    the Unreleased headline by design.
+    """
+    return await compute_default_snapshot(
+        client,
+        anchor_fn=_radarr_release_anchor,
+    )
+
+
 class RadarrAdapter:
     """Class-form Radarr adapter for the :data:`ADAPTERS` registry.
 
     Conforms to :class:`~houndarr.engine.adapters.protocols.AppAdapterProto`
-    structurally via the six staticmethod attributes below; the
+    structurally via the seven staticmethod attributes below; the
     module-level functions remain importable for direct unit-test use.
     """
 
@@ -230,3 +252,4 @@ class RadarrAdapter:
     dispatch_search = staticmethod(dispatch_search)
     make_client = staticmethod(make_client)
     fetch_reconcile_sets = staticmethod(fetch_reconcile_sets)
+    fetch_instance_snapshot = staticmethod(fetch_instance_snapshot)

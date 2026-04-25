@@ -352,7 +352,7 @@ async def test_no_extra_log_rows_during_retry_sequence(
 
 
 # ---------------------------------------------------------------------------
-# PR 5: snapshot refresh loop
+# Snapshot refresh loop
 # ---------------------------------------------------------------------------
 
 
@@ -361,17 +361,14 @@ async def test_refresh_all_snapshots_once_updates_enabled_instances(
     seeded_instances: None,
 ) -> None:
     """_refresh_all_snapshots_once calls update_instance_snapshot on each
-    enabled instance using the per-client snapshot.
+    enabled instance using the snapshot composed by the adapter.
     """
-    from houndarr.clients.base import InstanceSnapshot
+    from houndarr.clients.base import InstanceSnapshot, ReconcileSets
     from houndarr.services.instances import get_instance
 
     inst = _make_instance(enabled=True)
 
     fake_client = AsyncMock()
-    fake_client.get_instance_snapshot = AsyncMock(
-        return_value=InstanceSnapshot(monitored_total=42, unreleased_count=3),
-    )
 
     class _CtxClient:
         async def __aenter__(self) -> Any:
@@ -383,7 +380,13 @@ async def test_refresh_all_snapshots_once_updates_enabled_instances(
     fake_adapter = type(
         "FakeAdapter",
         (),
-        {"make_client": staticmethod(lambda _inst: _CtxClient())},
+        {
+            "make_client": staticmethod(lambda _inst: _CtxClient()),
+            "fetch_instance_snapshot": staticmethod(
+                AsyncMock(return_value=InstanceSnapshot(monitored_total=42, unreleased_count=3))
+            ),
+            "fetch_reconcile_sets": staticmethod(AsyncMock(return_value=ReconcileSets.empty())),
+        },
     )()
 
     with (

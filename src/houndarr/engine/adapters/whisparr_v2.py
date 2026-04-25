@@ -20,7 +20,7 @@ import httpx
 from pydantic import ValidationError
 
 from houndarr.clients._wire_models import ArrSeries
-from houndarr.clients.base import ReconcileSets
+from houndarr.clients.base import InstanceSnapshot, ReconcileSets
 from houndarr.clients.whisparr_v2 import (
     LibraryWhisparrEpisode,
     MissingWhisparrEpisode,
@@ -30,6 +30,7 @@ from houndarr.engine.adapters._common import (
     ContextOverride,
     build_cutoff_candidate,
     build_missing_candidate,
+    compute_default_snapshot,
     paginate_wanted,
 )
 from houndarr.engine.candidates import SearchCandidate
@@ -410,11 +411,31 @@ async def fetch_reconcile_sets(client: WhisparrClient, instance: Instance) -> Re
     return ReconcileSets(missing=missing_set, cutoff=cutoff_set, upgrade=upgrade_set)
 
 
+async def fetch_instance_snapshot(
+    client: WhisparrClient,
+    instance: Instance,  # noqa: ARG001
+) -> InstanceSnapshot:
+    """Compose the dashboard snapshot for a Whisparr v2 instance.
+
+    Whisparr v2 is the only adapter whose domain model holds a
+    pre-parsed ``datetime`` (the wire field accepts both ISO strings
+    and ``{year, month, day}`` dicts; :func:`_parse_date_only` in the
+    client normalises both to a single shape).  The shared snapshot
+    helper takes the dt-typed branch via ``anchor_is_dt=True`` so the
+    re-parse step is skipped.
+    """
+    return await compute_default_snapshot(
+        client,
+        anchor_fn=lambda ep: ep.release_date,
+        anchor_is_dt=True,
+    )
+
+
 class WhisparrV2Adapter:
     """Class-form Whisparr v2 adapter for the :data:`ADAPTERS` registry.
 
     Conforms to :class:`~houndarr.engine.adapters.protocols.AppAdapterProto`
-    structurally via the six staticmethod attributes below; the
+    structurally via the seven staticmethod attributes below; the
     module-level functions remain importable for direct unit-test use.
     """
 
@@ -425,3 +446,4 @@ class WhisparrV2Adapter:
     dispatch_search = staticmethod(dispatch_search)
     make_client = staticmethod(make_client)
     fetch_reconcile_sets = staticmethod(fetch_reconcile_sets)
+    fetch_instance_snapshot = staticmethod(fetch_instance_snapshot)

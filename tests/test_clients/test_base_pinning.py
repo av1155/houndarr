@@ -21,7 +21,7 @@ import httpx
 import pytest
 import respx
 
-from houndarr.clients.base import ArrClient, InstanceSnapshot, WantedKind
+from houndarr.clients.base import ArrClient, WantedKind
 
 pytestmark = pytest.mark.pinning
 
@@ -250,38 +250,6 @@ class TestPing:
         )
         async with _StubClient(url="http://sonarr:8989", api_key="k") as client:
             assert await client.ping() is None
-
-
-# get_instance_snapshot default
-
-
-class TestInstanceSnapshotDefault:
-    """Pin the default get_instance_snapshot contract."""
-
-    @pytest.mark.asyncio()
-    async def test_default_sums_missing_and_cutoff(self) -> None:
-        """monitored_total = get_wanted_total('missing') + get_wanted_total('cutoff')."""
-        stub = _StubClient(
-            url="http://sonarr:8989",
-            api_key="k",
-            wanted_totals={"missing": 7, "cutoff": 13},
-        )
-        try:
-            snap = await stub.get_instance_snapshot()
-        finally:
-            await stub.aclose()
-        assert isinstance(snap, InstanceSnapshot)
-        assert snap.monitored_total == 20
-        assert snap.unreleased_count == 0
-
-    @pytest.mark.asyncio()
-    async def test_default_unreleased_count_is_zero(self) -> None:
-        """Default _count_unreleased_default returns 0 (pinning: no probe is issued)."""
-        stub = _StubClient(url="http://sonarr:8989", api_key="k")
-        try:
-            assert await stub._count_unreleased_default() == 0
-        finally:
-            await stub.aclose()
 
 
 # Context-manager lifecycle

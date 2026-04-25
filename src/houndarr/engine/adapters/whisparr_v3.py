@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from houndarr.clients.base import ReconcileSets
+from houndarr.clients.base import InstanceSnapshot, ReconcileSets
 from houndarr.clients.whisparr_v3 import (
     LibraryWhisparrV3Movie,
     MissingWhisparrV3Movie,
@@ -27,6 +27,7 @@ from houndarr.engine.candidates import (
     SearchCandidate,
     _is_unreleased,
     _is_within_post_release_grace,
+    _parse_iso_utc,
 )
 from houndarr.services.instances import Instance
 
@@ -226,11 +227,55 @@ async def fetch_reconcile_sets(
     )
 
 
+async def fetch_instance_snapshot(
+    client: WhisparrV3Client,
+    instance: Instance,  # noqa: ARG001
+) -> InstanceSnapshot:
+    """Compose the dashboard snapshot for a Whisparr v3 instance.
+
+    Whisparr v3 has no ``/wanted`` endpoint, so the snapshot does not
+    follow the shared :func:`compute_default_snapshot` path.  Instead
+    it walks the cached ``/api/v3/movie`` response (also consumed by
+    :func:`fetch_reconcile_sets` in the same client context, so the
+    cost is amortised to a single HTTP round trip per refresh cycle).
+
+    ``monitored_total`` counts items that are monitored AND either
+    have no file OR have a file but the cutoff is unmet — matching
+    the missing + cutoff sum the other adapters derive from
+    ``totalRecords``.  ``unreleased_count`` counts monitored items
+    whose first parseable release anchor (digital → physical →
+    in-cinemas → release_date) is strictly in the future.  This
+    intentionally stays narrower than :func:`_unreleased_reason` at
+    dispatch time, which adds ``isAvailable=false`` and status-based
+    gates; the dashboard's Unreleased bucket reflects strictly
+    pre-release items, while items skipped for those other reasons
+    surface in the logs as their explicit reason strings.
+    """
+    movies = await client.get_library()
+    now = datetime.now(UTC)
+    monitored_total = 0
+    unreleased_count = 0
+    for m in movies:
+        if not m.monitored:
+            continue
+        if (not m.has_file) or (m.has_file and not m.cutoff_met):
+            monitored_total += 1
+        for val in (m.digital_release, m.physical_release, m.in_cinemas, m.release_date):
+            parsed = _parse_iso_utc(val)
+            if parsed is not None and parsed > now:
+                unreleased_count += 1
+                break
+    return InstanceSnapshot(
+        monitored_total=monitored_total,
+        unreleased_count=unreleased_count,
+    )
+
+
 class WhisparrV3Adapter:
     """Class-form Whisparr v3 adapter for the :data:`ADAPTERS` registry.
 
     Conforms to :class:`~houndarr.engine.adapters.protocols.AppAdapterProto`
-    structurally via the six staticmethod attributes below; the
+    structurally via the seven staticmethod attributes below; the
     module-level functions remain importable for direct unit-test use.
     """
 
@@ -241,3 +286,4 @@ class WhisparrV3Adapter:
     dispatch_search = staticmethod(dispatch_search)
     make_client = staticmethod(make_client)
     fetch_reconcile_sets = staticmethod(fetch_reconcile_sets)
+    fetch_instance_snapshot = staticmethod(fetch_instance_snapshot)

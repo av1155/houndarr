@@ -17,7 +17,7 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable
 from typing import Any, Protocol, runtime_checkable
 
-from houndarr.clients.base import ArrClient, ReconcileSets
+from houndarr.clients.base import ArrClient, InstanceSnapshot, ReconcileSets
 from houndarr.engine.candidates import SearchCandidate
 from houndarr.services.instances import Instance
 
@@ -62,4 +62,20 @@ class AppAdapterProto(Protocol):
         for upgrade-pool ids, and (in context-mode adapters) UNION in
         the synthetic parent ids derived from leaf parent metadata so
         the DB match stays pure set membership.
+        """
+
+    @property
+    def fetch_instance_snapshot(self) -> Callable[..., Awaitable[InstanceSnapshot]]:
+        """Return the per-instance dashboard counts.
+
+        Called from the supervisor's snapshot refresh just before
+        :attr:`fetch_reconcile_sets`.  The returned
+        :class:`~houndarr.clients.base.InstanceSnapshot` carries the
+        ``monitored_total`` (missing + cutoff totals) and
+        ``unreleased_count`` (monitored items whose canonical release
+        anchor is strictly in the future).  Each *arr exposes a
+        different shape, so anchor selection lives per-adapter; the
+        five ``/wanted``-paged adapters delegate to
+        :func:`compute_default_snapshot` while Whisparr v3 walks its
+        cached ``/api/v3/movie`` response inline.
         """

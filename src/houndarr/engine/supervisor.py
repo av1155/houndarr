@@ -19,6 +19,7 @@ from uuid import uuid4
 import httpx
 
 from houndarr.clients.base import ReconcileSets
+from houndarr.database import get_db
 from houndarr.engine.adapters import get_adapter
 from houndarr.engine.adapters.protocols import AppAdapterProto
 from houndarr.engine.retry import ReconnectState, run_with_reconnect
@@ -41,7 +42,28 @@ _STARTUP_GRACE_SECS = 10  # one-time delay before the first cycle fires per inst
 _STARTUP_STAGGER_SECS = 30  # per-instance offset added to startup grace at initial start()
 _SNAPSHOT_REFRESH_INTERVAL_SECS = 600  # 10 minutes, matches the locked plan cadence
 _SNAPSHOT_INITIAL_DELAY_SECS = 20  # first run after startup, gives arr time to come up
+_UNRELEASED_DELTA_LOG_THRESHOLD = 10  # log INFO when |new - prior| exceeds this
 RunNowStatus = Literal["accepted", "not_found", "disabled"]
+
+
+async def _read_prior_unreleased(instance_id: int) -> int | None:
+    """Return the currently-stored ``unreleased_count`` for an instance.
+
+    A targeted SELECT keeps the delta-logging path off the
+    decryption-heavy :func:`get_instance` helper (the only field this
+    needs is one int).  Returns ``None`` when the row is missing so
+    the caller can suppress the delta log on a freshly-deleted
+    instance instead of treating "absent" as "0 -> N jumped".
+    """
+    async with get_db() as conn:
+        async with conn.execute(
+            "SELECT unreleased_count FROM instances WHERE id = ?",
+            (instance_id,),
+        ) as cur:
+            row = await cur.fetchone()
+    if row is None:
+        return None
+    return int(row["unreleased_count"])
 
 
 class Supervisor:
@@ -467,6 +489,25 @@ class Supervisor:
                             "keeping existing cooldowns.",
                             instance.core.name,
                         )
+                # Surface a one-line INFO when the unreleased count
+                # jumps non-trivially.  The first refresh after a user
+                # upgrade flips every non-Whisparr-v3 instance from 0
+                # to its real count; without this log the transition
+                # is silent.  Threshold is intentionally noisy enough
+                # to ignore +/- 1 churn from a single release going
+                # past midnight.
+                prior_unreleased = await _read_prior_unreleased(instance.core.id)
+                if (
+                    prior_unreleased is not None
+                    and abs(snap.unreleased_count - prior_unreleased)
+                    > _UNRELEASED_DELTA_LOG_THRESHOLD
+                ):
+                    logger.info(
+                        "Supervisor: %r unreleased jumped %d -> %d",
+                        instance.core.name,
+                        prior_unreleased,
+                        snap.unreleased_count,
+                    )
                 await update_instance_snapshot(
                     instance.core.id,
                     monitored_total=snap.monitored_total,

@@ -23,15 +23,20 @@ multi-user support, or media file manipulation.
 
 ## Setup & Run
 
+`just` is the canonical interface. Install it via `brew install just`
+(macOS) or `cargo install just`. The repo's `justfile` wires every
+gate, every test slice, and the dev server, so most agent work goes
+through `just <recipe>` rather than `.venv/bin/...`.
+
 ```bash
-# Create venv and install
+# Create venv and install (one-time bootstrap)
 python3 -m venv .venv
 .venv/bin/pip install --upgrade pip
 .venv/bin/pip install -r requirements-dev.txt
 .venv/bin/pip install -e .
 
 # Run locally (dev mode; auto-reload, API docs at /docs)
-.venv/bin/python -m houndarr --data-dir ./data-dev --dev
+just dev
 ```
 
 Dev server: `http://localhost:8877`.
@@ -40,24 +45,27 @@ Dev server: `http://localhost:8877`.
 
 ## Quality Gates
 
-Run before every commit. CI enforces the same five plus security
-and container checks.
+Run before every commit. CI enforces the same five plus additional
+security and container checks.
 
 ```bash
-just check      # all gates, CI order: lint + fmt-check + type + sec + test
-just quick      # fast loop: lint + type + non-integration pytest
-just fix        # ruff --fix + ruff format
-just lint | fmt-check | type | sec | test  # individual recipes
+just check      # lint + format-check + mypy + bandit + full pytest, in CI order
+just quick      # lint + mypy + non-integration pytest (fast feedback loop)
+just fix        # ruff --fix + ruff format, applied in place
 ```
 
-If `just` is unavailable, read `justfile` for the underlying
-`.venv/bin/...` invocations.
+`just` is the source of truth.  Individual gates are also available
+when the full sweep is overkill:
 
-### Shortcut: `just`
+```bash
+just lint       # ruff check src/ tests/
+just fmt-check  # ruff format --check src/ tests/
+just type       # mypy src/ (strict)
+just sec        # bandit -r src/ -c pyproject.toml
+just test       # pytest (full suite)
+```
 
-A `justfile` at the repo root wraps the same five commands plus a few
-common workflows. Install `just` via `brew install just` (macOS) or
-`cargo install just`; without it, the commands above stay authoritative.
+### Recipe index
 
 ```bash
 just            # list every recipe
@@ -70,24 +78,67 @@ just test-browser chromium  # Playwright e2e against a live stack
 just dev        # python -m houndarr --data-dir ./data-dev --dev
 ```
 
+### Without `just`
+
+If `just` is not installed, every recipe is a thin wrapper; read the
+`justfile` at the repo root for the underlying invocation. The
+authoritative commands the recipes wrap are:
+
+```bash
+.venv/bin/python -m ruff check src/ tests/          # lint
+.venv/bin/python -m ruff format --check src/ tests/  # format check
+.venv/bin/python -m mypy src/                        # type check (strict)
+.venv/bin/python -m bandit -r src/ -c pyproject.toml # SAST
+.venv/bin/pytest                                     # all tests
+```
+
 ---
 
 ## Running Tests
 
-~2580 tests (parametrised expansions + 12 async engine-cycle cases
-tagged `@pytest.mark.integration`).  `just test`, `test-quick`,
-`test-integration`, and `pin` run with `pytest -n auto` by default
-(pytest-xdist).  Override with `PYTEST_WORKERS=0` for serial
-triage, or `PYTEST_WORKERS=4` to constrain.
+The full collection is ~2502 tests (includes parametrised expansions
+and the 12 async engine-cycle tests tagged `@pytest.mark.integration`).
 
 ```bash
-just test               # full suite, parallel
-just test-quick         # unit only (-m "not integration"), parallel
-just test-integration   # tests/test_e2e/ (-m integration), parallel
-just pin                # characterisation tests only, parallel
-just test-browser chromium     # Playwright e2e; serial (shared stack on fixed ports)
-just capture-baselines  # rebuild login/setup PNG baselines (Linux Playwright container)
-just verify-baselines   # check committed baselines without --update-snapshots
+just test               # full suite
+just test-quick         # unit only, skip integration + browser trees
+just test-integration   # the 12 async engine-cycle cases under tests/test_e2e/
+just test-parallel      # pytest -n auto across CPUs (pytest-xdist)
+just pin                # characterisation tests only
+
+# Browser e2e (Playwright; needs a running Houndarr + mock *arr stack).
+# Not collected by default (norecursedirs skips tests/e2e_browser/);
+# invoke the tree explicitly:
+just test-browser chromium
+
+# Visual baseline capture / verify for the Phase 7b login + setup pins.
+# Both recipes orchestrate the mock *arr stack via
+# scripts/e2e_browser/capture_baselines.sh and run pytest inside a
+# Linux Playwright container so fonts match CI's ubuntu-latest renderer.
+# Re-capture is only required when login.html, setup.html, or the
+# auth CSS tokens change; see tests/e2e_browser/_screenshots/README.md.
+just capture-baselines   # produce + commit new PNG baselines
+just verify-baselines    # check committed baselines without re-capturing
+```
+
+For one-off invocations that don't have a `just` recipe (single test
+file, keyword filter, coverage report) call `pytest` directly:
+
+```bash
+# Single file
+.venv/bin/pytest tests/test_auth.py
+
+# Single test by name
+.venv/bin/pytest tests/test_auth.py::test_check_password_valid -v
+
+# Tests matching a keyword expression
+.venv/bin/pytest -k "csrf" -v
+
+# Single directory
+.venv/bin/pytest tests/test_services/
+
+# With coverage
+.venv/bin/pytest --cov=houndarr --cov-report=term-missing
 ```
 
 For one-off invocations without a `just` recipe:

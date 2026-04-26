@@ -15,6 +15,16 @@
 python := ".venv/bin/python"
 pytest := ".venv/bin/pytest"
 
+# Worker count for the test recipes that are safe to parallelise.
+# `auto` picks the physical-CPU count (psutil-aware).  Override via
+# `PYTEST_WORKERS=4 just test` for CI runners with constrained cores
+# or `PYTEST_WORKERS=0 just test` to fall back to serial when
+# debugging an ordering-sensitive flake.  Browser e2e + visual
+# baseline recipes ignore this and stay serial because they share a
+# single Houndarr instance + mock-arr stack on fixed ports (one of
+# the canonical pytest-xdist anti-patterns).
+workers := env_var_or_default("PYTEST_WORKERS", "auto")
+
 # Default target: list every recipe.
 default:
     @just --list
@@ -39,20 +49,22 @@ sec:
     {{python}} -m bandit -r src/ -c pyproject.toml
 
 test:
-    {{pytest}}
+    {{pytest}} -n {{workers}}
 
 test-quick:
-    {{pytest}} -m "not integration"
+    {{pytest}} -n {{workers}} -m "not integration"
 
 test-integration:
-    {{pytest}} -m integration tests/test_e2e/
+    {{pytest}} -n {{workers}} -m integration tests/test_e2e/
 
 # Run only characterisation (pinning) tests: the Track A safety net that
 # locks current behaviour before a refactor batch touches its module.
 pin:
-    {{pytest}} -m pinning
+    {{pytest}} -n {{workers}} -m pinning
 
-# Run the full suite in parallel across available CPUs (pytest-xdist).
+# Backwards-compatible alias kept for muscle memory; equivalent to
+# `just test` now that parallelism is the default.  Use
+# `PYTEST_WORKERS=0 just test` when you need a serial run.
 test-parallel:
     {{pytest}} -n auto
 

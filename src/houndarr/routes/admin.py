@@ -199,6 +199,10 @@ async def admin_factory_reset(
             await asyncio.sleep(0.5)
             request_process_exit()
 
+        # Fire-and-forget: RUF006's "keep a reference" rule doesn't apply
+        # to the hybrid fallback because the entire event loop dies inside
+        # request_process_exit(). There is nothing to keep alive past the
+        # os._exit() call.
         asyncio.create_task(_delayed_exit())  # noqa: RUF006
 
     return response

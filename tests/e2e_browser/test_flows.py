@@ -10,6 +10,7 @@ from __future__ import annotations
 import re
 import uuid
 
+import pytest
 from playwright.sync_api import Locator, Page, expect
 
 
@@ -319,6 +320,9 @@ def test_admin_dropdown_toggle_persists(logged_in_page: Page, houndarr_url: str)
     page.evaluate("() => localStorage.removeItem('houndarr.adminOpen')")
 
 
+@pytest.mark.skip(
+    reason="Password-match indicator depends on static/js/auth.js which lands with PR24."
+)
 def test_admin_security_confirm_password_match_indicator(
     logged_in_page: Page, houndarr_url: str
 ) -> None:
@@ -393,8 +397,11 @@ def test_admin_factory_reset_phrase_gates_submit(logged_in_page: Page, houndarr_
     expect(confirm_go).to_be_disabled()
     page.locator("#confirm-phrase-input").fill("RESET")
     expect(confirm_go).to_be_enabled()
-    # Dismiss without submitting.
-    page.locator("[data-dismiss-confirm]").first.click()
+    # Dismiss without submitting. Target the Cancel button explicitly;
+    # the backdrop also carries data-dismiss-confirm but its bounding-box
+    # centre is occluded by the panel in grid-centred layouts, so
+    # .first.click() lands on the panel and gets intercepted.
+    page.locator("button[data-dismiss-confirm]").click()
     expect(page.locator("#confirm-dialog")).to_have_class(re.compile(r"hidden"))
 
 

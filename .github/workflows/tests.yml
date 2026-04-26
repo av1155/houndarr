@@ -44,15 +44,8 @@ jobs:
       # Run pytest under xdist with worker-per-CPU.  Each test gets its own
       # tmp_data_dir + per-call respx mocks, so worker isolation holds.
       # The browser e2e suite is excluded by `norecursedirs` in pyproject.toml.
-      #
-      # `-p no:threadexception` disables pytest's automatic annotation of
-      # background-thread exceptions.  Under xdist scheduling on the GitHub-
-      # hosted Linux runner, an aiosqlite worker thread occasionally tries to
-      # write to a closed event loop during fixture teardown; the test itself
-      # passes but the runner promotes the traceback to a red annotation.
-      # Tests still fail loudly via non-zero exit on real assertion errors.
       - name: Run tests
-        run: python -m pytest -q --tb=short -n auto -p no:threadexception
+        run: python -m pytest -q --tb=short -n auto
 
       - name: Sanity checks
         run: |

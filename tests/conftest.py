@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+import gc
 import os
 import tempfile
 from collections.abc import AsyncGenerator, Generator
@@ -43,11 +45,28 @@ def tmp_data_dir() -> Generator[str, None, None]:
 
 @pytest_asyncio.fixture()
 async def db(tmp_data_dir: str) -> AsyncGenerator[None, None]:
-    """Initialize a fresh in-memory-style SQLite DB for each test."""
+    """Initialize a fresh in-memory-style SQLite DB for each test.
+
+    Each test gets its own SQLite file under a fresh ``tmp_data_dir``.
+    The finalizer drains lingering aiosqlite background work before the
+    per-test event loop closes; without it, a worker thread whose
+    ``call_soon_threadsafe`` callback is pending can fire after loop
+    teardown under xdist on the GitHub-hosted Linux runner and trip a
+    cosmetic ``PytestUnhandledThreadExceptionWarning``.
+    """
     db_path = os.path.join(tmp_data_dir, "test.db")
     set_db_path(db_path)
     await init_db()
-    yield
+    try:
+        yield
+    finally:
+        # Reclaim any aiosqlite Connection still held by the test or its
+        # fixtures so its worker thread shuts down while the loop is
+        # alive.  The single ``await asyncio.sleep(0)`` then yields back
+        # to the loop one last time so any queued thread-safe callbacks
+        # land before pytest-asyncio closes it.
+        gc.collect()
+        await asyncio.sleep(0)
 
 
 @pytest.fixture()

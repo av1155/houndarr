@@ -32,7 +32,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Any, Protocol
 
-from houndarr.engine.candidates import SearchCandidate
+from houndarr.engine.candidates import ItemType, SearchCandidate
 
 
 class _UpgradeFilterable(Protocol):
@@ -110,7 +110,7 @@ class ContextOverride:
 
 def build_missing_candidate(
     *,
-    item_type: str,
+    item_type: ItemType,
     item_id: int,
     label: str,
     unreleased_reason: str | None,
@@ -167,7 +167,7 @@ def build_missing_candidate(
 
 def build_cutoff_candidate(
     *,
-    item_type: str,
+    item_type: ItemType,
     item_id: int,
     label: str,
     unreleased_reason: str | None,

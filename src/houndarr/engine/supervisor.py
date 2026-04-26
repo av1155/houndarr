@@ -233,9 +233,7 @@ class Supervisor:
                 sleep_secs = await run_with_reconnect(
                     state,
                     instance=instance,
-                    cycle=partial(
-                        self._run_search_cycle, instance, cycle_trigger="scheduled"
-                    ),
+                    cycle=partial(self._run_search_cycle, instance, cycle_trigger="scheduled"),
                     cycle_trigger="scheduled",
                     error_retry_secs=_CONNECT_RETRY_SECS,
                     success_sleep_secs=instance.sleep_interval_mins * 60,

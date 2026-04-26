@@ -44,9 +44,10 @@ jobs:
         uses: actions/checkout@v6
 
       # QEMU is only needed when an arm64 build will actually run.
-      # PR builds are amd64 native, so the runner does not need emulation.
+      # Regular PRs are amd64 native; bump PRs (chore/bump-*) and tag pushes
+      # build the full multi-arch image and need emulation.
       - name: Set up QEMU
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: startsWith(github.ref, 'refs/tags/v') || startsWith(github.head_ref, 'chore/bump-')
         uses: docker/setup-qemu-action@v4
 
       - name: Set up Docker Buildx
@@ -73,17 +74,18 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # PR builds: amd64 only, no attestations.  Fast feedback is the goal;
-      # the Trivy image scan still runs against the amd64 build.
-      # Tag pushes: full multi-arch with provenance + SBOM for release artifacts.
+      # Regular PRs: amd64 only, no attestations (fast feedback; Trivy still scans).
+      # Bump PRs (chore/bump-*): full multi-arch + provenance/sbom so any arm64
+      # break is caught before the tag push (the actual release).
+      # Tag pushes: same as bump PRs, plus push to GHCR.
       - name: Build (and push on tag)
         uses: docker/build-push-action@v7
         with:
           context: .
-          platforms: ${{ startsWith(github.ref, 'refs/tags/v') && 'linux/amd64,linux/arm64' || 'linux/amd64' }}
+          platforms: ${{ (startsWith(github.ref, 'refs/tags/v') || startsWith(github.head_ref, 'chore/bump-')) && 'linux/amd64,linux/arm64' || 'linux/amd64' }}
           push: ${{ github.event_name != 'pull_request' && startsWith(github.ref, 'refs/tags/v') }}
-          provenance: ${{ startsWith(github.ref, 'refs/tags/v') && 'mode=max' || 'false' }}
-          sbom: ${{ startsWith(github.ref, 'refs/tags/v') }}
+          provenance: ${{ (startsWith(github.ref, 'refs/tags/v') || startsWith(github.head_ref, 'chore/bump-')) && 'mode=max' || 'false' }}
+          sbom: ${{ startsWith(github.ref, 'refs/tags/v') || startsWith(github.head_ref, 'chore/bump-') }}
           build-args: |
             HOUNDARR_VERSION=${{ steps.meta.outputs.version }}
           tags: ${{ steps.meta.outputs.tags }}

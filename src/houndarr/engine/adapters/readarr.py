@@ -9,9 +9,6 @@ from __future__ import annotations
 
 import logging
 
-import httpx
-from pydantic import ValidationError
-
 from houndarr.clients.base import ReconcileSets
 from houndarr.clients.readarr import LibraryBook, MissingBook, ReadarrClient
 from houndarr.engine.adapters._common import (

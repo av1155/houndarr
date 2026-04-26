@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock
 
@@ -415,14 +416,10 @@ class TestFetchReconcileSetsUpgrade:
         client.get_episodes.side_effect = lambda series_id: episodes_by_series[series_id]
 
         instance = _make_instance()
-        instance_with_upgrade = Instance(
-            core=instance.core,
-            missing=instance.missing,
-            cutoff=instance.cutoff,
-            upgrade=UpgradePolicy(upgrade_enabled=True, upgrade_series_offset=0),
-            schedule=instance.schedule,
-            snapshot=instance.snapshot,
-            timestamps=instance.timestamps,
+        instance_with_upgrade = replace(
+            instance,
+            upgrade_enabled=True,
+            upgrade_series_offset=0,
         )
 
         sets = await fetch_reconcile_sets(client, instance_with_upgrade)

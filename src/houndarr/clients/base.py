@@ -85,7 +85,6 @@ class ReconcileSets:
         return not self.missing and not self.cutoff and not self.upgrade
 
 
-
 # Default timeouts (seconds): connect=5, read=30
 _DEFAULT_TIMEOUT = httpx.Timeout(30.0, connect=5.0)
 

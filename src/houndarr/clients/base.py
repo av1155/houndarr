@@ -21,7 +21,6 @@ logger = logging.getLogger(__name__)
 WantedKind = Literal["missing", "cutoff"]
 
 
-
 # Default timeouts (seconds): connect=5, read=30
 _DEFAULT_TIMEOUT = httpx.Timeout(30.0, connect=5.0)
 

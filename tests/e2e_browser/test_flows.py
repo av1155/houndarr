@@ -90,6 +90,21 @@ def _submit_form(form: Locator) -> None:
     form.evaluate("form => form.requestSubmit()")
 
 
+def _open_admin_dropdown(page: Page) -> None:
+    """Click the Admin toggle and wait for the body to finish animating open.
+
+    The ``#admin-grouped`` panel starts at ``data-open="false"`` on every
+    fresh page load (``#admin-body`` has ``height:0; opacity:0`` until the
+    inline JS in settings_content.html toggles it).  Tests that click into
+    a control nested inside the dropdown need to open it first; otherwise
+    Playwright waits 30s for the zero-height button to become actionable.
+    """
+    panel = page.locator("#admin-grouped")
+    if panel.get_attribute("data-open") != "true":
+        page.locator("#admin-toggle").click()
+    expect(panel).to_have_attribute("data-open", "true")
+
+
 def test_full_instance_lifecycle(
     logged_in_page: Page, houndarr_url: str, mock_sonarr_url: str
 ) -> None:
@@ -310,6 +325,7 @@ def test_admin_security_confirm_password_match_indicator(
     """Typing a matching confirm-password paints the is-match indicator."""
     page = logged_in_page
     page.goto(f"{houndarr_url}/settings")
+    _open_admin_dropdown(page)
     page.locator("#new-password").fill("AnotherGood2!")
     page.locator("#confirm-password").fill("AnotherGood2!")
     expect(page.locator(".pw-match")).to_have_class(re.compile(r"is-match"))
@@ -322,6 +338,7 @@ def test_admin_show_last_changelog_opens_modal(logged_in_page: Page, houndarr_ur
     """The 'Show last changelog' button force-opens the What's new modal."""
     page = logged_in_page
     page.goto(f"{houndarr_url}/settings")
+    _open_admin_dropdown(page)
     page.get_by_role("button", name=re.compile(r"show\s*last\s*changelog", re.I)).click()
     expect(page.locator("dialog#changelog-modal[open]")).to_be_visible(timeout=4_000)
 
@@ -330,6 +347,7 @@ def test_admin_view_full_changelog_navigates(logged_in_page: Page, houndarr_url:
     """The 'View full CHANGELOG.md' link navigates to /settings/changelog/full."""
     page = logged_in_page
     page.goto(f"{houndarr_url}/settings")
+    _open_admin_dropdown(page)
     page.get_by_role("link", name=re.compile(r"view\s*full\s*CHANGELOG", re.I)).click()
     expect(page).to_have_url(re.compile(r"/settings/changelog/full$"))
     expect(page.locator("[data-page-key='changelog-full']")).to_be_visible()
@@ -339,6 +357,7 @@ def test_admin_clear_logs_flash(logged_in_page: Page, houndarr_url: str) -> None
     """Clear logs surfaces a success flash; the dialog closes automatically."""
     page = logged_in_page
     page.goto(f"{houndarr_url}/settings")
+    _open_admin_dropdown(page)
     page.locator('button[data-confirm-reset="logs"]').click()
     expect(page.locator("#confirm-dialog")).not_to_have_class(re.compile(r"hidden"))
     page.locator("#confirm-go").click()
@@ -352,6 +371,7 @@ def test_admin_reset_instances_empty_state_flash(logged_in_page: Page, houndarr_
     """With no instances configured the reset button renders the 'nothing to reset' flash."""
     page = logged_in_page
     page.goto(f"{houndarr_url}/settings")
+    _open_admin_dropdown(page)
     page.locator('button[data-confirm-reset="instances"]').click()
     expect(page.locator("#confirm-title")).to_contain_text("Reset policy settings")
     page.locator("#confirm-go").click()
@@ -365,6 +385,7 @@ def test_admin_factory_reset_phrase_gates_submit(logged_in_page: Page, houndarr_
     """Confirm button stays disabled until the typed phrase matches RESET."""
     page = logged_in_page
     page.goto(f"{houndarr_url}/settings")
+    _open_admin_dropdown(page)
     page.locator('button[data-confirm-reset="factory"]').click()
     confirm_go = page.locator("#confirm-go")
     expect(confirm_go).to_be_disabled()
@@ -385,6 +406,7 @@ def test_admin_factory_reset_wrong_password_flash(
         console_guard.allow(p)
     page = logged_in_page
     page.goto(f"{houndarr_url}/settings")
+    _open_admin_dropdown(page)
     page.locator('button[data-confirm-reset="factory"]').click()
     page.locator("#confirm-phrase-input").fill("RESET")
     page.locator("#confirm-password-input").fill("WrongPassword123!")

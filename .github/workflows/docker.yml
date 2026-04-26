@@ -155,7 +155,7 @@ jobs:
           cache-from: type=gha
 
       - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@0.35.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: houndarr:scan
           format: table
@@ -167,7 +167,7 @@ jobs:
       # Fork PRs lack security-events: write so this step is skipped.
       - name: Run Trivy (SARIF for GitHub Security tab)
         if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
-        uses: aquasecurity/trivy-action@0.35.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: houndarr:scan
           format: sarif

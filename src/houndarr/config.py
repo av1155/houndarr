@@ -235,8 +235,9 @@ def bootstrap_settings(**overrides: Unpack[BootstrapOverrides]) -> AppSettings:
     :func:`get_settings` calls return the same instance until the next
     ``bootstrap_settings`` call (or process restart). Any prior pin is
     replaced; any env var for an *unsupplied* key is ignored (the kwarg
-    path builds :class:`AppSettings` from overrides alone, so missing
-    fields take the dataclass default rather than the env value).
+    path matches the pre-refactor ``AppSettings(data_dir=..., **overrides)``
+    shape, where missing fields take the dataclass default rather than the
+    env value).
 
     With no overrides supplied, any prior pin is cleared and the result of
     :func:`get_settings` (env-var resolved) is returned *without* pinning.

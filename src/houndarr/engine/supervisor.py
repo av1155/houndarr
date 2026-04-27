@@ -378,11 +378,12 @@ class Supervisor:
                 )
                 return True
             except (EngineError, ClientError) as exc:
-                # ``run_instance_search`` wraps any non-typed escape in
-                # :class:`EngineError` before it reaches this handler,
-                # and the client layer raises :class:`ClientError`
-                # subclasses directly, so both branches land on the
-                # same ``search_log`` row shape.
+                # Track B.13: run_instance_search now wraps every
+                # non-typed escape into EngineError before it reaches
+                # this handler, and the client layer (Track B.11/B.12)
+                # raises ClientError subclasses.  Both branches land
+                # here and produce the same search_log row shape the
+                # pre-refactor `except Exception` produced.
                 logger.error(
                     "Supervisor: unhandled error in search loop for %r: %s",
                     instance.core.name,

@@ -1,13 +1,15 @@
-"""Consolidated invariant: the CSS component and utility layer stays whole.
+"""Track G gate: Tailwind `@layer components` + `@utility` rules landed.
 
-The per-macro pinning tests (test_macros_forms, test_macros_badges)
-and the built-bundle hash (test_css_hash_pinning) cover the
-consumer surface.  This gate locks the CSS structure above them:
-the ``@layer components`` block declares the ``.field-label`` and
-``.status-pill`` rules, the four ``@utility`` rules back the
-inline-shadow and brand-rule macros, no ``duration-slow`` utility
-leaks into the build, and the off-limits auth CSS sentinels are
-in place.
+The per-batch pinning tests cover each macro's byte-equal contract
+(test_macros_forms, test_macros_badges) and the built-bundle hash
+(test_css_hash_pinning).  This gate locks the Strangler-Fig
+invariants that every G batch actually landed: the @layer
+components block carries the `.field-label` and `.status-pill`
+rules, the four `@utility` rules migrated the six inline style
+attributes, the orphan `duration-slow` utility is gone, and the
+off-limits auth CSS sentinels are in place.  A later track cannot
+silently delete a rule, rename a modifier, or reintroduce an inline
+shadow without this test failing.
 """
 
 from __future__ import annotations
@@ -55,7 +57,9 @@ class TestLayerComponents:
 
     def test_layer_components_block_present(self) -> None:
         source = _INPUT_CSS.read_text()
-        assert "@layer components {" in source, "input.css missing @layer components block"
+        assert "@layer components {" in source, (
+            "input.css missing @layer components reservation from G.1"
+        )
 
     def test_field_label_rule_present(self) -> None:
         source = _INPUT_CSS.read_text()
@@ -84,7 +88,7 @@ class TestLayerComponents:
 
 
 class TestUtilityRules:
-    """Four @utility rules back the shadow and brand-rule surface."""
+    """Four @utility rules migrated the six inline style= attributes (G.5)."""
 
     @pytest.mark.parametrize(
         ("name", "declaration"),
@@ -106,8 +110,7 @@ class TestUtilityRules:
         )
 
     def test_duration_slow_utility_removed(self) -> None:
-        # No template consumes ``duration-slow``; reintroducing it
-        # should come with a real consumer, not as an orphan utility.
+        # G.8 removed the orphan; future reintroduction should come with a real consumer.
         source = _INPUT_CSS.read_text()
         assert "@utility duration-slow" not in source, (
             "duration-slow @utility came back; add a template consumer first or leave it out"
@@ -115,7 +118,7 @@ class TestUtilityRules:
 
 
 class TestInlineStylesMigrated:
-    """Templates ship no shadow / filter / border-left inline styles."""
+    """Templates no longer ship shadow / filter / border-left inline styles (G.5)."""
 
     @pytest.mark.parametrize(
         "needle",
@@ -165,7 +168,7 @@ class TestMacroDefaults:
     def test_status_pill_macro_emits_component_classes(self, modifier: str) -> None:
         source = _BADGES_MACRO.read_text()
         assert f'<span class="{modifier}">' in source, (
-            f"status_pill macro stopped emitting `{modifier}`"
+            f"status_pill macro stopped emitting `{modifier}`; rerun G.3 migration"
         )
 
 
@@ -192,18 +195,18 @@ class TestCssHashArtifact:
             pytest.skip("app.built.css not present; run `pnpm run build-css`")
         actual = hashlib.sha256(_APP_BUILT_CSS.read_bytes()).hexdigest()
         expected = _SHA256_PIN.read_text(encoding="utf-8").strip().split()[0]
-        assert actual == expected, "app.built.css hash drift without a matching sha256 pin update"
+        assert actual == expected, (
+            "Track G gate sees a hash drift without a matching sha256 pin update"
+        )
 
 
 class TestDocsAndSentinels:
-    """CSS docs and off-limits sentinels are in place."""
+    """Docs + off-limits sentinels landed (G.4, G.10)."""
 
     def test_track_g_notes_exist(self) -> None:
         assert _TRACK_G_NOTES.is_file()
         body = _TRACK_G_NOTES.read_text()
-        # The notes file documents why the log action-badge surface
-        # stays out of the shared macro layer.
-        assert "action-badge" in body
+        assert "action-badge" in body  # G.4 rationale lives here
 
     def test_auth_css_has_off_limits_sentinel(self) -> None:
         body = _AUTH_CSS.read_text()

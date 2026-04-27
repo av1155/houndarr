@@ -4,17 +4,20 @@ Two macros are exercised: instance_row (the entire <tr> rendered for
 every instance in the settings table) and form_context (the <form>
 opening / closing wrapper for the add-edit instance form).
 
-HIGH RISK: the pinning here covers every data-* attribute, every
-hx-* attribute, every rendered class string, every status-pill
-branch, the toggle button's enabled / disabled class swap, and
-the form_context derived strings (form_id, post_url, target,
-swap) so a future edit cannot silently drop a class, swap an
-attribute order, or break the HTMX wire contract the JS
+E.16 is HIGH RISK per plan section 6: the pinning here covers every
+data-* attribute, every hx-* attribute, every rendered class string,
+every status-pill branch, the toggle button's enabled / disabled
+class swap, and the form_context derived strings (form_id, post_url,
+target, swap) so a future edit cannot silently drop a class, swap
+an attribute order, or break the HTMX wire contract the JS
 controllers and route handlers depend on.
 
-Consumer-level integration (the full rendered HTML including
-ambient template indentation) is asserted via the render harness
-in ``test_pinned_render.py`` and the macro inventory gate.
+Like the other macro pinning suites under tests/test_templates/, the
+macro output is not the same as the full post-migration consumer
+HTML (consumers carry ambient template indentation that the macro
+does not).  Consumer-level integration is asserted via the Track
+A.22 render harness (test_pinned_render.py) and via the Track E
+gate.
 """
 
 from __future__ import annotations
@@ -39,9 +42,9 @@ def _instance_stub(
     batch_size: int = 2,
     sleep_interval_mins: int = 30,
 ) -> Any:
-    """Build a MagicMock shaped like the Instance sub-struct facade.
+    """Build a MagicMock shaped like the D.14 Instance facade.
 
-    Only the fields ``instance_row`` reads are populated here; other
+    Only the fields instance_row reads are populated here; other
     sub-structs return new MagicMock attributes lazily.
     """
     type_mock = MagicMock()

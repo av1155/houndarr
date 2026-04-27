@@ -1,9 +1,10 @@
-"""Consolidated invariant: the :mod:`houndarr.errors` hierarchy stays whole.
+"""Track B gate: consolidated characterisation of the typed-error hierarchy.
 
-Per-wrap-site pinning tests cover each ``except Exception``
-replacement in detail; this gate snapshot locks the *shape* of the
-exception hierarchy so a silent subclass drop or reparent fails
-here.
+Landing at the end of Track B (B.23).  The per-batch pinning tests
+already cover each wrap site in detail; this module is the gate
+snapshot that locks the *shape* of the :mod:`houndarr.errors`
+hierarchy so later tracks cannot accidentally drop a subclass or
+reparent one.
 
 Assertions:
 

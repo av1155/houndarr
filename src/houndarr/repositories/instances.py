@@ -1,19 +1,22 @@
 """Instances aggregate: SQL boundary for the ``instances`` table.
 
-The read path (:func:`list_instances`, :func:`get_instance`) plus
-:func:`_row_to_instance` and the tolerant column readers keep pre-v13
-test rows loadable under the current sub-struct
-:class:`~houndarr.services.instances.Instance`.  The write path
-(:class:`InstanceInsert`, :class:`InstanceUpdate`,
-:func:`insert_instance`, :func:`update_instance`,
-:func:`delete_instance`, :func:`update_instance_snapshot`) covers
-every column the service writes today.
+Track D.3 landed the read path (``list_instances`` / ``get_instance``
+plus the row mapper and the fault-tolerant column readers that keep
+tests with pre-v13 minimal rows compatible with the current
+:class:`houndarr.services.instances.Instance` dataclass).  Track D.4
+lands the write path: :class:`InstanceInsert` and
+:class:`InstanceUpdate` payload dataclasses, ``insert_instance``,
+``update_instance``, ``delete_instance``, and
+``update_instance_snapshot``.
 
-The :class:`~houndarr.services.instances.Instance` domain dataclass
-and the :class:`enum.StrEnum` search-mode classes live in the service
-module; this repository imports them so the row mapper can return the
-same types callers already consume.  Service writes delegate here via
-local imports to avoid an import-time cycle.
+The :class:`~houndarr.services.instances.Instance` domain dataclass,
+the search-mode :class:`enum.StrEnum` classes, and the value-mapping
+invariants all stay in the service module through Track D's early
+batches; D.13 - D.20 reshape ``Instance`` into sub-struct facades and
+the row mapper will follow that migration.  Until then this
+repository imports the dataclass and enums from the service and the
+service's writes delegate here via local imports to avoid an
+import-time cycle.
 
 API keys are encrypted at rest: every write accepts plaintext, and
 the repository runs :func:`houndarr.crypto.encrypt` before touching

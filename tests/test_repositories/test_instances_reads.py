@@ -1,13 +1,13 @@
 """Pinning tests for the instances-repository read boundary.
 
-Locks the contract of ``get_instance`` / ``list_instances`` and
-the row-mapper helpers that surround them.  The service-layer
-delegators in :mod:`houndarr.services.instances` return byte-equal
-:class:`~houndarr.services.instances.Instance` objects to their
-callers, so each case below pins one boundary the delegation
-preserves: empty result, single row, multi-row ordering,
-decryption correctness, and the tolerant fallback for rows that
-pre-date the v13 snapshot columns.
+Locks the Track D.3 contract of ``get_instance`` / ``list_instances``
+and the row-mapper helpers that moved alongside them.  The service-
+layer delegators in :mod:`houndarr.services.instances` have to keep
+returning byte-equal :class:`~houndarr.services.instances.Instance`
+objects across every subsequent D batch, so each case below covers
+one boundary that the delegation has to preserve: empty result,
+single row, multi-row ordering, decryption correctness, and the
+tolerant fallback for rows that pre-date the v13 snapshot columns.
 """
 
 from __future__ import annotations

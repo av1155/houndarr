@@ -688,13 +688,12 @@ def test_rate_limiter_uses_direct_ip_by_default(app: TestClient) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Characterisation pins for the auth seam split.
+# Characterisation pins for the final refactor wave.
 #
-# Each test below locks one load-bearing auth invariant so the eight
-# seam modules under :mod:`houndarr.auth` cannot silently drift the
-# bcrypt cost, session cookie kwargs, CSRF bucket survival, or the
-# proxy-auth trust-gate ordering.  ``@pytest.mark.pinning`` joins the
-# characterisation suite surfaced by ``just pin``.
+# Phase 1 of the final refactor wave locks every auth contract that the
+# subsequent seam split will move into `src/houndarr/auth/`.  Each test
+# below exercises one load-bearing invariant.  `@pytest.mark.pinning`
+# joins the characterisation suite surfaced by `just pin`.
 # ---------------------------------------------------------------------------
 
 

@@ -1,20 +1,21 @@
 """Log-query service: paginated ``search_log`` reads with cycle aggregates.
 
-The dynamic ``search_log`` SQL lives here so
-:mod:`houndarr.routes.api.logs` can stay a thin dispatcher and the
-view-layer aggregates (cycle progress, per-cycle searched / skipped
-/ error counts) live next to the query that produces them.  The
-route owns parameter parsing and HTTP-shaped error responses; this
-module owns SQL composition, cycle-grouping post-processing, and
-the row-summary roll-up the page header displays.
+Track D.9 lifts the dynamic ``search_log`` SQL out of
+:mod:`houndarr.routes.api.logs` so the route handler can stay short
+and the view-layer aggregates (cycle progress, per-cycle searched /
+skipped / error counts) live next to the query that produces them.
+The route still owns parameter parsing and HTTP-shaped error
+responses; this module owns SQL composition, cycle-grouping
+post-processing, and the row-summary roll-up the page header
+displays.
 
-Limit constants live here because the SQL clamps to ``LIMIT_MAX``
-and the load-more chunk cap is a property of the query, not the
-route.  The route imports them back when it wants Pydantic
-``Query`` defaults that match the service's clamp.
+Limit constants live here because the SQL clamps to ``LIMIT_MAX`` and
+the load-more chunk cap is a property of the query, not the route.
+The route imports them back when it wants Pydantic ``Query`` defaults
+that match the service's clamp.
 
 Connection lifetime: unlike the metrics service in
-:mod:`houndarr.services.metrics`, :func:`query_logs` opens its own
+:mod:`houndarr.services.metrics`, ``query_logs`` opens its own
 connection.  The route only ever runs one log query per request and
 does not need to share a handle with sibling reads, so the simpler
 "open here, close here" pattern fits.

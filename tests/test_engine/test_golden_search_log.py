@@ -1,13 +1,13 @@
 """Golden tests for search_log row sequences.
 
-These tests capture the exact ``search_log`` output for known
-input scenarios and act as a bit-identical regression snapshot for
-the adapter pattern plus unified search pipeline.
+These tests capture the exact ``search_log`` output for known input scenarios
+and prove that the Phase 1–2 refactor (adapter pattern + unified pipeline)
+produces bit-identical results to the pre-refactor engine.
 
-Each test asserts the complete row sequence (field values and
-ordering) for a multi-step search cycle.  They are regression
-snapshots, not behavioural unit tests, and should break only when
-someone intentionally changes search engine output.
+Each test asserts the complete row sequence - field values and ordering - for
+a multi-step search cycle.  They are regression snapshots, not behavioural
+unit tests, and should break only when someone intentionally changes search
+engine output.
 """
 
 from __future__ import annotations

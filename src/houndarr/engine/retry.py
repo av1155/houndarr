@@ -8,10 +8,10 @@ follows.  This file owns that logic so the supervisor's ``while True``
 loop body stays straight-line and the state-transition rules can be
 exercised directly.
 
-The helper is deliberately hand-rolled (no ``tenacity`` /
-``httpx-retries`` dependency) because the state surface is small:
-a :class:`ReconnectState` plus one :func:`run_with_reconnect`
-driver are enough for every retry path in the codebase.
+Track C.11 introduces this module.  The user explicitly rejected
+``tenacity`` and ``httpx-retries``: there is no new runtime dep here,
+just a small ``ReconnectState`` plus a single ``run_with_reconnect``
+helper.
 """
 
 from __future__ import annotations

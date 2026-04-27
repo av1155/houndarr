@@ -1,12 +1,12 @@
 """Pin the SearchCandidate byte-shape produced by every adapter.
 
-The six adapters share ``adapt_missing`` / ``adapt_cutoff`` /
-``fetch_upgrade_pool`` templates in
-:mod:`houndarr.engine.adapters._common`.  These tests snapshot the
-exact :class:`SearchCandidate` each adapter returns for an
-already-released item so a later template edit cannot silently
-drift ``item_id``, ``item_type``, the label shape,
-``unreleased_reason``, ``group_key``, or ``search_payload``.
+Track A.21 of the refactor plan.  Track C.7-C.9 will extract shared
+adapt_missing / adapt_cutoff / fetch_upgrade_pool templates in
+``engine/adapters/_common.py``.  These tests snapshot the exact
+SearchCandidate each of the six adapters returns today for an
+already-released item, so the template extraction cannot silently
+drift item_id, item_type, label shape, unreleased_reason, group_key,
+or search_payload.
 """
 
 from __future__ import annotations

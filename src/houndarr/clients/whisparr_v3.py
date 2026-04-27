@@ -6,16 +6,15 @@ does not expose ``/api/v3/wanted/missing`` or ``/api/v3/wanted/cutoff``
 endpoints.  Missing and cutoff-unmet items are identified by fetching the
 full library via ``GET /api/v3/movie`` and filtering client-side.
 
-Outlier status.  Sonarr, Radarr, Lidarr, Readarr, and Whisparr v2
-share the
+Outlier status (Track C.6).  Sonarr, Radarr, Lidarr, Readarr, and
+Whisparr v2 all collapsed onto the
 :meth:`~houndarr.clients.base.ArrClient._fetch_wanted_page` /
-:meth:`~houndarr.clients.base.ArrClient._fetch_wanted_total`
-template on the base ABC; this module deliberately does not.  No
-paginated ``/wanted`` endpoint exists upstream, so the four
-``_WANTED_*`` hooks on the base ABC stay at their defaults
-(``_WANTED_ENVELOPE`` is ``None``); calling
-:meth:`~ArrClient._fetch_wanted_page` here would raise
-:class:`NotImplementedError` by design.
+:meth:`~houndarr.clients.base.ArrClient._fetch_wanted_total` template
+in C.1 - C.5; this module deliberately does not.  No paginated
+``/wanted`` endpoint exists upstream, so the four ``_WANTED_*`` hooks
+on the base ABC stay at their defaults (``_WANTED_ENVELOPE`` is
+``None``); calling :meth:`~ArrClient._fetch_wanted_page` here would
+raise :class:`NotImplementedError` by design.
 
 Instead, this client fetches the entire library once per client
 lifetime and filters in memory: missing = ``monitored and not

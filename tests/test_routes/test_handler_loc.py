@@ -88,7 +88,7 @@ def _walk_handlers() -> list[tuple[str, str, int]]:
 
 
 def test_handler_count_matches_audit_snapshot() -> None:
-    """The handler inventory count matches the current snapshot (32 handlers).
+    """The handler inventory count matches the current snapshot (33 handlers).
 
     A regression here means a handler was added or removed without
     an accompanying update to this count.  Update this count

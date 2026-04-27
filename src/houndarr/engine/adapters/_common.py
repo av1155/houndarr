@@ -1,9 +1,15 @@
 """Shared adapter templates for the search engine pipeline.
 
-The upgrade-pool builder, missing-candidate builder, and
-cutoff-candidate builder are identical across most *arr apps.  This
-module collects the shared templates so each adapter shrinks to
-per-app data shaping plus a single call into here.
+Adapters today copy 85-100% of the same upgrade-pool builder, missing
+candidate builder, and cutoff candidate builder per app.  This module
+collects the shared templates so each adapter shrinks to per-app data
+shaping plus a single call into here.
+
+Track C.7 - C.9 land the templates and migrate the matching adapters;
+C.10 then converts :class:`~houndarr.engine.adapters.AppAdapter` from a
+dataclass of callables into a Protocol so adapters can become classes
+that inherit the shared behaviour from a base instead of importing it
+piecemeal.
 
 Inhabitants:
 

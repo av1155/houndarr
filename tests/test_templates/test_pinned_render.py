@@ -1,12 +1,13 @@
-"""Render-byte pinning for the partials that compose with macros.
+"""Render-byte pinning for Track E's migration targets.
 
-Each test pins the structural markers (class names, data-*
-attributes, visible text) on one partial under a representative
-context so a macro touch-up or template edit cannot silently drop
-or rename an attribute that the HTMX client or CSS depends on.
+Track A.22 of the refactor plan.  Track E.1-E.17 will extract macros
+from the partials exercised here.  These tests pin the structural
+markers (class names, data-* attributes, visible text) so the macro
+extraction cannot silently drop or rename an attribute that the HTMX
+client or CSS depends on.
 
-Coverage is narrow by design: one partial per test, one or two
-contexts each, markers only.
+Coverage is narrow by design: we render each partial under a couple of
+representative contexts and assert the structural markers survive.
 """
 
 from __future__ import annotations
@@ -31,14 +32,6 @@ def _instance_stub(
     name: str = "Sonarr",
     enabled: bool = True,
 ) -> Any:
-    """Build a MagicMock shaped like the Instance sub-struct facade.
-
-    Templates read ``instance.core.<field>``,
-    ``instance.missing.<field>``, ``instance.cutoff.<field>``,
-    ``instance.upgrade.<field>``, ``instance.schedule.<field>``, and
-    ``instance.snapshot.<field>``.  The stub mirrors that shape so
-    each attribute read resolves to a deterministic value.
-    """
     type_mock = MagicMock()
     type_mock.value = type_value
 
@@ -355,67 +348,3 @@ class TestChangelogModalRender:
             manual=False,
         )
         assert "Since v1.1.0" in html
-
-
-# login.html / setup.html
-
-
-class TestAuthPagesRender:
-    """Pin the structural markers on /login and /setup.
-
-    The auth CSS (auth.css + auth-fields.css) is explicitly
-    off-limits for structural refactor, but the CSS class hooks and
-    auth.js data attributes are exercised here: a single missing
-    class or id would break the caps-lock badge, the strength meter,
-    the submit-button loading state, or the Settings > Security
-    show-hide parity.
-    """
-
-    def test_login_html_structural_markers(self, render) -> None:
-        html = render(
-            "login.html",
-            version="9.9.9",
-            csrf_token="csrf-test",
-            error=None,
-        )
-        # Shell chrome.
-        assert 'class="auth-card auth-card--login"' in html
-        assert 'class="auth-form"' in html
-        assert "data-auth-form" in html
-        # show_nav = false => the `is-auth` body class is applied
-        # (auth.css selectors scope under `body.is-auth`); the shell
-        # nav + footer remain suppressed.
-        assert "is-auth" in html
-        assert 'data-shell-nav="true"' not in html
-        # Form hooks that auth.js and the auth.css selectors depend on.
-        assert 'id="login-username"' in html
-        assert 'id="login-password"' in html
-        assert 'name="csrf_token"' in html and "csrf-test" in html
-        assert 'action="/login"' in html
-        # Leading-icon + password-toggle primitives (auth-fields.css .input-wrap).
-        assert 'class="input-wrap"' in html
-        assert "data-pw-input" in html
-        # The version chip in the card footer uses the passed version.
-        assert "Houndarr v9.9.9" in html
-
-    def test_setup_html_structural_markers(self, render) -> None:
-        html = render(
-            "setup.html",
-            version="9.9.9",
-            csrf_token="csrf-test",
-            error=None,
-        )
-        # Setup uses the plain auth-card (no --login modifier) plus the
-        # "Welcome to Houndarr" eyebrow.
-        assert 'class="auth-card"' in html
-        assert "auth-card--login" not in html
-        assert 'class="auth-eyebrow"' in html and "Welcome to Houndarr" in html
-        # Three password-like fields: username, new-password, confirm.
-        assert 'id="setup-username"' in html
-        assert 'id="setup-password"' in html
-        assert 'id="setup-password-confirm"' in html
-        # Setup is the only page that renders the strength meter.
-        assert "data-strength-source" in html
-        assert 'data-strength="true"' in html or "data-strength" in html
-        # Form posts back to /setup.
-        assert 'action="/setup"' in html

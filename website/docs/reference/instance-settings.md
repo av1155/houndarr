@@ -312,13 +312,3 @@ in Settings. New instances are created as enabled by default.
   </figcaption>
 </figure>
 
-## Changelog notifications
-
-The **Changelog notifications** toggle opens a modal after each upgrade
-summarising what shipped. The **What's new** button re-opens the same
-modal on demand.
-
-<Image
-  img={require('@site/static/img/screenshots/houndarr-changelog-modal.png')}
-  alt="The Houndarr What's New modal listing Added, Changed, and Fixed items from the latest release with a link to the full changelog on GitHub"
-/>

@@ -2,11 +2,18 @@
 sidebar_position: 4
 ---
 
+import Image from '@theme/IdealImage';
+
 # Admin actions
 
 The Settings page groups every global administrative action inside the
 **Admin** collapsible. Four sub-sections: Security, Updates,
 Maintenance, Danger zone.
+
+<Image
+  img={require('@site/static/img/screenshots/houndarr-settings-admin.png')}
+  alt="The Houndarr Admin panel expanded under the Settings page, showing the Admin header (Security, updates, maintenance, and factory-reset actions) above the Security section (Signed in as admin, Current / New / Confirm password fields, strength meter, Update Password button) and the Updates section (Automatically check for new releases toggle, Check now button, Show changelog after each update toggle, What's new button, Latest on GitHub link), with the Maintenance heading visible at the bottom edge"
+/>
 
 Everything below works the same under built-in auth and proxy / SSO
 auth, with two exceptions noted inline.
@@ -59,6 +66,11 @@ Controls for the release check and the What's new modal:
 - **Latest on GitHub ↗** link. Opens `CHANGELOG.md` on GitHub so the
   remote view is always one click away, independent of the image
   version you are on.
+
+<Image
+  img={require('@site/static/img/screenshots/houndarr-changelog-modal.png')}
+  alt="The Houndarr What's New modal listing Added, Changed, and Fixed items from the latest release with a link to the full changelog on GitHub"
+/>
 
 ## Maintenance
 

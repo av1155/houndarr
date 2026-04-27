@@ -85,7 +85,8 @@ async def _wipe_demo_tables(conn: aiosqlite.Connection) -> None:
 
 
 def _instances_spec() -> list[tuple[Any, ...]]:
-    """Fixed demo instance set. Seven rows covering all six arr types.
+    """Fixed demo instance set. Six rows covering five active arr types
+    plus a disabled Whisparr v3 for the mixed-state look.
 
     Cutoff is enabled on every active instance and upgrade is enabled on
     the TV + movie instances so the dashboard + logs surfaces exercise
@@ -96,12 +97,11 @@ def _instances_spec() -> list[tuple[Any, ...]]:
     #         sleep_interval_mins, monitored_total, unreleased_count.
     return [
         (1, "Sonarr", "sonarr", "http://sonarr:8989", 1, 1, 1, 30, 120, 8),
-        (2, "Sonarr 4K", "sonarr", "http://sonarr-4k:8989", 1, 1, 1, 60, 65, 5),
-        (3, "Radarr", "radarr", "http://radarr:7878", 1, 1, 1, 30, 180, 12),
-        (4, "Radarr 4K", "radarr", "http://radarr-4k:7878", 1, 1, 1, 60, 95, 6),
-        (5, "Music Library", "lidarr", "http://lidarr:8686", 1, 1, 0, 30, 240, 4),
-        (6, "Readarr (BookShelf)", "readarr", "http://readarr:8787", 1, 1, 0, 60, 48, 2),
-        (7, "Whisparr v3", "whisparr_v3", "http://whisparr:6969", 0, 0, 0, 30, 0, 0),
+        (2, "Radarr", "radarr", "http://radarr:7878", 1, 1, 1, 30, 180, 12),
+        (3, "Radarr 4K", "radarr", "http://radarr-4k:7878", 1, 1, 1, 60, 95, 6),
+        (4, "Lidarr", "lidarr", "http://lidarr:8686", 1, 1, 1, 30, 240, 4),
+        (5, "Readarr", "readarr", "http://readarr:8787", 1, 1, 1, 60, 48, 2),
+        (6, "Whisparr v3", "whisparr_v3", "http://whisparr:6969", 0, 0, 0, 30, 0, 0),
     ]
 
 
@@ -167,11 +167,11 @@ def _stagger_cooldowns(
     """Evenly space ``count`` rows between ``oldest_hours`` and ``newest_hours`` ago.
 
     Returns 5-tuples ``(instance_id, item_id, item_type, searched_at,
-    search_kind)``. The fifth element is the pass kind the cooldown
-    came from; callers strip it when inserting into the ``cooldowns``
-    table (which has no ``search_kind`` column) but carry it through
-    to the matching ``search_log`` row so the dashboard's cooldown
-    breakdown reports the correct per-kind counts.
+    search_kind)``.  The fifth element is the pass kind that booked
+    the cooldown.  The ``cooldowns`` table tracks search_kind directly
+    (schema v14+), so the INSERT below carries it through; the
+    matching ``search_log`` row uses the same kind so the
+    dashboard-side breakdown queries agree with the cooldown row.
     """
     picks = pool[:count]
     if len(picks) < 2:
@@ -272,22 +272,28 @@ async def _seed_cooldowns_and_logs(
     cooldown so items rotate through slower).
     """
     # (instance_id, pool_key, item_type, missing, cutoff, upgrade).
-    # Pool sizes (25/15/30/20/20/16) cap the per-instance totals.
+    # Pool sizes (25/30/20/20/16) cap the per-instance totals; every
+    # active instance gets at least one cooldown of each kind so the
+    # dashboard's library-health bar paints all five segments and the
+    # cooldown-breakdown row on every card shows missing + cutoff +
+    # upgrade segments.
     splits: list[tuple[int, str, str, int, int, int]] = [
         (1, "sonarr", "episode", 11, 10, 4),
-        (2, "sonarr_4k", "episode", 7, 6, 2),
-        (3, "radarr", "movie", 13, 12, 5),
-        (4, "radarr_4k", "movie", 9, 8, 3),
-        (5, "lidarr", "album", 12, 8, 0),
-        (6, "readarr", "book", 10, 6, 0),
+        (2, "radarr", "movie", 13, 12, 5),
+        (3, "radarr_4k", "movie", 9, 8, 3),
+        (4, "lidarr", "album", 10, 7, 3),
+        (5, "readarr", "book", 8, 5, 3),
     ]
     cooldown_rows: list[tuple[int, int, str, str, str]] = []
     for iid, pool_key, item_type, miss, cut, upg in splits:
         cooldown_rows += _distribute_cooldowns(iid, pools[pool_key], item_type, miss, cut, upg, now)
 
     await conn.executemany(
-        "INSERT INTO cooldowns (instance_id, item_id, item_type, searched_at) VALUES (?, ?, ?, ?)",
-        [(r[0], r[1], r[2], r[3]) for r in cooldown_rows],
+        """
+        INSERT INTO cooldowns (instance_id, item_id, item_type, searched_at, search_kind)
+        VALUES (?, ?, ?, ?, ?)
+        """,
+        [(r[0], r[1], r[2], r[3], r[4]) for r in cooldown_rows],
     )
 
     log_rows: list[tuple[Any, ...]] = []
@@ -317,7 +323,7 @@ async def _seed_cooldowns_and_logs(
         ts = now - timedelta(days=days_ago)
         log_rows.append(
             (
-                7,
+                6,
                 80000 + i,
                 "whisparr_v3_movie",
                 "missing",
@@ -372,7 +378,7 @@ async def _run(
         cd_count, log_count = await _seed_cooldowns_and_logs(conn, pools, now)
         await conn.commit()
         print(
-            f"[seed] populated: 7 instances, {cd_count} cooldowns, "
+            f"[seed] populated: 6 instances, {cd_count} cooldowns, "
             f"{log_count} log rows at {data_dir}"
         )
 

@@ -112,11 +112,21 @@ On mobile, log entries are presented as stacked cards; each card corresponds to 
 
 <figure className="docs-screenshot-portrait">
   <Image
-    img={require('@site/static/img/screenshots/houndarr-logs-mobile.png')}
-    alt="The Houndarr Logs page on mobile with each entry as a stacked card showing cycle summaries and individual skip or search rows"
+    img={require('@site/static/img/screenshots/houndarr-logs-mobile-top-of-page.png')}
+    alt="The Houndarr Logs page on mobile, scrolled to the top, showing the Audit trail filters (instance, action, kind, trigger, rows), Hide system and Hide skipped noise toggles, the Live update indicator, and the most recent cycle card"
   />
   <figcaption>
-    The Logs page on a phone-width viewport. Each cycle becomes a stacked card; individual rows sit underneath.
+    The Logs page on a phone-width viewport: the same filter controls as desktop, then cycle cards stacked underneath.
+  </figcaption>
+</figure>
+
+<figure className="docs-screenshot-portrait">
+  <Image
+    img={require('@site/static/img/screenshots/houndarr-logs-mobile-expanded-logs.png')}
+    alt="The Houndarr Logs page on mobile with several cycle cards stacked vertically, one expanded inline to reveal its searched and skipped rows"
+  />
+  <figcaption>
+    Each cycle card expands inline to show its individual searched and skipped rows.
   </figcaption>
 </figure>
 

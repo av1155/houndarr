@@ -1,50 +1,57 @@
-import type {ComponentProps, ReactNode} from 'react';
+import type {ReactNode} from 'react';
 import clsx from 'clsx';
 import Link from '@docusaurus/Link';
-import useBaseUrl from '@docusaurus/useBaseUrl';
+import useBaseUrl, {useBaseUrlUtils} from '@docusaurus/useBaseUrl';
 import useDocusaurusContext from '@docusaurus/useDocusaurusContext';
 import Layout from '@theme/Layout';
-import Image from '@theme/IdealImage';
 import HomepageFeatures from '@site/src/components/HomepageFeatures';
 import Heading from '@theme/Heading';
 
 import styles from './index.module.css';
 
+/* Screenshots use plain <img> + full-resolution PNGs rather than
+   @theme/IdealImage. IdealImage picks the smallest srcset variant
+   that fits the rendered box (640w for the gallery's narrow cards),
+   and medium-zoom then upscales that 640w bitmap to viewport width
+   when the user clicks to zoom — that's the visible blur on the
+   homepage. Loading the full optimized PNG keeps zoom crisp; the
+   gallery is below the fold so loading="lazy" defers the cost until
+   the user scrolls into view. */
 type ScreenshotItem = {
-  img: ComponentProps<typeof Image>['img'];
+  src: string;
   alt: string;
   caption: string;
 };
 
 const DASHBOARD_SCREENSHOT: ScreenshotItem = {
-  img: require('@site/static/img/screenshots/houndarr-dashboard-hero.png'),
-  alt: 'Houndarr Dashboard: library-health bar, Recent hunts strip, and per-instance cards with WATCHING / ELIGIBLE / SEARCHED stats, Expected-to-unlock panel, policy chips, and Run Now button',
-  caption: 'Dashboard: gating state at a glance, per-instance Expected-to-unlock panels, on-demand Run Now',
+  src: '/img/screenshots/houndarr-dashboard-hero.png',
+  alt: 'Houndarr Dashboard: library-health bar with eligible / gated / unreleased totals, Recent hunts strip, and per-instance cards showing WANTED / ELIGIBLE / SEARCHED stats, Cooldown schedule panel, policy chips, and Run Now button',
+  caption: 'Dashboard: gating state at a glance, per-instance Cooldown schedule panels, on-demand Run Now',
 };
 
 const SUPPORTING_SCREENSHOTS: ScreenshotItem[] = [
   {
-    img: require('@site/static/img/screenshots/houndarr-logs.png'),
+    src: '/img/screenshots/houndarr-logs.png',
     alt: 'Houndarr Logs: filterable search activity log',
     caption: 'Logs',
   },
   {
-    img: require('@site/static/img/screenshots/houndarr-settings-instances.png'),
+    src: '/img/screenshots/houndarr-settings-instances.png',
     alt: 'Houndarr Settings: instance list with enable toggles',
     caption: 'Settings',
   },
   {
-    img: require('@site/static/img/screenshots/houndarr-add-instance-form.png'),
+    src: '/img/screenshots/houndarr-add-instance-form.png',
     alt: 'Houndarr Add Instance: search, cutoff, and upgrade configuration',
     caption: 'Instance config',
   },
   {
-    img: require('@site/static/img/screenshots/houndarr-settings-account.png'),
-    alt: 'Houndarr Account settings: password and session management',
-    caption: 'Account',
+    src: '/img/screenshots/houndarr-settings-admin.png',
+    alt: 'Houndarr Admin panel: password change form with strength meter, plus release-check toggle, Check now button, changelog modal toggle, and Latest on GitHub link',
+    caption: 'Admin',
   },
   {
-    img: require('@site/static/img/screenshots/houndarr-settings-help.png'),
+    src: '/img/screenshots/houndarr-settings-help.png',
     alt: 'Houndarr Help: in-app settings reference',
     caption: 'Help',
   },
@@ -142,10 +149,11 @@ function HomepageHeader() {
 
         {/* Right column: dashboard preview */}
         <div className={clsx(styles.heroRight, 'landing-zoomable')}>
-          <Image
-            img={DASHBOARD_SCREENSHOT.img}
+          <img
+            src={useBaseUrl(DASHBOARD_SCREENSHOT.src)}
             alt={DASHBOARD_SCREENSHOT.alt}
             className={styles.heroScreenshot}
+            decoding="async"
           />
         </div>
 
@@ -155,6 +163,7 @@ function HomepageHeader() {
 }
 
 function Screenshots() {
+  const {withBaseUrl} = useBaseUrlUtils();
   return (
     <section className={clsx(styles.screenshots, 'landing-zoomable')}>
       <div className="container">
@@ -164,9 +173,14 @@ function Screenshots() {
 
         {/* Hero: Dashboard takes full width */}
         <div className={styles.screenshotHero}>
-          <Image img={DASHBOARD_SCREENSHOT.img} alt={DASHBOARD_SCREENSHOT.alt} />
+          <img
+            src={withBaseUrl(DASHBOARD_SCREENSHOT.src)}
+            alt={DASHBOARD_SCREENSHOT.alt}
+            loading="lazy"
+            decoding="async"
+          />
           <p className={styles.screenshotCaption}>
-            <strong>Dashboard</strong>: gating state at a glance, per-instance Expected-to-unlock panels, on-demand Run Now
+            <strong>Dashboard</strong>: gating state at a glance, per-instance Cooldown schedule panels, on-demand Run Now
           </p>
         </div>
 
@@ -174,7 +188,14 @@ function Screenshots() {
         <div className={styles.screenshotGallery}>
           {SUPPORTING_SCREENSHOTS.map((item) => (
             <div key={item.caption}>
-              <Image img={item.img} alt={item.alt} />
+              <div className={styles.screenshotThumb}>
+                <img
+                  src={withBaseUrl(item.src)}
+                  alt={item.alt}
+                  loading="lazy"
+                  decoding="async"
+                />
+              </div>
               <p className={styles.screenshotCaption}>
                 <strong>{item.caption}</strong>
               </p>

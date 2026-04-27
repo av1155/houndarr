@@ -73,7 +73,7 @@ Click **Dashboard** in the top navigation.
 
 <Image
   img={require('@site/static/img/screenshots/houndarr-dashboard-instances.png')}
-  alt="The Houndarr Dashboard Instances section with per-instance cards showing WATCHING / ELIGIBLE / SEARCHED stats, Cooldown schedule panel, policy chips, and Run Now button"
+  alt="The Houndarr Dashboard Instances section with per-instance cards showing WANTED / ELIGIBLE / SEARCHED stats, Cooldown schedule panel, policy chips, and Run Now button"
 />
 
 Find the card for the instance you just added and click **Run

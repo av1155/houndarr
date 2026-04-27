@@ -42,38 +42,38 @@ _CYCLE_SPECS: list[
         31,
         "scheduled",
         [
-            (3, "radarr", 19, "movie", "missing", "searched", None, "dispatched"),
-            (3, "radarr", 4, "movie", "missing", "skipped", "not yet released", None),
-            (3, "radarr", 5, "movie", "missing", "skipped", "not yet released", None),
-            (3, "radarr", 6, "movie", "missing", "skipped", "not yet released", None),
-            (3, "radarr", 0, "movie", "missing", "skipped", "on cooldown (14d)", None),
+            (2, "radarr", 19, "movie", "missing", "searched", None, "dispatched"),
+            (2, "radarr", 4, "movie", "missing", "skipped", "not yet released", None),
+            (2, "radarr", 5, "movie", "missing", "skipped", "not yet released", None),
+            (2, "radarr", 6, "movie", "missing", "skipped", "not yet released", None),
+            (2, "radarr", 0, "movie", "missing", "skipped", "on cooldown (14d)", None),
         ],
     ),
     (
         58,
         "scheduled",
         [
-            (2, "sonarr_4k", 0, "episode", "upgrade", "searched", None, "dispatched"),
-            (2, "sonarr_4k", 1, "episode", "upgrade", "skipped", "on upgrade cooldown (90d)", None),
-            (2, "sonarr_4k", 2, "episode", "upgrade", "skipped", "on upgrade cooldown (90d)", None),
+            (1, "sonarr", 21, "episode", "upgrade", "searched", None, "dispatched"),
+            (1, "sonarr", 22, "episode", "upgrade", "skipped", "on upgrade cooldown (90d)", None),
+            (1, "sonarr", 23, "episode", "upgrade", "skipped", "on upgrade cooldown (90d)", None),
         ],
     ),
     (
         96,
         "scheduled",
         [
-            (5, "lidarr", 0, "album", "cutoff", "searched", None, "dispatched"),
-            (5, "lidarr", 1, "album", "cutoff", "skipped", "on cutoff cooldown (21d)", None),
-            (5, "lidarr", 2, "album", "cutoff", "skipped", "on cutoff cooldown (21d)", None),
+            (4, "lidarr", 0, "album", "cutoff", "searched", None, "dispatched"),
+            (4, "lidarr", 1, "album", "cutoff", "skipped", "on cutoff cooldown (21d)", None),
+            (4, "lidarr", 2, "album", "cutoff", "skipped", "on cutoff cooldown (21d)", None),
         ],
     ),
     (
         148,
         "scheduled",
         [
-            (4, "radarr_4k", 2, "movie", "upgrade", "searched", None, "dispatched"),
-            (4, "radarr_4k", 3, "movie", "upgrade", "skipped", "on upgrade cooldown (90d)", None),
-            (4, "radarr_4k", 4, "movie", "missing", "skipped", "post-release grace (6h)", None),
+            (3, "radarr_4k", 2, "movie", "upgrade", "searched", None, "dispatched"),
+            (3, "radarr_4k", 3, "movie", "upgrade", "skipped", "on upgrade cooldown (90d)", None),
+            (3, "radarr_4k", 4, "movie", "missing", "skipped", "post-release grace (6h)", None),
         ],
     ),
     # Queue-backpressure gate: the whole cycle records a single info row.
@@ -82,7 +82,7 @@ _CYCLE_SPECS: list[
         "scheduled",
         [
             (
-                4,
+                3,
                 None,
                 -1,
                 None,
@@ -105,15 +105,15 @@ _CYCLE_SPECS: list[
         317,
         "scheduled",
         [
-            (3, None, -1, None, None, "error", None, "Could not reach http://radarr:7878"),
+            (2, None, -1, None, None, "error", None, "Could not reach http://radarr:7878"),
         ],
     ),
     (
         194,
         "scheduled",
         [
-            (6, "readarr", 0, "book", "cutoff", "skipped", "on cutoff cooldown (21d)", None),
-            (6, "readarr", 1, "book", "cutoff", "skipped", "on cutoff cooldown (21d)", None),
+            (5, "readarr", 0, "book", "cutoff", "skipped", "on cutoff cooldown (21d)", None),
+            (5, "readarr", 1, "book", "cutoff", "skipped", "on cutoff cooldown (21d)", None),
         ],
     ),
 ]

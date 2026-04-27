@@ -165,15 +165,16 @@
 }
 
 /* ── Hero screenshot ─────────────────────────────────────────────────────── */
-/* IdealImage renders <span><img/></span>; .heroScreenshot lands on the span.
-   Layout cap (max-height) + drop shadow stay on the span. Rules that must
-   track the visible bitmap (rounded corners, 1px ring) live on the inner
-   <img>, so the ring follows the image to the point where .heroBanner's
-   overflow: hidden clips it (i.e. it runs behind the next section instead
-   of stopping at 820px). */
+/* The hero is a plain <img>, not IdealImage, so the layout cap and the
+   1px ring both live directly on the element. medium-zoom overrides
+   transform with inline styles when it opens the image, so the
+   perspective tilt cleanly hands off to the zoom animation. */
 .heroScreenshot {
+  display: block;
   border-radius: 10px;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
+  box-shadow:
+    0 20px 60px rgba(0, 0, 0, 0.6),
+    0 0 0 1px rgba(30, 38, 56, 0.9);
   width: 100%;
   height: auto;
   max-height: 820px;
@@ -183,24 +184,19 @@
     box-shadow 0.4s ease;
 }
 
-.heroScreenshot img {
-  display: block;
-  width: 100%;
-  height: auto;
-  border-radius: 10px;
-  box-shadow: 0 0 0 1px rgba(30, 38, 56, 0.9);
-  transition: box-shadow 0.4s ease;
-}
-
 .heroScreenshot:hover {
   transform: perspective(1400px) rotateY(-2deg) rotateX(0.5deg) scale(1.01);
   box-shadow:
     0 24px 72px rgba(0, 0, 0, 0.65),
-    0 0 50px rgba(34, 211, 238, 0.03);
+    0 0 50px rgba(34, 211, 238, 0.03),
+    0 0 0 1px rgba(34, 211, 238, 0.12);
 }
 
-.heroScreenshot:hover img {
-  box-shadow: 0 0 0 1px rgba(34, 211, 238, 0.12);
+/* When medium-zoom opens the hero, drop the layout cap and the
+   perspective tilt so the zoom animation reaches the natural image
+   size cleanly. */
+.heroScreenshot:global(.medium-zoom-image--opened) {
+  max-height: none;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -296,4 +292,48 @@
   box-shadow:
     0 8px 24px rgba(0, 0, 0, 0.45),
     0 0 0 1px rgba(34, 211, 238, 0.1);
+}
+
+/* Pin every gallery thumbnail to the landscape aspect of the four
+   desktop shots (5088×3330). IdealImage renders an outer wrapper div
+   plus an svg sizer plus an img; setting aspect-ratio on the .thumb
+   wrapper plus 100%/100% on every direct child forces all three to
+   the same rectangle, so the squarer Admin shot crops uniformly.
+   object-position: top keeps the page header + Security / Updates
+   visible inline; the Danger zone is what gets trimmed.
+
+   The zoom plugin (medium-zoom) lifts the <img> out of the gallery
+   when opened, so the natural full-height Admin view is one click
+   away. The :has() rule below relaxes overflow during animation so
+   the lifted image is not clipped by the thumb's clipping box. */
+.screenshotThumb {
+  position: relative;
+  aspect-ratio: 5088 / 3330;
+  overflow: hidden;
+  border-radius: 8px;
+}
+
+.screenshotThumb > * {
+  width: 100% !important;
+  height: 100% !important;
+}
+
+.screenshotThumb svg {
+  display: block;
+}
+
+.screenshotThumb img {
+  object-fit: cover;
+  object-position: top;
+}
+
+.screenshotThumb:has(img:global(.medium-zoom-image--opened)) {
+  overflow: visible;
+}
+
+.screenshotThumb img:global(.medium-zoom-image--opened) {
+  width: auto !important;
+  height: auto !important;
+  object-fit: initial;
+  object-position: initial;
 }

@@ -38,7 +38,7 @@ Go to **Settings** and click **Add Instance** to connect your *arr instances.
 
 <Image
   img={require('@site/static/img/screenshots/houndarr-settings-instances.png')}
-  alt="The Houndarr Settings page showing a two-row Instances table with active Radarr and Sonarr rows, each with Disable / Edit / Delete actions"
+  alt="The Houndarr Settings page showing the Instances table with multiple active rows (Sonarr, Radarr, Radarr 4K, Lidarr, Readarr, Whisparr v3) each with Disable / Edit / Delete actions, plus a collapsed Admin section underneath"
 />
 
 For each instance you need:
@@ -116,7 +116,7 @@ The top section shows:
 
 The lower section lays out one **card per instance** with:
 
-- A type eyebrow, instance name, and a 3-stat row (`WATCHING`
+- A type eyebrow, instance name, and a 3-stat row (`WANTED`
   monitored total, `ELIGIBLE` ready-to-search count, and `SEARCHED`
   lifetime dispatches)
 - A **Cooldown schedule** inset panel showing the soonest, median,
@@ -131,7 +131,7 @@ The lower section lays out one **card per instance** with:
 
 <Image
   img={require('@site/static/img/screenshots/houndarr-dashboard-instances.png')}
-  alt="The Houndarr Dashboard Instances section showing per-instance cards with WATCHING / ELIGIBLE / SEARCHED stats, Cooldown schedule panel, policy chips, and Run Now button"
+  alt="The Houndarr Dashboard Instances section showing per-instance cards with WANTED / ELIGIBLE / SEARCHED stats, Cooldown schedule panel, policy chips, and Run Now button"
 />
 
 <figure className="docs-screenshot-portrait">

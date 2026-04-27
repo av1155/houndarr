@@ -491,9 +491,7 @@ _EXPECTED_500_CONSOLE_NOISE = [
 
 
 @pytest.mark.integration
-def test_password_change_hx_refresh_recovers_csrf(
-    logged_in_page: Page, houndarr_url: str, console_guard
-) -> None:
+def test_password_change_hx_refresh_recovers_csrf(logged_in_page: Page, houndarr_url: str) -> None:
     """After a successful password change the server sets HX-Refresh so the
     tab reloads and re-stamps hx-headers with the rotated CSRF cookie.
     Without that reload, the next mutating HTMX request would 403 because
@@ -505,19 +503,6 @@ def test_password_change_hx_refresh_recovers_csrf(
     finally so a failure mid-test doesn't lock subsequent tests out of
     the shared container.
     """
-    # Webkit emits two extra console errors during this test that
-    # chromium and firefox squelch.  The test logic passes in all
-    # three browsers; whitelist the noise so the autouse console_guard
-    # does not flag teardown on webkit:
-    #
-    # 1. htmx:afterRequest / htmx:sendError fire when HX-Refresh's
-    #    location.reload() aborts an in-flight HTMX request.
-    # 2. A "pageerror: ... due to access control checks" pageerror
-    #    fires when the changelog popup fetches its content during
-    #    the post-reload navigation.
-    console_guard.allow(r"htmx:(afterRequest|sendError)")
-    console_guard.allow(r"due to access control checks")
-
     page = logged_in_page
     original_password = "CITestPass1!"
     temp_password = "TempCI999!"

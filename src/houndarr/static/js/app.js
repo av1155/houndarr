@@ -14,6 +14,29 @@
 })();
 
 (function () {
+  // Cancel any HTMX request that begins after the page has started
+  // unloading.  Without this guard, the changelog-popup hx-trigger
+  // (load once delay:800ms in base.html) and any other deferred
+  // request can fire mid-navigation when HX-Refresh calls
+  // location.reload() during a password change or factory reset.
+  // Webkit logs the resulting aborted fetch as a "due to access
+  // control checks" pageerror plus htmx:afterRequest / htmx:sendError
+  // console errors; chromium and firefox swallow the abort silently.
+  // Aborting before the request leaves the browser keeps every engine
+  // quiet without weakening the autouse console_guard fixture in the
+  // browser-e2e suite.
+  let isUnloading = false;
+  window.addEventListener('pagehide', function () {
+    isUnloading = true;
+  });
+  document.body.addEventListener('htmx:beforeRequest', function (evt) {
+    if (isUnloading) {
+      evt.preventDefault();
+    }
+  });
+})();
+
+(function () {
   const TOAST_VISIBLE_MS = 2400;
   const TOAST_LEAVE_MS = 240;
   let toastTimer = null;

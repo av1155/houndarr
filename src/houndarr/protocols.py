@@ -1,29 +1,23 @@
 """Structural Protocols for Houndarr's repository and factory seams.
 
-Track B.20 declaration.  These Protocols advertise the repository
-shape that Track D.3-D.6 will implement concretely in
-``src/houndarr/repositories/``; this module lands the declarations
-first so service-layer callers can depend on the shape instead of
-the eventual SQL-executing module.  A similar story holds for
-:class:`ClientFactory`: today every :class:`ArrClient` is constructed
-inline via an adapter's ``make_client``; Track C will introduce a
-registered factory that satisfies this Protocol.
+Each Protocol advertises the shape of a repository or factory
+boundary so service-layer callers depend on the structural contract
+rather than the concrete SQL-executing module.  The concrete
+implementations live in :mod:`houndarr.repositories`.
 
 Every declaration is ``@runtime_checkable`` so tests can assert
-conformance with ``isinstance(instance, InstanceRepository)`` once
-a concrete implementation lands.  The signatures are deliberately
-minimal: Track D refines them as each repository boundary solidifies.
-Until then this module is the single source of truth for the seam.
+conformance with ``isinstance(instance, InstanceRepository)``.
+Signatures are deliberately minimal: each method covers one call
+site the service layer uses today, and nothing more.
 """
 
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable, Iterable
+from collections.abc import Awaitable
 from typing import Any, Literal, Protocol, runtime_checkable
 
 from houndarr.clients.base import ArrClient
-from houndarr.enums import ItemType
-from houndarr.services.instances import Instance, InstanceType
+from houndarr.services.instances import Instance
 from houndarr.value_objects import ItemRef
 
 # ``RunNowStatus`` is duplicated here (rather than imported from
@@ -55,15 +49,14 @@ class SettingsRepository(Protocol):
 class InstanceRepository(Protocol):
     """Instance CRUD boundary backing the ``instances`` table.
 
-    Track D.3 lands the read half under ``repositories/instances.py``;
-    Track D.4 lands the write half, including the concrete
+    Read methods take the Fernet ``master_key`` so the concrete
+    repository can decrypt ``encrypted_api_key`` before returning an
+    :class:`Instance`.  Write methods accept
     :class:`~houndarr.repositories.instances.InstanceInsert` and
     :class:`~houndarr.repositories.instances.InstanceUpdate` payload
-    dataclasses the Protocol references below.  The read methods take
-    the Fernet ``master_key`` so the repository can decrypt
-    ``encrypted_api_key`` before returning an :class:`Instance`; the
-    service layer in ``services/instances.py`` becomes a facade over
-    this boundary.
+    dataclasses; those types are structurally typed as :class:`Any`
+    on the Protocol so consumers do not have to import the concrete
+    repository module just to satisfy the Protocol.
     """
 
     def list_instances(self, *, master_key: bytes) -> Awaitable[list[Instance]]:
@@ -119,8 +112,8 @@ class CooldownRepository(Protocol):
     """Cooldown SQL boundary backing the ``cooldowns`` table.
 
     The LRU skip-log sentinel (``should_log_skip``) stays in the
-    service layer; this Protocol only covers the SQL write paths
-    that Track D.5 will migrate to ``repositories/cooldowns.py``.
+    service layer; this Protocol covers the three SQL methods the
+    concrete repository exposes.
     """
 
     def exists_active_cooldown(self, ref: ItemRef, cooldown_days: int) -> Awaitable[bool]:
@@ -137,9 +130,9 @@ class CooldownRepository(Protocol):
 class SearchLogRepository(Protocol):
     """``search_log`` SQL boundary.
 
-    Track D.6 will land ``repositories/search_log.py``; the engine's
-    :func:`_write_log` helper becomes a thin call to
-    :meth:`insert_log_row`.
+    The engine's :func:`_write_log` helper is a thin call to
+    :meth:`insert_log_row`; the log-query service composes
+    :meth:`fetch_log_rows` for the ``/api/logs`` route.
     """
 
     def insert_log_row(
@@ -190,16 +183,12 @@ class SearchLogRepository(Protocol):
 class SupervisorProto(Protocol):
     """Route-facing view of the engine supervisor.
 
-    Track B.21 introduces this Protocol so FastAPI routes can depend
-    on the structural contract instead of the concrete
-    :class:`~houndarr.engine.supervisor.Supervisor` class.  Only the
-    methods route handlers invoke are declared; internal task
-    bookkeeping and lifecycle helpers stay on the concrete type.
-
-    Wired through :func:`get_supervisor` in ``routes/api/status.py``
-    today; Track D.12 + D.26 will move it into a shared
-    :mod:`houndarr.deps` module and migrate the remaining
-    ``settings/instances`` callers.
+    FastAPI routes depend on this structural contract instead of the
+    concrete :class:`~houndarr.engine.supervisor.Supervisor` class.
+    Only the methods route handlers invoke are declared; internal
+    task bookkeeping and lifecycle helpers stay on the concrete
+    type.  The shim in :mod:`houndarr.deps` wires the concrete
+    instance into this Protocol for every route that depends on it.
     """
 
     async def trigger_run_now(self, instance_id: int) -> RunNowStatus:
@@ -219,13 +208,13 @@ class SupervisorProto(Protocol):
 class ClientFactory(Protocol):
     """Construct an :class:`ArrClient` for a given :class:`Instance`.
 
-    Today every adapter exposes its own ``make_client`` function; the
+    Each adapter exposes its own ``make_client`` function; the
     supervisor and search loop receive adapters via
     :func:`houndarr.engine.adapters.get_adapter` and call
-    ``adapter.make_client(instance)`` inline.  Track C will introduce
-    a registered factory seam so tests can swap client construction
-    without monkeypatching.  Implementations must return an unopened
-    client; callers open it via ``async with``.
+    ``adapter.make_client(instance)`` directly.  The Protocol
+    captures that signature so tests and future factory seams can
+    depend on the structural contract.  Implementations must return
+    an unopened client; callers open it via ``async with``.
     """
 
     def __call__(self, instance: Instance) -> ArrClient:
@@ -244,7 +233,3 @@ __all__ = [
     "SettingsRepository",
     "SupervisorProto",
 ]
-
-
-# Silence "unused" hints on passthrough imports used by ``@runtime_checkable``
-_TYPE_HINTS: tuple[Any, ...] = (Callable, Iterable, ItemType, InstanceType)

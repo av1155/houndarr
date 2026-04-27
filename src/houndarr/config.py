@@ -162,9 +162,15 @@ def _parse_update_check_repo(raw: str) -> str:
 
     The value is interpolated into ``https://api.github.com/repos/{repo}/...``
     so the GitHub URL parser already keeps the host pinned. This guard is
-    defence in depth: catch typos (missing slash, accidental query strings)
-    at startup and log a warning instead of letting a garbled request hit
-    the GitHub API.
+    defence in depth: every :func:`get_settings` call that reads env
+    (the no-pin fallback, including the no-override branch of
+    :func:`bootstrap_settings`) flows through here, so a typo (missing
+    slash, accidental query string, absolute URL) is caught before a
+    garbled request hits the GitHub API. CLI overrides bypass this path
+    entirely because :func:`bootstrap_settings` constructs ``AppSettings``
+    from kwargs directly; ``HOUNDARR_UPDATE_CHECK_REPO`` only affects
+    the env-fallback callers (scripts, tests, and any caller that
+    invokes :func:`bootstrap_settings` with no overrides).
     """
     value = raw.strip()
     if not value:
@@ -220,6 +226,7 @@ class BootstrapOverrides(TypedDict, total=False):
     trusted_proxies: str
     auth_mode: str
     auth_proxy_header: str
+    update_check_repo: str
 
 
 def bootstrap_settings(**overrides: Unpack[BootstrapOverrides]) -> AppSettings:
@@ -235,9 +242,8 @@ def bootstrap_settings(**overrides: Unpack[BootstrapOverrides]) -> AppSettings:
     :func:`get_settings` calls return the same instance until the next
     ``bootstrap_settings`` call (or process restart). Any prior pin is
     replaced; any env var for an *unsupplied* key is ignored (the kwarg
-    path matches the pre-refactor ``AppSettings(data_dir=..., **overrides)``
-    shape, where missing fields take the dataclass default rather than the
-    env value).
+    path builds :class:`AppSettings` from overrides alone, so missing
+    fields take the dataclass default rather than the env value).
 
     With no overrides supplied, any prior pin is cleared and the result of
     :func:`get_settings` (env-var resolved) is returned *without* pinning.

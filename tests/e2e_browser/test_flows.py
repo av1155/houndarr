@@ -763,7 +763,7 @@ def test_changelog_preferences_switch_rolls_back_on_error(
 
 
 @pytest.mark.integration
-def test_login_page_visual(logged_in_page: Page, houndarr_url: str) -> None:
+def test_login_page_visual(logged_in_page: Page, houndarr_url: str, browser_name: str) -> None:
     """Pixel-compare the /login page against the committed baseline.
 
     ``logged_in_page`` puts the browser through setup + login, so by
@@ -771,7 +771,16 @@ def test_login_page_visual(logged_in_page: Page, houndarr_url: str) -> None:
     cookies client-side (``/logout`` only accepts POST, so
     ``page.goto('/logout')`` would trigger a 405 under HTTP GET) and
     navigate to ``/login`` for the capture.
+
+    The committed baseline PNG is captured from chromium only;
+    firefox and webkit render the same DOM with different font and
+    subpixel rasterisation, so a single byte-equal baseline cannot
+    cover all three.  The visual assertion is therefore chromium-
+    only; the other two browsers exercise the rest of the e2e flow
+    on the same page without enforcing pixel parity.
     """
+    if browser_name != "chromium":
+        pytest.skip("visual baselines are chromium-only")
     page = logged_in_page
     page.context.clear_cookies()
     page.goto(f"{houndarr_url}/login")
@@ -882,8 +891,12 @@ def _recreate_admin(page: Page, base_url: str) -> None:
 
 
 @pytest.mark.integration
-def test_setup_page_visual(page: Page, browser, houndarr_url: str) -> None:
+def test_setup_page_visual(page: Page, browser, houndarr_url: str, browser_name: str) -> None:
     """Pixel-compare the /setup page against the committed baseline.
+
+    The committed baseline PNG is chromium-only (see
+    ``test_login_page_visual`` for the rationale); firefox and webkit
+    skip the byte-equal assertion.
 
     Self-healing: works whether the stack entered in a pre-admin state
     (``just capture-baselines`` fresh-data path) or with admin already
@@ -901,6 +914,8 @@ def test_setup_page_visual(page: Page, browser, houndarr_url: str) -> None:
     from residual browser state, which would fail the byte-equal
     assertion even though the HTML is identical.
     """
+    if browser_name != "chromium":
+        pytest.skip("visual baselines are chromium-only")
     _ensure_pre_setup_state(page, houndarr_url)
     capture_context = browser.new_context()
     try:

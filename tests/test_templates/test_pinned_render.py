@@ -32,25 +32,39 @@ def _instance_stub(
     name: str = "Sonarr",
     enabled: bool = True,
 ) -> Any:
+    type_mock = MagicMock()
+    type_mock.value = type_value
+
     stub = MagicMock()
-    stub.id = instance_id
-    stub.name = name
-    stub.url = "http://host:8989"
-    stub.type = MagicMock()
-    stub.type.value = type_value
-    stub.enabled = enabled
-    stub.batch_size = 2
-    stub.hourly_cap = 4
-    stub.sleep_interval_mins = 30
-    stub.cooldown_days = 14
-    stub.cutoff_enabled = False
-    stub.upgrade_enabled = False
-    stub.post_release_grace_hrs = 6
-    stub.queue_limit = 0
-    stub.monitored_total = 0
-    stub.unreleased_count = 0
-    stub.snapshot_refreshed_at = ""
-    stub.allowed_time_window = ""
+
+    stub.core = MagicMock()
+    stub.core.id = instance_id
+    stub.core.name = name
+    stub.core.url = "http://host:8989"
+    stub.core.type = type_mock
+    stub.core.enabled = enabled
+
+    stub.missing = MagicMock()
+    stub.missing.batch_size = 2
+    stub.missing.hourly_cap = 4
+    stub.missing.sleep_interval_mins = 30
+    stub.missing.cooldown_days = 14
+    stub.missing.post_release_grace_hrs = 6
+    stub.missing.queue_limit = 0
+
+    stub.cutoff = MagicMock()
+    stub.cutoff.cutoff_enabled = False
+
+    stub.upgrade = MagicMock()
+    stub.upgrade.upgrade_enabled = False
+
+    stub.snapshot = MagicMock()
+    stub.snapshot.monitored_total = 0
+    stub.snapshot.unreleased_count = 0
+    stub.snapshot.snapshot_refreshed_at = ""
+
+    stub.schedule = MagicMock()
+    stub.schedule.allowed_time_window = ""
     return stub
 
 

@@ -520,6 +520,20 @@ function initLogsPage() {
     }
   }
 
+  // Silently refresh the feed when new cycles land and the user is at
+  // the top: scrolling away triggers the toast path instead, but at the
+  // top there is no need to interrupt the user with a click target. The
+  // refresh fires only when there are real new cycles since the last
+  // refresh so it does not race with the operator's filter input.
+  function maybeAutoRefreshAtTop() {
+    if (pendingCount === 0) return;
+    if (window.scrollY > SCROLL_THRESHOLD) return;
+    if (!window.htmx || !FORM) return;
+    pendingCount = 0;
+    updateBannerVisibility();
+    window.htmx.trigger(FORM, 'submit');
+  }
+
   function updateLiveMeta(isoTs) {
     if (!LIVE_META) return;
     LIVE_META.textContent = isoTs ? `updated ${formatRelTime(isoTs)}` : 'updated just now';
@@ -537,6 +551,7 @@ function initLogsPage() {
       pendingCount = Number(data.count_newer_than) || 0;
       if (data.newest_timestamp) updateLiveMeta(data.newest_timestamp);
       updateBannerVisibility();
+      maybeAutoRefreshAtTop();
     } catch (err) {
       if (err.name !== 'AbortError') {
         // Head poll is best-effort; silently suppress transient

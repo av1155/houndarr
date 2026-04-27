@@ -330,10 +330,7 @@ async def instance_accent_by_name() -> dict[str, str]:
     """
     async with get_db() as db, db.execute("SELECT name, type FROM instances") as cur:
         rows = await cur.fetchall()
-    return {
-        row["name"]: _INSTANCE_TYPE_TO_ACCENT_SLUG.get(row["type"], "")
-        for row in rows
-    }
+    return {row["name"]: _INSTANCE_TYPE_TO_ACCENT_SLUG.get(row["type"], "") for row in rows}
 
 
 async def head_snapshot(since_cycle_id: str | None) -> dict[str, Any]:

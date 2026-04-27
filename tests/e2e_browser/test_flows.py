@@ -687,7 +687,13 @@ def test_changelog_preferences_switch_rolls_back_on_error(
         page.locator("#admin-toggle").click()
     expect(page.locator("#admin-updates")).to_be_visible()
 
-    checkbox = page.locator('#admin-updates input[type="checkbox"][name="enabled"]')
+    # Two `name="enabled"` checkboxes live under #admin-updates after the
+    # changelog-popup toggle landed (auto-update-enable + changelog-popups).
+    # Anchor on the wrapping form's hx-post so this test only ever drives
+    # the changelog form whose /preferences endpoint we mock to 500 below.
+    checkbox = page.locator(
+        'form[hx-post="/settings/changelog/preferences"] input[type="checkbox"][name="enabled"]'
+    )
     initial_checked = checkbox.is_checked()
 
     # Force every /preferences call during this test to fail with 500.

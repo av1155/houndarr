@@ -54,23 +54,11 @@ test:
 test-quick:
     {{pytest}} -n {{workers}} -m "not integration"
 
-# Run a filtered subset (single file, single test, keyword, etc.) under
-# the same parallelism + non-integration marker that test-quick uses.
-# Forwards every remaining positional argument straight to pytest.
-# When the first forwarded argument starts with a dash, prefix the
-# command with `just --` so just does not interpret the dash as one of
-# its own options:
-#     just test-one tests/test_errors.py
-#     just test-one tests/test_errors.py::TestInstanceValidationPublicMessage
-#     just -- test-one -k csrf -v
-test-one *ARGS:
-    {{pytest}} -n {{workers}} -m "not integration" {{ARGS}}
-
 test-integration:
     {{pytest}} -n {{workers}} -m integration tests/test_e2e/
 
-# Run only characterisation (pinning) tests: the Track A safety net that
-# locks current behaviour before a refactor batch touches its module.
+# Run only characterisation (pinning) tests: the safety net that locks
+# current behaviour so a later refactor cannot drift it silently.
 pin:
     {{pytest}} -n {{workers}} -m pinning
 
@@ -115,18 +103,19 @@ e2e-up:
 e2e-down:
     bash scripts/e2e_browser/capture_baselines.sh down
 
-# Capture the Phase 7b visual baselines under
+# Capture the login + setup visual baselines under
 # tests/e2e_browser/_screenshots/.  Runs pytest inside a Linux Playwright
 # container so fonts antialias the way CI's ubuntu-latest renders them;
 # captures /setup first (pre-admin), creates the admin, then captures
-# /login.  Cleans up the stack on exit.  Re-run when the login or setup
-# templates or auth CSS change.
+# /login.  Cleans up the stack on exit.  Re-run when login.html,
+# setup.html, or the auth CSS tokens change.
 capture-baselines:
     bash scripts/e2e_browser/capture_baselines.sh capture
 
-# Verify the committed Phase 7b visual baselines without `--update-snapshots`.
-# Same two-pytest flow as `capture-baselines` but the PNGs on disk must
-# satisfy the assertions; any pixel diff fails the run.
+# Verify the committed login + setup visual baselines without
+# `--update-snapshots`.  Same two-pytest flow as `capture-baselines`
+# but the PNGs on disk must satisfy the assertions; any pixel diff
+# fails the run.
 verify-baselines:
     bash scripts/e2e_browser/capture_baselines.sh verify
 

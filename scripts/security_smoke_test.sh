@@ -119,6 +119,7 @@ PROTECTED_ROUTES=(
     "GET /api/status"
     "GET /api/logs"
     "GET /api/logs/partial"
+    "GET /settings/changelog/full"
     "POST /settings/admin/reset-instances"
     "POST /settings/admin/clear-logs"
     "POST /settings/admin/factory-reset"
@@ -269,12 +270,9 @@ if [[ "$AUTHENTICATED" == "1" ]]; then
         fi
     done
 
-    # factory-reset with valid session + CSRF but wrong password must reject.
-    # Section 5 just maxed the IP-scoped rate-limit bucket with 7 failed
-    # logins; factory-reset shares that same bucket (security fix #496),
-    # so the first attempt here returns 429 instead of the 422 a fresh-IP
-    # call would get.  Both responses prove the endpoint refused the
-    # destructive action; either is acceptable as a security-gate signal.
+    # factory-reset with valid session + CSRF but wrong password must 422
+    # (the endpoint should never redirect unauthenticated, but verify that
+    # the dangerous path is password-gated in builtin mode).
     SC=$(curl -s -o "$BODY" -w "%{http_code}" \
         -X POST \
         --max-redirs 0 \
@@ -283,13 +281,13 @@ if [[ "$AUTHENTICATED" == "1" ]]; then
         -H "X-CSRF-Token: ${CSRF_TOKEN}" \
         -d "confirm_phrase=RESET&current_password=definitely-not-the-password" \
         "$HOST/settings/admin/factory-reset" || true)
-    if [[ "$SC" == "422" || "$SC" == "429" ]]; then
-        _pass "POST /settings/admin/factory-reset with wrong password -> $SC (rejected)"
+    if [[ "$SC" == "422" ]]; then
+        _pass "POST /settings/admin/factory-reset with wrong password -> 422"
     else
-        _fail "POST /settings/admin/factory-reset with wrong password -> $SC (expected 422 or 429)"
+        _fail "POST /settings/admin/factory-reset with wrong password -> $SC (expected 422)"
     fi
 
-    # factory-reset with wrong phrase + right password must still reject.
+    # factory-reset with wrong phrase + right password must still 422.
     SC=$(curl -s -o "$BODY" -w "%{http_code}" \
         -X POST \
         --max-redirs 0 \
@@ -298,10 +296,27 @@ if [[ "$AUTHENTICATED" == "1" ]]; then
         -H "X-CSRF-Token: ${CSRF_TOKEN}" \
         -d "confirm_phrase=nope&current_password=${PASSWORD}" \
         "$HOST/settings/admin/factory-reset" || true)
-    if [[ "$SC" == "422" || "$SC" == "429" ]]; then
-        _pass "POST /settings/admin/factory-reset with wrong phrase -> $SC (rejected)"
+    if [[ "$SC" == "422" ]]; then
+        _pass "POST /settings/admin/factory-reset with wrong phrase -> 422"
     else
-        _fail "POST /settings/admin/factory-reset with wrong phrase -> $SC (expected 422 or 429)"
+        _fail "POST /settings/admin/factory-reset with wrong phrase -> $SC (expected 422)"
+    fi
+
+    # /settings/changelog/full was retired in favour of the GitHub link
+    # on the Admin > Updates card; confirm the route stays removed so a
+    # future accidental re-add is caught. Authenticated routes redirect
+    # unknown paths through AuthMiddleware, so any of 302/303/404 is a
+    # valid "not a live page" signal; the test fails only if the body
+    # ever renders a recognisable Changelog heading again.
+    SC=$(curl -s -o "$BODY" -w "%{http_code}" \
+        --max-redirs 0 \
+        -c /tmp/houndarr_smoke_cookies \
+        -b /tmp/houndarr_smoke_cookies \
+        "$HOST/settings/changelog/full" || true)
+    if [[ "$SC" == "404" || "$SC" == "302" || "$SC" == "303" ]] && ! grep -qi "<h1[^>]*>.*changelog" "$BODY"; then
+        _pass "GET /settings/changelog/full -> $SC (retired route stays retired)"
+    else
+        _fail "GET /settings/changelog/full -> $SC; retired route should not render a Changelog page"
     fi
 
     # Rate limit regression guard: six wrong-password factory-reset

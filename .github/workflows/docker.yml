@@ -9,11 +9,6 @@ on:
       - "**/*.md"
       - "website/**"
       - ".claude/**"
-  schedule:
-    # Weekly arm64 canary every Sunday at 06:00 UTC.  PR builds skip arm64
-    # for speed, so this run is the regular safety net for arm64 regressions
-    # outside the release path.  Not a required check.
-    - cron: "0 6 * * 0"
 
 # Permissions set at job level for least-privilege.
 permissions: {}
@@ -28,26 +23,16 @@ env:
 jobs:
   build:
     name: Build ${{ startsWith(github.ref, 'refs/tags/v') && '+ Push' || '(no push)' }}
-    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     permissions:
       contents: read
       packages: write
-    env:
-      # Avoid the post-build summary upload that has caused workflow hangs.
-      # See docker/build-push-action#1156.
-      DOCKER_BUILD_SUMMARY: "false"
-      DOCKER_BUILD_RECORD_UPLOAD: "false"
     steps:
       - name: Checkout
         uses: actions/checkout@v6
 
-      # QEMU is only needed when an arm64 build will actually run.
-      # Regular PRs are amd64 native; bump PRs (chore/bump-*) and tag pushes
-      # build the full multi-arch image and need emulation.
       - name: Set up QEMU
-        if: startsWith(github.ref, 'refs/tags/v') || startsWith(github.head_ref, 'chore/bump-')
         uses: docker/setup-qemu-action@v4
 
       - name: Set up Docker Buildx
@@ -74,18 +59,12 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # Regular PRs: amd64 only, no attestations (fast feedback; Trivy still scans).
-      # Bump PRs (chore/bump-*): full multi-arch + provenance/sbom so any arm64
-      # break is caught before the tag push (the actual release).
-      # Tag pushes: same as bump PRs, plus push to GHCR.
       - name: Build (and push on tag)
         uses: docker/build-push-action@v7
         with:
           context: .
-          platforms: ${{ (startsWith(github.ref, 'refs/tags/v') || startsWith(github.head_ref, 'chore/bump-')) && 'linux/amd64,linux/arm64' || 'linux/amd64' }}
+          platforms: linux/amd64,linux/arm64
           push: ${{ github.event_name != 'pull_request' && startsWith(github.ref, 'refs/tags/v') }}
-          provenance: ${{ (startsWith(github.ref, 'refs/tags/v') || startsWith(github.head_ref, 'chore/bump-')) && 'mode=max' || 'false' }}
-          sbom: ${{ startsWith(github.ref, 'refs/tags/v') || startsWith(github.head_ref, 'chore/bump-') }}
           build-args: |
             HOUNDARR_VERSION=${{ steps.meta.outputs.version }}
           tags: ${{ steps.meta.outputs.tags }}
@@ -93,42 +72,8 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  arm64-canary:
-    name: arm64 canary build
-    if: github.event_name == 'schedule'
-    runs-on: ubuntu-latest
-    timeout-minutes: 45
-    permissions:
-      contents: read
-    env:
-      DOCKER_BUILD_SUMMARY: "false"
-      DOCKER_BUILD_RECORD_UPLOAD: "false"
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v4
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
-
-      - name: Build linux/arm64 image
-        uses: docker/build-push-action@v7
-        with:
-          context: .
-          platforms: linux/arm64
-          push: false
-          provenance: false
-          sbom: false
-          build-args: |
-            HOUNDARR_VERSION=arm64-canary
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
   scan:
     name: Trivy image scan
-    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     needs: build
@@ -155,7 +100,7 @@ jobs:
           cache-from: type=gha
 
       - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@v0.36.0
+        uses: aquasecurity/trivy-action@0.35.0
         with:
           image-ref: houndarr:scan
           format: table
@@ -167,7 +112,7 @@ jobs:
       # Fork PRs lack security-events: write so this step is skipped.
       - name: Run Trivy (SARIF for GitHub Security tab)
         if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
-        uses: aquasecurity/trivy-action@v0.36.0
+        uses: aquasecurity/trivy-action@0.35.0
         with:
           image-ref: houndarr:scan
           format: sarif

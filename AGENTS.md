@@ -45,100 +45,46 @@ Dev server: `http://localhost:8877`.
 
 ## Quality Gates
 
-Run before every commit. CI enforces the same five plus additional
-security and container checks.
+Run before every commit. CI enforces the same five plus security
+and container checks.
 
 ```bash
-just check      # lint + format-check + mypy + bandit + full pytest, in CI order
-just quick      # lint + mypy + non-integration pytest (fast feedback loop)
-just fix        # ruff --fix + ruff format, applied in place
+just check      # all gates, CI order: lint + fmt-check + type + sec + test
+just quick      # fast loop: lint + type + non-integration pytest
+just fix        # ruff --fix + ruff format
+just lint | fmt-check | type | sec | test  # individual recipes
 ```
 
-`just` is the source of truth.  Individual gates are also available
-when the full sweep is overkill:
-
-```bash
-just lint       # ruff check src/ tests/
-just fmt-check  # ruff format --check src/ tests/
-just type       # mypy src/ (strict)
-just sec        # bandit -r src/ -c pyproject.toml
-just test       # pytest (full suite)
-```
-
-### Recipe index
-
-```bash
-just            # list every recipe
-just check      # all five gates, CI order
-just quick      # lint + type + non-integration pytest (fast feedback loop)
-just fix        # ruff check --fix + ruff format, in place
-just test-quick # pytest -m "not integration"
-just test-one tests/foo.py # filtered run (single file, single test, -k pattern)
-just test-integration  # pytest -m integration tests/test_e2e/
-just test-browser chromium  # Playwright e2e against a live stack
-just dev        # python -m houndarr --data-dir ./data-dev --dev
-```
-
-### Without `just`
-
-If `just` is not installed, every recipe is a thin wrapper; read the
-`justfile` at the repo root for the underlying invocation. The
-authoritative commands the recipes wrap are:
-
-```bash
-.venv/bin/python -m ruff check src/ tests/          # lint
-.venv/bin/python -m ruff format --check src/ tests/  # format check
-.venv/bin/python -m mypy src/                        # type check (strict)
-.venv/bin/python -m bandit -r src/ -c pyproject.toml # SAST
-.venv/bin/pytest                                     # all tests
-```
+If `just` is unavailable, read `justfile` for the underlying
+`.venv/bin/...` invocations.
 
 ---
 
 ## Running Tests
 
-The full collection is ~2502 tests (includes parametrised expansions
-and the 12 async engine-cycle tests tagged `@pytest.mark.integration`).
+~2580 tests (parametrised expansions + 12 async engine-cycle cases
+tagged `@pytest.mark.integration`).  `just test`, `test-quick`,
+`test-integration`, and `pin` run with `pytest -n auto` by default
+(pytest-xdist).  Override with `PYTEST_WORKERS=0` for serial
+triage, or `PYTEST_WORKERS=4` to constrain.
 
 ```bash
-just test               # full suite
-just test-quick         # unit only, skip integration + browser trees
-just test-integration   # the 12 async engine-cycle cases under tests/test_e2e/
-just test-parallel      # pytest -n auto across CPUs (pytest-xdist)
-just pin                # characterisation tests only
-
-# Browser e2e (Playwright; needs a running Houndarr + mock *arr stack).
-# Not collected by default (norecursedirs skips tests/e2e_browser/);
-# invoke the tree explicitly:
-just test-browser chromium
-
-# Visual baseline capture / verify for the Phase 7b login + setup pins.
-# Both recipes orchestrate the mock *arr stack via
-# scripts/e2e_browser/capture_baselines.sh and run pytest inside a
-# Linux Playwright container so fonts match CI's ubuntu-latest renderer.
-# Re-capture is only required when login.html, setup.html, or the
-# auth CSS tokens change; see tests/e2e_browser/_screenshots/README.md.
-just capture-baselines   # produce + commit new PNG baselines
-just verify-baselines    # check committed baselines without re-capturing
+just test               # full suite, parallel
+just test-quick         # unit only (-m "not integration"), parallel
+just test-integration   # tests/test_e2e/ (-m integration), parallel
+just pin                # characterisation tests only, parallel
+just test-browser chromium     # Playwright e2e; serial (shared stack on fixed ports)
+just capture-baselines  # rebuild login/setup PNG baselines (Linux Playwright container)
+just verify-baselines   # check committed baselines without --update-snapshots
 ```
 
-Filtered runs (single file, single test, keyword expression, single
-directory) go through `just test-one`, which forwards every remaining
-argument to pytest under the same xdist parallelism + non-integration
-marker filter that `just test-quick` uses:
+For one-off invocations without a `just` recipe:
 
 ```bash
-just test-one tests/test_auth.py                                       # single file
-just test-one tests/test_auth.py::test_verify_password_correct         # single test
-just test-one tests/test_services/                                     # single directory
-just -- test-one -k csrf -v                                            # keyword filter (pass -- when the first forwarded arg is a flag)
-```
-
-Drop to `.venv/bin/pytest` directly only for invocations the
-recipes do not cover, e.g. coverage reports:
-
-```bash
-.venv/bin/pytest --cov=houndarr --cov-report=term-missing
+.venv/bin/pytest tests/test_auth.py                                    # single file
+.venv/bin/pytest tests/test_auth.py::test_check_password_valid -v      # single test
+.venv/bin/pytest -k "csrf" -v                                          # keyword filter
+.venv/bin/pytest --cov=houndarr --cov-report=term-missing              # coverage
 ```
 
 ### Markers
@@ -620,31 +566,6 @@ explain what the original observation was actually picking up
 (cooldown saturation, recency effects, sort-order interaction, sample
 noise), and close the discussion. A correct "no change required" is a
 successful task, not a non-result.
-
-### Known emergent behaviours (already measured)
-
-These are real but minor effects that have been verified by probe and
-deliberately left alone. Do not re-investigate them unless the
-operating point changes or a user reports a concrete regression.
-
-- Partial-last-page over-selection on missing/cutoff under random
-  search order. When the engine's `page_size` does not divide
-  `totalRecords` evenly, items on the (short) last page are drained
-  every visit because the engine dispatches up to `batch_size` items
-  per page. Measured at most 2x attention skew for the 1-9 items on
-  the last page at default settings (batch=1, pageSize=10) and 4x in
-  contrived configurations (batch=5, pageSize=20). Affects a small
-  slice of the backlog; the only clean fix is a virtual flat-index
-  draw which is a substantial redesign of `_run_search_pass`. Probe:
-  `tests/mock_arr/probe_cooldown.py`.
-- Sonarr / Whisparr v2 windowed-rotation coverage time. The upgrade
-  pass visits 5 series per cycle; full-library coverage takes
-  approximately `ceil(eligible_episodes * H / batch)` cycles where H
-  is the harmonic-coverage factor. Measured 91% theoretical and
-  85-89% empirical coverage at 60 cycles with batch=5 on 50 series.
-  This is the intentional trade-off versus hammering one series with
-  a single huge *arr fetch. Probe:
-  `tests/mock_arr/probe_upgrade_coverage.py`.
 
 ---
 

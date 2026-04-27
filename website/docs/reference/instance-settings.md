@@ -315,8 +315,8 @@ in Settings. New instances are created as enabled by default.
 ## Changelog notifications
 
 The **Changelog notifications** toggle opens a modal after each upgrade
-summarising what shipped. The **Show last changelog** button re-opens
-the same modal on demand.
+summarising what shipped. The **What's new** button re-opens the same
+modal on demand.
 
 <Image
   img={require('@site/static/img/screenshots/houndarr-changelog-modal.png')}

@@ -269,12 +269,10 @@ class TestInstanceSnapshotDefault:
     """
 
     @pytest.mark.asyncio()
-    async def test_default_sums_missing_and_cutoff(self) -> None:
-        ...
+    async def test_default_sums_missing_and_cutoff(self) -> None: ...
 
     @pytest.mark.asyncio()
-    async def test_default_unreleased_count_is_zero(self) -> None:
-        ...
+    async def test_default_unreleased_count_is_zero(self) -> None: ...
 
 
 # Context-manager lifecycle

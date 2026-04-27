@@ -50,7 +50,7 @@
     ]
   },
   "engines": {
-    "node": ">=20.0"
+    "node": ">=22.12"
   },
   "pnpm": {
     "overrides": {

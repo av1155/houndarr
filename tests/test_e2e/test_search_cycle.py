@@ -154,6 +154,7 @@ async def _cooldown_rows(instance_id: int) -> list[dict[str, Any]]:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.integration
 @pytest.mark.asyncio()
 @respx.mock
 async def test_full_cycle_sonarr(sonarr_instance: Instance, master_key: bytes) -> None:
@@ -182,6 +183,7 @@ async def test_full_cycle_sonarr(sonarr_instance: Instance, master_key: bytes) -
     assert cds[0]["item_type"] == "episode"
 
 
+@pytest.mark.integration
 @pytest.mark.asyncio()
 @respx.mock
 async def test_full_cycle_radarr(radarr_instance: Instance, master_key: bytes) -> None:
@@ -213,6 +215,7 @@ async def test_full_cycle_radarr(radarr_instance: Instance, master_key: bytes) -
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.integration
 @pytest.mark.asyncio()
 @respx.mock
 async def test_second_cycle_items_skipped_on_cooldown(
@@ -253,6 +256,7 @@ async def test_second_cycle_items_skipped_on_cooldown(
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.integration
 @pytest.mark.asyncio()
 @respx.mock
 async def test_hourly_cap_enforced(
@@ -306,6 +310,7 @@ async def test_hourly_cap_enforced(
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.integration
 @pytest.mark.asyncio()
 @respx.mock
 async def test_supervisor_graceful_shutdown(
@@ -329,6 +334,7 @@ async def test_supervisor_graceful_shutdown(
     assert sup._tasks == {}  # noqa: SLF001
 
 
+@pytest.mark.integration
 @pytest.mark.asyncio()
 async def test_supervisor_no_instances_starts_cleanly(db: None, master_key: bytes) -> None:
     """Supervisor with zero instances should start and stop without error."""
@@ -343,6 +349,7 @@ async def test_supervisor_no_instances_starts_cleanly(db: None, master_key: byte
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.integration
 @pytest.mark.asyncio()
 @respx.mock
 async def test_supervisor_runs_both_instances(
@@ -386,6 +393,7 @@ async def test_supervisor_runs_both_instances(
     assert radarr_instance.id in instance_ids
 
 
+@pytest.mark.integration
 @pytest.mark.asyncio()
 @respx.mock
 async def test_missing_pass_reaches_deeper_page_when_top_items_are_ineligible(
@@ -424,6 +432,7 @@ async def test_missing_pass_reaches_deeper_page_when_top_items_are_ineligible(
     assert any(row["item_id"] == 602 and row["action"] == "searched" for row in logs)
 
 
+@pytest.mark.integration
 @pytest.mark.asyncio()
 @respx.mock
 async def test_missing_list_calls_are_bounded_per_cycle(
@@ -517,6 +526,7 @@ async def whisparr_v2_instance(db: None, master_key: bytes) -> Instance:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.integration
 @pytest.mark.asyncio()
 @respx.mock
 async def test_full_cycle_lidarr(lidarr_instance: Instance, master_key: bytes) -> None:
@@ -549,6 +559,7 @@ async def test_full_cycle_lidarr(lidarr_instance: Instance, master_key: bytes) -
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.integration
 @pytest.mark.asyncio()
 @respx.mock
 async def test_full_cycle_readarr(readarr_instance: Instance, master_key: bytes) -> None:
@@ -580,6 +591,7 @@ async def test_full_cycle_readarr(readarr_instance: Instance, master_key: bytes)
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.integration
 @pytest.mark.asyncio()
 @respx.mock
 async def test_full_cycle_whisparr_v2(whisparr_v2_instance: Instance, master_key: bytes) -> None:

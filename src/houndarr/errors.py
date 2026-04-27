@@ -139,15 +139,17 @@ class InstanceValidationError(ServiceError):
         Every raise site in this codebase constructs the exception with
         a single literal string argument (e.g. ``raise
         InstanceValidationError("Invalid instance type.")``).  Reading
-        ``args[0]`` returns that literal verbatim, never the chained
-        ``__cause__`` traceback that ``str(exc)`` could potentially
-        leak in some Python builds.  Routes use this accessor so the
-        guard banner cannot accidentally expose internal exception text
-        even if a future raise site forgets to pass a curated string.
+        ``args[0]`` returns that literal verbatim regardless of how
+        many positional args were passed; ``str(exc)`` only matches
+        ``args[0]`` for the single-arg case and otherwise coerces the
+        whole tuple to ``repr(args)`` (e.g. ``"('a', 'b')"``).  Routes
+        use this accessor so the guard banner shows the curated
+        message even if a future raise site forgets the convention
+        and passes multiple positional args.
 
         Returns:
-            ``str(args[0])`` when the exception was constructed with at
-            least one argument; the empty string otherwise.
+            ``str(args[0])`` when the exception was constructed with
+            at least one argument; the empty string otherwise.
         """
         if not self.args:
             return ""

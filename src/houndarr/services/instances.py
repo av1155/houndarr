@@ -6,7 +6,7 @@ caller-supplied Fernet *master_key*; every read decrypts transparently.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from dataclasses import fields as dataclass_fields
 from enum import StrEnum
 from typing import Any
@@ -36,7 +36,6 @@ from houndarr.config import (
     DEFAULT_UPGRADE_WHISPARR_V2_SEARCH_MODE,
     DEFAULT_WHISPARR_V2_SEARCH_MODE,
 )
-from houndarr.database import get_db
 
 
 class InstanceType(StrEnum):
@@ -254,34 +253,38 @@ class InstanceTimestamps:
     updated_at: str
 
 
-@dataclass(init=False)
+@dataclass(frozen=True, slots=True)
 class Instance:
     """In-memory representation of a configured *arr instance.
 
-    Composes seven frozen sub-structs (:class:`InstanceCore`,
-    :class:`MissingPolicy`, :class:`CutoffPolicy`, :class:`UpgradePolicy`,
-    :class:`SchedulePolicy`, :class:`RuntimeSnapshot`,
-    :class:`InstanceTimestamps`) and exposes every flat attribute of
-    the pre-refactor dataclass via ``@property`` delegation.  Both
-    access patterns work: ``instance.batch_size`` reads through to
-    ``instance.missing.batch_size``, and assignment to
-    ``instance.batch_size`` rebuilds the :class:`MissingPolicy`
-    sub-struct via :func:`dataclasses.replace`.
+    Composes seven sub-structs that partition the row into coherent
+    policy groups: :class:`InstanceCore` for identity and wire
+    credentials, :class:`MissingPolicy` / :class:`CutoffPolicy` /
+    :class:`UpgradePolicy` for the three search passes,
+    :class:`SchedulePolicy` for when and in what order the engine
+    runs, :class:`RuntimeSnapshot` for dashboard telemetry, and
+    :class:`InstanceTimestamps` for audit metadata.
 
-    The constructor still accepts the 39 flat keyword arguments the
-    pre-refactor dataclass accepted so every caller site keeps working
-    through the caller-migration batches.  The flat property
-    delegators and the flat-kwargs ``__init__`` are both removed in
-    :ref:`D.20 <track-d>` once every caller has switched to sub-struct
-    access (``instance.missing.batch_size``) and sub-struct
-    construction (``Instance(core=..., missing=...)``).
+    :class:`Instance` is frozen.  Offset rotations and snapshot
+    updates travel through the repository (``update_instance`` or
+    ``update_instance_snapshot``) and surface as a freshly-fetched
+    :class:`Instance`; no call site mutates the in-memory record in
+    place.  Each sub-struct is itself frozen, so field-level writes
+    are also blocked.  Callers that need a modified copy compose
+    :func:`dataclasses.replace`::
 
-    ``api_key`` is always the **decrypted** plaintext value; the
-    encrypted form only ever lives in the database column
-    ``encrypted_api_key``.  :class:`Instance` stays mutable
-    (non-frozen) deliberately: the skip-log cache and test fixtures
-    rely on in-place attribute writes, and the slots audit records
-    this as a known exception.
+        instance = dataclasses.replace(
+            instance, missing=dataclasses.replace(instance.missing, batch_size=1)
+        )
+
+    ``slots=True`` keeps per-instance memory tight and blocks stray
+    attribute assignment on the facade.  Combined with ``frozen=True``
+    the only way to evolve state is by constructing a new value
+    object, which makes the repository the single mutation authority.
+
+    API keys are always decrypted at this layer:
+    ``instance.core.api_key`` returns plaintext; the encrypted form
+    only ever lives in the database column ``encrypted_api_key``.
     """
 
     core: InstanceCore
@@ -291,450 +294,6 @@ class Instance:
     schedule: SchedulePolicy
     snapshot: RuntimeSnapshot
     timestamps: InstanceTimestamps
-
-    def __init__(  # noqa: PLR0913
-        self,
-        *,
-        id: int,  # noqa: A002
-        name: str,
-        type: InstanceType,  # noqa: A002
-        url: str,
-        api_key: str,
-        enabled: bool,
-        batch_size: int,
-        sleep_interval_mins: int,
-        hourly_cap: int,
-        cooldown_days: int,
-        post_release_grace_hrs: int,
-        queue_limit: int,
-        cutoff_enabled: bool,
-        cutoff_batch_size: int,
-        cutoff_cooldown_days: int,
-        cutoff_hourly_cap: int,
-        created_at: str,
-        updated_at: str,
-        sonarr_search_mode: SonarrSearchMode = SonarrSearchMode.episode,
-        lidarr_search_mode: LidarrSearchMode = LidarrSearchMode.album,
-        readarr_search_mode: ReadarrSearchMode = ReadarrSearchMode.book,
-        whisparr_v2_search_mode: WhisparrV2SearchMode = WhisparrV2SearchMode.episode,
-        upgrade_enabled: bool = False,
-        upgrade_batch_size: int = DEFAULT_UPGRADE_BATCH_SIZE,
-        upgrade_cooldown_days: int = DEFAULT_UPGRADE_COOLDOWN_DAYS,
-        upgrade_hourly_cap: int = DEFAULT_UPGRADE_HOURLY_CAP,
-        upgrade_sonarr_search_mode: SonarrSearchMode = SonarrSearchMode.episode,
-        upgrade_lidarr_search_mode: LidarrSearchMode = LidarrSearchMode.album,
-        upgrade_readarr_search_mode: ReadarrSearchMode = ReadarrSearchMode.book,
-        upgrade_whisparr_v2_search_mode: WhisparrV2SearchMode = WhisparrV2SearchMode.episode,
-        upgrade_item_offset: int = 0,
-        upgrade_series_offset: int = 0,
-        upgrade_series_window_size: int = DEFAULT_UPGRADE_SERIES_WINDOW_SIZE,
-        missing_page_offset: int = 1,
-        cutoff_page_offset: int = 1,
-        allowed_time_window: str = "",
-        search_order: SearchOrder = SearchOrder.chronological,
-        monitored_total: int = 0,
-        unreleased_count: int = 0,
-        snapshot_refreshed_at: str = "",
-    ) -> None:
-        """Accept the pre-refactor 39-kwarg shape and build sub-structs.
-
-        Defaults match the pre-refactor :class:`Instance` dataclass
-        field-by-field so byte-level behaviour is preserved for every
-        caller that does not pass a given kwarg.  The sub-struct
-        defaults (which route through :mod:`houndarr.config` constants)
-        apply only when a sub-struct is constructed directly; the
-        Instance facade takes its flat-kwarg defaults as the source of
-        truth to avoid silently changing what ``Instance(...)`` without
-        ``search_order`` resolves to mid-refactor.
-        """
-        self.core = InstanceCore(
-            id=id,
-            name=name,
-            type=type,
-            url=url,
-            api_key=api_key,
-            enabled=enabled,
-        )
-        self.missing = MissingPolicy(
-            batch_size=batch_size,
-            sleep_interval_mins=sleep_interval_mins,
-            hourly_cap=hourly_cap,
-            cooldown_days=cooldown_days,
-            post_release_grace_hrs=post_release_grace_hrs,
-            queue_limit=queue_limit,
-            sonarr_search_mode=sonarr_search_mode,
-            lidarr_search_mode=lidarr_search_mode,
-            readarr_search_mode=readarr_search_mode,
-            whisparr_v2_search_mode=whisparr_v2_search_mode,
-        )
-        self.cutoff = CutoffPolicy(
-            cutoff_enabled=cutoff_enabled,
-            cutoff_batch_size=cutoff_batch_size,
-            cutoff_cooldown_days=cutoff_cooldown_days,
-            cutoff_hourly_cap=cutoff_hourly_cap,
-        )
-        self.upgrade = UpgradePolicy(
-            upgrade_enabled=upgrade_enabled,
-            upgrade_batch_size=upgrade_batch_size,
-            upgrade_cooldown_days=upgrade_cooldown_days,
-            upgrade_hourly_cap=upgrade_hourly_cap,
-            upgrade_sonarr_search_mode=upgrade_sonarr_search_mode,
-            upgrade_lidarr_search_mode=upgrade_lidarr_search_mode,
-            upgrade_readarr_search_mode=upgrade_readarr_search_mode,
-            upgrade_whisparr_v2_search_mode=upgrade_whisparr_v2_search_mode,
-            upgrade_item_offset=upgrade_item_offset,
-            upgrade_series_offset=upgrade_series_offset,
-            upgrade_series_window_size=upgrade_series_window_size,
-        )
-        self.schedule = SchedulePolicy(
-            allowed_time_window=allowed_time_window,
-            search_order=search_order,
-            missing_page_offset=missing_page_offset,
-            cutoff_page_offset=cutoff_page_offset,
-        )
-        self.snapshot = RuntimeSnapshot(
-            monitored_total=monitored_total,
-            unreleased_count=unreleased_count,
-            snapshot_refreshed_at=snapshot_refreshed_at,
-        )
-        self.timestamps = InstanceTimestamps(
-            created_at=created_at,
-            updated_at=updated_at,
-        )
-
-    # InstanceCore delegation.
-
-    @property
-    def id(self) -> int:  # noqa: A003
-        return self.core.id
-
-    @id.setter
-    def id(self, value: int) -> None:
-        self.core = replace(self.core, id=value)
-
-    @property
-    def name(self) -> str:
-        return self.core.name
-
-    @name.setter
-    def name(self, value: str) -> None:
-        self.core = replace(self.core, name=value)
-
-    @property
-    def type(self) -> InstanceType:  # noqa: A003
-        return self.core.type
-
-    @type.setter
-    def type(self, value: InstanceType) -> None:
-        self.core = replace(self.core, type=value)
-
-    @property
-    def url(self) -> str:
-        return self.core.url
-
-    @url.setter
-    def url(self, value: str) -> None:
-        self.core = replace(self.core, url=value)
-
-    @property
-    def api_key(self) -> str:
-        return self.core.api_key
-
-    @api_key.setter
-    def api_key(self, value: str) -> None:
-        self.core = replace(self.core, api_key=value)
-
-    @property
-    def enabled(self) -> bool:
-        return self.core.enabled
-
-    @enabled.setter
-    def enabled(self, value: bool) -> None:
-        self.core = replace(self.core, enabled=value)
-
-    # MissingPolicy delegation.
-
-    @property
-    def batch_size(self) -> int:
-        return self.missing.batch_size
-
-    @batch_size.setter
-    def batch_size(self, value: int) -> None:
-        self.missing = replace(self.missing, batch_size=value)
-
-    @property
-    def sleep_interval_mins(self) -> int:
-        return self.missing.sleep_interval_mins
-
-    @sleep_interval_mins.setter
-    def sleep_interval_mins(self, value: int) -> None:
-        self.missing = replace(self.missing, sleep_interval_mins=value)
-
-    @property
-    def hourly_cap(self) -> int:
-        return self.missing.hourly_cap
-
-    @hourly_cap.setter
-    def hourly_cap(self, value: int) -> None:
-        self.missing = replace(self.missing, hourly_cap=value)
-
-    @property
-    def cooldown_days(self) -> int:
-        return self.missing.cooldown_days
-
-    @cooldown_days.setter
-    def cooldown_days(self, value: int) -> None:
-        self.missing = replace(self.missing, cooldown_days=value)
-
-    @property
-    def post_release_grace_hrs(self) -> int:
-        return self.missing.post_release_grace_hrs
-
-    @post_release_grace_hrs.setter
-    def post_release_grace_hrs(self, value: int) -> None:
-        self.missing = replace(self.missing, post_release_grace_hrs=value)
-
-    @property
-    def queue_limit(self) -> int:
-        return self.missing.queue_limit
-
-    @queue_limit.setter
-    def queue_limit(self, value: int) -> None:
-        self.missing = replace(self.missing, queue_limit=value)
-
-    @property
-    def sonarr_search_mode(self) -> SonarrSearchMode:
-        return self.missing.sonarr_search_mode
-
-    @sonarr_search_mode.setter
-    def sonarr_search_mode(self, value: SonarrSearchMode) -> None:
-        self.missing = replace(self.missing, sonarr_search_mode=value)
-
-    @property
-    def lidarr_search_mode(self) -> LidarrSearchMode:
-        return self.missing.lidarr_search_mode
-
-    @lidarr_search_mode.setter
-    def lidarr_search_mode(self, value: LidarrSearchMode) -> None:
-        self.missing = replace(self.missing, lidarr_search_mode=value)
-
-    @property
-    def readarr_search_mode(self) -> ReadarrSearchMode:
-        return self.missing.readarr_search_mode
-
-    @readarr_search_mode.setter
-    def readarr_search_mode(self, value: ReadarrSearchMode) -> None:
-        self.missing = replace(self.missing, readarr_search_mode=value)
-
-    @property
-    def whisparr_v2_search_mode(self) -> WhisparrV2SearchMode:
-        return self.missing.whisparr_v2_search_mode
-
-    @whisparr_v2_search_mode.setter
-    def whisparr_v2_search_mode(self, value: WhisparrV2SearchMode) -> None:
-        self.missing = replace(self.missing, whisparr_v2_search_mode=value)
-
-    # CutoffPolicy delegation.
-
-    @property
-    def cutoff_enabled(self) -> bool:
-        return self.cutoff.cutoff_enabled
-
-    @cutoff_enabled.setter
-    def cutoff_enabled(self, value: bool) -> None:
-        self.cutoff = replace(self.cutoff, cutoff_enabled=value)
-
-    @property
-    def cutoff_batch_size(self) -> int:
-        return self.cutoff.cutoff_batch_size
-
-    @cutoff_batch_size.setter
-    def cutoff_batch_size(self, value: int) -> None:
-        self.cutoff = replace(self.cutoff, cutoff_batch_size=value)
-
-    @property
-    def cutoff_cooldown_days(self) -> int:
-        return self.cutoff.cutoff_cooldown_days
-
-    @cutoff_cooldown_days.setter
-    def cutoff_cooldown_days(self, value: int) -> None:
-        self.cutoff = replace(self.cutoff, cutoff_cooldown_days=value)
-
-    @property
-    def cutoff_hourly_cap(self) -> int:
-        return self.cutoff.cutoff_hourly_cap
-
-    @cutoff_hourly_cap.setter
-    def cutoff_hourly_cap(self, value: int) -> None:
-        self.cutoff = replace(self.cutoff, cutoff_hourly_cap=value)
-
-    # UpgradePolicy delegation.
-
-    @property
-    def upgrade_enabled(self) -> bool:
-        return self.upgrade.upgrade_enabled
-
-    @upgrade_enabled.setter
-    def upgrade_enabled(self, value: bool) -> None:
-        self.upgrade = replace(self.upgrade, upgrade_enabled=value)
-
-    @property
-    def upgrade_batch_size(self) -> int:
-        return self.upgrade.upgrade_batch_size
-
-    @upgrade_batch_size.setter
-    def upgrade_batch_size(self, value: int) -> None:
-        self.upgrade = replace(self.upgrade, upgrade_batch_size=value)
-
-    @property
-    def upgrade_cooldown_days(self) -> int:
-        return self.upgrade.upgrade_cooldown_days
-
-    @upgrade_cooldown_days.setter
-    def upgrade_cooldown_days(self, value: int) -> None:
-        self.upgrade = replace(self.upgrade, upgrade_cooldown_days=value)
-
-    @property
-    def upgrade_hourly_cap(self) -> int:
-        return self.upgrade.upgrade_hourly_cap
-
-    @upgrade_hourly_cap.setter
-    def upgrade_hourly_cap(self, value: int) -> None:
-        self.upgrade = replace(self.upgrade, upgrade_hourly_cap=value)
-
-    @property
-    def upgrade_sonarr_search_mode(self) -> SonarrSearchMode:
-        return self.upgrade.upgrade_sonarr_search_mode
-
-    @upgrade_sonarr_search_mode.setter
-    def upgrade_sonarr_search_mode(self, value: SonarrSearchMode) -> None:
-        self.upgrade = replace(self.upgrade, upgrade_sonarr_search_mode=value)
-
-    @property
-    def upgrade_lidarr_search_mode(self) -> LidarrSearchMode:
-        return self.upgrade.upgrade_lidarr_search_mode
-
-    @upgrade_lidarr_search_mode.setter
-    def upgrade_lidarr_search_mode(self, value: LidarrSearchMode) -> None:
-        self.upgrade = replace(self.upgrade, upgrade_lidarr_search_mode=value)
-
-    @property
-    def upgrade_readarr_search_mode(self) -> ReadarrSearchMode:
-        return self.upgrade.upgrade_readarr_search_mode
-
-    @upgrade_readarr_search_mode.setter
-    def upgrade_readarr_search_mode(self, value: ReadarrSearchMode) -> None:
-        self.upgrade = replace(self.upgrade, upgrade_readarr_search_mode=value)
-
-    @property
-    def upgrade_whisparr_v2_search_mode(self) -> WhisparrV2SearchMode:
-        return self.upgrade.upgrade_whisparr_v2_search_mode
-
-    @upgrade_whisparr_v2_search_mode.setter
-    def upgrade_whisparr_v2_search_mode(self, value: WhisparrV2SearchMode) -> None:
-        self.upgrade = replace(self.upgrade, upgrade_whisparr_v2_search_mode=value)
-
-    @property
-    def upgrade_item_offset(self) -> int:
-        return self.upgrade.upgrade_item_offset
-
-    @upgrade_item_offset.setter
-    def upgrade_item_offset(self, value: int) -> None:
-        self.upgrade = replace(self.upgrade, upgrade_item_offset=value)
-
-    @property
-    def upgrade_series_offset(self) -> int:
-        return self.upgrade.upgrade_series_offset
-
-    @upgrade_series_offset.setter
-    def upgrade_series_offset(self, value: int) -> None:
-        self.upgrade = replace(self.upgrade, upgrade_series_offset=value)
-
-    @property
-    def upgrade_series_window_size(self) -> int:
-        return self.upgrade.upgrade_series_window_size
-
-    @upgrade_series_window_size.setter
-    def upgrade_series_window_size(self, value: int) -> None:
-        self.upgrade = replace(self.upgrade, upgrade_series_window_size=value)
-
-    # SchedulePolicy delegation.
-
-    @property
-    def allowed_time_window(self) -> str:
-        return self.schedule.allowed_time_window
-
-    @allowed_time_window.setter
-    def allowed_time_window(self, value: str) -> None:
-        self.schedule = replace(self.schedule, allowed_time_window=value)
-
-    @property
-    def search_order(self) -> SearchOrder:
-        return self.schedule.search_order
-
-    @search_order.setter
-    def search_order(self, value: SearchOrder) -> None:
-        self.schedule = replace(self.schedule, search_order=value)
-
-    @property
-    def missing_page_offset(self) -> int:
-        return self.schedule.missing_page_offset
-
-    @missing_page_offset.setter
-    def missing_page_offset(self, value: int) -> None:
-        self.schedule = replace(self.schedule, missing_page_offset=value)
-
-    @property
-    def cutoff_page_offset(self) -> int:
-        return self.schedule.cutoff_page_offset
-
-    @cutoff_page_offset.setter
-    def cutoff_page_offset(self, value: int) -> None:
-        self.schedule = replace(self.schedule, cutoff_page_offset=value)
-
-    # RuntimeSnapshot delegation.
-
-    @property
-    def monitored_total(self) -> int:
-        return self.snapshot.monitored_total
-
-    @monitored_total.setter
-    def monitored_total(self, value: int) -> None:
-        self.snapshot = replace(self.snapshot, monitored_total=value)
-
-    @property
-    def unreleased_count(self) -> int:
-        return self.snapshot.unreleased_count
-
-    @unreleased_count.setter
-    def unreleased_count(self, value: int) -> None:
-        self.snapshot = replace(self.snapshot, unreleased_count=value)
-
-    @property
-    def snapshot_refreshed_at(self) -> str:
-        return self.snapshot.snapshot_refreshed_at
-
-    @snapshot_refreshed_at.setter
-    def snapshot_refreshed_at(self, value: str) -> None:
-        self.snapshot = replace(self.snapshot, snapshot_refreshed_at=value)
-
-    # InstanceTimestamps delegation.
-
-    @property
-    def created_at(self) -> str:
-        return self.timestamps.created_at
-
-    @created_at.setter
-    def created_at(self, value: str) -> None:
-        self.timestamps = replace(self.timestamps, created_at=value)
-
-    @property
-    def updated_at(self) -> str:
-        return self.timestamps.updated_at
-
-    @updated_at.setter
-    def updated_at(self, value: str) -> None:
-        self.timestamps = replace(self.timestamps, updated_at=value)
 
 
 async def create_instance(
@@ -909,43 +468,17 @@ async def list_instances(*, master_key: bytes) -> list[Instance]:
 async def active_error_instance_ids() -> set[int]:
     """Return the set of instance IDs whose newest ``search_log`` row is an error.
 
-    Used by the Settings page to paint the status dot red on a per-row
-    basis. Mirrors the signal the dashboard already keys off
-    (``enabled && active_error``); the dashboard just renders a banner
-    while Settings renders an inline dot.
-
-    The window is narrowed to the last 48 hours so the ROW_NUMBER()
-    partition only scans recent rows. An error that hasn't re-surfaced
-    in two days is stale for the "is this instance healthy right now?"
-    question the dot answers, and a genuinely stuck instance writes
-    fresh error rows well inside that window. Keeps the common case
-    (zero errors) cheap and bounds the cost on installs that bump
-    log retention.
-
-    The cutoff is formatted with ``strftime('%Y-%m-%dT%H:%M:%fZ', ...)``
-    so it matches the stored column format exactly. SQLite compares
-    TEXT lexicographically, and ``datetime('now', '-2 days')`` returns
-    a space-separated value; at position 10 of the comparison that
-    space (0x20) sorts below the stored value's 'T' (0x54), which lets
-    same-calendar-day rows older than 48 h slip through the filter.
-    Matching formats makes the comparison a pure ISO-8601 string
-    compare and restores the advertised window.
+    Thin delegator over
+    :func:`houndarr.repositories.search_log.fetch_active_error_instance_ids`
+    since D.27.  The service layer exposes this for the settings
+    page and dashboard consumers; the repository owns the windowed
+    ``ROW_NUMBER()`` SQL.  See the repository function's docstring
+    for the reasoning behind the 48-hour window and the
+    ``strftime`` cutoff format.
     """
-    sql = """
-    SELECT instance_id FROM (
-        SELECT instance_id, action,
-               ROW_NUMBER() OVER (
-                   PARTITION BY instance_id ORDER BY timestamp DESC
-               ) AS rn
-        FROM search_log
-        WHERE timestamp >= strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-2 days')
-    )
-    WHERE rn = 1 AND action = 'error'
-    """
-    async with get_db() as db:
-        async with db.execute(sql) as cur:
-            rows = await cur.fetchall()
-    return {int(row["instance_id"]) for row in rows}
+    from houndarr.repositories.search_log import fetch_active_error_instance_ids
+
+    return await fetch_active_error_instance_ids()
 
 
 async def update_instance(
@@ -957,35 +490,49 @@ async def update_instance(
     """Partially update an instance and return the refreshed :class:`Instance`.
 
     Thin delegator over
-    :func:`houndarr.repositories.instances.update_instance`.  Accepts
-    any subset of the mutable columns as kwargs to preserve the
-    pre-D.4 call sites; unrecognised field names are silently ignored
-    for safety and the remainder are packed into an
-    :class:`~houndarr.repositories.instances.InstanceUpdate` payload.
-    Payloads with no non-``None`` fields cause the repository to
-    no-op, at which point this function still re-fetches and returns
-    the current :class:`Instance` so the pre-refactor
-    empty-update-returns-state contract stays intact.
+    :func:`houndarr.repositories.instances.update_instance`.  Kwargs
+    are packed into an
+    :class:`~houndarr.repositories.instances.InstanceUpdate` payload
+    and forwarded.  Payloads with no non-``None`` fields cause the
+    repository to no-op, at which point this function still re-
+    fetches and returns the current :class:`Instance` so the pre-
+    refactor empty-update-returns-state contract stays intact.
+
+    Unknown kwargs raise :class:`TypeError`.  Until the review-
+    adversarial pass that landed with this change the surface
+    silently dropped unrecognised names "for safety"; that made
+    rename drift (either a repository column rename or a caller-
+    side typo) a silent bug farm where the SQL update ran with
+    fewer fields than the caller expected.  Raising surfaces the
+    drift at the call site instead, and every production caller
+    already passes only valid column names.
 
     Args:
         id: Primary key of the instance to update.
         master_key: Fernet key used to re-encrypt ``api_key`` when
             that field is part of the update, and to decrypt on the
             return-value round trip.
-        **fields: Column-value pairs to update.  See
-            :class:`~houndarr.repositories.instances.InstanceUpdate`
-            for the accepted keys; values that do not appear there
-            are silently dropped.
+        **fields: Column-value pairs to update.  Every key must be a
+            field name on
+            :class:`~houndarr.repositories.instances.InstanceUpdate`;
+            unknown names raise :class:`TypeError` with the offending
+            key set named explicitly.
 
     Returns:
         Updated :class:`Instance`, or ``None`` if *id* does not exist.
+
+    Raises:
+        TypeError: When *fields* contains a key that is not a valid
+            :class:`InstanceUpdate` column.
     """
     from houndarr.repositories.instances import InstanceUpdate
     from houndarr.repositories.instances import update_instance as _repo_update_instance
 
     allowed_field_names = {f.name for f in dataclass_fields(InstanceUpdate)}
-    payload_kwargs = {name: value for name, value in fields.items() if name in allowed_field_names}
-    payload = InstanceUpdate(**payload_kwargs)
+    unknown = fields.keys() - allowed_field_names
+    if unknown:
+        raise TypeError("update_instance received unknown field(s): " + ", ".join(sorted(unknown)))
+    payload = InstanceUpdate(**fields)
 
     await _repo_update_instance(id, payload, master_key=master_key)
     return await get_instance(id, master_key=master_key)

@@ -13,12 +13,19 @@ from houndarr.database import get_db
 from houndarr.engine.candidates import ItemType
 from houndarr.services.cooldown import _reset_skip_log_cache
 from houndarr.services.instances import (
+    CutoffPolicy,
     Instance,
+    InstanceCore,
+    InstanceTimestamps,
     InstanceType,
     LidarrSearchMode,
+    MissingPolicy,
     ReadarrSearchMode,
+    RuntimeSnapshot,
+    SchedulePolicy,
     SearchOrder,
     SonarrSearchMode,
+    UpgradePolicy,
     WhisparrV2SearchMode,
 )
 
@@ -45,6 +52,7 @@ RADARR_URL = "http://radarr:7878"
 LIDARR_URL = "http://lidarr:8686"
 READARR_URL = "http://readarr:8787"
 WHISPARR_V2_URL = "http://whisparr:6969"
+WHISPARR_V3_URL = "http://whisparr-v3:6970"
 MASTER_KEY: bytes = Fernet.generate_key()
 
 _EPISODE_RECORD: dict[str, Any] = {
@@ -181,42 +189,55 @@ def make_instance(
     """Build an Instance with sensible defaults for testing."""
     resolved_url = url or URL_FOR_TYPE.get(itype, SONARR_URL)
     return Instance(
-        id=instance_id,
-        name="Test Instance",
-        type=itype,
-        url=resolved_url,
-        api_key="test-api-key",
-        enabled=enabled,
-        batch_size=batch_size,
-        sleep_interval_mins=15,
-        hourly_cap=hourly_cap,
-        cooldown_days=cooldown_days,
-        post_release_grace_hrs=post_release_grace_hrs,
-        queue_limit=queue_limit,
-        cutoff_enabled=cutoff_enabled,
-        cutoff_batch_size=cutoff_batch_size,
-        cutoff_cooldown_days=cutoff_cooldown_days,
-        cutoff_hourly_cap=cutoff_hourly_cap,
-        created_at="2024-01-01T00:00:00Z",
-        updated_at="2024-01-01T00:00:00Z",
-        sonarr_search_mode=sonarr_search_mode,
-        lidarr_search_mode=lidarr_search_mode,
-        readarr_search_mode=readarr_search_mode,
-        whisparr_v2_search_mode=whisparr_v2_search_mode,
-        upgrade_enabled=upgrade_enabled,
-        upgrade_batch_size=upgrade_batch_size,
-        upgrade_cooldown_days=upgrade_cooldown_days,
-        upgrade_hourly_cap=upgrade_hourly_cap,
-        upgrade_sonarr_search_mode=upgrade_sonarr_search_mode,
-        upgrade_lidarr_search_mode=upgrade_lidarr_search_mode,
-        upgrade_readarr_search_mode=upgrade_readarr_search_mode,
-        upgrade_whisparr_v2_search_mode=upgrade_whisparr_v2_search_mode,
-        upgrade_item_offset=upgrade_item_offset,
-        upgrade_series_offset=upgrade_series_offset,
-        missing_page_offset=missing_page_offset,
-        cutoff_page_offset=cutoff_page_offset,
-        allowed_time_window=allowed_time_window,
-        search_order=search_order,
+        core=InstanceCore(
+            id=instance_id,
+            name="Test Instance",
+            type=itype,
+            url=resolved_url,
+            api_key="test-api-key",
+            enabled=enabled,
+        ),
+        missing=MissingPolicy(
+            batch_size=batch_size,
+            sleep_interval_mins=15,
+            hourly_cap=hourly_cap,
+            cooldown_days=cooldown_days,
+            post_release_grace_hrs=post_release_grace_hrs,
+            queue_limit=queue_limit,
+            sonarr_search_mode=sonarr_search_mode,
+            lidarr_search_mode=lidarr_search_mode,
+            readarr_search_mode=readarr_search_mode,
+            whisparr_v2_search_mode=whisparr_v2_search_mode,
+        ),
+        cutoff=CutoffPolicy(
+            cutoff_enabled=cutoff_enabled,
+            cutoff_batch_size=cutoff_batch_size,
+            cutoff_cooldown_days=cutoff_cooldown_days,
+            cutoff_hourly_cap=cutoff_hourly_cap,
+        ),
+        upgrade=UpgradePolicy(
+            upgrade_enabled=upgrade_enabled,
+            upgrade_batch_size=upgrade_batch_size,
+            upgrade_cooldown_days=upgrade_cooldown_days,
+            upgrade_hourly_cap=upgrade_hourly_cap,
+            upgrade_sonarr_search_mode=upgrade_sonarr_search_mode,
+            upgrade_lidarr_search_mode=upgrade_lidarr_search_mode,
+            upgrade_readarr_search_mode=upgrade_readarr_search_mode,
+            upgrade_whisparr_v2_search_mode=upgrade_whisparr_v2_search_mode,
+            upgrade_item_offset=upgrade_item_offset,
+            upgrade_series_offset=upgrade_series_offset,
+        ),
+        schedule=SchedulePolicy(
+            allowed_time_window=allowed_time_window,
+            search_order=search_order,
+            missing_page_offset=missing_page_offset,
+            cutoff_page_offset=cutoff_page_offset,
+        ),
+        snapshot=RuntimeSnapshot(),
+        timestamps=InstanceTimestamps(
+            created_at="2024-01-01T00:00:00Z",
+            updated_at="2024-01-01T00:00:00Z",
+        ),
     )
 
 
@@ -240,6 +261,7 @@ async def seeded_instances(db: None) -> AsyncGenerator[None, None]:
                 (3, "Lidarr Test", "lidarr", LIDARR_URL, encrypted),
                 (4, "Readarr Test", "readarr", READARR_URL, encrypted),
                 (5, "Whisparr Test", "whisparr_v2", WHISPARR_V2_URL, encrypted),
+                (6, "Whisparr V3 Test", "whisparr_v3", WHISPARR_V3_URL, encrypted),
             ],
         )
         await conn.commit()

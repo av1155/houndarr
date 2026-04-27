@@ -15,7 +15,19 @@ from cryptography.fernet import Fernet
 from houndarr.database import get_db
 from houndarr.engine import supervisor as _supervisor_mod
 from houndarr.engine.supervisor import Supervisor
-from houndarr.services.instances import Instance, InstanceType, SonarrSearchMode
+from houndarr.services.instances import (
+    CutoffPolicy,
+    Instance,
+    InstanceCore,
+    InstanceTimestamps,
+    InstanceType,
+    MissingPolicy,
+    RuntimeSnapshot,
+    SchedulePolicy,
+    SearchOrder,
+    SonarrSearchMode,
+    UpgradePolicy,
+)
 
 # ---------------------------------------------------------------------------
 # Shared constants
@@ -37,25 +49,36 @@ def _make_instance(
     sleep_interval_mins: int = 30,
 ) -> Instance:
     return Instance(
-        id=instance_id,
-        name="Test Sonarr",
-        type=InstanceType.sonarr,
-        url=url,
-        api_key="test-api-key",
-        enabled=enabled,
-        batch_size=2,
-        sleep_interval_mins=sleep_interval_mins,
-        hourly_cap=4,
-        cooldown_days=14,
-        post_release_grace_hrs=6,
-        queue_limit=0,
-        cutoff_enabled=False,
-        cutoff_batch_size=1,
-        cutoff_cooldown_days=21,
-        cutoff_hourly_cap=1,
-        created_at="2024-01-01T00:00:00Z",
-        updated_at="2024-01-01T00:00:00Z",
-        sonarr_search_mode=SonarrSearchMode.episode,
+        core=InstanceCore(
+            id=instance_id,
+            name="Test Sonarr",
+            type=InstanceType.sonarr,
+            url=url,
+            api_key="test-api-key",
+            enabled=enabled,
+        ),
+        missing=MissingPolicy(
+            batch_size=2,
+            sleep_interval_mins=sleep_interval_mins,
+            hourly_cap=4,
+            cooldown_days=14,
+            post_release_grace_hrs=6,
+            queue_limit=0,
+            sonarr_search_mode=SonarrSearchMode.episode,
+        ),
+        cutoff=CutoffPolicy(
+            cutoff_enabled=False,
+            cutoff_batch_size=1,
+            cutoff_cooldown_days=21,
+            cutoff_hourly_cap=1,
+        ),
+        upgrade=UpgradePolicy(),
+        schedule=SchedulePolicy(search_order=SearchOrder.chronological),
+        snapshot=RuntimeSnapshot(),
+        timestamps=InstanceTimestamps(
+            created_at="2024-01-01T00:00:00Z",
+            updated_at="2024-01-01T00:00:00Z",
+        ),
     )
 
 
@@ -117,7 +140,7 @@ async def test_instance_loop_waits_startup_grace_before_first_cycle(
     ):
         supervisor = Supervisor(master_key=MASTER_KEY)
         with pytest.raises(asyncio.CancelledError):  # noqa: PT012
-            await supervisor._instance_loop(instance.id)  # noqa: SLF001
+            await supervisor._instance_loop(instance.core.id)  # noqa: SLF001
 
     # The very first sleep must be the startup grace, not the inter-cycle sleep.
     assert sleep_calls, "expected at least one asyncio.sleep call"
@@ -149,7 +172,7 @@ async def test_instance_loop_applies_startup_offset(
     ):
         supervisor = Supervisor(master_key=MASTER_KEY)
         with pytest.raises(asyncio.CancelledError):  # noqa: PT012
-            await supervisor._instance_loop(instance.id, startup_offset=60)  # noqa: SLF001
+            await supervisor._instance_loop(instance.core.id, startup_offset=60)  # noqa: SLF001
 
     assert sleep_calls, "expected at least one asyncio.sleep call"
     assert sleep_calls[0] == 70  # 10 (grace) + 60 (offset)
@@ -174,9 +197,9 @@ async def test_start_staggers_instance_tasks() -> None:
         await supervisor.start()
 
     assert mock_start.call_count == 2
-    assert mock_start.call_args_list[0].args == (instance1.id,)
+    assert mock_start.call_args_list[0].args == (instance1.core.id,)
     assert mock_start.call_args_list[0].kwargs["startup_offset"] == 0
-    assert mock_start.call_args_list[1].args == (instance2.id,)
+    assert mock_start.call_args_list[1].args == (instance2.core.id,)
     assert mock_start.call_args_list[1].kwargs["startup_offset"] == _STARTUP_STAGGER_SECS
 
 
@@ -211,7 +234,7 @@ async def test_first_connect_error_writes_exactly_one_error_row(
     ):
         supervisor = Supervisor(master_key=MASTER_KEY)
         with pytest.raises(asyncio.CancelledError):
-            await supervisor._instance_loop(instance.id)  # noqa: SLF001
+            await supervisor._instance_loop(instance.core.id)  # noqa: SLF001
 
     rows = await _get_log_rows()
     error_rows = [r for r in rows if r["action"] == "error"]
@@ -245,7 +268,7 @@ async def test_repeated_connect_errors_write_only_one_error_row(
     ):
         supervisor = Supervisor(master_key=MASTER_KEY)
         with pytest.raises(asyncio.CancelledError):
-            await supervisor._instance_loop(instance.id)  # noqa: SLF001
+            await supervisor._instance_loop(instance.core.id)  # noqa: SLF001
 
     rows = await _get_log_rows()
     error_rows = [r for r in rows if r["action"] == "error"]
@@ -282,7 +305,7 @@ async def test_recovery_after_connect_error_writes_info_row(
     ):
         supervisor = Supervisor(master_key=MASTER_KEY)
         with pytest.raises(asyncio.CancelledError):
-            await supervisor._instance_loop(instance.id)  # noqa: SLF001
+            await supervisor._instance_loop(instance.core.id)  # noqa: SLF001
 
     rows = await _get_log_rows()
     info_rows = [r for r in rows if r["action"] == "info"]
@@ -319,7 +342,7 @@ async def test_no_extra_log_rows_during_retry_sequence(
     ):
         supervisor = Supervisor(master_key=MASTER_KEY)
         with pytest.raises(asyncio.CancelledError):
-            await supervisor._instance_loop(instance.id)  # noqa: SLF001
+            await supervisor._instance_loop(instance.core.id)  # noqa: SLF001
 
     rows = await _get_log_rows()
     # Expect exactly: 1 error (first failure) + 1 info (recovery) = 2 rows total
@@ -373,11 +396,11 @@ async def test_refresh_all_snapshots_once_updates_enabled_instances(
         supervisor = Supervisor(master_key=MASTER_KEY)
         await supervisor._refresh_all_snapshots_once()  # noqa: SLF001
 
-    refreshed = await get_instance(inst.id, master_key=MASTER_KEY)
+    refreshed = await get_instance(inst.core.id, master_key=MASTER_KEY)
     assert refreshed is not None
-    assert refreshed.monitored_total == 42
-    assert refreshed.unreleased_count == 3
-    assert refreshed.snapshot_refreshed_at != ""
+    assert refreshed.snapshot.monitored_total == 42
+    assert refreshed.snapshot.unreleased_count == 3
+    assert refreshed.snapshot.snapshot_refreshed_at != ""
 
 
 @pytest.mark.asyncio()
@@ -398,9 +421,9 @@ async def test_refresh_all_snapshots_skips_disabled(
         await supervisor._refresh_all_snapshots_once()  # noqa: SLF001
 
     assert fake_client_call.await_count == 0
-    refreshed = await get_instance(inst.id, master_key=MASTER_KEY)
+    refreshed = await get_instance(inst.core.id, master_key=MASTER_KEY)
     assert refreshed is not None
-    assert refreshed.monitored_total == 0  # unchanged from default
+    assert refreshed.snapshot.monitored_total == 0  # unchanged from default
 
 
 @pytest.mark.asyncio()
@@ -463,12 +486,12 @@ async def test_refresh_one_snapshot_quiet_on_small_unreleased_change(
     "no log fired" half of the contract.
     """
     from houndarr.clients.base import InstanceSnapshot, ReconcileSets
-    from houndarr.services.instances import update_instance_snapshot
+    from houndarr.repositories.instances import update_instance_snapshot
 
     inst = _make_instance(enabled=True)
 
     # Seed a prior count of 5; the new snapshot returns 7 (delta = 2).
-    await update_instance_snapshot(inst.id, monitored_total=10, unreleased_count=5)
+    await update_instance_snapshot(inst.core.id, monitored_total=10, unreleased_count=5)
 
     fake_client = AsyncMock()
 

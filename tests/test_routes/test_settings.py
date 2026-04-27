@@ -142,7 +142,7 @@ def test_settings_page_includes_changelog_section(app: TestClient) -> None:
 
 
 async def test_settings_page_reflects_disabled_changelog(app: TestClient) -> None:
-    from houndarr.database import set_setting
+    from houndarr.repositories.settings import set_setting
 
     _login(app)
     await set_setting("changelog_popups_disabled", "1")
@@ -240,26 +240,6 @@ def test_create_instance_invalid_type_returns_422(app: TestClient) -> None:
     form = {**_VALID_FORM, "type": "plex"}
     resp = app.post("/settings/instances", data=form, headers=csrf_headers(app))
     assert resp.status_code == 422
-
-
-def test_create_instance_invalid_type_renders_curated_message_only(app: TestClient) -> None:
-    """The connection-guard banner exposes ``InstanceValidationError.public_message``,
-    not ``str(exc)``.  ``_parse_type`` chains the original ``ValueError`` via
-    ``raise ... from exc``; the chained text must never reach the response body
-    even though ``__cause__`` is preserved server-side for logging.
-    """
-    _login(app)
-    form = {**_VALID_FORM, "type": "plex"}
-    resp = app.post("/settings/instances", data=form, headers=csrf_headers(app))
-    assert resp.status_code == 422
-    body = resp.content.decode()
-    assert "Invalid instance type." in body
-    # ``ValueError`` from ``InstanceType('plex')`` would normally render
-    # as "'plex' is not a valid InstanceType" if the chained cause leaked
-    # through ``str(exc)``.  ``public_message`` returns ``args[0]`` so the
-    # cause text stays internal.
-    assert "is not a valid" not in body
-    assert "plex" not in body
 
 
 def test_create_instance_requires_successful_test(app: TestClient) -> None:

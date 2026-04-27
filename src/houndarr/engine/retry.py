@@ -8,10 +8,10 @@ follows.  This file owns that logic so the supervisor's ``while True``
 loop body stays straight-line and the state-transition rules can be
 exercised directly.
 
-Track C.11 introduces this module.  The user explicitly rejected
-``tenacity`` and ``httpx-retries``: there is no new runtime dep here,
-just a small ``ReconnectState`` plus a single ``run_with_reconnect``
-helper.
+The helper is deliberately hand-rolled (no ``tenacity`` /
+``httpx-retries`` dependency) because the state surface is small:
+a :class:`ReconnectState` plus one :func:`run_with_reconnect`
+driver are enough for every retry path in the codebase.
 """
 
 from __future__ import annotations
@@ -131,12 +131,12 @@ async def run_with_reconnect(
     if got_connect_error:
         if not state.in_retry:
             await write_log(
-                instance_id=instance.id,
+                instance_id=instance.core.id,
                 item_id=None,
                 item_type=None,
                 action=SearchAction.error.value,
                 cycle_trigger=cycle_trigger,
-                message=f"Could not reach {instance.url}",
+                message=f"Could not reach {instance.core.url}",
             )
         state.in_retry = True
         return _apply_jitter(error_retry_secs, jitter_secs)
@@ -144,16 +144,16 @@ async def run_with_reconnect(
     if state.in_retry:
         logger.info(
             "Reconnect: %r (%s) is reachable again",
-            instance.name,
-            instance.url,
+            instance.core.name,
+            instance.core.url,
         )
         await write_log(
-            instance_id=instance.id,
+            instance_id=instance.core.id,
             item_id=None,
             item_type=None,
             action=SearchAction.info.value,
             cycle_trigger=cycle_trigger,
-            message=f"{instance.name!r} ({instance.url}) is reachable again",
+            message=f"{instance.core.name!r} ({instance.core.url}) is reachable again",
         )
         state.in_retry = False
     return _apply_jitter(success_sleep_secs, jitter_secs)

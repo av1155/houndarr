@@ -1,23 +1,23 @@
 """Dashboard-metrics service: SQL aggregations for ``/api/status``.
 
-Track D.8 lifts the metrics SQL out of
-:mod:`houndarr.routes.api.status` so the route handler can stay
-short and the queries are testable without spinning up FastAPI.
-The functions live here, paired with the SQL constants that drive
-them; the route composes them and assembles the JSON envelope.
+The metrics SQL lives here, paired with the SQL constants that drive
+it; the :mod:`houndarr.routes.api.status` route composes the
+functions and assembles the JSON envelope.  Pulling the queries into
+a service keeps the route handler short and lets the queries be
+tested without spinning up FastAPI.
 
 Connection lifetime stays with the caller: every public function
 takes an open :class:`aiosqlite.Connection` (typically the route's
 ``async with get_db() as db:`` scope) so all five lookups run on the
 same SQLite handle.  That keeps the read-side consistent and lets
-the route batch its queries inside one ``BEGIN`` / connection close
-without crossing a service boundary mid-transaction.
+the route batch its queries inside one connection scope without
+crossing a service boundary mid-transaction.
 
 The Python-side aggregation in :func:`gather_cooldown_data` (per-row
 unlock-time computation, batch-clone spread for ``unlocking_next``)
-moves with the SQL: it has no useful lifetime apart from the rows
-the SQL produces, and pulling it apart would force the caller to
-re-derive the same per-row context.
+lives next to the SQL: it has no useful lifetime apart from the
+rows the SQL produces, and pulling it apart would force the caller
+to re-derive the same per-row context.
 """
 
 from __future__ import annotations
@@ -128,27 +128,25 @@ ORDER BY sl.timestamp DESC
 LIMIT ?
 """
 
-# Per-instance cooldown rows with the most recent searched kind attached.
-# Small correlated subqueries are fine here: cooldowns is typically <100 rows
-# per instance and each subquery uses the idx_search_log_instance index.
+# Per-instance cooldown rows.  search_kind is stamped on the row at
+# insert time (see schema v14 + repositories.cooldowns.upsert_cooldown),
+# so the breakdown reads it directly instead of re-classifying via a
+# correlated search_log subquery on every /api/status poll.  The
+# item_label subquery stays because labels are still sourced from
+# search_log and change as items are re-searched.
 _COOLDOWNS_SQL = """
 SELECT
     c.instance_id,
     c.item_id,
     c.item_type,
+    c.search_kind,
     c.searched_at,
     (SELECT sl.item_label FROM search_log sl
      WHERE sl.instance_id = c.instance_id
        AND sl.item_id = c.item_id
        AND sl.item_type = c.item_type
        AND sl.action = 'searched'
-     ORDER BY sl.timestamp DESC LIMIT 1) AS item_label,
-    (SELECT sl.search_kind FROM search_log sl
-     WHERE sl.instance_id = c.instance_id
-       AND sl.item_id = c.item_id
-       AND sl.item_type = c.item_type
-       AND sl.action = 'searched'
-     ORDER BY sl.timestamp DESC LIMIT 1) AS last_search_kind
+     ORDER BY sl.timestamp DESC LIMIT 1) AS item_label
 FROM cooldowns c
 WHERE c.instance_id IN ({placeholders})
 """
@@ -521,7 +519,10 @@ async def gather_cooldown_data(
     async with db.execute(_COOLDOWNS_SQL.format(placeholders=placeholders), instance_ids) as cur:
         async for row in cur:
             iid = int(row["instance_id"])
-            kind = str(row["last_search_kind"]) if row["last_search_kind"] else "missing"
+            # search_kind is a stamped column constrained to the three
+            # enum values; the DB CHECK guarantees it; fall back to
+            # "missing" only if a legacy row somehow slipped through.
+            kind = str(row["search_kind"]) if row["search_kind"] else "missing"
             bucket = kind if kind in ("missing", "cutoff", "upgrade") else "missing"
             out[iid]["cooldown_breakdown"][bucket] += 1
             out[iid]["cooldown_total"] += 1
@@ -542,6 +543,12 @@ async def gather_cooldown_data(
             try:
                 parsed = datetime.fromisoformat(entry["searched_at"].replace("Z", "+00:00"))
             except ValueError:
+                # Defensive: repositories/cooldowns always writes ISO-8601
+                # via _iso(), so a malformed timestamp means the row was
+                # seeded by a pre-D.5 fixture or external tooling.  The
+                # row still counts in cooldown_total + cooldown_breakdown
+                # above; only unlocking_next skips it, so the dashboard
+                # shows the correct count but no unlock estimate.
                 continue
             if parsed.tzinfo is None:
                 parsed = parsed.replace(tzinfo=UTC)

@@ -4,10 +4,7 @@
 
 {% block title %}Setup | Houndarr{% endblock %}
 
-{% block head %}
-<link rel="stylesheet" href="/static/css/auth.css?v={{ version }}" />
-<link rel="stylesheet" href="/static/css/auth-fields.css?v={{ version }}" />
-{% endblock %}
+{% block head %}{% endblock %}
 
 {% block content %}
 <div class="auth-card">
@@ -57,56 +54,19 @@
       </div>
 
       <div class="field">
-        <label class="field__label" for="setup-password">
-          <span>Password</span>
-        </label>
-        <div class="input-wrap">
-          <svg class="leading" width="16" height="16" viewBox="0 0 24 24" fill="none"
-               stroke="currentColor" stroke-width="2" stroke-linecap="round"
-               stroke-linejoin="round" aria-hidden="true">
-            <rect x="3" y="11" width="18" height="10" rx="2"/>
-            <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
-          </svg>
-          <input id="setup-password" name="password" type="password"
-                 class="station-input has-trailing mono"
-                 autocomplete="new-password" required minlength="8"
-                 placeholder="Minimum 8 characters"
-                 data-pw-input data-strength-source
-                 {% if error %}aria-invalid="true"{% endif %} />
-          <div class="input-trailing">
-            <span class="caps-badge" role="status" aria-label="Caps Lock is on">
-              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"
-                   stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <path d="M8 3.2 3.6 7.6h2.5v4h3.8v-4h2.5z"/>
-                <line x1="5.6" y1="13.3" x2="10.4" y2="13.3"/>
-              </svg>
-            </span>
-            <button type="button" class="icon-btn"
-                    aria-label="Show password" aria-pressed="false"
-                    data-pw-toggle tabindex="-1">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
-                   stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                   stroke-linejoin="round" aria-hidden="true">
-                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8S1 12 1 12z"/>
-                <circle cx="12" cy="12" r="3"/>
-              </svg>
-            </button>
-          </div>
-        </div>
-        <div class="strength" data-strength role="meter"
-             aria-label="Password strength"
-             aria-valuemin="0" aria-valuemax="4" aria-valuenow="0" aria-valuetext="—">
-          <div class="strength__track">
-            <div class="strength__seg"></div>
-            <div class="strength__seg"></div>
-            <div class="strength__seg"></div>
-            <div class="strength__seg"></div>
-          </div>
-          <div class="strength__meta">
-            <span>Strength</span>
-            <span class="strength__label">—</span>
-          </div>
-        </div>
+        {{ forms.password_input(
+            id="setup-password",
+            name="password",
+            label="Password",
+            variant="auth",
+            leading="padlock",
+            autocomplete="new-password",
+            placeholder="Minimum 8 characters",
+            minlength=8,
+            strength_meter=true,
+            data_strength_source=true,
+            aria_invalid=error,
+        ) }}
       </div>
 
       <div class="field">

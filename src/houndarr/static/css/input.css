@@ -251,22 +251,21 @@
 
 /* Layered imports: custom design tokens and component primitives.
    Order matters for cascade: tokens first (variables), then layout,
-   then per-page. Tailwind utilities always win regardless of order.
-   auth.css and auth-fields.css are introduced by later PRs (login /
-   setup redesign + Settings password primitives); their @import lines
-   are added back when those files land. */
+   then per-page. Tailwind utilities always win regardless of order. */
 @import "./tokens.css";
 @import "./app.css";
+@import "./auth.css";
+@import "./auth-fields.css";
 @import "./logs.css";
 
 /* Named duration utilities.  Tailwind v4 has no `--duration-*` theme
    namespace (durations normally go via numeric arbitrary values), so
    register fast / base as custom utilities driven by CSS variables
-   declared on :root in tokens.css.  A third step `duration-slow`
-   existed pre-Track-G but had zero template consumers; the 280ms
-   `--dur-slow` token itself is still consumed directly by app.css
-   (collapsible max-height transition) so the token survives while
-   the Tailwind utility does not. */
+   declared on :root in tokens.css.  Only the two durations with
+   Tailwind consumers are registered; the 280ms `--dur-slow` token is
+   consumed directly by app.css + logs.css (collapsible max-height
+   transition, cycle__body expand/collapse) so the token survives
+   without a matching `duration-slow` utility. */
 @utility duration-fast { transition-duration: var(--dur-fast); }
 @utility duration-base { transition-duration: var(--dur-base); }
 
@@ -291,15 +290,12 @@
 @utility shadow-modal       { box-shadow: 0 30px 80px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(30, 38, 56, 0.8); }
 @utility border-l-brand-rule { border-left: 3px solid var(--color-brand-500); }
 
-/* Component reservation.
-   Empty block that later Track G batches fill with Houndarr-specific
-   component classes (.field-label in G.2, .status-pill variants in
-   G.3). Positioned between the @utility duration rules and the
-   unlayered daisyUI overrides so custom components compose into
-   Tailwind's components layer while daisyUI's own layered rules still
-   sit above them and unlayered overrides below beat both. Keeping the
-   reservation explicit avoids later batches having to guess cascade
-   intent. */
+/* Component layer.  Houses the Houndarr-specific component classes
+   (.field-label, .status-pill variants).  Positioned between the
+   @utility duration rules and the unlayered daisyUI overrides so
+   custom components compose into Tailwind's components layer while
+   daisyUI's own layered rules still sit above them and unlayered
+   overrides below beat both. */
 @layer components {
   /* .field-label centralises the uppercase-tracking label treatment
      used by every form_field / select_field call in the instance
@@ -442,6 +438,30 @@
   border-left-color: var(--color-info);
 }
 
+/* Copy-button flash state (logs page, Copy as TSV split-button). Tailwind
+   v4 sorts custom @theme colors *after* the built-in palette, so Tailwind
+   classes like `bg-emerald-700` added dynamically by the flash JS end up
+   losing the cascade against the static `bg-surface-2` on the button.
+   These semantic state classes are unlayered and win cleanly; the
+   button's existing `transition-colors duration-base` utility animates
+   background + border smoothly in and back out. */
+.copy-main-btn.is-copy-success {
+  background-color: #047857;             /* emerald-700 */
+  border-color: rgba(16, 185, 129, 0.6); /* emerald-500/60 */
+  color: var(--color-text-inverse);
+}
+.copy-main-btn.is-copy-success:hover {
+  background-color: #059669;             /* emerald-600 */
+}
+.copy-main-btn.is-copy-error {
+  background-color: #991b1b;             /* red-800 */
+  border-color: rgba(220, 38, 38, 0.6);  /* red-600/60 */
+  color: var(--color-text-inverse);
+}
+.copy-main-btn.is-copy-error:hover {
+  background-color: #b91c1c;             /* red-700 */
+}
+
 /* `.btn-soft.btn-*` has the same 8%-against-base invisibility problem
    as `.badge-soft` and `.alert-soft`. For the three soft-btn variants
    Houndarr uses (neutral cancel/secondary, error destructive), layer
@@ -467,12 +487,33 @@
   border-color: var(--color-danger);
 }
 
-/* ── v4 compatibility shims ───────────────────────────────────────────
-   Tailwind v4's Preflight removed the automatic margin: auto on
-   <dialog> elements. Houndarr uses <dialog> for the changelog modal,
-   add-instance modal, and confirm dialog — restore the centering. */
+/* Tailwind v4 Preflight compatibility shims.
+   Preflight removed the automatic `margin: auto` on <dialog>, which
+   Houndarr relies on for centered modals (changelog, add-instance,
+   confirm), so it's restored here. Preflight also flipped the default
+   button cursor back to the UA default; an interactive sysadmin button
+   should still read as clickable, so pointer is re-enabled. */
 @layer base {
   dialog {
     margin: auto;
   }
+  button:not(:disabled):not([aria-disabled="true"]),
+  [role="button"]:not(:disabled):not([aria-disabled="true"]) {
+    cursor: pointer;
+  }
+}
+
+/* Baseline-aligned link-arrow sized for inline use next to link text. */
+.inline-link-icon {
+  display: inline-block;
+  width: 0.875rem;
+  height: 0.875rem;
+  vertical-align: -0.1875em;
+  margin-inline-start: 0.25rem;
+}
+
+.dash-sub__eyebrow-icon {
+  width: 0.75rem;
+  height: 0.75rem;
+  flex-shrink: 0;
 }

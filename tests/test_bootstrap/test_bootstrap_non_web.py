@@ -248,3 +248,9 @@ class TestOverrides:
         )
         assert settings.auth_mode == "proxy"
         assert settings.auth_proxy_header == "Remote-User"
+
+    def test_update_check_repo_override(self, tmp_path: Path) -> None:
+        settings, _db_path, _key = bootstrap_non_web(
+            data_dir=str(tmp_path), update_check_repo="forker/houndarr-fork"
+        )
+        assert settings.update_check_repo == "forker/houndarr-fork"

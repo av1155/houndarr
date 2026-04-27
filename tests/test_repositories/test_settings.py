@@ -1,11 +1,8 @@
 """Pinning tests for the settings-repository SQL boundary.
 
-Locks the Track D.2 contract of
-:mod:`houndarr.repositories.settings` and the transitional
-delegation from :mod:`houndarr.database`: every case below has to
-stay byte-equal through later D batches so route callers and the
-``database`` module can be migrated one file at a time without
-regressing behaviour at the edges.
+Locks the contract of :mod:`houndarr.repositories.settings`: every
+case below pins one boundary behaviour that route and service
+callers rely on.
 """
 
 from __future__ import annotations
@@ -85,48 +82,15 @@ async def test_delete_setting_only_removes_named_key(db: None) -> None:
 
 
 @pytest.mark.pinning()
-@pytest.mark.asyncio()
-async def test_database_get_setting_returns_default_on_missing_key(db: None) -> None:
-    """Legacy wrapper preserves the ``default=`` behaviour its callers rely on."""
-    from houndarr.database import get_setting as db_get
+def test_database_no_longer_exposes_settings_shim() -> None:
+    """``database.get_setting`` / ``set_setting`` are not re-exported.
 
-    assert await db_get("absent_key", default="fallback") == "fallback"
+    Callers import from :mod:`houndarr.repositories.settings`; if
+    either name reappears on the database module a future
+    contributor is re-introducing the indirection intentionally
+    dropped, and this pin catches it.
+    """
+    import houndarr.database as _database_mod
 
-
-@pytest.mark.pinning()
-@pytest.mark.asyncio()
-async def test_database_get_setting_returns_none_without_default(db: None) -> None:
-    """Legacy wrapper still returns ``None`` when no default is supplied."""
-    from houndarr.database import get_setting as db_get
-
-    assert await db_get("also_absent") is None
-
-
-@pytest.mark.pinning()
-@pytest.mark.asyncio()
-async def test_database_get_setting_prefers_stored_value_over_default(db: None) -> None:
-    """A stored value wins over the caller's default in the legacy path."""
-    from houndarr.database import get_setting as db_get
-
-    await repo.set_setting("real_key", "real_value")
-    assert await db_get("real_key", default="fallback") == "real_value"
-
-
-@pytest.mark.pinning()
-@pytest.mark.asyncio()
-async def test_database_set_setting_delegates_to_repo(db: None) -> None:
-    """A write through the legacy wrapper is visible via the repository read."""
-    from houndarr.database import set_setting as db_set
-
-    await db_set("shared_key", "via_db_wrapper")
-    assert await repo.get_setting("shared_key") == "via_db_wrapper"
-
-
-@pytest.mark.pinning()
-@pytest.mark.asyncio()
-async def test_repo_set_setting_visible_to_database_wrapper(db: None) -> None:
-    """A write through the repository is visible via the legacy wrapper read."""
-    from houndarr.database import get_setting as db_get
-
-    await repo.set_setting("shared_key_2", "via_repo")
-    assert await db_get("shared_key_2") == "via_repo"
+    assert not hasattr(_database_mod, "get_setting")
+    assert not hasattr(_database_mod, "set_setting")

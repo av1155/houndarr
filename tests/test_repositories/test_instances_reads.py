@@ -1,13 +1,13 @@
 """Pinning tests for the instances-repository read boundary.
 
-Locks the Track D.3 contract of ``get_instance`` / ``list_instances``
-and the row-mapper helpers that moved alongside them.  The service-
-layer delegators in :mod:`houndarr.services.instances` have to keep
-returning byte-equal :class:`~houndarr.services.instances.Instance`
-objects across every subsequent D batch, so each case below covers
-one boundary that the delegation has to preserve: empty result,
-single row, multi-row ordering, decryption correctness, and the
-tolerant fallback for rows that pre-date the v13 snapshot columns.
+Locks the contract of ``get_instance`` / ``list_instances`` and
+the row-mapper helpers that surround them.  The service-layer
+delegators in :mod:`houndarr.services.instances` return byte-equal
+:class:`~houndarr.services.instances.Instance` objects to their
+callers, so each case below pins one boundary the delegation
+preserves: empty result, single row, multi-row ordering,
+decryption correctness, and the tolerant fallback for rows that
+pre-date the v13 snapshot columns.
 """
 
 from __future__ import annotations
@@ -65,14 +65,14 @@ async def test_get_instance_roundtrip(db: None, master_key: bytes) -> None:
         api_key="top-secret",
     )
 
-    fetched = await repo.get_instance(created.id, master_key=master_key)
+    fetched = await repo.get_instance(created.core.id, master_key=master_key)
     assert fetched is not None
     assert isinstance(fetched, Instance)
-    assert fetched.id == created.id
-    assert fetched.name == "Sonarr Main"
-    assert fetched.type == InstanceType.sonarr
-    assert fetched.url == "http://sonarr:8989"
-    assert fetched.api_key == "top-secret"
+    assert fetched.core.id == created.core.id
+    assert fetched.core.name == "Sonarr Main"
+    assert fetched.core.type == InstanceType.sonarr
+    assert fetched.core.url == "http://sonarr:8989"
+    assert fetched.core.api_key == "top-secret"
 
 
 @pytest.mark.pinning()
@@ -102,7 +102,7 @@ async def test_list_instances_orders_by_id_ascending(db: None, master_key: bytes
     )
 
     rows = await repo.list_instances(master_key=master_key)
-    assert [r.id for r in rows] == [first.id, second.id, third.id]
+    assert [r.core.id for r in rows] == [first.core.id, second.core.id, third.core.id]
 
 
 @pytest.mark.pinning()
@@ -125,7 +125,7 @@ async def test_list_instances_decrypts_each_api_key(db: None, master_key: bytes)
     )
 
     rows = await repo.list_instances(master_key=master_key)
-    assert {r.api_key for r in rows} == {"plain-one", "plain-two"}
+    assert {r.core.api_key for r in rows} == {"plain-one", "plain-two"}
 
 
 @pytest.mark.pinning()
@@ -141,7 +141,7 @@ async def test_get_instance_decrypts_with_correct_key(db: None, master_key: byte
     )
     other_key = Fernet.generate_key()
     with pytest.raises(Exception):  # noqa: B017, PT011
-        await repo.get_instance(created.id, master_key=other_key)
+        await repo.get_instance(created.core.id, master_key=other_key)
 
 
 @pytest.mark.pinning()
@@ -157,11 +157,11 @@ async def test_row_to_instance_preserves_all_enum_coercions(db: None, master_key
         sonarr_search_mode=SonarrSearchMode.season_context,
         search_order=SearchOrder.random,
     )
-    fetched = await repo.get_instance(created.id, master_key=master_key)
+    fetched = await repo.get_instance(created.core.id, master_key=master_key)
     assert fetched is not None
-    assert fetched.type is InstanceType.sonarr
-    assert fetched.sonarr_search_mode is SonarrSearchMode.season_context
-    assert fetched.search_order is SearchOrder.random
+    assert fetched.core.type is InstanceType.sonarr
+    assert fetched.missing.sonarr_search_mode is SonarrSearchMode.season_context
+    assert fetched.schedule.search_order is SearchOrder.random
 
 
 @pytest.mark.pinning()
@@ -182,9 +182,9 @@ async def test_optional_row_helpers_tolerate_pre_v13_rows(db: None, master_key: 
 
     fetched = await repo.get_instance(legacy_id, master_key=master_key)
     assert fetched is not None
-    assert fetched.monitored_total == 0
-    assert fetched.unreleased_count == 0
-    assert fetched.snapshot_refreshed_at == ""
+    assert fetched.snapshot.monitored_total == 0
+    assert fetched.snapshot.unreleased_count == 0
+    assert fetched.snapshot.snapshot_refreshed_at == ""
 
 
 @pytest.mark.pinning()
@@ -236,8 +236,8 @@ async def test_service_get_instance_delegates_to_repo(db: None, master_key: byte
         url="http://sonarr:8989",
         api_key="shared",
     )
-    via_repo = await repo.get_instance(created.id, master_key=master_key)
-    via_service = await svc_get(created.id, master_key=master_key)
+    via_repo = await repo.get_instance(created.core.id, master_key=master_key)
+    via_service = await svc_get(created.core.id, master_key=master_key)
     assert via_repo == via_service
 
 

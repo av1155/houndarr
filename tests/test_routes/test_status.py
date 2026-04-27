@@ -288,14 +288,20 @@ async def _seed_search_log(rows: list[tuple[Any, ...]]) -> None:
         await conn.commit()
 
 
-async def _seed_cooldown(instance_id: int, item_id: int, item_type: str, days_ago: float) -> None:
+async def _seed_cooldown(
+    instance_id: int,
+    item_id: int,
+    item_type: str,
+    days_ago: float,
+    search_kind: str = "missing",
+) -> None:
     when = datetime.now(UTC) - timedelta(days=days_ago)
     iso = when.strftime("%Y-%m-%dT%H:%M:%S.000Z")
     async with get_db() as conn:
         await conn.execute(
-            "INSERT INTO cooldowns (instance_id, item_id, item_type, searched_at)"
-            " VALUES (?, ?, ?, ?)",
-            (instance_id, item_id, item_type, iso),
+            "INSERT INTO cooldowns (instance_id, item_id, item_type, search_kind, searched_at)"
+            " VALUES (?, ?, ?, ?, ?)",
+            (instance_id, item_id, item_type, search_kind, iso),
         )
         await conn.commit()
 
@@ -328,7 +334,38 @@ def test_status_v2_includes_redesign_fields(app: TestClient) -> None:
     }
     assert expected_keys.issubset(inst.keys())
     assert inst["id"] == iid
-    assert inst["unreleased_count"] == 0  # PR 1 interim; PR 5 populates real
+
+
+def test_status_unreleased_count_zero_on_fresh_db(app: TestClient) -> None:
+    """Fresh instance with no snapshot run yet reports unreleased_count=0.
+
+    Pins the post-create / pre-supervisor state.  The supervisor's
+    snapshot refresh populates the real value within ~20s of process
+    start (or immediately on enable via the prime-on-enable hook).
+    """
+    _login(app)
+    _create_instance(app)
+    inst = app.get("/api/status").json()["instances"][0]
+    assert inst["unreleased_count"] == 0
+
+
+def test_status_unreleased_count_reflects_snapshot_update(app: TestClient) -> None:
+    """The /api/status envelope echoes whatever the supervisor wrote.
+
+    Direct DB write via update_instance_snapshot stands in for a
+    real supervisor refresh; the route is a passive read of the
+    stored snapshot column.
+    """
+    from houndarr.repositories.instances import update_instance_snapshot
+
+    _login(app)
+    iid = _create_instance(app)
+    asyncio.run(update_instance_snapshot(iid, monitored_total=42, unreleased_count=7))
+
+    inst = app.get("/api/status").json()["instances"][0]
+    assert inst["id"] == iid
+    assert inst["monitored_total"] == 42
+    assert inst["unreleased_count"] == 7
 
 
 def test_status_v2_lifetime_searched_counts_all_time(app: TestClient) -> None:
@@ -756,6 +793,58 @@ def test_status_v2_unlocking_next_returns_all_when_three_or_fewer(app: TestClien
     assert ids == [301, 302]
 
 
+def test_status_v2_unlocking_next_keys_window_by_kind(app: TestClient) -> None:
+    """Per-kind unlock windows: an upgrade-kind cooldown row renders the
+    upgrade_cooldown_days (default 90) rather than collapsing to the
+    min-across-enabled cooldown_days (default 14).  Regression for
+    `_cooldown_data` previously using a single ``min_days`` for all rows.
+    """
+    _login(app)
+    iid = _create_instance(app)
+
+    # Enable cutoff + upgrade on the seeded instance so their windows matter.
+    async def _enable_passes() -> None:
+        async with get_db() as conn:
+            await conn.execute(
+                "UPDATE instances SET cutoff_enabled = 1, upgrade_enabled = 1 WHERE id = ?",
+                (iid,),
+            )
+            await conn.commit()
+
+    asyncio.run(_enable_passes())
+    now = datetime.now(UTC)
+    searched_at = (now - timedelta(days=1)).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+    # Seed three rows (one per kind) at the same searched_at so only the
+    # per-row cooldown window explains the different unlock times.
+    asyncio.run(
+        _seed_search_log(
+            [
+                (iid, 501, "episode", "missing", "searched", None, "M", None, searched_at),
+                (iid, 502, "episode", "cutoff", "searched", None, "C", None, searched_at),
+                (iid, 503, "episode", "upgrade", "searched", None, "U", None, searched_at),
+            ]
+        )
+    )
+    asyncio.run(_seed_cooldown(iid, 501, "episode", days_ago=1.0, search_kind="missing"))
+    asyncio.run(_seed_cooldown(iid, 502, "episode", days_ago=1.0, search_kind="cutoff"))
+    asyncio.run(_seed_cooldown(iid, 503, "episode", days_ago=1.0, search_kind="upgrade"))
+
+    body = app.get("/api/status").json()["instances"][0]
+    picks = {row["item_id"]: row for row in body["unlocking_next"]}
+    assert set(picks) == {501, 502, 503}
+
+    def _days_from_now(iso: str) -> float:
+        parsed = datetime.fromisoformat(iso.replace("Z", "+00:00"))
+        return (parsed - now).total_seconds() / 86400.0
+
+    # Defaults (see config.py): cooldown_days=14, cutoff_cooldown_days=21,
+    # upgrade_cooldown_days=90.  Each row was searched 1 day ago, so the
+    # remaining window is N-1 days.
+    assert 12.5 < _days_from_now(picks[501]["unlock_at"]) < 13.5  # missing: 14 - 1
+    assert 19.5 < _days_from_now(picks[502]["unlock_at"]) < 20.5  # cutoff: 21 - 1
+    assert 88.5 < _days_from_now(picks[503]["unlock_at"]) < 89.5  # upgrade: 90 - 1
+
+
 def test_status_v2_cooldown_breakdown_splits_by_kind(app: TestClient) -> None:
     _login(app)
     iid = _create_instance(app)
@@ -811,10 +900,10 @@ def test_status_v2_cooldown_breakdown_splits_by_kind(app: TestClient) -> None:
             ]
         )
     )
-    asyncio.run(_seed_cooldown(iid, 301, "episode", days_ago=1.0))
-    asyncio.run(_seed_cooldown(iid, 302, "episode", days_ago=1.0))
-    asyncio.run(_seed_cooldown(iid, 303, "episode", days_ago=1.0))
-    asyncio.run(_seed_cooldown(iid, 304, "episode", days_ago=1.0))
+    asyncio.run(_seed_cooldown(iid, 301, "episode", days_ago=1.0, search_kind="missing"))
+    asyncio.run(_seed_cooldown(iid, 302, "episode", days_ago=1.0, search_kind="cutoff"))
+    asyncio.run(_seed_cooldown(iid, 303, "episode", days_ago=1.0, search_kind="upgrade"))
+    asyncio.run(_seed_cooldown(iid, 304, "episode", days_ago=1.0, search_kind="missing"))
     body = app.get("/api/status").json()["instances"][0]
     assert body["cooldown_breakdown"] == {"missing": 2, "cutoff": 1, "upgrade": 1}
 
@@ -838,3 +927,39 @@ def test_status_monitored_total_zero_when_no_snapshot(app: TestClient) -> None:
     body = app.get("/api/status").json()["instances"][0]
     assert body["monitored_total"] == 0
     assert body["unreleased_count"] == 0
+
+
+def test_status_reconciled_invariant_holds(app: TestClient) -> None:
+    """After reconciliation, per-instance cooldown counts must not
+    exceed monitored_total.
+
+    Encodes the invariant the dashboard's Eligible formula depends on:
+    ``monitored_total >= missing_cd + cutoff_cd`` for every enabled
+    instance in /api/status.  Pre-reconcile this could fail (downloads
+    / unmonitors left stale cooldown rows behind); post-reconcile the
+    cooldowns table is a projection of the *arr's live state, so the
+    inequality holds by construction.  The seed below mirrors that
+    post-reconcile steady state: cooldowns only exist for items still
+    present in monitored_total.
+    """
+    from houndarr.services.instances import update_instance_snapshot
+
+    _login(app)
+    iid = _create_instance(app)
+    asyncio.run(update_instance_snapshot(iid, monitored_total=10, unreleased_count=2))
+    # Seed a realistic post-reconcile mix: six cooldowns against
+    # ten monitored items.  missing_cd + cutoff_cd = 6 <= 10.
+    for i in range(1, 5):
+        asyncio.run(_seed_cooldown(iid, i, "episode", days_ago=1.0, search_kind="missing"))
+    for i in range(100, 102):
+        asyncio.run(_seed_cooldown(iid, i, "episode", days_ago=1.0, search_kind="cutoff"))
+
+    body = app.get("/api/status").json()["instances"][0]
+    bd = body["cooldown_breakdown"]
+    monitored = body["monitored_total"]
+    unreleased = body["unreleased_count"]
+    gated = bd["missing"] + bd["cutoff"]
+    assert gated + unreleased <= monitored, (
+        f"invariant violated: gated={gated} unreleased={unreleased} "
+        f"monitored={monitored} breakdown={bd}"
+    )

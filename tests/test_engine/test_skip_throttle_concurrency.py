@@ -47,6 +47,7 @@ import pytest_asyncio
 from houndarr.database import get_db
 from houndarr.engine.adapters import get_adapter
 from houndarr.engine.candidates import SearchCandidate
+from houndarr.engine.config.search_pass import SearchPassConfig
 from houndarr.engine.search_loop import _run_search_pass
 from houndarr.services.cooldown import record_search
 from houndarr.services.instances import InstanceType
@@ -94,7 +95,7 @@ async def test_concurrent_passes_produce_at_most_one_skip_row(
         hourly_cap=10,
         cooldown_days=14,
     )
-    adapter = get_adapter(instance.type)
+    adapter = get_adapter(instance.core.type)
 
     # One pre-built candidate that matches the cooldowned item.  Both passes
     # pull from the same fetch_fn and hit is_on_cooldown -> True, then fall
@@ -127,19 +128,21 @@ async def test_concurrent_passes_produce_at_most_one_skip_row(
         await _run_search_pass(
             instance,
             adapter,
-            adapt_fn=adapt_passthrough,
-            dispatch_fn=dispatch_mock,
-            fetch_fn=fetch_one,
-            search_kind="missing",
-            batch_size=5,
-            hourly_cap=10,
-            cooldown_days=14,
-            page_size=10,
-            scan_budget=10,
-            cycle_id=f"cycle-{cycle_label}",
-            cycle_trigger="scheduled",
-            start_page=1,
-            total_fn=None,
+            SearchPassConfig(
+                adapt_fn=adapt_passthrough,
+                dispatch_fn=dispatch_mock,
+                fetch_fn=fetch_one,
+                search_kind="missing",
+                batch_size=5,
+                hourly_cap=10,
+                cooldown_days=14,
+                page_size=10,
+                scan_budget=10,
+                cycle_id=f"cycle-{cycle_label}",
+                cycle_trigger="scheduled",
+                start_page=1,
+                total_fn=None,
+            ),
         )
 
     # asyncio.gather schedules both coroutines on the same event loop; they

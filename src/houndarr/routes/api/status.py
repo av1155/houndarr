@@ -22,6 +22,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
 
 from houndarr.database import get_db
+from houndarr.deps import get_supervisor
 from houndarr.engine.supervisor import Supervisor
 from houndarr.protocols import SupervisorProto
 from houndarr.services.metrics import gather_dashboard_status
@@ -29,35 +30,6 @@ from houndarr.services.metrics import gather_dashboard_status
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
-
-
-# ---------------------------------------------------------------------------
-# Dependency shims
-# ---------------------------------------------------------------------------
-
-
-def get_supervisor(request: Request) -> SupervisorProto:
-    """Resolve the running supervisor typed as :class:`SupervisorProto`.
-
-    Track B.21 seam.  The concrete instance is still stashed on
-    ``app.state.supervisor`` at lifespan startup; this shim narrows
-    the route-facing surface to the Protocol shape so route handlers
-    only depend on the methods they invoke (``trigger_run_now`` here;
-    ``reconcile_instance`` / ``stop_instance_task`` for future
-    migrations of ``routes/settings/instances``).
-
-    Raises :class:`HTTPException` with status 503 when the supervisor
-    slot is empty (pre-lifespan, during factory reset, or post-stop).
-    The runtime isinstance check uses the concrete
-    :class:`~houndarr.engine.supervisor.Supervisor` class for the
-    positive identity assertion, then widens the return type to the
-    Protocol.  Track D.12 will move this shim into a shared
-    :mod:`houndarr.deps` module.
-    """
-    supervisor = getattr(request.app.state, "supervisor", None)
-    if not isinstance(supervisor, Supervisor):
-        raise HTTPException(status_code=503, detail="Supervisor unavailable")
-    return supervisor
 
 
 @router.get("/api/status")

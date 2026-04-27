@@ -1,6 +1,6 @@
-"""Pin the SupervisorProto + get_supervisor Depends shim (Track B.21).
+"""Pin the SupervisorProto + get_supervisor Depends shim.
 
-:func:`houndarr.routes.api.status.get_supervisor` resolves the
+:func:`houndarr.deps.get_supervisor` resolves the
 running supervisor typed as
 :class:`~houndarr.protocols.SupervisorProto`.  Route handlers
 consume it via ``Depends(get_supervisor)`` instead of reaching into

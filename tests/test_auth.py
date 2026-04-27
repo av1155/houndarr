@@ -9,19 +9,18 @@ import pytest
 from fastapi.testclient import TestClient
 
 from houndarr.auth import (
-    _CSRF_PROTECTED_METHODS,
-    _LOGOUT_PATH,
-    _PUBLIC_PATHS,
+    _CSRF_PROTECTED_METHODS,  # noqa: SLF001
+    _LOGOUT_PATH,  # noqa: SLF001
+    _PUBLIC_PATHS,  # noqa: SLF001
     BCRYPT_COST,
     CSRF_COOKIE_NAME,
     SESSION_COOKIE_NAME,
     check_credentials,
-    get_session_csrf_token,
     hash_password,
     is_setup_complete,
     verify_password,
 )
-from houndarr.database import get_setting
+from houndarr.repositories.settings import get_setting
 from tests.conftest import csrf_headers
 
 # ---------------------------------------------------------------------------
@@ -298,34 +297,31 @@ async def test_resolve_signed_in_as_builtin_falls_back_to_admin(
 @pytest.mark.asyncio()
 async def test_resolve_signed_in_as_proxy_returns_header_user(
     tmp_data_dir: str,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from fastapi import Request
 
-    import houndarr.config as _cfg
     from houndarr.auth import resolve_signed_in_as
-    from houndarr.config import AppSettings
+    from houndarr.config import bootstrap_settings
 
-    monkeypatch.setattr(
-        _cfg,
-        "_runtime_settings",
-        AppSettings(
+    try:
+        bootstrap_settings(
             data_dir=tmp_data_dir,
             auth_mode="proxy",
             auth_proxy_header="Remote-User",
             trusted_proxies="127.0.0.1",
-        ),
-    )
-    scope = {
-        "type": "http",
-        "method": "GET",
-        "path": "/",
-        "headers": [],
-        "query_string": b"",
-    }
-    request = Request(scope)
-    request.state.proxy_auth_user = "alice"
-    assert await resolve_signed_in_as(request) == "alice"
+        )
+        scope = {
+            "type": "http",
+            "method": "GET",
+            "path": "/",
+            "headers": [],
+            "query_string": b"",
+        }
+        request = Request(scope)
+        request.state.proxy_auth_user = "alice"
+        assert await resolve_signed_in_as(request) == "alice"
+    finally:
+        bootstrap_settings()
 
 
 # ---------------------------------------------------------------------------
@@ -688,12 +684,13 @@ def test_rate_limiter_uses_direct_ip_by_default(app: TestClient) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Characterisation pins for the final refactor wave.
+# Characterisation pins for the auth seam split.
 #
-# Phase 1 of the final refactor wave locks every auth contract that the
-# subsequent seam split will move into `src/houndarr/auth/`.  Each test
-# below exercises one load-bearing invariant.  `@pytest.mark.pinning`
-# joins the characterisation suite surfaced by `just pin`.
+# Each test below locks one load-bearing auth invariant so the eight
+# seam modules under :mod:`houndarr.auth` cannot silently drift the
+# bcrypt cost, session cookie kwargs, CSRF bucket survival, or the
+# proxy-auth trust-gate ordering.  ``@pytest.mark.pinning`` joins the
+# characterisation suite surfaced by ``just pin``.
 # ---------------------------------------------------------------------------
 
 
@@ -925,6 +922,8 @@ async def test_get_session_csrf_token_extracts_payload(app: TestClient) -> None:
     the submitted header.
     """
     from fastapi import Request
+
+    from houndarr.auth import get_session_csrf_token
 
     app.post(
         "/setup",

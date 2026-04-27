@@ -1,13 +1,13 @@
 """Golden tests for search_log row sequences.
 
-These tests capture the exact ``search_log`` output for known input scenarios
-and prove that the Phase 1–2 refactor (adapter pattern + unified pipeline)
-produces bit-identical results to the pre-refactor engine.
+These tests capture the exact ``search_log`` output for known
+input scenarios and act as a bit-identical regression snapshot for
+the adapter pattern plus unified search pipeline.
 
-Each test asserts the complete row sequence - field values and ordering - for
-a multi-step search cycle.  They are regression snapshots, not behavioural
-unit tests, and should break only when someone intentionally changes search
-engine output.
+Each test asserts the complete row sequence (field values and
+ordering) for a multi-step search cycle.  They are regression
+snapshots, not behavioural unit tests, and should break only when
+someone intentionally changes search engine output.
 """
 
 from __future__ import annotations
@@ -24,11 +24,19 @@ from cryptography.fernet import Fernet
 from houndarr.database import get_db
 from houndarr.engine.search_loop import run_instance_search
 from houndarr.services.instances import (
+    CutoffPolicy,
     Instance,
+    InstanceCore,
+    InstanceTimestamps,
     InstanceType,
     LidarrSearchMode,
+    MissingPolicy,
     ReadarrSearchMode,
+    RuntimeSnapshot,
+    SchedulePolicy,
+    SearchOrder,
     SonarrSearchMode,
+    UpgradePolicy,
     WhisparrV2SearchMode,
 )
 
@@ -116,28 +124,39 @@ def _make_instance(
     whisparr_v2_search_mode: WhisparrV2SearchMode = WhisparrV2SearchMode.episode,
 ) -> Instance:
     return Instance(
-        id=instance_id,
-        name="Golden Test",
-        type=itype,
-        url=url,
-        api_key="test-api-key",
-        enabled=True,
-        batch_size=batch_size,
-        sleep_interval_mins=15,
-        hourly_cap=hourly_cap,
-        cooldown_days=cooldown_days,
-        post_release_grace_hrs=post_release_grace_hrs,
-        queue_limit=0,
-        cutoff_enabled=cutoff_enabled,
-        cutoff_batch_size=cutoff_batch_size,
-        cutoff_cooldown_days=cutoff_cooldown_days,
-        cutoff_hourly_cap=cutoff_hourly_cap,
-        created_at="2024-01-01T00:00:00Z",
-        updated_at="2024-01-01T00:00:00Z",
-        sonarr_search_mode=sonarr_search_mode,
-        lidarr_search_mode=lidarr_search_mode,
-        readarr_search_mode=readarr_search_mode,
-        whisparr_v2_search_mode=whisparr_v2_search_mode,
+        core=InstanceCore(
+            id=instance_id,
+            name="Golden Test",
+            type=itype,
+            url=url,
+            api_key="test-api-key",
+            enabled=True,
+        ),
+        missing=MissingPolicy(
+            batch_size=batch_size,
+            sleep_interval_mins=15,
+            hourly_cap=hourly_cap,
+            cooldown_days=cooldown_days,
+            post_release_grace_hrs=post_release_grace_hrs,
+            queue_limit=0,
+            sonarr_search_mode=sonarr_search_mode,
+            lidarr_search_mode=lidarr_search_mode,
+            readarr_search_mode=readarr_search_mode,
+            whisparr_v2_search_mode=whisparr_v2_search_mode,
+        ),
+        cutoff=CutoffPolicy(
+            cutoff_enabled=cutoff_enabled,
+            cutoff_batch_size=cutoff_batch_size,
+            cutoff_cooldown_days=cutoff_cooldown_days,
+            cutoff_hourly_cap=cutoff_hourly_cap,
+        ),
+        upgrade=UpgradePolicy(),
+        schedule=SchedulePolicy(search_order=SearchOrder.chronological),
+        snapshot=RuntimeSnapshot(),
+        timestamps=InstanceTimestamps(
+            created_at="2024-01-01T00:00:00Z",
+            updated_at="2024-01-01T00:00:00Z",
+        ),
     )
 
 

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 from typing import Annotated
+from urllib.parse import quote
 
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse
@@ -23,6 +24,7 @@ from houndarr.auth import (
     rotate_session_secret,
     set_password,
 )
+from houndarr.routes._htmx import hx_refresh_response
 from houndarr.routes.settings._helpers import render_settings_page
 
 router = APIRouter()
@@ -96,6 +98,20 @@ async def account_password_update(
         account_success="Password updated successfully.",
     )
     await create_session(response)
+    # Short-lived flash cookie the reloaded page reads and surfaces as a
+    # toast.  Plain cookie (not httponly) because app.js is the only
+    # consumer and it clears the cookie immediately after reading.
+    # URL-encode the value so http.cookies.SimpleCookie does not wrap
+    # the cookie in double quotes for spaces; the client decodes with
+    # decodeURIComponent before rendering.
+    response.set_cookie(
+        "houndarr_flash",
+        quote("Password updated successfully."),
+        max_age=10,
+        path="/",
+        httponly=False,
+        samesite="lax",
+    )
     # The response body was rendered from the incoming (pre-rotation)
     # cookies, so every hidden csrf_token input and the body-level
     # hx-headers attribute stamped by app.js at initial page load are
@@ -104,5 +120,4 @@ async def account_password_update(
     # renders with the new csrf_token; without this, the next mutating
     # HTMX request from the tab would 403 until the admin manually
     # refreshed.
-    response.headers["HX-Refresh"] = "true"
-    return response
+    return hx_refresh_response(response)

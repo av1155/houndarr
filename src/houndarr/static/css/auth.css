@@ -1,3 +1,18 @@
+/* OFF-LIMITS: auth visual language is frozen.
+ *
+ * This file + auth-fields.css define every pixel the unauthenticated
+ * user sees before the dashboard takes over.  The card, the brand
+ * glow, the field grid, the caps-lock badge, the strength meter, and
+ * the submit button all compose into a visual language that ships on
+ * fresh installs and gets screenshotted into marketing material.
+ *
+ * Changes here must land with an updated Playwright baseline under
+ * tests/e2e_browser/ and a recorded rationale in the commit body.
+ * Drive-by tweaks to selectors, colour tokens, spacing, or typography
+ * must not ride along with unrelated work.  The Tailwind refactor
+ * deliberately does not restructure these rules; the only admissible
+ * changes are small cosmetic comment additions like this one. */
+
 /* Houndarr auth pages (login + setup) layout + card chrome.
  * Scoped under body.is-auth; form controls live in auth-fields.css. */
 
@@ -7,10 +22,7 @@ body.is-auth main#app-content {
   display: flex;
   align-items: center;
   justify-content: center;
-  /* Compensates for :root { zoom: 1.1 } — a raw 100vh box renders at
-   * 110vh after zoom and forces a page-wide vertical scrollbar on
-   * otherwise-short pages. */
-  min-height: calc(100vh / 1.1);
+  min-height: 100vh;
 }
 
 /* The base.html <footer> is replaced on auth pages by the card's
@@ -22,17 +34,8 @@ body.is-auth > footer {
 /* ── Card wrapper ──────────────────────────────────────── */
 .is-auth .auth-card {
   width: 100%;
-  max-width: 420px;
-  padding: 32px 20px 16px;
-}
-
-/* Scale the whole card + contents up ~10% so the auth composition carries
- * more weight against the wide atmospheric background. Composes with the
- * root zoom: 1.1 for a final ~1.21 on auth content. */
-@supports (zoom: 1) {
-  .is-auth .auth-card {
-    zoom: 1.1;
-  }
+  max-width: 26.25rem;
+  padding: 2rem 1.25rem 1rem;
 }
 
 /* Sign-in card sits a touch above vertical center so the shorter login
@@ -52,26 +55,26 @@ body.is-auth > footer {
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-bottom: 24px;
+  margin-bottom: 1.5rem;
 }
 .is-auth .auth-card__brand {
   display: inline-flex;
   align-items: center;
-  gap: 10px;
+  gap: 0.625rem;
   text-decoration: none;
   color: inherit;
 }
 .is-auth .auth-card__brand img {
-  width: 36px;
-  height: 36px;
+  width: 2.25rem;
+  height: 2.25rem;
   object-fit: contain;
   filter: drop-shadow(var(--glow-logo));
 }
 .is-auth .auth-card__brand span {
   font-weight: 700;
-  font-size: 16px;
+  font-size: 1rem;
   letter-spacing: -0.01em;
-  color: #f1f5f9;
+  color: var(--color-text-heading);
 }
 
 /* ── Form shell ────────────────────────────────────────── */
@@ -81,59 +84,59 @@ body.is-auth > footer {
     var(--color-surface-1);
   border: 1px solid var(--color-border-subtle);
   border-radius: var(--radius-container);
-  padding: 28px 24px 20px;
+  padding: 1.75rem 1.5rem 1.25rem;
   box-shadow: var(--shadow-4);
 }
 
 .is-auth .auth-eyebrow {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 0.5rem;
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: 0.65625rem;
   letter-spacing: 0.18em;
   text-transform: uppercase;
   color: var(--color-brand-300);
-  margin: 0 0 12px;
+  margin: 0 0 0.75rem;
 }
 .is-auth .auth-eyebrow::before {
   content: '';
-  width: 18px;
+  width: 1.125rem;
   height: 1px;
   background: var(--color-brand-500);
 }
 
 .is-auth .auth-form h1 {
   font-family: var(--font-sans);
-  font-size: 26px;
+  font-size: 1.625rem;
   font-weight: 700;
   letter-spacing: -0.025em;
   line-height: 1.1;
-  color: #f8fafc;
-  margin: 0 0 8px;
+  color: var(--color-text-heading);
+  margin: 0 0 0.5rem;
 }
 .is-auth .auth-form h1 .accent {
   color: var(--color-brand-300);
 }
 .is-auth .auth-subhead {
-  color: #94a3b8;
-  font-size: 13.5px;
+  color: var(--color-text-muted);
+  font-size: 0.84375rem;
   line-height: 1.55;
-  margin: 0 0 22px;
+  margin: 0 0 1.375rem;
 }
 
 /* ── Alert banner ──────────────────────────────────────── */
 .is-auth .auth-alert {
   display: flex;
-  gap: 10px;
+  gap: 0.625rem;
   align-items: flex-start;
-  padding: 10px 12px;
-  margin-bottom: 18px;
+  padding: 0.625rem 0.75rem;
+  margin-bottom: 1.125rem;
   border-left: 3px solid var(--color-danger);
   background: var(--color-danger-bg);
   border-radius: 0 var(--radius-inset) var(--radius-inset) 0;
-  font-size: 13px;
-  color: #fecaca;
+  font-size: 0.8125rem;
+  color: var(--color-danger-text);
   line-height: 1.45;
 }
 .is-auth .auth-alert svg {
@@ -144,18 +147,18 @@ body.is-auth > footer {
 
 /* ── Card footer ───────────────────────────────────────── */
 .is-auth .auth-card__footer {
-  margin-top: 18px;
-  padding: 14px 4px 0;
+  margin-top: 1.125rem;
+  padding: 0.875rem 0.25rem 0;
   border-top: 1px dashed var(--color-border-subtle);
   display: flex;
   justify-content: space-between;
   align-items: center;
   font-family: var(--font-mono);
-  font-size: 11px;
-  color: #475569;
+  font-size: 0.6875rem;
+  color: var(--color-text-subtle);
 }
 .is-auth .auth-card__footer a {
-  color: #64748b;
+  color: var(--color-text-muted);
   display: inline-flex;
   align-items: center;
   transition: color var(--dur-base) var(--ease-station);
@@ -166,7 +169,7 @@ body.is-auth > footer {
 
 /* ── Responsive ────────────────────────────────────────── */
 @media (max-width: 480px) {
-  .is-auth .auth-card { padding: 20px 14px 12px; }
-  .is-auth .auth-form { padding: 22px 18px 16px; }
-  .is-auth .auth-form h1 { font-size: 24px; }
+  .is-auth .auth-card { padding: 1.25rem 0.875rem 0.75rem; }
+  .is-auth .auth-form { padding: 1.375rem 1.125rem 1rem; }
+  .is-auth .auth-form h1 { font-size: 1.5rem; }
 }

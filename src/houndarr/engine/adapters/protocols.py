@@ -1,4 +1,4 @@
-"""Structural Protocol mirroring the AppAdapter dataclass shape.
+"""Structural Protocol for the per-app adapter shape.
 
 Every adapter (per-app class with eight staticmethod attributes) must
 satisfy this Protocol.  Runtime-checkable so tests can
@@ -6,12 +6,10 @@ satisfy this Protocol.  Runtime-checkable so tests can
 against the :data:`ADAPTERS` registry.
 
 Each member is declared via ``@property`` so the Protocol advertises
-read-only attributes.  That matters because :class:`AppAdapter` is a
-frozen dataclass: its slots are read-only at runtime, and a
-bare-attribute Protocol would reject frozen instances as
-non-conforming.  Future class-based adapters can expose the same
-callables as plain attributes or as properties; either form
-satisfies this Protocol.
+read-only attributes.  That shape accepts both class-based adapters
+(staticmethod attributes on the class) and future frozen-dataclass
+forms whose slots are read-only at runtime; a bare-attribute
+Protocol would reject the latter as non-conforming.
 """
 
 from __future__ import annotations

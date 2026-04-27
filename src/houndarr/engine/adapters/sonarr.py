@@ -36,7 +36,7 @@ logger = logging.getLogger(__name__)
 _UPGRADE_MAX_SERIES_PER_CYCLE = 5
 
 # ---------------------------------------------------------------------------
-# Label builders (copied from search_loop.py; originals removed in Phase 2)
+# Label builders
 # ---------------------------------------------------------------------------
 
 
@@ -253,7 +253,7 @@ async def _collect_upgrade_episodes(
         except (httpx.HTTPError, httpx.InvalidURL, ValidationError):
             logger.warning(
                 "[%s] failed to fetch episodes for series %d, skipping",
-                instance.name,
+                instance.core.name,
                 series_id,
             )
             continue
@@ -412,10 +412,10 @@ async def fetch_reconcile_sets(client: SonarrClient, instance: Instance) -> Reco
     cutoff_items = await paginate_wanted(client.get_cutoff_unmet)
     missing_set = _episode_leaf_pairs(missing_items)
     cutoff_set = _episode_leaf_pairs(cutoff_items)
-    if instance.sonarr_search_mode != SonarrSearchMode.episode:
+    if instance.missing.sonarr_search_mode != SonarrSearchMode.episode:
         missing_set = missing_set | _season_synth_pairs(missing_items)
     upgrade_set: frozenset[tuple[str, int]] = frozenset()
-    if instance.upgrade_enabled:
+    if instance.upgrade.upgrade_enabled:
         upgrade_candidates = [
             adapt_upgrade(item, instance)
             for item in await _fetch_all_upgrade_episodes(client, instance)
@@ -448,8 +448,6 @@ class SonarrAdapter:
     Conforms to :class:`~houndarr.engine.adapters.protocols.AppAdapterProto`
     structurally via the eight staticmethod attributes below; the
     module-level functions remain importable for direct unit-test use.
-    Track C.10 introduces this class form to replace the prior
-    ``AppAdapter`` dataclass-of-callables registry shape.
     """
 
     adapt_missing = staticmethod(adapt_missing)

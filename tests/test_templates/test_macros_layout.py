@@ -5,10 +5,8 @@ four Admin sub-section partials repeat verbatim
 (security / updates / maintenance / danger).  Each test invokes
 the macro in isolation and asserts the exact bytes Jinja emits.
 
-Like the other macro pinning suites under tests/test_templates/, the
-macro output is not the same as the full post-migration consumer
-HTML (consumers carry ambient template indentation that the macro
-does not).  Consumer-level integration is asserted via the Track E
+Consumer-level integration (the full rendered HTML including
+ambient template indentation) is asserted via the macro inventory
 gate.  What this suite locks down is every attribute, every
 rendered class string, the title_color override branch the danger
 sub-section depends on, and the section-id placement so a future

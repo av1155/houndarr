@@ -9,6 +9,7 @@ are intercepted by respx.
 from __future__ import annotations
 
 import asyncio
+from dataclasses import replace
 from typing import Any
 from unittest.mock import patch
 
@@ -174,10 +175,10 @@ async def test_full_cycle_sonarr(sonarr_instance: Instance, master_key: bytes) -
     assert logs[0]["action"] == "searched"
     assert logs[0]["item_id"] == 101
     assert logs[0]["item_type"] == "episode"
-    assert logs[0]["instance_id"] == sonarr_instance.id
+    assert logs[0]["instance_id"] == sonarr_instance.core.id
 
     # cooldowns must have one row for episode 101
-    cds = await _cooldown_rows(sonarr_instance.id)
+    cds = await _cooldown_rows(sonarr_instance.core.id)
     assert len(cds) == 1
     assert cds[0]["item_id"] == 101
     assert cds[0]["item_type"] == "episode"
@@ -205,7 +206,7 @@ async def test_full_cycle_radarr(radarr_instance: Instance, master_key: bytes) -
     assert logs[0]["item_id"] == 201
     assert logs[0]["item_type"] == "movie"
 
-    cds = await _cooldown_rows(radarr_instance.id)
+    cds = await _cooldown_rows(radarr_instance.core.id)
     assert len(cds) == 1
     assert cds[0]["item_id"] == 201
 
@@ -247,7 +248,7 @@ async def test_second_cycle_items_skipped_on_cooldown(
     assert "skipped" in actions
 
     # cooldown row must still be exactly one (upsert, not duplicate)
-    cds = await _cooldown_rows(sonarr_instance.id)
+    cds = await _cooldown_rows(sonarr_instance.core.id)
     assert len(cds) == 1
 
 
@@ -389,8 +390,8 @@ async def test_supervisor_runs_both_instances(
     # Filter out the supervisor info row (instance_id=None)
     searched = [r for r in logs if r["action"] == "searched"]
     instance_ids = {r["instance_id"] for r in searched}
-    assert sonarr_instance.id in instance_ids
-    assert radarr_instance.id in instance_ids
+    assert sonarr_instance.core.id in instance_ids
+    assert radarr_instance.core.id in instance_ids
 
 
 @pytest.mark.integration
@@ -400,7 +401,7 @@ async def test_missing_pass_reaches_deeper_page_when_top_items_are_ineligible(
     sonarr_instance: Instance, master_key: bytes
 ) -> None:
     """Fair scanning should reach page 2 when page 1 candidates are blocked."""
-    await record_search(sonarr_instance.id, 601, "episode")
+    await record_search(sonarr_instance.core.id, 601, "episode")
 
     page_1 = {
         "records": [
@@ -421,7 +422,9 @@ async def test_missing_pass_reaches_deeper_page_when_top_items_are_ineligible(
     )
 
     # Use a small target to ensure we stop once we find one eligible candidate.
-    sonarr_instance.batch_size = 1
+    sonarr_instance = replace(
+        sonarr_instance, missing=replace(sonarr_instance.missing, batch_size=1)
+    )
     count = await run_instance_search(sonarr_instance, master_key)
 
     assert count == 1
@@ -459,8 +462,11 @@ async def test_missing_list_calls_are_bounded_per_cycle(
     # This test measures the ``_MAX_LIST_PAGES_PER_PASS`` page-fetch bound.
     # Random mode adds one probe call which would muddy the assertion, so
     # pin the instance to chronological for this specific check.
-    sonarr_instance.search_order = SearchOrder.chronological
-    sonarr_instance.batch_size = 2
+    sonarr_instance = replace(
+        sonarr_instance,
+        schedule=replace(sonarr_instance.schedule, search_order=SearchOrder.chronological),
+        missing=replace(sonarr_instance.missing, batch_size=2),
+    )
     count = await run_instance_search(sonarr_instance, master_key)
 
     assert count == 0
@@ -546,9 +552,9 @@ async def test_full_cycle_lidarr(lidarr_instance: Instance, master_key: bytes) -
     assert logs[0]["action"] == "searched"
     assert logs[0]["item_id"] == 301
     assert logs[0]["item_type"] == "album"
-    assert logs[0]["instance_id"] == lidarr_instance.id
+    assert logs[0]["instance_id"] == lidarr_instance.core.id
 
-    cds = await _cooldown_rows(lidarr_instance.id)
+    cds = await _cooldown_rows(lidarr_instance.core.id)
     assert len(cds) == 1
     assert cds[0]["item_id"] == 301
     assert cds[0]["item_type"] == "album"
@@ -580,7 +586,7 @@ async def test_full_cycle_readarr(readarr_instance: Instance, master_key: bytes)
     assert logs[0]["item_id"] == 401
     assert logs[0]["item_type"] == "book"
 
-    cds = await _cooldown_rows(readarr_instance.id)
+    cds = await _cooldown_rows(readarr_instance.core.id)
     assert len(cds) == 1
     assert cds[0]["item_id"] == 401
     assert cds[0]["item_type"] == "book"
@@ -612,7 +618,7 @@ async def test_full_cycle_whisparr_v2(whisparr_v2_instance: Instance, master_key
     assert logs[0]["item_id"] == 501
     assert logs[0]["item_type"] == "whisparr_v2_episode"
 
-    cds = await _cooldown_rows(whisparr_v2_instance.id)
+    cds = await _cooldown_rows(whisparr_v2_instance.core.id)
     assert len(cds) == 1
     assert cds[0]["item_id"] == 501
     assert cds[0]["item_type"] == "whisparr_v2_episode"

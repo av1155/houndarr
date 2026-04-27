@@ -24,8 +24,6 @@ from houndarr.services.url_validation import is_blocked_address
 
 logger = logging.getLogger(__name__)
 
-WantedKind = Literal["missing", "cutoff"]
-
 
 @dataclass(frozen=True, slots=True)
 class InstanceSnapshot:
@@ -88,6 +86,9 @@ class ReconcileSets:
         to a blank state.
         """
         return not self.missing and not self.cutoff and not self.upgrade
+
+
+WantedKind = Literal["missing", "cutoff"]
 
 
 # Default timeouts (seconds): connect=5, read=30
@@ -208,7 +209,11 @@ class ArrClient(ABC):
         # services/url_validation.py threat model.  ``follow_redirects``
         # is stated explicitly (httpx's own default is False) so a
         # future dependency upgrade that flips the default cannot
-        # silently weaken the posture.
+        # silently weaken the posture.  The response event_hook below
+        # is the defense-in-depth layer: even if follow_redirects ever
+        # goes True, any 3xx ``Location`` that resolves to a blocked
+        # target (loopback, link-local, unspecified) raises before the
+        # transport would chase it.
         self._client = httpx.AsyncClient(
             base_url=base,
             headers={"X-Api-Key": api_key, "Accept": "application/json"},
@@ -257,6 +262,10 @@ class ArrClient(ABC):
         ``version``; both are optional because *arr forks sometimes omit
         them.  Network failures and malformed payloads both collapse to
         ``None`` so callers can treat unreachable and unparseable alike.
+        Callers that need a typed escalation of the unreachable state
+        (for example the supervisor's reconnect loop) wrap the ``None``
+        return in :class:`~houndarr.errors.ClientUnreachableError`
+        themselves; this method intentionally does not raise.
         """
         try:
             result = await self._get(self._SYSTEM_STATUS_PATH)
@@ -277,13 +286,36 @@ class ArrClient(ABC):
         ``/api/v3/queue/status`` (Sonarr, Radarr, Whisparr) and is overridden
         to ``/api/v1/queue/status`` by Lidarr and Readarr.
 
+        Raw ``httpx`` and ``pydantic`` failures are wrapped in typed
+        :class:`~houndarr.errors.ClientError` subclasses so callers get
+        a Houndarr-specific surface they can catch.  The original
+        exception is preserved on ``__cause__`` via ``raise ... from``.
+
         Raises:
-            httpx.HTTPError: If the request fails or returns a non-2xx status.
-            pydantic.ValidationError: If the response is missing
-                ``totalCount`` or its shape cannot be validated.
+            ClientHTTPError: The server returned a non-2xx status.
+            ClientTransportError: The request failed before a response
+                arrived (connection refused, DNS failure, timeout,
+                malformed URL, etc.).
+            ClientValidationError: The response parsed as JSON but did
+                not match the :class:`QueueStatus` schema.
         """
-        result = await self._get(self._QUEUE_STATUS_PATH)
-        return QueueStatus.model_validate(result)
+        try:
+            result = await self._get(self._QUEUE_STATUS_PATH)
+        except httpx.HTTPStatusError as exc:
+            raise ClientHTTPError(
+                f"queue status: HTTP {exc.response.status_code} from {self._QUEUE_STATUS_PATH}"
+            ) from exc
+        except (httpx.RequestError, httpx.InvalidURL) as exc:
+            raise ClientTransportError(
+                f"queue status: transport error reaching {self._QUEUE_STATUS_PATH}: {exc}"
+            ) from exc
+
+        try:
+            return QueueStatus.model_validate(result)
+        except ValidationError as exc:
+            raise ClientValidationError(
+                f"queue status: malformed payload from {self._QUEUE_STATUS_PATH}"
+            ) from exc
 
     # /wanted template (paginated clients only; Whisparr v3 does not use it)
 
@@ -325,8 +357,9 @@ class ArrClient(ABC):
         each record (so the parser can read ``series.title`` /
         ``artist.artistName`` / ``author.authorName`` without an extra
         round trip).  :meth:`_fetch_wanted_total` flips it to ``False``
-        because the size-1 probe only needs ``totalRecords``, and
-        omitting the embed matches every per-app probe pre-refactor.
+        because the size-1 probe only needs ``totalRecords`` and
+        omitting the embed keeps that probe as cheap as the *arr APIs
+        allow.
 
         Subclasses without ``/wanted`` endpoints (Whisparr v3) leave the
         hooks unset and never call this method; calling it on a client
@@ -407,9 +440,10 @@ class ArrClient(ABC):
         """
         path = f"{self._WANTED_BASE_PATH}/{kind}"
         try:
-            # The probe omits the embed-parent param because totalRecords
-            # is independent of record shape; matches every per-app
-            # get_wanted_total override pre-refactor.
+            # The probe omits the embed-parent param because
+            # ``totalRecords`` is independent of record shape; keeping
+            # the probe payload minimal lowers the cost of the probe
+            # against the *arr APIs.
             envelope = await self._fetch_wanted_page(
                 kind,
                 page=1,

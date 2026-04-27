@@ -1,22 +1,19 @@
 """Instances aggregate: SQL boundary for the ``instances`` table.
 
-Track D.3 landed the read path (``list_instances`` / ``get_instance``
-plus the row mapper and the fault-tolerant column readers that keep
-tests with pre-v13 minimal rows compatible with the current
-:class:`houndarr.services.instances.Instance` dataclass).  Track D.4
-lands the write path: :class:`InstanceInsert` and
-:class:`InstanceUpdate` payload dataclasses, ``insert_instance``,
-``update_instance``, ``delete_instance``, and
-``update_instance_snapshot``.
+The read path (:func:`list_instances`, :func:`get_instance`) plus
+:func:`_row_to_instance` and the tolerant column readers keep pre-v13
+test rows loadable under the current sub-struct
+:class:`~houndarr.services.instances.Instance`.  The write path
+(:class:`InstanceInsert`, :class:`InstanceUpdate`,
+:func:`insert_instance`, :func:`update_instance`,
+:func:`delete_instance`, :func:`update_instance_snapshot`) covers
+every column the service writes today.
 
-The :class:`~houndarr.services.instances.Instance` domain dataclass,
-the search-mode :class:`enum.StrEnum` classes, and the value-mapping
-invariants all stay in the service module through Track D's early
-batches; D.13 - D.20 reshape ``Instance`` into sub-struct facades and
-the row mapper will follow that migration.  Until then this
-repository imports the dataclass and enums from the service and the
-service's writes delegate here via local imports to avoid an
-import-time cycle.
+The :class:`~houndarr.services.instances.Instance` domain dataclass
+and the :class:`enum.StrEnum` search-mode classes live in the service
+module; this repository imports them so the row mapper can return the
+same types callers already consume.  Service writes delegate here via
+local imports to avoid an import-time cycle.
 
 API keys are encrypted at rest: every write accepts plaintext, and
 the repository runs :func:`houndarr.crypto.encrypt` before touching
@@ -61,12 +58,19 @@ from houndarr.config import (
 from houndarr.crypto import decrypt, encrypt
 from houndarr.database import get_db
 from houndarr.services.instances import (
+    CutoffPolicy,
     Instance,
+    InstanceCore,
+    InstanceTimestamps,
     InstanceType,
     LidarrSearchMode,
+    MissingPolicy,
     ReadarrSearchMode,
+    RuntimeSnapshot,
+    SchedulePolicy,
     SearchOrder,
     SonarrSearchMode,
+    UpgradePolicy,
     WhisparrV2SearchMode,
 )
 
@@ -132,48 +136,62 @@ def _row_to_instance(row: aiosqlite.Row, master_key: bytes) -> Instance:
         ``api_key``.
     """
     return Instance(
-        id=row["id"],
-        name=row["name"],
-        type=InstanceType(row["type"]),
-        url=row["url"],
-        api_key=decrypt(row["encrypted_api_key"], master_key),
-        enabled=bool(row["enabled"]),
-        batch_size=row["batch_size"],
-        sleep_interval_mins=row["sleep_interval_mins"],
-        hourly_cap=row["hourly_cap"],
-        cooldown_days=row["cooldown_days"],
-        post_release_grace_hrs=row["post_release_grace_hrs"],
-        queue_limit=row["queue_limit"],
-        cutoff_enabled=bool(row["cutoff_enabled"]),
-        cutoff_batch_size=row["cutoff_batch_size"],
-        cutoff_cooldown_days=row["cutoff_cooldown_days"],
-        cutoff_hourly_cap=row["cutoff_hourly_cap"],
-        created_at=row["created_at"],
-        updated_at=row["updated_at"],
-        sonarr_search_mode=SonarrSearchMode(row["sonarr_search_mode"]),
-        lidarr_search_mode=LidarrSearchMode(row["lidarr_search_mode"]),
-        readarr_search_mode=ReadarrSearchMode(row["readarr_search_mode"]),
-        whisparr_v2_search_mode=WhisparrV2SearchMode(row["whisparr_v2_search_mode"]),
-        upgrade_enabled=bool(row["upgrade_enabled"]),
-        upgrade_batch_size=row["upgrade_batch_size"],
-        upgrade_cooldown_days=row["upgrade_cooldown_days"],
-        upgrade_hourly_cap=row["upgrade_hourly_cap"],
-        upgrade_sonarr_search_mode=SonarrSearchMode(row["upgrade_sonarr_search_mode"]),
-        upgrade_lidarr_search_mode=LidarrSearchMode(row["upgrade_lidarr_search_mode"]),
-        upgrade_readarr_search_mode=ReadarrSearchMode(row["upgrade_readarr_search_mode"]),
-        upgrade_whisparr_v2_search_mode=WhisparrV2SearchMode(
-            row["upgrade_whisparr_v2_search_mode"]
+        core=InstanceCore(
+            id=row["id"],
+            name=row["name"],
+            type=InstanceType(row["type"]),
+            url=row["url"],
+            api_key=decrypt(row["encrypted_api_key"], master_key),
+            enabled=bool(row["enabled"]),
         ),
-        upgrade_series_window_size=row["upgrade_series_window_size"],
-        upgrade_item_offset=row["upgrade_item_offset"],
-        upgrade_series_offset=row["upgrade_series_offset"],
-        missing_page_offset=row["missing_page_offset"],
-        cutoff_page_offset=row["cutoff_page_offset"],
-        allowed_time_window=row["allowed_time_window"],
-        search_order=SearchOrder(row["search_order"]),
-        monitored_total=_optional_row_int(row, "monitored_total"),
-        unreleased_count=_optional_row_int(row, "unreleased_count"),
-        snapshot_refreshed_at=_optional_row_str(row, "snapshot_refreshed_at"),
+        missing=MissingPolicy(
+            batch_size=row["batch_size"],
+            sleep_interval_mins=row["sleep_interval_mins"],
+            hourly_cap=row["hourly_cap"],
+            cooldown_days=row["cooldown_days"],
+            post_release_grace_hrs=row["post_release_grace_hrs"],
+            queue_limit=row["queue_limit"],
+            sonarr_search_mode=SonarrSearchMode(row["sonarr_search_mode"]),
+            lidarr_search_mode=LidarrSearchMode(row["lidarr_search_mode"]),
+            readarr_search_mode=ReadarrSearchMode(row["readarr_search_mode"]),
+            whisparr_v2_search_mode=WhisparrV2SearchMode(row["whisparr_v2_search_mode"]),
+        ),
+        cutoff=CutoffPolicy(
+            cutoff_enabled=bool(row["cutoff_enabled"]),
+            cutoff_batch_size=row["cutoff_batch_size"],
+            cutoff_cooldown_days=row["cutoff_cooldown_days"],
+            cutoff_hourly_cap=row["cutoff_hourly_cap"],
+        ),
+        upgrade=UpgradePolicy(
+            upgrade_enabled=bool(row["upgrade_enabled"]),
+            upgrade_batch_size=row["upgrade_batch_size"],
+            upgrade_cooldown_days=row["upgrade_cooldown_days"],
+            upgrade_hourly_cap=row["upgrade_hourly_cap"],
+            upgrade_sonarr_search_mode=SonarrSearchMode(row["upgrade_sonarr_search_mode"]),
+            upgrade_lidarr_search_mode=LidarrSearchMode(row["upgrade_lidarr_search_mode"]),
+            upgrade_readarr_search_mode=ReadarrSearchMode(row["upgrade_readarr_search_mode"]),
+            upgrade_whisparr_v2_search_mode=WhisparrV2SearchMode(
+                row["upgrade_whisparr_v2_search_mode"]
+            ),
+            upgrade_item_offset=row["upgrade_item_offset"],
+            upgrade_series_offset=row["upgrade_series_offset"],
+            upgrade_series_window_size=row["upgrade_series_window_size"],
+        ),
+        schedule=SchedulePolicy(
+            allowed_time_window=row["allowed_time_window"],
+            search_order=SearchOrder(row["search_order"]),
+            missing_page_offset=row["missing_page_offset"],
+            cutoff_page_offset=row["cutoff_page_offset"],
+        ),
+        snapshot=RuntimeSnapshot(
+            monitored_total=_optional_row_int(row, "monitored_total"),
+            unreleased_count=_optional_row_int(row, "unreleased_count"),
+            snapshot_refreshed_at=_optional_row_str(row, "snapshot_refreshed_at"),
+        ),
+        timestamps=InstanceTimestamps(
+            created_at=row["created_at"],
+            updated_at=row["updated_at"],
+        ),
     )
 
 

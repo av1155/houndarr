@@ -1,16 +1,15 @@
 {#-
   Shared badge macros for instance rows and log rows.
 
-  Every class string here is copied verbatim from the inline blocks
-  in partials/instance_row.html and partials/log_rows.html.  Track E.1
-  introduces this file without migrating consumers; E.2..E.4 do that.
-  Centralising the palette now means future Track G work can change a
-  badge's component class in one seam instead of five call sites.
+  Every class string matches the palette used by
+  partials/instance_row.html and partials/log_rows.html.
+  Centralising the palette here means a badge's component class
+  can change in one seam instead of across five call sites.
 
-  The dashboard `dash-pill` surface (rendered from static/js/dashboard.js
-  against the BEM CSS in partials/pages/dashboard_content.html) is a
-  distinct visual system and is intentionally NOT represented here.
-  See docs/refactor/track-e-notes.md.
+  The dashboard `dash-pill` surface (rendered from
+  static/js/dashboard.js against the BEM CSS in
+  partials/pages/dashboard_content.html) is a distinct visual
+  system and is intentionally NOT represented here.
 -#}
 
 
@@ -23,9 +22,8 @@
   'whisparr_v2': {'bg': 'bg-whisparr-v2-bg', 'text': 'text-whisparr-v2', 'border': 'border-whisparr-v2/40', 'label': 'Whisparr v2'},
   'whisparr_v3': {'bg': 'bg-whisparr-v3-bg', 'text': 'text-whisparr-v3', 'border': 'border-whisparr-v3/40', 'label': 'Whisparr v3'},
 } -%}
-{#- Unknown type falls back to the Sonarr palette, matching the
-    pre-refactor `badge_map.get(value, badge_map['sonarr'])` branch
-    so no row ever renders an unstyled span. -#}
+{#- Unknown type falls back to the Sonarr palette so no row ever
+    renders an unstyled span. -#}
 {%- set b = badge_map.get(type_value, badge_map['sonarr']) -%}
 <span class="inline-flex items-center px-2 py-0.5 rounded-chip text-xs font-mono {{ b.bg }} {{ b.text }} border {{ b.border }}">{{ b.label }}</span>
 {%- endmacro %}
@@ -67,28 +65,6 @@
 <span class="badge badge-soft badge-success">run_now</span>
 {%- elif trigger == "system" -%}
 <span class="badge badge-soft badge-neutral">system</span>
-{%- else -%}
-<span class="text-slate-600">-</span>
-{%- endif -%}
-{%- endmacro %}
-
-
-{%- macro log_cycle_outcome_badge(progress) -%}
-{%- if progress == "progress" -%}
-<span class="badge badge-soft badge-success">searched</span>
-{%- elif progress == "no_progress" -%}
-<span class="badge badge-soft badge-neutral">skips only</span>
-{%- else -%}
-<span class="text-[0.625rem] text-slate-600 font-mono">unknown</span>
-{%- endif -%}
-{%- endmacro %}
-
-
-{%- macro status_pill(state) -%}
-{%- if state == "error" -%}
-<span class="inline-flex items-center justify-center gap-1 text-xs text-danger min-w-[4.5rem]"><span class="w-1.5 h-1.5 rounded-full bg-danger inline-block station-pulse-dot" title="Instance is reporting errors" aria-label="Instance is reporting errors"></span><span class="hidden sm:inline">Error</span></span>
-{%- elif state == "active" -%}
-<span class="inline-flex items-center justify-center gap-1 text-xs text-success min-w-[4.5rem]"><span class="w-1.5 h-1.5 rounded-full bg-success inline-block station-pulse-dot" title="Search enabled" aria-label="Search enabled"></span><span class="hidden sm:inline">Active</span></span>
 {%- else -%}
 <span class="text-slate-600">-</span>
 {%- endif -%}

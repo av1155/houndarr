@@ -14,17 +14,16 @@ import math
 import random
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from typing import Any
 from uuid import uuid4
 
 import httpx
-from pydantic import ValidationError
 
-from houndarr.database import get_db
 from houndarr.engine.adapters import get_adapter
 from houndarr.engine.adapters.protocols import AppAdapterProto
 from houndarr.engine.candidates import SearchCandidate
+from houndarr.engine.config.search_pass import SearchPassConfig
 from houndarr.enums import CycleTrigger, ItemType, SearchAction, SearchKind
 from houndarr.errors import (
     ClientError,
@@ -154,9 +153,7 @@ def _reset_random_deck(instance_id: int, search_kind: SearchKind | str) -> None:
 _SHUFFLE_PAD: object = object()
 
 
-# ---------------------------------------------------------------------------
 # search_log helpers
-# ---------------------------------------------------------------------------
 
 
 def _format_hourly_limit_reason(kind: SearchKind | str, cap: int) -> str:
@@ -165,7 +162,7 @@ def _format_hourly_limit_reason(kind: SearchKind | str, cap: int) -> str:
     Centralises the phrasing used at the three hourly-cap gate sites
     (missing / cutoff / upgrade) so they cannot drift apart.  The
     parameter shape ``(N/hr)`` reads as "N per hour" to a user, where
-    the older ``(N)`` form read as an error code, a repeat finding
+    the older ``(N)`` form read as an error code — a repeat finding
     in post-Huntarr self-hoster research.
     """
     prefix = "" if kind == "missing" else f"{kind} "
@@ -284,53 +281,40 @@ def _cutoff_scan_budget(batch_size: int) -> int:
 
 
 async def _count_searches_last_hour(instance_id: int, search_kind: SearchKind | str) -> int:
-    """Count successful searches in the last hour for one pass kind."""
-    cutoff = datetime.now(UTC) - timedelta(hours=1)
-    cutoff_iso = cutoff.strftime("%Y-%m-%dT%H:%M:%S.%f") + "Z"
+    """Count successful searches in the last hour for one pass kind.
 
-    async with get_db() as db:
-        async with db.execute(
-            """
-            SELECT COUNT(*)
-            FROM search_log
-            WHERE instance_id = ?
-              AND action = 'searched'
-              AND search_kind = ?
-              AND timestamp > ?
-            """,
-            (instance_id, search_kind, cutoff_iso),
-        ) as cur:
-            row = await cur.fetchone()
+    Thin delegator over
+    :func:`houndarr.repositories.search_log.fetch_recent_searches`
+    since D.27.  The hourly cap only ever passes a 3600-second window;
+    the repository surface takes the window as a parameter so the
+    engine can stay on that single contract.
+    """
+    from houndarr.repositories.search_log import fetch_recent_searches
 
-    return int(row[0]) if row else 0
+    return await fetch_recent_searches(
+        instance_id,
+        search_kind=str(search_kind),
+        within_seconds=3600,
+    )
 
 
 async def _latest_missing_reason_ref(ref: ItemRef) -> str | None:
     """Return the latest logged missing-pass reason for *ref*, if any.
 
-    Used by the release-timing retry branch in :func:`_run_search_pass`
-    to decide whether an item that is currently on cooldown should be
-    retried (because the last logged reason was a pre-release or
-    post-release-grace skip that has since elapsed) or left on
-    cooldown.
+    Thin delegator over
+    :func:`houndarr.repositories.search_log.fetch_latest_missing_reason`
+    since D.27.  Used by the release-timing retry branch in
+    :func:`_run_search_pass` to decide whether an item on cooldown
+    should be retried (because the last logged reason was a
+    pre-release or post-release-grace skip that has since elapsed).
     """
-    async with get_db() as db:
-        async with db.execute(
-            """
-            SELECT reason
-            FROM search_log
-            WHERE instance_id = ?
-              AND item_id = ?
-              AND item_type = ?
-              AND search_kind = 'missing'
-            ORDER BY timestamp DESC, id DESC
-            LIMIT 1
-            """,
-            (ref.instance_id, ref.item_id, ref.item_type.value),
-        ) as cur:
-            row = await cur.fetchone()
+    from houndarr.repositories.search_log import fetch_latest_missing_reason
 
-    return str(row[0]) if row and row[0] is not None else None
+    return await fetch_latest_missing_reason(
+        ref.instance_id,
+        ref.item_id,
+        ref.item_type.value,
+    )
 
 
 def _is_release_timing_reason(reason: str | None) -> bool:
@@ -351,26 +335,24 @@ async def _dispatch_with_typed_wrap(
 ) -> None:
     """Open a client, call *dispatch_fn*, and surface failures typed.
 
-    Track B.14 introduces this helper so the three dispatch call sites
-    in :func:`_run_search_pass` and :func:`_run_upgrade_pass` can each
-    narrow their ``except Exception`` to :class:`EngineDispatchError`.
-    The helper owns the whole ``adapter.make_client -> dispatch``
-    attempt boundary: client construction (``httpx.InvalidURL``),
-    context-manager entry / exit, and the dispatch call itself all
+    The three dispatch call sites in :func:`_run_search_pass` and
+    :func:`_run_upgrade_pass` share this helper so each one narrows
+    its ``except Exception`` to :class:`EngineDispatchError`.  The
+    helper owns the whole ``adapter.make_client -> dispatch`` attempt
+    boundary: client construction (``httpx.InvalidURL``),
+    context-manager entry and exit, and the dispatch call itself all
     get typed into one surface.
 
     Already-typed :class:`EngineError` and :class:`ClientError`
     subclasses propagate unchanged so richer context from the client
-    layer (Track B.11 / B.12) is not flattened.  Track B.16 will
-    move the wrap into the adapter implementations; at that point
-    this helper becomes a thin passthrough.
+    layer is not flattened.
 
-    The typed error message is ``str(exc)`` verbatim, which keeps the
-    ``search_log.message`` field byte-equal to the pre-refactor
-    ``message=str(exc)`` write and preserves the golden log shape.
+    The typed error message is ``str(exc)`` verbatim, which keeps
+    the ``search_log.message`` field stable against the golden-log
+    characterisation test.
 
     Args:
-        adapter: The :class:`AppAdapterProto` for the instance.
+        adapter: :class:`AppAdapterProto` for the instance.
         instance: Fully-populated instance.
         dispatch_fn: Adapter dispatch callable; takes ``(client,
             candidate)`` and sends the search command.
@@ -397,11 +379,12 @@ async def _persist_offset_with_typed_wrap(
 ) -> None:
     """Call :func:`update_instance` with offset kwargs, typing failures.
 
-    Track B.15 introduces this helper so the four offset-persist call
-    sites (upgrade series offset + upgrade item offset in
-    :func:`_run_upgrade_pass`; missing page offset + cutoff page offset
-    in :func:`_run_instance_search_impl`) can narrow their
-    ``except Exception`` to :class:`EngineOffsetPersistError`.
+    The four offset-persist call sites (upgrade series offset and
+    upgrade item offset in :func:`_run_upgrade_pass`; missing page
+    offset and cutoff page offset in
+    :func:`_run_instance_search_impl`) share this helper so each one
+    narrows its ``except Exception`` to
+    :class:`EngineOffsetPersistError`.
 
     These writes are non-fatal by design: callers swallow the typed
     error and the next cycle retries the persist.  The wrap keeps the
@@ -440,7 +423,7 @@ async def _fetch_pool_with_typed_wrap(
     :class:`EnginePoolFetchError` surface.
 
     Args:
-        adapter: The :class:`AppAdapterProto` for the instance.
+        adapter: :class:`AppAdapterProto` for the instance.
         instance: Fully-populated instance.
 
     Returns:
@@ -459,65 +442,51 @@ async def _fetch_pool_with_typed_wrap(
         raise EnginePoolFetchError(str(exc)) from exc
 
 
-# ---------------------------------------------------------------------------
 # Unified search pass
-# ---------------------------------------------------------------------------
 
 
 async def _run_search_pass(  # noqa: C901
     instance: Instance,
     adapter: AppAdapterProto,
-    *,
-    adapt_fn: Callable[..., SearchCandidate],
-    dispatch_fn: Callable[..., Awaitable[None]],
-    fetch_fn: Callable[..., Awaitable[list[Any]]],
-    search_kind: SearchKind | str,
-    batch_size: int,
-    hourly_cap: int,
-    cooldown_days: int,
-    page_size: int,
-    scan_budget: int,
-    cycle_id: str,
-    cycle_trigger: CycleTrigger | str,
-    start_page: int = 1,
-    total_fn: Callable[[], Awaitable[int]] | None = None,
+    config: SearchPassConfig,
 ) -> tuple[int, int]:
     """Execute a single search pass (missing or cutoff) using the adapter.
 
     This is the unified pipeline that replaces the previously duplicated
     missing-pass inline code and the bifurcated ``_run_cutoff_pass()``
     function.  It pages through items, converts each to a
-    :class:`SearchCandidate` via *adapt_fn*, applies eligibility checks
-    (unreleased delay, hourly cap, cooldown), and dispatches searches via
-    *dispatch_fn*.
+    :class:`SearchCandidate` via ``config.adapt_fn``, applies eligibility
+    checks (unreleased delay, hourly cap, cooldown), and dispatches
+    searches via ``config.dispatch_fn``.
 
     Args:
         instance: Fully-populated (decrypted) instance.
         adapter: The :class:`AppAdapterProto` implementation for this
             instance type.
-        adapt_fn: Converts a raw API item to a :class:`SearchCandidate`.
-        dispatch_fn: Sends the search command via the appropriate client.
-        fetch_fn: Bound method to fetch a page of items
-            (e.g. ``client.get_missing`` or ``client.get_cutoff_unmet``).
-        search_kind: ``"missing"`` or ``"cutoff"``.
-        batch_size: Maximum items to search in this pass.
-        hourly_cap: Hourly search limit for this pass kind (0 = unlimited).
-        cooldown_days: Cooldown window for this pass kind.
-        page_size: Number of items to request per page.
-        scan_budget: Maximum candidates to evaluate before stopping.
-        cycle_id: Shared cycle identifier for all log rows.
-        cycle_trigger: How this cycle was initiated.
-        start_page: 1-based page number to begin fetching from (for
-            offset rotation across cycles).
-        total_fn: Optional probe returning the total record count for this
-            pass.  When ``instance.search_order == SearchOrder.random`` the
-            probe is used to pick a random start page each cycle; the
-            persisted offset is then ignored.  Probe failure falls back to
-            *start_page* with a warning.
+        config: :class:`SearchPassConfig` carrying the adapter bindings,
+            rate-shape knobs, cycle metadata, and pagination / total
+            probe for this pass.  See the class docstring for the
+            per-field contract.  Random search order uses
+            ``config.total_fn`` to pick a random start page each cycle;
+            probe failure falls back to ``config.start_page`` with a
+            warning.
 
     Returns:
         Tuple of (items_searched, next_start_page).
     """
+    adapt_fn = config.adapt_fn
+    dispatch_fn = config.dispatch_fn
+    fetch_fn = config.fetch_fn
+    search_kind = config.search_kind
+    batch_size = config.batch_size
+    hourly_cap = config.hourly_cap
+    cooldown_days = config.cooldown_days
+    page_size = config.page_size
+    scan_budget = config.scan_budget
+    cycle_id = config.cycle_id
+    cycle_trigger = config.cycle_trigger
+    start_page = config.start_page
+    total_fn = config.total_fn
     target = max(0, batch_size)
     if target == 0:
         return 0, start_page
@@ -525,7 +494,7 @@ async def _run_search_pass(  # noqa: C901
     is_cutoff = search_kind == "cutoff"
     log_prefix = "cutoff " if is_cutoff else ""
 
-    searches_this_hour = await _count_searches_last_hour(instance.id, search_kind)
+    searches_this_hour = await _count_searches_last_hour(instance.core.id, search_kind)
     seen_item_ids: set[int] = set()
     seen_group_keys: set[tuple[int, int]] = set()
     searched = 0
@@ -535,13 +504,13 @@ async def _run_search_pass(  # noqa: C901
     random_max_page = 0
     use_random_deck = False
 
-    if instance.search_order == SearchOrder.random and total_fn is not None:
+    if instance.schedule.search_order == SearchOrder.random and total_fn is not None:
         try:
             total = await total_fn()
         except Exception as exc:  # noqa: BLE001
             logger.warning(
                 "[%s] %stotal probe failed (%s); falling back to page %d",
-                instance.name,
+                instance.core.name,
                 log_prefix,
                 exc,
                 page,
@@ -571,11 +540,11 @@ async def _run_search_pass(  # noqa: C901
             items = list(items)
             while len(items) < page_size:
                 items.append(_SHUFFLE_PAD)
-        if instance.search_order == SearchOrder.random and items:
+        if instance.schedule.search_order == SearchOrder.random and items:
             random.shuffle(items)  # noqa: S311  # nosec B311
         logger.debug(
             "[%s] fetched %d %sitem(s) from page %d",
-            instance.name,
+            instance.core.name,
             len(items),
             "cutoff-unmet " if is_cutoff else "missing ",
             page,
@@ -627,7 +596,7 @@ async def _run_search_pass(  # noqa: C901
 
             candidate = adapt_fn(item, instance)
             ref = ItemRef(
-                instance.id,
+                instance.core.id,
                 candidate.item_id,
                 ItemType(candidate.item_type),
             )
@@ -674,7 +643,9 @@ async def _run_search_pass(  # noqa: C901
                 reason = _format_hourly_limit_reason(
                     "cutoff" if is_cutoff else "missing", hourly_cap
                 )
-                logger.info("[%s] %s%s: %s", instance.name, log_prefix, candidate.item_id, reason)
+                logger.info(
+                    "[%s] %s%s: %s", instance.core.name, log_prefix, candidate.item_id, reason
+                )
                 await _write_item_log(
                     ref,
                     SearchAction.skipped.value,
@@ -694,7 +665,7 @@ async def _run_search_pass(  # noqa: C901
                     if _is_release_timing_reason(latest_reason):
                         logger.info(
                             "[%s] allowing missing retry for %s after release-timing block",
-                            instance.name,
+                            instance.core.name,
                             candidate.item_id,
                         )
                         scanned += 1
@@ -706,7 +677,7 @@ async def _run_search_pass(  # noqa: C901
                             msg = str(exc)
                             logger.warning(
                                 "[%s] %ssearch failed for %s: %s",
-                                instance.name,
+                                instance.core.name,
                                 log_prefix,
                                 candidate.item_id,
                                 msg,
@@ -735,7 +706,7 @@ async def _run_search_pass(  # noqa: C901
                         searches_this_hour += 1
                         logger.info(
                             "[%s] %ssearched %s %s",
-                            instance.name,
+                            instance.core.name,
                             log_prefix,
                             candidate.item_type,
                             candidate.item_id,
@@ -749,11 +720,11 @@ async def _run_search_pass(  # noqa: C901
                     else f"on cooldown ({cooldown_days}d)"
                 )
                 bucket = "cutoff_cd" if is_cutoff else "cooldown"
-                skip_key = (instance.id, candidate.item_id, search_kind, bucket)
+                skip_key = (instance.core.id, candidate.item_id, search_kind, bucket)
                 if cycle_trigger == "run_now" or await should_log_skip(skip_key):
                     logger.debug(
                         "[%s] %s%s: %s",
-                        instance.name,
+                        instance.core.name,
                         log_prefix,
                         candidate.item_id,
                         reason,
@@ -779,7 +750,7 @@ async def _run_search_pass(  # noqa: C901
                 msg = str(exc)
                 logger.warning(
                     "[%s] %ssearch failed for %s: %s",
-                    instance.name,
+                    instance.core.name,
                     log_prefix,
                     candidate.item_id,
                     msg,
@@ -808,7 +779,7 @@ async def _run_search_pass(  # noqa: C901
             searches_this_hour += 1
             logger.info(
                 "[%s] %ssearched %s %s",
-                instance.name,
+                instance.core.name,
                 log_prefix,
                 candidate.item_type,
                 candidate.item_id,
@@ -830,9 +801,7 @@ async def _run_search_pass(  # noqa: C901
     return searched, page
 
 
-# ---------------------------------------------------------------------------
 # Upgrade pass (dedicated, does NOT reuse _run_search_pass)
-# ---------------------------------------------------------------------------
 
 
 async def _run_upgrade_pass(
@@ -859,9 +828,9 @@ async def _run_upgrade_pass(
     Returns:
         Count of items searched in this upgrade pass.
     """
-    batch_size = min(max(0, instance.upgrade_batch_size), _UPGRADE_BATCH_HARD_CAP)
-    hourly_cap = min(max(0, instance.upgrade_hourly_cap), _UPGRADE_HOURLY_CAP_HARD_CAP)
-    cooldown_days = max(instance.upgrade_cooldown_days, _UPGRADE_MIN_COOLDOWN_DAYS)
+    batch_size = min(max(0, instance.upgrade.upgrade_batch_size), _UPGRADE_BATCH_HARD_CAP)
+    hourly_cap = min(max(0, instance.upgrade.upgrade_hourly_cap), _UPGRADE_HOURLY_CAP_HARD_CAP)
+    cooldown_days = max(instance.upgrade.upgrade_cooldown_days, _UPGRADE_MIN_COOLDOWN_DAYS)
     scan_budget = _clamp(batch_size * 8, _UPGRADE_SCAN_BUDGET_MIN, _UPGRADE_SCAN_BUDGET_MAX)
 
     if batch_size == 0:
@@ -872,9 +841,9 @@ async def _run_upgrade_pass(
         pool = await _fetch_pool_with_typed_wrap(adapter, instance)
     except EnginePoolFetchError as exc:
         msg = str(exc)
-        logger.warning("[%s] upgrade pool fetch failed: %s", instance.name, msg)
+        logger.warning("[%s] upgrade pool fetch failed: %s", instance.core.name, msg)
         await _write_log(
-            instance.id,
+            instance.core.id,
             None,
             None,
             SearchAction.error.value,
@@ -894,19 +863,19 @@ async def _run_upgrade_pass(
     # series feeds the upgrade pool, so continuing to rotate it in random
     # mode preserves whole-library coverage while the shuffle happens
     # within each rotated slice.
-    if pool and instance.type in (InstanceType.sonarr, InstanceType.whisparr_v2):
-        new_series_offset = instance.upgrade_series_offset + 5
+    if pool and instance.core.type in (InstanceType.sonarr, InstanceType.whisparr_v2):
+        new_series_offset = instance.upgrade.upgrade_series_offset + 5
         try:
             await _persist_offset_with_typed_wrap(
-                instance.id,
+                instance.core.id,
                 master_key=master_key,
                 upgrade_series_offset=new_series_offset,
             )
         except EngineOffsetPersistError:
-            logger.warning("[%s] failed to persist upgrade_series_offset", instance.name)
+            logger.warning("[%s] failed to persist upgrade_series_offset", instance.core.name)
 
     if not pool:
-        logger.info("[%s] upgrade pool empty, nothing to upgrade", instance.name)
+        logger.info("[%s] upgrade pool empty, nothing to upgrade", instance.core.name)
         # Suppress identical info rows on every cycle for an instance
         # that has nothing to upgrade.  One row per 6 hours per
         # instance keeps the logs feed calm while still proving the
@@ -914,9 +883,9 @@ async def _run_upgrade_pass(
         # should_log_info` for the LRU + TTL contract.
         from houndarr.services.cooldown import should_log_info
 
-        if await should_log_info((instance.id, "upgrade_pool_empty"), 6 * 3600):
+        if await should_log_info((instance.core.id, "upgrade_pool_empty"), 6 * 3600):
             await _write_log(
-                instance.id,
+                instance.core.id,
                 None,
                 None,
                 SearchAction.info.value,
@@ -930,7 +899,7 @@ async def _run_upgrade_pass(
     # Random mode shuffles the pool and bypasses id-sort + offset-rotation.
     # Chronological mode keeps the deterministic rotation so coverage is
     # guaranteed over time.
-    if instance.search_order == SearchOrder.random:
+    if instance.schedule.search_order == SearchOrder.random:
         random.shuffle(pool)  # noqa: S311  # nosec B311
         offset = 0
         rotated = pool
@@ -946,10 +915,10 @@ async def _run_upgrade_pass(
             )
 
         pool.sort(key=_item_sort_key)
-        offset = instance.upgrade_item_offset % len(pool) if pool else 0
+        offset = instance.upgrade.upgrade_item_offset % len(pool) if pool else 0
         rotated = pool[offset:] + pool[:offset]
 
-    searches_this_hour = await _count_searches_last_hour(instance.id, "upgrade")
+    searches_this_hour = await _count_searches_last_hour(instance.core.id, "upgrade")
     searched = 0
     scanned = 0
     seen_item_ids: set[int] = set()
@@ -962,7 +931,7 @@ async def _run_upgrade_pass(
 
         candidate = adapter.adapt_upgrade(item, instance)
         ref = ItemRef(
-            instance.id,
+            instance.core.id,
             candidate.item_id,
             ItemType(candidate.item_type),
         )
@@ -983,7 +952,7 @@ async def _run_upgrade_pass(
         # Hourly cap
         if hourly_cap > 0 and searches_this_hour >= hourly_cap:
             reason = _format_hourly_limit_reason("upgrade", hourly_cap)
-            logger.info("[%s] upgrade %s: %s", instance.name, candidate.item_id, reason)
+            logger.info("[%s] upgrade %s: %s", instance.core.name, candidate.item_id, reason)
             await _write_item_log(
                 ref,
                 SearchAction.skipped.value,
@@ -998,9 +967,9 @@ async def _run_upgrade_pass(
         # Cooldown
         if await is_on_cooldown_ref(ref, cooldown_days):
             reason = f"on upgrade cooldown ({cooldown_days}d)"
-            skip_key = (instance.id, candidate.item_id, "upgrade", "upgrade_cd")
+            skip_key = (instance.core.id, candidate.item_id, "upgrade", "upgrade_cd")
             if cycle_trigger == "run_now" or await should_log_skip(skip_key):
-                logger.debug("[%s] upgrade %s: %s", instance.name, candidate.item_id, reason)
+                logger.debug("[%s] upgrade %s: %s", instance.core.name, candidate.item_id, reason)
                 await _write_item_log(
                     ref,
                     SearchAction.skipped.value,
@@ -1023,7 +992,7 @@ async def _run_upgrade_pass(
             msg = str(exc)
             logger.warning(
                 "[%s] upgrade search failed for %s: %s",
-                instance.name,
+                instance.core.name,
                 candidate.item_id,
                 msg,
             )
@@ -1053,7 +1022,7 @@ async def _run_upgrade_pass(
         new_offset = (offset + scanned) % len(pool)
         logger.info(
             "[%s] upgrade searched %s %s",
-            instance.name,
+            instance.core.name,
             candidate.item_type,
             candidate.item_id,
         )
@@ -1062,22 +1031,20 @@ async def _run_upgrade_pass(
     # Persist new offset.  In random mode the offset concept does not apply
     # (the pool was shuffled, not rotated), so skip the write entirely to
     # keep the column meaningful and avoid per-cycle row churn.
-    if instance.search_order == SearchOrder.chronological:
+    if instance.schedule.search_order == SearchOrder.chronological:
         try:
             await _persist_offset_with_typed_wrap(
-                instance.id,
+                instance.core.id,
                 master_key=master_key,
                 upgrade_item_offset=new_offset,
             )
         except EngineOffsetPersistError:
-            logger.warning("[%s] failed to persist upgrade_item_offset", instance.name)
+            logger.warning("[%s] failed to persist upgrade_item_offset", instance.core.name)
 
     return searched
 
 
-# ---------------------------------------------------------------------------
 # Public API
-# ---------------------------------------------------------------------------
 
 
 async def run_instance_search(
@@ -1095,7 +1062,7 @@ async def run_instance_search(
     3. Optionally run the cutoff pass via :func:`_run_search_pass`.
     4. Return the total number of items searched.
 
-    Error surface (Track B.13):
+    Error surface:
     Typed Houndarr errors (:class:`~houndarr.errors.EngineError` and
     :class:`~houndarr.errors.ClientError` subclasses) and
     :class:`httpx.TransportError` propagate unchanged; the supervisor's
@@ -1125,7 +1092,9 @@ async def run_instance_search(
     except (EngineError, ClientError):
         raise
     except Exception as exc:  # noqa: BLE001
-        raise EngineError(f"unhandled error in search cycle for {instance.name!r}: {exc}") from exc
+        raise EngineError(
+            f"unhandled error in search cycle for {instance.core.name!r}: {exc}"
+        ) from exc
 
 
 async def _run_instance_search_impl(
@@ -1143,11 +1112,11 @@ async def _run_instance_search_impl(
     """
     logger.info(
         "[%s] starting search cycle (batch_size=%d)",
-        instance.name,
-        instance.batch_size,
+        instance.core.name,
+        instance.missing.batch_size,
     )
 
-    adapter = get_adapter(instance.type)
+    adapter = get_adapter(instance.core.type)
     cycle_id_value = cycle_id or str(uuid4())
     searched = 0
 
@@ -1156,17 +1125,17 @@ async def _run_instance_search_impl(
     # on purpose: the time window is an operator-preference schedule, not a
     # safety gate.  Queue backpressure and hourly caps still apply to manual
     # runs below.
-    if cycle_trigger == "scheduled" and instance.allowed_time_window:
+    if cycle_trigger == "scheduled" and instance.schedule.allowed_time_window:
         try:
-            ranges = parse_time_window(instance.allowed_time_window)
+            ranges = parse_time_window(instance.schedule.allowed_time_window)
         except ValueError:
             # Malformed spec should have been rejected at save time; if it
             # slipped through (e.g. manual DB edit), fail open rather than
             # silently skipping every cycle forever.
             logger.warning(
                 "[%s] malformed allowed_time_window %r; ignoring gate",
-                instance.name,
-                instance.allowed_time_window,
+                instance.core.name,
+                instance.schedule.allowed_time_window,
             )
             ranges = []
         if ranges:
@@ -1178,9 +1147,9 @@ async def _run_instance_search_impl(
                     f"Local time {now_local.strftime('%H:%M')} is outside "
                     f"configured window {configured}"
                 )
-                logger.info("[%s] skipping cycle: %s (%s)", instance.name, reason, message)
+                logger.info("[%s] skipping cycle: %s (%s)", instance.core.name, reason, message)
                 await _write_log(
-                    instance.id,
+                    instance.core.id,
                     None,
                     None,
                     SearchAction.info.value,
@@ -1192,16 +1161,16 @@ async def _run_instance_search_impl(
                 return 0
 
     # --- Queue backpressure gate ---
-    if instance.queue_limit > 0:
+    if instance.missing.queue_limit > 0:
         try:
             async with adapter.make_client(instance) as queue_client:
                 queue_status = await queue_client.get_queue_status()
             total_queued = queue_status.total_count
-            if total_queued >= instance.queue_limit:
-                reason = f"queue backpressure ({total_queued}/{instance.queue_limit})"
-                logger.info("[%s] skipping cycle: %s", instance.name, reason)
+            if total_queued >= instance.missing.queue_limit:
+                reason = f"queue backpressure ({total_queued}/{instance.missing.queue_limit})"
+                logger.info("[%s] skipping cycle: %s", instance.core.name, reason)
                 await _write_log(
-                    instance.id,
+                    instance.core.id,
                     None,
                     None,
                     SearchAction.info.value,
@@ -1209,118 +1178,129 @@ async def _run_instance_search_impl(
                     cycle_trigger=cycle_trigger,
                     reason=reason,
                     message=(
-                        f"Download queue has {total_queued} items, limit is {instance.queue_limit}"
+                        f"Download queue has {total_queued} items,"
+                        f" limit is {instance.missing.queue_limit}"
                     ),
                 )
                 return 0
             logger.debug(
                 "[%s] queue check passed (%d/%d)",
-                instance.name,
+                instance.core.name,
                 total_queued,
-                instance.queue_limit,
+                instance.missing.queue_limit,
             )
-        except (httpx.HTTPError, httpx.InvalidURL, KeyError, ValueError, ValidationError):
+        except (ClientError, httpx.InvalidURL):
             # If the queue check fails, log a warning and continue with the
             # search cycle; failing open avoids blocking searches when the
             # queue endpoint is temporarily unavailable or the payload
-            # shape drifts.
+            # shape drifts.  ``ClientError`` covers HTTP, transport, and
+            # validation failures from ``get_queue_status``; raw
+            # ``httpx.InvalidURL`` can still surface from client
+            # construction in ``adapter.make_client`` before the wrap
+            # boundary applies.
             logger.warning(
                 "[%s] queue status check failed; proceeding with search",
-                instance.name,
+                instance.core.name,
                 exc_info=True,
             )
 
     # --- Missing pass ---
-    missing_target = max(0, instance.batch_size)
+    missing_target = max(0, instance.missing.batch_size)
     if missing_target > 0:
         client = adapter.make_client(instance)
         async with client:
             missing_searched, next_missing_page = await _run_search_pass(
                 instance,
                 adapter,
-                adapt_fn=adapter.adapt_missing,
-                dispatch_fn=adapter.dispatch_search,
-                fetch_fn=client.get_missing,
-                search_kind="missing",
-                batch_size=instance.batch_size,
-                hourly_cap=instance.hourly_cap,
-                cooldown_days=instance.cooldown_days,
-                page_size=_missing_page_size(missing_target),
-                scan_budget=_missing_scan_budget(missing_target),
-                cycle_id=cycle_id_value,
-                cycle_trigger=cycle_trigger,
-                start_page=instance.missing_page_offset,
-                total_fn=lambda: client.get_wanted_total("missing"),
+                SearchPassConfig(
+                    adapt_fn=adapter.adapt_missing,
+                    dispatch_fn=adapter.dispatch_search,
+                    fetch_fn=client.get_missing,
+                    search_kind="missing",
+                    batch_size=instance.missing.batch_size,
+                    hourly_cap=instance.missing.hourly_cap,
+                    cooldown_days=instance.missing.cooldown_days,
+                    page_size=_missing_page_size(missing_target),
+                    scan_budget=_missing_scan_budget(missing_target),
+                    cycle_id=cycle_id_value,
+                    cycle_trigger=cycle_trigger,
+                    start_page=instance.schedule.missing_page_offset,
+                    total_fn=lambda: client.get_wanted_total("missing"),
+                ),
             )
         searched += missing_searched
         # In random mode the "next page" returned by the pass is derived from
         # a random pick, not a rotation offset, so persisting it would write
         # a misleading value to the column and churn the row every cycle.
         # Only advance the offset in chronological mode.
-        if instance.search_order == SearchOrder.chronological:
+        if instance.schedule.search_order == SearchOrder.chronological:
             try:
                 await _persist_offset_with_typed_wrap(
-                    instance.id,
+                    instance.core.id,
                     master_key=master_key,
                     missing_page_offset=next_missing_page,
                 )
             except EngineOffsetPersistError:
-                logger.warning("[%s] failed to persist missing_page_offset", instance.name)
+                logger.warning("[%s] failed to persist missing_page_offset", instance.core.name)
 
-    logger.info("[%s] cycle complete: %d searched", instance.name, searched)
+    logger.info("[%s] cycle complete: %d searched", instance.core.name, searched)
 
     # --- Cutoff-unmet pass ---
-    if instance.cutoff_enabled:
-        cutoff_target = max(0, instance.cutoff_batch_size)
+    if instance.cutoff.cutoff_enabled:
+        cutoff_target = max(0, instance.cutoff.cutoff_batch_size)
         if cutoff_target > 0:
             logger.info(
                 "[%s] starting cutoff-unmet pass (cutoff_batch_size=%d)",
-                instance.name,
-                instance.cutoff_batch_size,
+                instance.core.name,
+                instance.cutoff.cutoff_batch_size,
             )
             cutoff_client = adapter.make_client(instance)
             async with cutoff_client:
                 cutoff_searched, next_cutoff_page = await _run_search_pass(
                     instance,
                     adapter,
-                    adapt_fn=adapter.adapt_cutoff,
-                    dispatch_fn=adapter.dispatch_search,
-                    fetch_fn=cutoff_client.get_cutoff_unmet,
-                    search_kind="cutoff",
-                    batch_size=instance.cutoff_batch_size,
-                    hourly_cap=instance.cutoff_hourly_cap,
-                    cooldown_days=instance.cutoff_cooldown_days,
-                    page_size=_cutoff_page_size(cutoff_target),
-                    scan_budget=_cutoff_scan_budget(cutoff_target),
-                    cycle_id=cycle_id_value,
-                    cycle_trigger=cycle_trigger,
-                    start_page=instance.cutoff_page_offset,
-                    total_fn=lambda: cutoff_client.get_wanted_total("cutoff"),
+                    SearchPassConfig(
+                        adapt_fn=adapter.adapt_cutoff,
+                        dispatch_fn=adapter.dispatch_search,
+                        fetch_fn=cutoff_client.get_cutoff_unmet,
+                        search_kind="cutoff",
+                        batch_size=instance.cutoff.cutoff_batch_size,
+                        hourly_cap=instance.cutoff.cutoff_hourly_cap,
+                        cooldown_days=instance.cutoff.cutoff_cooldown_days,
+                        page_size=_cutoff_page_size(cutoff_target),
+                        scan_budget=_cutoff_scan_budget(cutoff_target),
+                        cycle_id=cycle_id_value,
+                        cycle_trigger=cycle_trigger,
+                        start_page=instance.schedule.cutoff_page_offset,
+                        total_fn=lambda: cutoff_client.get_wanted_total("cutoff"),
+                    ),
                 )
-            logger.info("[%s] cutoff pass complete: %d searched", instance.name, cutoff_searched)
+            logger.info(
+                "[%s] cutoff pass complete: %d searched", instance.core.name, cutoff_searched
+            )
             # Mirror the missing-pass gate: only advance the offset in
             # chronological mode.  See the missing pass for rationale.
-            if instance.search_order == SearchOrder.chronological:
+            if instance.schedule.search_order == SearchOrder.chronological:
                 try:
                     await _persist_offset_with_typed_wrap(
-                        instance.id,
+                        instance.core.id,
                         master_key=master_key,
                         cutoff_page_offset=next_cutoff_page,
                     )
                 except EngineOffsetPersistError:
-                    logger.warning("[%s] failed to persist cutoff_page_offset", instance.name)
+                    logger.warning("[%s] failed to persist cutoff_page_offset", instance.core.name)
             searched += cutoff_searched
 
     # --- Upgrade pass ---
-    if instance.upgrade_enabled:
+    if instance.upgrade.upgrade_enabled:
         upgrade_target = min(
-            max(0, instance.upgrade_batch_size),
+            max(0, instance.upgrade.upgrade_batch_size),
             _UPGRADE_BATCH_HARD_CAP,
         )
         if upgrade_target > 0:
             logger.info(
                 "[%s] starting upgrade pass (upgrade_batch_size=%d)",
-                instance.name,
+                instance.core.name,
                 upgrade_target,
             )
             upgrade_searched = await _run_upgrade_pass(
@@ -1332,7 +1312,7 @@ async def _run_instance_search_impl(
             )
             logger.info(
                 "[%s] upgrade pass complete: %d searched",
-                instance.name,
+                instance.core.name,
                 upgrade_searched,
             )
             searched += upgrade_searched

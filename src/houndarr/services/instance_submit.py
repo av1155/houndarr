@@ -1,9 +1,9 @@
 """Instance submit service: orchestration for create + update routes.
 
-Track D.10 lifts the validation, connection-test, and persistence
-orchestration out of :mod:`houndarr.routes.settings.instances` so the
-route handlers become pure form-parse-and-render shells.  Each service
-function performs the same sequence of steps the route used to:
+Owns the full validation, connection-test, and persistence
+orchestration for :mod:`houndarr.routes.settings.instances` so the
+route handlers stay pure form-parse-and-render shells.  Each service
+function performs the same sequence of steps:
 
 1. Parse the raw ``type`` string into :class:`InstanceType`.
 2. Run the URL / time-window / cutoff-control / upgrade-control
@@ -25,18 +25,20 @@ the connection-status guard banner via
 :func:`connection_guard_response`.  The service raises rather than
 returning a tagged tuple so the caller's happy path stays linear.
 
-Track D.11 will lift the validators out of
-:mod:`houndarr.routes.settings._helpers` into a dedicated
-:mod:`houndarr.services.instance_validation` module; until then this
-service imports them through their current home.
+The static validators, :data:`API_KEY_UNCHANGED`, and
+:func:`check_connection` live in
+:mod:`houndarr.services.instance_validation`; this module depends
+only on neighbouring services instead of reaching back across the
+route boundary.
 """
 
 from __future__ import annotations
 
 from houndarr.errors import InstanceValidationError
-from houndarr.routes.settings._helpers import API_KEY_UNCHANGED, check_connection
 from houndarr.services.instance_validation import (
+    API_KEY_UNCHANGED,
     SearchModes,
+    check_connection,
     resolve_search_modes,
     type_mismatch_message,
     validate_cutoff_controls,
@@ -376,7 +378,7 @@ async def submit_update(
         upgrade_hourly_cap=upgrade_hourly_cap,
     )
 
-    resolved_api_key = current.api_key if api_key == API_KEY_UNCHANGED else api_key
+    resolved_api_key = current.core.api_key if api_key == API_KEY_UNCHANGED else api_key
 
     if not connection_verified:
         raise InstanceValidationError("Test connection successfully before saving changes.")
@@ -411,7 +413,7 @@ async def submit_update(
         "type": instance_type,
         "url": cleaned_url,
         "api_key": resolved_api_key,
-        "enabled": current.enabled,
+        "enabled": current.core.enabled,
         "batch_size": batch_size,
         "sleep_interval_mins": sleep_interval_mins,
         "hourly_cap": hourly_cap,
@@ -443,7 +445,7 @@ async def submit_update(
     # Reset offsets when upgrade is toggled off so a future re-enable
     # starts from a clean position rather than picking up halfway
     # through the page rotation cycle.
-    if current.upgrade_enabled and not upgrade_enabled:
+    if current.upgrade.upgrade_enabled and not upgrade_enabled:
         update_kwargs["upgrade_item_offset"] = 0
         update_kwargs["upgrade_series_offset"] = 0
 

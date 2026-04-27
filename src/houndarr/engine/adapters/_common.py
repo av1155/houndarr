@@ -1,15 +1,9 @@
 """Shared adapter templates for the search engine pipeline.
 
-Adapters today copy 85-100% of the same upgrade-pool builder, missing
-candidate builder, and cutoff candidate builder per app.  This module
-collects the shared templates so each adapter shrinks to per-app data
-shaping plus a single call into here.
-
-Track C.7 - C.9 land the templates and migrate the matching adapters;
-C.10 then converts :class:`~houndarr.engine.adapters.AppAdapter` from a
-dataclass of callables into a Protocol so adapters can become classes
-that inherit the shared behaviour from a base instead of importing it
-piecemeal.
+The upgrade-pool builder, missing-candidate builder, and
+cutoff-candidate builder are identical across most *arr apps.  This
+module collects the shared templates so each adapter shrinks to
+per-app data shaping plus a single call into here.
 
 Inhabitants:
 
@@ -35,7 +29,6 @@ from typing import Any, Protocol
 
 from houndarr.clients.base import ArrClient, InstanceSnapshot, WantedKind
 from houndarr.engine.candidates import (
-    ItemType,
     SearchCandidate,
     _is_unreleased,
     _is_unreleased_dt,
@@ -173,7 +166,7 @@ class ContextOverride:
 
 def build_missing_candidate(
     *,
-    item_type: ItemType | str,
+    item_type: str,
     item_id: int,
     label: str,
     unreleased_reason: str | None,
@@ -230,7 +223,7 @@ def build_missing_candidate(
 
 def build_cutoff_candidate(
     *,
-    item_type: ItemType | str,
+    item_type: str,
     item_id: int,
     label: str,
     unreleased_reason: str | None,

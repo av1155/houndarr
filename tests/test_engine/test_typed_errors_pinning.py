@@ -1,25 +1,19 @@
 """Pin the typed-error surface on ``run_instance_search`` and the supervisor.
 
-Track B.13 installs a top-level wrap on :func:`run_instance_search`
-that re-raises typed errors unchanged and converts any other
-``Exception`` into a fresh :class:`EngineError` with the original
-cause preserved on ``__cause__``.  The supervisor's
-``_run_search_cycle`` migrates its ``except Exception`` branch to
-``except (EngineError, ClientError)`` to match.
+:func:`run_instance_search` carries a top-level wrap that re-raises
+typed errors unchanged and converts any other ``Exception`` into a
+fresh :class:`EngineError` with the original cause preserved on
+``__cause__``.  The supervisor's ``_run_search_cycle`` catches
+``(EngineError, ClientError)`` to match.
 
 These tests lock both ends of that contract:
 
 * :func:`run_instance_search` wraps untyped exceptions and lets the
   three escape types (``EngineError``, ``ClientError``,
   ``httpx.TransportError``) propagate unchanged.
-* The supervisor's ``_run_search_cycle`` writes the same error row
-  for ``EngineError`` and ``ClientError`` that the pre-refactor
-  ``except Exception`` produced, and still returns ``True`` on
-  ``httpx.TransportError`` so the reconnect loop engages.
-
-Future batches (B.14-B.17 raising typed errors from internal
-handlers; C.11 extracting the supervisor's reconnect helper)
-cannot drift these behaviours without failing this file.
+* The supervisor's ``_run_search_cycle`` writes a single error row
+  for ``EngineError`` and ``ClientError`` and still returns ``True``
+  on ``httpx.TransportError`` so the reconnect loop engages.
 """
 
 from __future__ import annotations
@@ -63,7 +57,7 @@ def _encrypt_key(value: str) -> str:
 
 
 class TestRunInstanceSearchWrap:
-    """Pin the public entrypoint's typed-error surface (B.13)."""
+    """Pin the public entrypoint's typed-error surface."""
 
     @pytest.mark.asyncio()
     async def test_unhandled_exception_wraps_to_engine_error(
@@ -81,7 +75,7 @@ class TestRunInstanceSearchWrap:
         with pytest.raises(EngineError) as exc_info:
             await run_instance_search(instance, _MASTER_KEY)
         assert exc_info.value.__cause__ is original
-        assert instance.name in str(exc_info.value)
+        assert instance.core.name in str(exc_info.value)
 
     @pytest.mark.asyncio()
     async def test_key_error_wraps_to_engine_error(
@@ -204,7 +198,7 @@ async def _fetch_error_rows() -> list[dict[str, Any]]:
 
 
 class TestSupervisorCycleCatchSurface:
-    """Pin ``Supervisor._run_search_cycle`` post-B.13 catch behaviour."""
+    """Pin ``Supervisor._run_search_cycle`` typed-error catch behaviour."""
 
     @pytest.mark.asyncio()
     async def test_engine_error_writes_row_and_returns_false(

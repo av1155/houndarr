@@ -28,7 +28,7 @@ _RADARR_UNRELEASED_STATUSES = {"tba", "announced"}
 
 
 # ---------------------------------------------------------------------------
-# Helpers (copied from search_loop.py; originals removed in Phase 2)
+# Helpers
 # ---------------------------------------------------------------------------
 
 
@@ -192,7 +192,7 @@ async def fetch_reconcile_sets(
     missing_items = await paginate_wanted(client.get_missing)
     cutoff_items = await paginate_wanted(client.get_cutoff_unmet)
     upgrade_set: frozenset[tuple[str, int]] = frozenset()
-    if instance.upgrade_enabled:
+    if instance.upgrade.upgrade_enabled:
         upgrade_candidates = [
             adapt_upgrade(item, instance) for item in await fetch_upgrade_pool(client, instance)
         ]
@@ -243,8 +243,6 @@ class RadarrAdapter:
     Conforms to :class:`~houndarr.engine.adapters.protocols.AppAdapterProto`
     structurally via the eight staticmethod attributes below; the
     module-level functions remain importable for direct unit-test use.
-    Track C.10 introduces this class form to replace the prior
-    ``AppAdapter`` dataclass-of-callables registry shape.
     """
 
     adapt_missing = staticmethod(adapt_missing)

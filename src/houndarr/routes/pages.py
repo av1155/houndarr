@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Form, HTTPException, Query, Request
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
 from houndarr import __version__
@@ -19,7 +21,8 @@ from houndarr.auth import (
     set_username,
     validate_username,
 )
-from houndarr.database import set_setting
+from houndarr.deps import get_master_key
+from houndarr.repositories.settings import set_setting
 from houndarr.routes._htmx import is_hx_request
 from houndarr.routes._templates import get_templates
 from houndarr.services.instances import list_instances
@@ -217,6 +220,7 @@ async def dashboard(request: Request) -> HTMLResponse:
 @router.get("/logs", response_class=HTMLResponse)
 async def logs_page(
     request: Request,
+    master_key: Annotated[bytes, Depends(get_master_key)],
     instance_id: list[str] = Query(default_factory=list),
     action: str | None = Query(default=None),
     search_kind: str | None = Query(default=None),
@@ -235,11 +239,11 @@ async def logs_page(
     hydrates the multi-select filter's checkboxes without a redirect.
     """
     from houndarr.routes.api.logs import (
-        _parse_cycle_trigger,
-        _parse_hide_system,
-        _parse_instance_ids,
-        _parse_search_kind,
+        parse_cycle_trigger,
         parse_hide_skipped,
+        parse_hide_system,
+        parse_instance_ids,
+        parse_search_kind,
     )
     from houndarr.services.log_query import (
         compute_load_more_limit,
@@ -248,10 +252,10 @@ async def logs_page(
     )
 
     try:
-        parsed_instance_ids = _parse_instance_ids(instance_id)
-        parsed_search_kind = _parse_search_kind(search_kind)
-        parsed_cycle_trigger = _parse_cycle_trigger(cycle_trigger)
-        parsed_hide_system = _parse_hide_system(hide_system) if hide_system is not None else True
+        parsed_instance_ids = parse_instance_ids(instance_id)
+        parsed_search_kind = parse_search_kind(search_kind)
+        parsed_cycle_trigger = parse_cycle_trigger(cycle_trigger)
+        parsed_hide_system = parse_hide_system(hide_system) if hide_system is not None else True
         parsed_hide_skipped = (
             parse_hide_skipped(hide_skipped) if hide_skipped is not None else False
         )
@@ -266,7 +270,6 @@ async def logs_page(
 
     parsed_action = action or None
 
-    master_key: bytes = request.app.state.master_key
     instances = await list_instances(master_key=master_key)
     rows = await query_logs(
         instance_ids=parsed_instance_ids,
@@ -292,7 +295,6 @@ async def logs_page(
         template_name,
         instances=instances,
         rows=rows,
-        instance_accent_by_name=accent_map,
         limit=50,
         load_more_limit=compute_load_more_limit(50),
         selected_instance_ids=parsed_instance_ids,
@@ -308,6 +310,7 @@ async def logs_page(
         hide_system=parsed_hide_system,
         hide_skipped=parsed_hide_skipped,
         before=None,
+        instance_accent_by_name=accent_map,
     )
 
 

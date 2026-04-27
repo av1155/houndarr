@@ -17,20 +17,12 @@ import pytest
 from fastapi import HTTPException
 
 from houndarr.routes.api.logs import (
-    _parse_cycle_trigger as parse_cycle_trigger,
-)
-from houndarr.routes.api.logs import (
-    _parse_hide_system as parse_hide_system,
-)
-from houndarr.routes.api.logs import (
-    _parse_instance_ids as parse_instance_ids,
-)
-from houndarr.routes.api.logs import (
-    _parse_search_kind as parse_search_kind,
-)
-from houndarr.routes.api.logs import (
     _partial_validation_error,
+    parse_cycle_trigger,
     parse_hide_skipped,
+    parse_hide_system,
+    parse_instance_ids,
+    parse_search_kind,
 )
 from houndarr.services.log_query import compute_load_more_limit, summarize_rows
 
@@ -251,6 +243,6 @@ class TestPartialValidationError:
         """Pin the shape so HTMX swap into #log-feed keeps feed structure."""
         resp = _partial_validation_error("bad input")
         body = resp.body.decode("utf-8")
-        assert body.startswith('<div id="log-error"')
+        assert body.startswith('<div id="log-error-row"')
         assert 'class="empty empty--error"' in body
         assert body.endswith("</div>")

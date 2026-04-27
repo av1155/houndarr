@@ -13,6 +13,7 @@ from houndarr.clients.radarr import RadarrClient
 from houndarr.clients.readarr import ReadarrClient
 from houndarr.clients.sonarr import SonarrClient
 from houndarr.clients.whisparr_v2 import WhisparrV2Client
+from houndarr.errors import ClientHTTPError, ClientTransportError
 
 # ---------------------------------------------------------------------------
 # Queue status: per-app path verification
@@ -104,25 +105,27 @@ async def test_whisparr_v2_queue_status_uses_v3_path() -> None:
 @pytest.mark.asyncio()
 @respx.mock
 async def test_queue_status_http_500_raises() -> None:
-    """HTTP 500 on queue/status raises HTTPStatusError."""
+    """HTTP 500 on queue/status raises ``ClientHTTPError`` wrapping the status error."""
     respx.get("http://sonarr:8989/api/v3/queue/status").mock(
         return_value=httpx.Response(500),
     )
     async with SonarrClient(url="http://sonarr:8989", api_key="test") as client:
-        with pytest.raises(httpx.HTTPStatusError):
+        with pytest.raises(ClientHTTPError) as exc_info:
             await client.get_queue_status()
+    assert isinstance(exc_info.value.__cause__, httpx.HTTPStatusError)
 
 
 @pytest.mark.asyncio()
 @respx.mock
 async def test_queue_status_transport_error_propagates() -> None:
-    """A ConnectError on queue/status propagates as-is."""
+    """ConnectError on queue/status is wrapped in ``ClientTransportError``."""
     respx.get("http://sonarr:8989/api/v3/queue/status").mock(
         side_effect=httpx.ConnectError("connection refused"),
     )
     async with SonarrClient(url="http://sonarr:8989", api_key="test") as client:
-        with pytest.raises(httpx.ConnectError):
+        with pytest.raises(ClientTransportError) as exc_info:
             await client.get_queue_status()
+    assert isinstance(exc_info.value.__cause__, httpx.ConnectError)
 
 
 # ---------------------------------------------------------------------------

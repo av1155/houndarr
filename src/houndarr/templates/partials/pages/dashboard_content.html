@@ -10,15 +10,325 @@
   }
 
   @media (prefers-reduced-motion: reduce) {
-    #instance-grid.is-entering,
-    .metric-changed {
-      transition: none;
-      animation: none;
-      opacity: 1;
-      transform: none;
+    .dash-run-now.is-error { animation: none; }
+  }
+
+  /* ── Dashboard redesign: top section ─────────────────────────────── */
+  .dash-main {
+    display: flex;
+    flex-direction: column;
+    gap: 1.75rem;
+  }
+  /* #dash-top wraps the polled top-of-page sections (subheader, alert,
+     library-health, recent hunts, section heading). Apply the same flex
+     column + gap here so those sections get the 1.75rem rhythm from the
+     preview; otherwise they collapse flush against one another. */
+  #dash-top {
+    display: flex;
+    flex-direction: column;
+    gap: 1.75rem;
+  }
+
+  .dash-sub__eyebrow {
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+    font-family: var(--font-mono);
+    font-size: 0.6875rem;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--color-brand-400);
+    margin: 0 0 0.5rem;
+    font-weight: 500;
+  }
+  .dash-sub__sentence {
+    font-size: 1.875rem;
+    font-weight: 600;
+    color: var(--color-text-primary);
+    margin: 0;
+    letter-spacing: -0.02em;
+    line-height: 1.25;
+  }
+  .dash-sub__sentence .attn  { color: var(--color-danger); }
+  .dash-sub__sentence .muted { color: var(--color-text-muted); font-weight: 500; }
+
+  .dash-alert {
+    background: linear-gradient(135deg, rgba(248, 113, 113, 0.08), transparent 60%), var(--color-surface-1);
+    border: 1px solid var(--color-danger-border);
+    border-left: 3px solid var(--color-danger);
+    border-radius: var(--radius-container);
+    padding: 1rem 1.25rem;
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    grid-template-areas: "icon body link";
+    align-items: start;
+    gap: 0.875rem 1rem;
+  }
+  .dash-alert__icon { grid-area: icon; font-size: 1.125rem; color: var(--color-danger); line-height: 1; margin-top: 1px; }
+  .dash-alert__body { grid-area: body; min-width: 0; }
+  .dash-alert__head {
+    font-family: var(--font-mono);
+    font-size: 0.625rem;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--color-danger-text);
+    margin: 0 0 0.375rem;
+    font-weight: 600;
+  }
+  /* One row per errored instance.  Layout is a single inline sentence:
+     "name: could not reach <url> · N failures · last Xm ago" so the
+     meta hugs the URL instead of floating in a right-aligned column.
+     overflow-wrap on the row keeps long URLs from breaking the grid
+     at narrow widths. */
+  .dash-alert__list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+  .dash-alert__row {
+    font-size: 0.8125rem;
+    color: var(--color-text-primary);
+    line-height: 1.5;
+    overflow-wrap: anywhere;
+  }
+  .dash-alert__row .mono  { font-family: var(--font-mono); color: var(--color-danger-text); }
+  .dash-alert__row .muted { color: var(--color-text-muted); }
+  .dash-alert__row-meta { color: var(--color-text-muted); white-space: nowrap; }
+  .dash-alert__link {
+    grid-area: link;
+    font-size: 0.75rem;
+    color: var(--color-danger-text);
+    text-decoration: none;
+    font-weight: 500;
+    padding: 0.375rem 0.625rem;
+    border: 1px solid rgba(252, 165, 165, 0.35);
+    border-radius: var(--radius-inset);
+    white-space: nowrap;
+    align-self: center;
+    transition: background var(--dur-base) var(--ease-station);
+  }
+  .dash-alert__link:hover { background: rgba(248, 113, 113, 0.12); }
+
+  .dash-lh {
+    background: var(--color-surface-1);
+    border: 1px solid var(--color-border-subtle);
+    border-radius: var(--radius-container);
+    padding: 1.375rem 1.625rem;
+    box-shadow: var(--shadow-1);
+  }
+  .dash-lh__eyebrow {
+    font-size: 0.625rem;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--color-text-muted);
+    font-weight: 600;
+    margin: 0 0 0.875rem;
+  }
+  .dash-lh__headline {
+    display: flex;
+    gap: 2.5rem;
+    flex-wrap: wrap;
+    align-items: baseline;
+    margin-bottom: 1.125rem;
+  }
+  .dash-lh__stat { display: flex; align-items: baseline; gap: 0.625rem; }
+  .dash-lh__stat-value {
+    font-family: var(--font-mono);
+    font-size: 2.25rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+  }
+  .dash-lh__stat-value--eligible { color: var(--seg-eligible); }
+  .dash-lh__stat-value--gated,
+  .dash-lh__stat-value--unrel    { color: var(--color-text-emphasis); }
+  .dash-lh__stat-label {
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--color-text-muted);
+    font-weight: 500;
+  }
+  .dash-lh__stat-label--eligible { color: var(--seg-eligible); opacity: 0.9; }
+  .dash-lh__bar {
+    display: flex;
+    height: 0.875rem;
+    width: 100%;
+    border-radius: var(--radius-bar);
+    overflow: hidden;
+    background: #0b0e14;
+  }
+  .dash-lh__segment { height: 100%; }
+  .dash-lh__segment--eligible   { background: var(--seg-eligible);   opacity: 0.88; }
+  .dash-lh__segment--cutoff-cd  { background: var(--seg-cutoff-cd);  opacity: 0.88; }
+  .dash-lh__segment--cooldown   { background: var(--seg-cooldown);   opacity: 0.85; }
+  .dash-lh__segment--upgrade-cd { background: var(--seg-upgrade-cd); opacity: 0.85; }
+  .dash-lh__segment--unreleased { background: var(--seg-unreleased); opacity: 0.85; }
+  .dash-lh__legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    margin-top: 0.875rem;
+    font-family: var(--font-mono);
+    font-size: 0.6875rem;
+    color: var(--color-text-muted);
+  }
+  .dash-lh__legend-item { display: inline-flex; align-items: center; gap: 0.5rem; }
+  .dash-lh__legend-swatch { width: 0.625rem; height: 0.625rem; border-radius: var(--radius-bar); flex-shrink: 0; }
+  .dash-lh__legend-swatch--eligible   { background: var(--seg-eligible); }
+  .dash-lh__legend-swatch--cutoff-cd  { background: var(--seg-cutoff-cd); }
+  .dash-lh__legend-swatch--cooldown   { background: var(--seg-cooldown); }
+  .dash-lh__legend-swatch--upgrade-cd { background: var(--seg-upgrade-cd); }
+  .dash-lh__legend-swatch--unreleased { background: var(--seg-unreleased); }
+
+
+  .dash-trail {
+    background: var(--color-surface-1);
+    border: 1px solid var(--color-border-subtle);
+    border-radius: var(--radius-container);
+    padding: 1.25rem 1.625rem;
+  }
+  .dash-trail__head {
+    font-family: var(--font-mono);
+    font-size: 0.625rem;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--seg-eligible);
+    margin: 0 0 0.875rem;
+    font-weight: 600;
+  }
+  .dash-trail__list { display: flex; flex-direction: column; gap: 0; }
+  /* Desktop grid: icon | title (expands) | inst | when.  Four
+     columns put the kind icon adjacent to the title instead of
+     stranding it at the far left of the row while title + inst
+     clump on the right.  The mobile override below stacks these
+     across three rows; placements there are explicit so the icon
+     does not disturb the established visual hierarchy. */
+  .dash-trail__row {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto auto;
+    align-items: center;
+    gap: 0.875rem;
+    padding: 0.6875rem 0.75rem;
+    margin: 0 -0.75rem;
+    border-top: 1px solid var(--color-border-subtle);
+    border-radius: var(--radius-bar);
+    transition: background var(--dur-fast) var(--ease-station);
+  }
+  .dash-trail__row:hover { background: rgba(148, 163, 184, 0.04); }
+  .dash-trail__row:last-child { padding-bottom: 2px; }
+  .dash-trail__title {
+    font-size: 0.84375rem;
+    color: var(--color-text-primary);
+    font-weight: 500;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .dash-trail__inst {
+    font-family: var(--font-mono);
+    font-size: 0.625rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    font-weight: 600;
+  }
+  .dash-trail__when {
+    font-family: var(--font-mono);
+    font-size: 0.6875rem;
+    color: var(--color-text-muted);
+    min-width: 3.5rem;
+    text-align: right;
+  }
+  .dash-trail__empty {
+    font-size: 0.8125rem;
+    color: var(--color-text-muted);
+    font-style: italic;
+    padding: 0.625rem 0 2px;
+    margin: 0;
+  }
+
+  .dash-section-head {
+    display: flex;
+    align-items: center;
+    gap: 1.25rem;
+    padding: 0.5rem 0 0;
+    flex-wrap: wrap;
+  }
+  .dash-section-head__title {
+    font-size: 1.75rem;
+    font-weight: 600;
+    color: var(--color-text-primary);
+    margin: 0;
+    letter-spacing: -0.02em;
+    line-height: 1.2;
+    flex: 0 0 auto;
+  }
+  .dash-section-head__rule {
+    flex: 1 1 2.5rem;
+    min-width: 2.5rem;
+    height: 1px;
+    background: linear-gradient(
+      to right,
+      var(--color-border-default) 0%,
+      var(--color-border-subtle) 85%,
+      transparent 100%
+    );
+  }
+  .dash-section-head__add {
+    font-size: 0.8125rem;
+    color: var(--color-brand-400);
+    text-decoration: none;
+    font-weight: 500;
+    transition: color var(--dur-base) var(--ease-station);
+    flex: 0 0 auto;
+  }
+  .dash-section-head__add:hover { color: var(--color-brand-300); }
+
+  @media (max-width: 640px) {
+    .dash-sub__sentence { font-size: 1.375rem; }
+    /* Break the "X of Y on patrol / N need attention" sentence onto
+       two lines so the danger callout never wraps mid-phrase on a
+       phone-width viewport. */
+    .dash-sub__sentence .attn { display: block; }
+    /* Same treatment for the muted "Last dispatch X ago" tail: keep it
+       inline on desktop where horizontal space is plentiful, force it
+       onto a fresh line on phone widths so the headline above it does
+       not hyphenate awkwardly. */
+    .dash-sub__sentence .muted { display: block; }
+    .dash-section-head__title { font-size: 1.375rem; }
+    .dash-lh { padding: 1.125rem 1.125rem; }
+    .dash-lh__headline { gap: 1.375rem; }
+    .dash-lh__stat-value { font-size: 1.875rem; }
+    .dash-trail { padding: 1rem 1.125rem; }
+    .dash-trail__row {
+      grid-template-columns: auto minmax(0, 1fr) auto;
+      row-gap: 0.25rem;
+      column-gap: 0.75rem;
     }
-    [data-run-now-btn="true"].is-error {
-      animation: none;
+    /* Mobile layout:
+         RADARR                                          32m ago
+         [icon] Limitless (2011)
+       Top row holds the instance badge and the relative timestamp.
+       Bottom row places the search-kind icon adjacent to the hunted
+       title (the user's eye lands on the title first; the icon next
+       to it identifies the action without burying it next to the
+       instance label). */
+    .dash-trail__inst { grid-column: 1 / 3; grid-row: 1; align-self: center; }
+    .dash-trail__when { grid-column: 3 / 4; grid-row: 1; align-self: center; }
+    .dash-trail__row .kind-icon { grid-column: 1 / 2; grid-row: 2; align-self: center; }
+    .dash-trail__title { grid-column: 2 / -1; grid-row: 2; }
+    .dash-alert {
+      grid-template-columns: auto 1fr;
+      grid-template-areas:
+        "icon body"
+        "link link";
+      padding: 0.875rem 1rem;
+      gap: 0.75rem 0.875rem;
     }
     .dash-alert__link {
       justify-self: stretch;
@@ -438,686 +748,6 @@
     .dash-card__stat-value { font-size: 1.375rem; }
     .dash-card__foot { font-size: 0.65625rem; }
   }
-
-  /* ── Dashboard redesign: top section ─────────────────────────────── */
-  .dash-main {
-    display: flex;
-    flex-direction: column;
-    gap: 28px;
-  }
-  /* #dash-top wraps the polled top-of-page sections (subheader, alert,
-     library-health, recent hunts, section heading). Apply the same flex
-     column + gap here so those sections get the 28px rhythm from the
-     preview; otherwise they collapse flush against one another. */
-  #dash-top {
-    display: flex;
-    flex-direction: column;
-    gap: 28px;
-  }
-
-  .dash-sub__eyebrow {
-    font-family: var(--font-mono);
-    font-size: 11px;
-    letter-spacing: 0.2em;
-    text-transform: uppercase;
-    color: var(--color-brand-400);
-    margin: 0 0 8px;
-    font-weight: 500;
-  }
-  .dash-sub__sentence {
-    font-size: 30px;
-    font-weight: 600;
-    color: #e2e8f0;
-    margin: 0;
-    letter-spacing: -0.02em;
-    line-height: 1.25;
-  }
-  .dash-sub__sentence .attn  { color: var(--color-danger); }
-  .dash-sub__sentence .muted { color: #94a3b8; font-weight: 500; }
-
-  .dash-alert {
-    background: linear-gradient(135deg, rgba(248, 113, 113, 0.08), transparent 60%), var(--color-surface-1);
-    border: 1px solid var(--color-danger-border);
-    border-left: 3px solid var(--color-danger);
-    border-radius: var(--radius-container);
-    padding: 16px 20px;
-    display: grid;
-    grid-template-columns: auto 1fr auto;
-    grid-template-areas: "icon body link";
-    align-items: start;
-    gap: 14px 16px;
-  }
-  .dash-alert__icon { grid-area: icon; font-size: 18px; color: var(--color-danger); line-height: 1; margin-top: 1px; }
-  .dash-alert__body { grid-area: body; min-width: 0; }
-  .dash-alert__head {
-    font-family: var(--font-mono);
-    font-size: 10px;
-    letter-spacing: 0.22em;
-    text-transform: uppercase;
-    color: #fca5a5;
-    margin: 0 0 6px;
-    font-weight: 600;
-  }
-  .dash-alert__text { font-size: 13px; color: #e2e8f0; margin: 0; line-height: 1.5; }
-  .dash-alert__text .mono  { font-family: var(--font-mono); color: #fca5a5; }
-  .dash-alert__text .muted { color: #94a3b8; }
-  .dash-alert__link {
-    grid-area: link;
-    font-size: 12px;
-    color: #fca5a5;
-    text-decoration: none;
-    font-weight: 500;
-    padding: 6px 10px;
-    border: 1px solid rgba(252, 165, 165, 0.35);
-    border-radius: var(--radius-inset);
-    white-space: nowrap;
-    align-self: start;
-    transition: background var(--dur-base) var(--ease-station);
-  }
-  .dash-alert__link:hover { background: rgba(248, 113, 113, 0.12); }
-
-  .dash-lh {
-    background: var(--color-surface-1);
-    border: 1px solid var(--color-border-subtle);
-    border-radius: var(--radius-container);
-    padding: 22px 26px;
-    box-shadow: var(--shadow-1);
-  }
-  .dash-lh__eyebrow {
-    font-size: 10px;
-    letter-spacing: 0.2em;
-    text-transform: uppercase;
-    color: #64748b;
-    font-weight: 600;
-    margin: 0 0 14px;
-  }
-  .dash-lh__headline {
-    display: flex;
-    gap: 40px;
-    flex-wrap: wrap;
-    align-items: baseline;
-    margin-bottom: 18px;
-  }
-  .dash-lh__stat { display: flex; align-items: baseline; gap: 10px; }
-  .dash-lh__stat-value {
-    font-family: var(--font-mono);
-    font-size: 36px;
-    font-weight: 700;
-    letter-spacing: -0.02em;
-    line-height: 1;
-    font-variant-numeric: tabular-nums;
-  }
-  .dash-lh__stat-value--eligible { color: var(--seg-eligible); }
-  .dash-lh__stat-value--gated,
-  .dash-lh__stat-value--unrel    { color: #cbd5e1; }
-  .dash-lh__stat-label {
-    font-family: var(--font-mono);
-    font-size: 12px;
-    letter-spacing: 0.15em;
-    text-transform: uppercase;
-    color: #64748b;
-    font-weight: 500;
-  }
-  .dash-lh__stat-label--eligible { color: var(--seg-eligible); opacity: 0.9; }
-  .dash-lh__bar {
-    display: flex;
-    height: 14px;
-    width: 100%;
-    border-radius: var(--radius-bar);
-    overflow: hidden;
-    background: #0b0e14;
-  }
-  .dash-lh__segment { height: 100%; }
-  .dash-lh__segment--eligible   { background: var(--seg-eligible);   opacity: 0.88; }
-  .dash-lh__segment--cutoff-cd  { background: var(--seg-cutoff-cd);  opacity: 0.88; }
-  .dash-lh__segment--cooldown   { background: var(--seg-cooldown);   opacity: 0.85; }
-  .dash-lh__segment--upgrade-cd { background: var(--seg-upgrade-cd); opacity: 0.85; }
-  .dash-lh__segment--unreleased { background: var(--seg-unreleased); opacity: 0.85; }
-  .dash-lh__legend {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 16px;
-    margin-top: 14px;
-    font-family: var(--font-mono);
-    font-size: 11px;
-    color: #94a3b8;
-  }
-  .dash-lh__legend-item { display: inline-flex; align-items: center; gap: 8px; }
-  .dash-lh__legend-swatch { width: 10px; height: 10px; border-radius: var(--radius-bar); flex-shrink: 0; }
-  .dash-lh__legend-swatch--eligible   { background: var(--seg-eligible); }
-  .dash-lh__legend-swatch--cutoff-cd  { background: var(--seg-cutoff-cd); }
-  .dash-lh__legend-swatch--cooldown   { background: var(--seg-cooldown); }
-  .dash-lh__legend-swatch--upgrade-cd { background: var(--seg-upgrade-cd); }
-  .dash-lh__legend-swatch--unreleased { background: var(--seg-unreleased); }
-
-
-  .dash-trail {
-    background: var(--color-surface-1);
-    border: 1px solid var(--color-border-subtle);
-    border-radius: var(--radius-container);
-    padding: 20px 26px;
-  }
-  .dash-trail__head {
-    font-family: var(--font-mono);
-    font-size: 10px;
-    letter-spacing: 0.22em;
-    text-transform: uppercase;
-    color: var(--seg-eligible);
-    margin: 0 0 14px;
-    font-weight: 600;
-  }
-  .dash-trail__list { display: flex; flex-direction: column; gap: 0; }
-  .dash-trail__row {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto auto;
-    align-items: center;
-    gap: 14px;
-    padding: 11px 12px;
-    margin: 0 -12px;
-    border-top: 1px solid var(--color-border-subtle);
-    border-radius: var(--radius-bar);
-    transition: background var(--dur-fast) var(--ease-station);
-  }
-  .dash-trail__row:hover { background: rgba(148, 163, 184, 0.04); }
-  .dash-trail__row:last-child { padding-bottom: 2px; }
-  .dash-trail__title {
-    font-size: 13.5px;
-    color: #e2e8f0;
-    font-weight: 500;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .dash-trail__inst {
-    font-family: var(--font-mono);
-    font-size: 10px;
-    letter-spacing: 0.14em;
-    text-transform: uppercase;
-    font-weight: 600;
-  }
-  .dash-trail__when {
-    font-family: var(--font-mono);
-    font-size: 11px;
-    color: #64748b;
-    min-width: 56px;
-    text-align: right;
-  }
-  .dash-trail__empty {
-    font-size: 13px;
-    color: #64748b;
-    font-style: italic;
-    padding: 10px 0 2px;
-    margin: 0;
-  }
-
-  .dash-section-head {
-    display: flex;
-    align-items: center;
-    gap: 20px;
-    padding: 8px 0 0;
-    flex-wrap: wrap;
-  }
-  .dash-section-head__title {
-    font-size: 28px;
-    font-weight: 600;
-    color: #e2e8f0;
-    margin: 0;
-    letter-spacing: -0.02em;
-    line-height: 1.2;
-    flex: 0 0 auto;
-  }
-  .dash-section-head__rule {
-    flex: 1 1 40px;
-    min-width: 40px;
-    height: 1px;
-    background: linear-gradient(
-      to right,
-      var(--color-border-default) 0%,
-      var(--color-border-subtle) 85%,
-      transparent 100%
-    );
-  }
-  .dash-section-head__add {
-    font-size: 13px;
-    color: var(--color-brand-400);
-    text-decoration: none;
-    font-weight: 500;
-    transition: color var(--dur-base) var(--ease-station);
-    flex: 0 0 auto;
-  }
-  .dash-section-head__add:hover { color: var(--color-brand-300); }
-
-  @media (max-width: 640px) {
-    .dash-sub__sentence { font-size: 22px; }
-    .dash-section-head__title { font-size: 22px; }
-    .dash-lh { padding: 18px 18px; }
-    .dash-lh__headline { gap: 22px; }
-    .dash-lh__stat-value { font-size: 30px; }
-    .dash-trail { padding: 16px 18px; }
-    .dash-trail__row {
-      grid-template-columns: minmax(0, 1fr) auto;
-      row-gap: 4px;
-      column-gap: 12px;
-    }
-    .dash-trail__inst { grid-column: 1 / 2; grid-row: 2; }
-    .dash-trail__when { grid-column: 2 / 3; grid-row: 1 / 3; align-self: center; }
-    .dash-alert {
-      grid-template-columns: auto 1fr;
-      grid-template-areas:
-        "icon body"
-        "link link";
-      padding: 14px 16px;
-      gap: 12px 14px;
-    }
-    .dash-alert__link {
-      justify-self: stretch;
-      text-align: center;
-      padding: 10px 14px;
-      font-size: 13px;
-    }
-    .dash-alert__meta { display: block; margin-top: 4px; }
-    .dash-alert__meta-lead { display: none; }
-  }
-
-  @media (max-width: 420px) {
-    .dash-lh__headline { gap: 18px; }
-    .dash-lh__stat-value { font-size: 26px; }
-    .dash-lh__legend { gap: 10px; font-size: 10px; }
-  }
-
-  /* ── Instance card (PR 3 redesign) ────────────────────────────────── */
-  .dash-grid {
-    display: grid;
-    gap: 16px;
-    grid-template-columns: 1fr;
-  }
-  @media (min-width: 640px) {
-    .dash-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    .dash-trail__row { transition: none; }
-  }
-
-  .dash-card {
-    --type-color: var(--color-brand-400);
-    background: var(--color-surface-1);
-    border: 1px solid var(--color-border-subtle);
-    border-top: 3px solid var(--type-color);
-    border-radius: var(--radius-container);
-    padding: 22px 24px 20px;
-    max-width: 640px;
-    width: 100%;
-    display: flex;
-    flex-direction: column;
-    gap: 18px;
-    box-shadow: var(--shadow-2);
-  }
-  .dash-card[data-type="sonarr"]      { --type-color: var(--color-sonarr); }
-  .dash-card[data-type="radarr"]      { --type-color: var(--color-radarr); }
-  .dash-card[data-type="lidarr"]      { --type-color: var(--color-lidarr); }
-  .dash-card[data-type="readarr"]     { --type-color: var(--color-readarr); }
-  .dash-card[data-type="whisparr_v2"] { --type-color: var(--color-whisparr); }
-  .dash-card[data-type="whisparr_v3"] { --type-color: var(--color-whisparr-v3); }
-
-  .dash-card[data-disabled="true"]               { --type-color: #475569; }
-  .dash-card[data-disabled="true"] .dash-card__name    { color: #94a3b8; }
-  .dash-card[data-disabled="true"] .dash-card__eyebrow { opacity: 0.6; }
-  .dash-card[data-disabled="true"] .dash-policy        { opacity: 0.55; }
-
-  .dash-card__head {
-    display: grid;
-    grid-template-columns: 1fr auto;
-    gap: 10px;
-    align-items: start;
-  }
-  .dash-card__eyebrow {
-    font-family: var(--font-mono);
-    font-size: 10px;
-    letter-spacing: 0.24em;
-    text-transform: uppercase;
-    color: var(--type-color);
-    font-weight: 600;
-    margin: 0;
-  }
-  .dash-card__name {
-    font-family: var(--font-sans);
-    font-size: 22px;
-    font-weight: 600;
-    color: #ffffff;
-    margin: 4px 0 0;
-    letter-spacing: -0.02em;
-    line-height: 1.15;
-  }
-
-  .dash-pill {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 11px;
-    font-weight: 500;
-    padding: 3px 10px;
-    border-radius: var(--radius-full);
-    font-family: var(--font-sans);
-    white-space: nowrap;
-    align-self: start;
-    margin-top: 2px;
-    text-decoration: none;
-  }
-  .dash-pill--active {
-    background: rgba(22, 101, 52, 0.28);
-    border: 1px solid rgba(74, 222, 128, 0.28);
-    color: #86efac;
-  }
-  .dash-pill--error {
-    background: rgba(153, 27, 27, 0.25);
-    border: 1px solid rgba(248, 113, 113, 0.42);
-    color: #fca5a5;
-    cursor: pointer;
-  }
-  .dash-pill--error::before { content: "⚠"; font-size: 10px; }
-  .dash-pill--error:hover { background: rgba(153, 27, 27, 0.40); }
-  .dash-pill--disabled {
-    background: var(--color-surface-2);
-    border: 1px solid var(--color-border-default);
-    color: #64748b;
-  }
-  .dash-pill--disabled .dash-pill__dot {
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: #475569;
-  }
-
-  .dash-card__stats {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 10px;
-  }
-  .dash-card__stats > div {
-    text-align: center;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 6px;
-    padding: 4px 0;
-    position: relative;
-  }
-  .dash-card__stats > div + div::before {
-    content: "";
-    position: absolute;
-    left: 0;
-    top: 20%;
-    bottom: 20%;
-    width: 1px;
-    background: var(--color-border-subtle);
-  }
-  .dash-card__stat-label {
-    font-family: var(--font-mono);
-    font-size: 10px;
-    letter-spacing: 0.22em;
-    text-transform: uppercase;
-    color: #64748b;
-    font-weight: 600;
-    margin: 0;
-  }
-  .dash-card__stat-value {
-    font-family: var(--font-mono);
-    font-size: 26px;
-    font-weight: 700;
-    letter-spacing: -0.02em;
-    color: #ffffff;
-    font-variant-numeric: tabular-nums;
-    line-height: 1;
-    margin: 0;
-  }
-  .dash-card__stat-value--eligible { color: var(--seg-eligible); }
-  .dash-card__stat-value--searched { color: var(--color-brand-300); }
-  .dash-card__stat-value--muted    { color: #64748b; }
-
-  .dash-unlocks {
-    background: #0b0e14;
-    border: 1px solid var(--color-border-subtle);
-    border-radius: var(--radius-inset);
-    padding: 14px 16px;
-    /* Absorb the card's extra vertical space so disabled / short-list
-       cards align with taller siblings in the same grid row. The card
-       is flex-column; the grid stretches siblings to a shared height.
-       Without this the cooldown box hugs its natural height and the
-       footer drifts up, leaving the card feeling top-heavy. */
-    flex: 1 1 auto;
-    display: flex;
-    flex-direction: column;
-  }
-  .dash-unlocks__head {
-    font-family: var(--font-mono);
-    font-size: 9px;
-    letter-spacing: 0.24em;
-    text-transform: uppercase;
-    color: #64748b;
-    font-weight: 600;
-    margin: 0 0 10px;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 4px 10px;
-  }
-  .dash-unlocks__head .tally {
-    color: #64748b;
-    font-weight: 500;
-    margin-left: auto;
-    text-align: right;
-  }
-  .dash-unlocks__list {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    /* Centre a short list vertically in the expanded cooldown box so
-       a 1- or 2-item card doesn't cluster at the top like the empty
-       state used to. 3+ items fill naturally (auto margins collapse
-       to 0 when there's no slack). */
-    margin: auto 0;
-  }
-  .dash-unlocks__row {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    gap: 14px;
-    align-items: baseline;
-    font-size: 13px;
-    color: #cbd5e1;
-  }
-  .dash-unlocks__title {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .dash-unlocks__time {
-    font-family: var(--font-mono);
-    font-size: 12px;
-    color: var(--type-color);
-    font-weight: 500;
-    white-space: nowrap;
-  }
-  .dash-unlocks--empty {
-    font-size: 12px;
-    color: #64748b;
-    font-style: italic;
-    text-align: center;
-    padding: 18px 8px;
-    /* Same auto-margin trick as __list: centres the empty message
-       vertically in the expanded cooldown box so a disabled or
-       all-caught-up card stays visually balanced with sibling cards. */
-    margin: auto 0;
-  }
-
-  .dash-policy {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 4px 5px;
-    font-family: var(--font-mono);
-    margin: 0;
-    padding: 0;
-  }
-  .dash-policy__chip {
-    display: inline-flex;
-    /* Align label + value on their shared text baseline. With
-       align-items: center the bounding boxes are centered but the
-       different font sizes leave visible ~1px baseline offset. */
-    align-items: baseline;
-    gap: 5px;
-    padding: 4px 8px 3px;
-    background: rgba(11, 14, 20, 0.8);
-    border: 1px solid var(--color-border-subtle);
-    border-radius: var(--radius-chip);
-    transition: border-color var(--dur-base) var(--ease-station);
-  }
-  .dash-policy__chip:hover { border-color: var(--color-border-default); }
-  .dash-policy__label {
-    font-size: 9px;
-    color: #64748b;
-    letter-spacing: 0.16em;
-    text-transform: uppercase;
-    font-weight: 500;
-    line-height: 1;
-  }
-  .dash-policy__value {
-    font-size: 11.5px;
-    color: #cbd5e1;
-    font-weight: 500;
-    line-height: 1;
-    font-variant-numeric: tabular-nums;
-  }
-  .dash-policy__value[data-state="on"]  { color: var(--seg-eligible); }
-  .dash-policy__value[data-state="off"] { color: #64748b; }
-
-  .dash-card__foot {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 14px;
-    padding-top: 14px;
-    border-top: 1px solid var(--color-border-subtle);
-    font-family: var(--font-mono);
-    font-size: 11px;
-    color: #64748b;
-    flex-wrap: wrap;
-  }
-  .dash-card__foot-text { line-height: 1.4; }
-  .dash-card__foot-text .sep { color: #334155; margin: 0 5px; }
-
-  .dash-run-now {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 6px 12px;
-    /* Pin to the right edge of whichever flex line this ends up on: when
-       the footer wraps at narrow viewports the button becomes the only
-       item on its own line, and space-between alone would left-align it. */
-    margin-left: auto;
-    border: 1px solid color-mix(in srgb, var(--type-color) 50%, transparent);
-    color: var(--type-color);
-    background: transparent;
-    border-radius: var(--radius-inset);
-    font-family: var(--font-mono);
-    font-size: 11px;
-    font-weight: 600;
-    letter-spacing: 0.03em;
-    cursor: pointer;
-    transition:
-      background var(--dur-base) var(--ease-station),
-      border-color var(--dur-base) var(--ease-station),
-      transform var(--dur-base) var(--ease-station);
-  }
-  .dash-run-now:hover {
-    background: color-mix(in srgb, var(--type-color) 14%, transparent);
-    border-color: var(--type-color);
-  }
-  .dash-run-now:active { transform: translateY(1px); }
-  .dash-run-now:disabled { opacity: 0.4; cursor: not-allowed; }
-  .dash-run-now__arrow { font-size: 9px; }
-
-  /* Run-now state machine overrides (reuse existing data-run-now-btn hook). */
-  .dash-run-now.is-running {
-    background: color-mix(in srgb, var(--type-color) 18%, transparent);
-    border-color: var(--type-color);
-  }
-  .dash-run-now.is-success {
-    background: color-mix(in srgb, var(--seg-eligible) 22%, transparent);
-    border-color: var(--seg-eligible);
-    color: var(--seg-eligible);
-  }
-  .dash-run-now.is-error {
-    background: color-mix(in srgb, var(--color-danger) 22%, transparent);
-    border-color: var(--color-danger);
-    color: var(--color-danger);
-    animation: run-now-shake 280ms var(--ease-station);
-  }
-
-  /* Empty-dashboard panel (State C in the preview). */
-  .dash-empty-state {
-    background: var(--color-surface-1);
-    border: 1px solid var(--color-border-subtle);
-    border-radius: var(--radius-container);
-    padding: 56px 24px;
-    text-align: center;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 14px;
-  }
-  .dash-empty-state__icon {
-    width: 44px;
-    height: 44px;
-    border-radius: 50%;
-    border: 1px dashed var(--color-border-default);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    margin-bottom: 4px;
-  }
-  .dash-empty-state__icon::before {
-    content: "";
-    width: 12px;
-    height: 12px;
-    border: 1px solid #475569;
-    border-radius: 50%;
-  }
-  .dash-empty-state__title {
-    font-size: 18px;
-    font-weight: 600;
-    color: #cbd5e1;
-    margin: 0;
-    letter-spacing: -0.01em;
-  }
-  .dash-empty-state__body {
-    font-size: 13.5px;
-    color: #94a3b8;
-    margin: 0;
-    max-width: 440px;
-    line-height: 1.55;
-  }
-  .dash-empty-state__cta {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    margin-top: 10px;
-    padding: 10px 20px;
-    background: var(--color-brand-600);
-    color: #ffffff;
-    border: 1px solid var(--color-brand-500);
-    border-radius: var(--radius-inset);
-    font-size: 13px;
-    font-weight: 500;
-    text-decoration: none;
-    transition: background var(--dur-base) var(--ease-station);
-  }
-  .dash-empty-state__cta:hover { background: var(--color-brand-500); }
-
-  @media (max-width: 640px) {
-    .dash-card { padding: 18px 18px 16px; }
-    .dash-card__name { font-size: 19px; }
-    .dash-card__stat-value { font-size: 22px; }
-    .dash-card__foot { font-size: 10.5px; }
-  }
 </style>
 
 <main class="dash-main">
@@ -1138,8 +768,6 @@
     hx-target="#instance-grid"
   ></div>
 </main>
-
-
 
 {# Inline /api/status envelope consumed by dashboard.js on init.  Using
    <script type="application/json"> keeps the payload out of any HTML

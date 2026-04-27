@@ -102,24 +102,24 @@ class Supervisor:
         # completes.
         self._last_cycle_end: dict[int, datetime] = {}
 
-    # ------------------------------------------------------------------
     # Lifecycle
-    # ------------------------------------------------------------------
 
     async def start(self) -> None:
         """Load enabled instances and launch one loop-task per instance."""
         instances = await list_instances(master_key=self._master_key)
-        enabled = [i for i in instances if i.enabled]
+        enabled = [i for i in instances if i.core.enabled]
 
         for idx, instance in enumerate(enabled):
             await self.start_instance_task(
                 instance.core.id, instance=instance, startup_offset=idx * _STARTUP_STAGGER_SECS
             )
 
-        # Snapshot refresh runs even when no search cycles are enabled, so a
-        # disabled instance's last-known snapshot columns still tick (useful
-        # for operators temporarily pausing search without losing the
-        # monitored-total reading).
+        # Snapshot refresh runs even when no search cycles are enabled, so
+        # a fresh install with zero enabled instances still gets the
+        # empty-state treatment right. Disabled instances skip the refresh
+        # itself (``_refresh_all_snapshots_once`` filters on ``enabled``)
+        # so their columns freeze at their last-known values until the
+        # operator re-enables them.
         self._snapshot_task = asyncio.create_task(
             self._snapshot_refresh_loop(),
             name="snapshot-refresh-loop",
@@ -203,7 +203,7 @@ class Supervisor:
         current = instance
         if current is None:
             current = await get_instance(instance_id, master_key=self._master_key)
-        if current is None or not current.enabled:
+        if current is None or not current.core.enabled:
             return False
 
         task = asyncio.create_task(
@@ -224,7 +224,11 @@ class Supervisor:
         self._prime_tasks.add(prime)
         prime.add_done_callback(self._prime_tasks.discard)
 
-        logger.info("Supervisor: started task for instance %r (id=%d)", current.name, current.id)
+        logger.info(
+            "Supervisor: started task for instance %r (id=%d)",
+            current.core.name,
+            current.core.id,
+        )
         return True
 
     async def stop_instance_task(self, instance_id: int) -> bool:
@@ -280,9 +284,7 @@ class Supervisor:
         self._manual_runs[instance_id] = task
         return "accepted"
 
-    # ------------------------------------------------------------------
     # Internal
-    # ------------------------------------------------------------------
 
     async def _instance_loop(self, instance_id: int, startup_offset: int = 0) -> None:
         """Run search cycles for one instance until cancelled.
@@ -378,12 +380,11 @@ class Supervisor:
                 )
                 return True
             except (EngineError, ClientError) as exc:
-                # Track B.13: run_instance_search now wraps every
-                # non-typed escape into EngineError before it reaches
-                # this handler, and the client layer (Track B.11/B.12)
-                # raises ClientError subclasses.  Both branches land
-                # here and produce the same search_log row shape the
-                # pre-refactor `except Exception` produced.
+                # ``run_instance_search`` wraps any non-typed escape in
+                # :class:`EngineError` before it reaches this handler,
+                # and the client layer raises :class:`ClientError`
+                # subclasses directly, so both branches land on the
+                # same ``search_log`` row shape.
                 logger.error(
                     "Supervisor: unhandled error in search loop for %r: %s",
                     instance.core.name,
@@ -479,14 +480,14 @@ class Supervisor:
                         logger.debug(
                             "Supervisor: reconcile sets unreachable for %r; "
                             "keeping existing cooldowns.",
-                            instance.name,
+                            instance.core.name,
                         )
                     except Exception:  # noqa: BLE001
                         reconcile_sets = ReconcileSets.empty()
                         logger.exception(
                             "Supervisor: reconcile fetch failed for %r; "
                             "keeping existing cooldowns.",
-                            instance.name,
+                            instance.core.name,
                         )
                 # Surface a one-line INFO when the unreleased count
                 # jumps non-trivially.  The first refresh after a user
@@ -495,7 +496,7 @@ class Supervisor:
                 # is silent.  Threshold is intentionally noisy enough
                 # to ignore +/- 1 churn from a single release going
                 # past midnight.
-                prior_unreleased = await _read_prior_unreleased(instance.id)
+                prior_unreleased = await _read_prior_unreleased(instance.core.id)
                 if (
                     prior_unreleased is not None
                     and abs(snap.unreleased_count - prior_unreleased)
@@ -503,7 +504,7 @@ class Supervisor:
                 ):
                     logger.info(
                         "Supervisor: %r unreleased jumped %d -> %d",
-                        instance.name,
+                        instance.core.name,
                         prior_unreleased,
                         snap.unreleased_count,
                     )
@@ -512,7 +513,7 @@ class Supervisor:
                     monitored_total=snap.monitored_total,
                     unreleased_count=snap.unreleased_count,
                 )
-                await reconcile_cooldowns(instance.id, reconcile_sets)
+                await reconcile_cooldowns(instance.core.id, reconcile_sets)
             except httpx.TransportError:
                 logger.debug(
                     "Supervisor: snapshot refresh skipped for %r; instance unreachable",

@@ -38,7 +38,7 @@ _SEARCH_KINDS = {"missing", "cutoff", "upgrade"}
 _CYCLE_TRIGGERS = {"scheduled", "run_now", "system"}
 
 
-def _parse_instance_ids(raw: list[str] | None) -> tuple[int, ...]:
+def parse_instance_ids(raw: list[str] | None) -> tuple[int, ...]:
     """Parse zero or more ``instance_id`` query params from an HTMX form.
 
     Accepts the repeated ``?instance_id=1&instance_id=2`` shape the
@@ -75,7 +75,7 @@ def _parse_instance_ids(raw: list[str] | None) -> tuple[int, ...]:
     return tuple(ordered)
 
 
-def _parse_search_kind(raw: str | None) -> str | None:
+def parse_search_kind(raw: str | None) -> str | None:
     """Parse optional search_kind query param."""
     if raw is None or raw == "":
         return None
@@ -87,7 +87,7 @@ def _parse_search_kind(raw: str | None) -> str | None:
     return raw
 
 
-def _parse_cycle_trigger(raw: str | None) -> str | None:
+def parse_cycle_trigger(raw: str | None) -> str | None:
     """Parse optional cycle_trigger query param."""
     if raw is None or raw == "":
         return None
@@ -99,7 +99,7 @@ def _parse_cycle_trigger(raw: str | None) -> str | None:
     return raw
 
 
-def _parse_hide_system(raw: str | None) -> bool:
+def parse_hide_system(raw: str | None) -> bool:
     """Parse hide_system checkbox/select values from query params."""
     if raw is None or raw == "":
         return False
@@ -167,11 +167,11 @@ def _resolve_filters(
     error row instead (see :func:`_partial_validation_error`).
     """
     return _ParsedLogFilters(
-        instance_ids=_parse_instance_ids(instance_id),
+        instance_ids=parse_instance_ids(instance_id),
         action=action or None,
-        search_kind=_parse_search_kind(search_kind),
-        cycle_trigger=_parse_cycle_trigger(cycle_trigger),
-        hide_system=_parse_hide_system(hide_system),
+        search_kind=parse_search_kind(search_kind),
+        cycle_trigger=parse_cycle_trigger(cycle_trigger),
+        hide_system=parse_hide_system(hide_system),
         hide_skipped=parse_hide_skipped(hide_skipped),
         before=before,
         limit=limit,
@@ -203,9 +203,9 @@ def _partial_validation_error(detail: str) -> HTMLResponse:
     """
     safe = html.escape(detail)
     content = (
-        '<div id="log-error" class="empty empty--error">'
+        '<div id="log-error-row" class="empty empty--error" role="alert">'
         '<p class="empty__title">Invalid filter value.</p>'
-        f'<p class="empty__hint">{safe}</p>'
+        f"<p>{safe}</p>"
         "</div>"
     )
     return HTMLResponse(content=content, status_code=422)

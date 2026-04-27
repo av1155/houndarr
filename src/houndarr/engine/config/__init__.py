@@ -1,7 +1,9 @@
 """Engine configuration value objects.
 
-Track B.22 introduces :mod:`~houndarr.engine.config.search_pass`.
-Additional per-subsystem configs may land here in later tracks.
+Holds the frozen dataclasses that group related configuration for
+the search engine (see :mod:`~houndarr.engine.config.search_pass`).
+New per-subsystem configs that share that shape land here next to
+``search_pass``.
 """
 
 from __future__ import annotations

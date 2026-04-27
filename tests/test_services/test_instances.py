@@ -53,34 +53,34 @@ async def _make(master_key: bytes, **overrides: object) -> Instance:
 async def test_create_returns_instance(db: None, master_key: bytes) -> None:
     inst = await _make(master_key)
     assert isinstance(inst, Instance)
-    assert inst.id >= 1
-    assert inst.name == "My Sonarr"
-    assert inst.type == InstanceType.sonarr
-    assert inst.url == "http://sonarr:8989"
+    assert inst.core.id >= 1
+    assert inst.core.name == "My Sonarr"
+    assert inst.core.type == InstanceType.sonarr
+    assert inst.core.url == "http://sonarr:8989"
 
 
 @pytest.mark.asyncio()
 async def test_create_decrypts_api_key(db: None, master_key: bytes) -> None:
     inst = await _make(master_key, api_key="secret-key-xyz")
-    assert inst.api_key == "secret-key-xyz"
+    assert inst.core.api_key == "secret-key-xyz"
 
 
 @pytest.mark.asyncio()
 async def test_create_applies_defaults(db: None, master_key: bytes) -> None:
     inst = await _make(master_key)
-    assert inst.enabled is True
-    assert inst.batch_size == 2
-    assert inst.sleep_interval_mins == 30
-    assert inst.hourly_cap == 4
-    assert inst.cooldown_days == 14
-    assert inst.post_release_grace_hrs == 6
-    assert inst.queue_limit == 0
-    assert inst.cutoff_enabled is False
-    assert inst.cutoff_batch_size == 1
-    assert inst.cutoff_cooldown_days == 21
-    assert inst.cutoff_hourly_cap == 1
-    assert inst.sonarr_search_mode == SonarrSearchMode.episode
-    assert inst.allowed_time_window == ""
+    assert inst.core.enabled is True
+    assert inst.missing.batch_size == 2
+    assert inst.missing.sleep_interval_mins == 30
+    assert inst.missing.hourly_cap == 4
+    assert inst.missing.cooldown_days == 14
+    assert inst.missing.post_release_grace_hrs == 6
+    assert inst.missing.queue_limit == 0
+    assert inst.cutoff.cutoff_enabled is False
+    assert inst.cutoff.cutoff_batch_size == 1
+    assert inst.cutoff.cutoff_cooldown_days == 21
+    assert inst.cutoff.cutoff_hourly_cap == 1
+    assert inst.missing.sonarr_search_mode == SonarrSearchMode.episode
+    assert inst.schedule.allowed_time_window == ""
 
 
 @pytest.mark.asyncio()
@@ -88,7 +88,7 @@ async def test_create_radarr_instance(db: None, master_key: bytes) -> None:
     inst = await _make(
         master_key, name="My Radarr", type=InstanceType.radarr, url="http://radarr:7878"
     )
-    assert inst.type == InstanceType.radarr
+    assert inst.core.type == InstanceType.radarr
 
 
 @pytest.mark.asyncio()
@@ -112,10 +112,10 @@ async def test_api_key_stored_encrypted(db: None, master_key: bytes) -> None:
 @pytest.mark.asyncio()
 async def test_get_instance_found(db: None, master_key: bytes) -> None:
     created = await _make(master_key)
-    fetched = await get_instance(created.id, master_key=master_key)
+    fetched = await get_instance(created.core.id, master_key=master_key)
     assert fetched is not None
-    assert fetched.id == created.id
-    assert fetched.api_key == created.api_key
+    assert fetched.core.id == created.core.id
+    assert fetched.core.api_key == created.core.api_key
 
 
 @pytest.mark.asyncio()
@@ -141,7 +141,7 @@ async def test_list_returns_all(db: None, master_key: bytes) -> None:
     await _make(master_key, name="B", type=InstanceType.radarr, url="http://radarr:7878")
     instances = await list_instances(master_key=master_key)
     assert len(instances) == 2
-    names = {i.name for i in instances}
+    names = {i.core.name for i in instances}
     assert names == {"A", "B"}
 
 
@@ -150,8 +150,8 @@ async def test_list_ordered_by_id(db: None, master_key: bytes) -> None:
     a = await _make(master_key, name="First")
     b = await _make(master_key, name="Second", type=InstanceType.radarr, url="http://radarr:7878")
     instances = await list_instances(master_key=master_key)
-    assert instances[0].id == a.id
-    assert instances[1].id == b.id
+    assert instances[0].core.id == a.core.id
+    assert instances[1].core.id == b.core.id
 
 
 # ---------------------------------------------------------------------------
@@ -162,24 +162,24 @@ async def test_list_ordered_by_id(db: None, master_key: bytes) -> None:
 @pytest.mark.asyncio()
 async def test_update_name(db: None, master_key: bytes) -> None:
     inst = await _make(master_key)
-    updated = await update_instance(inst.id, master_key=master_key, name="Renamed")
+    updated = await update_instance(inst.core.id, master_key=master_key, name="Renamed")
     assert updated is not None
-    assert updated.name == "Renamed"
+    assert updated.core.name == "Renamed"
 
 
 @pytest.mark.asyncio()
 async def test_update_api_key_re_encrypted(db: None, master_key: bytes) -> None:
     inst = await _make(master_key, api_key="old-key")
-    updated = await update_instance(inst.id, master_key=master_key, api_key="new-key")
+    updated = await update_instance(inst.core.id, master_key=master_key, api_key="new-key")
     assert updated is not None
-    assert updated.api_key == "new-key"
+    assert updated.core.api_key == "new-key"
 
     # Raw DB value must still be encrypted (not plaintext)
     from houndarr.database import get_db
 
     async with get_db() as conn:
         async with conn.execute(
-            "SELECT encrypted_api_key FROM instances WHERE id = ?", (inst.id,)
+            "SELECT encrypted_api_key FROM instances WHERE id = ?", (inst.core.id,)
         ) as cur:
             row = await cur.fetchone()
     assert row is not None
@@ -190,37 +190,41 @@ async def test_update_api_key_re_encrypted(db: None, master_key: bytes) -> None:
 async def test_update_multiple_fields(db: None, master_key: bytes) -> None:
     inst = await _make(master_key)
     updated = await update_instance(
-        inst.id,
+        inst.core.id,
         master_key=master_key,
         batch_size=20,
         hourly_cap=50,
         enabled=False,
     )
     assert updated is not None
-    assert updated.batch_size == 20
-    assert updated.hourly_cap == 50
-    assert updated.enabled is False
+    assert updated.missing.batch_size == 20
+    assert updated.missing.hourly_cap == 50
+    assert updated.core.enabled is False
 
 
 @pytest.mark.asyncio()
 async def test_update_sonarr_search_mode(db: None, master_key: bytes) -> None:
     inst = await _make(master_key)
     updated = await update_instance(
-        inst.id,
+        inst.core.id,
         master_key=master_key,
         sonarr_search_mode=SonarrSearchMode.season_context,
     )
     assert updated is not None
-    assert updated.sonarr_search_mode == SonarrSearchMode.season_context
+    assert updated.missing.sonarr_search_mode == SonarrSearchMode.season_context
 
 
 @pytest.mark.asyncio()
-async def test_update_unknown_fields_ignored(db: None, master_key: bytes) -> None:
+async def test_update_unknown_fields_raise_type_error(db: None, master_key: bytes) -> None:
+    """Unknown kwargs raise TypeError with the offending key set named.
+
+    Review-adversarial fix: silent drops used to hide rename drift.
+    The service now raises so the caller site sees the drift.
+    """
     inst = await _make(master_key)
-    # Should not raise even with unrecognised keys
-    updated = await update_instance(inst.id, master_key=master_key, nonexistent_col="x")
-    assert updated is not None
-    assert updated.name == inst.name
+    with pytest.raises(TypeError) as exc_info:
+        await update_instance(inst.core.id, master_key=master_key, nonexistent_col="x")
+    assert "nonexistent_col" in str(exc_info.value)
 
 
 @pytest.mark.asyncio()
@@ -232,15 +236,15 @@ async def test_update_nonexistent_returns_none(db: None, master_key: bytes) -> N
 @pytest.mark.asyncio()
 async def test_update_refreshes_updated_at(db: None, master_key: bytes) -> None:
     inst = await _make(master_key)
-    original_updated_at = inst.updated_at
+    original_updated_at = inst.timestamps.updated_at
     # Brief sleep to ensure the timestamp differs
     import asyncio
 
     await asyncio.sleep(0.01)
-    updated = await update_instance(inst.id, master_key=master_key, name="Changed")
+    updated = await update_instance(inst.core.id, master_key=master_key, name="Changed")
     assert updated is not None
     # updated_at should be >= original (may be equal at ms resolution, never less)
-    assert updated.updated_at >= original_updated_at
+    assert updated.timestamps.updated_at >= original_updated_at
 
 
 # ---------------------------------------------------------------------------
@@ -251,9 +255,9 @@ async def test_update_refreshes_updated_at(db: None, master_key: bytes) -> None:
 @pytest.mark.asyncio()
 async def test_delete_existing(db: None, master_key: bytes) -> None:
     inst = await _make(master_key)
-    result = await delete_instance(inst.id)
+    result = await delete_instance(inst.core.id)
     assert result is True
-    assert await get_instance(inst.id, master_key=master_key) is None
+    assert await get_instance(inst.core.id, master_key=master_key) is None
 
 
 @pytest.mark.asyncio()
@@ -266,10 +270,10 @@ async def test_delete_nonexistent(db: None, master_key: bytes) -> None:
 async def test_delete_removes_from_list(db: None, master_key: bytes) -> None:
     a = await _make(master_key, name="Keep")
     b = await _make(master_key, name="Delete", type=InstanceType.radarr, url="http://radarr:7878")
-    await delete_instance(b.id)
+    await delete_instance(b.core.id)
     remaining = await list_instances(master_key=master_key)
     assert len(remaining) == 1
-    assert remaining[0].id == a.id
+    assert remaining[0].core.id == a.core.id
 
 
 # ---------------------------------------------------------------------------
@@ -280,9 +284,9 @@ async def test_delete_removes_from_list(db: None, master_key: bytes) -> None:
 @pytest.mark.asyncio()
 async def test_create_persists_allowed_time_window(db: None, master_key: bytes) -> None:
     inst = await _make(master_key, allowed_time_window="09:00-23:00")
-    fetched = await get_instance(inst.id, master_key=master_key)
+    fetched = await get_instance(inst.core.id, master_key=master_key)
     assert fetched is not None
-    assert fetched.allowed_time_window == "09:00-23:00"
+    assert fetched.schedule.allowed_time_window == "09:00-23:00"
 
 
 @pytest.mark.asyncio()
@@ -290,24 +294,24 @@ async def test_update_allowed_time_window(db: None, master_key: bytes) -> None:
     from houndarr.services.instances import update_instance
 
     inst = await _make(master_key)
-    assert inst.allowed_time_window == ""
+    assert inst.schedule.allowed_time_window == ""
 
     updated = await update_instance(
-        inst.id,
+        inst.core.id,
         master_key=master_key,
         allowed_time_window="22:00-06:00",
     )
     assert updated is not None
-    assert updated.allowed_time_window == "22:00-06:00"
+    assert updated.schedule.allowed_time_window == "22:00-06:00"
 
     # Clearing works too.
     cleared = await update_instance(
-        inst.id,
+        inst.core.id,
         master_key=master_key,
         allowed_time_window="",
     )
     assert cleared is not None
-    assert cleared.allowed_time_window == ""
+    assert cleared.schedule.allowed_time_window == ""
 
 
 # ---------------------------------------------------------------------------
@@ -320,7 +324,7 @@ async def test_create_applies_search_order_default(db: None, master_key: bytes) 
     from houndarr.services.instances import SearchOrder
 
     inst = await _make(master_key)
-    assert inst.search_order == SearchOrder.random
+    assert inst.schedule.search_order == SearchOrder.random
 
 
 @pytest.mark.asyncio()
@@ -329,28 +333,28 @@ async def test_update_search_order_to_random(db: None, master_key: bytes) -> Non
 
     inst = await _make(master_key)
     updated = await update_instance(
-        inst.id,
+        inst.core.id,
         master_key=master_key,
         search_order=SearchOrder.random,
     )
     assert updated is not None
-    assert updated.search_order == SearchOrder.random
+    assert updated.schedule.search_order == SearchOrder.random
 
-    refetched = await get_instance(inst.id, master_key=master_key)
+    refetched = await get_instance(inst.core.id, master_key=master_key)
     assert refetched is not None
-    assert refetched.search_order == SearchOrder.random
+    assert refetched.schedule.search_order == SearchOrder.random
 
     reverted = await update_instance(
-        inst.id,
+        inst.core.id,
         master_key=master_key,
         search_order=SearchOrder.chronological,
     )
     assert reverted is not None
-    assert reverted.search_order == SearchOrder.chronological
+    assert reverted.schedule.search_order == SearchOrder.chronological
 
 
 # ---------------------------------------------------------------------------
-# PR 5: v13 snapshot columns + update_instance_snapshot helper
+# v13 snapshot columns + update_instance_snapshot helper
 # ---------------------------------------------------------------------------
 
 
@@ -358,9 +362,9 @@ async def test_update_search_order_to_random(db: None, master_key: bytes) -> Non
 async def test_v13_snapshot_columns_default_zero(db: None, master_key: bytes) -> None:
     """Fresh v13 installs initialize snapshot columns to their defaults."""
     inst = await _make(master_key)
-    assert inst.monitored_total == 0
-    assert inst.unreleased_count == 0
-    assert inst.snapshot_refreshed_at == ""
+    assert inst.snapshot.monitored_total == 0
+    assert inst.snapshot.unreleased_count == 0
+    assert inst.snapshot.snapshot_refreshed_at == ""
 
 
 @pytest.mark.asyncio()
@@ -368,12 +372,12 @@ async def test_update_instance_snapshot_writes_all_columns(db: None, master_key:
     from houndarr.services.instances import update_instance_snapshot
 
     inst = await _make(master_key)
-    await update_instance_snapshot(inst.id, monitored_total=123, unreleased_count=7)
-    refreshed = await get_instance(inst.id, master_key=master_key)
+    await update_instance_snapshot(inst.core.id, monitored_total=123, unreleased_count=7)
+    refreshed = await get_instance(inst.core.id, master_key=master_key)
     assert refreshed is not None
-    assert refreshed.monitored_total == 123
-    assert refreshed.unreleased_count == 7
-    assert refreshed.snapshot_refreshed_at != ""
+    assert refreshed.snapshot.monitored_total == 123
+    assert refreshed.snapshot.unreleased_count == 7
+    assert refreshed.snapshot.snapshot_refreshed_at != ""
 
 
 @pytest.mark.asyncio()
@@ -383,12 +387,12 @@ async def test_update_instance_snapshot_overwrites_prior_values(
     from houndarr.services.instances import update_instance_snapshot
 
     inst = await _make(master_key)
-    await update_instance_snapshot(inst.id, monitored_total=50, unreleased_count=3)
-    await update_instance_snapshot(inst.id, monitored_total=60, unreleased_count=5)
-    refreshed = await get_instance(inst.id, master_key=master_key)
+    await update_instance_snapshot(inst.core.id, monitored_total=50, unreleased_count=3)
+    await update_instance_snapshot(inst.core.id, monitored_total=60, unreleased_count=5)
+    refreshed = await get_instance(inst.core.id, master_key=master_key)
     assert refreshed is not None
-    assert refreshed.monitored_total == 60
-    assert refreshed.unreleased_count == 5
+    assert refreshed.snapshot.monitored_total == 60
+    assert refreshed.snapshot.unreleased_count == 5
 
 
 # ---------------------------------------------------------------------------
@@ -413,7 +417,7 @@ async def test_active_error_ignores_rows_older_than_window(db: None, master_key:
         await conn.execute(
             "INSERT INTO search_log (instance_id, action, cycle_trigger, timestamp)"
             " VALUES (?, 'error', 'system', ?)",
-            (inst.id, stale),
+            (inst.core.id, stale),
         )
         await conn.commit()
 
@@ -434,11 +438,11 @@ async def test_active_error_reports_fresh_error(db: None, master_key: bytes) -> 
         await conn.execute(
             "INSERT INTO search_log (instance_id, action, cycle_trigger, timestamp)"
             " VALUES (?, 'error', 'system', ?)",
-            (inst.id, fresh),
+            (inst.core.id, fresh),
         )
         await conn.commit()
 
-    assert await active_error_instance_ids() == {inst.id}
+    assert await active_error_instance_ids() == {inst.core.id}
 
 
 @pytest.mark.asyncio()
@@ -476,7 +480,7 @@ async def test_active_error_excludes_same_day_older_row(db: None, master_key: by
         await conn.execute(
             "INSERT INTO search_log (instance_id, action, cycle_trigger, timestamp)"
             " VALUES (?, 'error', 'system', ?)",
-            (inst.id, stale),
+            (inst.core.id, stale),
         )
         await conn.commit()
 

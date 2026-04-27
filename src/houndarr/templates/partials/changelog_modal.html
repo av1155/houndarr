@@ -11,14 +11,19 @@
       transform: translateY(0.75rem) scale(0.98);
     }
 
+    /* Keyframes live in app.css (hx-modal-*, hx-backdrop-*); this
+       block only picks the per-modal durations, eases, and backdrop
+       opacity via --hx-backdrop-opacity. */
+    #changelog-modal { --hx-backdrop-opacity: 0.65; }
+
     #changelog-modal[open] {
       opacity: 1;
       transform: translateY(0) scale(1);
-      animation: changelog-modal-in var(--dur-base) var(--ease-station);
+      animation: hx-modal-in var(--dur-base) var(--ease-station);
     }
 
     #changelog-modal[open].is-closing {
-      animation: changelog-modal-out var(--dur-fast) ease-in forwards;
+      animation: hx-modal-out var(--dur-fast) ease-in forwards;
     }
 
     #changelog-modal::backdrop {
@@ -26,33 +31,13 @@
     }
 
     #changelog-modal[open]::backdrop {
-      animation: changelog-backdrop-in var(--dur-base, 180ms)
+      animation: hx-backdrop-in var(--dur-base, 180ms)
         var(--ease-station, cubic-bezier(0.16, 1, 0.3, 1)) forwards;
       backdrop-filter: blur(3px);
     }
 
     #changelog-modal[open].is-closing::backdrop {
-      animation: changelog-backdrop-out 160ms ease-in forwards;
-    }
-
-    @keyframes changelog-modal-in {
-      from { opacity: 0; transform: translateY(0.75rem) scale(0.98); }
-      to   { opacity: 1; transform: translateY(0) scale(1); }
-    }
-
-    @keyframes changelog-backdrop-in {
-      from { background: rgba(2, 6, 23, 0); }
-      to   { background: rgba(2, 6, 23, 0.65); }
-    }
-
-    @keyframes changelog-modal-out {
-      from { opacity: 1; transform: translateY(0) scale(1); }
-      to   { opacity: 0; transform: translateY(0.5rem) scale(0.985); }
-    }
-
-    @keyframes changelog-backdrop-out {
-      from { background: rgba(2, 6, 23, 0.65); }
-      to   { background: rgba(2, 6, 23, 0); }
+      animation: hx-backdrop-out 160ms ease-in forwards;
     }
 
     /* Mobile: bottom sheet.  The native <dialog> UA stylesheet sets
@@ -79,21 +64,11 @@
 
       #changelog-modal[open] {
         transform: translateY(0);
-        animation: changelog-sheet-in 220ms var(--ease-station, cubic-bezier(0.16, 1, 0.3, 1));
+        animation: hx-modal-sheet-in 220ms var(--ease-station, cubic-bezier(0.16, 1, 0.3, 1));
       }
 
       #changelog-modal[open].is-closing {
-        animation: changelog-sheet-out 180ms ease-in forwards;
-      }
-
-      @keyframes changelog-sheet-in {
-        from { transform: translateY(100%); }
-        to   { transform: translateY(0); }
-      }
-
-      @keyframes changelog-sheet-out {
-        from { transform: translateY(0); }
-        to   { transform: translateY(100%); }
+        animation: hx-modal-sheet-out 180ms ease-in forwards;
       }
     }
 
@@ -138,11 +113,11 @@
       data-close-changelog-modal="true"
       class="ml-4 flex-shrink-0 rounded-inset border border-border-default bg-surface-2 p-2 text-slate-400 hover:bg-surface-3 hover:text-slate-200 transition-colors duration-base ease-station focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400/30"
     >
-      <span aria-hidden="true" class="block leading-none text-xl">&times;</span>
+      <svg aria-hidden="true" class="block w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
     </button>
   </div>
 
-  <div class="max-h-[min(calc(100dvh-14rem),36rem)] overflow-y-auto px-6 py-5">
+  <div data-modal-scroll class="max-h-[min(calc(100dvh-14rem),36rem)] overflow-y-auto px-6 py-5">
     {% include "partials/changelog_content.html" %}
   </div>
 

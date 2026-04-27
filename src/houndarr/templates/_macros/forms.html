@@ -4,32 +4,30 @@
   The Houndarr web surface repeats a handful of input shapes across
   login, setup, admin > security, the admin confirm dialog, and the
   add / edit instance form.  Each macro here captures one of those
-  shapes so Track E.7 .. E.12 can migrate consumers batch by batch
-  without forking the class strings or data-* markers that auth.js
-  (caps badge, strength meter, confirm-match, show-hide toggle) and
-  CSS (.field, .input-wrap, .input-trailing, .station-input,
-  .has-trailing, .mono, .pw-match, .strength*) rely on.
+  shapes so a consumer renders identical class strings and data-*
+  markers that auth.js (caps badge, strength meter, confirm-match,
+  show-hide toggle) and CSS (.field, .input-wrap, .input-trailing,
+  .station-input, .has-trailing, .mono, .pw-match, .strength*) rely
+  on.
 
   Variants are explicit.  password_input branches on variant="auth"
-  (login / setup, with the .field__label + leading SVG treatment from
-  auth-fields.css) versus variant="admin" (security + confirm dialog,
-  with the Tailwind utility label and the h-10 px-3 input class).  The
-  two families render through different CSS language; collapsing them
-  into one variant would lose either the auth-card visual or the
-  admin-page visual.
+  (login / setup, with the .field__label + leading SVG treatment
+  from auth-fields.css) versus variant="admin" (security + confirm
+  dialog, with the Tailwind utility label and the h-10 px-3 input
+  class).  The two families render through different CSS language;
+  collapsing them into one variant would lose either the auth-card
+  visual or the admin-page visual.
 
-  Track E.6 introduces this file without migrating consumers; later
-  batches do that.  Centralising the markup here means Track G can
-  change a form element's component class in one seam instead of
-  seven inline call sites.
+  Centralising the markup here means a component-class rename
+  lands in one seam instead of across seven inline call sites.
 
   Whitespace layout per macro is deliberate and pinned by
   tests/test_templates/test_macros_forms.py: form_field emits every
   attribute on a single line; password_input variant="auth" keeps
-  the pre-refactor multi-line auth-card attribute layout; variant=
-  "admin" keeps the one-attribute-per-line admin layout.  Changing
-  any of the three without also re-pinning the relevant byte-equal
-  tests will fail the pinning gate.
+  the multi-line auth-card attribute layout the auth-fields CSS
+  expects; variant="admin" keeps the one-attribute-per-line admin
+  layout.  Changing any of the three without re-pinning the
+  relevant byte-equal tests will fail the pinning gate.
 -#}
 
 
@@ -55,7 +53,7 @@
     maxlength=none,
     pattern=none,
     input_class="station-input",
-    label_class="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide",
+    label_class="field-label",
     data_default_value=none,
     help_text=none,
     tip_ref=none
@@ -282,7 +280,7 @@
     options,
     selected=none,
     label="",
-    label_class="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide",
+    label_class="field-label",
     select_class="station-input station-select",
     data_default_value=none,
     help_text=none,

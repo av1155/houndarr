@@ -13,6 +13,7 @@ import uuid
 from contextlib import suppress
 from pathlib import Path
 
+import pytest
 from playwright.sync_api import Locator, Page, expect
 
 _SCREENSHOTS_DIR = Path(__file__).resolve().parent / "_screenshots"
@@ -149,6 +150,7 @@ def _open_admin_dropdown(page: Page) -> None:
     expect(panel).to_have_attribute("data-open", "true")
 
 
+@pytest.mark.integration
 def test_full_instance_lifecycle(
     logged_in_page: Page, houndarr_url: str, mock_sonarr_url: str
 ) -> None:
@@ -234,6 +236,7 @@ _EXPECTED_422_CONSOLE_NOISE = [
 ]
 
 
+@pytest.mark.integration
 def test_save_instance_4xx_renders_error(
     logged_in_page: Page,
     houndarr_url: str,
@@ -272,6 +275,7 @@ def test_save_instance_4xx_renders_error(
     )
 
 
+@pytest.mark.integration
 def test_test_connection_4xx_renders_error(
     logged_in_page: Page, houndarr_url: str, console_guard
 ) -> None:
@@ -305,6 +309,7 @@ def test_test_connection_4xx_renders_error(
     )
 
 
+@pytest.mark.integration
 def test_password_change_4xx_renders_error(
     logged_in_page: Page, houndarr_url: str, console_guard
 ) -> None:
@@ -343,6 +348,7 @@ def test_password_change_4xx_renders_error(
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.integration
 def test_admin_dropdown_toggle_resets_on_reload(logged_in_page: Page, houndarr_url: str) -> None:
     """The Admin collapsible always starts collapsed. Opening it holds
     within the session, but a reload (or fresh navigation) returns it to
@@ -370,13 +376,13 @@ def test_admin_dropdown_toggle_resets_on_reload(logged_in_page: Page, houndarr_u
     assert stored is None
 
 
+@pytest.mark.integration
 def test_admin_security_confirm_password_match_indicator(
     logged_in_page: Page, houndarr_url: str
 ) -> None:
     """Typing a matching confirm-password paints the is-match indicator."""
     page = logged_in_page
     page.goto(f"{houndarr_url}/settings")
-    _open_admin_dropdown(page)
     page.locator("#new-password").fill("AnotherGood2!")
     page.locator("#confirm-password").fill("AnotherGood2!")
     expect(page.locator(".pw-match")).to_have_class(re.compile(r"is-match"))
@@ -385,6 +391,7 @@ def test_admin_security_confirm_password_match_indicator(
     expect(page.locator(".pw-match")).to_have_class(re.compile(r"is-mismatch"))
 
 
+@pytest.mark.integration
 def test_admin_whats_new_button_opens_modal(logged_in_page: Page, houndarr_url: str) -> None:
     """The 'What's new' button force-opens the What's new modal."""
     page = logged_in_page
@@ -394,6 +401,7 @@ def test_admin_whats_new_button_opens_modal(logged_in_page: Page, houndarr_url: 
     expect(page.locator("dialog#changelog-modal[open]")).to_be_visible(timeout=4_000)
 
 
+@pytest.mark.integration
 def test_admin_clear_logs_flash(logged_in_page: Page, houndarr_url: str) -> None:
     """Clear logs surfaces a success flash; the dialog closes automatically."""
     page = logged_in_page
@@ -408,6 +416,7 @@ def test_admin_clear_logs_flash(logged_in_page: Page, houndarr_url: str) -> None
     expect(flash).to_contain_text(re.compile(r"Cleared|already empty", re.I), timeout=4_000)
 
 
+@pytest.mark.integration
 def test_admin_reset_instances_empty_state_flash(logged_in_page: Page, houndarr_url: str) -> None:
     """With no instances configured the reset button renders the 'nothing to reset' flash."""
     page = logged_in_page
@@ -422,6 +431,7 @@ def test_admin_reset_instances_empty_state_flash(logged_in_page: Page, houndarr_
     )
 
 
+@pytest.mark.integration
 def test_admin_factory_reset_phrase_gates_submit(logged_in_page: Page, houndarr_url: str) -> None:
     """Confirm button stays disabled until the typed phrase matches RESET."""
     page = logged_in_page
@@ -434,14 +444,15 @@ def test_admin_factory_reset_phrase_gates_submit(logged_in_page: Page, houndarr_
     expect(confirm_go).to_be_disabled()
     page.locator("#confirm-phrase-input").fill("RESET")
     expect(confirm_go).to_be_enabled()
-    # Dismiss without submitting.  The backdrop is sized to the dialog
-    # panel so the password input inside the panel intercepts a real
-    # cursor click; dispatch the event directly so the test does not
-    # depend on which child element a hit-test happens to land on.
-    page.locator("[data-dismiss-confirm]").first.dispatch_event("click")
+    # Dismiss without submitting. Target the Cancel button explicitly;
+    # the backdrop also carries data-dismiss-confirm but its bounding-box
+    # centre is occluded by the panel in grid-centred layouts, so
+    # .first.click() lands on the panel and gets intercepted.
+    page.locator("button[data-dismiss-confirm]").click()
     expect(page.locator("#confirm-dialog")).to_have_class(re.compile(r"hidden"))
 
 
+@pytest.mark.integration
 def test_admin_factory_reset_wrong_password_flash(
     logged_in_page: Page, houndarr_url: str, console_guard
 ) -> None:
@@ -454,15 +465,10 @@ def test_admin_factory_reset_wrong_password_flash(
     page.locator('button[data-confirm-reset="factory"]').click()
     page.locator("#confirm-phrase-input").fill("RESET")
     page.locator("#confirm-password-input").fill("WrongPassword123!")
-    # The Factory reset button lives below the fold inside the dialog on
-    # the headless browser viewports we run, and Playwright keeps marking
-    # it "outside of the viewport" even after scroll_into_view_if_needed.
-    # Submit the form via requestSubmit() so HTMX still picks up the
-    # native submit event without a click hit-test.
     with page.expect_response(
         lambda r: "/settings/admin/factory-reset" in r.url and r.request.method == "POST"
     ) as resp_info:
-        page.locator("#confirm-form").evaluate("f => f.requestSubmit()")
+        page.locator("#confirm-go").click()
     assert resp_info.value.status == 422, resp_info.value.status
     expect(page.locator("#admin-flash")).to_contain_text(
         re.compile(r"password is incorrect", re.I),
@@ -484,6 +490,7 @@ _EXPECTED_500_CONSOLE_NOISE = [
 ]
 
 
+@pytest.mark.integration
 def test_password_change_hx_refresh_recovers_csrf(logged_in_page: Page, houndarr_url: str) -> None:
     """After a successful password change the server sets HX-Refresh so the
     tab reloads and re-stamps hx-headers with the rotated CSRF cookie.
@@ -502,6 +509,7 @@ def test_password_change_hx_refresh_recovers_csrf(logged_in_page: Page, houndarr
 
     def _submit_password_change(current: str, new: str) -> tuple[int, dict[str, str]]:
         page.goto(f"{houndarr_url}/settings")
+        _open_admin_dropdown(page)
         section = page.locator("#admin-security")
         expect(section).to_be_visible()
         section.locator('input[name="current_password"]').fill(current)
@@ -535,15 +543,10 @@ def test_password_change_hx_refresh_recovers_csrf(logged_in_page: Page, houndarr
         _open_admin_dropdown(page)
         page.locator('button[data-confirm-reset="logs"]').click()
         expect(page.locator("#confirm-dialog")).not_to_have_class(re.compile(r"hidden"))
-        # Submit via the form's requestSubmit(); the dialog scroll region
-        # often keeps Playwright thinking #confirm-go is offscreen even
-        # after scroll_into_view_if_needed.  HTMX still receives the
-        # native submit event and the rotated CSRF cookie from the
-        # post-password-change reload.
         with page.expect_response(
             lambda r: "/settings/admin/clear-logs" in r.url and r.request.method == "POST"
         ) as clear_resp:
-            page.locator("#confirm-form").evaluate("f => f.requestSubmit()")
+            page.locator("#confirm-go").click()
         assert clear_resp.value.status == 200, (
             f"post-rotation clear-logs returned {clear_resp.value.status}; "
             "HX-Refresh recovery failed; hx-headers is still carrying the "
@@ -562,6 +565,7 @@ def test_password_change_hx_refresh_recovers_csrf(logged_in_page: Page, houndarr
             _submit_password_change(temp_password, original_password)
 
 
+@pytest.mark.integration
 def test_caps_lock_badge_toggles_with_modifier_state(
     logged_in_page: Page, houndarr_url: str
 ) -> None:
@@ -614,6 +618,7 @@ def test_caps_lock_badge_toggles_with_modifier_state(
     expect(caps_badge).not_to_have_class(re.compile(r"\bis-on\b"), timeout=2_000)
 
 
+@pytest.mark.integration
 def test_instance_toggle_and_delete_keeps_layout_stable(
     logged_in_page: Page, houndarr_url: str, mock_sonarr_url: str
 ) -> None:
@@ -676,12 +681,16 @@ def test_instance_toggle_and_delete_keeps_layout_stable(
     expect(toggle_btn).to_have_text(re.compile(r"Disable", re.I), timeout=5_000)
 
     delete_btn = row.locator("button[hx-delete]")
-    # hx-confirm triggers a window.confirm(); auto-accept it.
-    page.once("dialog", lambda dialog: dialog.accept())
+    # settings.js intercepts htmx:confirm and routes delete through the
+    # shared danger-tone dialog instead of window.confirm(); confirm via
+    # the dialog's primary button.
     delete_btn.click()
+    expect(page.locator("#confirm-dialog")).not_to_have_class(re.compile(r"hidden"))
+    page.locator("#confirm-go").click()
     expect(row).to_have_count(0, timeout=5_000)
 
 
+@pytest.mark.integration
 def test_changelog_preferences_switch_rolls_back_on_error(
     logged_in_page: Page, houndarr_url: str, console_guard
 ) -> None:
@@ -703,14 +712,19 @@ def test_changelog_preferences_switch_rolls_back_on_error(
         page.locator("#admin-toggle").click()
     expect(page.locator("#admin-updates")).to_be_visible()
 
-    # Two `name="enabled"` checkboxes live under #admin-updates after the
-    # changelog-popup toggle landed (auto-update-enable + changelog-popups).
-    # Anchor on the wrapping form's hx-post so this test only ever drives
-    # the changelog form whose /preferences endpoint we mock to 500 below.
-    checkbox = page.locator(
-        'form[hx-post="/settings/changelog/preferences"] input[type="checkbox"][name="enabled"]'
-    )
+    # Commit 45e0fdd added a second input[name="enabled"] inside
+    # #admin-updates for the release-auto-check toggle, so the old
+    # #admin-updates input[type="checkbox"][name="enabled"] selector now
+    # resolves to 2 elements and fails Playwright's strict mode. Scope
+    # to the changelog form specifically.
+    checkbox = page.locator('form[hx-post="/settings/changelog/preferences"] input[name="enabled"]')
     initial_checked = checkbox.is_checked()
+
+    # The iOS-style switch layers a .switch__thumb span on top of the
+    # native <input>, so Playwright's element-centre click lands on the
+    # span and gets intercepted. Click the wrapping <label> so the
+    # browser forwards the click to the input natively.
+    toggle_label = page.locator('form[hx-post="/settings/changelog/preferences"] label').first
 
     # Force every /preferences call during this test to fail with 500.
     pattern = re.compile(r"/settings/changelog/preferences$")
@@ -720,12 +734,7 @@ def test_changelog_preferences_switch_rolls_back_on_error(
         with page.expect_response(
             lambda r: "/settings/changelog/preferences" in r.url and r.request.method == "POST"
         ) as resp_info:
-            # The visible switch wraps the <input> in <span class="switch__track">
-            # / <span class="switch__thumb"> overlays that intercept pointer
-            # events.  A real-user click lands on the label; dispatch_event
-            # bypasses the visual chrome so the test does not depend on which
-            # span the cursor happens to hit.
-            checkbox.dispatch_event("click")
+            toggle_label.click()
         assert resp_info.value.status == 500
 
         # The htmx:responseError handler flips the checkbox back; give it a
@@ -736,3 +745,170 @@ def test_changelog_preferences_switch_rolls_back_on_error(
         )
     finally:
         page.unroute(pattern)
+
+
+# ---------------------------------------------------------------------------
+# Visual baselines for /login and /setup
+#
+# These two tests capture pytest-playwright snapshot baselines for the
+# auth-card surface so an auth-fields.css edit that drifts the computed
+# rgba on any consuming element fails loudly.  First capture runs via
+# ``just capture-baselines``, which drives
+# ``scripts/e2e_browser/capture_baselines.sh`` inside a Linux
+# Playwright container so the PNGs match CI's ubuntu-latest font
+# rendering.  ``just verify-baselines`` and
+# ``just test-browser chromium`` compare the live render against the
+# committed baseline on every run.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.integration
+def test_login_page_visual(logged_in_page: Page, houndarr_url: str) -> None:
+    """Pixel-compare the /login page against the committed baseline.
+
+    ``logged_in_page`` puts the browser through setup + login, so by
+    the time we reach here the admin account exists.  Drop the auth
+    cookies client-side (``/logout`` only accepts POST, so
+    ``page.goto('/logout')`` would trigger a 405 under HTTP GET) and
+    navigate to ``/login`` for the capture.
+    """
+    page = logged_in_page
+    page.context.clear_cookies()
+    page.goto(f"{houndarr_url}/login")
+    page.wait_for_load_state("networkidle")
+    _assert_screenshot(page, "login_page_visual.png")
+
+
+def _ensure_pre_setup_state(page: Page, base_url: str) -> None:
+    """Bring Houndarr to a pre-admin state, regardless of entry condition.
+
+    The CI browser-e2e workflow creates the admin account via
+    ``POST /setup`` before pytest runs, so ``test_setup_page_visual``
+    can reach here in two distinct states:
+
+    1. Admin already exists: ``GET /setup`` redirects to ``/login``
+       (see ``src/houndarr/routes/pages.py:64``).  We need to wipe
+       the admin state before we can capture the pre-setup form.
+    2. Admin does not exist: ``/setup`` renders directly.  No action
+       needed (the local ``just capture-baselines`` path).
+
+    When state 1, drive the factory-reset flow through the admin API:
+    log in via UI to seed the session + CSRF cookie, then POST
+    ``/settings/admin/factory-reset`` with the confirm phrase and
+    admin password.  Factory reset wipes the database and master key,
+    drops every auth cache, and leaves Houndarr in the pre-admin
+    state we need.  Clear cookies so the old session cookie (now
+    signed against a rotated secret) does not linger.
+    """
+    # State probe: a pre-admin Houndarr renders /setup directly; an
+    # already-seeded Houndarr 302s to /login (src/houndarr/routes/pages.py:64).
+    # The post-redirect URL tells us which branch to take.  wait_until=
+    # networkidle avoids racing the redirect response.
+    page.goto(f"{base_url}/setup", wait_until="networkidle")
+    if page.url.rstrip("/").endswith("/setup"):
+        return  # already pre-admin; capture can run directly
+
+    # --- admin-present branch -------------------------------------------
+    # Need to wipe admin state so /setup renders again.  The factory-reset
+    # route requires a logged-in session plus CSRF, so drive the login
+    # flow first.  Selectors mirror the `logged_in_page` fixture in
+    # conftest.py so any login-form refactor updates both call sites in
+    # the same commit.
+    page.goto(f"{base_url}/login", wait_until="networkidle")
+    page.get_by_role("textbox", name="Username").fill(_ADMIN_USER)
+    page.get_by_role("textbox", name="Password").fill(_ADMIN_PASS)
+    page.get_by_role("button", name="Sign In").click()
+    # Explicit redirect target: /login succeeds by bouncing to /.
+    # Waiting for the URL (not networkidle) avoids flakes on slow CI
+    # runners where post-login HTMX fetches keep the network busy past
+    # the redirect.
+    page.wait_for_url(re.compile(rf"^{re.escape(base_url)}/?$"))
+
+    # The houndarr_csrf cookie is readable (not HttpOnly) precisely so
+    # HTMX can echo it back; auth/csrf.py's validate_csrf rejects
+    # mutating POSTs without it, so we pull it off the context and echo
+    # it in BOTH the header (HTMX path) and form body (classic path).
+    csrf = next(
+        (c.get("value", "") for c in page.context.cookies() if c.get("name") == "houndarr_csrf"),
+        "",
+    )
+    assert csrf, "houndarr_csrf cookie missing after login"
+
+    # Drive the API directly instead of the UI (admin dropdown ->
+    # typed-RESET-phrase dialog -> click confirm).  factory_reset is
+    # synchronous server-side: the POST returns only after the db wipe,
+    # master-key file delete, and reset_auth_caches() finish, so no
+    # post-call wait is needed before the next request sees pristine
+    # state.  page.request.post reuses the browser context's cookies so
+    # the session cookie travels automatically.
+    response = page.request.post(
+        f"{base_url}/settings/admin/factory-reset",
+        form={
+            "confirm_phrase": "RESET",
+            "current_password": _ADMIN_PASS,
+            "csrf_token": csrf,
+        },
+        headers={"X-CSRF-Token": csrf},
+        max_redirects=0,
+    )
+    assert response.status in (200, 303), (
+        f"factory-reset returned {response.status}: {response.text()}"
+    )
+    # Clear cookies: the session secret rotated during reset so the old
+    # cookie would fail signature verification on the next request.
+    # Dropping it now avoids a spurious middleware log warning.
+    page.context.clear_cookies()
+
+
+def _recreate_admin(page: Page, base_url: str) -> None:
+    """Seed the admin account via ``POST /setup``.
+
+    Called after the pre-setup capture so subsequent tests'
+    ``logged_in_page`` fixture (which assumes admin exists) continues
+    to work.  Matches the CI workflow's admin-creation curl exactly.
+    """
+    response = page.request.post(
+        f"{base_url}/setup",
+        form={
+            "username": _ADMIN_USER,
+            "password": _ADMIN_PASS,
+            "password_confirm": _ADMIN_PASS,
+        },
+        max_redirects=0,
+    )
+    assert response.status in (200, 303), (
+        f"/setup re-seed returned {response.status}: {response.text()}"
+    )
+
+
+@pytest.mark.integration
+def test_setup_page_visual(page: Page, browser, houndarr_url: str) -> None:
+    """Pixel-compare the /setup page against the committed baseline.
+
+    Self-healing: works whether the stack entered in a pre-admin state
+    (``just capture-baselines`` fresh-data path) or with admin already
+    seeded (``.github/workflows/browser-e2e.yml`` which curls
+    ``POST /setup`` before pytest).  In the admin-seeded case the test
+    first factory-resets via the admin API, captures ``/setup``, then
+    re-seeds admin so later tests' ``logged_in_page`` fixture finds
+    the credentials it expects.
+
+    The final capture opens a fresh browser context so the screenshot
+    is byte-equal regardless of prior navigation state (caret, focus,
+    font cache, HTMX listeners).  The baseline was captured on a fresh
+    pytest context; capturing on the same context that just drove
+    login + factory-reset produces a small but consistent pixel diff
+    from residual browser state, which would fail the byte-equal
+    assertion even though the HTML is identical.
+    """
+    _ensure_pre_setup_state(page, houndarr_url)
+    capture_context = browser.new_context()
+    try:
+        capture_page = capture_context.new_page()
+        capture_page.goto(f"{houndarr_url}/setup", wait_until="networkidle")
+        _assert_screenshot(capture_page, "setup_page_visual.png")
+    finally:
+        capture_context.close()
+        # Restore admin even if the assertion failed so the rest of
+        # the suite is not stranded in a pre-setup state.
+        _recreate_admin(page, houndarr_url)

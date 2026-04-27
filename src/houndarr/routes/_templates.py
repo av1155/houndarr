@@ -1,25 +1,13 @@
 """Centralised Jinja2Templates singleton for the route layer.
 
-Track D.7.  Before this module the five route packages that render
-HTML (``pages``, ``admin``, ``changelog``, ``update_check``, and
-``settings``) each owned an identical lazy-initialised
-:class:`fastapi.templating.Jinja2Templates` instance with the same
-``directory=`` computation and the same one-line ``global _templates``
-pattern.  Two of the five additionally registered custom Jinja
-filters from their own modules (``changelog_bullet``, ``timeago``).
-
-Folding the construction here does three things:
-
-- Every route renders through the same environment, so template
-  autoescape settings and filter registrations are guaranteed to
-  be symmetric across the five call sites.
-- New filters register in one place instead of five; Track G's macro
-  work will add more without sprawling the filter setup across
-  multiple modules.
-- The test conftest that builds its own Jinja environment
-  (``tests/test_templates/conftest.py``) stays completely separate;
-  the production singleton and the test environment are two distinct
-  things, and consolidating the production one does not change that.
+Every route that renders HTML (``pages``, ``admin``, ``changelog``,
+``update_check``, ``settings``) goes through :func:`get_templates`
+so template autoescape settings and filter registrations are
+symmetric across the five call sites, and new filters register in
+one place.  The test conftest that builds its own Jinja
+environment (``tests/test_templates/conftest.py``) stays separate;
+the production singleton and the test environment are two distinct
+things.
 
 The filter registration uses deferred imports so ``_templates.py``
 does not drag ``changelog`` or ``update_check`` into the module
@@ -73,8 +61,7 @@ def _register_filters(templates: Jinja2Templates) -> None:
             callables and are inert.
     """
     from houndarr.routes.changelog import _render_changelog_bullet
+    from houndarr.routes.update_check import _timeago
 
     templates.env.filters["changelog_bullet"] = _render_changelog_bullet
-    # The ``timeago`` filter ships with PR23's ``routes.update_check``.
-    # Until that module lands, the filter is unregistered; templates that
-    # use it (changelog popup last-seen) fall back to the raw ISO string.
+    templates.env.filters["timeago"] = _timeago

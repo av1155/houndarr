@@ -4,12 +4,19 @@
 /* Design tokens live in tokens.css; this file consumes them.                 */
 /* ─────────────────────────────────────────────────────────────────────────── */
 
-/* ── Scrollbar gutter ─────────────────────────────────────────────────────
-   `stable` (not `both-edges`) avoids a known Chromium bug and keeps the
-   reserved strip on the inline-end edge only. The atmosphere painted on
-   <html> below fills that strip so it never reads as an empty gap. */
-html {
-  scrollbar-gutter: stable;
+/* Native scrollbar hidden on every element across every engine. Applied
+   universally because `scrollbar-width` is not inherited (per MDN): only
+   the root-element value propagates to the viewport, so inner scrollable
+   surfaces (modals, logs table) default to `auto` and render a classic
+   scrollbar on Chromium when macOS "Show scroll bars" is set to Always,
+   which reserves space and shifts content. The `::-webkit-scrollbar`
+   rule further down is a belt-and-suspenders fallback for engines that
+   don't honor the standard property yet. `.hx-scrollbar` provides the
+   visual affordance so accessibility isn't lost. */
+*,
+*::before,
+*::after {
+  scrollbar-width: none;
 }
 
 /* ── Global content scale ────────────────────────────────────────────────
@@ -27,17 +34,15 @@ html {
   font-size: 110%;
 }
 
-/* ── Atmosphere painted on <html> ─────────────────────────────────────────
-   CSS Backgrounds Level 3: the root element's background paints the
-   canvas, which includes the area reserved by `scrollbar-gutter`. Keeping
-   the gradient on body left the gutter unpainted and the viewport edges
-   visibly stopped short; moving it to html fixes that while the sticky
-   nav and content stay within body's width. `background-attachment: fixed`
-   locks the gradient to the viewport across scroll. */
+/* Atmosphere lives on <html> so CSS Backgrounds 3 canvas propagation
+   extends it across the full viewport. Kept off a fixed pseudo because
+   WebKit clips fixed-position painting to the root box even with
+   width: 100vw. `background-attachment: fixed` is deliberately omitted:
+   WebKit/Chromium clip fixed-attached layers to the element box, which
+   undoes the canvas propagation we need. */
 html {
   background-color: var(--color-base);
   background-repeat: no-repeat;
-  background-attachment: fixed;
   background-image:
     radial-gradient(ellipse 55% 40% at 0% 0%,    rgba(6, 182, 212, 0.055) 0%, transparent 60%),
     radial-gradient(ellipse 40% 30% at 100% 100%, rgba(14, 116, 144, 0.030) 0%, transparent 55%),
@@ -50,7 +55,7 @@ html {
     );
 }
 
-/* Auth pages (login/setup) swap to a centered radial vignette; no stripes. */
+/* Auth pages swap the stripe atmosphere for a centered vignette. */
 html:has(body.is-auth) {
   background-image:
     radial-gradient(
@@ -62,40 +67,111 @@ html:has(body.is-auth) {
     );
 }
 
-/* Body stays transparent so html's atmosphere shows through every page. */
+/* Transparent so the canvas-propagated html atmosphere shows through. */
 body {
   background: transparent;
 }
 
-/* ── Scrollbar ──────────────────────────────────────────────────────────── */
+/* Paired with `scrollbar-width: none` on html; applies to every scrollable
+   element so nothing paints a scrollbar column. */
 ::-webkit-scrollbar {
+  display: none;
+}
+
+/* Custom overlay thumb. JS (app.js) sizes + positions it against a
+   scroll target (window or a modal's scroll region) and toggles
+   `.is-visible` when the target is actually scrollable. Fixed/absolute
+   position means it never reserves layout space, so no shift between
+   pages that overflow and pages that don't. Stays visible the whole
+   time the target is scrollable (no idle fade). */
+.hx-scrollbar {
+  position: fixed;
   width: 6px;
-  height: 6px;
+  z-index: 60;
+  pointer-events: none;
+  display: none;
 }
 
-::-webkit-scrollbar-track {
-  background: var(--color-surface-1);
+.hx-scrollbar.is-visible {
+  display: block;
 }
 
-::-webkit-scrollbar-thumb {
+/* Window bar pins to the viewport edges. Modal bars get top/right/
+   height from JS against the dialog's scroll region. */
+.hx-scrollbar--window {
+  top: 0;
+  right: 2px;
+  bottom: 0;
+}
+
+/* Modal bars are appended inside the <dialog> so they share its top
+   layer (showModal() puts the dialog above all fixed-position siblings);
+   absolute positioning keeps the coordinates dialog-relative. */
+.hx-scrollbar--modal {
+  position: absolute;
+}
+
+.hx-scrollbar__thumb {
+  position: absolute;
+  right: 0;
+  width: 6px;
+  min-height: 2rem;
   background: var(--color-border-default);
   border-radius: var(--radius-chip);
+  transform: translateY(0);
+  will-change: transform;
+  /* Interactive thumb while the track stays click-through so form
+     elements flush with the modal's right edge still receive clicks.
+     Matches native scrollbar convention: default arrow cursor, no
+     hand pointer on hover. */
+  pointer-events: auto;
+  cursor: default;
+  transition: background-color 120ms ease-out;
 }
 
-::-webkit-scrollbar-thumb:hover {
+.hx-scrollbar__thumb:hover,
+.hx-scrollbar__thumb.is-dragging {
   background: var(--color-border-strong);
 }
 
-/* ── Instance form select chevron ───────────────────────────────────────── */
-/* Native <select> chevrons sit flush against the right border and render at
-   subtly different positions across browsers.  On the settings instance
-   form the custom SVG keeps every dropdown aligned with consistent
-   padding-right.  The class is applied via ``select_cls`` in
-   templates/partials/instance_form.html. */
-.hd-select-chevron {
-  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20' stroke='%2394a3b8' stroke-width='1.75'><polyline points='6 8 10 12 14 8' stroke-linecap='round' stroke-linejoin='round'/></svg>");
-  background-position: right 0.75rem center;
-  background-size: 1rem 1rem;
+@media (prefers-reduced-motion: reduce) {
+  .hx-scrollbar__thumb {
+    transition: none;
+  }
+}
+
+/* ── Modal animation keyframes ───────────────────────────────────────────
+   Shared by every <dialog> that uses the `[open]` + `.is-closing` +
+   `::backdrop` pattern (add-instance modal, changelog modal). Each
+   caller picks its own animation duration and ease inline; the
+   keyframe names live here so the translate/scale vocabulary is
+   defined exactly once. Backdrop opacity is parameterised via a CSS
+   custom property (`--hx-backdrop-opacity`) so callers needing a
+   darker or lighter backdrop just override the variable on the
+   dialog (defaults to 0.65). */
+@keyframes hx-modal-in {
+  from { opacity: 0; transform: translateY(0.75rem) scale(0.98); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes hx-modal-out {
+  from { opacity: 1; transform: translateY(0) scale(1); }
+  to   { opacity: 0; transform: translateY(0.5rem) scale(0.985); }
+}
+@keyframes hx-backdrop-in {
+  from { background: rgba(2, 6, 23, 0); }
+  to   { background: rgba(2, 6, 23, var(--hx-backdrop-opacity, 0.65)); }
+}
+@keyframes hx-backdrop-out {
+  from { background: rgba(2, 6, 23, var(--hx-backdrop-opacity, 0.65)); }
+  to   { background: rgba(2, 6, 23, 0); }
+}
+@keyframes hx-modal-sheet-in {
+  from { transform: translateY(100%); }
+  to   { transform: translateY(0); }
+}
+@keyframes hx-modal-sheet-out {
+  from { transform: translateY(0); }
+  to   { transform: translateY(100%); }
 }
 
 /* Fade + slide-down reveal used by the Admin > Updates status row.
@@ -216,6 +292,14 @@ body {
     background: var(--color-brand-400);
   }
 
+  /* Visible at rest on purpose so the right-hand utility slot reads
+     as a deliberate chip balancing the brand on the left, instead of
+     a naked 16px glyph floating past the edge of the nav pill.
+     Matches the mobile hamburger's always-on outline + surface
+     treatment, just at the desktop 34x34 size.  Colour/background
+     transition runs on --dur-base (180ms) so the fade between the
+     muted resting slate and the red danger hover state registers
+     both directions. */
   .nav-iconbtn {
     width: 34px;
     height: 34px;
@@ -223,23 +307,148 @@ body {
     align-items: center;
     justify-content: center;
     border-radius: 8px;
-    color: var(--color-text-muted);
-    border: 1px solid transparent;
+    color: var(--color-text-subtle);
+    background: var(--color-surface-2);
+    border: 1px solid var(--color-border-subtle);
     transition:
-      color        var(--dur-fast) var(--ease-station),
-      background   var(--dur-fast) var(--ease-station),
-      border-color var(--dur-fast) var(--ease-station);
+      color        var(--dur-base) var(--ease-station),
+      background   var(--dur-base) var(--ease-station),
+      border-color var(--dur-base) var(--ease-station);
   }
   .nav-iconbtn svg { width: 16px; height: 16px; }
   .nav-iconbtn:hover {
     color: var(--color-text-primary);
-    background: var(--color-surface-2);
+    background: var(--color-surface-3);
     border-color: var(--color-border-default);
   }
   .nav-logout:hover {
     color: var(--color-danger);
     border-color: var(--color-danger-border);
     background: var(--color-danger-bg);
+  }
+
+  /* Search-kind icon.  Appears in Recent hunts and Cooldown schedule
+     rows, 12px high to match the 12.5px row text.  Color is driven by
+     data-kind through the three --color-kind-* aliases defined in
+     tokens.css so retints stay in one place. */
+  .kind-icon {
+    width: 12px;
+    height: 12px;
+    flex-shrink: 0;
+    color: var(--color-text-muted);
+  }
+  .kind-icon[data-kind="missing"] { color: var(--color-kind-missing); }
+  .kind-icon[data-kind="cutoff"]  { color: var(--color-kind-cutoff); }
+  .kind-icon[data-kind="upgrade"] { color: var(--color-kind-upgrade); }
+
+  /* Hourly budget bar on each dashboard instance card.
+     - data-level = eligible | warning | danger drives the fill color
+       through the three segment tokens (mirrors library-health legend).
+     - data-at-cap triggers a station-pulse that flags the "at or over
+       your indexer budget" moment, matching Huntarr's pre-incident
+       traffic-light treatment.
+     - --budget-fill is a per-render percentage written inline; no
+       JS mutation after first paint.  The transition lets the poll
+       cadence feel smooth instead of snappy. */
+  .dash-card__budget {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    column-gap: 8px;
+    row-gap: 4px;
+    padding: 8px 12px;
+    margin: 8px 0;
+    background: var(--color-surface-1);
+    border-radius: var(--radius-container, 8px);
+    border: 1px solid var(--color-border-subtle);
+    font-size: 11px;
+    font-family: var(--font-mono);
+    letter-spacing: 0.03em;
+  }
+  .dash-card__budget-label {
+    text-transform: uppercase;
+    color: var(--color-text-muted);
+    font-weight: 500;
+  }
+  .dash-card__budget-value {
+    justify-self: end;
+    color: var(--color-text-emphasis);
+    font-weight: 600;
+  }
+  .dash-card__budget-bar {
+    grid-column: 1 / -1;
+    height: 6px;
+    border-radius: 3px;
+    background: color-mix(in srgb, var(--color-border-default) 60%, transparent);
+    overflow: hidden;
+  }
+  .dash-card__budget-fill {
+    display: block;
+    height: 100%;
+    width: var(--budget-fill, 0%);
+    border-radius: 3px;
+    background: var(--seg-eligible);
+    transition:
+      width      var(--dur-slow, 420ms) var(--ease-station),
+      background var(--dur-fast) var(--ease-station);
+  }
+  .dash-card__budget[data-level="warning"] .dash-card__budget-fill {
+    background: var(--color-warning);
+  }
+  .dash-card__budget[data-level="danger"] .dash-card__budget-fill {
+    background: var(--color-danger);
+  }
+  .dash-card__budget[data-level="danger"] .dash-card__budget-value {
+    color: var(--color-danger);
+  }
+  .dash-card__budget[data-at-cap="true"] .dash-card__budget-fill {
+    animation: station-pulse 2.4s var(--ease-station) 2;
+  }
+
+  /* Unlimited variant: rendered when the user sets hourly_cap=0.
+     Keeps the same vertical footprint as a real budget bar so cards
+     in the same grid row stay height-matched.  The value reads
+     "Unlimited" in the muted-text tone; the track itself stays
+     empty (0% fill) with a subtle repeating gradient so the bar is
+     clearly present but reads as "no ceiling to track" rather than
+     "0% used of a real cap". */
+  .dash-card__budget--unlimited .dash-card__budget-value {
+    color: var(--color-text-muted);
+    font-weight: 500;
+    letter-spacing: 0.04em;
+  }
+  .dash-card__budget--unlimited .dash-card__budget-bar {
+    background:
+      repeating-linear-gradient(
+        135deg,
+        color-mix(in srgb, var(--color-border-default) 55%, transparent) 0 4px,
+        transparent 4px 8px
+      );
+  }
+  .dash-card__budget--unlimited .dash-card__budget-fill {
+    display: none;
+  }
+
+  /* Stale-snapshot pill on the card footer.  Muted amber chip with a
+     12px Lucide alert-triangle.  Only rendered when the snapshot is
+     >15 min old; absence = healthy.  Sized to align with the footer
+     text baseline. */
+  .dash-card__stale {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 8px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-family: var(--font-mono);
+    color: var(--color-warning);
+    background: var(--color-warning-bg);
+    border: 1px solid var(--color-warning-border);
+    white-space: nowrap;
+  }
+  .dash-card__stale svg {
+    width: 12px;
+    height: 12px;
+    flex-shrink: 0;
   }
 }
 
@@ -326,41 +535,40 @@ body {
   box-shadow: 0 0 0 2px rgba(34, 211, 238, 0.38);
 }
 
-/* ── Global keyboard focus (dashboard redesign) ─────────────────────────── */
-:focus-visible {
-  outline: 2px solid var(--color-brand-400);
-  outline-offset: 2px;
-  border-radius: var(--radius-bar);
+/* ── Global toast (bottom-center pill) ──────────────────────────────────
+   Triggered by window.houndarrShowToast(msg) in app.js, by the
+   houndarr-toast custom event (HTMX HX-Trigger), and by the
+   houndarr_flash cookie check on page load.  The markup lives in
+   base.html so every page ships one instance. */
+.toast {
+  position: fixed;
+  bottom: 28px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 10px 18px;
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-brand-400);
+  border-radius: 999px;
+  box-shadow: var(--glow-cyan), var(--shadow-pop);
+  font-size: 13px;
+  color: var(--color-text-heading);
+  z-index: 100;
+  animation: toast-in 240ms var(--ease-station);
 }
-.dash-card:focus-visible {
-  outline-offset: 4px;
+@keyframes toast-in {
+  from { opacity: 0; transform: translate(-50%, 10px); }
+  to   { opacity: 1; transform: translate(-50%, 0); }
 }
-.dash-pill:focus-visible {
-  outline-offset: 3px;
+@keyframes toast-out {
+  from { opacity: 1; transform: translate(-50%, 0); }
+  to   { opacity: 0; transform: translate(-50%, 10px); }
 }
-a:focus-visible,
-button:focus-visible {
-  text-decoration: none;
+.toast.is-leaving {
+  animation: toast-out 240ms var(--ease-station) forwards;
 }
-
-/* ── Dashboard active-pill pulse (preview parity) ───────────────────────── */
-@keyframes dash-pulse-dot {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(74, 222, 128, 0); }
-  50%      { box-shadow: 0 0 0 4px rgba(74, 222, 128, 0.18); }
-}
-.dash-pill--active .dash-pill__dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--seg-eligible);
-  animation: dash-pulse-dot 2.4s var(--ease-station) infinite;
-}
-
-/* ── Login/Setup background radial glow ─────────────────────────────────── */
-.auth-glow-bg {
-  background:
-    radial-gradient(ellipse 60% 50% at 50% 40%, rgba(6, 182, 212, 0.08) 0%, transparent 70%),
-    var(--color-base);
+@media (prefers-reduced-motion: reduce) {
+  .toast,
+  .toast.is-leaving { animation: none; }
 }
 
 /* ── Tooltip (shared floating panel) ──────────────────────────────────
@@ -504,7 +712,6 @@ button:focus-visible {
   text-decoration: none;
 }
 
-
 /* ── Nav atmospheric glow ───────────────────────────────────────────────── */
 body > nav {
   box-shadow:
@@ -531,9 +738,9 @@ body > nav {
   border: 1px solid var(--color-border-default);
   border-radius: var(--radius-inset);
   transition:
-    border-color var(--dur-base) var(--ease-station),
-    box-shadow   var(--dur-base) var(--ease-station),
-    background   var(--dur-base) var(--ease-station);
+    border-color     var(--dur-base) var(--ease-station),
+    box-shadow       var(--dur-base) var(--ease-station),
+    background-color var(--dur-base) var(--ease-station);
 }
 .station-input::placeholder {
   color: var(--color-text-muted);
@@ -553,6 +760,21 @@ body > nav {
 }
 .station-input[aria-invalid="true"] {
   border-color: var(--color-danger);
+}
+
+/* Select variant: strips the native chevron and paints a consistent
+   slate caret so every <select> in the app aligns the same way. Compose
+   with .station-input (`class="station-input station-select"`). The
+   padding-right + background-image declarations come after
+   .station-input in source order, so they win cleanly. */
+.station-select {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: 2.5rem;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20' stroke='%2394a3b8' stroke-width='1.75'><polyline points='6 8 10 12 14 8' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 0.75rem center;
+  background-size: 1rem 1rem;
 }
 
 .station-button {
@@ -583,33 +805,6 @@ body > nav {
   opacity: 0.5;
   cursor: not-allowed;
 }
-.station-button--primary {
-  color: var(--color-text-inverse);
-  background: var(--color-brand-600);
-  border-color: var(--color-brand-500);
-}
-.station-button--primary:hover:not(:disabled) {
-  background: var(--color-brand-500);
-}
-.station-button--secondary {
-  color: var(--color-text-emphasis);
-  background: var(--color-surface-2);
-  border-color: var(--color-border-default);
-}
-.station-button--secondary:hover:not(:disabled) {
-  background: var(--color-surface-3);
-  border-color: var(--color-border-strong);
-  color: #f1f5f9;
-}
-.station-button--danger {
-  color: var(--color-danger);
-  background: transparent;
-  border-color: color-mix(in srgb, var(--color-danger) 50%, transparent);
-}
-.station-button--danger:hover:not(:disabled) {
-  background: var(--color-danger-bg);
-  border-color: var(--color-danger);
-}
 
 /* ── Reduced motion ─────────────────────────────────────────────────────── */
 @media (prefers-reduced-motion: reduce) {
@@ -627,11 +822,8 @@ body > nav {
     transform: none;
   }
   .status-dot--active,
-  .status-dot--error,
-  .dash-pill--active .dash-pill__dot {
+  .status-dot--error {
     animation: none;
     box-shadow: none;
-    opacity: 1;
-    transform: none;
   }
 }

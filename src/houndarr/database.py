@@ -131,11 +131,6 @@ def set_db_path(path: str) -> None:
     _db_path = path
 
 
-def get_db_path() -> str:
-    """Return the configured SQLite file path set by :func:`set_db_path`."""
-    return _db_path
-
-
 @asynccontextmanager
 async def get_db() -> AsyncGenerator[aiosqlite.Connection, None]:
     """Yield a database connection with foreign keys enabled."""
@@ -1157,78 +1152,3 @@ async def _column_exists(db: aiosqlite.Connection, table_name: str, column_name:
     async with db.execute(f"PRAGMA table_info({table_name})") as cur:  # noqa: S608  # nosec B608
         rows = await cur.fetchall()
     return any(row[1] == column_name for row in rows)
-
-
-async def get_setting(key: str, default: str | None = None) -> str | None:
-    """Fetch a single setting value by key.
-
-    Thin delegator over
-    :func:`houndarr.repositories.settings.get_setting`; kept here so
-    callers that still import from :mod:`houndarr.database` keep
-    working while the D batches migrate them one file at a time.  The
-    ``default=`` fallback is preserved because route-layer callers
-    rely on it; the repository contract has no default (see
-    :class:`houndarr.protocols.SettingsRepository`).
-
-    Args:
-        key: Setting key to look up.
-        default: Value to return when *key* has no row (the legacy
-            contract).  Defaults to ``None``.
-
-    Returns:
-        The stored string value, or *default* when the row is absent.
-    """
-    from houndarr.repositories.settings import get_setting as _repo_get_setting
-
-    value = await _repo_get_setting(key)
-    return value if value is not None else default
-
-
-async def set_setting(key: str, value: str) -> None:
-    """Upsert a setting.
-
-    Thin delegator over
-    :func:`houndarr.repositories.settings.set_setting`.  Same rationale
-    as :func:`get_setting`: callers still importing from this module
-    see the previous signature; the SQL itself lives in the repository.
-
-    Args:
-        key: Setting key.
-        value: Raw string value to store.
-    """
-    from houndarr.repositories.settings import set_setting as _repo_set_setting
-
-    await _repo_set_setting(key, value)
-
-
-async def clear_all_search_logs() -> int:
-    """Delete every row in ``search_log`` and return the count that was removed.
-
-    Backs the Admin > Maintenance > Clear all logs action.  The audit
-    breadcrumb row ("Audit log cleared by admin…") is written by the
-    caller after this returns so the DELETE + INSERT aren't racy with
-    concurrent search_loop writes; this helper stays a pure truncate.
-    """
-    async with get_db() as db:
-        cur = await db.execute("DELETE FROM search_log")
-        await db.commit()
-        return cur.rowcount or 0
-
-
-async def write_admin_audit(message: str) -> None:
-    """Insert a single system-audit row into ``search_log``.
-
-    Used by Admin operations to leave a breadcrumb on the Activity logs
-    page (e.g. "Policy settings reset to defaults by admin"). The row is
-    attributed to ``cycle_trigger='system'`` and ``action='info'`` so it
-    sorts alongside the scheduler's lifecycle events rather than a real
-    search result.  ``instance_id`` is NULL because these are
-    library-wide operations, not per-instance.
-    """
-    async with get_db() as db:
-        await db.execute(
-            "INSERT INTO search_log (instance_id, cycle_trigger, action, message)"
-            " VALUES (NULL, 'system', 'info', ?)",
-            (message,),
-        )
-        await db.commit()

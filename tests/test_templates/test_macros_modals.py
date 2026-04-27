@@ -6,12 +6,10 @@ confirm_dialog_shell (the BEM .confirm-dialog backdrop + panel pair
 used by the shared admin confirm prompt).
 
 Each test invokes the macro in isolation and asserts the exact
-bytes Jinja emits.  Like the other macro pinning suites under
-tests/test_templates/, the macro output is not the same as the
-full post-migration consumer HTML (consumers carry ambient
-template indentation that the macro does not).  Consumer-level
-integration is asserted via the Track A.22 render harness and the
-Track E gate.  What this suite locks down is every attribute,
+bytes Jinja emits.  Consumer-level integration (the full rendered
+HTML including ambient template indentation) is asserted via the
+render harness in ``test_pinned_render.py`` and the macro
+inventory gate.  What this suite locks down is every attribute,
 every conditional emission, and the structure the JS controllers
 read so a future edit cannot silently drop a wrapper class, swap
 an aria attribute, or reorder the backdrop / panel divs.

@@ -1,12 +1,12 @@
 """Pinning tests for the search_log-repository SQL boundary.
 
-Locks the Track D.6 contract of ``insert_log_row``,
-``fetch_log_rows``, ``fetch_recent_searches``, and
-``delete_logs_for_instance``.  The golden-log characterisation test
-(``tests/test_engine/test_golden_search_log.py``) pins the engine's
-``_write_log`` byte shape; these tests pin the repository primitives
-the engine delegator now rests on, plus the fetch surface D.9 will
-consume.
+Locks the contract of ``insert_log_row``, ``fetch_log_rows``,
+``fetch_recent_searches``, ``delete_logs_for_instance``, and
+``purge_old_logs``.  The golden-log characterisation test in
+``tests/test_engine/test_golden_search_log.py`` pins the engine's
+``_write_log`` byte shape; these tests pin the repository
+primitives the delegator rests on plus the fetch surface that
+:mod:`houndarr.services.log_query` composes.
 """
 
 from __future__ import annotations
@@ -306,6 +306,211 @@ async def test_delete_logs_for_instance_returns_zero_when_empty(
 
 @pytest.mark.pinning()
 @pytest.mark.asyncio()
+async def test_fetch_latest_missing_reason_returns_newest_reason(
+    seeded_instances: None,
+) -> None:
+    """fetch_latest_missing_reason returns the newest missing-pass reason."""
+    await repo.insert_log_row(
+        instance_id=1,
+        item_id=42,
+        item_type="episode",
+        action="skipped",
+        search_kind="missing",
+        reason="not yet released",
+    )
+    await repo.insert_log_row(
+        instance_id=1,
+        item_id=42,
+        item_type="episode",
+        action="skipped",
+        search_kind="missing",
+        reason="post-release grace (3h)",
+    )
+    assert await repo.fetch_latest_missing_reason(1, 42, "episode") == "post-release grace (3h)"
+
+
+@pytest.mark.pinning()
+@pytest.mark.asyncio()
+async def test_fetch_latest_missing_reason_returns_none_when_no_match(
+    seeded_instances: None,
+) -> None:
+    """fetch_latest_missing_reason returns None when no missing-pass rows exist."""
+    assert await repo.fetch_latest_missing_reason(1, 99, "episode") is None
+
+
+@pytest.mark.pinning()
+@pytest.mark.asyncio()
+async def test_fetch_latest_missing_reason_ignores_non_missing_rows(
+    seeded_instances: None,
+) -> None:
+    """fetch_latest_missing_reason only consults missing-pass rows."""
+    await repo.insert_log_row(
+        instance_id=1,
+        item_id=5,
+        item_type="episode",
+        action="skipped",
+        search_kind="cutoff",
+        reason="cutoff-only reason",
+    )
+    assert await repo.fetch_latest_missing_reason(1, 5, "episode") is None
+
+
+@pytest.mark.pinning()
+@pytest.mark.asyncio()
+async def test_fetch_active_error_instance_ids_includes_recent_error(
+    seeded_instances: None,
+) -> None:
+    """fetch_active_error_instance_ids flags instances whose newest row errored."""
+    await repo.insert_log_row(
+        instance_id=1, item_id=None, item_type=None, action="error", message="boom"
+    )
+    assert await repo.fetch_active_error_instance_ids() == {1}
+
+
+@pytest.mark.pinning()
+@pytest.mark.asyncio()
+async def test_fetch_active_error_instance_ids_excludes_when_error_is_superseded(
+    seeded_instances: None,
+) -> None:
+    """A non-error row newer than the error clears the flag."""
+    await repo.insert_log_row(
+        instance_id=1, item_id=None, item_type=None, action="error", message="boom"
+    )
+    await repo.insert_log_row(
+        instance_id=1,
+        item_id=1,
+        item_type="episode",
+        action="searched",
+    )
+    assert await repo.fetch_active_error_instance_ids() == set()
+
+
+@pytest.mark.pinning()
+@pytest.mark.asyncio()
+async def test_fetch_active_error_instance_ids_returns_empty_on_no_errors(
+    seeded_instances: None,
+) -> None:
+    """fetch_active_error_instance_ids returns the empty set when nothing errored."""
+    await repo.insert_log_row(instance_id=1, item_id=1, item_type="episode", action="searched")
+    assert await repo.fetch_active_error_instance_ids() == set()
+
+
+@pytest.mark.pinning()
+@pytest.mark.asyncio()
+async def test_engine_count_searches_last_hour_delegates_through_repo(
+    seeded_instances: None,
+) -> None:
+    """The engine's _count_searches_last_hour reads through fetch_recent_searches."""
+    from houndarr.engine.search_loop import _count_searches_last_hour
+
+    await repo.insert_log_row(
+        instance_id=1,
+        item_id=1,
+        item_type="episode",
+        action="searched",
+        search_kind="missing",
+    )
+    assert await _count_searches_last_hour(1, "missing") == 1
+
+
+@pytest.mark.pinning()
+@pytest.mark.asyncio()
+async def test_engine_latest_missing_reason_ref_delegates_through_repo(
+    seeded_instances: None,
+) -> None:
+    """The engine's _latest_missing_reason_ref reads through fetch_latest_missing_reason."""
+    from houndarr.engine.search_loop import _latest_missing_reason_ref
+    from houndarr.enums import ItemType
+    from houndarr.value_objects import ItemRef
+
+    await repo.insert_log_row(
+        instance_id=1,
+        item_id=7,
+        item_type="episode",
+        action="skipped",
+        search_kind="missing",
+        reason="not yet released",
+    )
+    ref = ItemRef(instance_id=1, item_id=7, item_type=ItemType.episode)
+    assert await _latest_missing_reason_ref(ref) == "not yet released"
+
+
+@pytest.mark.pinning()
+@pytest.mark.asyncio()
+async def test_services_active_error_instance_ids_delegates_through_repo(
+    seeded_instances: None,
+) -> None:
+    """services.instances.active_error_instance_ids delegates to the repo."""
+    from houndarr.services.instances import active_error_instance_ids
+
+    await repo.insert_log_row(
+        instance_id=2, item_id=None, item_type=None, action="error", message="broken"
+    )
+    assert await active_error_instance_ids() == {2}
+
+
+@pytest.mark.pinning()
+@pytest.mark.asyncio()
+async def test_delete_all_logs_wipes_every_row(seeded_instances: None) -> None:
+    """delete_all_logs returns the pre-wipe count and empties the table."""
+    await repo.insert_log_row(instance_id=1, item_id=1, item_type="episode", action="searched")
+    await repo.insert_log_row(instance_id=2, item_id=2, item_type="movie", action="skipped")
+    await repo.insert_log_row(instance_id=None, item_id=None, item_type=None, action="info")
+
+    removed = await repo.delete_all_logs()
+
+    assert removed == 3
+    assert await _count_logs() == 0
+
+
+@pytest.mark.pinning()
+@pytest.mark.asyncio()
+async def test_delete_all_logs_returns_zero_on_empty_table(seeded_instances: None) -> None:
+    """delete_all_logs returns 0 when the table is already empty."""
+    assert await repo.delete_all_logs() == 0
+
+
+@pytest.mark.pinning()
+@pytest.mark.asyncio()
+async def test_insert_admin_audit_writes_system_info_row(seeded_instances: None) -> None:
+    """insert_admin_audit writes a NULL-instance system/info breadcrumb."""
+    await repo.insert_admin_audit("Audit log cleared by admin (5 rows removed)")
+
+    rows = await repo.fetch_log_rows()
+    assert len(rows) == 1
+    row = rows[0]
+    assert row["instance_id"] is None
+    assert row["cycle_trigger"] == "system"
+    assert row["action"] == "info"
+    assert row["message"] == "Audit log cleared by admin (5 rows removed)"
+
+
+@pytest.mark.pinning()
+@pytest.mark.asyncio()
+async def test_insert_admin_audit_appends_without_mutating_existing(
+    seeded_instances: None,
+) -> None:
+    """insert_admin_audit is append-only; it does not disturb existing rows."""
+    await repo.insert_log_row(
+        instance_id=1,
+        item_id=101,
+        item_type="episode",
+        action="searched",
+        item_label="Show S01E01",
+    )
+    await repo.insert_admin_audit("Policy reset by admin")
+
+    rows = await repo.fetch_log_rows()
+    assert len(rows) == 2
+    # fetch_log_rows orders newest first; the audit row is newest.
+    assert rows[0]["cycle_trigger"] == "system"
+    assert rows[0]["action"] == "info"
+    assert rows[1]["action"] == "searched"
+    assert rows[1]["item_label"] == "Show S01E01"
+
+
+@pytest.mark.pinning()
+@pytest.mark.asyncio()
 async def test_engine_write_log_delegates_through_repo(seeded_instances: None) -> None:
     """The engine's _write_log helper writes the same row shape the repo would."""
     from houndarr.engine.search_loop import _write_log
@@ -337,7 +542,7 @@ async def test_engine_write_log_delegates_through_repo(seeded_instances: None) -
 @pytest.mark.pinning()
 @pytest.mark.asyncio()
 async def test_purge_old_logs_lives_on_repository(db: None) -> None:
-    """``purge_old_logs`` lives on the search-log repository post-Phase 6b.
+    """``purge_old_logs`` lives on the search-log repository.
 
     The function's disable-on-zero semantics and the empty-table
     return shape are pinned here; detailed row-deletion coverage

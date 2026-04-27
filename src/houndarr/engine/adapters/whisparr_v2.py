@@ -264,7 +264,7 @@ async def _collect_upgrade_episodes(
         except (httpx.HTTPError, httpx.InvalidURL, ValidationError):
             logger.warning(
                 "[%s] failed to fetch episodes for series %d, skipping",
-                instance.name,
+                instance.core.name,
                 series_id,
             )
             continue
@@ -405,10 +405,10 @@ async def fetch_reconcile_sets(client: WhisparrV2Client, instance: Instance) -> 
     cutoff_items = await paginate_wanted(client.get_cutoff_unmet)
     missing_set = _whisparr_v2_leaf_pairs(missing_items)
     cutoff_set = _whisparr_v2_leaf_pairs(cutoff_items)
-    if instance.whisparr_v2_search_mode != WhisparrV2SearchMode.episode:
+    if instance.missing.whisparr_v2_search_mode != WhisparrV2SearchMode.episode:
         missing_set = missing_set | _whisparr_v2_season_synth_pairs(missing_items)
     upgrade_set: frozenset[tuple[str, int]] = frozenset()
-    if instance.upgrade_enabled:
+    if instance.upgrade.upgrade_enabled:
         upgrade_candidates = [
             adapt_upgrade(item, instance)
             for item in await _fetch_all_upgrade_episodes(client, instance)
@@ -443,8 +443,6 @@ class WhisparrV2Adapter:
     Conforms to :class:`~houndarr.engine.adapters.protocols.AppAdapterProto`
     structurally via the eight staticmethod attributes below; the
     module-level functions remain importable for direct unit-test use.
-    Track C.10 introduces this class form to replace the prior
-    ``AppAdapter`` dataclass-of-callables registry shape.
     """
 
     adapt_missing = staticmethod(adapt_missing)

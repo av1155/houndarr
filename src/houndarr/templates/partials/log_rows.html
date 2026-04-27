@@ -46,11 +46,86 @@
 {%- if ns.cooldown -%}{%- set _ = parts.append(ns.cooldown ~ ' on cooldown') -%}{%- endif -%}
 {%- if ns.unreleased -%}{%- set _ = parts.append(ns.unreleased ~ ' not yet released') -%}{%- endif -%}
 {%- if ns.capped -%}{%- set _ = parts.append(ns.capped ~ ' hit hourly limit') -%}{%- endif -%}
-{%- if ns.other -%}{%- set _ = parts.append(ns.other ~ ' other') -%}{%- endif -%}
+{%- if ns.other -%}{%- set _ = parts.append(ns.other ~ ' other') -%}{%- endif %}
  <span class="cycle__summary-reason">{{ parts | join(', ') }}</span>. No dispatches needed.
 {%- else -%}
 <strong>{{ instance_name }}</strong> checked the queue. No dispatches needed.
 {%- endif -%}
+{%- endmacro -%}
+
+{#- Pretty per-slug label used in the error-type group header.  Mirrors
+    the accent slug vocabulary emitted by services.log_query
+    (_INSTANCE_TYPE_TO_ACCENT_SLUG); anything unknown falls through to a
+    capitalised slug so the page never renders an empty header. -#}
+{%- set _TYPE_LABELS = {
+  'sonarr': 'Sonarr',
+  'radarr': 'Radarr',
+  'lidarr': 'Lidarr',
+  'readarr': 'Readarr',
+  'whisparr-v2': 'Whisparr v2',
+  'whisparr-v3': 'Whisparr v3',
+} -%}
+
+{#- Folds two-or-more cycleless error rows that share an accent slug
+    into a single expanded card whose body lists the individual
+    errors newest-first.  Motivated by the banner's "View logs" deep
+    link: it passes every offline instance through the multi-select
+    filter, and rendering one card per instance buries the fact that
+    a single upstream blip took down a whole *arr type.  Cycle rows
+    and singleton cycleless errors stay on _render_cycle. -#}
+{%- macro _render_error_type_group(slug, rows) -%}
+{%- set type_label = _TYPE_LABELS.get(slug, slug|capitalize) -%}
+{%- set newest_ts = rows[0].timestamp -%}
+{%- set instance_names = rows | map(attribute='instance_name') | unique | list -%}
+<article class="cycle cycle--error-group"
+         data-cycle-id=""
+         data-cycle-trigger=""
+         data-outcome="error"
+         data-expanded="true"
+         style="--cycle-accent: var(--inst-{{ slug }}); --cycle-accent-bg: var(--inst-{{ slug }}-bg); --cycle-accent-border: var(--inst-{{ slug }}-border);"
+>
+  <header class="cycle__header" role="button" tabindex="0" aria-expanded="true">
+    <div class="cycle__lead">
+      <span class="cycle__expand" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="9 18 15 12 9 6"/>
+        </svg>
+      </span>
+      <span class="cycle__instance"><span class="cycle__instance-dot" aria-hidden="true"></span>{{ type_label }}</span>
+      <div class="cycle__meta">
+        <span class="cycle__meta-ts" data-ts="{{ newest_ts or '' }}">{{ newest_ts[:19].replace('T', ' ') if newest_ts else '-' }}</span>
+        {%- if instance_names | length > 1 %}
+        <span class="cycle__meta-sep" aria-hidden="true">·</span>
+        <span class="cycle__trigger">{{ instance_names | length }} instances</span>
+        {%- endif %}
+      </div>
+    </div>
+    <span></span>
+    <div class="cycle__outcome">
+      <span class="outcome-pill outcome-pill--error"><span class="outcome-pill__n">{{ rows | length }}</span> error{% if rows | length > 1 %}s{% endif %}</span>
+    </div>
+  </header>
+  <div class="cycle__body">
+    <div class="entries">
+      {%- for row in rows %}
+      <div class="entry entry--error"
+           data-action="error"
+           data-cycle-id=""
+           data-cycle-progress=""
+           data-item-type="{{ row.item_type or '' }}"
+      >
+        <div class="entry__time" data-ts="{{ row.timestamp or '' }}" data-log-ts="{{ row.timestamp or '' }}">{{ row.timestamp[:19].replace('T', ' ') if row.timestamp else '' }}</div>
+        <div class="entry__action entry__action--error">error</div>
+        <div></div>
+        <div class="entry__media">
+          <div class="entry__title">{{ row.instance_name }}</div>
+        </div>
+        <div class="entry__reason">{{ row.reason or row.message or '' }}</div>
+      </div>
+      {%- endfor %}
+    </div>
+  </div>
+</article>
 {%- endmacro -%}
 
 {%- macro _render_cycle(cycle_id, group, accents) -%}
@@ -120,12 +195,12 @@
   </header>
   <div class="cycle__body">
     <div class="entries">
-      {#- Strip the `whisparr_` / `whisparr_v3_` namespace prefix off
+      {#- Strip the `whisparr_v2_` / `whisparr_v3_` namespace prefix off
           the user-facing type label while `data-item-type` keeps the
-          canonical value for copy-as-TSV.  Longer prefix has to match
-          first so `whisparr_v3_movie` becomes `movie`, not `v3_movie`. -#}
+          canonical value for copy-as-TSV.  Both prefixes are the same
+          length so order does not matter. -#}
       {%- for row in group %}
-      {%- set display_type = (row.item_type or '')|replace('whisparr_v3_', '')|replace('whisparr_', '') %}
+      {%- set display_type = (row.item_type or '')|replace('whisparr_v3_', '')|replace('whisparr_v2_', '') %}
       <div class="entry entry--{{ row.action or 'info' }}"
            data-action="{{ row.action or '' }}"
            data-cycle-id="{{ row.cycle_id or '' }}"
@@ -158,15 +233,60 @@
 {%- endmacro -%}
 
 {% if rows %}
-{%- set ns = namespace(current=none, buf=[], started=false) -%}
+{#- Three cases drive the grouping:
+     * cycle_id is not none  -> consecutive rows sharing that id
+       fold into one cycle card via _render_cycle.
+     * cycle_id is none, action == 'error', and two or more errors
+       share an accent slug -> collapse them into one type-group
+       card via _render_error_type_group, anchored at the newest
+       row's position so the feed stays timestamp-descending.
+     * cycle_id is none otherwise -> each row renders on its own so
+       three instances that all happen to carry cycle_id = NULL can
+       never collapse into a single pseudo-system card labelled by
+       whichever one sorted first.
+
+   The pre-pass exists because the anchor decision needs to know the
+   bucket size at first sight: a slug with only one cycleless error
+   must fall through to _render_cycle (no parent wrapper), and a
+   slug with two or more must emit the type group at the first
+   sibling in order to preserve timestamp-descending layout.  Rows
+   without an accent slug (deleted instance or unknown type) fall
+   through so the label never blanks out. -#}
+{%- set err_groups = namespace(by_slug={}) -%}
 {%- for row in rows -%}
-{%- if ns.started and row.cycle_id != ns.current -%}
+{%- if row.cycle_id is none and row.action == 'error' -%}
+{%- set _slug = _accents.get(row.instance_name, '') -%}
+{%- if _slug -%}
+{%- if _slug not in err_groups.by_slug -%}
+{%- set _ = err_groups.by_slug.update({_slug: []}) -%}
+{%- endif -%}
+{%- set _ = err_groups.by_slug[_slug].append(row) -%}
+{%- endif -%}
+{%- endif -%}
+{%- endfor -%}
+{%- set ns = namespace(current=none, buf=[], started=false, emitted={}) -%}
+{%- for row in rows -%}
+{%- set row_slug = _accents.get(row.instance_name, '') if (row.cycle_id is none and row.action == 'error') else '' -%}
+{%- set row_bucket = err_groups.by_slug.get(row_slug, []) if row_slug else [] -%}
+{%- set in_group = row_slug and (row_bucket | length) >= 2 -%}
+{%- if in_group and row_slug in ns.emitted -%}
+  {#- Sibling of an already-rendered type-group anchor; skip. -#}
+{%- else -%}
+{%- if ns.started and ns.buf and (in_group or row.cycle_id is none or row.cycle_id != ns.current) -%}
 {{ _render_cycle(ns.current, ns.buf, _accents) }}
 {%- set ns.buf = [] -%}
 {%- endif -%}
+{%- if in_group -%}
+{{ _render_error_type_group(row_slug, row_bucket) }}
+{%- set _ = ns.emitted.update({row_slug: true}) -%}
+{%- set ns.current = none -%}
+{%- set ns.started = true -%}
+{%- else -%}
 {%- set _ = ns.buf.append(row) -%}
 {%- set ns.current = row.cycle_id -%}
 {%- set ns.started = true -%}
+{%- endif -%}
+{%- endif -%}
 {%- endfor -%}
 {%- if ns.buf -%}
 {{ _render_cycle(ns.current, ns.buf, _accents) }}
@@ -182,7 +302,7 @@
     <button
       type="button"
       class="load-older"
-      hx-get="/api/logs/partial?limit={{ next_limit }}{% if instance_id %}&instance_id={{ instance_id }}{% endif %}{% if action %}&action={{ action }}{% endif %}{% if search_kind %}&search_kind={{ search_kind }}{% endif %}{% if cycle_trigger %}&cycle_trigger={{ cycle_trigger }}{% endif %}&hide_system={{ 'true' if hide_system else 'false' }}&hide_skipped={{ 'true' if hide_skipped else 'false' }}&before={{ rows[-1].timestamp }}"
+      hx-get="/api/logs/partial?limit={{ next_limit }}{% for iid in (instance_ids or []) %}&instance_id={{ iid }}{% endfor %}{% if action %}&action={{ action }}{% endif %}{% if search_kind %}&search_kind={{ search_kind }}{% endif %}{% if cycle_trigger %}&cycle_trigger={{ cycle_trigger }}{% endif %}&hide_system={{ 'true' if hide_system else 'false' }}&hide_skipped={{ 'true' if hide_skipped else 'false' }}&before={{ rows[-1].timestamp }}"
       hx-target="#pagination-row"
       hx-swap="outerHTML"
     >

@@ -25,120 +25,15 @@
   </div>
 </section>
 
-<form
-  id="log-filter-form"
-  hx-get="/api/logs/partial"
-  hx-target="#log-feed"
-  hx-swap="innerHTML"
-  hx-trigger="change, submit"
-  hx-indicator="#log-spinner"
-  class="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-end sm:gap-3 mb-5"
->
-  <div class="col-span-2 flex flex-col gap-1 sm:min-w-[180px]">
-    <label for="filter-instance" class="text-xs text-slate-400 font-medium">Instance</label>
-    <select
-      id="filter-instance"
-      name="instance_id"
-      class="station-input station-select py-2 font-sans"
-    >
-      <option value="">All instances</option>
-      {% for inst in instances %}
-      <option value="{{ inst.id }}" {% if selected_instance_id == inst.id %}selected{% endif %}>
-        {{ inst.name }}
-      </option>
-      {% endfor %}
-    </select>
-  </div>
-
-  <div class="flex flex-col gap-1">
-    <label for="filter-action" class="text-xs text-slate-400 font-medium">Action</label>
-    <select
-      id="filter-action"
-      name="action"
-      class="station-input station-select py-2 font-sans"
-    >
-      <option value="">All actions</option>
-      <option value="searched" {% if selected_action == "searched" %}selected{% endif %}>Searched</option>
-      <option value="skipped" {% if selected_action == "skipped" %}selected{% endif %}>Skipped</option>
-      <option value="error" {% if selected_action == "error" %}selected{% endif %}>Error</option>
-      <option value="info" {% if selected_action == "info" %}selected{% endif %}>Info</option>
-    </select>
-  </div>
-
-  <div class="flex flex-col gap-1">
-    <label for="filter-limit" class="text-xs text-slate-400 font-medium">Rows</label>
-    <select
-      id="filter-limit"
-      name="limit"
-      class="station-input station-select py-2 font-sans"
-    >
-      <option value="25">25</option>
-      <option value="50" selected>50</option>
-      <option value="100">100</option>
-      <option value="200">200</option>
-      <option value="300">300</option>
-      <option value="500">500</option>
-      <option value="1000">1000</option>
-      <option value="5000">All</option>
-    </select>
-  </div>
-
-  <div class="flex flex-col gap-1">
-    <label for="filter-search-kind" class="text-xs text-slate-400 font-medium">Kind</label>
-    <select
-      id="filter-search-kind"
-      name="search_kind"
-      class="station-input station-select py-2 font-sans"
-    >
-      <option value="">All kinds</option>
-      <option value="missing" {% if selected_search_kind == "missing" %}selected{% endif %}>Missing</option>
-      <option value="cutoff" {% if selected_search_kind == "cutoff" %}selected{% endif %}>Cutoff</option>
-      <option value="upgrade" {% if selected_search_kind == "upgrade" %}selected{% endif %}>Upgrade</option>
-    </select>
-  </div>
-
-  <div class="flex flex-col gap-1">
-    <label for="filter-cycle-trigger" class="text-xs text-slate-400 font-medium">Trigger</label>
-    <select
-      id="filter-cycle-trigger"
-      name="cycle_trigger"
-      class="station-input station-select py-2 font-sans"
-    >
-      <option value="">All triggers</option>
-      <option value="scheduled" {% if selected_cycle_trigger == "scheduled" %}selected{% endif %}>Scheduled</option>
-      <option value="run_now" {% if selected_cycle_trigger == "run_now" %}selected{% endif %}>Run now</option>
-      <option value="system" {% if selected_cycle_trigger == "system" %}selected{% endif %}>System</option>
-    </select>
-  </div>
-
-  <div class="col-span-2 flex items-center gap-2 sm:pb-2">
-    <input
-      id="filter-hide-system"
-      name="hide_system"
-      type="checkbox"
-      value="true"
-      {% if selected_hide_system %}checked{% endif %}
-      class="w-4 h-4 rounded-chip border-border-default bg-surface-2 text-brand-500 focus:ring-brand-400 focus:ring-offset-0"
-    />
-    <label for="filter-hide-system" class="text-xs text-slate-300 font-medium">Hide system rows</label>
-  </div>
-
-  <div id="log-spinner" class="col-span-2 htmx-indicator flex items-center gap-2 text-xs text-slate-400">
-    <svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-      <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-      <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
-    </svg>
-    Loading...
-  </div>
-</form>
-
-<div class="flex flex-wrap items-center justify-between gap-2 mb-4">
-  <div id="logs-summary" class="min-w-0 flex-1"></div>
-  <!-- Desktop split-button copy group -->
-  <div
-    id="copy-dropdown-group-desktop"
-    class="hidden sm:inline-flex relative flex-shrink-0"
-    data-copy-group="desktop"
+<section class="controls" aria-label="Log filters">
+  <form
+    id="log-filter-form"
+    hx-get="/api/logs/partial"
+    hx-target="#log-feed"
+    hx-swap="innerHTML"
+    hx-trigger="change, submit"
+    hx-indicator="#log-spinner"
+    class="filter-bar"
   >
     {# Multi-select dropdown: trigger + popover of checkboxes.  Each
        checkbox carries name="instance_id" so native form serialisation
@@ -169,9 +64,15 @@
           hidden
         >
           {% for inst in instances %}
-          <option value="{{ inst.core.id }}" {% if inst.core.id in (selected_instance_ids or ()) %}selected{% endif %}>
-            {{ inst.core.name }}
-          </option>
+          <label class="filter-multiselect__option">
+            <input
+              type="checkbox"
+              name="instance_id"
+              value="{{ inst.core.id }}"
+              {% if inst.core.id in (selected_instance_ids or ()) %}checked{% endif %}
+            />
+            <span>{{ inst.core.name }}</span>
+          </label>
           {% endfor %}
         </div>
       </div>
@@ -348,13 +249,10 @@
    scroll + delta conditions both hold. #}
 <button type="button" class="new-entries" id="new-entries" hidden>
   <span class="new-entries__arrow" aria-hidden="true">↑</span>
-  <span id="new-entries-count">0</span> new cycles · tap to see
+  <span id="new-entries-count">0</span> new <span id="new-entries-noun">cycles</span> · tap to see
 </button>
 
 <section class="feed" id="log-feed" aria-live="polite" aria-label="Log feed">
   {% include "partials/log_rows.html" %}
 </section>
 
-<div class="toast" id="toast" role="status" aria-live="polite" hidden>
-  <span class="toast__label"></span>
-</div>

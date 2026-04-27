@@ -23,7 +23,7 @@ import hmac
 import logging
 from typing import Annotated
 
-from fastapi import APIRouter, Form, Request
+from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, Response
 
 from houndarr import __version__
@@ -37,6 +37,9 @@ from houndarr.auth import (
     record_failed_login,
 )
 from houndarr.config import get_settings
+from houndarr.deps import get_master_key
+from houndarr.errors import ServiceError
+from houndarr.routes._htmx import hx_redirect_response
 from houndarr.routes._templates import get_templates
 from houndarr.services.admin import (
     clear_all_search_logs,
@@ -84,10 +87,12 @@ def _flash_response(
 
 
 @router.post("/settings/admin/reset-instances", response_class=HTMLResponse)
-async def admin_reset_instances(request: Request) -> HTMLResponse:
+async def admin_reset_instances(
+    request: Request,
+    master_key: Annotated[bytes, Depends(get_master_key)],
+) -> HTMLResponse:
     """Revert every instance's policy columns back to :mod:`config` defaults."""
     supervisor = getattr(request.app.state, "supervisor", None)
-    master_key: bytes = request.app.state.master_key
     count = await reset_all_instance_policy(master_key=master_key, supervisor=supervisor)
 
     if count == 0:
@@ -197,17 +202,19 @@ async def admin_factory_reset(
 
     redirect_target = "/" if is_proxy else "/setup"
 
-    response = Response(status_code=200)
-    response.headers["HX-Redirect"] = redirect_target
+    response = hx_redirect_response(Response(status_code=200), redirect_target)
     clear_session(response)
 
     try:
         await factory_reset(app=request.app, data_dir=settings.data_dir)
-    except Exception:  # noqa: BLE001
+    except ServiceError:
         # Hybrid fallback: schedule a delayed process exit so this response
         # reaches the client before the container restarts. The orchestrator
         # brings Houndarr back up with a clean data_dir and the redirect
-        # target is reachable again.
+        # target is reachable again.  ServiceError covers every in-process
+        # failure the service can surface (file-deletion, init_db, master-
+        # key rotation, supervisor start, retention-loop respawn) because
+        # factory_reset wraps unhandled exceptions at its public boundary.
         logger.exception("Factory reset: in-process path failed; scheduling process exit")
 
         async def _delayed_exit() -> None:

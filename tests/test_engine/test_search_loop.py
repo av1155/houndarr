@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 from collections.abc import AsyncGenerator
 from typing import Any
 from unittest.mock import AsyncMock, patch
@@ -16,12 +17,19 @@ from houndarr.database import get_db
 from houndarr.engine.candidates import ItemType
 from houndarr.engine.search_loop import run_instance_search
 from houndarr.services.instances import (
+    CutoffPolicy,
     Instance,
+    InstanceCore,
+    InstanceTimestamps,
     InstanceType,
     LidarrSearchMode,
+    MissingPolicy,
     ReadarrSearchMode,
+    RuntimeSnapshot,
+    SchedulePolicy,
     SearchOrder,
     SonarrSearchMode,
+    UpgradePolicy,
     WhisparrV2SearchMode,
 )
 
@@ -123,29 +131,39 @@ def _make_instance(
     search_order: SearchOrder = SearchOrder.chronological,
 ) -> Instance:
     return Instance(
-        id=instance_id,
-        name="Test Instance",
-        type=itype,
-        url=url,
-        api_key="test-api-key",
-        enabled=enabled,
-        batch_size=batch_size,
-        sleep_interval_mins=15,
-        hourly_cap=hourly_cap,
-        cooldown_days=cooldown_days,
-        post_release_grace_hrs=post_release_grace_hrs,
-        queue_limit=queue_limit,
-        cutoff_enabled=False,
-        cutoff_batch_size=5,
-        cutoff_cooldown_days=21,
-        cutoff_hourly_cap=1,
-        created_at="2024-01-01T00:00:00Z",
-        updated_at="2024-01-01T00:00:00Z",
-        sonarr_search_mode=sonarr_search_mode,
-        lidarr_search_mode=lidarr_search_mode,
-        readarr_search_mode=readarr_search_mode,
-        whisparr_v2_search_mode=whisparr_v2_search_mode,
-        search_order=search_order,
+        core=InstanceCore(
+            id=instance_id,
+            name="Test Instance",
+            type=itype,
+            url=url,
+            api_key="test-api-key",
+            enabled=enabled,
+        ),
+        missing=MissingPolicy(
+            batch_size=batch_size,
+            sleep_interval_mins=15,
+            hourly_cap=hourly_cap,
+            cooldown_days=cooldown_days,
+            post_release_grace_hrs=post_release_grace_hrs,
+            queue_limit=queue_limit,
+            sonarr_search_mode=sonarr_search_mode,
+            lidarr_search_mode=lidarr_search_mode,
+            readarr_search_mode=readarr_search_mode,
+            whisparr_v2_search_mode=whisparr_v2_search_mode,
+        ),
+        cutoff=CutoffPolicy(
+            cutoff_enabled=False,
+            cutoff_batch_size=5,
+            cutoff_cooldown_days=21,
+            cutoff_hourly_cap=1,
+        ),
+        upgrade=UpgradePolicy(),
+        schedule=SchedulePolicy(search_order=search_order),
+        snapshot=RuntimeSnapshot(),
+        timestamps=InstanceTimestamps(
+            created_at="2024-01-01T00:00:00Z",
+            updated_at="2024-01-01T00:00:00Z",
+        ),
     )
 
 
@@ -1949,10 +1967,15 @@ async def test_inter_search_delay_fires_in_upgrade_pass(
     instance = _make_instance(
         itype=InstanceType.radarr, url=RADARR_URL, instance_id=2, batch_size=0
     )
-    instance.upgrade_enabled = True
-    instance.upgrade_batch_size = 1
-    instance.upgrade_cooldown_days = 7
-    instance.upgrade_hourly_cap = 5
+    instance = dataclasses.replace(
+        instance,
+        upgrade=UpgradePolicy(
+            upgrade_enabled=True,
+            upgrade_batch_size=1,
+            upgrade_cooldown_days=7,
+            upgrade_hourly_cap=5,
+        ),
+    )
     with patch("houndarr.engine.search_loop.asyncio.sleep", sleep_mock):
         count = await run_instance_search(instance, MASTER_KEY)
 
@@ -2230,25 +2253,36 @@ def _make_cutoff_instance(
     sonarr_search_mode: SonarrSearchMode = SonarrSearchMode.episode,
 ) -> Instance:
     return Instance(
-        id=instance_id,
-        name="Cutoff Test",
-        type=itype,
-        url=url,
-        api_key="test-api-key",
-        enabled=True,
-        batch_size=10,
-        sleep_interval_mins=15,
-        hourly_cap=hourly_cap,
-        cooldown_days=cooldown_days,
-        post_release_grace_hrs=post_release_grace_hrs,
-        queue_limit=0,
-        cutoff_enabled=cutoff_enabled,
-        cutoff_batch_size=cutoff_batch_size,
-        cutoff_cooldown_days=cutoff_cooldown_days,
-        cutoff_hourly_cap=cutoff_hourly_cap,
-        created_at="2024-01-01T00:00:00Z",
-        updated_at="2024-01-01T00:00:00Z",
-        sonarr_search_mode=sonarr_search_mode,
+        core=InstanceCore(
+            id=instance_id,
+            name="Cutoff Test",
+            type=itype,
+            url=url,
+            api_key="test-api-key",
+            enabled=True,
+        ),
+        missing=MissingPolicy(
+            batch_size=10,
+            sleep_interval_mins=15,
+            hourly_cap=hourly_cap,
+            cooldown_days=cooldown_days,
+            post_release_grace_hrs=post_release_grace_hrs,
+            queue_limit=0,
+            sonarr_search_mode=sonarr_search_mode,
+        ),
+        cutoff=CutoffPolicy(
+            cutoff_enabled=cutoff_enabled,
+            cutoff_batch_size=cutoff_batch_size,
+            cutoff_cooldown_days=cutoff_cooldown_days,
+            cutoff_hourly_cap=cutoff_hourly_cap,
+        ),
+        upgrade=UpgradePolicy(),
+        schedule=SchedulePolicy(search_order=SearchOrder.chronological),
+        snapshot=RuntimeSnapshot(),
+        timestamps=InstanceTimestamps(
+            created_at="2024-01-01T00:00:00Z",
+            updated_at="2024-01-01T00:00:00Z",
+        ),
     )
 
 

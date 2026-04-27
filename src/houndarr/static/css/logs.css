@@ -5,7 +5,10 @@
 
 
 /* ─── Page head ────────────────────────────────────────────────────────── */
-.logs-head { margin-bottom: 24px; }
+/* Header-to-container gap matches the settings page (which uses Tailwind
+   `mb-3` = 0.75rem on its instances-section title row); both pages feed
+   off the same --space-3 token so retuning it moves them together. */
+.logs-head { margin-bottom: var(--space-3); }
 .logs-head__title-row {
   display: flex;
   align-items: flex-start;
@@ -762,7 +765,6 @@
 }
 
 
-/* ─── Load older + toast + empty ──────────────────────────────────────── */
 .feed-foot {
   display: flex;
   justify-content: center;
@@ -788,26 +790,6 @@
   border-color: var(--color-brand-400);
 }
 .load-older svg { width: 13px; height: 13px; }
-
-.toast {
-  position: fixed;
-  bottom: 28px;
-  left: 50%;
-  transform: translateX(-50%);
-  padding: 10px 18px;
-  background: var(--color-surface-2);
-  border: 1px solid var(--color-brand-400);
-  border-radius: 999px;
-  box-shadow: var(--glow-cyan), var(--shadow-pop);
-  font-size: 13px;
-  color: var(--color-text-heading);
-  z-index: 100;
-  animation: toast-in 240ms var(--ease-station);
-}
-@keyframes toast-in {
-  from { opacity: 0; transform: translate(-50%, 10px); }
-  to   { opacity: 1; transform: translate(-50%, 0); }
-}
 
 .empty {
   padding: 48px 20px;

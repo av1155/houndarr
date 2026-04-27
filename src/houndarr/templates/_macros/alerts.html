@@ -21,17 +21,16 @@
 
   Auth-card alerts (login.html, setup.html) use the bespoke
   .auth-alert class from auth.css and are intentionally NOT
-  rerouted through this macro.  Plan section 3 keeps the auth
-  surface OFF-LIMITS to structural changes.
+  rerouted through this macro; the auth surface is off-limits to
+  structural changes.
 
   Macro-internal whitespace is pinned byte-equal by
   tests/test_templates/test_macros_alerts.py: the opening tag stays
   on one line; the call-block body sits indented two spaces; the
-  closing tag follows on its own line.  The post-migration
-  consumer HTML is not byte-equal to its pre-refactor form (the
-  inline blocks carried ambient template indentation the macro
-  does not); structural parity is enforced by the substring
-  assertions in test_pinned_render.py and the Track E gate.
+  closing tag follows on its own line.  Structural parity against
+  consumer renders is enforced by the substring assertions in
+  test_pinned_render.py; update macro, pin, and render tests
+  together.
 -#}
 
 

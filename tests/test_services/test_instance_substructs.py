@@ -1,26 +1,29 @@
-"""Pinning tests for the :class:`Instance` policy sub-struct dataclasses.
+"""Pinning tests for :class:`Instance` and its seven policy sub-structs.
 
-Track D.13 declares seven frozen, slotted dataclasses alongside the
-existing :class:`Instance` dataclass:
+Seven frozen, slotted dataclasses make up an :class:`Instance`:
 :class:`InstanceCore`, :class:`MissingPolicy`, :class:`CutoffPolicy`,
-:class:`UpgradePolicy`, :class:`SchedulePolicy`, :class:`RuntimeSnapshot`,
-and :class:`InstanceTimestamps`.  The declarations are currently unused;
-D.14 wraps :class:`Instance` as a facade that composes them via
-``@property`` delegation, and D.15 through D.19 migrate the callers.
-D.20 removes the flat-attribute delegation.
+:class:`UpgradePolicy`, :class:`SchedulePolicy`,
+:class:`RuntimeSnapshot`, and :class:`InstanceTimestamps`.
+:class:`Instance` carries only the seven sub-struct fields and
+accepts only the seven sub-struct kwargs at construction time.
 
-These tests lock the contract that every later batch keys off:
+These tests lock the invariants that the sub-struct shape must keep
+through any future Instance changes:
 
-* each sub-struct is a ``@dataclass(frozen=True, slots=True)``
-* each sub-struct exposes the exact field names the plan specifies
-* default values match the constants in :mod:`houndarr.config` so fresh
-  construction never drifts from what :class:`InstanceInsert` writes
-* the seven sub-struct field sets partition :class:`Instance`'s 39
-  fields disjointly and exhaustively
+* every sub-struct is a frozen, slotted dataclass with the exact field
+  list and defaults the plan specified
+* the seven sub-structs partition the historical flat surface
+  disjointly and exhaustively (no field dropped, no field renamed)
+* :class:`Instance` exposes exactly the seven sub-structs as its
+  dataclass fields, each typed to its matching class
+* flat attribute access no longer works: reading ``instance.batch_size``
+  must raise ``AttributeError`` so a regressed caller fails loudly
+  instead of silently drifting
 
-Every assertion below has to stay green through D.14 - D.20.  A test
-failing here means the sub-struct shape has drifted from the plan and
-the facade migration is about to propagate the drift.
+A failure in this module means either a sub-struct shape changed, a
+field moved sub-structs, the Instance facade grew back, or a flat
+accessor crept back in.  Every condition above is a regression worth
+surfacing immediately.
 """
 
 from __future__ import annotations
@@ -85,6 +88,62 @@ SUBSTRUCTS: list[type] = [
 ]
 
 
+# Map every historical flat field to the sub-struct that owns it.
+# Still the single source of truth for the disjoint partitioning
+# even though :class:`Instance` no longer exposes a flat accessor
+# surface.  A caller migrating old code keys off this table to
+# find where each flat name lives now.
+FLAT_TO_SUB: dict[str, str] = {
+    # InstanceCore
+    "id": "core",
+    "name": "core",
+    "type": "core",
+    "url": "core",
+    "api_key": "core",
+    "enabled": "core",
+    # MissingPolicy
+    "batch_size": "missing",
+    "sleep_interval_mins": "missing",
+    "hourly_cap": "missing",
+    "cooldown_days": "missing",
+    "post_release_grace_hrs": "missing",
+    "queue_limit": "missing",
+    "sonarr_search_mode": "missing",
+    "lidarr_search_mode": "missing",
+    "readarr_search_mode": "missing",
+    "whisparr_v2_search_mode": "missing",
+    # CutoffPolicy
+    "cutoff_enabled": "cutoff",
+    "cutoff_batch_size": "cutoff",
+    "cutoff_cooldown_days": "cutoff",
+    "cutoff_hourly_cap": "cutoff",
+    # UpgradePolicy
+    "upgrade_enabled": "upgrade",
+    "upgrade_batch_size": "upgrade",
+    "upgrade_cooldown_days": "upgrade",
+    "upgrade_hourly_cap": "upgrade",
+    "upgrade_sonarr_search_mode": "upgrade",
+    "upgrade_lidarr_search_mode": "upgrade",
+    "upgrade_readarr_search_mode": "upgrade",
+    "upgrade_whisparr_v2_search_mode": "upgrade",
+    "upgrade_item_offset": "upgrade",
+    "upgrade_series_offset": "upgrade",
+    "upgrade_series_window_size": "upgrade",
+    # SchedulePolicy
+    "allowed_time_window": "schedule",
+    "search_order": "schedule",
+    "missing_page_offset": "schedule",
+    "cutoff_page_offset": "schedule",
+    # RuntimeSnapshot
+    "monitored_total": "snapshot",
+    "unreleased_count": "snapshot",
+    "snapshot_refreshed_at": "snapshot",
+    # InstanceTimestamps
+    "created_at": "timestamps",
+    "updated_at": "timestamps",
+}
+
+
 def _field_names(cls: type) -> list[str]:
     """Return the dataclass field names of *cls* in declaration order."""
     return [f.name for f in dataclasses.fields(cls)]
@@ -94,8 +153,8 @@ def _field_defaults(cls: type) -> dict[str, Any]:
     """Return a mapping from field name to default value.
 
     Fields with no default (required fields) are skipped.  Fields that
-    use ``default_factory`` are also skipped, but none of the D.13
-    sub-structs use factories so the omission is moot today.
+    use ``default_factory`` are also skipped, but none of the sub-structs
+    use factories so the omission is moot today.
     """
     defaults: dict[str, Any] = {}
     for f in dataclasses.fields(cls):
@@ -337,9 +396,11 @@ def test_instance_timestamps_requires_both_fields() -> None:
 def test_substruct_field_sets_are_disjoint() -> None:
     """No field name appears in two different sub-structs.
 
-    The facade migration in D.14 depends on this: a shadowed name
-    would break ``@property`` delegation because flat access would
-    become ambiguous.
+    Disjointness keeps the caller migration tractable: a flat name
+    maps to exactly one sub-struct.  Regressing this invariant means
+    two sub-structs both now own a column, which would also break
+    :class:`InstanceInsert` and :class:`InstanceUpdate` in the
+    repository payload layer.
     """
     seen: dict[str, type] = {}
     for cls in SUBSTRUCTS:
@@ -352,15 +413,14 @@ def test_substruct_field_sets_are_disjoint() -> None:
             seen[name] = cls
 
 
-def test_substruct_field_union_matches_flat_accessor_surface() -> None:
-    """The union of sub-struct fields is exactly the flat accessors.
+def test_substruct_field_union_matches_flat_surface() -> None:
+    """The seven sub-structs cover the 39-field flat surface.
 
-    After D.14 Instance holds the seven sub-structs as its own fields
-    and exposes every flat name via ``@property`` delegation.  This
-    test locks the invariant that the flat accessor surface is the
-    disjoint union of the sub-struct fields, which is what allows the
-    caller-migration batches (D.15 - D.19) to translate a flat access
-    to exactly one sub-struct access without ambiguity.
+    :data:`FLAT_TO_SUB` encodes the authoritative flat-name surface;
+    the test asserts that the declared sub-struct fields cover it
+    exactly with no extras.  A regression here means either a new
+    column landed without a sub-struct update or an old column lost
+    its sub-struct owner.
     """
     substruct_fields: set[str] = set()
     for cls in SUBSTRUCTS:
@@ -368,174 +428,28 @@ def test_substruct_field_union_matches_flat_accessor_surface() -> None:
     assert substruct_fields == set(FLAT_TO_SUB.keys())
 
 
-def test_flat_accessor_surface_covers_pre_refactor_instance_fields() -> None:
-    """Every pre-refactor flat field is still reachable as a property.
+def test_substruct_field_union_count_matches_pre_refactor_surface() -> None:
+    """Forty flat fields, partitioned across seven sub-structs.
 
-    Locks that the D.14 facade did not drop any attribute: a caller
-    that reads ``instance.<name>`` for any ``<name>`` in the 39-field
-    pre-refactor surface still finds that attribute after D.14.  The
-    pre-refactor field list is encoded directly in :data:`FLAT_TO_SUB`
-    so the test stays meaningful even once the Instance dataclass no
-    longer declares those fields itself.
+    Canary for arithmetic drift: if someone bumps :data:`FLAT_TO_SUB` or
+    adds a sub-struct field without updating the other, this test
+    surfaces the inconsistency before the union check does, with a
+    clearer failure.
     """
-    instance = _minimal_instance()
-    for flat_name in FLAT_TO_SUB:
-        assert hasattr(instance, flat_name), (
-            f"Instance no longer exposes the flat attribute {flat_name!r};"
-            " the facade migration lost coverage."
-        )
+    total = sum(len(_field_names(cls)) for cls in SUBSTRUCTS)
+    assert total == 40
+    assert len(FLAT_TO_SUB) == 40
 
 
-# Instance facade contract (D.14).
-
-
-# Map every pre-refactor flat field to the sub-struct that owns it.
-# Source of truth for the caller migrations in D.15 - D.19; a caller
-# rewriting ``instance.batch_size`` to ``instance.missing.batch_size``
-# keys off this table.  The table also drives the parametrised
-# facade tests below; a missing entry here would silently skip
-# coverage for that attribute.
-FLAT_TO_SUB: dict[str, str] = {
-    # InstanceCore
-    "id": "core",
-    "name": "core",
-    "type": "core",
-    "url": "core",
-    "api_key": "core",
-    "enabled": "core",
-    # MissingPolicy
-    "batch_size": "missing",
-    "sleep_interval_mins": "missing",
-    "hourly_cap": "missing",
-    "cooldown_days": "missing",
-    "post_release_grace_hrs": "missing",
-    "queue_limit": "missing",
-    "sonarr_search_mode": "missing",
-    "lidarr_search_mode": "missing",
-    "readarr_search_mode": "missing",
-    "whisparr_v2_search_mode": "missing",
-    # CutoffPolicy
-    "cutoff_enabled": "cutoff",
-    "cutoff_batch_size": "cutoff",
-    "cutoff_cooldown_days": "cutoff",
-    "cutoff_hourly_cap": "cutoff",
-    # UpgradePolicy
-    "upgrade_enabled": "upgrade",
-    "upgrade_batch_size": "upgrade",
-    "upgrade_cooldown_days": "upgrade",
-    "upgrade_hourly_cap": "upgrade",
-    "upgrade_sonarr_search_mode": "upgrade",
-    "upgrade_lidarr_search_mode": "upgrade",
-    "upgrade_readarr_search_mode": "upgrade",
-    "upgrade_whisparr_v2_search_mode": "upgrade",
-    "upgrade_item_offset": "upgrade",
-    "upgrade_series_offset": "upgrade",
-    "upgrade_series_window_size": "upgrade",
-    # SchedulePolicy
-    "allowed_time_window": "schedule",
-    "search_order": "schedule",
-    "missing_page_offset": "schedule",
-    "cutoff_page_offset": "schedule",
-    # RuntimeSnapshot
-    "monitored_total": "snapshot",
-    "unreleased_count": "snapshot",
-    "snapshot_refreshed_at": "snapshot",
-    # InstanceTimestamps
-    "created_at": "timestamps",
-    "updated_at": "timestamps",
-}
-
-
-# Writable replacement values for every flat field.  The value a setter
-# test drives through Instance.<field> = X must differ from the
-# pre-minimal-instance default so the test observes an actual change.
-FLAT_WRITE_VALUES: dict[str, Any] = {
-    # InstanceCore
-    "id": 999,
-    "name": "renamed",
-    "type": InstanceType.radarr,
-    "url": "http://rewritten:7878",
-    "api_key": "rotated-key",
-    "enabled": False,
-    # MissingPolicy
-    "batch_size": 7,
-    "sleep_interval_mins": 45,
-    "hourly_cap": 11,
-    "cooldown_days": 33,
-    "post_release_grace_hrs": 12,
-    "queue_limit": 5,
-    "sonarr_search_mode": SonarrSearchMode.season_context,
-    "lidarr_search_mode": LidarrSearchMode.artist_context,
-    "readarr_search_mode": ReadarrSearchMode.author_context,
-    "whisparr_v2_search_mode": WhisparrV2SearchMode.season_context,
-    # CutoffPolicy
-    "cutoff_enabled": True,
-    "cutoff_batch_size": 3,
-    "cutoff_cooldown_days": 60,
-    "cutoff_hourly_cap": 4,
-    # UpgradePolicy
-    "upgrade_enabled": True,
-    "upgrade_batch_size": 9,
-    "upgrade_cooldown_days": 120,
-    "upgrade_hourly_cap": 2,
-    "upgrade_sonarr_search_mode": SonarrSearchMode.season_context,
-    "upgrade_lidarr_search_mode": LidarrSearchMode.artist_context,
-    "upgrade_readarr_search_mode": ReadarrSearchMode.author_context,
-    "upgrade_whisparr_v2_search_mode": WhisparrV2SearchMode.season_context,
-    "upgrade_item_offset": 42,
-    "upgrade_series_offset": 17,
-    "upgrade_series_window_size": 12,
-    # SchedulePolicy
-    "allowed_time_window": "08:00-20:00",
-    "search_order": SearchOrder.random,
-    "missing_page_offset": 5,
-    "cutoff_page_offset": 9,
-    # RuntimeSnapshot
-    "monitored_total": 1234,
-    "unreleased_count": 56,
-    "snapshot_refreshed_at": "2026-05-01T12:00:00.000Z",
-    # InstanceTimestamps
-    "created_at": "2099-01-01T00:00:00.000Z",
-    "updated_at": "2099-02-02T00:00:00.000Z",
-}
-
-
-def _minimal_instance() -> Instance:
-    """Build an Instance with only the 18 pre-refactor required kwargs.
-
-    Every defaulted kwarg falls back to the pre-D.14 Instance default
-    value, so the result doubles as a default-preservation probe:
-    tests that mutate a single field and then read it back can trust
-    that untouched fields stay at their documented defaults.
-    """
-    return Instance(
-        id=1,
-        name="Test",
-        type=InstanceType.sonarr,
-        url="http://sonarr:8989",
-        api_key="plaintext-key",
-        enabled=True,
-        batch_size=2,
-        sleep_interval_mins=30,
-        hourly_cap=4,
-        cooldown_days=14,
-        post_release_grace_hrs=6,
-        queue_limit=0,
-        cutoff_enabled=False,
-        cutoff_batch_size=1,
-        cutoff_cooldown_days=21,
-        cutoff_hourly_cap=1,
-        created_at="2024-01-01T00:00:00Z",
-        updated_at="2024-01-02T00:00:00Z",
-    )
+# Instance shape.
 
 
 def test_instance_is_dataclass_with_seven_sub_struct_fields() -> None:
-    """Instance is a dataclass whose fields are the seven sub-structs.
+    """Instance is a plain dataclass whose fields are the seven sub-structs.
 
-    ``@dataclass(init=False)`` keeps auto-generated ``__eq__`` /
-    ``__repr__`` across the seven sub-structs while the custom
-    ``__init__`` accepts the 39 flat kwargs.
+    Locks that :class:`Instance` is no longer a facade: the sub-struct
+    fields are the only shape the constructor accepts and the only
+    surface :func:`dataclasses.fields` returns.
     """
     assert dataclasses.is_dataclass(Instance)
     expected = [
@@ -548,40 +462,31 @@ def test_instance_is_dataclass_with_seven_sub_struct_fields() -> None:
         ("timestamps", InstanceTimestamps),
     ]
     observed = [(f.name, f.type) for f in dataclasses.fields(Instance)]
-    # Dataclass field types arrive as string annotations under PEP 563 /
-    # ``from __future__ import annotations``, so compare by name.
     assert [name for name, _ in observed] == [name for name, _ in expected]
     for (_, typ), (_, expected_typ) in zip(observed, expected, strict=True):
-        # ``f.type`` is the stringified annotation ("InstanceCore").
+        # ``f.type`` is the stringified annotation ("InstanceCore") under
+        # ``from __future__ import annotations``.
         assert typ == expected_typ.__name__
 
 
-def test_instance_is_not_frozen() -> None:
-    """Instance stays mutable so the slots audit exception still holds."""
-    params = Instance.__dataclass_params__  # type: ignore[attr-defined]
-    assert params.frozen is False
+def test_instance_is_frozen() -> None:
+    """Instance is frozen alongside every sub-struct.
 
-
-def test_instance_accepts_pre_refactor_flat_kwargs() -> None:
-    """Calling ``Instance`` with the 18 required flat kwargs succeeds.
-
-    Backwards-compat check for the 14+ caller sites that still build
-    Instance via flat kwargs through D.15 - D.19.  Drop this test only
-    after D.20 migrates every construction site to sub-struct form.
+    :class:`Instance` is ``@dataclass(frozen=True, slots=True)``.
+    Every evolution path runs through :func:`dataclasses.replace`
+    on the facade (optionally nesting another ``replace`` for
+    per-field writes on a sub-struct).  Offset rotations travel
+    through the repository, and the supervisor always re-fetches
+    the Instance before each cycle.
     """
+    params = Instance.__dataclass_params__  # type: ignore[attr-defined]
+    assert params.frozen is True
+
+
+def test_instance_accepts_only_sub_struct_kwargs() -> None:
+    """Constructing Instance with sub-struct kwargs succeeds."""
     instance = _minimal_instance()
     assert isinstance(instance, Instance)
-    assert instance.id == 1
-    assert instance.name == "Test"
-    assert instance.type == InstanceType.sonarr
-    assert instance.url == "http://sonarr:8989"
-    assert instance.api_key == "plaintext-key"
-    assert instance.enabled is True
-
-
-def test_instance_sub_struct_fields_populated_by_flat_init() -> None:
-    """Flat __init__ kwargs land in the matching sub-struct field."""
-    instance = _minimal_instance()
     assert isinstance(instance.core, InstanceCore)
     assert isinstance(instance.missing, MissingPolicy)
     assert isinstance(instance.cutoff, CutoffPolicy)
@@ -589,115 +494,97 @@ def test_instance_sub_struct_fields_populated_by_flat_init() -> None:
     assert isinstance(instance.schedule, SchedulePolicy)
     assert isinstance(instance.snapshot, RuntimeSnapshot)
     assert isinstance(instance.timestamps, InstanceTimestamps)
-    assert instance.core.id == 1
-    assert instance.missing.batch_size == 2
-    assert instance.cutoff.cutoff_batch_size == 1
-    assert instance.upgrade.upgrade_enabled is False
-    assert instance.schedule.missing_page_offset == 1
-    assert instance.snapshot.monitored_total == 0
-    assert instance.timestamps.created_at == "2024-01-01T00:00:00Z"
 
 
-def test_instance_flat_kwarg_defaults_preserve_pre_refactor_values() -> None:
-    """The 21 defaulted flat kwargs resolve to the pre-D.14 defaults.
+def test_instance_rejects_pre_refactor_flat_kwargs() -> None:
+    """The flat-kwarg surface raises ``TypeError``.
 
-    Pre-D.14 Instance defaulted ``search_order`` to
-    :attr:`SearchOrder.chronological` even though
-    :data:`DEFAULT_SEARCH_ORDER` is ``"random"``.  The facade must
-    preserve that exact contract so migrated rows that never wrote a
-    search_order column keep iterating chronologically.  Same logic
-    for every other defaulted kwarg: the Instance facade is the
-    authority, not the sub-struct's direct default.
+    A caller that still passes ``Instance(id=..., name=...)`` must
+    fail loudly at the call site instead of silently ignoring the
+    kwargs; sub-struct kwargs are the only accepted form.
     """
-    instance = _minimal_instance()
-    assert instance.sonarr_search_mode == SonarrSearchMode.episode
-    assert instance.lidarr_search_mode == LidarrSearchMode.album
-    assert instance.readarr_search_mode == ReadarrSearchMode.book
-    assert instance.whisparr_v2_search_mode == WhisparrV2SearchMode.episode
-    assert instance.upgrade_enabled is False
-    assert instance.upgrade_sonarr_search_mode == SonarrSearchMode.episode
-    assert instance.upgrade_lidarr_search_mode == LidarrSearchMode.album
-    assert instance.upgrade_readarr_search_mode == ReadarrSearchMode.book
-    assert instance.upgrade_whisparr_v2_search_mode == WhisparrV2SearchMode.episode
-    assert instance.upgrade_item_offset == 0
-    assert instance.upgrade_series_offset == 0
-    assert instance.missing_page_offset == 1
-    assert instance.cutoff_page_offset == 1
-    assert instance.allowed_time_window == ""
-    assert instance.search_order == SearchOrder.chronological
-    assert instance.monitored_total == 0
-    assert instance.unreleased_count == 0
-    assert instance.snapshot_refreshed_at == ""
+    with pytest.raises(TypeError):
+        Instance(  # type: ignore[call-arg]
+            id=1,
+            name="legacy",
+            type=InstanceType.sonarr,
+            url="http://host:8989",
+            api_key="k",
+            enabled=True,
+        )
 
 
 @pytest.mark.parametrize("flat_name", sorted(FLAT_TO_SUB))
-def test_flat_read_equals_sub_struct_read(flat_name: str) -> None:
-    """Every flat attribute reads through to the matching sub-struct field."""
-    instance = _minimal_instance()
-    sub_name = FLAT_TO_SUB[flat_name]
-    sub_value = getattr(getattr(instance, sub_name), flat_name)
-    assert getattr(instance, flat_name) == sub_value
+def test_flat_attribute_access_no_longer_works(flat_name: str) -> None:
+    """Reading ``instance.<flat>`` raises ``AttributeError``.
 
-
-@pytest.mark.parametrize("flat_name", sorted(FLAT_TO_SUB))
-def test_flat_write_propagates_to_sub_struct(flat_name: str) -> None:
-    """Writing a flat attribute rebuilds the owning sub-struct.
-
-    Locks the ``@property`` setter contract: after
-    ``instance.<flat> = X``, both ``instance.<flat>`` and
-    ``instance.<sub>.<flat>`` return ``X``.  Since sub-structs are
-    frozen, the setter has to route through
-    :func:`dataclasses.replace`; a regression here would surface as
-    a :class:`dataclasses.FrozenInstanceError` from the setter.
+    Locks that no @property delegators leak flat attributes onto
+    :class:`Instance`.  Every flat name that used to be reachable
+    through a facade must fail with an ``AttributeError`` so a
+    migrated caller surfaces a loud error rather than silently
+    pointing at a non-existent attribute.
     """
     instance = _minimal_instance()
-    sub_name = FLAT_TO_SUB[flat_name]
-    new_value = FLAT_WRITE_VALUES[flat_name]
-    setattr(instance, flat_name, new_value)
-    assert getattr(instance, flat_name) == new_value
-    assert getattr(getattr(instance, sub_name), flat_name) == new_value
+    with pytest.raises(AttributeError):
+        getattr(instance, flat_name)
 
 
-def test_sub_struct_swap_visible_via_flat_read() -> None:
-    """Reassigning a whole sub-struct propagates to flat reads.
+def test_sub_struct_reassignment_replaces_via_dataclass_replace() -> None:
+    """Facade-level ``dataclasses.replace`` substitutes a sub-struct wholesale.
 
-    Exercises the "sub-struct write" side of the D.14 both-patterns
-    contract: a caller that has migrated to sub-struct construction
-    (``instance.missing = MissingPolicy(batch_size=99, ...)``) still
-    stays consistent with flat readers that have not migrated yet.
+    :class:`Instance` is frozen; per-sub-struct updates flow
+    through :func:`dataclasses.replace` on the facade.  Peer
+    sub-structs stay identity-equal under the replacement because
+    ``replace`` copies unspecified fields by reference.
     """
     instance = _minimal_instance()
-    assert instance.batch_size == 2  # baseline from _minimal_instance
-    instance.missing = MissingPolicy(batch_size=99)
-    assert instance.batch_size == 99
-    assert instance.missing.batch_size == 99
-
-
-def test_sub_struct_swap_isolated_to_its_group() -> None:
-    """Swapping one sub-struct does not disturb the others.
-
-    A sub-struct assignment must not implicitly reset peer sub-structs;
-    the facade stores them as seven independent fields.
-    """
-    instance = _minimal_instance()
-    original_core = instance.core
     original_schedule = instance.schedule
-    instance.missing = MissingPolicy(batch_size=50)
-    assert instance.core is original_core
-    assert instance.schedule is original_schedule
+    rebuilt = dataclasses.replace(instance, missing=MissingPolicy(batch_size=99))
+    assert rebuilt.missing.batch_size == 99
+    # Peer sub-structs stay untouched under the reassignment.
+    assert rebuilt.schedule is original_schedule
 
 
-def test_pre_refactor_instance_field_count_via_flat_accessors() -> None:
-    """The D.14 facade exposes exactly 40 flat accessors after PR22.
+def test_sub_struct_partial_update_via_nested_replace() -> None:
+    """Nested ``replace`` is the canonical per-field write on a frozen facade.
 
-    Canary that the facade migration did not quietly grow or shrink
-    the flat surface.  :data:`FLAT_TO_SUB` is the authoritative
-    encoding of that surface; bumping it requires a deliberate update
-    with a matching accessor pair on :class:`Instance`.  PR22 added
-    ``upgrade_series_window_size`` for per-instance Sonarr/Whisparr-v2
-    upgrade-pool window tuning, taking the count from 39 to 40.
+    The sub-structs are frozen and the facade is frozen; the only
+    legitimate per-field write is a :func:`dataclasses.replace` round
+    trip on the owning sub-struct, wrapped in another ``replace`` on
+    the facade.
     """
-    assert len(FLAT_TO_SUB) == 40
     instance = _minimal_instance()
-    for flat_name in FLAT_TO_SUB:
-        assert hasattr(instance, flat_name)
+    rebuilt = dataclasses.replace(
+        instance, missing=dataclasses.replace(instance.missing, batch_size=7)
+    )
+    assert rebuilt.missing.batch_size == 7
+
+
+def _minimal_instance() -> Instance:
+    """Construct a minimal Instance using only sub-struct kwargs.
+
+    The sub-structs with all-defaulted fields (MissingPolicy,
+    CutoffPolicy, UpgradePolicy, SchedulePolicy, RuntimeSnapshot) are
+    default-constructed.  InstanceCore and InstanceTimestamps carry
+    required fields that the test must supply; the values match the
+    ``_make_instance`` test fixture shape so the assertion helpers
+    remain portable across suites.
+    """
+    return Instance(
+        core=InstanceCore(
+            id=1,
+            name="Test",
+            type=InstanceType.sonarr,
+            url="http://sonarr:8989",
+            api_key="plaintext-key",
+        ),
+        missing=MissingPolicy(),
+        cutoff=CutoffPolicy(),
+        upgrade=UpgradePolicy(),
+        schedule=SchedulePolicy(),
+        snapshot=RuntimeSnapshot(),
+        timestamps=InstanceTimestamps(
+            created_at="2024-01-01T00:00:00Z",
+            updated_at="2024-01-02T00:00:00Z",
+        ),
+    )

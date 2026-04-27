@@ -15,7 +15,8 @@ function initLogsPage() {
   const LIVE_META = document.getElementById('live-meta');
   const BANNER = document.getElementById('new-entries');
   const BANNER_COUNT = document.getElementById('new-entries-count');
-  const TOAST = document.getElementById('toast');
+  const BANNER_NOUN = document.getElementById('new-entries-noun');
+  const showToast = window.houndarrShowToast || function () {};
 
   if (!FEED || !FORM) {
     return;
@@ -39,10 +40,6 @@ function initLogsPage() {
     };
 
   const reducedMotionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
-
-  // ---------------------------------------------------------------------
-  // Timestamp formatting
-  // ---------------------------------------------------------------------
 
   function formatRelTime(isoTs) {
     if (!isoTs) return '';
@@ -68,13 +65,10 @@ function initLogsPage() {
     });
   }
 
-  // ---------------------------------------------------------------------
   // Expand / collapse with JS-driven max-height.  Matches the admin
   // panel pattern in settings.js: measure scrollHeight on open, pin
   // the value inline, flip to max-height:none after transitionend so
   // the card can grow on window resize without a second JS pass.
-  // ---------------------------------------------------------------------
-
   function applyExpand(article, open, animate = true) {
     const body = article.querySelector('.cycle__body');
     const header = article.querySelector('.cycle__header');
@@ -171,10 +165,6 @@ function initLogsPage() {
     { signal },
   );
 
-  // ---------------------------------------------------------------------
-  // Copy split button
-  // ---------------------------------------------------------------------
-
   const COPY_COLS = [
     'timestamp',
     'instance',
@@ -257,26 +247,9 @@ function initLogsPage() {
         .join('\n');
     }
 
-    // Default: tsv
     const header = COPY_COLS.map(safeTsv).join('\t');
     const body = rows.map((r) => COPY_COLS.map((c) => safeTsv(r[c] || '')).join('\t'));
     return [header, ...body].join('\n');
-  }
-
-  let toastTimer = null;
-
-  function showToast(message) {
-    if (!TOAST) return;
-    const label = TOAST.querySelector('.toast__label');
-    if (label) label.textContent = message;
-    TOAST.hidden = false;
-    if (toastTimer !== null) {
-      clearTimeout(toastTimer);
-    }
-    toastTimer = window.setTimeout(() => {
-      TOAST.hidden = true;
-      toastTimer = null;
-    }, 2400);
   }
 
   async function writeClipboard(text) {
@@ -503,6 +476,7 @@ function initLogsPage() {
     const show = pendingCount > 0 && scrolledAway;
     if (show) {
       if (BANNER_COUNT) BANNER_COUNT.textContent = String(pendingCount);
+      if (BANNER_NOUN) BANNER_NOUN.textContent = pendingCount === 1 ? 'cycle' : 'cycles';
       BANNER.hidden = false;
       BANNER.dataset.visible = 'true';
       LIVE?.setAttribute('data-state', 'paused');
@@ -585,10 +559,6 @@ function initLogsPage() {
     { signal },
   );
 
-  // ---------------------------------------------------------------------
-  // HTMX lifecycle
-  // ---------------------------------------------------------------------
-
   document.body.addEventListener(
     'htmx:afterSwap',
     (ev) => {
@@ -608,7 +578,6 @@ function initLogsPage() {
     { signal },
   );
 
-  // Initial apply
   formatVisibleTimestamps(document);
   applyExpandState(FEED);
   updateLiveMeta(null);

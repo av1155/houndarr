@@ -1,12 +1,12 @@
 """Pin the SearchCandidate byte-shape produced by every adapter.
 
-Track A.21 of the refactor plan.  Track C.7-C.9 will extract shared
-adapt_missing / adapt_cutoff / fetch_upgrade_pool templates in
-``engine/adapters/_common.py``.  These tests snapshot the exact
-SearchCandidate each of the six adapters returns today for an
-already-released item, so the template extraction cannot silently
-drift item_id, item_type, label shape, unreleased_reason, group_key,
-or search_payload.
+The six adapters share ``adapt_missing`` / ``adapt_cutoff`` /
+``fetch_upgrade_pool`` templates in
+:mod:`houndarr.engine.adapters._common`.  These tests snapshot the
+exact :class:`SearchCandidate` each adapter returns for an
+already-released item so a later template edit cannot silently
+drift ``item_id``, ``item_type``, the label shape,
+``unreleased_reason``, ``group_key``, or ``search_payload``.
 """
 
 from __future__ import annotations
@@ -138,9 +138,7 @@ def _whisparr_v3_movie() -> MissingWhisparrV3Movie:
     )
 
 
-# ---------------------------------------------------------------------------
 # Radarr
-# ---------------------------------------------------------------------------
 
 
 class TestRadarrAdapter:
@@ -160,9 +158,7 @@ class TestRadarrAdapter:
         assert radarr_adapt_cutoff(movie, inst) == radarr_adapt_missing(movie, inst)
 
 
-# ---------------------------------------------------------------------------
 # Sonarr
-# ---------------------------------------------------------------------------
 
 
 class TestSonarrAdapter:
@@ -197,9 +193,7 @@ class TestSonarrAdapter:
         assert cand.search_payload["command"] == "EpisodeSearch"
 
 
-# ---------------------------------------------------------------------------
 # Lidarr
-# ---------------------------------------------------------------------------
 
 
 class TestLidarrAdapter:
@@ -216,9 +210,7 @@ class TestLidarrAdapter:
         assert cand.item_type == "album"
 
 
-# ---------------------------------------------------------------------------
 # Readarr
-# ---------------------------------------------------------------------------
 
 
 class TestReadarrAdapter:
@@ -235,9 +227,7 @@ class TestReadarrAdapter:
         assert cand.item_type == "book"
 
 
-# ---------------------------------------------------------------------------
 # Whisparr v2
-# ---------------------------------------------------------------------------
 
 
 class TestWhisparrV2Adapter:
@@ -254,9 +244,7 @@ class TestWhisparrV2Adapter:
         assert cand.item_type == "whisparr_v2_episode"
 
 
-# ---------------------------------------------------------------------------
 # Whisparr v3
-# ---------------------------------------------------------------------------
 
 
 class TestWhisparrV3Adapter:

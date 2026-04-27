@@ -307,10 +307,10 @@ async def fetch_reconcile_sets(client: ReadarrClient, instance: Instance) -> Rec
     cutoff_items = await paginate_wanted(client.get_cutoff_unmet)
     missing_set = _book_leaf_pairs(missing_items)
     cutoff_set = _book_leaf_pairs(cutoff_items)
-    if instance.readarr_search_mode != ReadarrSearchMode.book:
+    if instance.missing.readarr_search_mode != ReadarrSearchMode.book:
         missing_set = missing_set | _author_synth_pairs(missing_items)
     upgrade_set: frozenset[tuple[str, int]] = frozenset()
-    if instance.upgrade_enabled:
+    if instance.upgrade.upgrade_enabled:
         upgrade_candidates = [
             adapt_upgrade(item, instance) for item in await fetch_upgrade_pool(client, instance)
         ]
@@ -340,8 +340,6 @@ class ReadarrAdapter:
     Conforms to :class:`~houndarr.engine.adapters.protocols.AppAdapterProto`
     structurally via the eight staticmethod attributes below; the
     module-level functions remain importable for direct unit-test use.
-    Track C.10 introduces this class form to replace the prior
-    ``AppAdapter`` dataclass-of-callables registry shape.
     """
 
     adapt_missing = staticmethod(adapt_missing)

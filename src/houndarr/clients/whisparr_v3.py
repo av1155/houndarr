@@ -6,15 +6,16 @@ does not expose ``/api/v3/wanted/missing`` or ``/api/v3/wanted/cutoff``
 endpoints.  Missing and cutoff-unmet items are identified by fetching the
 full library via ``GET /api/v3/movie`` and filtering client-side.
 
-Outlier status (Track C.6).  Sonarr, Radarr, Lidarr, Readarr, and
-Whisparr v2 all collapsed onto the
+Outlier status.  Sonarr, Radarr, Lidarr, Readarr, and Whisparr v2
+share the
 :meth:`~houndarr.clients.base.ArrClient._fetch_wanted_page` /
-:meth:`~houndarr.clients.base.ArrClient._fetch_wanted_total` template
-in C.1 - C.5; this module deliberately does not.  No paginated
-``/wanted`` endpoint exists upstream, so the four ``_WANTED_*`` hooks
-on the base ABC stay at their defaults (``_WANTED_ENVELOPE`` is
-``None``); calling :meth:`~ArrClient._fetch_wanted_page` here would
-raise :class:`NotImplementedError` by design.
+:meth:`~houndarr.clients.base.ArrClient._fetch_wanted_total`
+template on the base ABC; this module deliberately does not.  No
+paginated ``/wanted`` endpoint exists upstream, so the four
+``_WANTED_*`` hooks on the base ABC stay at their defaults
+(``_WANTED_ENVELOPE`` is ``None``); calling
+:meth:`~ArrClient._fetch_wanted_page` here would raise
+:class:`NotImplementedError` by design.
 
 Instead, this client fetches the entire library once per client
 lifetime and filters in memory: missing = ``monitored and not
@@ -25,7 +26,7 @@ list rather than triggering further network calls.
 
 The cache lives on ``self._movie_cache`` and survives for the
 context manager's lifetime (one search pass).  This keeps the
-missing pass, the cutoff pass, and the wanted-total probe from
+upgrade pass, the missing pass, and the dashboard snapshot from
 each issuing their own ``/api/v3/movie`` request.
 """
 
@@ -34,9 +35,15 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 import httpx
+from pydantic import ValidationError
 
 from houndarr.clients._wire_models import WhisparrV3LibraryMovie
 from houndarr.clients.base import ArrClient, WantedKind
+from houndarr.errors import (
+    ClientHTTPError,
+    ClientTransportError,
+    ClientValidationError,
+)
 
 __all__ = ["LibraryWhisparrV3Movie", "MissingWhisparrV3Movie", "WhisparrV3Client"]
 
@@ -188,10 +195,35 @@ class WhisparrV3Client(ArrClient):
         because there is no ``/wanted`` endpoint to probe here; the
         total is derived from the cached ``/api/v3/movie`` payload.
 
-        Reuses :meth:`_get_all_movies` (one fetch per client lifetime) so the
-        probe does not trigger an extra network call during a pass.
+        Reuses :meth:`_get_all_movies` (one fetch per client lifetime) so
+        the probe does not trigger an extra network call during a pass.
+
+        Raw ``httpx`` and ``pydantic`` failures from the first (uncached)
+        ``_get_all_movies`` call are wrapped in typed
+        :class:`~houndarr.errors.ClientError` subclasses; once the cache
+        is populated subsequent calls are pure Python and cannot raise.
+
+        Raises:
+            ClientHTTPError: Non-2xx response from ``/api/v3/movie``.
+            ClientTransportError: Transport failure (connect, timeout,
+                malformed URL, etc.).
+            ClientValidationError: Any movie in the response failed
+                wire-model validation.
         """
-        movies = await self._get_all_movies()
+        path = "/api/v3/movie"
+        try:
+            movies = await self._get_all_movies()
+        except httpx.HTTPStatusError as exc:
+            raise ClientHTTPError(
+                f"wanted total: HTTP {exc.response.status_code} from {path}"
+            ) from exc
+        except (httpx.RequestError, httpx.InvalidURL) as exc:
+            raise ClientTransportError(
+                f"wanted total: transport error reaching {path}: {exc}"
+            ) from exc
+        except ValidationError as exc:
+            raise ClientValidationError(f"wanted total: malformed payload from {path}") from exc
+
         if kind == "missing":
             return sum(1 for m in movies if m.monitored and not m.has_file)
         count = 0

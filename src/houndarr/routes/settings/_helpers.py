@@ -18,13 +18,6 @@ from fastapi.responses import HTMLResponse
 
 from houndarr import __version__
 from houndarr.auth import resolve_signed_in_as
-from houndarr.clients.base import ArrClient
-from houndarr.clients.lidarr import LidarrClient
-from houndarr.clients.radarr import RadarrClient
-from houndarr.clients.readarr import ReadarrClient
-from houndarr.clients.sonarr import SonarrClient
-from houndarr.clients.whisparr_v2 import WhisparrV2Client
-from houndarr.clients.whisparr_v3 import WhisparrV3Client
 from houndarr.config import (
     DEFAULT_ALLOWED_TIME_WINDOW,
     DEFAULT_BATCH_SIZE,
@@ -43,37 +36,50 @@ from houndarr.config import (
     DEFAULT_WHISPARR_V2_SEARCH_MODE,
     get_settings,
 )
-from houndarr.routes._htmx import is_hx_request
+from houndarr.routes._htmx import (
+    hx_retarget_response,
+    hx_trigger_response,
+    is_hx_request,
+)
 from houndarr.routes._templates import get_templates
 from houndarr.services.instance_validation import (
+    API_KEY_UNCHANGED,
     ConnectionCheck,
     SearchModes,
+    build_client,
+    check_connection,
     resolve_search_modes,
     type_mismatch_message,
     validate_cutoff_controls,
     validate_upgrade_controls,
 )
 from houndarr.services.instances import (
+    CutoffPolicy,
     Instance,
+    InstanceCore,
+    InstanceTimestamps,
     InstanceType,
     LidarrSearchMode,
+    MissingPolicy,
     ReadarrSearchMode,
+    RuntimeSnapshot,
+    SchedulePolicy,
     SearchOrder,
     SonarrSearchMode,
+    UpgradePolicy,
     WhisparrV2SearchMode,
     active_error_instance_ids,
     list_instances,
 )
 
-# Re-exported from houndarr.services.instance_validation so existing
-# imports from this module keep working; D.11 moved the real definitions
-# into the service layer.
+# Re-exports from houndarr.services.instance_validation so existing
+# route-layer imports through this module keep working.  The real
+# definitions now live in the service so instance_submit can depend
+# on the service layer instead of reaching back into routes.
 __all__ = [
     "API_KEY_UNCHANGED",
-    "ArrClient",
     "ConnectionCheck",
     "SearchModes",
-    "active_error_instance_ids",
     "blank_instance",
     "build_client",
     "check_connection",
@@ -89,9 +95,6 @@ __all__ = [
 ]
 
 logger = logging.getLogger(__name__)
-
-API_KEY_UNCHANGED = "__UNCHANGED__"
-"""Sentinel sent back in the edit form to indicate the stored key is kept."""
 
 
 def render(
@@ -114,81 +117,63 @@ def render(
 
 
 def master_key(request: Request) -> bytes:
-    """Return the Fernet master key stored on ``app.state``."""
-    return request.app.state.master_key  # type: ignore[no-any-return]
+    """Return the Fernet master key stored on ``app.state``.
+
+    Thin wrapper over :func:`houndarr.deps.get_master_key` so the
+    legacy helper call site (``render_settings_page``) inherits the
+    same 503 "Master key unavailable" failure class that the
+    Depends-migrated routes already use.  The direct
+    ``request.app.state.master_key`` read this replaced would have
+    returned ``None`` or a wrongly-typed value during a lifespan
+    race (factory-reset window, misconfigured test harness) and
+    pushed the failure into the Fernet layer as a less actionable
+    error; routing through the shim keeps the behaviour
+    symmetrical across the routes tree.
+    """
+    from houndarr.deps import get_master_key
+
+    return get_master_key(request)
 
 
 def blank_instance() -> Instance:
     """Return an Instance pre-filled with defaults for the add-form partial."""
     return Instance(
-        id=0,
-        name="",
-        type=InstanceType.radarr,
-        url="",
-        api_key="",
-        enabled=True,
-        batch_size=DEFAULT_BATCH_SIZE,
-        sleep_interval_mins=DEFAULT_SLEEP_INTERVAL_MINUTES,
-        hourly_cap=DEFAULT_HOURLY_CAP,
-        cooldown_days=DEFAULT_COOLDOWN_DAYS,
-        post_release_grace_hrs=DEFAULT_POST_RELEASE_GRACE_HOURS,
-        queue_limit=DEFAULT_QUEUE_LIMIT,
-        cutoff_enabled=False,
-        cutoff_batch_size=DEFAULT_CUTOFF_BATCH_SIZE,
-        cutoff_cooldown_days=DEFAULT_CUTOFF_COOLDOWN_DAYS,
-        cutoff_hourly_cap=DEFAULT_CUTOFF_HOURLY_CAP,
-        sonarr_search_mode=SonarrSearchMode(DEFAULT_SONARR_SEARCH_MODE),
-        lidarr_search_mode=LidarrSearchMode(DEFAULT_LIDARR_SEARCH_MODE),
-        readarr_search_mode=ReadarrSearchMode(DEFAULT_READARR_SEARCH_MODE),
-        whisparr_v2_search_mode=WhisparrV2SearchMode(DEFAULT_WHISPARR_V2_SEARCH_MODE),
-        created_at="",
-        updated_at="",
-        allowed_time_window=DEFAULT_ALLOWED_TIME_WINDOW,
-        search_order=SearchOrder(DEFAULT_SEARCH_ORDER),
-    )
-
-
-_CLIENT_CONSTRUCTORS: dict[InstanceType, type[ArrClient]] = {
-    InstanceType.radarr: RadarrClient,
-    InstanceType.sonarr: SonarrClient,
-    InstanceType.lidarr: LidarrClient,
-    InstanceType.readarr: ReadarrClient,
-    InstanceType.whisparr_v2: WhisparrV2Client,
-    InstanceType.whisparr_v3: WhisparrV3Client,
-}
-
-
-def build_client(instance_type: InstanceType, url: str, api_key: str) -> ArrClient:
-    """Construct the *arr client matching *instance_type*."""
-    client_cls = _CLIENT_CONSTRUCTORS.get(instance_type)
-    if client_cls is None:
-        msg = f"No client for instance type: {instance_type!r}"
-        raise ValueError(msg)
-    return client_cls(url=url, api_key=api_key)
-
-
-async def check_connection(
-    instance_type: InstanceType,
-    url: str,
-    api_key: str,
-) -> ConnectionCheck:
-    """Test connectivity and identify the remote *arr application.
-
-    Kept here (and not in :mod:`houndarr.services.instance_validation`)
-    because it performs a live HTTP probe through the client layer;
-    the validation service stays pure.  The returned
-    :class:`ConnectionCheck` is the service type so callers only see
-    one dataclass for the connection-probe result.
-    """
-    client = build_client(instance_type, url, api_key)
-    async with client:
-        status = await client.ping()
-    if status is None:
-        return ConnectionCheck(reachable=False)
-    return ConnectionCheck(
-        reachable=True,
-        app_name=status.app_name,
-        version=status.version,
+        core=InstanceCore(
+            id=0,
+            name="",
+            type=InstanceType.radarr,
+            url="",
+            api_key="",
+            enabled=True,
+        ),
+        missing=MissingPolicy(
+            batch_size=DEFAULT_BATCH_SIZE,
+            sleep_interval_mins=DEFAULT_SLEEP_INTERVAL_MINUTES,
+            hourly_cap=DEFAULT_HOURLY_CAP,
+            cooldown_days=DEFAULT_COOLDOWN_DAYS,
+            post_release_grace_hrs=DEFAULT_POST_RELEASE_GRACE_HOURS,
+            queue_limit=DEFAULT_QUEUE_LIMIT,
+            sonarr_search_mode=SonarrSearchMode(DEFAULT_SONARR_SEARCH_MODE),
+            lidarr_search_mode=LidarrSearchMode(DEFAULT_LIDARR_SEARCH_MODE),
+            readarr_search_mode=ReadarrSearchMode(DEFAULT_READARR_SEARCH_MODE),
+            whisparr_v2_search_mode=WhisparrV2SearchMode(DEFAULT_WHISPARR_V2_SEARCH_MODE),
+        ),
+        cutoff=CutoffPolicy(
+            cutoff_enabled=False,
+            cutoff_batch_size=DEFAULT_CUTOFF_BATCH_SIZE,
+            cutoff_cooldown_days=DEFAULT_CUTOFF_COOLDOWN_DAYS,
+            cutoff_hourly_cap=DEFAULT_CUTOFF_HOURLY_CAP,
+        ),
+        upgrade=UpgradePolicy(),
+        schedule=SchedulePolicy(
+            allowed_time_window=DEFAULT_ALLOWED_TIME_WINDOW,
+            search_order=SearchOrder(DEFAULT_SEARCH_ORDER),
+        ),
+        snapshot=RuntimeSnapshot(),
+        timestamps=InstanceTimestamps(
+            created_at="",
+            updated_at="",
+        ),
     )
 
 
@@ -196,23 +181,25 @@ def connection_status_response(message: str, ok: bool, status_code: int) -> HTML
     """Render the inline connection-test status snippet for HTMX swap."""
     trigger = "houndarr-connection-test-success" if ok else "houndarr-connection-test-failure"
     color = "text-green-400" if ok else "text-red-400"
-    return HTMLResponse(
-        content=f'<span class="text-xs {color}">{html.escape(message)}</span>',
-        status_code=status_code,
-        headers={"HX-Trigger": trigger},
+    return hx_trigger_response(
+        HTMLResponse(
+            content=f'<span class="text-xs {color}">{html.escape(message)}</span>',
+            status_code=status_code,
+        ),
+        trigger,
     )
 
 
 def connection_guard_response(message: str) -> HTMLResponse:
     """Re-target an error to the connection status span when a save is blocked."""
-    return HTMLResponse(
-        content=f'<span class="text-xs text-red-400">{html.escape(message)}</span>',
-        status_code=422,
-        headers={
-            "HX-Retarget": "#instance-connection-status",
-            "HX-Reswap": "innerHTML",
-            "HX-Trigger": "houndarr-connection-test-failure",
-        },
+    return hx_retarget_response(
+        HTMLResponse(
+            content=f'<span class="text-xs text-red-400">{html.escape(message)}</span>',
+            status_code=422,
+        ),
+        target="#instance-connection-status",
+        reswap="innerHTML",
+        trigger="houndarr-connection-test-failure",
     )
 
 
@@ -224,7 +211,7 @@ async def render_settings_page(
     account_success: str | None = None,
 ) -> HTMLResponse:
     """Render the settings page with common account and instance context."""
-    from houndarr.database import get_setting
+    from houndarr.repositories.settings import get_setting
 
     instances = await list_instances(master_key=master_key(request))
     error_ids = await active_error_instance_ids()

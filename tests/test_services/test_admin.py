@@ -70,7 +70,7 @@ async def seeded_instances(db: None) -> AsyncGenerator[list[int], None]:
         batch_size=50,
         hourly_cap=20,
     )
-    yield [inst1.id, inst2.id]
+    yield [inst1.core.id, inst2.core.id]
 
 
 # ---------------------------------------------------------------------------
@@ -91,25 +91,25 @@ async def test_reset_all_instance_policy_reverts_columns(
     await reset_all_instance_policy(master_key=_MASTER_KEY, supervisor=None)
     inst = await get_instance(seeded_instances[0], master_key=_MASTER_KEY)
     assert inst is not None
-    assert inst.batch_size == DEFAULT_BATCH_SIZE
-    assert inst.sleep_interval_mins == DEFAULT_SLEEP_INTERVAL_MINUTES
-    assert inst.hourly_cap == DEFAULT_HOURLY_CAP
-    assert inst.cooldown_days == DEFAULT_COOLDOWN_DAYS
-    assert inst.post_release_grace_hrs == DEFAULT_POST_RELEASE_GRACE_HOURS
-    assert inst.queue_limit == DEFAULT_QUEUE_LIMIT
-    assert inst.cutoff_enabled is False
-    assert inst.cutoff_batch_size == DEFAULT_CUTOFF_BATCH_SIZE
-    assert inst.cutoff_cooldown_days == DEFAULT_CUTOFF_COOLDOWN_DAYS
-    assert inst.cutoff_hourly_cap == DEFAULT_CUTOFF_HOURLY_CAP
-    assert inst.upgrade_enabled is False
-    assert inst.upgrade_batch_size == DEFAULT_UPGRADE_BATCH_SIZE
-    assert inst.upgrade_cooldown_days == DEFAULT_UPGRADE_COOLDOWN_DAYS
-    assert inst.upgrade_hourly_cap == DEFAULT_UPGRADE_HOURLY_CAP
-    assert inst.allowed_time_window == ""
-    assert inst.missing_page_offset == 1
-    assert inst.cutoff_page_offset == 1
-    assert inst.upgrade_item_offset == 0
-    assert inst.upgrade_series_offset == 0
+    assert inst.missing.batch_size == DEFAULT_BATCH_SIZE
+    assert inst.missing.sleep_interval_mins == DEFAULT_SLEEP_INTERVAL_MINUTES
+    assert inst.missing.hourly_cap == DEFAULT_HOURLY_CAP
+    assert inst.missing.cooldown_days == DEFAULT_COOLDOWN_DAYS
+    assert inst.missing.post_release_grace_hrs == DEFAULT_POST_RELEASE_GRACE_HOURS
+    assert inst.missing.queue_limit == DEFAULT_QUEUE_LIMIT
+    assert inst.cutoff.cutoff_enabled is False
+    assert inst.cutoff.cutoff_batch_size == DEFAULT_CUTOFF_BATCH_SIZE
+    assert inst.cutoff.cutoff_cooldown_days == DEFAULT_CUTOFF_COOLDOWN_DAYS
+    assert inst.cutoff.cutoff_hourly_cap == DEFAULT_CUTOFF_HOURLY_CAP
+    assert inst.upgrade.upgrade_enabled is False
+    assert inst.upgrade.upgrade_batch_size == DEFAULT_UPGRADE_BATCH_SIZE
+    assert inst.upgrade.upgrade_cooldown_days == DEFAULT_UPGRADE_COOLDOWN_DAYS
+    assert inst.upgrade.upgrade_hourly_cap == DEFAULT_UPGRADE_HOURLY_CAP
+    assert inst.schedule.allowed_time_window == ""
+    assert inst.schedule.missing_page_offset == 1
+    assert inst.schedule.cutoff_page_offset == 1
+    assert inst.upgrade.upgrade_item_offset == 0
+    assert inst.upgrade.upgrade_series_offset == 0
 
 
 @pytest.mark.asyncio()
@@ -119,11 +119,11 @@ async def test_reset_all_instance_policy_preserves_identity(
     await reset_all_instance_policy(master_key=_MASTER_KEY, supervisor=None)
     inst = await get_instance(seeded_instances[0], master_key=_MASTER_KEY)
     assert inst is not None
-    assert inst.name == "Sonarr 4K"
-    assert inst.type is InstanceType.sonarr
-    assert inst.url == "http://sonarr:8989"
-    assert inst.api_key == "sonarr-key"  # Decrypted round-trip still works
-    assert inst.enabled is True
+    assert inst.core.name == "Sonarr 4K"
+    assert inst.core.type is InstanceType.sonarr
+    assert inst.core.url == "http://sonarr:8989"
+    assert inst.core.api_key == "sonarr-key"  # Decrypted round-trip still works
+    assert inst.core.enabled is True
 
 
 @pytest.mark.asyncio()
@@ -290,12 +290,16 @@ async def test_factory_reset_deletes_files_and_reinits(
 async def test_factory_reset_propagates_reinit_failure(
     tmp_data_dir: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """If the in-process re-init raises, the exception bubbles to the
-    route layer. The route layer's hybrid fallback then schedules a
-    process exit so the orchestrator restarts the container; on next
-    boot the empty data dir drops into first-run. No sentinel file is
-    written: the container restart is the recovery mechanism.
+    """If the in-process re-init raises, the exception surfaces as a typed
+    :class:`~houndarr.errors.ServiceError` with the original on
+    ``__cause__``.  The route layer's hybrid fallback then schedules
+    a process exit so the orchestrator restarts the container; on
+    next boot the empty data dir drops into first-run.  No sentinel
+    file is written: the container restart is the recovery
+    mechanism.
     """
+    from houndarr.errors import ServiceError
+
     db_path = os.path.join(tmp_data_dir, "houndarr.db")
     set_db_path(db_path)
     from houndarr.database import init_db as _real_init_db
@@ -310,8 +314,13 @@ async def test_factory_reset_propagates_reinit_failure(
 
     monkeypatch.setattr("houndarr.services.admin.init_db", _boom)
 
-    with pytest.raises(RuntimeError, match="init_db blew up"):
+    with pytest.raises(ServiceError) as exc_info:
         await factory_reset(app=fake_app, data_dir=tmp_data_dir)
+
+    # Typed wrap: the original RuntimeError lives on __cause__ so the
+    # observability hook still sees the underlying shape.
+    assert isinstance(exc_info.value.__cause__, RuntimeError)
+    assert "init_db blew up" in str(exc_info.value.__cause__)
 
     # The on-disk DB and masterkey are already wiped (the file-delete
     # step ran before init_db), so a container restart lands on first-run.

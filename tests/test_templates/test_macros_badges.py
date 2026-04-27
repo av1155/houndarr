@@ -1,14 +1,16 @@
-"""Byte-equal render pinning for `_macros/badges.html`.
+"""Byte-equal output pinning for each macro in `_macros/badges.html`.
 
-E.2 through E.4 migrate consumer templates to these macros.  Every
-class string, label, and branch label emitted here is asserted
-verbatim so the migration diffs cannot silently drop a utility
-class, reorder attributes, or rename a label that CSS or the HTMX
-client depends on.
+Each test invokes a single macro in isolation and asserts the exact
+bytes Jinja emits.  The macros use ``{%- ... -%}`` whitespace
+control that ambient template indentation does not have, so
+consumer-level pinning lives in ``test_pinned_render.py`` and
+matches on class-string substrings, which is what CSS and the
+HTMX client actually depend on.
 
-Each assertion targets the exact byte sequence Jinja produces when
-the macro is invoked with a given value, including whitespace-free
-concatenation of adjacent spans in the ``status_pill`` output.
+What the assertions here lock down is every class string, label,
+and branch of every macro, including unmapped strings and ``None``,
+so a future edit cannot silently drop a utility class, reorder
+attributes, rename a label, or change a fallback.
 """
 
 from __future__ import annotations

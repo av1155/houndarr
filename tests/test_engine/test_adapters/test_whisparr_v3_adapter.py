@@ -28,7 +28,19 @@ from houndarr.engine.adapters.whisparr_v3 import (
     fetch_upgrade_pool,
 )
 from houndarr.engine.candidates import SearchCandidate
-from houndarr.services.instances import Instance, InstanceType, SonarrSearchMode
+from houndarr.services.instances import (
+    CutoffPolicy,
+    Instance,
+    InstanceCore,
+    InstanceTimestamps,
+    InstanceType,
+    MissingPolicy,
+    RuntimeSnapshot,
+    SchedulePolicy,
+    SearchOrder,
+    SonarrSearchMode,
+    UpgradePolicy,
+)
 
 _NOW_ISO = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 _OLD_RELEASE = "2020-01-15T00:00:00Z"
@@ -37,25 +49,36 @@ _FUTURE_RELEASE = "2099-06-01T00:00:00Z"
 
 def _make_instance(*, post_release_grace_hrs: int = 6) -> Instance:
     return Instance(
-        id=1,
-        name="Whisparr V3 Test",
-        type=InstanceType.whisparr_v3,
-        url="http://whisparr:6969",
-        api_key="test-key",
-        enabled=True,
-        batch_size=5,
-        sleep_interval_mins=30,
-        hourly_cap=4,
-        cooldown_days=14,
-        post_release_grace_hrs=post_release_grace_hrs,
-        queue_limit=0,
-        cutoff_enabled=False,
-        cutoff_batch_size=1,
-        cutoff_cooldown_days=21,
-        cutoff_hourly_cap=1,
-        created_at="2024-01-01T00:00:00Z",
-        updated_at="2024-01-01T00:00:00Z",
-        sonarr_search_mode=SonarrSearchMode.episode,
+        core=InstanceCore(
+            id=1,
+            name="Whisparr V3 Test",
+            type=InstanceType.whisparr_v3,
+            url="http://whisparr:6969",
+            api_key="test-key",
+            enabled=True,
+        ),
+        missing=MissingPolicy(
+            batch_size=5,
+            sleep_interval_mins=30,
+            hourly_cap=4,
+            cooldown_days=14,
+            post_release_grace_hrs=post_release_grace_hrs,
+            queue_limit=0,
+            sonarr_search_mode=SonarrSearchMode.episode,
+        ),
+        cutoff=CutoffPolicy(
+            cutoff_enabled=False,
+            cutoff_batch_size=1,
+            cutoff_cooldown_days=21,
+            cutoff_hourly_cap=1,
+        ),
+        upgrade=UpgradePolicy(),
+        schedule=SchedulePolicy(search_order=SearchOrder.chronological),
+        snapshot=RuntimeSnapshot(),
+        timestamps=InstanceTimestamps(
+            created_at="2024-01-01T00:00:00Z",
+            updated_at="2024-01-01T00:00:00Z",
+        ),
     )
 
 

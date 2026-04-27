@@ -10,11 +10,10 @@ import pytest_asyncio
 from fastapi.testclient import TestClient
 
 import houndarr.auth as _auth_mod
-import houndarr.config as _cfg
 from houndarr.auth import CSRF_COOKIE_NAME
-from houndarr.clients._wire_models.common import SystemStatus
+from houndarr.clients._wire_models import SystemStatus
 from houndarr.clients.base import ArrClient
-from houndarr.config import AppSettings
+from houndarr.config import AppSettings, bootstrap_settings
 from houndarr.database import get_db
 from tests.conftest import csrf_headers
 
@@ -64,13 +63,12 @@ def _proxy_csrf(client: TestClient) -> str:
 
 @pytest.fixture()
 def proxy_settings(tmp_data_dir: str) -> AppSettings:
-    settings = AppSettings(
+    settings = bootstrap_settings(
         data_dir=tmp_data_dir,
         auth_mode="proxy",
         auth_proxy_header=_AUTH_HEADER,
         trusted_proxies=_TRUSTED_IP,
     )
-    _cfg._runtime_settings = settings  # noqa: SLF001
     _auth_mod._serializer = None  # noqa: SLF001
     _auth_mod._setup_complete = None  # noqa: SLF001
     _auth_mod._login_attempts.clear()  # noqa: SLF001

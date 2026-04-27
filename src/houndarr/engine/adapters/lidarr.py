@@ -317,10 +317,10 @@ async def fetch_reconcile_sets(client: LidarrClient, instance: Instance) -> Reco
     cutoff_items = await paginate_wanted(client.get_cutoff_unmet)
     missing_set = _album_leaf_pairs(missing_items)
     cutoff_set = _album_leaf_pairs(cutoff_items)
-    if instance.lidarr_search_mode != LidarrSearchMode.album:
+    if instance.missing.lidarr_search_mode != LidarrSearchMode.album:
         missing_set = missing_set | _artist_synth_pairs(missing_items)
     upgrade_set: frozenset[tuple[str, int]] = frozenset()
-    if instance.upgrade_enabled:
+    if instance.upgrade.upgrade_enabled:
         upgrade_candidates = [
             adapt_upgrade(item, instance) for item in await fetch_upgrade_pool(client, instance)
         ]
@@ -350,8 +350,6 @@ class LidarrAdapter:
     Conforms to :class:`~houndarr.engine.adapters.protocols.AppAdapterProto`
     structurally via the eight staticmethod attributes below; the
     module-level functions remain importable for direct unit-test use.
-    Track C.10 introduces this class form to replace the prior
-    ``AppAdapter`` dataclass-of-callables registry shape.
     """
 
     adapt_missing = staticmethod(adapt_missing)

@@ -1080,7 +1080,7 @@ async def test_set_and_get_setting(db: None) -> None:
 
 @pytest.mark.asyncio()
 async def test_get_setting_missing_key_returns_none(db: None) -> None:
-    """get_setting returns None when key not found; callers compose any fallback."""
+    """Missing keys return ``None``; callers compose the fallback themselves."""
     value = await get_setting("nonexistent_key")
     assert value is None
 

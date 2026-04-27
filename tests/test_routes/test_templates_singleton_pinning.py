@@ -1,10 +1,11 @@
 """Pinning tests for the centralised Jinja2Templates singleton.
 
-Locks the Track D.7 contract: the five route packages that render
-HTML now share a single :class:`fastapi.templating.Jinja2Templates`
-instance (built lazily by :func:`houndarr.routes._templates.get_templates`)
-with both custom filters (``timeago``, ``changelog_bullet``) wired
-in.  These tests fence:
+Locks the shared-singleton contract: the five route packages that
+render HTML share a single
+:class:`fastapi.templating.Jinja2Templates` instance (built lazily
+by :func:`houndarr.routes._templates.get_templates`) with both
+custom filters (``timeago``, ``changelog_bullet``) wired in.
+These tests fence:
 
 - The singleton invariant: every route package returns the same
   underlying templates object.
@@ -54,7 +55,6 @@ def test_changelog_bullet_filter_is_registered() -> None:
 
 
 @pytest.mark.pinning()
-@pytest.mark.skip(reason="`timeago` filter ships with PR23's routes.update_check module.")
 def test_timeago_filter_is_registered() -> None:
     """``timeago`` is a registered Jinja filter on the shared env."""
     templates = get_templates()
@@ -95,7 +95,6 @@ def test_changelog_module_uses_shared_templates() -> None:
 
 
 @pytest.mark.pinning()
-@pytest.mark.skip(reason="`routes.update_check` module ships with PR23.")
 def test_update_check_module_uses_shared_templates() -> None:
     """routes.update_check.get_templates is the same callable as the shared one."""
     from houndarr.routes import update_check

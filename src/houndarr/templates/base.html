@@ -72,7 +72,6 @@
          hamburger hides.  Explicit col-start anchors keep col 3 right-
          aligned even when col 2 collapses to zero width. #}
       <div class="grid grid-cols-[1fr_auto_1fr] items-center h-16 sm:h-14 gap-4 sm:gap-6">
-        <!-- Col 1: brand -->
         {% call hx.hx_shell_fetch('/', class_='col-start-1 justify-self-start -ml-1 flex items-center gap-2 text-brand-400 font-semibold text-lg leading-none hover:text-brand-300 transition-colors') -%}
           <img
             src="/static/img/houndarr-logo-dark.png"
@@ -82,7 +81,6 @@
           Houndarr
         {%- endcall %}
 
-        <!-- Col 2: pill container (desktop only) -->
         <div class="pill-nav hidden sm:inline-flex col-start-2 justify-self-center">
           {% with nav_variant = 'pill' %}
             {% include "partials/shell_nav_links.html" %}
@@ -140,6 +138,13 @@
   <div id="mobile-nav-backdrop" class="sm:hidden fixed inset-0 z-40 mobile-nav-backdrop" aria-hidden="true"></div>
   {% endif %}
 
+  {# Window-scoped overlay thumb driven by app.js; replaces the hidden
+     native scrollbar (see app.css for why native is hidden). Modal
+     bars are injected per-dialog by a separate IIFE. #}
+  <div class="hx-scrollbar hx-scrollbar--window" aria-hidden="true">
+    <div class="hx-scrollbar__thumb"></div>
+  </div>
+
   <!-- Flash messages: Station left-border style -->
   {%- import "_macros/alerts.html" as alerts -%}
   {% if flash_error %}
@@ -153,6 +158,14 @@
   <main id="app-content" class="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
     {% block content %}{% endblock %}
   </main>
+
+  {# Global bottom-center toast.  Used by logs.js for the copy-as-TSV
+     feedback and by anything that dispatches a `houndarr-toast`
+     custom event (HX-Trigger response header or direct JS call via
+     window.houndarrShowToast). #}
+  <div class="toast" id="toast" role="status" aria-live="polite" hidden>
+    <span class="toast__label"></span>
+  </div>
 
   <!-- Footer -->
   <footer class="border-t border-border-subtle py-4 text-xs text-slate-500">
@@ -181,11 +194,20 @@
   {% endif %}
 
   <script src="/static/js/app.js?v={{ version }}"></script>
-  <script src="/static/js/auth.js?v={{ version }}"></script>
+  <script src="/static/js/hx-dialog.js?v={{ version }}"></script>
+  <script src="/static/js/hx-scrollbar.js?v={{ version }}"></script>
   <script src="/static/js/tooltip.js?v={{ version }}"></script>
+  <script src="/static/js/settings.js?v={{ version }}"></script>
   <script src="/static/js/dashboard.js?v={{ version }}"></script>
   <script src="/static/js/logs.js?v={{ version }}"></script>
   <script src="/static/js/changelog.js?v={{ version }}"></script>
+  {# auth.js powers password show/hide, caps-lock badge, and strength
+     meter. Login / setup templates load it themselves (they render
+     without the nav shell); elsewhere we ship it from base so the
+     Admin > Security form reuses the same primitives as /login. #}
+  {% if show_nav is not defined or show_nav %}
+  <script src="/static/js/auth.js?v={{ version }}"></script>
+  {% endif %}
 
 </body>
 </html>

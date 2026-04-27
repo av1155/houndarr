@@ -24,21 +24,18 @@
                  invokes `caller(form_id)` so the body can use
                  the computed id without recomputing it.
 
-  HIGH RISK per plan section 6: every data-* attribute, HTMX
-  swap target, hx-* attribute, and rendered class string here
-  must stay byte-equal to the pre-refactor consumer markup.  The
-  Track A.22 render-pinning suite and the Track A.23 HX header
-  parity tests both depend on this; substring-based matching
-  saves us from whitespace drift but a renamed attribute or a
-  dropped class would fail loudly.
+  HIGH RISK: every data-* attribute, HTMX swap target, hx-*
+  attribute, and rendered class string here is observed by the
+  render-pinning suite and the HX-header parity tests.  Changing
+  any one of them without updating the matching assertion fails
+  the pinning gate; a rename or a dropped class fails loudly.
 
   Macro-internal whitespace is pinned byte-equal by
-  tests/test_templates/test_macros_instances.py.  Post-migration
-  consumer HTML is not byte-equal to its pre-refactor form (the
-  status pill collapses from inline multi-line spans to the
-  single-line badges.status_pill output); browsers collapse
-  inter-tag whitespace between inline elements so the rendered
-  surface is identical.
+  tests/test_templates/test_macros_instances.py.  The status pill
+  renders on a single line via badges.status_pill; browsers
+  collapse inter-tag whitespace between inline elements so the
+  rendered surface stays identical to any pre-existing
+  multi-line consumer spelling.
 -#}
 
 
@@ -115,8 +112,8 @@
 
 {#- form_context: open / close the add-edit instance <form>.
 
-    Centralises the four derived strings the pre-refactor
-    instance_form.html computed inline at the top of the file.
+    Centralises the four derived strings (form_id, post_url,
+    target, swap) that the add-mode and edit-mode forms need.
     The form body comes from the call block and is invoked with
     `caller(form_id)` so the body can use the computed id
     without recomputing it from is_edit + instance_id.

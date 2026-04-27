@@ -27,7 +27,8 @@ from fastapi.responses import HTMLResponse, Response
 from markupsafe import Markup
 
 from houndarr import __version__
-from houndarr.database import get_setting, set_setting
+from houndarr.repositories.settings import get_setting, set_setting
+from houndarr.routes._htmx import hx_trigger_after_swap
 from houndarr.routes._templates import get_templates
 from houndarr.services.changelog import (
     ReleaseEntry,
@@ -189,10 +190,7 @@ async def popup(request: Request, force: int = 0) -> HTMLResponse:
             "manual": is_manual,
         },
     )
-    # After-Swap fires once the <dialog> is actually in the DOM; plain
-    # HX-Trigger fires before the swap, so getElementById would return null.
-    response.headers["HX-Trigger-After-Swap"] = "houndarr-show-changelog"
-    return response
+    return hx_trigger_after_swap(response, "houndarr-show-changelog")
 
 
 @router.post("/dismiss", response_class=Response)

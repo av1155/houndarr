@@ -14,7 +14,7 @@ import httpx
 import pytest
 import respx
 
-from houndarr.database import get_setting, set_setting
+from houndarr.repositories.settings import get_setting, set_setting
 from houndarr.services import update_check as uc
 
 _LATEST_BODY = {
@@ -290,14 +290,11 @@ async def test_update_available_false_for_dev_build_newer_than_latest(db: None) 
 async def test_repo_override_env_var(db: None, monkeypatch: pytest.MonkeyPatch) -> None:
     """HOUNDARR_UPDATE_CHECK_REPO redirects the check to a different
     owner/repo without any code change."""
-    from houndarr import config
+    from houndarr.config import bootstrap_settings
 
-    monkeypatch.setattr(
-        config,
-        "_runtime_settings",
-        None,
-    )
     monkeypatch.setenv("HOUNDARR_UPDATE_CHECK_REPO", "someone-else/fork")
+    # Clear any pinned settings so get_settings re-reads the env var above.
+    bootstrap_settings()
 
     respx.get(_url("someone-else/fork")).mock(return_value=httpx.Response(200, json=_LATEST_BODY))
     await uc.set_enabled(True)
@@ -315,11 +312,12 @@ async def test_repo_override_invalid_falls_back_to_default(
     """Malformed HOUNDARR_UPDATE_CHECK_REPO values fall back to the
     default upstream repo rather than sending a garbage path to the
     GitHub API."""
-    from houndarr import config
+    from houndarr.config import bootstrap_settings
 
-    monkeypatch.setattr(config, "_runtime_settings", None)
     # Missing slash, query-string injection, absolute URL: all rejected.
     monkeypatch.setenv("HOUNDARR_UPDATE_CHECK_REPO", "not-a-valid-slug")
+    # Clear any pinned settings so get_settings re-reads the env var above.
+    bootstrap_settings()
 
     # If the validator didn't fall back, the request would land on this
     # malformed URL and the default-repo mock would never be hit.
@@ -329,6 +327,28 @@ async def test_repo_override_invalid_falls_back_to_default(
     status = await uc.get_update_status(force=False)
 
     assert status.latest_version == "2.0.0"
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_refuses_non_github_html_url(db: None) -> None:
+    """A payload whose html_url is not on https://github.com/ is refused
+    so a compromised upstream response cannot land a javascript: or
+    data: URL in the Admin panel's release link."""
+    poisoned = {
+        **_LATEST_BODY,
+        "html_url": "javascript:alert(1)",
+    }
+    respx.get(_url()).mock(return_value=httpx.Response(200, json=poisoned))
+
+    await uc.set_enabled(True)
+    status = await uc.get_update_status(force=True)
+
+    # Refused: release URL must not have been persisted; error marker set.
+    assert status.release_url is None
+    assert status.latest_version is None
+    last_error = await get_setting(uc.KEY_LAST_ERROR_AT)
+    assert last_error != ""
 
 
 def test_parse_version_handles_v_prefix() -> None:

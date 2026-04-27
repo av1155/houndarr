@@ -505,13 +505,18 @@ def test_password_change_hx_refresh_recovers_csrf(
     finally so a failure mid-test doesn't lock subsequent tests out of
     the shared container.
     """
-    # Webkit logs htmx event names (htmx:afterRequest, htmx:sendError) to
-    # console.error when an HTMX request is aborted by HX-Refresh's
-    # location.reload() mid-flight.  Chromium and firefox squelch the
-    # already-aborted request without surfacing it.  The test itself
-    # passes in all three browsers; whitelist the noise so the autouse
-    # console_guard does not flag the teardown on webkit.
+    # Webkit emits two extra console errors during this test that
+    # chromium and firefox squelch.  The test logic passes in all
+    # three browsers; whitelist the noise so the autouse console_guard
+    # does not flag teardown on webkit:
+    #
+    # 1. htmx:afterRequest / htmx:sendError fire when HX-Refresh's
+    #    location.reload() aborts an in-flight HTMX request.
+    # 2. A "pageerror: ... due to access control checks" pageerror
+    #    fires when the changelog popup fetches its content during
+    #    the post-reload navigation.
     console_guard.allow(r"htmx:(afterRequest|sendError)")
+    console_guard.allow(r"due to access control checks")
 
     page = logged_in_page
     original_password = "CITestPass1!"

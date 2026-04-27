@@ -423,7 +423,11 @@
 }
 
 /* Instance accent bar on the left edge; colour comes from the inline
-   --cycle-accent custom property the template sets per article. */
+   --cycle-accent custom property the template sets per article.
+   z-index keeps the bar above .entry:hover's background, which is
+   painted by an inner block element that would otherwise paint over
+   the absolutely-positioned bar and visibly hide the accent on
+   hovered rows. */
 .cycle::before {
   content: "";
   position: absolute;
@@ -433,6 +437,7 @@
   width: 3px;
   background: var(--cycle-accent, var(--color-text-subtle));
   opacity: 0.8;
+  z-index: 1;
 }
 .cycle--system::before { opacity: 0.35; }
 

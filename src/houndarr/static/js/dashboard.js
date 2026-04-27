@@ -378,16 +378,25 @@ function initDashboardPage() {
     // unknown kind so render sites can drop the icon entirely without
     // a wrapper element leaking into the layout.
     function searchKindIcon(kind) {
-      const label = kind === 'missing' ? 'Missing search'
-        : kind === 'cutoff' ? 'Cutoff search'
-        : kind === 'upgrade' ? 'Upgrade search'
+      // Allowlist-narrow `kind` to one of the three known literals before
+      // it ever reaches the data-kind attribute interpolation below.  An
+      // unknown kind collapses to '', the !label guard short-circuits,
+      // and no SVG is emitted, matching the documented "drop the icon
+      // entirely" behaviour for unknown values.  Closes the CodeQL
+      // js/xss-through-dom path where /api/status JSON's
+      // recent_searches[i].search_kind would otherwise flow into the
+      // attribute unsanitised.
+      const safeKind = kind === 'missing' || kind === 'cutoff' || kind === 'upgrade' ? kind : '';
+      const label = safeKind === 'missing' ? 'Missing search'
+        : safeKind === 'cutoff' ? 'Cutoff search'
+        : safeKind === 'upgrade' ? 'Upgrade search'
         : '';
       if (!label) return '';
       const path =
-        kind === 'missing' ? '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>'
-        : kind === 'cutoff' ? '<circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/>'
+        safeKind === 'missing' ? '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>'
+        : safeKind === 'cutoff' ? '<circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/>'
         : '<path d="M12 19V5"/><path d="m5 12 7-7 7 7"/>';
-      return `<svg class="kind-icon" data-kind="${kind}" role="img" aria-label="${label}" title="${label}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${path}</svg>`;
+      return `<svg class="kind-icon" data-kind="${safeKind}" role="img" aria-label="${label}" title="${label}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${path}</svg>`;
     }
 
     function renderRecentHunts(recentSearches) {

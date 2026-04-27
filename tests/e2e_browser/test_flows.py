@@ -491,7 +491,9 @@ _EXPECTED_500_CONSOLE_NOISE = [
 
 
 @pytest.mark.integration
-def test_password_change_hx_refresh_recovers_csrf(logged_in_page: Page, houndarr_url: str) -> None:
+def test_password_change_hx_refresh_recovers_csrf(
+    logged_in_page: Page, houndarr_url: str, console_guard
+) -> None:
     """After a successful password change the server sets HX-Refresh so the
     tab reloads and re-stamps hx-headers with the rotated CSRF cookie.
     Without that reload, the next mutating HTMX request would 403 because
@@ -503,6 +505,14 @@ def test_password_change_hx_refresh_recovers_csrf(logged_in_page: Page, houndarr
     finally so a failure mid-test doesn't lock subsequent tests out of
     the shared container.
     """
+    # Webkit logs htmx event names (htmx:afterRequest, htmx:sendError) to
+    # console.error when an HTMX request is aborted by HX-Refresh's
+    # location.reload() mid-flight.  Chromium and firefox squelch the
+    # already-aborted request without surfacing it.  The test itself
+    # passes in all three browsers; whitelist the noise so the autouse
+    # console_guard does not flag the teardown on webkit.
+    console_guard.allow(r"htmx:(afterRequest|sendError)")
+
     page = logged_in_page
     original_password = "CITestPass1!"
     temp_password = "TempCI999!"

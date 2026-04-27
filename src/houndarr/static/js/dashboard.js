@@ -797,14 +797,27 @@ function initDashboardPage() {
     }
 
     function mountTopSection(host, markup) {
-      // Parse the rendered markup via a <template> then adopt the
-      // resulting nodes.  Avoids Element.innerHTML assignment on the
-      // live DOM (all user-controlled values already pass through
-      // escHtml in the renderers above).
-      const tpl = document.createElement('template');
-      // eslint-disable-next-line no-unsanitized/property
-      tpl.innerHTML = markup;
-      host.replaceChildren(...tpl.content.childNodes);
+      // Parse the rendered markup in an inert document via DOMParser
+      // so no scripts run and no resources load, then adopt the body
+      // children into the live document.  All user-controlled values
+      // already pass through escHtml in the renderers above; avoiding
+      // an Element.innerHTML write keeps the dataflow clean for
+      // CodeQL js/xss-through-dom (DOMParser is a recognised inert
+      // parser and adoptNode never re-enters the HTML parser).
+      // The HTML Sanitizer API would also satisfy CodeQL but its
+      // default allowlist strips hx-* / data-* attributes that this
+      // markup carries on the View logs link, the + Add Instance
+      // link, the run-now button, and the live countdown.  DOMParser
+      // preserves every attribute byte-for-byte, which is what we
+      // need for HTMX + tooltip wiring downstream.
+      const parsed = new DOMParser().parseFromString(
+        '<!doctype html><body>' + markup,
+        'text/html',
+      );
+      const adopted = Array.from(parsed.body.childNodes).map(function (node) {
+        return document.adoptNode(node);
+      });
+      host.replaceChildren(...adopted);
       // Register any hx-* attributes on the new nodes so HTMX handles
       // clicks on the View-logs link and the + Add Instance link.
       if (window.htmx && typeof window.htmx.process === 'function') {

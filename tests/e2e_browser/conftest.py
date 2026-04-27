@@ -24,10 +24,21 @@ MOCK_RADARR_URL = os.environ.get("MOCK_RADARR_URL", "http://mock-radarr:7878")
 ADMIN_USER = os.environ.get("HOUNDARR_E2E_USER", "admin")
 ADMIN_PASS = os.environ.get("HOUNDARR_E2E_PASS", "CITestPass1!")
 
-# Console noise unrelated to any behaviour the suite verifies: Google
-# Fonts fetches abort in headless mode across every engine.
+# Console noise unrelated to any behaviour the suite verifies.
 _ALLOWED_ERROR_PATTERNS = [
+    # Google Fonts fetches abort in headless mode across every engine.
     re.compile(r"downloadable font: download failed"),
+    # Webkit logs the bare HTMX event names (htmx:afterRequest,
+    # htmx:sendError, htmx:responseError, htmx:swapError) to
+    # console.error when an in-flight HTMX request is aborted by
+    # location.reload() (e.g. HX-Refresh after a password change) or
+    # by webkit's own navigation handling.  Chromium and firefox
+    # squelch the same abort path silently.  The pagehide guard in
+    # static/js/app.js cancels future requests during unload, but the
+    # response that triggered the unload itself can still surface
+    # mid-flight; allow the bare event-name console errors so the
+    # autouse console_guard does not flag the teardown on webkit.
+    re.compile(r"^htmx:[A-Za-z]+(?:Error|Request|Swap|Send|Response)?$"),
 ]
 
 

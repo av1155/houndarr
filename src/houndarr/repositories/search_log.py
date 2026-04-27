@@ -1,19 +1,15 @@
 """Search-log aggregate: SQL boundary for the ``search_log`` table.
 
-Track D.6 lands the insert path and a minimal fetch surface matching
-the :class:`houndarr.protocols.SearchLogRepository` Protocol.  The
-engine's ``_write_log`` helper in :mod:`houndarr.engine.search_loop`
-delegates to :func:`insert_log_row`; the golden-log characterisation
-test in ``tests/test_engine/test_golden_search_log.py`` pins the
-column ordering and NULL-vs-value handling so the byte-equal
-invariant survives the migration.
-
-Track D.9 extracts a log-query service that will consume
-:func:`fetch_log_rows` for the ``/api/logs`` route; until then the
-route keeps its own dynamic SQL.  D.27 sweeps the remaining engine
-call sites for ``_write_log`` (the specialised ``fetch_recent_searches``
-and ``fetch_latest_missing_reason`` lookups currently living in
-:mod:`houndarr.engine.search_loop`) through the repository.
+Implements the :class:`houndarr.protocols.SearchLogRepository`
+contract plus the retention purge.  The engine's ``_write_log``
+helper in :mod:`houndarr.engine.search_loop` delegates to
+:func:`insert_log_row`; the golden-log characterisation test in
+``tests/test_engine/test_golden_search_log.py`` pins the column
+ordering and NULL-vs-value handling so the insert shape stays
+byte-equal.  The ``/api/logs`` route is backed by
+:mod:`houndarr.services.log_query`, which composes
+:func:`fetch_log_rows` with the filter and pagination logic the
+route needs.
 
 Timestamps: the ``search_log.timestamp`` column is a ``DEFAULT
 strftime(...)`` at the schema level, so inserts leave it untouched
@@ -230,6 +226,91 @@ async def fetch_recent_searches(
     return int(row[0]) if row else 0
 
 
+async def fetch_latest_missing_reason(
+    instance_id: int,
+    item_id: int,
+    item_type: str,
+) -> str | None:
+    """Return the ``reason`` from the most recent missing-pass log for *ref*.
+
+    Used by the release-timing retry branch in the engine search loop
+    to decide whether an item currently on cooldown should be retried
+    (because the last logged skip reason was pre-release or
+    post-release-grace, both of which can now have elapsed) or left
+    alone.
+
+    Args:
+        instance_id: Owning instance primary key.
+        item_id: *arr per-type item identifier.
+        item_type: ``ItemType`` string value (``"episode"``,
+            ``"season"``, ``"movie"``, ``"album"``, ``"book"``,
+            ``"author"``, ``"series"``, ``"artist"``).
+
+    Returns:
+        The ``reason`` column value from the newest matching row, or
+        ``None`` when no missing-pass row exists or the row's reason
+        is NULL.
+    """
+    async with get_db() as db:
+        async with db.execute(
+            """
+            SELECT reason
+            FROM search_log
+            WHERE instance_id = ?
+              AND item_id = ?
+              AND item_type = ?
+              AND search_kind = 'missing'
+            ORDER BY timestamp DESC, id DESC
+            LIMIT 1
+            """,
+            (instance_id, item_id, item_type),
+        ) as cur:
+            row = await cur.fetchone()
+    return str(row[0]) if row and row[0] is not None else None
+
+
+async def fetch_active_error_instance_ids() -> set[int]:
+    """Return the set of instance IDs whose newest log row is an error.
+
+    Used by the settings page to paint the per-row status dot red and
+    by the dashboard banner to flag active failures.  The window is
+    narrowed to the last 48 hours so the ``ROW_NUMBER()`` partition
+    only scans recent rows: an error that has not re-surfaced in two
+    days is stale for the "is this instance healthy right now?"
+    question, and a genuinely stuck instance writes fresh error rows
+    well inside that window.
+
+    The cutoff uses ``strftime('%Y-%m-%dT%H:%M:%fZ', ...)`` so the
+    boundary matches the stored column format exactly.  SQLite
+    compares TEXT lexicographically, and ``datetime('now',
+    '-2 days')`` returns a space-separated value; at position 10 of
+    the comparison that space (0x20) sorts below the stored value's
+    ``T`` (0x54), which would let same-calendar-day rows older than
+    48 hours slip through.  Matching formats makes the comparison a
+    pure ISO-8601 string compare and restores the advertised window.
+
+    Returns:
+        Set of instance IDs whose newest ``search_log`` row (within
+        the 48h window) has ``action='error'``.  Empty set when no
+        instance is currently failing.
+    """
+    sql = """
+    SELECT instance_id FROM (
+        SELECT instance_id, action,
+               ROW_NUMBER() OVER (
+                   PARTITION BY instance_id ORDER BY timestamp DESC, id DESC
+               ) AS rn
+        FROM search_log
+        WHERE timestamp >= strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-2 days')
+    )
+    WHERE rn = 1 AND action = 'error'
+    """
+    async with get_db() as db:
+        async with db.execute(sql) as cur:
+            rows = await cur.fetchall()
+    return {int(row["instance_id"]) for row in rows}
+
+
 async def delete_logs_for_instance(instance_id: int) -> int:
     """Delete every ``search_log`` row for *instance_id*.
 
@@ -254,6 +335,51 @@ async def delete_logs_for_instance(instance_id: int) -> int:
         )
         await db.commit()
         return cur.rowcount or 0
+
+
+async def delete_all_logs() -> int:
+    """Truncate the ``search_log`` table and return the removed row count.
+
+    Backs the Admin > Maintenance > Clear all logs action.  The audit
+    breadcrumb row ("Audit log cleared by admin ...") is written by
+    :func:`insert_admin_audit` after this returns, so the DELETE and
+    the follow-up INSERT are two separate statements against two
+    separate connections; that keeps the truncate a pure wipe and
+    lets concurrent supervisor writes interleave without corrupting
+    the breadcrumb row.
+
+    Returns:
+        Number of rows that were removed (excluding the breadcrumb,
+        which is written by the caller afterwards).
+    """
+    async with get_db() as db:
+        cur = await db.execute("DELETE FROM search_log")
+        await db.commit()
+        return cur.rowcount or 0
+
+
+async def insert_admin_audit(message: str) -> None:
+    """Insert a single system-audit row into ``search_log``.
+
+    Used by admin operations (policy reset, log clear, factory reset)
+    to leave a breadcrumb on the Activity logs page
+    (e.g. "Policy settings reset to defaults by admin").  The row is
+    attributed to ``cycle_trigger='system'`` and ``action='info'`` so
+    it sorts alongside the scheduler's lifecycle events rather than a
+    real search result.  ``instance_id`` is NULL because these are
+    library-wide operations, not per-instance.
+
+    Args:
+        message: Free-text audit message written to the ``message``
+            column verbatim.
+    """
+    async with get_db() as db:
+        await db.execute(
+            "INSERT INTO search_log (instance_id, cycle_trigger, action, message)"
+            " VALUES (NULL, 'system', 'info', ?)",
+            (message,),
+        )
+        await db.commit()
 
 
 async def purge_old_logs(retention_days: int) -> int:

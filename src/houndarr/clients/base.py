@@ -214,6 +214,7 @@ class ArrClient(ABC):
             headers={"X-Api-Key": api_key, "Accept": "application/json"},
             timeout=timeout,
             follow_redirects=False,
+            event_hooks={"response": [_redirect_guard]},
         )
 
     # Context-manager support

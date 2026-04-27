@@ -21,7 +21,7 @@ import httpx
 import pytest
 import respx
 
-from houndarr.clients.base import ArrClient, InstanceSnapshot, WantedKind
+from houndarr.clients.base import ArrClient, WantedKind
 
 pytestmark = pytest.mark.pinning
 

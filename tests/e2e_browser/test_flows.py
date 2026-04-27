@@ -11,8 +11,8 @@ import os
 import re
 import uuid
 from contextlib import suppress
+from pathlib import Path
 
-import pytest
 from playwright.sync_api import Locator, Page, expect
 
 _SCREENSHOTS_DIR = Path(__file__).resolve().parent / "_screenshots"

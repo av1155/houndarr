@@ -134,7 +134,7 @@ class InstanceValidationError(ServiceError):
 
     @property
     def public_message(self) -> str:
-        """Curated user-facing message safe to surface in HTTP responses.
+        """Return the curated user-facing string safe to surface in HTTP responses.
 
         Every raise site in this codebase constructs the exception with
         a single literal string argument (e.g. ``raise
@@ -144,6 +144,10 @@ class InstanceValidationError(ServiceError):
         leak in some Python builds.  Routes use this accessor so the
         guard banner cannot accidentally expose internal exception text
         even if a future raise site forgets to pass a curated string.
+
+        Returns:
+            ``str(args[0])`` when the exception was constructed with at
+            least one argument; the empty string otherwise.
         """
         if not self.args:
             return ""

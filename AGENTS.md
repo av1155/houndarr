@@ -73,6 +73,7 @@ just check      # all five gates, CI order
 just quick      # lint + type + non-integration pytest (fast feedback loop)
 just fix        # ruff check --fix + ruff format, in place
 just test-quick # pytest -m "not integration"
+just test-one tests/foo.py # filtered run (single file, single test, -k pattern)
 just test-integration  # pytest -m integration tests/test_e2e/
 just test-browser chromium  # Playwright e2e against a live stack
 just dev        # python -m houndarr --data-dir ./data-dev --dev
@@ -121,33 +122,23 @@ just capture-baselines   # produce + commit new PNG baselines
 just verify-baselines    # check committed baselines without re-capturing
 ```
 
-For one-off invocations that don't have a `just` recipe (single test
-file, keyword filter, coverage report) call `pytest` directly:
+Filtered runs (single file, single test, keyword expression, single
+directory) go through `just test-one`, which forwards every remaining
+argument to pytest under the same xdist parallelism + non-integration
+marker filter that `just test-quick` uses:
 
 ```bash
-# Single file
-.venv/bin/pytest tests/test_auth.py
-
-# Single test by name
-.venv/bin/pytest tests/test_auth.py::test_check_password_valid -v
-
-# Tests matching a keyword expression
-.venv/bin/pytest -k "csrf" -v
-
-# Single directory
-.venv/bin/pytest tests/test_services/
-
-# With coverage
-.venv/bin/pytest --cov=houndarr --cov-report=term-missing
+just test-one tests/test_auth.py                                       # single file
+just test-one tests/test_auth.py::test_verify_password_correct         # single test
+just test-one tests/test_services/                                     # single directory
+just -- test-one -k csrf -v                                            # keyword filter (pass -- when the first forwarded arg is a flag)
 ```
 
-For one-off invocations without a `just` recipe:
+Drop to `.venv/bin/pytest` directly only for invocations the
+recipes do not cover, e.g. coverage reports:
 
 ```bash
-.venv/bin/pytest tests/test_auth.py                                    # single file
-.venv/bin/pytest tests/test_auth.py::test_check_password_valid -v      # single test
-.venv/bin/pytest -k "csrf" -v                                          # keyword filter
-.venv/bin/pytest --cov=houndarr --cov-report=term-missing              # coverage
+.venv/bin/pytest --cov=houndarr --cov-report=term-missing
 ```
 
 ### Markers

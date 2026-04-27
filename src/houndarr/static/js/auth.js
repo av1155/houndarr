@@ -1,6 +1,14 @@
-/* Houndarr auth pages (login + setup) client behaviors:
- * password show/hide, caps-lock badge, password-strength meter,
- * submit-button loading state. */
+/* Houndarr password-form client behaviors, shared by the auth pages
+ * (login / setup) and the Admin > Security form on Settings:
+ *   - Password show/hide toggle          (data-pw-toggle)
+ *   - Caps-lock badge on password inputs (data-pw-input + .caps-badge)
+ *   - Password-strength meter            (data-strength-source + data-strength)
+ *   - Confirm-password match indicator   (data-pw-confirm + .pw-match)
+ *   - Submit-button loading state        (form[data-auth-form])
+ * Everything is data-attribute driven so the same module initialises on
+ * any page that includes the required markup, without requiring the
+ * .is-auth body class.
+ */
 
 (function () {
   'use strict';
@@ -19,9 +27,23 @@
   }
 
   function initCapsBadge(input) {
-    var wrap = input.closest('.input-wrap');
-    if (!wrap) return;
-    var badge = wrap.querySelector('.caps-badge');
+    // The caps-badge lives in one of two places depending on the form:
+    //   1. Inside the .input-wrap container (legacy auth layout).
+    //   2. Inside the .field container alongside the label (setup.html
+    //      and Admin > Security both follow this pattern; placing the
+    //      badge in the label keeps the input's trailing-icon area
+    //      uncluttered on narrow viewports).
+    // Walk outward from the input, scoping by .field so a badge in a
+    // neighbouring field does not flicker when this input is focused.
+    var field = input.closest('.field');
+    var badge = null;
+    if (field) {
+      badge = field.querySelector('.caps-badge');
+    }
+    if (!badge) {
+      var wrap = input.closest('.input-wrap');
+      if (wrap) badge = wrap.querySelector('.caps-badge');
+    }
     if (!badge) return;
     var update = function (e) {
       if (!e.getModifierState) return;
@@ -74,6 +96,37 @@
     update();
   }
 
+  function initConfirmPassword(input) {
+    // input has data-pw-confirm="<id-of-target-input>". On every input
+    // event we compare the two values and update the sibling .pw-match
+    // element so the Admin > Security form can preview whether the two
+    // password fields agree without a round trip.
+    var targetId = input.getAttribute('data-pw-confirm');
+    if (!targetId) return;
+    var target = document.getElementById(targetId);
+    if (!target) return;
+    var wrap = input.closest('.field') || input.parentElement;
+    var match = wrap ? wrap.querySelector('.pw-match') : null;
+    var update = function () {
+      if (!match) return;
+      match.classList.remove('is-match', 'is-mismatch');
+      if (!input.value) {
+        match.textContent = '\u00A0';
+        return;
+      }
+      if (input.value === target.value) {
+        match.textContent = '\u2713 Passwords match';
+        match.classList.add('is-match');
+      } else {
+        match.textContent = '\u2717 Passwords don\u2019t match';
+        match.classList.add('is-mismatch');
+      }
+    };
+    input.addEventListener('input', update);
+    target.addEventListener('input', update);
+    update();
+  }
+
   function initSubmitLoading(form) {
     form.addEventListener('submit', function () {
       var btn = form.querySelector('.station-button');
@@ -114,12 +167,23 @@
     form.addEventListener('input', dismissAlert);
   }
 
+  function initAll(root) {
+    root.querySelectorAll('[data-pw-toggle]').forEach(initPasswordToggle);
+    root.querySelectorAll('input[data-pw-input]').forEach(initCapsBadge);
+    root.querySelectorAll('input[data-pw-input][data-strength-source]').forEach(initStrengthMeter);
+    root.querySelectorAll('input[data-pw-confirm]').forEach(initConfirmPassword);
+    root.querySelectorAll('form[data-auth-form]').forEach(initSubmitLoading);
+    root.querySelectorAll('form[data-auth-form]').forEach(initErrorDismiss);
+  }
+
   document.addEventListener('DOMContentLoaded', function () {
-    document.querySelectorAll('[data-pw-toggle]').forEach(initPasswordToggle);
-    document.querySelectorAll('input[data-pw-input]').forEach(initCapsBadge);
-    var setupPw = document.querySelector('input[data-pw-input][data-strength-source]');
-    if (setupPw) initStrengthMeter(setupPw);
-    document.querySelectorAll('form[data-auth-form]').forEach(initSubmitLoading);
-    document.querySelectorAll('form[data-auth-form]').forEach(initErrorDismiss);
+    initAll(document);
+  });
+  // HTMX swaps partials into the Settings page without a full reload, so
+  // re-run the initializers when new password-form markup lands.
+  document.body.addEventListener('htmx:afterSwap', function (evt) {
+    if (evt.detail && evt.detail.target) {
+      initAll(evt.detail.target);
+    }
   });
 })();

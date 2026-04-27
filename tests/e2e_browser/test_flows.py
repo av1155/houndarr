@@ -376,6 +376,7 @@ def test_admin_security_confirm_password_match_indicator(
     """Typing a matching confirm-password paints the is-match indicator."""
     page = logged_in_page
     page.goto(f"{houndarr_url}/settings")
+    _open_admin_dropdown(page)
     page.locator("#new-password").fill("AnotherGood2!")
     page.locator("#confirm-password").fill("AnotherGood2!")
     expect(page.locator(".pw-match")).to_have_class(re.compile(r"is-match"))
@@ -433,8 +434,11 @@ def test_admin_factory_reset_phrase_gates_submit(logged_in_page: Page, houndarr_
     expect(confirm_go).to_be_disabled()
     page.locator("#confirm-phrase-input").fill("RESET")
     expect(confirm_go).to_be_enabled()
-    # Dismiss without submitting.
-    page.locator("[data-dismiss-confirm]").first.click()
+    # Dismiss without submitting.  The backdrop is sized to the dialog
+    # panel so the password input inside the panel intercepts a real
+    # cursor click; dispatch the event directly so the test does not
+    # depend on which child element a hit-test happens to land on.
+    page.locator("[data-dismiss-confirm]").first.dispatch_event("click")
     expect(page.locator("#confirm-dialog")).to_have_class(re.compile(r"hidden"))
 
 
@@ -450,10 +454,15 @@ def test_admin_factory_reset_wrong_password_flash(
     page.locator('button[data-confirm-reset="factory"]').click()
     page.locator("#confirm-phrase-input").fill("RESET")
     page.locator("#confirm-password-input").fill("WrongPassword123!")
+    # The Factory reset button lives below the fold inside the dialog on
+    # the headless browser viewports we run; scroll it into view before
+    # clicking so the action lands inside Playwright's stability window.
+    confirm_go = page.locator("#confirm-go")
+    confirm_go.scroll_into_view_if_needed()
     with page.expect_response(
         lambda r: "/settings/admin/factory-reset" in r.url and r.request.method == "POST"
     ) as resp_info:
-        page.locator("#confirm-go").click()
+        confirm_go.click()
     assert resp_info.value.status == 422, resp_info.value.status
     expect(page.locator("#admin-flash")).to_contain_text(
         re.compile(r"password is incorrect", re.I),
@@ -523,12 +532,15 @@ def test_password_change_hx_refresh_recovers_csrf(logged_in_page: Page, houndarr
         # request would hit the old CSRF token against the new session and
         # return 403 with no flash.
         page.goto(f"{houndarr_url}/settings")
+        _open_admin_dropdown(page)
         page.locator('button[data-confirm-reset="logs"]').click()
         expect(page.locator("#confirm-dialog")).not_to_have_class(re.compile(r"hidden"))
+        confirm_go = page.locator("#confirm-go")
+        confirm_go.scroll_into_view_if_needed()
         with page.expect_response(
             lambda r: "/settings/admin/clear-logs" in r.url and r.request.method == "POST"
         ) as clear_resp:
-            page.locator("#confirm-go").click()
+            confirm_go.click()
         assert clear_resp.value.status == 200, (
             f"post-rotation clear-logs returned {clear_resp.value.status}; "
             "HX-Refresh recovery failed; hx-headers is still carrying the "
@@ -560,6 +572,7 @@ def test_caps_lock_badge_toggles_with_modifier_state(
     """
     page = logged_in_page
     page.goto(f"{houndarr_url}/settings")
+    _open_admin_dropdown(page)
     section = page.locator("#admin-security")
     expect(section).to_be_visible()
 

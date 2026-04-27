@@ -97,7 +97,7 @@ function initDashboardPage() {
     //
     // These take the /api/status?v=2 envelope and emit HTML strings for
     // the four top-of-page widgets plus the section heading.  All
-    // dynamic values pass through escHtml so the result is safe to parse
+    // dynamic values pass through escapeHtml so the result is safe to parse
     // via a <template> and adopt into the live DOM.
 
     function formatTimeAgo(iso) {
@@ -163,7 +163,7 @@ function initDashboardPage() {
       if (instances.length === 0) {
         return `
 <section class="dash-sub">
-  <p class="dash-sub__eyebrow">${RADAR_ICON}<span>${escHtml(eyebrow)}</span></p>
+  <p class="dash-sub__eyebrow">${RADAR_ICON}<span>${escapeHtml(eyebrow)}</span></p>
   <h1 class="dash-sub__sentence">No hounds on patrol yet.</h1>
 </section>`;
       }
@@ -179,7 +179,7 @@ function initDashboardPage() {
         // once (a five-instance outage should not push "needs
         // attention" off the end of the viewport).
         const attn = failing.length === 1
-          ? `${escHtml(failing[0].name)} needs attention.`
+          ? `${escapeHtml(failing[0].name)} needs attention.`
           : `${failing.length} instances need attention.`;
         sentence = `${on} of ${total} hounds on patrol. <span class="attn">${attn}</span>`;
       } else {
@@ -189,7 +189,7 @@ function initDashboardPage() {
           .sort()
           .pop();
         const whenPart = recent
-          ? `Last dispatch ${escHtml(formatTimeAgo(recent))}.`
+          ? `Last dispatch ${escapeHtml(formatTimeAgo(recent))}.`
           : 'No recent dispatches.';
         // At active=0 (all instances disabled) and active=1 (exactly
         // one on patrol) the "All N hounds on patrol" phrasing reads
@@ -207,7 +207,7 @@ function initDashboardPage() {
       }
       return `
 <section class="dash-sub">
-  <p class="dash-sub__eyebrow">${RADAR_ICON}<span>${escHtml(eyebrow)}</span></p>
+  <p class="dash-sub__eyebrow">${RADAR_ICON}<span>${escapeHtml(eyebrow)}</span></p>
   <h1 class="dash-sub__sentence">${sentence}</h1>
 </section>`;
     }
@@ -215,14 +215,14 @@ function initDashboardPage() {
     function renderAlertMessage(msg) {
       // Wrap any http(s):// URL in the message in a <span class="mono"> so
       // it picks up the red monospace treatment from the preview. Each
-      // segment passes through escHtml so the final string is safe.
+      // segment passes through escapeHtml so the final string is safe.
       const text = msg || 'Could not reach instance';
       const match = text.match(/^(.*?)(https?:\/\/\S+)(.*)$/);
-      if (!match) return escHtml(text);
+      if (!match) return escapeHtml(text);
       const before = match[1];
       const url = match[2];
       const after = match[3];
-      return `${escHtml(before)}<span class="mono">${escHtml(url)}</span>${escHtml(after)}`;
+      return `${escapeHtml(before)}<span class="mono">${escapeHtml(url)}</span>${escapeHtml(after)}`;
     }
 
     function renderAlertRow(inst) {
@@ -242,9 +242,9 @@ function initDashboardPage() {
       const msg = err.message || '';
       return `
     <li class="dash-alert__row">
-      <strong>${escHtml(inst.name)}</strong><span class="muted">:</span>
+      <strong>${escapeHtml(inst.name)}</strong><span class="muted">:</span>
       ${renderAlertMessage(msg)}
-      <span class="dash-alert__row-meta"><span class="muted dash-alert__row-meta-lead">·</span> ${escHtml(failText)} <span class="muted">·</span> last ${escHtml(whenAgo || 'just now')}</span>
+      <span class="dash-alert__row-meta"><span class="muted dash-alert__row-meta-lead">·</span> ${escapeHtml(failText)} <span class="muted">·</span> last ${escapeHtml(whenAgo || 'just now')}</span>
     </li>`;
     }
 
@@ -345,7 +345,7 @@ function initDashboardPage() {
       <span class="dash-lh__stat-label">Unreleased</span>
     </span>
   </div>
-  <div class="dash-lh__bar" role="img" aria-label="${escHtml(ariaLabel)}">
+  <div class="dash-lh__bar" role="img" aria-label="${escapeHtml(ariaLabel)}">
     <div class="dash-lh__segment dash-lh__segment--eligible"   style="flex: ${eligible};"></div>
     <div class="dash-lh__segment dash-lh__segment--cooldown"   style="flex: ${totals.cooldown};"></div>
     <div class="dash-lh__segment dash-lh__segment--cutoff-cd"  style="flex: ${totals.cutoffCd};"></div>
@@ -406,9 +406,9 @@ function initDashboardPage() {
           return `
         <div class="dash-trail__row">
           ${searchKindIcon(r.search_kind)}
-          <span class="dash-trail__title">${escHtml(title)}</span>
-          <span class="dash-trail__inst" style="color: ${color};">${escHtml(r.instance_name)}</span>
-          <span class="dash-trail__when">${escHtml(formatTimeAgo(r.timestamp))}</span>
+          <span class="dash-trail__title">${escapeHtml(title)}</span>
+          <span class="dash-trail__inst" style="color: ${color};">${escapeHtml(r.instance_name)}</span>
+          <span class="dash-trail__when">${escapeHtml(formatTimeAgo(r.timestamp))}</span>
         </div>`;
         })
         .join('');
@@ -500,7 +500,7 @@ function initDashboardPage() {
         // and would otherwise swell to absorb the missing bar).
         const tip = `Hourly cap disabled for this instance. No ceiling on searches dispatched per hour.`;
         return `
-<div class="dash-card__budget dash-card__budget--unlimited" data-tip="${escHtml(tip)}">
+<div class="dash-card__budget dash-card__budget--unlimited" data-tip="${escapeHtml(tip)}">
   <dt class="dash-card__budget-label">Hourly budget</dt>
   <dd class="dash-card__budget-value">Unlimited</dd>
   <div class="dash-card__budget-bar" aria-hidden="true">
@@ -523,10 +523,10 @@ function initDashboardPage() {
         + `Missing cap ${hourlyCap}, cutoff cap ${inst.cutoff_enabled ? toNumber(inst.cutoff_hourly_cap) : 'off'}, `
         + `upgrade cap ${inst.upgrade_enabled ? toNumber(inst.upgrade_hourly_cap) : 'off'}.`;
       return `
-<div class="dash-card__budget" data-level="${level}"${atCap ? ' data-at-cap="true"' : ''} data-tip="${escHtml(tip)}">
+<div class="dash-card__budget" data-level="${level}"${atCap ? ' data-at-cap="true"' : ''} data-tip="${escapeHtml(tip)}">
   <dt class="dash-card__budget-label">Hourly budget</dt>
   <dd class="dash-card__budget-value">${used} / ${effectiveCap}</dd>
-  <div class="dash-card__budget-bar" role="img" aria-label="${escHtml(aria)}">
+  <div class="dash-card__budget-bar" role="img" aria-label="${escapeHtml(aria)}">
     <span class="dash-card__budget-fill" style="--budget-fill: ${pct.toFixed(1)}%;"></span>
   </div>
 </div>`;
@@ -565,8 +565,8 @@ function initDashboardPage() {
         return `
       <div class="dash-unlocks__row">
         ${searchKindIcon(row.last_search_kind)}
-        <span class="dash-unlocks__title">${escHtml(title)}</span>
-        <span class="dash-unlocks__time">${escHtml(formatTimeUntil(row.unlock_at))}</span>
+        <span class="dash-unlocks__title">${escapeHtml(title)}</span>
+        <span class="dash-unlocks__time">${escapeHtml(formatTimeUntil(row.unlock_at))}</span>
       </div>`;
       }).join('');
       return `
@@ -639,8 +639,8 @@ function initDashboardPage() {
       return chips.map(function (chip) {
         const dataState = chip.state ? ` data-state="${chip.state}"` : '';
         return `
-        <span class="dash-policy__chip" title="${escHtml(chip.tip)}">
-          <span class="dash-policy__label">${escHtml(chip.label)}</span><span class="dash-policy__value"${dataState}>${escHtml(chip.value)}</span>
+        <span class="dash-policy__chip" title="${escapeHtml(chip.tip)}">
+          <span class="dash-policy__label">${escapeHtml(chip.label)}</span><span class="dash-policy__value"${dataState}>${escapeHtml(chip.value)}</span>
         </span>`;
       }).join('');
     }
@@ -663,13 +663,13 @@ function initDashboardPage() {
       if (age <= SNAPSHOT_STALE_THRESHOLD_MS) return '';
       const label = `counts ${formatTimeAgo(ts)} old`;
       return `
-  <span class="dash-card__stale" title="Wanted / Eligible counts last refreshed ${escHtml(formatTimeAgo(ts))}. Normal refresh cadence is 10 minutes; longer gaps usually mean the *arr is unreachable.">
+  <span class="dash-card__stale" title="Wanted / Eligible counts last refreshed ${escapeHtml(formatTimeAgo(ts))}. Normal refresh cadence is 10 minutes; longer gaps usually mean the *arr is unreachable.">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
       <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/>
       <path d="M12 9v4"/>
       <path d="M12 17h.01"/>
     </svg>
-    <span>${escHtml(label)}</span>
+    <span>${escapeHtml(label)}</span>
   </span>`;
     }
 
@@ -680,10 +680,10 @@ function initDashboardPage() {
       const lastDispatch = inst.last_dispatch_at ? formatTimeAgo(inst.last_dispatch_at) : '';
       let footText;
       if (disabled) {
-        footText = `last dispatch ${escHtml(lastDispatch || 'never')} <span class="sep">·</span> paused`;
+        footText = `last dispatch ${escapeHtml(lastDispatch || 'never')} <span class="sep">·</span> paused`;
       } else if (offline) {
         const since = inst.active_error ? formatTimeAgo(inst.active_error.timestamp) : '';
-        footText = `offline since ${escHtml(since || 'just now')}`;
+        footText = `offline since ${escapeHtml(since || 'just now')}`;
       } else {
         const sleep = toNumber(inst.sleep_interval_mins);
         // Countdown anchor preference order:
@@ -705,9 +705,9 @@ function initDashboardPage() {
           || inst.last_activity_at
           || inst.last_dispatch_at
           || '';
-        footText = `last dispatch ${escHtml(lastDispatch || 'never')} <span class="sep">·</span>`
+        footText = `last dispatch ${escapeHtml(lastDispatch || 'never')} <span class="sep">·</span>`
           + ` next patrol <span data-next-patrol`
-          + ` data-anchor="${escHtml(anchor)}"`
+          + ` data-anchor="${escapeHtml(anchor)}"`
           + ` data-sleep-min="${sleep}">${sleep}m</span>`;
       }
       return `
@@ -729,7 +729,7 @@ function initDashboardPage() {
     function renderCard(inst) {
       const disabled = !inst.enabled;
       const offline = !disabled && !!inst.active_error;
-      const typeAttr = inst.type ? ` data-type="${escHtml(inst.type)}"` : '';
+      const typeAttr = inst.type ? ` data-type="${escapeHtml(inst.type)}"` : '';
       const disabledAttr = disabled ? ' data-disabled="true"' : '';
       const wantedVal = toNumber(inst.monitored_total);
       const bd = inst.cooldown_breakdown || { missing: 0, cutoff: 0, upgrade: 0 };
@@ -769,8 +769,8 @@ function initDashboardPage() {
 <article class="dash-card"${typeAttr}${disabledAttr}>
   <header class="dash-card__head">
     <div>
-      <p class="dash-card__eyebrow">${escHtml(typeEyebrowLabel(inst.type))}</p>
-      <p class="dash-card__name">${escHtml(inst.name)}</p>
+      <p class="dash-card__eyebrow">${escapeHtml(typeEyebrowLabel(inst.type))}</p>
+      <p class="dash-card__name">${escapeHtml(inst.name)}</p>
     </div>
     ${renderStatusPill(inst)}
   </header>
@@ -800,7 +800,7 @@ function initDashboardPage() {
       // Parse the rendered markup via a <template> then adopt the
       // resulting nodes.  Avoids Element.innerHTML assignment on the
       // live DOM (all user-controlled values already pass through
-      // escHtml in the renderers above).
+      // escapeHtml in the renderers above).
       const tpl = document.createElement('template');
       // eslint-disable-next-line no-unsanitized/property
       tpl.innerHTML = markup;
@@ -891,7 +891,7 @@ function initDashboardPage() {
       { signal },
     );
 
-    function escHtml(s) {
+    function escapeHtml(s) {
       return String(s)
         .replace(/&/g, '&amp;')
         .replace(/</g, '&lt;')

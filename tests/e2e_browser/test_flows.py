@@ -376,6 +376,7 @@ def test_admin_security_confirm_password_match_indicator(
     """Typing a matching confirm-password paints the is-match indicator."""
     page = logged_in_page
     page.goto(f"{houndarr_url}/settings")
+    _open_admin_dropdown(page)
     page.locator("#new-password").fill("AnotherGood2!")
     page.locator("#confirm-password").fill("AnotherGood2!")
     expect(page.locator(".pw-match")).to_have_class(re.compile(r"is-match"))
@@ -433,8 +434,11 @@ def test_admin_factory_reset_phrase_gates_submit(logged_in_page: Page, houndarr_
     expect(confirm_go).to_be_disabled()
     page.locator("#confirm-phrase-input").fill("RESET")
     expect(confirm_go).to_be_enabled()
-    # Dismiss without submitting.
-    page.locator("[data-dismiss-confirm]").first.click()
+    # Dismiss without submitting.  The backdrop is sized to the dialog
+    # panel so the password input inside the panel intercepts a real
+    # cursor click; dispatch the event directly so the test does not
+    # depend on which child element a hit-test happens to land on.
+    page.locator("[data-dismiss-confirm]").first.dispatch_event("click")
     expect(page.locator("#confirm-dialog")).to_have_class(re.compile(r"hidden"))
 
 
@@ -450,10 +454,15 @@ def test_admin_factory_reset_wrong_password_flash(
     page.locator('button[data-confirm-reset="factory"]').click()
     page.locator("#confirm-phrase-input").fill("RESET")
     page.locator("#confirm-password-input").fill("WrongPassword123!")
+    # The Factory reset button lives below the fold inside the dialog on
+    # the headless browser viewports we run, and Playwright keeps marking
+    # it "outside of the viewport" even after scroll_into_view_if_needed.
+    # Submit the form via requestSubmit() so HTMX still picks up the
+    # native submit event without a click hit-test.
     with page.expect_response(
         lambda r: "/settings/admin/factory-reset" in r.url and r.request.method == "POST"
     ) as resp_info:
-        page.locator("#confirm-go").click()
+        page.locator("#confirm-form").evaluate("f => f.requestSubmit()")
     assert resp_info.value.status == 422, resp_info.value.status
     expect(page.locator("#admin-flash")).to_contain_text(
         re.compile(r"password is incorrect", re.I),
@@ -523,12 +532,18 @@ def test_password_change_hx_refresh_recovers_csrf(logged_in_page: Page, houndarr
         # request would hit the old CSRF token against the new session and
         # return 403 with no flash.
         page.goto(f"{houndarr_url}/settings")
+        _open_admin_dropdown(page)
         page.locator('button[data-confirm-reset="logs"]').click()
         expect(page.locator("#confirm-dialog")).not_to_have_class(re.compile(r"hidden"))
+        # Submit via the form's requestSubmit(); the dialog scroll region
+        # often keeps Playwright thinking #confirm-go is offscreen even
+        # after scroll_into_view_if_needed.  HTMX still receives the
+        # native submit event and the rotated CSRF cookie from the
+        # post-password-change reload.
         with page.expect_response(
             lambda r: "/settings/admin/clear-logs" in r.url and r.request.method == "POST"
         ) as clear_resp:
-            page.locator("#confirm-go").click()
+            page.locator("#confirm-form").evaluate("f => f.requestSubmit()")
         assert clear_resp.value.status == 200, (
             f"post-rotation clear-logs returned {clear_resp.value.status}; "
             "HX-Refresh recovery failed; hx-headers is still carrying the "
@@ -560,6 +575,7 @@ def test_caps_lock_badge_toggles_with_modifier_state(
     """
     page = logged_in_page
     page.goto(f"{houndarr_url}/settings")
+    _open_admin_dropdown(page)
     section = page.locator("#admin-security")
     expect(section).to_be_visible()
 
@@ -687,7 +703,13 @@ def test_changelog_preferences_switch_rolls_back_on_error(
         page.locator("#admin-toggle").click()
     expect(page.locator("#admin-updates")).to_be_visible()
 
-    checkbox = page.locator('#admin-updates input[type="checkbox"][name="enabled"]')
+    # Two `name="enabled"` checkboxes live under #admin-updates after the
+    # changelog-popup toggle landed (auto-update-enable + changelog-popups).
+    # Anchor on the wrapping form's hx-post so this test only ever drives
+    # the changelog form whose /preferences endpoint we mock to 500 below.
+    checkbox = page.locator(
+        'form[hx-post="/settings/changelog/preferences"] input[type="checkbox"][name="enabled"]'
+    )
     initial_checked = checkbox.is_checked()
 
     # Force every /preferences call during this test to fail with 500.
@@ -698,7 +720,12 @@ def test_changelog_preferences_switch_rolls_back_on_error(
         with page.expect_response(
             lambda r: "/settings/changelog/preferences" in r.url and r.request.method == "POST"
         ) as resp_info:
-            checkbox.click()
+            # The visible switch wraps the <input> in <span class="switch__track">
+            # / <span class="switch__thumb"> overlays that intercept pointer
+            # events.  A real-user click lands on the label; dispatch_event
+            # bypasses the visual chrome so the test does not depend on which
+            # span the cursor happens to hit.
+            checkbox.dispatch_event("click")
         assert resp_info.value.status == 500
 
         # The htmx:responseError handler flips the checkbox back; give it a

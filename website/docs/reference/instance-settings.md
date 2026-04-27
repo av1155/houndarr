@@ -202,6 +202,20 @@ missing search mode.
 - Readarr: Book (default) or Author-context
 - Radarr, Whisparr v3: Always movie-level (no mode selection)
 
+### Upgrade Series Window (Sonarr / Whisparr v2 only)
+
+How many monitored series the upgrade pass samples per cycle. The
+series offset rotates by this amount each cycle, so the whole
+library cycles through over time.
+
+- Default: `5`
+- Range: `1` to `100`
+- Larger windows finish a full library rotation faster but make
+  every upgrade cycle hit more series at once. Raise this on a
+  large Sonarr library if you can absorb the higher per-cycle load
+  on the *arr instance.
+- No effect on Radarr, Whisparr v3, Lidarr, or Readarr.
+
 ### Offset-based rotation
 
 Applies when `Search Order` is `Chronological`. Persistent per-pass
@@ -265,6 +279,7 @@ Restricts scheduled cycles to one or more time-of-day windows.
 | Upgrade search | Off |
 | Upgrade Batch | `1` (hard cap: 5) |
 | Upgrade Cooldown | `90` (min: 7) |
+| Upgrade Series Window | `5` (range 1-100, Sonarr/Whisparr v2 only) |
 | Upgrade Cap | `1` (hard cap: 5) |
 
 ## Status control

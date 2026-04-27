@@ -135,6 +135,11 @@
   <p>Maximum successful upgrade searches per hour. Separate budget so the upgrade pass cannot starve missing or cutoff.</p>
   <p class="tip__hint">Default 1. Hard cap: 5. 0 disables the upgrade cap.</p>
 </template>
+<template id="tip-upgrade_series_window_size">
+  <p class="tip__eyebrow">Upgrade series window · Sonarr / Whisparr v2 only</p>
+  <p>How many monitored series the upgrade pass samples per cycle for Sonarr-shaped instances. The series offset rotates by this amount each cycle, so the whole library cycles through over time. Larger windows finish a full rotation faster but make every upgrade cycle hit more series at once.</p>
+  <p class="tip__hint">Default 5. Range 1 to 100. Has no effect on Radarr, Whisparr v3, Lidarr, or Readarr.</p>
+</template>
 <template id="tip-upgrade_sonarr_search_mode">
   <p class="tip__eyebrow">Sonarr upgrade search mode</p>
   <p>Strategy for upgrade-pass commands, independent of the missing mode. Episode fires per-episode; season-context groups by season for fewer, broader commands.</p>
@@ -438,6 +443,21 @@
                  class="{{ mono_input_cls }}" />
           <p class="mt-1.5 text-xs text-slate-600">Hard cap: 5. 0 = unlimited.</p>
         </div>
+      </div>
+      {# Sonarr / Whisparr v2 only: per-cycle series rotation window. #}
+      <div data-sonarr-or-whisparr-v2-only="true"
+           {% if instance.core.type.value not in ('sonarr', 'whisparr_v2') %}style="display:none;"{% endif %}>
+        {{ forms.form_field(
+            id=form_id ~ "-uwin",
+            name="upgrade_series_window_size",
+            type="number",
+            min=1, max=100,
+            value=instance.upgrade.upgrade_series_window_size,
+            data_default_value=defaults.upgrade.upgrade_series_window_size,
+            input_class=mono_input_cls,
+            label="Upgrade Series Window (per cycle)",
+            tip_ref="upgrade_series_window_size",
+        ) }}
       </div>
       {# Per-app upgrade search mode selectors #}
       <div data-sonarr-only="true"

@@ -259,6 +259,18 @@
           independent of the missing search mode. Radarr and Whisparr v3 always use movie-level search.
         </p>
       </div>
+      <div class="rounded-inset border border-border-subtle bg-surface-base/50 p-3">
+        <div class="flex items-center justify-between gap-3">
+          <h3 class="text-sm font-semibold text-slate-200">Upgrade Series Window</h3>
+          <span
+            class="text-[0.6875rem] px-2 py-0.5 rounded-full bg-brand-900/40 text-brand-200 border border-brand-800/40"
+            >Default: 5</span
+          >
+        </div>
+        <p class="mt-1 text-sm text-slate-300">
+          <strong>Sonarr / Whisparr v2 only.</strong> How many monitored series the upgrade pass samples per cycle. The series offset rotates by this amount each cycle, so the whole library cycles through over time. Larger windows finish a full rotation faster but make every upgrade cycle hit more series at once. Range: 1 to 100. Has no effect on Radarr, Whisparr v3, Lidarr, or Readarr.
+        </p>
+      </div>
     </div>
     <p class="mt-4 text-xs text-slate-400">
       Upgrade has its own budget, cooldown, and offset rotation so it does not compete with missing or cutoff searches. All three passes (missing, cutoff, upgrade) rotate through items across cycles.

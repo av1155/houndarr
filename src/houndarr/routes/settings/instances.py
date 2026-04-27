@@ -34,6 +34,7 @@ from houndarr.config import (
     DEFAULT_UPGRADE_HOURLY_CAP,
     DEFAULT_UPGRADE_LIDARR_SEARCH_MODE,
     DEFAULT_UPGRADE_READARR_SEARCH_MODE,
+    DEFAULT_UPGRADE_SERIES_WINDOW_SIZE,
     DEFAULT_UPGRADE_SONARR_SEARCH_MODE,
     DEFAULT_UPGRADE_WHISPARR_V2_SEARCH_MODE,
     DEFAULT_WHISPARR_V2_SEARCH_MODE,
@@ -182,6 +183,7 @@ async def instance_create(
     upgrade_whisparr_v2_search_mode: Annotated[str, Form()] = (
         DEFAULT_UPGRADE_WHISPARR_V2_SEARCH_MODE
     ),
+    upgrade_series_window_size: Annotated[int, Form()] = DEFAULT_UPGRADE_SERIES_WINDOW_SIZE,
     allowed_time_window: Annotated[str, Form()] = DEFAULT_ALLOWED_TIME_WINDOW,
     search_order: Annotated[str, Form()] = DEFAULT_SEARCH_ORDER,
     connection_verified: Annotated[str, Form()] = "false",
@@ -216,6 +218,7 @@ async def instance_create(
             upgrade_lidarr_search_mode=upgrade_lidarr_search_mode,
             upgrade_readarr_search_mode=upgrade_readarr_search_mode,
             upgrade_whisparr_v2_search_mode=upgrade_whisparr_v2_search_mode,
+            upgrade_series_window_size=upgrade_series_window_size,
             allowed_time_window=allowed_time_window,
             search_order=search_order,
             connection_verified=connection_verified == "true",
@@ -285,6 +288,7 @@ async def instance_update(
     upgrade_whisparr_v2_search_mode: Annotated[str, Form()] = (
         DEFAULT_UPGRADE_WHISPARR_V2_SEARCH_MODE
     ),
+    upgrade_series_window_size: Annotated[int, Form()] = DEFAULT_UPGRADE_SERIES_WINDOW_SIZE,
     allowed_time_window: Annotated[str, Form()] = DEFAULT_ALLOWED_TIME_WINDOW,
     search_order: Annotated[str, Form()] = DEFAULT_SEARCH_ORDER,
     connection_verified: Annotated[str, Form()] = "false",
@@ -326,6 +330,7 @@ async def instance_update(
             upgrade_lidarr_search_mode=upgrade_lidarr_search_mode,
             upgrade_readarr_search_mode=upgrade_readarr_search_mode,
             upgrade_whisparr_v2_search_mode=upgrade_whisparr_v2_search_mode,
+            upgrade_series_window_size=upgrade_series_window_size,
             allowed_time_window=allowed_time_window,
             search_order=search_order,
             connection_verified=connection_verified == "true",

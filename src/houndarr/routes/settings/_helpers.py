@@ -64,6 +64,7 @@ from houndarr.services.instances import (
     list_instances,
 )
 
+
 # active_error_instance_ids() is added by PR18 (f65e0bc).  Until it lands,
 # return an empty set so template `(active_error_ids or [])` checks
 # evaluate to "no instances in error" without breaking the call sites.

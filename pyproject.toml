@@ -141,5 +141,6 @@ asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 addopts = "-q --tb=short"
 markers = [
+    "integration: end-to-end tests (live mock *arr containers or Playwright browser driving)",
     "pinning: characterization tests that lock current behaviour (Track A; run via `just pin`)",
 ]

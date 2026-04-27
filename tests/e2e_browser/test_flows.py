@@ -455,14 +455,14 @@ def test_admin_factory_reset_wrong_password_flash(
     page.locator("#confirm-phrase-input").fill("RESET")
     page.locator("#confirm-password-input").fill("WrongPassword123!")
     # The Factory reset button lives below the fold inside the dialog on
-    # the headless browser viewports we run; scroll it into view before
-    # clicking so the action lands inside Playwright's stability window.
-    confirm_go = page.locator("#confirm-go")
-    confirm_go.scroll_into_view_if_needed()
+    # the headless browser viewports we run, and Playwright keeps marking
+    # it "outside of the viewport" even after scroll_into_view_if_needed.
+    # Submit the form via requestSubmit() so HTMX still picks up the
+    # native submit event without a click hit-test.
     with page.expect_response(
         lambda r: "/settings/admin/factory-reset" in r.url and r.request.method == "POST"
     ) as resp_info:
-        confirm_go.click()
+        page.locator("#confirm-form").evaluate("f => f.requestSubmit()")
     assert resp_info.value.status == 422, resp_info.value.status
     expect(page.locator("#admin-flash")).to_contain_text(
         re.compile(r"password is incorrect", re.I),
@@ -535,12 +535,15 @@ def test_password_change_hx_refresh_recovers_csrf(logged_in_page: Page, houndarr
         _open_admin_dropdown(page)
         page.locator('button[data-confirm-reset="logs"]').click()
         expect(page.locator("#confirm-dialog")).not_to_have_class(re.compile(r"hidden"))
-        confirm_go = page.locator("#confirm-go")
-        confirm_go.scroll_into_view_if_needed()
+        # Submit via the form's requestSubmit(); the dialog scroll region
+        # often keeps Playwright thinking #confirm-go is offscreen even
+        # after scroll_into_view_if_needed.  HTMX still receives the
+        # native submit event and the rotated CSRF cookie from the
+        # post-password-change reload.
         with page.expect_response(
             lambda r: "/settings/admin/clear-logs" in r.url and r.request.method == "POST"
         ) as clear_resp:
-            confirm_go.click()
+            page.locator("#confirm-form").evaluate("f => f.requestSubmit()")
         assert clear_resp.value.status == 200, (
             f"post-rotation clear-logs returned {clear_resp.value.status}; "
             "HX-Refresh recovery failed; hx-headers is still carrying the "

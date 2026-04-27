@@ -132,6 +132,23 @@ class InstanceValidationError(ServiceError):
     called.
     """
 
+    @property
+    def public_message(self) -> str:
+        """Curated user-facing message safe to surface in HTTP responses.
+
+        Every raise site in this codebase constructs the exception with
+        a single literal string argument (e.g. ``raise
+        InstanceValidationError("Invalid instance type.")``).  Reading
+        ``args[0]`` returns that literal verbatim, never the chained
+        ``__cause__`` traceback that ``str(exc)`` could potentially
+        leak in some Python builds.  Routes use this accessor so the
+        guard banner cannot accidentally expose internal exception text
+        even if a future raise site forgets to pass a curated string.
+        """
+        if not self.args:
+            return ""
+        return str(self.args[0])
+
 
 class CooldownStateError(ServiceError):
     """Cooldown state is inconsistent (e.g. negative days).

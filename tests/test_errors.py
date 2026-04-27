@@ -104,3 +104,44 @@ class TestRaiseAndCatch:
     def test_does_not_catch_framework_exception(self) -> None:
         """Built-in ``ValueError`` is NOT a HoundarrError."""
         assert not issubclass(ValueError, HoundarrError)
+
+
+class TestInstanceValidationPublicMessage:
+    """``InstanceValidationError.public_message`` is the route-safe accessor.
+
+    Routes surface this string in the connection-guard banner instead of
+    ``str(exc)`` so chained ``__cause__`` text from a future raise site
+    can never leak into the HTTP response.
+    """
+
+    def test_returns_first_arg_for_curated_message(self) -> None:
+        exc = InstanceValidationError("Invalid instance type.")
+        assert exc.public_message == "Invalid instance type."
+
+    def test_empty_when_constructed_with_no_args(self) -> None:
+        exc = InstanceValidationError()
+        assert exc.public_message == ""
+
+    def test_unchanged_by_from_exc_chaining(self) -> None:
+        """``raise X("curated") from cause`` leaves ``args[0]`` curated.
+
+        The original cause is preserved on ``__cause__`` for server-side
+        logging while ``public_message`` keeps the user-facing surface
+        free of upstream exception text.
+        """
+        cause = ValueError("internal detail that must not leak")
+        try:
+            try:
+                raise cause
+            except ValueError as inner:
+                raise InstanceValidationError("Invalid instance type.") from inner
+        except InstanceValidationError as exc:
+            assert exc.public_message == "Invalid instance type."
+            assert exc.__cause__ is cause
+
+    def test_coerces_non_string_first_arg(self) -> None:
+        """Belt-and-braces: any future raise site that passes a non-string
+        first arg still produces a string for the response body.
+        """
+        exc = InstanceValidationError(42)
+        assert exc.public_message == "42"

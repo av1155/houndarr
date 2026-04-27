@@ -1,12 +1,11 @@
 """Pure validation helpers + form-output dataclasses for instance writes.
 
-Owns the pure validation logic and the live connection probe that
-:mod:`houndarr.services.instance_submit` composes into a single
-orchestration.  Keeping the pure logic here means it can be tested
-without the FastAPI machinery, and the HTTP-shaped helpers in
-:mod:`houndarr.routes.settings._helpers` stay focused on request
+Track D.11 lifts the validators and their data structures out of
+:mod:`houndarr.routes.settings._helpers` into this service module so
+the HTTP-shaped helpers in ``_helpers.py`` stay focused on request
 plumbing (render, master_key lookup, connection-guard response
-shaping).
+shaping) and the pure logic becomes testable without the FastAPI
+machinery.
 
 The two "form output" dataclasses live here because they are what
 the validators emit:
@@ -17,13 +16,14 @@ the validators emit:
   values :func:`resolve_search_modes` returns.
 
 Validators return ``str | None`` where the string is the user-facing
-error message.  :mod:`houndarr.services.instance_submit` converts
-non-``None`` returns into :class:`~houndarr.errors.InstanceValidationError`
-so the route layer never sees the bare string contract.  The
-sentinel-not-raise convention is intentional: the submit service
-orchestrates multiple validators before rendering the guard banner,
-and raising on the first failure would cascade into the template
-flow the service owns.
+error message.  The instance submit service
+(:mod:`houndarr.services.instance_submit`) converts non-``None``
+returns into :class:`~houndarr.errors.InstanceValidationError` so
+the route layer never sees the bare string contract.  The sentinel
+pattern survived the move intentionally: both D.10 (submit
+orchestration) and the pre-refactor route handlers lean on it, and
+raising early would have cascaded into the route's guard-banner
+logic that the service now owns.
 """
 
 from __future__ import annotations
@@ -91,8 +91,7 @@ def type_mismatch_message(check: ConnectionCheck, selected: InstanceType) -> str
     on the major-version number.  Any other app name is looked up
     against the lowercase map; an unknown app name (e.g. a Readarr
     fork that has renamed itself) is allowed through without a
-    mismatch so operators can still adopt forks that self-report a
-    novel name.
+    mismatch, matching the pre-refactor behaviour.
 
     Args:
         check: Result from a live :func:`check_connection` probe.
@@ -180,11 +179,10 @@ def validate_upgrade_controls(
 class SearchModes:
     """Resolved per-app search mode enum values.
 
-    Kept as a plain class with ``__slots__`` (rather than a
-    ``@dataclass``) because the four per-app
-    :class:`enum.StrEnum` fields are the only state the
-    instance-submit path reads back; adding dataclass machinery
-    buys nothing here.
+    Kept as a class with ``__slots__`` (rather than a ``@dataclass``)
+    to preserve the pre-refactor wire shape exactly; the four
+    per-app :class:`enum.StrEnum` fields are the only state the
+    instance-submit path reads back.
     """
 
     __slots__ = ("lidarr", "readarr", "sonarr", "whisparr_v2")
@@ -267,198 +265,5 @@ def resolve_search_modes(
         sonarr=sonarr_mode,
         lidarr=lidarr_mode,
         readarr=readarr_mode,
-        whisparr=whisparr_mode,
-    )
-
-
-_CLIENT_CONSTRUCTORS: dict[InstanceType, type[ArrClient]] = {
-    InstanceType.radarr: RadarrClient,
-    InstanceType.sonarr: SonarrClient,
-    InstanceType.lidarr: LidarrClient,
-    InstanceType.readarr: ReadarrClient,
-    InstanceType.whisparr_v2: WhisparrClient,
-    InstanceType.whisparr_v3: WhisparrV3Client,
-}
-
-
-def build_client(instance_type: InstanceType, url: str, api_key: str) -> ArrClient:
-    """Construct the *arr client matching *instance_type*.
-
-    Args:
-        instance_type: The :class:`InstanceType` selected in the
-            form.
-        url: Base URL of the remote *arr.
-        api_key: Plaintext API key for the remote.
-
-    Returns:
-        An unopened :class:`~houndarr.clients.base.ArrClient`; the
-        caller enters it via ``async with``.
-
-    Raises:
-        ValueError: When *instance_type* has no registered client
-            class.  The :class:`InstanceType` enum is the authority
-            for valid values, so this only triggers on programmer
-            error during future migrations.
-    """
-    client_cls = _CLIENT_CONSTRUCTORS.get(instance_type)
-    if client_cls is None:
-        msg = f"No client for instance type: {instance_type!r}"
-        raise ValueError(msg)
-    return client_cls(url=url, api_key=api_key)
-
-
-@dataclass(frozen=True, slots=True)
-class ConnectionTestOutcome:
-    """Route-shaped result of the full test-connection orchestration.
-
-    The three fields map 1:1 to what the settings route's status
-    snippet renders: a reachable-or-not flag, the user-facing message,
-    and the HTTP status code.  Wrapping them in a frozen dataclass
-    lets the route stay a pure dispatch (one call, one render) without
-    branching inside the handler body.
-    """
-
-    ok: bool
-    message: str
-    status_code: int
-
-
-async def run_connection_test(
-    *,
-    master_key: bytes,
-    type_value: str,
-    url: str,
-    api_key: str,
-    instance_id: str = "",
-) -> ConnectionTestOutcome:
-    """Orchestrate the full test-connection flow, including the sentinel path.
-
-    Wraps the four concerns the ``POST /settings/instances/test-connection``
-    route used to carry inline: parse the form's type string into
-    :class:`InstanceType`; SSRF-gate the URL via
-    :func:`houndarr.services.url_validation.validate_instance_url`;
-    resolve the edit-form ``__UNCHANGED__`` sentinel against the
-    stored api_key (look up by ``instance_id`` and pull the already-
-    decrypted value); call :func:`check_connection`; check type
-    mismatch.
-
-    Args:
-        master_key: Fernet key used to decrypt the stored api_key
-            when the sentinel path applies.
-        type_value: Raw instance-type string from the form
-            (``"sonarr"``, ``"radarr"``, ``"lidarr"``, ``"readarr"``,
-            ``"whisparr_v2"``, ``"whisparr_v3"``).
-        url: Raw URL string from the form.  Trailing slashes are
-            stripped before the live probe so the client's base URL
-            never double-joins.
-        api_key: Raw api_key string from the form.  The
-            :data:`API_KEY_UNCHANGED` sentinel triggers the stored-
-            key lookup; any other value is used verbatim.
-        instance_id: Optional raw instance_id string from the form.
-            Required only when ``api_key`` is the sentinel; empty or
-            non-numeric means the sentinel resolves to a 422.
-
-    Returns:
-        :class:`ConnectionTestOutcome` with the three fields the route
-        plugs straight into :func:`connection_status_response`.
-    """
-    try:
-        instance_type = InstanceType(type_value)
-    except ValueError:
-        return ConnectionTestOutcome(ok=False, message="Invalid instance type.", status_code=422)
-
-    url_error = validate_instance_url(url)
-    if url_error is not None:
-        return ConnectionTestOutcome(ok=False, message=url_error, status_code=422)
-
-    resolved_api_key = api_key
-    if api_key == API_KEY_UNCHANGED:
-        # A sentinel submission requires an instance_id so the service
-        # can pull the stored plaintext key.  The add-instance form
-        # never sends the sentinel; the edit form always populates
-        # instance_id.  A hand-crafted POST that sends the sentinel
-        # with no instance_id used to fall through and probe the
-        # remote with the literal string, which the *arr rejected as
-        # an invalid key and the user saw a generic "Connection
-        # failed" message.  Return a specific 422 instead.
-        if not instance_id:
-            return ConnectionTestOutcome(
-                ok=False,
-                message="Provide an API key.",
-                status_code=422,
-            )
-        try:
-            iid = int(instance_id)
-        except ValueError:
-            return ConnectionTestOutcome(
-                ok=False,
-                message="Invalid instance ID for key lookup.",
-                status_code=422,
-            )
-        existing = await get_instance(iid, master_key=master_key)
-        if existing is None:
-            return ConnectionTestOutcome(ok=False, message="Instance not found.", status_code=404)
-        resolved_api_key = existing.core.api_key
-
-    check = await check_connection(instance_type, url.rstrip("/"), resolved_api_key)
-    if not check.reachable:
-        return ConnectionTestOutcome(
-            ok=False,
-            message="Connection failed. Check URL/API key and try again.",
-            status_code=422,
-        )
-
-    mismatch = type_mismatch_message(check, instance_type)
-    if mismatch is not None:
-        return ConnectionTestOutcome(ok=False, message=mismatch, status_code=422)
-
-    # "save changes" is shown when editing an existing instance
-    # (instance_id set); "add this instance" is shown when the form
-    # is creating a new one.
-    action = "save changes" if instance_id else "add this instance"
-    if check.app_name and check.version:
-        message = f"Connected to {check.app_name} v{check.version}. You can now {action}."
-    elif check.app_name:
-        message = f"Connected to {check.app_name}. You can now {action}."
-    else:
-        message = f"Connection successful. You can now {action}."
-    return ConnectionTestOutcome(ok=True, message=message, status_code=200)
-
-
-async def check_connection(
-    instance_type: InstanceType,
-    url: str,
-    api_key: str,
-) -> ConnectionCheck:
-    """Probe the remote *arr and return a :class:`ConnectionCheck`.
-
-    Opens a client, calls ``ping()``, and converts the result into
-    the service's :class:`ConnectionCheck` dataclass so every
-    caller (the submit service and the route's explicit test
-    connection button) speaks one shape.
-
-    Args:
-        instance_type: The :class:`InstanceType` selected in the
-            form.  Drives which client class is instantiated.
-        url: Base URL of the remote *arr.
-        api_key: Plaintext API key for the remote.
-
-    Returns:
-        :class:`ConnectionCheck` with ``reachable=True`` plus the
-        remote's self-reported ``app_name`` and ``version`` on
-        success, or ``reachable=False`` with both optional fields
-        ``None`` on any probe failure (transport, HTTP error, or
-        client validation error; the client's ``ping()`` wraps all
-        three into a single ``None`` return per
-        :data:`~houndarr.clients.base.ArrClient._PING_SAFE_ERRORS`).
-    """
-    client = build_client(instance_type, url, api_key)
-    async with client:
-        status = await client.ping()
-    if status is None:
-        return ConnectionCheck(reachable=False)
-    return ConnectionCheck(
-        reachable=True,
-        app_name=status.app_name,
-        version=status.version,
+        whisparr_v2=whisparr_mode,
     )

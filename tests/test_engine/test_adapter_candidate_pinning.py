@@ -138,7 +138,9 @@ def _whisparr_v3_movie() -> MissingWhisparrV3Movie:
     )
 
 
+# ---------------------------------------------------------------------------
 # Radarr
+# ---------------------------------------------------------------------------
 
 
 class TestRadarrAdapter:
@@ -158,7 +160,9 @@ class TestRadarrAdapter:
         assert radarr_adapt_cutoff(movie, inst) == radarr_adapt_missing(movie, inst)
 
 
+# ---------------------------------------------------------------------------
 # Sonarr
+# ---------------------------------------------------------------------------
 
 
 class TestSonarrAdapter:
@@ -193,7 +197,9 @@ class TestSonarrAdapter:
         assert cand.search_payload["command"] == "EpisodeSearch"
 
 
+# ---------------------------------------------------------------------------
 # Lidarr
+# ---------------------------------------------------------------------------
 
 
 class TestLidarrAdapter:
@@ -210,7 +216,9 @@ class TestLidarrAdapter:
         assert cand.item_type == "album"
 
 
+# ---------------------------------------------------------------------------
 # Readarr
+# ---------------------------------------------------------------------------
 
 
 class TestReadarrAdapter:
@@ -227,7 +235,9 @@ class TestReadarrAdapter:
         assert cand.item_type == "book"
 
 
+# ---------------------------------------------------------------------------
 # Whisparr v2
+# ---------------------------------------------------------------------------
 
 
 class TestWhisparrV2Adapter:
@@ -244,7 +254,9 @@ class TestWhisparrV2Adapter:
         assert cand.item_type == "whisparr_v2_episode"
 
 
+# ---------------------------------------------------------------------------
 # Whisparr v3
+# ---------------------------------------------------------------------------
 
 
 class TestWhisparrV3Adapter:

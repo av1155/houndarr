@@ -20,7 +20,9 @@ class HoundarrError(Exception):
     """
 
 
+# ---------------------------------------------------------------------------
 # Client-layer errors (clients/*.py)
+# ---------------------------------------------------------------------------
 
 
 class ClientError(HoundarrError):
@@ -74,7 +76,9 @@ class ClientUnreachableError(ClientError):
     """
 
 
+# ---------------------------------------------------------------------------
 # Engine-layer errors (engine/*.py)
+# ---------------------------------------------------------------------------
 
 
 class EngineError(HoundarrError):
@@ -108,7 +112,9 @@ class EngineQueueProbeError(EngineError):
     """The queue-backpressure probe (``get_queue_status``) failed."""
 
 
+# ---------------------------------------------------------------------------
 # Service-layer errors (services/*.py, routes/admin.py)
+# ---------------------------------------------------------------------------
 
 
 class ServiceError(HoundarrError):
@@ -142,7 +148,9 @@ class TimeWindowSpecError(ServiceError):
     """
 
 
+# ---------------------------------------------------------------------------
 # Route-layer errors (routes/*.py, auth.py)
+# ---------------------------------------------------------------------------
 
 
 class RouteError(HoundarrError):

@@ -73,7 +73,103 @@ _UPGRADE_HOURLY_CAP_HARD_CAP = 5
 _UPGRADE_MIN_COOLDOWN_DAYS = 7
 
 
-# search_log helper
+# ---------------------------------------------------------------------------
+# Random search order: stratified-shuffle deck
+# ---------------------------------------------------------------------------
+#
+# When ``SearchOrder.random`` is active, ``_run_search_pass`` picks page
+# numbers from a shuffled permutation of ``[1, max_page]`` rather than a
+# fresh ``random.randint`` each cycle plus a forward walk with wrap-once.
+# The deck is held in this module-level cache, keyed by
+# ``(instance_id, search_kind)`` so each (instance, missing/cutoff) pair
+# tracks its own progress through the current round.
+#
+# Two properties this design buys over the old algorithm:
+#
+#   1. Bounded short-term variance.  Every page is visited exactly once
+#      per round (one round == ``max_page`` page-draws). The worst-case
+#      wait for a given page is therefore ``ceil(max_page / K)`` cycles,
+#      where K = ``_MAX_LIST_PAGES_PER_PASS``.  The previous algorithm
+#      could skip a page for arbitrarily many cycles in a row by chance.
+#
+#   2. No wrap-once asymmetry.  The original walk visited
+#      ``{start, start+1, ..., max_page, 1, 2, ...}`` which favoured
+#      pages near the end of the list when start>1 (a 1.25x-1.5x bias
+#      under multi-page-walk conditions; see AGENTS.md "Verifying
+#      Claims About Algorithms").  Pulling from a fresh shuffle has
+#      no positional asymmetry.
+#
+# The deck is rebuilt whenever ``max_page`` changes (the wanted-list
+# grew or shrank since the last cycle) or whenever the previous round
+# is exhausted.  Stale entries for deleted instances stay in the dict
+# but cost only a small list of integers per (instance, kind) pair.
+
+
+@dataclass(slots=True)
+class _RandomDeckState:
+    """Per-(instance, kind) deck of remaining page numbers for random mode."""
+
+    max_page: int
+    remaining: list[int]
+
+
+_random_decks: dict[tuple[int, str], _RandomDeckState] = {}
+
+
+def _draw_next_random_page(instance_id: int, search_kind: SearchKind | str, max_page: int) -> int:
+    """Pop the next page from this (instance, kind)'s shuffled deck.
+
+    Refreshes the deck when it is empty or when ``max_page`` differs from
+    the value the deck was built against (which happens when the user has
+    added or removed wanted items in the *arr instance since the last
+    cycle).
+    """
+    key = (instance_id, str(search_kind))
+    state = _random_decks.get(key)
+    if state is None or state.max_page != max_page or not state.remaining:
+        deck = list(range(1, max_page + 1))
+        random.shuffle(deck)  # noqa: S311  # nosec B311
+        state = _RandomDeckState(max_page=max_page, remaining=deck)
+        _random_decks[key] = state
+    return state.remaining.pop()
+
+
+def _reset_random_deck(instance_id: int, search_kind: SearchKind | str) -> None:
+    """Drop the cached deck for one (instance, kind) pair.
+
+    Test helper.  Production code does not need to call this because the
+    deck self-refreshes on ``max_page`` mismatch and on exhaustion.
+    """
+    _random_decks.pop((instance_id, str(search_kind)), None)
+
+
+# Sentinel used to pad partial last pages out to ``page_size`` in random mode
+# so the within-page selection probability is the same on partial and full
+# pages.  Without this padding, items on a short last page would be drained
+# every visit (``actual_items < page_size`` means each item has higher than
+# ``batch_size / page_size`` per-visit dispatch probability), accumulating a
+# small but persistent over-selection of the last 1-9 items in any backlog
+# whose ``totalRecords`` is not a multiple of ``page_size``.  Identity
+# comparison (``item is _SHUFFLE_PAD``) is the cheap and unambiguous gate.
+_SHUFFLE_PAD: object = object()
+
+
+# ---------------------------------------------------------------------------
+# search_log helpers
+# ---------------------------------------------------------------------------
+
+
+def _format_hourly_limit_reason(kind: SearchKind | str, cap: int) -> str:
+    """Return the skip-reason string for a cap-exhausted pass.
+
+    Centralises the phrasing used at the three hourly-cap gate sites
+    (missing / cutoff / upgrade) so they cannot drift apart.  The
+    parameter shape ``(N/hr)`` reads as "N per hour" to a user, where
+    the older ``(N)`` form read as an error code, a repeat finding
+    in post-Huntarr self-hoster research.
+    """
+    prefix = "" if kind == "missing" else f"{kind} "
+    return f"{prefix}hourly limit reached ({cap}/hr)"
 
 
 async def _write_log(
@@ -363,6 +459,7 @@ async def _fetch_pool_with_typed_wrap(
 
 
 # Unified search pass
+# ---------------------------------------------------------------------------
 
 
 async def _run_search_pass(  # noqa: C901
@@ -731,7 +828,9 @@ async def _run_search_pass(  # noqa: C901
     return searched, page
 
 
+# ---------------------------------------------------------------------------
 # Upgrade pass (dedicated, does NOT reuse _run_search_pass)
+# ---------------------------------------------------------------------------
 
 
 async def _run_upgrade_pass(
@@ -974,7 +1073,9 @@ async def _run_upgrade_pass(
     return searched
 
 
+# ---------------------------------------------------------------------------
 # Public API
+# ---------------------------------------------------------------------------
 
 
 async def run_instance_search(

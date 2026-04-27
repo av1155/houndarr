@@ -224,7 +224,7 @@ async def instance_create(
             connection_verified=connection_verified == "true",
         )
     except InstanceValidationError as exc:
-        return connection_guard_response(str(exc))
+        return connection_guard_response(exc.public_message)
 
     supervisor = getattr(request.app.state, "supervisor", None)
     if isinstance(supervisor, Supervisor):
@@ -338,7 +338,7 @@ async def instance_update(
     except InstanceNotFoundError:
         return HTMLResponse(content="Not found", status_code=404)
     except InstanceValidationError as exc:
-        return connection_guard_response(str(exc))
+        return connection_guard_response(exc.public_message)
 
     # HTMX: return just the refreshed row
     error_ids = await active_error_instance_ids()

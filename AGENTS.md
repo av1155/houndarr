@@ -45,6 +45,61 @@ also enforces them as part of the required checks, alongside additional
 security and container checks.
 
 ```bash
+just check      # lint + format-check + mypy + bandit + full pytest, in CI order
+just quick      # lint + mypy + non-integration pytest (fast feedback loop)
+just fix        # ruff --fix + ruff format, applied in place
+```
+
+`just` is the source of truth.  Individual gates are also available
+when the full sweep is overkill:
+
+```bash
+just lint       # ruff check src/ tests/
+just fmt-check  # ruff format --check src/ tests/
+just type       # mypy src/ (strict)
+just sec        # bandit -r src/ -c pyproject.toml
+just test       # pytest (full suite)
+```
+
+### Recipe index
+
+```bash
+just            # list every recipe
+just check      # all five gates, CI order
+just quick      # lint + type + non-integration pytest (fast feedback loop)
+just fix        # ruff check --fix + ruff format, in place
+just pin        # pytest -m pinning (characterisation subset)
+just test       # pytest, parallel across CPUs by default
+just test-quick # pytest -m "not integration", parallel
+just test-integration  # pytest -m integration tests/test_e2e/, parallel
+just test-parallel     # alias of `just test` (kept for muscle memory)
+just test-browser chromium  # Playwright e2e against a live stack (serial)
+just dev        # python -m houndarr --data-dir ./data-dev --dev
+```
+
+### Parallel by default
+
+`test`, `test-quick`, `test-integration`, and `pin` all run with
+`pytest -n auto` (pytest-xdist) so the suite uses every physical
+CPU.  Override via env var:
+
+```bash
+PYTEST_WORKERS=0 just test    # serial fallback for ordering-sensitive flakes
+PYTEST_WORKERS=4 just test    # constrain to 4 workers for limited-CPU CI
+```
+
+Browser e2e (`test-browser`) and the visual-baseline recipes
+(`capture-baselines`, `verify-baselines`) stay serial: they share a
+single Houndarr instance + mock-arr stack on fixed ports, which is
+the canonical pytest-xdist anti-pattern.
+
+### Without `just`
+
+If `just` is not installed, every recipe is a thin wrapper; read the
+`justfile` at the repo root for the underlying invocation. The
+authoritative commands the recipes wrap are:
+
+```bash
 .venv/bin/python -m ruff check src/ tests/          # lint
 .venv/bin/python -m ruff format --check src/ tests/  # format check
 .venv/bin/python -m mypy src/                        # type check (strict)

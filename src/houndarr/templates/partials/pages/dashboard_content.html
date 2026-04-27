@@ -532,11 +532,19 @@
     display: flex;
     flex-direction: column;
     gap: 0.5rem;
-    /* Centre a short list vertically in the expanded cooldown box so
-       a 1- or 2-item card doesn't cluster at the top like the empty
-       state used to. 3+ items fill naturally (auto margins collapse
-       to 0 when there's no slack). */
-    margin: auto 0;
+    /* Top-anchored: the outer .dash-unlocks absorbs any vertical
+       slack the grid hands the card so siblings stay height-aligned,
+       but the entries themselves pin to the top of the box.  An
+       earlier rule used `margin: auto 0` to centre short lists, but
+       that produced visible empty rows above and below the entries
+       whenever a neighbour card in the same row was tall enough to
+       stretch this one (long titles, more chips, an error banner).
+       Reads as randomness because the spacing depends on which cards
+       happen to be adjacent in the grid.  Top-anchored avoids that:
+       any extra height shows as space at the bottom only, which the
+       eye reads as "room for more cooldowns" instead of floating
+       entries. */
+    margin: 0;
   }
   .dash-unlocks__row {
     display: grid;

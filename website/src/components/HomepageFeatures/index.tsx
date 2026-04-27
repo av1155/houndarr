@@ -1,18 +1,27 @@
-import type {ReactNode} from 'react';
+import type {ComponentType, ReactNode} from 'react';
 import clsx from 'clsx';
 import Heading from '@theme/Heading';
+import {
+  Container,
+  Hexagon,
+  Lock,
+  Search,
+  Shield,
+  Timer,
+  type LucideProps,
+} from 'lucide-react';
 import styles from './styles.module.css';
 
 type FeatureItem = {
   title: string;
-  icon: string;
+  Icon: ComponentType<LucideProps>;
   description: ReactNode;
 };
 
 const FeatureList: FeatureItem[] = [
   {
     title: 'Polite & Controlled',
-    icon: '⏱',
+    Icon: Timer,
     description: (
       <>
         Small batches, configurable sleep intervals, per-item cooldowns, and
@@ -23,7 +32,7 @@ const FeatureList: FeatureItem[] = [
   },
   {
     title: 'Missing, Cutoff & Upgrade',
-    icon: '🔍',
+    Icon: Search,
     description: (
       <>
         Automatically searches for missing episodes, movies, albums, and
@@ -35,7 +44,7 @@ const FeatureList: FeatureItem[] = [
   },
   {
     title: 'Multi-Instance',
-    icon: '⬡',
+    Icon: Hexagon,
     description: (
       <>
         Connect one or more Radarr, Sonarr, Lidarr, Readarr, and Whisparr
@@ -46,7 +55,7 @@ const FeatureList: FeatureItem[] = [
   },
   {
     title: 'No Telemetry',
-    icon: '🛡',
+    Icon: Shield,
     description: (
       <>
         Zero outbound connections to analytics, error tracking, or
@@ -57,7 +66,7 @@ const FeatureList: FeatureItem[] = [
   },
   {
     title: 'Encrypted API Keys',
-    icon: '🔒',
+    Icon: Lock,
     description: (
       <>
         API keys are encrypted at rest with Fernet (AES-128-CBC + HMAC-SHA256)
@@ -68,7 +77,7 @@ const FeatureList: FeatureItem[] = [
   },
   {
     title: 'Single Docker Container',
-    icon: '📦',
+    Icon: Container,
     description: (
       <>
         Runs as a single container alongside your existing *arr stack. SQLite
@@ -79,11 +88,13 @@ const FeatureList: FeatureItem[] = [
   },
 ];
 
-function Feature({title, icon, description}: FeatureItem) {
+function Feature({title, Icon, description}: FeatureItem) {
   return (
     <div className={clsx('col col--4')}>
       <div className={clsx('padding-horiz--md padding-vert--md', styles.featureCard)}>
-        <div className={styles.featureIcon} aria-hidden="true">{icon}</div>
+        <div className={styles.featureIcon} aria-hidden="true">
+          <Icon size={16} strokeWidth={2} />
+        </div>
         <Heading as="h3">{title}</Heading>
         <p>{description}</p>
       </div>

@@ -70,6 +70,8 @@
 }
 
 /* ── Feature icon badge ───────────────────────────────────────────────────── */
+/* Houses a Lucide SVG; the SVG inherits color via currentColor, so the
+   wrapper's color sets the icon stroke per theme. */
 .featureIcon {
   display: inline-flex;
   align-items: center;
@@ -78,16 +80,17 @@
   height: 2rem;
   border-radius: 6px;
   margin-bottom: 0.875rem;
-  font-size: 0.9375rem;
   line-height: 1;
 }
 
 :global([data-theme='dark']) .featureIcon {
   background: rgba(34, 211, 238, 0.07);
   border: 1px solid rgba(34, 211, 238, 0.13);
+  color: rgb(103, 232, 249);
 }
 
 :global([data-theme='light']) .featureIcon {
   background: rgba(8, 145, 178, 0.08);
   border: 1px solid rgba(8, 145, 178, 0.15);
+  color: rgb(8, 145, 178);
 }

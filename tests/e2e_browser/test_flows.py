@@ -704,7 +704,12 @@ def test_changelog_preferences_switch_rolls_back_on_error(
         with page.expect_response(
             lambda r: "/settings/changelog/preferences" in r.url and r.request.method == "POST"
         ) as resp_info:
-            checkbox.click()
+            # The visible switch wraps the <input> in <span class="switch__track">
+            # / <span class="switch__thumb"> overlays that intercept pointer
+            # events.  A real-user click lands on the label; dispatch_event
+            # bypasses the visual chrome so the test does not depend on which
+            # span the cursor happens to hit.
+            checkbox.dispatch_event("click")
         assert resp_info.value.status == 500
 
         # The htmx:responseError handler flips the checkbox back; give it a

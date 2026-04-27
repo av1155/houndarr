@@ -93,6 +93,20 @@
     var card = form.closest('.auth-card');
     var alert = card ? card.querySelector('.auth-alert') : null;
     if (!alert) return;
+    // Focus + scroll the alert on render so screen readers announce it
+    // and keyboard users land on the error instead of the first input.
+    // tabindex=-1 keeps the alert out of tab order but focusable
+    // programmatically; the attribute is idempotent so re-running this
+    // initializer (HTMX swap) doesn't compound it.
+    if (!alert.hasAttribute('tabindex')) {
+      alert.setAttribute('tabindex', '-1');
+    }
+    try {
+      alert.focus({ preventScroll: true });
+    } catch (err) { /* old Safari: focus() without options */ alert.focus(); }
+    if (typeof alert.scrollIntoView === 'function') {
+      alert.scrollIntoView({ block: 'center', behavior: 'auto' });
+    }
     var dismissAlert = function () {
       alert.remove();
       form.removeEventListener('input', dismissAlert);

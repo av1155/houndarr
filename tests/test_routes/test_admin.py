@@ -257,6 +257,34 @@ def test_factory_reset_happy_path(
     _stub_factory_reset.assert_awaited_once()
 
 
+def test_factory_reset_rate_limit_returns_429_after_five_bad_attempts(
+    app: TestClient,
+    _stub_factory_reset: AsyncMock,
+) -> None:
+    """Six failed attempts trip the shared /login bucket so a session-
+    compromised attacker cannot brute-force the admin password through
+    the destructive /settings/admin/factory-reset endpoint.
+    """
+    _login(app)
+    bad = {"confirm_phrase": "RESET", "current_password": "not-the-password"}
+    for _ in range(5):
+        resp = app.post(
+            "/settings/admin/factory-reset",
+            data=bad,
+            headers=csrf_headers(app),
+        )
+        assert resp.status_code == 422
+
+    resp = app.post(
+        "/settings/admin/factory-reset",
+        data=bad,
+        headers=csrf_headers(app),
+    )
+    assert resp.status_code == 429
+    assert b"Too many attempts" in resp.content
+    _stub_factory_reset.assert_not_called()
+
+
 # ---------------------------------------------------------------------------
 # Proxy mode
 # ---------------------------------------------------------------------------

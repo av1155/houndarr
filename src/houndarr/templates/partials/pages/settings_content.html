@@ -1315,18 +1315,29 @@
         bulletsEl.classList.add('hidden');
       }
 
+      // Disable the typed-phrase + second-factor inputs when the action
+      // does not require them. Disabled inputs are omitted from the form
+      // payload, so if a future neutral-action handler started reading
+      // the factory-only fields it would receive nothing instead of a
+      // stale user-typed value.
+      const secondInput = secondFactorWrap.querySelector('input');
       if (copy.requiresTyped) {
         typedWrap.classList.remove('hidden');
         secondFactorWrap.classList.remove('hidden');
+        phraseInput.disabled = false;
         phraseInput.value = '';
         phraseInput.placeholder = FACTORY_PHRASE;
-        const secondInput = secondFactorWrap.querySelector('input');
-        if (secondInput) secondInput.value = '';
+        if (secondInput) {
+          secondInput.disabled = false;
+          secondInput.value = '';
+        }
         confirmGo.textContent = copy.cta;
         confirmGo.disabled = true;
       } else {
         typedWrap.classList.add('hidden');
         secondFactorWrap.classList.add('hidden');
+        phraseInput.disabled = true;
+        if (secondInput) secondInput.disabled = true;
         confirmGo.textContent = copy.cta;
         confirmGo.disabled = false;
       }
@@ -1403,6 +1414,26 @@
           }
         }, 320);
       }, FADE_MS);
+    });
+  })();
+
+  /* ── Switch rollback on /preferences error ───────────────────
+     The #admin-updates changelog-popup switch flips visually the moment
+     the user clicks the checkbox, before the form POST reaches the
+     server. /settings/changelog/preferences normally returns 204, but if
+     the write fails (DB locked, etc.) HTMX's config skips the swap for
+     4xx/5xx, leaving the thumb in the user's desired position while the
+     server state stayed the opposite. Listen for htmx:responseError
+     scoped to that form and flip the checkbox back so the DOM stays in
+     sync with what actually persisted. */
+  (function () {
+    document.body.addEventListener('htmx:responseError', (evt) => {
+      const form = evt.detail && evt.detail.elt;
+      if (!(form instanceof HTMLFormElement)) return;
+      if (!form.closest('#admin-updates')) return;
+      const checkbox = form.querySelector('input[type="checkbox"][name="enabled"]');
+      if (!checkbox) return;
+      checkbox.checked = !checkbox.checked;
     });
   })();
 </script>

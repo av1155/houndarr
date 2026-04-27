@@ -706,6 +706,92 @@ def test_password_change_htmx(app: TestClient) -> None:
     assert b"Password updated successfully" in resp.content
 
 
+def test_password_change_sets_hx_refresh_header(app: TestClient) -> None:
+    """After rotation the response body still embeds the OLD csrf_token
+    (it was rendered before create_session ran) and app.js stamps
+    hx-headers once at page load. HX-Refresh forces the tab to reload so
+    the new cookies populate every form and the body attribute alike.
+    """
+    _login(app)
+    resp = app.post(
+        "/settings/account/password",
+        data={
+            "current_password": "ValidPass1!",
+            "new_password": "BetterPass2!",
+            "new_password_confirm": "BetterPass2!",
+        },
+        headers=csrf_headers(app),
+    )
+    assert resp.status_code == 200
+    assert resp.headers.get("HX-Refresh") == "true"
+
+
+def test_password_change_invalidates_prior_session_cookie(app: TestClient) -> None:
+    """Old session cookies stop validating after rotate_session_secret.
+
+    Models the stolen-cookie scenario: an attacker holds a valid session
+    cookie; the admin changes their password; the attacker's cookie must
+    not validate against the next protected request.
+    """
+    from houndarr.auth import SESSION_COOKIE_NAME
+
+    _login(app)
+    old_session = app.cookies.get(SESSION_COOKIE_NAME)
+    assert old_session, "login did not issue a session cookie"
+
+    resp = app.post(
+        "/settings/account/password",
+        data={
+            "current_password": "ValidPass1!",
+            "new_password": "BetterPass2!",
+            "new_password_confirm": "BetterPass2!",
+        },
+        headers=csrf_headers(app),
+    )
+    assert resp.status_code == 200
+
+    # Pin only the OLD cookie back; the serializer has rotated so the old
+    # signature is no longer verifiable and the middleware must redirect
+    # to /login instead of serving the protected page.
+    app.cookies.clear()
+    app.cookies.set(SESSION_COOKIE_NAME, old_session)
+    resp = app.get("/settings", follow_redirects=False)
+    assert resp.status_code == 302
+    assert resp.headers["location"].endswith("/login")
+
+
+def test_password_change_rate_limit_returns_429_after_five_bad_attempts(
+    app: TestClient,
+) -> None:
+    """Six failed attempts from one IP must trip the shared /login bucket.
+
+    Guards the rate-limit wiring: a session-compromised attacker trying
+    to brute-force the current password through /settings/account/password
+    gets the same 5-per-60s ceiling as /login.
+    """
+    _login(app)
+    wrong = {
+        "current_password": "WrongPass1!",
+        "new_password": "AnotherGoodPass2!",
+        "new_password_confirm": "AnotherGoodPass2!",
+    }
+    for _ in range(5):
+        resp = app.post(
+            "/settings/account/password",
+            data=wrong,
+            headers=csrf_headers(app),
+        )
+        assert resp.status_code == 422
+
+    resp = app.post(
+        "/settings/account/password",
+        data=wrong,
+        headers=csrf_headers(app),
+    )
+    assert resp.status_code == 429
+    assert b"Too many password attempts" in resp.content
+
+
 # ---------------------------------------------------------------------------
 # allowed_time_window validation on create + update
 # ---------------------------------------------------------------------------

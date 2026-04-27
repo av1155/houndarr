@@ -250,6 +250,85 @@ async def test_check_credentials_claims_username_for_legacy_install(db: None) ->
 
 
 # ---------------------------------------------------------------------------
+# resolve_signed_in_as: the identity label the Settings > Security card
+# renders. Proxy mode returns the forwarded header; builtin mode returns the
+# stored username and falls back to "admin" when nothing is configured yet.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio()
+async def test_resolve_signed_in_as_builtin_returns_stored_username(
+    db: None,
+) -> None:
+    from fastapi import Request
+
+    from houndarr.auth import resolve_signed_in_as, set_username
+
+    await set_username("customadmin")
+    scope = {
+        "type": "http",
+        "method": "GET",
+        "path": "/",
+        "headers": [],
+        "query_string": b"",
+    }
+    request = Request(scope)
+    assert await resolve_signed_in_as(request) == "customadmin"
+
+
+@pytest.mark.asyncio()
+async def test_resolve_signed_in_as_builtin_falls_back_to_admin(
+    db: None,
+) -> None:
+    from fastapi import Request
+
+    from houndarr.auth import resolve_signed_in_as
+
+    scope = {
+        "type": "http",
+        "method": "GET",
+        "path": "/",
+        "headers": [],
+        "query_string": b"",
+    }
+    request = Request(scope)
+    assert await resolve_signed_in_as(request) == "admin"
+
+
+@pytest.mark.asyncio()
+async def test_resolve_signed_in_as_proxy_returns_header_user(
+    tmp_data_dir: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from fastapi import Request
+
+    import houndarr.config as _cfg
+    from houndarr.auth import resolve_signed_in_as
+    from houndarr.config import AppSettings
+
+    monkeypatch.setattr(
+        _cfg,
+        "_runtime_settings",
+        AppSettings(
+            data_dir=tmp_data_dir,
+            auth_mode="proxy",
+            auth_proxy_header="Remote-User",
+            trusted_proxies="127.0.0.1",
+        ),
+    )
+    scope = {
+        "type": "http",
+        "method": "GET",
+        "path": "/",
+        "headers": [],
+        "query_string": b"",
+    }
+    request = Request(scope)
+    request.state.proxy_auth_user = "alice"
+    assert await resolve_signed_in_as(request) == "alice"
+
+
+# ---------------------------------------------------------------------------
 # Integration tests - HTTP routes
 # ---------------------------------------------------------------------------
 

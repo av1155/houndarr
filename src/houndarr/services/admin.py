@@ -197,6 +197,7 @@ async def factory_reset(*, app: FastAPI, data_dir: str) -> None:
         db_path.with_suffix(".db-shm"),
         data_path / "houndarr.masterkey",
     ]
+    sentinel_path = data_path / "factory-reset-pending"
 
     # Stop every background task that touches the database before the
     # on-disk wipe, so none of them race a half-deleted file or wake up
@@ -229,16 +230,38 @@ async def factory_reset(*, app: FastAPI, data_dir: str) -> None:
         logger.exception("Factory reset: file deletion failed")
         raise
 
-    # On-disk state is wiped at this point. If anything below raises, the
-    # route layer catches it and schedules a delayed process exit; the
-    # orchestrator's restart drops into first-run on the empty data dir.
-    await init_db()
-    new_key = ensure_master_key(str(data_path))
-    app.state.master_key = new_key
-    reset_auth_caches()
-    new_supervisor = Supervisor(master_key=new_key)
-    await new_supervisor.start()
-    app.state.supervisor = new_supervisor
+    # From this point the on-disk state is wiped; any failure leaves a
+    # sentinel so the container's next boot can finish the reset cleanly.
+    try:
+        await init_db()
+        new_key = ensure_master_key(str(data_path))
+        app.state.master_key = new_key
+        reset_auth_caches()
+        new_supervisor = Supervisor(master_key=new_key)
+        await new_supervisor.start()
+        app.state.supervisor = new_supervisor
+        # Respawn the log-retention loop we cancelled above. Without this,
+        # an operator who stays in the same container process after the
+        # reset gets unbounded search_log growth until the next restart.
+        # Lazy import avoids a circular dependency: houndarr.app imports
+        # this module's siblings during router registration.
+        from houndarr.app import _periodic_log_retention
+
+        app.state.retention_task = asyncio.create_task(
+            _periodic_log_retention(),
+            name="log-retention-loop",
+        )
+    except Exception:
+        logger.exception("Factory reset: in-process re-init failed; writing sentinel for next boot")
+        try:
+            sentinel_path.write_text("pending\n", encoding="utf-8")
+        except OSError:
+            logger.exception("Factory reset: could not write sentinel file")
+        raise
+
+    # Clean up any stale sentinel from a previous aborted reset.
+    with suppress(FileNotFoundError):
+        sentinel_path.unlink()
 
 
 def request_process_exit() -> None:

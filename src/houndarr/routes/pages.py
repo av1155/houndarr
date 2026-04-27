@@ -306,7 +306,7 @@ async def logs_page(
         template_name,
         instances=instances,
         rows=rows,
-        instance_accent_by_name=instance_accent_by_name,
+        instance_accent_by_name=accent_map,
         limit=50,
         load_more_limit=compute_load_more_limit(50),
         selected_instance_ids=parsed_instance_ids,
@@ -322,7 +322,6 @@ async def logs_page(
         hide_system=parsed_hide_system,
         hide_skipped=parsed_hide_skipped,
         before=None,
-        instance_accent_by_name=accent_map,
     )
 
 

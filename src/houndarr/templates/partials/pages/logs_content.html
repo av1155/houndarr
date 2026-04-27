@@ -28,7 +28,7 @@
 <form
   id="log-filter-form"
   hx-get="/api/logs/partial"
-  hx-target="#log-tbody"
+  hx-target="#log-feed"
   hx-swap="innerHTML"
   hx-trigger="change, submit"
   hx-indicator="#log-spinner"
@@ -133,9 +133,7 @@
 </form>
 
 <div class="flex flex-wrap items-center justify-between gap-2 mb-4">
-  <div id="logs-summary" class="min-w-0 flex-1">
-    {% include "partials/log_summary.html" %}
-  </div>
+  <div id="logs-summary" class="min-w-0 flex-1"></div>
   <!-- Desktop split-button copy group -->
   <div
     id="copy-dropdown-group-desktop"

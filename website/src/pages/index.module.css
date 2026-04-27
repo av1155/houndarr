@@ -46,6 +46,13 @@
 .heroRight {
   flex: 1 1 auto;
   min-width: 0;
+  /* Cap the layout box, not the image. The hero <img> stays at natural
+     full height (so the dashboard preview starts at the top and renders
+     sharp), but the layout slot it occupies stops at 820px.  Anything
+     past that bleeds visually into the features section underneath and
+     is clipped by .heroBanner's overflow: hidden, giving the "preview
+     runs behind the next section" feel the IdealImage version had. */
+  max-height: 820px;
   overflow: visible;
 }
 
@@ -165,12 +172,11 @@
 }
 
 /* ── Hero screenshot ─────────────────────────────────────────────────────── */
-/* The hero is a plain <img>, not IdealImage. width: 100% scales the
-   natural portrait aspect to whatever the column gives it; no height
-   cap, so the dashboard hero renders at its full natural height
-   instead of getting clamped. medium-zoom overrides transform with
-   inline styles when it opens the image, so the perspective tilt
-   cleanly hands off to the zoom animation. */
+/* The hero is a plain <img>, not IdealImage. width: 100% scales it to
+   the column; no height cap on the img itself, so it renders at the
+   full natural aspect.  The layout cap lives on .heroRight above,
+   which lets the bottom of the image bleed into the features section
+   (clipped by .heroBanner overflow: hidden). */
 .heroScreenshot {
   display: block;
   border-radius: 10px;

@@ -140,14 +140,14 @@ class TestDialogShellConsumerCallSites:
         self, render_macro: Callable[[str], str]
     ) -> None:
         src = (
-            _IMPORT + '{% call modals.dialog_shell(id="changelog-modal", width="38rem", '
+            _IMPORT + '{% call modals.dialog_shell(id="changelog-modal", width="42rem", '
             'aria_labelledby="changelog-modal-title", '
             'aria_describedby="changelog-modal-subtitle") %}BODY{% endcall %}'
         )
         expected = (
             "<dialog\n"
             '  id="changelog-modal"\n'
-            '  class="m-auto p-0 w-[min(94vw,38rem)] rounded-container border '
+            '  class="m-auto p-0 w-[min(94vw,42rem)] rounded-container border '
             'border-border-subtle bg-surface-1 text-slate-100 shadow-modal"\n'
             '  aria-labelledby="changelog-modal-title"\n'
             '  aria-describedby="changelog-modal-subtitle"\n'
@@ -161,13 +161,13 @@ class TestDialogShellConsumerCallSites:
         self, render_macro: Callable[[str], str]
     ) -> None:
         src = (
-            _IMPORT + '{% call modals.dialog_shell(id="changelog-modal", width="38rem", '
+            _IMPORT + '{% call modals.dialog_shell(id="changelog-modal", width="42rem", '
             'aria_labelledby="changelog-modal-title") %}BODY{% endcall %}'
         )
         expected = (
             "<dialog\n"
             '  id="changelog-modal"\n'
-            '  class="m-auto p-0 w-[min(94vw,38rem)] rounded-container border '
+            '  class="m-auto p-0 w-[min(94vw,42rem)] rounded-container border '
             'border-border-subtle bg-surface-1 text-slate-100 shadow-modal"\n'
             '  aria-labelledby="changelog-modal-title"\n'
             ">\n"

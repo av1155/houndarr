@@ -41,9 +41,15 @@
       id:       required dialog id.  Used by the per-modal
                 <style> block and by the JS controller that
                 opens / closes the modal.
-      width:    the upper bound passed to `w-[min(94vw,WIDTH)]`.
-                Two values used in production: "38rem" (changelog)
-                and "52rem" (add-instance).
+      width:    the upper bound passed to the dialog's
+                `w-[min(94vw,WIDTH)]` arbitrary-value class.  Tailwind
+                v4 cannot derive the resolved class through the Jinja
+                interpolation, so every value used here MUST also be
+                listed in `@source inline(...)` directives in
+                `static/css/input.css` or the rule disappears from
+                the production CSS bundle.  Two values are used in
+                production: "42rem" (changelog) and "52rem"
+                (add-instance).
       aria_labelledby: optional id of the heading the dialog
                 names.  The changelog modal sets this to its
                 title id; the add-instance modal leaves it None

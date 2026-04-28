@@ -37,6 +37,17 @@
    explicit source so the build never misses Jinja partials. */
 @source "../../templates";
 
+/* Force-generate utility classes whose final form is composed at
+   render time from a Jinja variable (e.g. `w-[min(94vw,{{ width }})]`
+   in _macros/modals.html). Tailwind's static scanner sees the literal
+   `{{ width }}` and cannot derive `w-[min(94vw,42rem)]`, so the rule
+   would be missing from the production Docker build (templates-only
+   scan) even though it survives locally because tests reference the
+   literal. Keep this list aligned with the dialog_shell call sites:
+   42rem = changelog modal, 52rem = add-instance modal. */
+@source inline("w-[min(94vw,42rem)]");
+@source inline("w-[min(94vw,52rem)]");
+
 /* daisyUI v5 component plugin. Runs at Tailwind build time; nothing
    ships to the browser except compiled CSS. themes: false disables
    the built-in theme set because we define our own "station" theme

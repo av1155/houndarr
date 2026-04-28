@@ -720,13 +720,50 @@ def test_logs_page_copy_dropdown_aria_attributes(app: TestClient) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_logs_partial_empty(app: TestClient) -> None:
-    """The HTMX partial returns the empty-state card when no logs exist."""
+def test_logs_partial_empty_when_db_has_no_rows(app: TestClient) -> None:
+    """A truly empty search_log renders the quiet "no entries yet" branch.
+
+    Distinguishes a fresh install (or post Clear logs) from a filter that
+    happens to exclude every row: the route probes
+    ``search_log_has_any_row`` when the filtered query came back empty
+    and passes ``log_db_empty=True`` so the partial picks the
+    ``empty--quiet`` Station panel instead of the filter-mismatch copy.
+    """
     _login(app)
     resp = app.get("/api/logs/partial")
     assert resp.status_code == 200
-    assert b'class="empty"' in resp.content
-    assert b"No entries match those filters" in resp.content
+    assert b"empty--quiet" in resp.content
+    assert b"No log entries yet" in resp.content
+    assert b"No entries match those filters" not in resp.content
+
+
+@pytest.mark.asyncio()
+async def test_logs_partial_empty_when_filters_exclude_all_rows(
+    seeded_log: None, async_client: object
+) -> None:
+    """When rows exist but the filter excludes every one, keep the original copy.
+
+    Pin: ``log_db_empty`` must be False whenever the underlying table has
+    any row, even if the filtered query returns zero, so the user sees
+    the actionable "clear a filter" hint instead of the fresh-install copy.
+    """
+    from httpx import AsyncClient
+
+    assert isinstance(async_client, AsyncClient)
+
+    await async_client.post(
+        "/setup",
+        data={"username": "admin", "password": "ValidPass1!", "password_confirm": "ValidPass1!"},
+    )
+    await async_client.post("/login", data={"username": "admin", "password": "ValidPass1!"})
+
+    # search_kind=upgrade does not match any seeded row.
+    resp = await async_client.get("/api/logs/partial?search_kind=upgrade")
+    assert resp.status_code == 200
+    body = resp.content
+    assert b"No entries match those filters" in body
+    assert b"empty--quiet" not in body
+    assert b"No log entries yet" not in body
 
 
 @pytest.mark.asyncio()

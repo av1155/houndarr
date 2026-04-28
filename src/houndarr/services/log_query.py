@@ -43,6 +43,21 @@ still get the safety net.
 _LOAD_MORE_CHUNK_MAX = 100
 
 
+async def search_log_has_any_row() -> bool:
+    """Return ``True`` if at least one row exists in ``search_log``.
+
+    Cheap LIMIT 1 probe used by the Logs page to distinguish a
+    fresh-install / cleared-log empty state ("no entries yet") from a
+    filter that happens to exclude every row ("no entries match those
+    filters").  Both ship the same DOM shape; the empty-state copy and
+    visual treatment differ by which case the route detected.
+    """
+    async with get_db() as db:
+        async with db.execute("SELECT 1 FROM search_log LIMIT 1") as cur:
+            row = await cur.fetchone()
+    return row is not None
+
+
 def compute_load_more_limit(limit: int) -> int:
     """Return a bounded per-request chunk size for load-more pagination.
 

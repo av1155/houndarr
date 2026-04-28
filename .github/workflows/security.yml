@@ -11,6 +11,11 @@ on:
   schedule:
     # Every Monday at 09:00 UTC
     - cron: "0 9 * * 1"
+  # Manual re-scan handle for when a website-only fix lands and the
+  # next cron is too far out to clear stale alerts.  Most relevant
+  # for pnpm-lock.yaml CVE bumps where the fix PR's paths-ignore
+  # excludes website/** so the PR-time Trivy run is skipped.
+  workflow_dispatch:
 
 permissions:
   contents: read

@@ -35,21 +35,10 @@
     var input = wrap.querySelector('input[data-pw-input]');
     if (!input) return;
     btn.addEventListener('click', function () {
-      // Toggle a data attribute and let CSS handle the visual reveal
-      // via -webkit-text-security.  Flipping ``input.type`` between
-      // ``password`` and ``text`` would also work, but password
-      // managers bind their autofill heuristic to ``type=password``;
-      // once we flip to ``text`` they fall back to a generic-text
-      // suggestion (often the username) and the field misfills.
-      // Keeping the type pinned preserves the autofill contract.
-      var revealing = input.getAttribute('data-pw-revealed') !== 'true';
-      if (revealing) {
-        input.setAttribute('data-pw-revealed', 'true');
-      } else {
-        input.removeAttribute('data-pw-revealed');
-      }
-      btn.setAttribute('aria-label', revealing ? 'Hide password' : 'Show password');
-      btn.setAttribute('aria-pressed', revealing ? 'true' : 'false');
+      var hidden = input.type === 'password';
+      input.type = hidden ? 'text' : 'password';
+      btn.setAttribute('aria-label', hidden ? 'Hide password' : 'Show password');
+      btn.setAttribute('aria-pressed', hidden ? 'true' : 'false');
     });
   }
 

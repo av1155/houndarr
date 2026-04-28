@@ -389,27 +389,19 @@ def test_password_eye_toggle_works_after_422_swap(
     )
 
     # After the swap, every password input in the form must respond to
-    # its eye-toggle button by flipping the ``data-pw-revealed`` attribute.
-    # The input's ``type`` stays pinned at ``password`` so password
-    # managers keep their autofill binding; the visual reveal happens via
-    # CSS (-webkit-text-security: none).  All three fields share the same
-    # wiring path, so a regression in one would imply a regression in the
-    # others.
+    # its eye-toggle button by flipping its ``type`` attribute.  All three
+    # fields share the same wiring path, so a regression in one would
+    # imply a regression in the others.
     for input_id in ("current-password", "new-password", "confirm-password"):
         field = page.locator("#admin-security").locator(f"#{input_id}")
         expect(field).to_have_attribute("type", "password")
-        expect(field).not_to_have_attribute("data-pw-revealed", "true")
         toggle = field.locator(
             "xpath=ancestor::div[contains(@class, 'input-wrap')]//button[@data-pw-toggle]"
         )
         toggle.click()
-        expect(field).to_have_attribute("data-pw-revealed", "true", timeout=2_000)
-        # Type must remain ``password`` so password managers continue to
-        # bind autofill to this field.
-        expect(field).to_have_attribute("type", "password")
+        expect(field).to_have_attribute("type", "text", timeout=2_000)
         toggle.click()
-        expect(field).not_to_have_attribute("data-pw-revealed", "true")
-        expect(field).to_have_attribute("type", "password")
+        expect(field).to_have_attribute("type", "password", timeout=2_000)
 
 
 @pytest.mark.integration

@@ -1,7 +1,5 @@
 #!/usr/bin/env bash
-# Orchestrate the Playwright browser-e2e stack locally and (optionally)
-# capture / verify the login + setup visual baselines under
-# tests/e2e_browser/_screenshots/.
+# Orchestrate the Playwright browser-e2e stack locally.
 #
 # Usage:
 #   bash scripts/e2e_browser/capture_baselines.sh <mode>
@@ -15,40 +13,19 @@
 #   down      Tear the stack down (docker rm -f the three containers,
 #             docker network rm arr-net, rm -rf /tmp/houndarr-e2e-data).
 #             Idempotent; safe to run when the stack is already down.
-#   capture   Bring the stack up (pre-admin state) and run pytest
-#             inside the Playwright Linux container twice: first
-#             -k test_setup_page_visual --update-snapshots (no admin
-#             yet, /setup renders), then curl POST /setup to create
-#             the admin, then -k test_login_page_visual
-#             --update-snapshots.  Tears the stack down on exit.
-#   verify    Like ``capture`` but without ``--update-snapshots``.
-#             The two visual tests must pass unguarded against the
-#             already-committed PNGs.  Tears the stack down on exit.
 #
 # Defaults the maintainer usually does not override:
 #   IMAGE                  houndarr:e2e
 #   NETWORK                arr-net
 #   DATA_DIR               /tmp/houndarr-e2e-data
 #   HOUNDARR_HOST_PORT     8877
-#   PLAYWRIGHT_IMAGE       mcr.microsoft.com/playwright/python:v1.58.0-jammy
-#                          (matches ``playwright==1.58.0`` pinned in
-#                          tests/e2e_browser/requirements.txt)
-#   HOUNDARR_ADMIN_USER    admin
-#   HOUNDARR_ADMIN_PASS    CITestPass1!
-#
-# OS-parity note: the pytest invocation runs inside a Linux Playwright
-# container so fonts antialias the same way as GitHub Actions'
-# ubuntu-latest runner.  Capturing directly on the macOS host would
-# produce pixel diffs against CI; this container detour keeps the
-# baselines strictly byte-equal between local and CI.
 #
 # Exit codes:
 #   0  success
-#   1  any failure (propagated from docker / pytest / curl)
+#   1  any failure (propagated from docker / curl)
 #
-# The script traps EXIT in capture / verify modes so a mid-flow failure
-# still tears the stack down.  ``up`` leaves the stack running on
-# purpose.
+# ``up`` leaves the stack running on purpose; pair with ``down`` when
+# finished.  Used by ``just e2e-up`` and ``just e2e-down``.
 
 set -euo pipefail
 
@@ -59,9 +36,6 @@ IMAGE="${IMAGE:-houndarr:e2e}"
 NETWORK="${NETWORK:-arr-net}"
 DATA_DIR="${DATA_DIR:-/tmp/houndarr-e2e-data}"
 HOUNDARR_HOST_PORT="${HOUNDARR_HOST_PORT:-8877}"
-PLAYWRIGHT_IMAGE="${PLAYWRIGHT_IMAGE:-mcr.microsoft.com/playwright/python:v1.58.0-jammy}"
-HOUNDARR_ADMIN_USER="${HOUNDARR_ADMIN_USER:-admin}"
-HOUNDARR_ADMIN_PASS="${HOUNDARR_ADMIN_PASS:-CITestPass1!}"
 
 # Colour codes (disabled when not a tty)
 if [ -t 1 ]; then
@@ -91,9 +65,7 @@ _require_docker() {
 _build_image() {
     # Always `docker build`; Docker's layer cache makes a no-op fast
     # when nothing changed, while a real code change (CSS, template,
-    # Python) rebuilds the affected layers.  An "only build if missing"
-    # guard would silently capture baselines against a stale image
-    # whenever a maintainer iterates on CSS between captures.
+    # Python) rebuilds the affected layers.
     _info "building ${IMAGE} from ${REPO_ROOT} (uses docker cache)"
     docker build -t "${IMAGE}" "${REPO_ROOT}" >/dev/null
 }
@@ -177,13 +149,6 @@ _wait_for_houndarr() {
     exit 1
 }
 
-_create_admin() {
-    _info "creating admin account via POST /setup"
-    curl -sf -X POST "http://localhost:${HOUNDARR_HOST_PORT}/setup" \
-        -d "username=${HOUNDARR_ADMIN_USER}&password=${HOUNDARR_ADMIN_PASS}&password_confirm=${HOUNDARR_ADMIN_PASS}" \
-        -o /dev/null
-}
-
 _teardown() {
     _info "tearing down e2e stack"
     docker rm -f houndarr-e2e mock-sonarr mock-radarr >/dev/null 2>&1 || true
@@ -197,32 +162,6 @@ _teardown() {
     else
         _warn "DATA_DIR override detected (${DATA_DIR}); leaving contents intact"
     fi
-}
-
-_run_pytest() {
-    # Args:
-    #   $1 selector    pytest -k expression
-    #   $2 update_mode "update" (captures baselines) or "verify" (compares)
-    local selector="$1"
-    local update_mode="${2:-verify}"
-    local update_env=""
-    if [ "${update_mode}" = "update" ]; then
-        update_env="-e HOUNDARR_E2E_CAPTURE=1"
-    fi
-    _info "pytest inside ${PLAYWRIGHT_IMAGE} (-k ${selector}, mode=${update_mode})"
-    docker run --rm --network "${NETWORK}" \
-        -v "${REPO_ROOT}:/workspace" \
-        -w /workspace \
-        -e HOUNDARR_URL="http://houndarr-e2e:8877" \
-        -e MOCK_SONARR_URL="http://mock-sonarr:8989" \
-        -e MOCK_RADARR_URL="http://mock-radarr:7878" \
-        -e HOUNDARR_E2E_USER="${HOUNDARR_ADMIN_USER}" \
-        -e HOUNDARR_E2E_PASS="${HOUNDARR_ADMIN_PASS}" \
-        ${update_env} \
-        "${PLAYWRIGHT_IMAGE}" \
-        bash -lc "pip install --quiet --disable-pip-version-check -r tests/e2e_browser/requirements.txt \
-            && pytest tests/e2e_browser/ --confcutdir tests/e2e_browser \
-               -k '${selector}' --browser chromium -v"
 }
 
 _up() {
@@ -243,50 +182,16 @@ _down() {
     _info "teardown complete"
 }
 
-_capture() {
-    _require_docker
-    trap _teardown EXIT
-    _up
-    # Setup baseline first: fresh /data means is_setup_complete is False
-    # and /setup renders the first-run form.
-    _run_pytest test_setup_page_visual update
-    # test_setup_page_visual's ``finally`` block already calls
-    # ``_recreate_admin`` to restore admin state.  The curl below is a
-    # belt-and-braces re-confirmation: POST /setup is idempotent
-    # server-side (returns 200/303 on a second call; see
-    # src/houndarr/routes/pages.py:77), so running it again is a no-op.
-    _create_admin
-    # Login baseline: admin now exists; logged_in_page fixture logs in,
-    # the test logs out and navigates to /login.
-    _run_pytest test_login_page_visual update
-    _info "baselines captured under tests/e2e_browser/_screenshots/"
-}
-
-_verify() {
-    _require_docker
-    trap _teardown EXIT
-    _up
-    # Same two-pytest flow in verify mode.  The captured baselines
-    # must satisfy the byte-equal assertion; otherwise pytest fails.
-    _run_pytest test_setup_page_visual verify
-    # Idempotent re-confirmation; see _capture for rationale.
-    _create_admin
-    _run_pytest test_login_page_visual verify
-    _info "baselines verified"
-}
-
 main() {
     if [ "$#" -lt 1 ]; then
-        _fail "usage: $0 <up|down|capture|verify>"
+        _fail "usage: $0 <up|down>"
         exit 1
     fi
     case "$1" in
-        up)      _up ;;
-        down)    _down ;;
-        capture) _capture ;;
-        verify)  _verify ;;
+        up)   _up ;;
+        down) _down ;;
         *)
-            _fail "unknown mode: $1 (expected up|down|capture|verify)"
+            _fail "unknown mode: $1 (expected up|down)"
             exit 1
             ;;
     esac

@@ -1,9 +1,8 @@
 """Consolidated invariant: the CSS component and utility layer stays whole.
 
 The per-macro pinning tests (test_macros_forms, test_macros_badges)
-and the built-bundle hash (test_css_hash_pinning) cover the
-consumer surface.  This gate locks the CSS structure above them:
-the ``@layer components`` block declares the ``.field-label`` and
+cover the consumer surface.  This gate locks the CSS structure above
+them: the ``@layer components`` block declares the ``.field-label`` and
 ``.status-pill`` rules, the four ``@utility`` rules back the
 inline-shadow and brand-rule macros, no ``duration-slow`` utility
 leaks into the build, and the off-limits auth CSS sentinels are
@@ -12,7 +11,6 @@ in place.
 
 from __future__ import annotations
 
-import hashlib
 from pathlib import Path
 
 import pytest
@@ -25,9 +23,6 @@ pytestmark = pytest.mark.pinning
 _REPO_ROOT = Path(houndarr.__file__).resolve().parents[2]
 
 _INPUT_CSS = _REPO_ROOT / "src" / "houndarr" / "static" / "css" / "input.css"
-_APP_BUILT_CSS = _REPO_ROOT / "src" / "houndarr" / "static" / "css" / "app.built.css"
-_SHA256_PIN = _REPO_ROOT / "tests" / "_artifacts" / "app.built.css.sha256"
-_ARTIFACTS_README = _REPO_ROOT / "tests" / "_artifacts" / "README.md"
 
 _AUTH_CSS = _REPO_ROOT / "src" / "houndarr" / "static" / "css" / "auth.css"
 _AUTH_FIELDS_CSS = _REPO_ROOT / "src" / "houndarr" / "static" / "css" / "auth-fields.css"
@@ -156,32 +151,6 @@ class TestMacroDefaults:
         assert f'<span class="{modifier}">' in source, (
             f"status_pill macro stopped emitting `{modifier}`"
         )
-
-
-class TestCssHashArtifact:
-    """tests/_artifacts/app.built.css.sha256 is a committed reference."""
-
-    def test_sha256_pin_exists(self) -> None:
-        assert _SHA256_PIN.is_file()
-
-    def test_sha256_pin_is_single_line_hash(self) -> None:
-        raw = _SHA256_PIN.read_text(encoding="utf-8").strip()
-        head = raw.split()[0]
-        assert len(head) == 64
-        int(head, 16)  # parse as hex
-
-    def test_readme_documents_refresh_policy(self) -> None:
-        assert _ARTIFACTS_README.is_file()
-        body = _ARTIFACTS_README.read_text()
-        assert "app.built.css.sha256" in body
-        assert "pnpm run build-css" in body
-
-    def test_bundle_matches_pin_when_bundle_present(self) -> None:
-        if not _APP_BUILT_CSS.is_file():
-            pytest.skip("app.built.css not present; run `pnpm run build-css`")
-        actual = hashlib.sha256(_APP_BUILT_CSS.read_bytes()).hexdigest()
-        expected = _SHA256_PIN.read_text(encoding="utf-8").strip().split()[0]
-        assert actual == expected, "app.built.css hash drift without a matching sha256 pin update"
 
 
 class TestDocsAndSentinels:

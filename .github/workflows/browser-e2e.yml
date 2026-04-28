@@ -8,11 +8,6 @@ on:
       - "website/**"
       - ".claude/**"
   workflow_dispatch:
-    inputs:
-      update_baselines:
-        description: "Re-capture login + setup visual baselines and upload them as an artifact (chromium only)."
-        type: boolean
-        default: false
 
 permissions:
   contents: read
@@ -134,7 +129,6 @@ jobs:
             -o /dev/null
 
       - name: Run browser e2e suite
-        if: github.event_name != 'workflow_dispatch' || inputs.update_baselines != true
         env:
           HOUNDARR_URL: http://localhost:8877
           MOCK_SONARR_URL: http://mock-sonarr:8989
@@ -154,35 +148,6 @@ jobs:
             --junitxml=test-results/junit.xml \
             --reruns 2 \
             -v
-
-      - name: Capture login + setup visual baselines (workflow_dispatch only)
-        if: github.event_name == 'workflow_dispatch' && inputs.update_baselines == true && matrix.browser == 'chromium'
-        env:
-          HOUNDARR_URL: http://localhost:8877
-          MOCK_SONARR_URL: http://mock-sonarr:8989
-          MOCK_RADARR_URL: http://mock-radarr:7878
-          HOUNDARR_E2E_USER: admin
-          HOUNDARR_E2E_PASS: CITestPass1!
-          HOUNDARR_E2E_CAPTURE: "1"
-        run: |
-          # The visual baseline tests honour HOUNDARR_E2E_CAPTURE=1 by
-          # writing the rendered screenshot to disk instead of asserting
-          # against the committed PNG.  Run only the two visual tests so
-          # nothing else writes into _screenshots/.
-          pytest tests/e2e_browser/test_flows.py \
-            --confcutdir tests/e2e_browser \
-            --browser chromium \
-            --full-page-screenshot \
-            -k "test_login_page_visual or test_setup_page_visual" \
-            -v
-
-      - name: Upload re-captured baselines (workflow_dispatch only)
-        if: github.event_name == 'workflow_dispatch' && inputs.update_baselines == true && matrix.browser == 'chromium'
-        uses: actions/upload-artifact@v7
-        with:
-          name: visual-baselines-chromium
-          path: tests/e2e_browser/_screenshots/*.png
-          retention-days: 30
 
       - name: Dump container logs on failure
         if: failure()

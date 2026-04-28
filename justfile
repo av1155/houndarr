@@ -115,22 +115,6 @@ e2e-up:
 e2e-down:
     bash scripts/e2e_browser/capture_baselines.sh down
 
-# Capture the login + setup visual baselines under
-# tests/e2e_browser/_screenshots/.  Runs pytest inside a Linux Playwright
-# container so fonts antialias the way CI's ubuntu-latest renders them;
-# captures /setup first (pre-admin), creates the admin, then captures
-# /login.  Cleans up the stack on exit.  Re-run when login.html,
-# setup.html, or the auth CSS tokens change.
-capture-baselines:
-    bash scripts/e2e_browser/capture_baselines.sh capture
-
-# Verify the committed login + setup visual baselines without
-# `--update-snapshots`.  Same two-pytest flow as `capture-baselines`
-# but the PNGs on disk must satisfy the assertions; any pixel diff
-# fails the run.
-verify-baselines:
-    bash scripts/e2e_browser/capture_baselines.sh verify
-
 # Print the commit history since the branch last matched main.
 log:
     git log --oneline main..HEAD

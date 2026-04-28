@@ -74,8 +74,6 @@ just test-quick         # unit only (-m "not integration"), parallel
 just test-integration   # tests/test_e2e/ (-m integration), parallel
 just pin                # characterisation tests only, parallel
 just test-browser chromium     # Playwright e2e; serial (shared stack on fixed ports)
-just capture-baselines  # rebuild login/setup PNG baselines (Linux Playwright container)
-just verify-baselines   # check committed baselines without --update-snapshots
 ```
 
 For one-off invocations without a `just` recipe:

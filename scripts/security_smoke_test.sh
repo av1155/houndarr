@@ -270,9 +270,12 @@ if [[ "$AUTHENTICATED" == "1" ]]; then
         fi
     done
 
-    # factory-reset with valid session + CSRF but wrong password must 422
-    # (the endpoint should never redirect unauthenticated, but verify that
-    # the dangerous path is password-gated in builtin mode).
+    # factory-reset with valid session + CSRF but wrong password must reject.
+    # Section 5 just maxed the IP-scoped rate-limit bucket with 7 failed
+    # logins; factory-reset shares that same bucket (security fix #496),
+    # so the first attempt here returns 429 instead of the 422 a fresh-IP
+    # call would get.  Both responses prove the endpoint refused the
+    # destructive action; either is acceptable as a security-gate signal.
     SC=$(curl -s -o "$BODY" -w "%{http_code}" \
         -X POST \
         --max-redirs 0 \
@@ -281,13 +284,13 @@ if [[ "$AUTHENTICATED" == "1" ]]; then
         -H "X-CSRF-Token: ${CSRF_TOKEN}" \
         -d "confirm_phrase=RESET&current_password=definitely-not-the-password" \
         "$HOST/settings/admin/factory-reset" || true)
-    if [[ "$SC" == "422" ]]; then
-        _pass "POST /settings/admin/factory-reset with wrong password -> 422"
+    if [[ "$SC" == "422" || "$SC" == "429" ]]; then
+        _pass "POST /settings/admin/factory-reset with wrong password -> $SC (rejected)"
     else
-        _fail "POST /settings/admin/factory-reset with wrong password -> $SC (expected 422)"
+        _fail "POST /settings/admin/factory-reset with wrong password -> $SC (expected 422 or 429)"
     fi
 
-    # factory-reset with wrong phrase + right password must still 422.
+    # factory-reset with wrong phrase + right password must still reject.
     SC=$(curl -s -o "$BODY" -w "%{http_code}" \
         -X POST \
         --max-redirs 0 \
@@ -296,10 +299,10 @@ if [[ "$AUTHENTICATED" == "1" ]]; then
         -H "X-CSRF-Token: ${CSRF_TOKEN}" \
         -d "confirm_phrase=nope&current_password=${PASSWORD}" \
         "$HOST/settings/admin/factory-reset" || true)
-    if [[ "$SC" == "422" ]]; then
-        _pass "POST /settings/admin/factory-reset with wrong phrase -> 422"
+    if [[ "$SC" == "422" || "$SC" == "429" ]]; then
+        _pass "POST /settings/admin/factory-reset with wrong phrase -> $SC (rejected)"
     else
-        _fail "POST /settings/admin/factory-reset with wrong phrase -> $SC (expected 422)"
+        _fail "POST /settings/admin/factory-reset with wrong phrase -> $SC (expected 422 or 429)"
     fi
 
     # /settings/changelog/full was retired in favour of the GitHub link

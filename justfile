@@ -54,6 +54,18 @@ test:
 test-quick:
     {{pytest}} -n {{workers}} -m "not integration"
 
+# Run a filtered subset (single file, single test, keyword, etc.) under
+# the same parallelism + non-integration marker that test-quick uses.
+# Forwards every remaining positional argument straight to pytest.
+# When the first forwarded argument starts with a dash, prefix the
+# command with `just --` so just does not interpret the dash as one of
+# its own options:
+#     just test-one tests/test_errors.py
+#     just test-one tests/test_errors.py::TestInstanceValidationPublicMessage
+#     just -- test-one -k csrf -v
+test-one *ARGS:
+    {{pytest}} -n {{workers}} -m "not integration" {{ARGS}}
+
 test-integration:
     {{pytest}} -n {{workers}} -m integration tests/test_e2e/
 

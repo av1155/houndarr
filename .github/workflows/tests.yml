@@ -7,6 +7,7 @@ on:
       - "**/*.md"
       - "website/**"
       - ".claude/**"
+      - "scripts/marketing/**"
 
 permissions:
   contents: read
@@ -41,8 +42,11 @@ jobs:
           pip install -r requirements-dev.txt
           pip install -e .
 
+      # Run pytest under xdist with worker-per-CPU.  Each test gets its own
+      # tmp_data_dir + per-call respx mocks, so worker isolation holds.
+      # The browser e2e suite is excluded by `norecursedirs` in pyproject.toml.
       - name: Run tests
-        run: python -m pytest -q --tb=short
+        run: python -m pytest -q --tb=short -n auto
 
       - name: Sanity checks
         run: |

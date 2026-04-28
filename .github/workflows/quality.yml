@@ -7,6 +7,7 @@ on:
       - "**/*.md"
       - "website/**"
       - ".claude/**"
+      - "scripts/marketing/**"
 
 permissions:
   contents: read

@@ -384,6 +384,24 @@ src/houndarr/
 Full DDL and migrations live in `src/houndarr/database.py`. Bump
 `SCHEMA_VERSION` and add a `_migrate_to_vN` when changing schema.
 
+### Migration constants are version-locked
+
+Rebuild migrations (`CREATE TABLE foo_new ... INSERT INTO foo_new SELECT ...`)
+must reference a snapshot constant frozen at the introducing schema version,
+never the current `_ITEM_TYPES` / `_INSTANCE_TYPES` alias. The snapshots
+(`_ITEM_TYPES_V5`, `_ITEM_TYPES_V10`, `_ITEM_TYPES_V15`, `_ITEM_TYPES_V16`,
+`_INSTANCE_TYPES_V5`, `_INSTANCE_TYPES_V10`) live at the top of `database.py`
+and are immutable after their migration ships. Fresh-install DDL in
+`_SCHEMA_SQL` uses the latest snapshot via the `_ITEM_TYPES` /
+`_INSTANCE_TYPES` aliases.
+
+When adding a migration that renames a value: introduce a new
+`_FOO_TYPES_VN` constant, point the `_FOO_TYPES` alias at it, write the new
+migration with the new constant plus a CASE WHEN translation in its COPY,
+and leave the prior snapshot (and prior migrations) untouched. This prevents
+the class of bug where a later rename retroactively breaks an earlier
+rebuild migration's CHECK clause.
+
 ### *arr API reference (local)
 
 Full upstream OpenAPI specs vendored under `docs/api/` (one per app:

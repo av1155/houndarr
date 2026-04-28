@@ -18,8 +18,28 @@ SCHEMA_VERSION = 17
 # ---------------------------------------------------------------------------
 # DDL
 # ---------------------------------------------------------------------------
-_INSTANCE_TYPES = "'radarr', 'sonarr', 'lidarr', 'readarr', 'whisparr_v2', 'whisparr_v3'"
-_ITEM_TYPES = "'episode', 'movie', 'album', 'book', 'whisparr_v2_episode', 'whisparr_v3_movie'"
+# Version-locked DDL constants.  Each rebuild migration references the snapshot
+# matching its own schema version so that future renames (e.g. PR #493 rotating
+# 'whisparr_episode' to 'whisparr_v2_episode') cannot retroactively invalidate
+# the CHECK clauses written by earlier migrations.  Never edit a snapshot once
+# its migration has shipped: add a new constant for the migration that performs
+# the rename instead, and update _ITEM_TYPES / _INSTANCE_TYPES below to point at
+# the latest snapshot for fresh-install DDL.
+
+_INSTANCE_TYPES_V5 = "'sonarr', 'radarr', 'lidarr', 'readarr', 'whisparr'"
+_INSTANCE_TYPES_V10 = "'radarr', 'sonarr', 'lidarr', 'readarr', 'whisparr_v2', 'whisparr_v3'"
+
+_ITEM_TYPES_V5 = "'episode', 'movie', 'album', 'book', 'whisparr_episode'"
+_ITEM_TYPES_V10 = "'episode', 'movie', 'album', 'book', 'whisparr_episode', 'whisparr_v3_movie'"
+# v15 rebuilt cooldowns to enforce search_kind CHECK; the item_type list was
+# unchanged, so v15 reuses the v10 snapshot.
+_ITEM_TYPES_V15 = _ITEM_TYPES_V10
+_ITEM_TYPES_V16 = "'episode', 'movie', 'album', 'book', 'whisparr_v2_episode', 'whisparr_v3_movie'"
+
+# Aliases used by _SCHEMA_SQL and the latest-shipped CHECK clauses.  Always
+# point at the most recent snapshot.
+_INSTANCE_TYPES = _INSTANCE_TYPES_V10
+_ITEM_TYPES = _ITEM_TYPES_V16
 
 _SCHEMA_SQL = f"""
 CREATE TABLE IF NOT EXISTS settings (
@@ -277,16 +297,24 @@ async def _migrate_to_v5(db: aiosqlite.Connection) -> None:
     New columns (lidarr/readarr/whisparr search modes) are added afterwards
     via ALTER TABLE since they have defaults.
     """
+    # Flush any pending transaction first.  PRAGMA foreign_keys is a no-op
+    # inside an open transaction (per SQLite docs), and earlier migrations
+    # may have left one open via DML statements.  Without this commit, FK
+    # enforcement stays ON and the DROP TABLE instances below would CASCADE
+    # delete every cooldowns row.
+    await db.commit()
     # Disable FK enforcement during table recreation to prevent CASCADE deletes
     await db.execute("PRAGMA foreign_keys=OFF")
 
     # -- 1) Recreate instances with expanded type CHECK ----------------------
+    # Use the v5 snapshot of _INSTANCE_TYPES so this rebuild stays correct even
+    # when the current alias rotates in a later migration.
     await db.execute(
         f"""
         CREATE TABLE instances_new (
             id                   INTEGER PRIMARY KEY AUTOINCREMENT,
             name                 TEXT    NOT NULL,
-            type                 TEXT    NOT NULL CHECK(type IN ({_INSTANCE_TYPES})),
+            type                 TEXT    NOT NULL CHECK(type IN ({_INSTANCE_TYPES_V5})),
             url                  TEXT    NOT NULL,
             encrypted_api_key    TEXT    NOT NULL DEFAULT '',
             batch_size           INTEGER NOT NULL DEFAULT 2,
@@ -328,13 +356,15 @@ async def _migrate_to_v5(db: aiosqlite.Connection) -> None:
     await db.execute("ALTER TABLE instances_new RENAME TO instances")
 
     # -- 2) Recreate cooldowns with expanded item_type CHECK -----------------
+    # v5 snapshot still allows 'whisparr_episode'; the rename to
+    # 'whisparr_v2_episode' belongs to v16, not here.
     await db.execute(
         f"""
         CREATE TABLE cooldowns_new (
             id          INTEGER PRIMARY KEY AUTOINCREMENT,
             instance_id INTEGER NOT NULL REFERENCES instances(id) ON DELETE CASCADE,
             item_id     INTEGER NOT NULL,
-            item_type   TEXT    NOT NULL CHECK(item_type IN ({_ITEM_TYPES})),
+            item_type   TEXT    NOT NULL CHECK(item_type IN ({_ITEM_TYPES_V5})),
             searched_at TEXT    NOT NULL,
             UNIQUE(instance_id, item_id, item_type)
         )
@@ -343,10 +373,7 @@ async def _migrate_to_v5(db: aiosqlite.Connection) -> None:
     await db.execute(
         """
         INSERT INTO cooldowns_new (id, instance_id, item_id, item_type, searched_at)
-        SELECT id, instance_id, item_id,
-               CASE WHEN item_type = 'whisparr_episode' THEN 'whisparr_v2_episode'
-                    ELSE item_type END,
-               searched_at
+        SELECT id, instance_id, item_id, item_type, searched_at
         FROM cooldowns
         """
     )
@@ -364,7 +391,7 @@ async def _migrate_to_v5(db: aiosqlite.Connection) -> None:
             id          INTEGER PRIMARY KEY AUTOINCREMENT,
             instance_id INTEGER REFERENCES instances(id) ON DELETE SET NULL,
             item_id     INTEGER,
-            item_type   TEXT    CHECK(item_type IN ({_ITEM_TYPES})),
+            item_type   TEXT    CHECK(item_type IN ({_ITEM_TYPES_V5})),
             search_kind TEXT,
             cycle_id    TEXT,
             cycle_trigger TEXT CHECK(cycle_trigger IN ('scheduled', 'run_now', 'system')),
@@ -383,9 +410,7 @@ async def _migrate_to_v5(db: aiosqlite.Connection) -> None:
             cycle_id, cycle_trigger, item_label, action, reason, message, timestamp
         )
         SELECT
-            id, instance_id, item_id,
-            CASE WHEN item_type = 'whisparr_episode' THEN 'whisparr_v2_episode'
-                 ELSE item_type END,
+            id, instance_id, item_id, item_type,
             search_kind, cycle_id, cycle_trigger, item_label, action, reason, message, timestamp
         FROM search_log
         """
@@ -576,6 +601,11 @@ async def _migrate_to_v10(db: aiosqlite.Connection) -> None:
         "upgrade_whisparr_v2_search_mode" if v16_already_applied else "upgrade_whisparr_search_mode"
     )
 
+    # Flush any pending transaction so PRAGMA foreign_keys=OFF actually takes
+    # effect.  Without this, v6's UPDATE keeps a transaction open through
+    # v7..v9, the PRAGMA below silently no-ops, and the DROP TABLE instances
+    # CASCADE-wipes every cooldowns row.
+    await db.commit()
     await db.execute("PRAGMA foreign_keys=OFF")
 
     # Guard: clean up any leftover temp tables from a partial previous run.
@@ -584,12 +614,14 @@ async def _migrate_to_v10(db: aiosqlite.Connection) -> None:
     await db.execute("DROP TABLE IF EXISTS search_log_new")
 
     # -- 1) Recreate instances with expanded type CHECK + rename whisparr ------
+    # v10 snapshot of _INSTANCE_TYPES locks the CHECK clause to what this
+    # migration introduced; later renames live in their own migrations.
     await db.execute(
         f"""
         CREATE TABLE instances_new (
             id                   INTEGER PRIMARY KEY AUTOINCREMENT,
             name                 TEXT    NOT NULL,
-            type                 TEXT    NOT NULL CHECK(type IN ({_INSTANCE_TYPES})),
+            type                 TEXT    NOT NULL CHECK(type IN ({_INSTANCE_TYPES_V10})),
             url                  TEXT    NOT NULL,
             encrypted_api_key    TEXT    NOT NULL DEFAULT '',
             batch_size           INTEGER NOT NULL DEFAULT 2,
@@ -662,13 +694,16 @@ async def _migrate_to_v10(db: aiosqlite.Connection) -> None:
     await db.execute("ALTER TABLE instances_new RENAME TO instances")
 
     # -- 2) Recreate cooldowns with expanded item_type CHECK -------------------
+    # v10 snapshot still allows 'whisparr_episode'; v16 is the migration that
+    # renames it.  Keeping that responsibility in one place keeps each
+    # migration's intent clear.
     await db.execute(
         f"""
         CREATE TABLE cooldowns_new (
             id          INTEGER PRIMARY KEY AUTOINCREMENT,
             instance_id INTEGER NOT NULL REFERENCES instances(id) ON DELETE CASCADE,
             item_id     INTEGER NOT NULL,
-            item_type   TEXT    NOT NULL CHECK(item_type IN ({_ITEM_TYPES})),
+            item_type   TEXT    NOT NULL CHECK(item_type IN ({_ITEM_TYPES_V10})),
             searched_at TEXT    NOT NULL,
             UNIQUE(instance_id, item_id, item_type)
         )
@@ -677,10 +712,7 @@ async def _migrate_to_v10(db: aiosqlite.Connection) -> None:
     await db.execute(
         """
         INSERT INTO cooldowns_new (id, instance_id, item_id, item_type, searched_at)
-        SELECT id, instance_id, item_id,
-               CASE WHEN item_type = 'whisparr_episode' THEN 'whisparr_v2_episode'
-                    ELSE item_type END,
-               searched_at
+        SELECT id, instance_id, item_id, item_type, searched_at
         FROM cooldowns
         """
     )
@@ -698,7 +730,7 @@ async def _migrate_to_v10(db: aiosqlite.Connection) -> None:
             id          INTEGER PRIMARY KEY AUTOINCREMENT,
             instance_id INTEGER REFERENCES instances(id) ON DELETE SET NULL,
             item_id     INTEGER,
-            item_type   TEXT    CHECK(item_type IN ({_ITEM_TYPES})),
+            item_type   TEXT    CHECK(item_type IN ({_ITEM_TYPES_V10})),
             search_kind TEXT,
             cycle_id    TEXT,
             cycle_trigger TEXT CHECK(cycle_trigger IN ('scheduled', 'run_now', 'system')),
@@ -718,9 +750,7 @@ async def _migrate_to_v10(db: aiosqlite.Connection) -> None:
             reason, message, timestamp
         )
         SELECT
-            id, instance_id, item_id,
-            CASE WHEN item_type = 'whisparr_episode' THEN 'whisparr_v2_episode'
-                 ELSE item_type END,
+            id, instance_id, item_id, item_type,
             search_kind, cycle_id, cycle_trigger, item_label, action,
             reason, message, timestamp
         FROM search_log
@@ -882,12 +912,30 @@ async def _migrate_to_v15(db: aiosqlite.Connection) -> None:
     not reject pre-existing data; such rows should not exist in
     practice (the app writes only valid kinds) but defence-in-depth
     keeps the migration from failing on a corrupted snapshot.
+
+    The item_type CHECK uses ``_ITEM_TYPES_V15``, the version-locked
+    snapshot of the item-type list at v15's introduction, which still
+    allows ``'whisparr_episode'``.  v16 is the migration that renames
+    that value to ``'whisparr_v2_episode'``; binding v15 to the
+    contemporaneous list means a later rename of ``_ITEM_TYPES``
+    cannot retroactively reject pre-rename rows during this rebuild.
     """
     if await _cooldowns_has_search_kind_check(db):
         return
 
+    # Flush any pending transaction so PRAGMA foreign_keys=OFF actually takes
+    # effect.  v14's UPDATE leaves an open transaction; without this commit
+    # the PRAGMA silently no-ops.  v15's DROP is on cooldowns (a child, not
+    # a parent) so CASCADE is not the immediate concern, but committing here
+    # also makes v11..v14's column adds durable on disk before the rebuild.
+    await db.commit()
     await db.execute("PRAGMA foreign_keys=OFF")
     try:
+        # Clean up any leftover temp table from a partial previous run.
+        # Mirrors the same defence in v16; a CHECK violation on the COPY
+        # below would otherwise leave cooldowns_new behind and break retry.
+        await db.execute("DROP TABLE IF EXISTS cooldowns_new")
+
         await db.execute(
             f"""
             CREATE TABLE cooldowns_new (
@@ -895,7 +943,7 @@ async def _migrate_to_v15(db: aiosqlite.Connection) -> None:
                 instance_id INTEGER NOT NULL
                                     REFERENCES instances(id) ON DELETE CASCADE,
                 item_id     INTEGER NOT NULL,
-                item_type   TEXT    NOT NULL CHECK(item_type IN ({_ITEM_TYPES})),
+                item_type   TEXT    NOT NULL CHECK(item_type IN ({_ITEM_TYPES_V15})),
                 search_kind TEXT    NOT NULL DEFAULT 'missing'
                                     CHECK(search_kind IN ('missing', 'cutoff', 'upgrade')),
                 searched_at TEXT    NOT NULL,
@@ -973,6 +1021,11 @@ async def _migrate_to_v16(db: aiosqlite.Connection) -> None:
     if await _cooldowns_has_v2_item_type_check(db):
         return
 
+    # Flush any pending transaction so PRAGMA foreign_keys=OFF actually takes
+    # effect (it is a no-op inside a transaction).  v15 above ran a rebuild
+    # in the same connection if v14 had pending DML; without this commit the
+    # PRAGMA below would silently no-op.
+    await db.commit()
     await db.execute("PRAGMA foreign_keys=OFF")
     try:
         # Clean up any leftover temp tables from a partial previous run.
@@ -980,6 +1033,9 @@ async def _migrate_to_v16(db: aiosqlite.Connection) -> None:
         await db.execute("DROP TABLE IF EXISTS search_log_new")
 
         # cooldowns rebuild with the v16 item_type CHECK + UPDATE rows.
+        # Use the v16 snapshot — this migration is the rename, so it pins
+        # the post-rename list and is unaffected by future changes to the
+        # current _ITEM_TYPES alias.
         await db.execute(
             f"""
             CREATE TABLE cooldowns_new (
@@ -987,7 +1043,7 @@ async def _migrate_to_v16(db: aiosqlite.Connection) -> None:
                 instance_id INTEGER NOT NULL
                                     REFERENCES instances(id) ON DELETE CASCADE,
                 item_id     INTEGER NOT NULL,
-                item_type   TEXT    NOT NULL CHECK(item_type IN ({_ITEM_TYPES})),
+                item_type   TEXT    NOT NULL CHECK(item_type IN ({_ITEM_TYPES_V16})),
                 search_kind TEXT    NOT NULL DEFAULT 'missing'
                                     CHECK(search_kind IN ('missing', 'cutoff', 'upgrade')),
                 searched_at TEXT    NOT NULL,
@@ -1025,7 +1081,7 @@ async def _migrate_to_v16(db: aiosqlite.Connection) -> None:
                 id          INTEGER PRIMARY KEY AUTOINCREMENT,
                 instance_id INTEGER REFERENCES instances(id) ON DELETE SET NULL,
                 item_id     INTEGER,
-                item_type   TEXT    CHECK(item_type IN ({_ITEM_TYPES})),
+                item_type   TEXT    CHECK(item_type IN ({_ITEM_TYPES_V16})),
                 search_kind TEXT,
                 cycle_id    TEXT,
                 cycle_trigger TEXT CHECK(cycle_trigger IN ('scheduled', 'run_now', 'system')),

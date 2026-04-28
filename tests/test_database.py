@@ -1070,6 +1070,732 @@ async def test_migrate_to_v15_coerces_invalid_search_kind(tmp_path: Path) -> Non
         ]
 
 
+# ---------------------------------------------------------------------------
+# Historical migration matrix
+# ---------------------------------------------------------------------------
+#
+# Every released schema version must migrate cleanly to current with realistic
+# data, including ``whisparr_episode`` cooldown rows from any v1.1.0+ install
+# that ever ran a Whisparr instance.  The fixtures below emit the
+# contemporaneous DDL for each schema version (literal SQL, no module
+# constants) so the tests are stable against future changes to
+# ``_ITEM_TYPES`` / ``_INSTANCE_TYPES``.
+
+
+def _seed_v4_shaped_db() -> str:
+    """v4-shaped DB (~v1.0.x): pre-Whisparr era.
+
+    Only ``sonarr`` and ``radarr`` instance types; only ``episode`` and
+    ``movie`` item_types.  Drives the longest possible migration chain
+    (v5 → v17) and verifies that v10's rebuild preserves every cooldown
+    row when no transaction-leak from v6 exists at v4 (since v6 has not
+    run yet at the start of this chain — but v6 will run mid-chain).
+    """
+    return """
+    CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+    INSERT INTO settings (key, value) VALUES ('schema_version', '4');
+
+    CREATE TABLE instances (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        type TEXT NOT NULL CHECK(type IN ('sonarr','radarr')),
+        url TEXT NOT NULL,
+        encrypted_api_key TEXT NOT NULL DEFAULT '',
+        batch_size INTEGER NOT NULL DEFAULT 2,
+        sleep_interval_mins INTEGER NOT NULL DEFAULT 30,
+        hourly_cap INTEGER NOT NULL DEFAULT 4,
+        cooldown_days INTEGER NOT NULL DEFAULT 14,
+        unreleased_delay_hrs INTEGER NOT NULL DEFAULT 36,
+        cutoff_enabled INTEGER NOT NULL DEFAULT 0,
+        cutoff_batch_size INTEGER NOT NULL DEFAULT 1,
+        cutoff_cooldown_days INTEGER NOT NULL DEFAULT 21,
+        cutoff_hourly_cap INTEGER NOT NULL DEFAULT 1,
+        sonarr_search_mode TEXT NOT NULL DEFAULT 'episode',
+        enabled INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT NOT NULL DEFAULT '2024-01-01T00:00:00.000Z',
+        updated_at TEXT NOT NULL DEFAULT '2024-01-01T00:00:00.000Z'
+    );
+
+    CREATE TABLE cooldowns (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        instance_id INTEGER NOT NULL REFERENCES instances(id) ON DELETE CASCADE,
+        item_id INTEGER NOT NULL,
+        item_type TEXT NOT NULL CHECK(item_type IN ('episode','movie')),
+        searched_at TEXT NOT NULL,
+        UNIQUE(instance_id, item_id, item_type)
+    );
+
+    CREATE TABLE search_log (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        instance_id INTEGER REFERENCES instances(id) ON DELETE SET NULL,
+        item_id INTEGER,
+        item_type TEXT CHECK(item_type IN ('episode','movie')),
+        search_kind TEXT,
+        cycle_id TEXT,
+        cycle_trigger TEXT,
+        item_label TEXT,
+        action TEXT NOT NULL,
+        reason TEXT,
+        message TEXT,
+        timestamp TEXT NOT NULL DEFAULT '2024-01-01T00:00:00.000Z'
+    );
+    """
+
+
+def _seed_v5_shaped_db() -> str:
+    """v5-shaped DB (~v1.1.x): the earliest version where ``whisparr_episode``
+    item_type values exist.  Drives the longest realistic migration chain
+    (v6 → v17) including v6's column drop, v10's rebuild, v15's rebuild,
+    and v16's rename.
+    """
+    return """
+    CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+    INSERT INTO settings (key, value) VALUES ('schema_version', '5');
+
+    CREATE TABLE instances (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        type TEXT NOT NULL CHECK(type IN (
+            'sonarr','radarr','lidarr','readarr','whisparr'
+        )),
+        url TEXT NOT NULL,
+        encrypted_api_key TEXT NOT NULL DEFAULT '',
+        batch_size INTEGER NOT NULL DEFAULT 2,
+        sleep_interval_mins INTEGER NOT NULL DEFAULT 30,
+        hourly_cap INTEGER NOT NULL DEFAULT 4,
+        cooldown_days INTEGER NOT NULL DEFAULT 14,
+        unreleased_delay_hrs INTEGER NOT NULL DEFAULT 36,
+        cutoff_enabled INTEGER NOT NULL DEFAULT 0,
+        cutoff_batch_size INTEGER NOT NULL DEFAULT 1,
+        cutoff_cooldown_days INTEGER NOT NULL DEFAULT 21,
+        cutoff_hourly_cap INTEGER NOT NULL DEFAULT 1,
+        sonarr_search_mode TEXT NOT NULL DEFAULT 'episode',
+        lidarr_search_mode TEXT NOT NULL DEFAULT 'album',
+        readarr_search_mode TEXT NOT NULL DEFAULT 'book',
+        whisparr_search_mode TEXT NOT NULL DEFAULT 'episode',
+        enabled INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT NOT NULL DEFAULT '2024-01-01T00:00:00.000Z',
+        updated_at TEXT NOT NULL DEFAULT '2024-01-01T00:00:00.000Z'
+    );
+
+    CREATE TABLE cooldowns (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        instance_id INTEGER NOT NULL REFERENCES instances(id) ON DELETE CASCADE,
+        item_id INTEGER NOT NULL,
+        item_type TEXT NOT NULL CHECK(item_type IN (
+            'episode','movie','album','book','whisparr_episode'
+        )),
+        searched_at TEXT NOT NULL,
+        UNIQUE(instance_id, item_id, item_type)
+    );
+
+    CREATE TABLE search_log (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        instance_id INTEGER REFERENCES instances(id) ON DELETE SET NULL,
+        item_id INTEGER,
+        item_type TEXT CHECK(item_type IN (
+            'episode','movie','album','book','whisparr_episode'
+        )),
+        search_kind TEXT,
+        cycle_id TEXT,
+        cycle_trigger TEXT,
+        item_label TEXT,
+        action TEXT NOT NULL,
+        reason TEXT,
+        message TEXT,
+        timestamp TEXT NOT NULL DEFAULT '2024-01-01T00:00:00.000Z'
+    );
+    """
+
+
+def _seed_v7_shaped_db() -> str:
+    """v7-shaped DB (~v1.2.x .. v1.5.0): v6 already ran (post_release_grace_hrs
+    in place of unreleased_delay_hrs) plus v7's ``queue_limit``.  No upgrade_*
+    columns yet (v8) and no page_offset (v9).
+    """
+    return """
+    CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+    INSERT INTO settings (key, value) VALUES ('schema_version', '7');
+
+    CREATE TABLE instances (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        type TEXT NOT NULL CHECK(type IN (
+            'sonarr','radarr','lidarr','readarr','whisparr'
+        )),
+        url TEXT NOT NULL,
+        encrypted_api_key TEXT NOT NULL DEFAULT '',
+        batch_size INTEGER NOT NULL DEFAULT 2,
+        sleep_interval_mins INTEGER NOT NULL DEFAULT 30,
+        hourly_cap INTEGER NOT NULL DEFAULT 4,
+        cooldown_days INTEGER NOT NULL DEFAULT 14,
+        post_release_grace_hrs INTEGER NOT NULL DEFAULT 6,
+        queue_limit INTEGER NOT NULL DEFAULT 0,
+        cutoff_enabled INTEGER NOT NULL DEFAULT 0,
+        cutoff_batch_size INTEGER NOT NULL DEFAULT 1,
+        cutoff_cooldown_days INTEGER NOT NULL DEFAULT 21,
+        cutoff_hourly_cap INTEGER NOT NULL DEFAULT 1,
+        sonarr_search_mode TEXT NOT NULL DEFAULT 'episode',
+        lidarr_search_mode TEXT NOT NULL DEFAULT 'album',
+        readarr_search_mode TEXT NOT NULL DEFAULT 'book',
+        whisparr_search_mode TEXT NOT NULL DEFAULT 'episode',
+        enabled INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT NOT NULL DEFAULT '2024-01-01T00:00:00.000Z',
+        updated_at TEXT NOT NULL DEFAULT '2024-01-01T00:00:00.000Z'
+    );
+
+    CREATE TABLE cooldowns (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        instance_id INTEGER NOT NULL REFERENCES instances(id) ON DELETE CASCADE,
+        item_id INTEGER NOT NULL,
+        item_type TEXT NOT NULL CHECK(item_type IN (
+            'episode','movie','album','book','whisparr_episode'
+        )),
+        searched_at TEXT NOT NULL,
+        UNIQUE(instance_id, item_id, item_type)
+    );
+
+    CREATE TABLE search_log (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        instance_id INTEGER REFERENCES instances(id) ON DELETE SET NULL,
+        item_id INTEGER,
+        item_type TEXT CHECK(item_type IN (
+            'episode','movie','album','book','whisparr_episode'
+        )),
+        search_kind TEXT,
+        cycle_id TEXT,
+        cycle_trigger TEXT,
+        item_label TEXT,
+        action TEXT NOT NULL,
+        reason TEXT,
+        message TEXT,
+        timestamp TEXT NOT NULL DEFAULT '2024-01-01T00:00:00.000Z'
+    );
+    """
+
+
+def _seed_v8_shaped_db() -> str:
+    """v8-shaped DB (~v1.6.0 .. v1.6.2): v7 plus the upgrade_* columns."""
+    return (
+        _seed_v7_shaped_db()
+        .replace(
+            "INSERT INTO settings (key, value) VALUES ('schema_version', '7');",
+            "INSERT INTO settings (key, value) VALUES ('schema_version', '8');",
+        )
+        .replace(
+            "whisparr_search_mode TEXT NOT NULL DEFAULT 'episode',",
+            "whisparr_search_mode TEXT NOT NULL DEFAULT 'episode',\n        "
+            "upgrade_enabled INTEGER NOT NULL DEFAULT 0,\n        "
+            "upgrade_batch_size INTEGER NOT NULL DEFAULT 1,\n        "
+            "upgrade_cooldown_days INTEGER NOT NULL DEFAULT 90,\n        "
+            "upgrade_hourly_cap INTEGER NOT NULL DEFAULT 1,\n        "
+            "upgrade_sonarr_search_mode TEXT NOT NULL DEFAULT 'episode',\n        "
+            "upgrade_lidarr_search_mode TEXT NOT NULL DEFAULT 'album',\n        "
+            "upgrade_readarr_search_mode TEXT NOT NULL DEFAULT 'book',\n        "
+            "upgrade_whisparr_search_mode TEXT NOT NULL DEFAULT 'episode',\n        "
+            "upgrade_item_offset INTEGER NOT NULL DEFAULT 0,\n        "
+            "upgrade_series_offset INTEGER NOT NULL DEFAULT 0,",
+        )
+    )
+
+
+def _seed_v9_shaped_db() -> str:
+    """Return the DDL for a v9-shaped database (~v1.6.x).
+
+    v9 still uses the v5 ``_INSTANCE_TYPES`` (singular ``whisparr``) and the
+    v5 ``_ITEM_TYPES`` (allows ``whisparr_episode``, no ``whisparr_v3_movie``).
+    Adds ``missing_page_offset`` / ``cutoff_page_offset`` from v9.
+    """
+    return """
+    CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+    INSERT INTO settings (key, value) VALUES ('schema_version', '9');
+
+    CREATE TABLE instances (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        type TEXT NOT NULL CHECK(type IN (
+            'sonarr','radarr','lidarr','readarr','whisparr'
+        )),
+        url TEXT NOT NULL,
+        encrypted_api_key TEXT NOT NULL DEFAULT '',
+        batch_size INTEGER NOT NULL DEFAULT 2,
+        sleep_interval_mins INTEGER NOT NULL DEFAULT 30,
+        hourly_cap INTEGER NOT NULL DEFAULT 4,
+        cooldown_days INTEGER NOT NULL DEFAULT 14,
+        post_release_grace_hrs INTEGER NOT NULL DEFAULT 6,
+        queue_limit INTEGER NOT NULL DEFAULT 0,
+        cutoff_enabled INTEGER NOT NULL DEFAULT 0,
+        cutoff_batch_size INTEGER NOT NULL DEFAULT 1,
+        cutoff_cooldown_days INTEGER NOT NULL DEFAULT 21,
+        cutoff_hourly_cap INTEGER NOT NULL DEFAULT 1,
+        sonarr_search_mode TEXT NOT NULL DEFAULT 'episode',
+        lidarr_search_mode TEXT NOT NULL DEFAULT 'album',
+        readarr_search_mode TEXT NOT NULL DEFAULT 'book',
+        whisparr_search_mode TEXT NOT NULL DEFAULT 'episode',
+        upgrade_enabled INTEGER NOT NULL DEFAULT 0,
+        upgrade_batch_size INTEGER NOT NULL DEFAULT 1,
+        upgrade_cooldown_days INTEGER NOT NULL DEFAULT 90,
+        upgrade_hourly_cap INTEGER NOT NULL DEFAULT 1,
+        upgrade_sonarr_search_mode TEXT NOT NULL DEFAULT 'episode',
+        upgrade_lidarr_search_mode TEXT NOT NULL DEFAULT 'album',
+        upgrade_readarr_search_mode TEXT NOT NULL DEFAULT 'book',
+        upgrade_whisparr_search_mode TEXT NOT NULL DEFAULT 'episode',
+        upgrade_item_offset INTEGER NOT NULL DEFAULT 0,
+        upgrade_series_offset INTEGER NOT NULL DEFAULT 0,
+        missing_page_offset INTEGER NOT NULL DEFAULT 1,
+        cutoff_page_offset INTEGER NOT NULL DEFAULT 1,
+        enabled INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT NOT NULL DEFAULT '2024-01-01T00:00:00.000Z',
+        updated_at TEXT NOT NULL DEFAULT '2024-01-01T00:00:00.000Z'
+    );
+
+    CREATE TABLE cooldowns (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        instance_id INTEGER NOT NULL REFERENCES instances(id) ON DELETE CASCADE,
+        item_id INTEGER NOT NULL,
+        item_type TEXT NOT NULL CHECK(item_type IN (
+            'episode','movie','album','book','whisparr_episode'
+        )),
+        searched_at TEXT NOT NULL,
+        UNIQUE(instance_id, item_id, item_type)
+    );
+
+    CREATE TABLE search_log (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        instance_id INTEGER REFERENCES instances(id) ON DELETE SET NULL,
+        item_id INTEGER,
+        item_type TEXT CHECK(item_type IN (
+            'episode','movie','album','book','whisparr_episode'
+        )),
+        search_kind TEXT,
+        cycle_id TEXT,
+        cycle_trigger TEXT,
+        item_label TEXT,
+        action TEXT NOT NULL,
+        reason TEXT,
+        message TEXT,
+        timestamp TEXT NOT NULL DEFAULT '2024-01-01T00:00:00.000Z'
+    );
+    """
+
+
+def _seed_v10_shaped_db() -> str:
+    """v10-shaped DB (~v1.7.0): type CHECK rebuilt to whisparr_v2/whisparr_v3."""
+    return """
+    CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+    INSERT INTO settings (key, value) VALUES ('schema_version', '10');
+
+    CREATE TABLE instances (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        type TEXT NOT NULL CHECK(type IN (
+            'radarr','sonarr','lidarr','readarr','whisparr_v2','whisparr_v3'
+        )),
+        url TEXT NOT NULL,
+        encrypted_api_key TEXT NOT NULL DEFAULT '',
+        batch_size INTEGER NOT NULL DEFAULT 2,
+        sleep_interval_mins INTEGER NOT NULL DEFAULT 30,
+        hourly_cap INTEGER NOT NULL DEFAULT 4,
+        cooldown_days INTEGER NOT NULL DEFAULT 14,
+        post_release_grace_hrs INTEGER NOT NULL DEFAULT 6,
+        queue_limit INTEGER NOT NULL DEFAULT 0,
+        cutoff_enabled INTEGER NOT NULL DEFAULT 0,
+        cutoff_batch_size INTEGER NOT NULL DEFAULT 1,
+        cutoff_cooldown_days INTEGER NOT NULL DEFAULT 21,
+        cutoff_hourly_cap INTEGER NOT NULL DEFAULT 1,
+        sonarr_search_mode TEXT NOT NULL DEFAULT 'episode',
+        lidarr_search_mode TEXT NOT NULL DEFAULT 'album',
+        readarr_search_mode TEXT NOT NULL DEFAULT 'book',
+        whisparr_search_mode TEXT NOT NULL DEFAULT 'episode',
+        upgrade_enabled INTEGER NOT NULL DEFAULT 0,
+        upgrade_batch_size INTEGER NOT NULL DEFAULT 1,
+        upgrade_cooldown_days INTEGER NOT NULL DEFAULT 90,
+        upgrade_hourly_cap INTEGER NOT NULL DEFAULT 1,
+        upgrade_sonarr_search_mode TEXT NOT NULL DEFAULT 'episode',
+        upgrade_lidarr_search_mode TEXT NOT NULL DEFAULT 'album',
+        upgrade_readarr_search_mode TEXT NOT NULL DEFAULT 'book',
+        upgrade_whisparr_search_mode TEXT NOT NULL DEFAULT 'episode',
+        upgrade_item_offset INTEGER NOT NULL DEFAULT 0,
+        upgrade_series_offset INTEGER NOT NULL DEFAULT 0,
+        missing_page_offset INTEGER NOT NULL DEFAULT 1,
+        cutoff_page_offset INTEGER NOT NULL DEFAULT 1,
+        enabled INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT NOT NULL DEFAULT '2024-01-01T00:00:00.000Z',
+        updated_at TEXT NOT NULL DEFAULT '2024-01-01T00:00:00.000Z'
+    );
+
+    CREATE TABLE cooldowns (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        instance_id INTEGER NOT NULL REFERENCES instances(id) ON DELETE CASCADE,
+        item_id INTEGER NOT NULL,
+        item_type TEXT NOT NULL CHECK(item_type IN (
+            'episode','movie','album','book','whisparr_episode','whisparr_v3_movie'
+        )),
+        searched_at TEXT NOT NULL,
+        UNIQUE(instance_id, item_id, item_type)
+    );
+
+    CREATE TABLE search_log (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        instance_id INTEGER REFERENCES instances(id) ON DELETE SET NULL,
+        item_id INTEGER,
+        item_type TEXT CHECK(item_type IN (
+            'episode','movie','album','book','whisparr_episode','whisparr_v3_movie'
+        )),
+        search_kind TEXT,
+        cycle_id TEXT,
+        cycle_trigger TEXT,
+        item_label TEXT,
+        action TEXT NOT NULL,
+        reason TEXT,
+        message TEXT,
+        timestamp TEXT NOT NULL DEFAULT '2024-01-01T00:00:00.000Z'
+    );
+    """
+
+
+def _seed_v11_shaped_db() -> str:
+    """v11-shaped DB (~v1.8.0): adds allowed_time_window."""
+    return (
+        _seed_v10_shaped_db()
+        .replace(
+            "INSERT INTO settings (key, value) VALUES ('schema_version', '10');",
+            "INSERT INTO settings (key, value) VALUES ('schema_version', '11');",
+        )
+        .replace(
+            "missing_page_offset INTEGER NOT NULL DEFAULT 1,",
+            "missing_page_offset INTEGER NOT NULL DEFAULT 1,\n        "
+            "allowed_time_window TEXT NOT NULL DEFAULT '',",
+        )
+    )
+
+
+def _seed_v12_shaped_db() -> str:
+    """v12-shaped DB (~v1.9.0): adds search_order.
+
+    This is the regression-of-record fixture: a Whisparr v2 user on v1.9.0
+    upgrading to next-release hits ``_migrate_to_v15`` first, which used to
+    rebuild ``cooldowns`` with a CHECK that no longer allowed
+    ``whisparr_episode`` rows.
+    """
+    return (
+        _seed_v11_shaped_db()
+        .replace(
+            "INSERT INTO settings (key, value) VALUES ('schema_version', '11');",
+            "INSERT INTO settings (key, value) VALUES ('schema_version', '12');",
+        )
+        .replace(
+            "allowed_time_window TEXT NOT NULL DEFAULT '',",
+            "allowed_time_window TEXT NOT NULL DEFAULT '',\n        "
+            "search_order TEXT NOT NULL DEFAULT 'chronological',",
+        )
+    )
+
+
+def _whisparr_v2_seed_inserts(version: int) -> str:
+    """INSERTs that exercise the rename path: a Whisparr v2 instance plus
+    cooldowns/search_log rows carrying the pre-v16 ``whisparr_episode`` value.
+    """
+    instance_type = "whisparr" if version <= 9 else "whisparr_v2"
+    return f"""
+    INSERT INTO instances (id, name, type, url) VALUES
+        (1, 'Sonarr Test', 'sonarr', 'http://sonarr:8989'),
+        (2, 'Whisparr v2 Test', '{instance_type}', 'http://whisparr:6969');
+
+    INSERT INTO cooldowns (instance_id, item_id, item_type, searched_at) VALUES
+        (1, 100, 'episode',          '2024-06-01T00:00:00.000Z'),
+        (2, 200, 'whisparr_episode', '2024-06-02T00:00:00.000Z'),
+        (2, 201, 'whisparr_episode', '2024-06-03T00:00:00.000Z'),
+        (2, 202, 'whisparr_episode', '2024-06-04T00:00:00.000Z');
+
+    INSERT INTO search_log
+        (instance_id, item_id, item_type, action, timestamp) VALUES
+        (1, 100, 'episode',          'searched', '2024-06-01T00:00:00.000Z'),
+        (2, 200, 'whisparr_episode', 'searched', '2024-06-02T00:00:00.000Z'),
+        (2, 201, 'whisparr_episode', 'skipped',  '2024-06-03T00:00:00.000Z');
+    """
+
+
+@pytest.mark.asyncio()
+@pytest.mark.parametrize(
+    ("source_version", "ddl_builder"),
+    [
+        (5, _seed_v5_shaped_db),
+        (7, _seed_v7_shaped_db),
+        (8, _seed_v8_shaped_db),
+        (9, _seed_v9_shaped_db),
+        (10, _seed_v10_shaped_db),
+        (11, _seed_v11_shaped_db),
+        (12, _seed_v12_shaped_db),
+    ],
+)
+async def test_init_db_migrates_whisparr_episode_rows_through_to_current(
+    tmp_path: Path,
+    source_version: int,
+    ddl_builder: object,
+) -> None:
+    """Every released schema version 9..12 must migrate to current cleanly,
+    even when ``cooldowns`` and ``search_log`` carry pre-v16 ``whisparr_episode``
+    rows.  Regression test for the bug where ``_migrate_to_v15`` used the
+    current ``_ITEM_TYPES`` (which no longer allows ``whisparr_episode``) for
+    its rebuild CHECK and crashed on the COPY before ``_migrate_to_v16`` could
+    do the rename.
+    """
+    db_path = tmp_path / f"v{source_version}.db"
+
+    async with aiosqlite.connect(str(db_path)) as conn:
+        # pyright doesn't understand the parametrize-supplied callable; we
+        # only ever pass the four module-level functions defined above.
+        await conn.executescript(ddl_builder())  # type: ignore[operator]
+        await conn.executescript(_whisparr_v2_seed_inserts(source_version))
+        await conn.commit()
+
+    set_db_path(str(db_path))
+    await init_db()
+
+    async with get_db() as conn:
+        # 1. Schema version landed at current.
+        async with conn.execute("SELECT value FROM settings WHERE key = 'schema_version'") as cur:
+            row = await cur.fetchone()
+        assert row is not None
+        assert row[0] == "17"
+
+        # 2. The Whisparr v2 cooldown rows survived and were renamed.
+        async with conn.execute(
+            "SELECT item_id, item_type, search_kind FROM cooldowns"
+            " WHERE instance_id = 2 ORDER BY item_id"
+        ) as cur:
+            cooldown_rows = [(int(r[0]), str(r[1]), str(r[2])) async for r in cur]
+        assert cooldown_rows == [
+            (200, "whisparr_v2_episode", "missing"),
+            (201, "whisparr_v2_episode", "missing"),
+            (202, "whisparr_v2_episode", "missing"),
+        ]
+
+        # 3. search_log rows likewise renamed (v16 rebuilds search_log too).
+        async with conn.execute(
+            "SELECT item_id, item_type, action FROM search_log"
+            " WHERE instance_id = 2 ORDER BY item_id"
+        ) as cur:
+            log_rows = [(int(r[0]), str(r[1]), str(r[2])) async for r in cur]
+        assert log_rows == [
+            (200, "whisparr_v2_episode", "searched"),
+            (201, "whisparr_v2_episode", "skipped"),
+        ]
+
+        # 4. Both tables now carry the v16 CHECK clause.
+        async with conn.execute(
+            "SELECT sql FROM sqlite_master WHERE type='table'"
+            " AND name IN ('cooldowns','search_log')"
+        ) as cur:
+            ddls = {str(r[0] or "") async for r in cur}
+        for ddl in ddls:
+            assert "whisparr_v2_episode" in ddl
+            assert "whisparr_episode'" not in ddl  # the trailing quote keeps
+            # 'whisparr_v2_episode' from satisfying the substring check
+
+        # 5. cooldowns also carries the v15 search_kind CHECK clause.
+        async with conn.execute(
+            "SELECT sql FROM sqlite_master WHERE type='table' AND name='cooldowns'"
+        ) as cur:
+            cooldowns_ddl = (await cur.fetchone())[0]  # type: ignore[index]
+        compact = "".join(str(cooldowns_ddl or "").split())
+        assert "CHECK(search_kindIN" in compact
+
+        # 6. The Whisparr v2 instance row was migrated and the column rename
+        #    landed (v10 + v16).
+        async with conn.execute("SELECT type FROM instances WHERE id = 2") as cur:
+            row = await cur.fetchone()
+        assert row is not None
+        assert row[0] == "whisparr_v2"
+        async with conn.execute("PRAGMA table_info(instances)") as cur:
+            instance_columns = {r[1] async for r in cur}
+        assert "whisparr_v2_search_mode" in instance_columns
+        assert "upgrade_whisparr_v2_search_mode" in instance_columns
+        assert "upgrade_series_window_size" in instance_columns
+        assert "monitored_total" in instance_columns
+        assert "snapshot_refreshed_at" in instance_columns
+
+        # 7. No leftover *_new tables from rebuild migrations.
+        async with conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name LIKE '%_new'"
+        ) as cur:
+            leftovers = [r[0] async for r in cur]
+        assert leftovers == []
+
+    # 8. Idempotency: running init_db a second time on the migrated DB must
+    #    be a clean no-op (the self-heal block runs every startup).
+    await init_db()
+    async with get_db() as conn:
+        async with conn.execute("SELECT COUNT(*) FROM cooldowns WHERE instance_id = 2") as cur:
+            row = await cur.fetchone()
+        assert row is not None
+        assert row[0] == 3
+
+
+@pytest.mark.asyncio()
+async def test_init_db_migrates_v4_preserves_cooldowns_through_v10_rebuild(
+    tmp_path: Path,
+) -> None:
+    """v4 (~v1.0.x) was the pre-Whisparr era: only sonarr/radarr instances and
+    only ``episode`` / ``movie`` cooldowns.  The v4 → v17 chain runs through
+    v6 (UPDATE leaves a transaction open) and v10 (rebuilds instances).
+    Without the commit added at the start of v10, ``PRAGMA foreign_keys=OFF``
+    silently no-ops inside the still-open transaction, FK enforcement stays
+    on, and the DROP TABLE instances CASCADE-wipes every cooldown row.
+    This test would have failed before the fix.
+    """
+    db_path = tmp_path / "v4.db"
+
+    async with aiosqlite.connect(str(db_path)) as conn:
+        await conn.executescript(_seed_v4_shaped_db())
+        await conn.executescript(
+            """
+            INSERT INTO instances (id, name, type, url) VALUES
+                (1, 'Sonarr Test', 'sonarr', 'http://sonarr:8989'),
+                (2, 'Radarr Test', 'radarr', 'http://radarr:7878');
+
+            INSERT INTO cooldowns (instance_id, item_id, item_type, searched_at) VALUES
+                (1, 100, 'episode', '2024-06-01T00:00:00.000Z'),
+                (1, 101, 'episode', '2024-06-02T00:00:00.000Z'),
+                (2, 200, 'movie',   '2024-06-03T00:00:00.000Z'),
+                (2, 201, 'movie',   '2024-06-04T00:00:00.000Z');
+
+            INSERT INTO search_log
+                (instance_id, item_id, item_type, action, timestamp) VALUES
+                (1, 100, 'episode', 'searched', '2024-06-01T00:00:00.000Z'),
+                (2, 200, 'movie',   'searched', '2024-06-03T00:00:00.000Z');
+            """
+        )
+        await conn.commit()
+
+    set_db_path(str(db_path))
+    await init_db()
+
+    async with get_db() as conn:
+        async with conn.execute("SELECT value FROM settings WHERE key = 'schema_version'") as cur:
+            row = await cur.fetchone()
+        assert row is not None
+        assert row[0] == "17"
+
+        # All four cooldown rows must survive the v10 instances rebuild.
+        async with conn.execute(
+            "SELECT instance_id, item_id, item_type FROM cooldowns ORDER BY item_id"
+        ) as cur:
+            rows = [(int(r[0]), int(r[1]), str(r[2])) async for r in cur]
+        assert rows == [
+            (1, 100, "episode"),
+            (1, 101, "episode"),
+            (2, 200, "movie"),
+            (2, 201, "movie"),
+        ]
+
+        # search_log rows survive too (FK is ON DELETE SET NULL, so even
+        # without the commit fix the rows would survive — but instance_id
+        # would have been NULLed).  With the fix, the FK reference is
+        # preserved.
+        async with conn.execute(
+            "SELECT instance_id, item_id FROM search_log ORDER BY item_id"
+        ) as cur:
+            log_rows = [(r[0], int(r[1])) async for r in cur]
+        assert log_rows == [(1, 100), (2, 200)]
+
+
+@pytest.mark.asyncio()
+async def test_init_db_self_heals_v17_with_whisparr_v2_data(tmp_path: Path) -> None:
+    """An already-migrated v17 database with whisparr_v2_episode data must
+    pass through ``init_db`` unchanged: every self-heal migration's idempotency
+    guard fires and returns early.
+    """
+    db_path = tmp_path / "healthy-v17.db"
+
+    set_db_path(str(db_path))
+    await init_db()
+
+    async with get_db() as conn:
+        await conn.execute(
+            "INSERT INTO instances (id, name, type, url, encrypted_api_key)"
+            " VALUES (1, 'Whisparr v2', 'whisparr_v2', 'http://w:6969', 'fake')"
+        )
+        await conn.execute(
+            "INSERT INTO cooldowns (instance_id, item_id, item_type, search_kind, searched_at)"
+            " VALUES (1, 999, 'whisparr_v2_episode', 'missing', '2026-01-01T00:00:00.000Z')"
+        )
+        await conn.commit()
+
+    # Second init_db must be a no-op: no exception, data preserved.
+    await init_db()
+
+    async with get_db() as conn:
+        async with conn.execute(
+            "SELECT item_type, search_kind FROM cooldowns WHERE item_id = 999"
+        ) as cur:
+            row = await cur.fetchone()
+        assert row is not None
+        assert row[0] == "whisparr_v2_episode"
+        assert row[1] == "missing"
+
+        async with conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name LIKE '%_new'"
+        ) as cur:
+            leftovers = [r[0] async for r in cur]
+        assert leftovers == []
+
+
+@pytest.mark.asyncio()
+async def test_migrate_to_v15_recovers_from_partial_previous_run(
+    tmp_path: Path,
+) -> None:
+    """If a previous run of ``_migrate_to_v15`` crashed after CREATE TABLE
+    cooldowns_new but before DROP/RENAME, the next startup must recover by
+    dropping the leftover and retrying.  The fix adds DROP TABLE IF EXISTS at
+    the top of v15's body, mirroring v16.
+    """
+    db_path = tmp_path / "partial-v15.db"
+
+    async with aiosqlite.connect(str(db_path)) as conn:
+        # v14-shaped schema (so v15 will run) plus a dangling cooldowns_new.
+        await conn.executescript(_seed_v12_shaped_db())
+        await conn.executescript(_whisparr_v2_seed_inserts(12))
+        await conn.execute("UPDATE settings SET value = '14' WHERE key = 'schema_version'")
+        # Add the v14 search_kind column (NOT NULL DEFAULT 'missing') without
+        # the v15 CHECK so v15 will rebuild.
+        await conn.execute(
+            "ALTER TABLE cooldowns ADD COLUMN search_kind TEXT NOT NULL DEFAULT 'missing'"
+        )
+        # Simulate a leftover from a crashed previous v15 run.
+        await conn.executescript(
+            """
+            CREATE TABLE cooldowns_new (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                instance_id INTEGER NOT NULL,
+                item_id     INTEGER NOT NULL,
+                item_type   TEXT    NOT NULL,
+                search_kind TEXT    NOT NULL DEFAULT 'missing',
+                searched_at TEXT    NOT NULL,
+                UNIQUE(instance_id, item_id, item_type)
+            );
+            """
+        )
+        await conn.commit()
+
+    set_db_path(str(db_path))
+    await init_db()  # must not raise "table cooldowns_new already exists"
+
+    async with get_db() as conn:
+        async with conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name LIKE '%_new'"
+        ) as cur:
+            leftovers = [r[0] async for r in cur]
+        assert leftovers == []
+        async with conn.execute(
+            "SELECT COUNT(*) FROM cooldowns WHERE item_type = 'whisparr_v2_episode'"
+        ) as cur:
+            row = await cur.fetchone()
+        assert row is not None
+        assert row[0] == 3
+
+
 @pytest.mark.asyncio()
 async def test_set_and_get_setting(db: None) -> None:
     """set_setting / get_setting round-trip."""

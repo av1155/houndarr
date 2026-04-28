@@ -720,13 +720,110 @@ def test_logs_page_copy_dropdown_aria_attributes(app: TestClient) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_logs_partial_empty(app: TestClient) -> None:
-    """The HTMX partial returns the empty-state card when no logs exist."""
+def test_logs_partial_empty_when_db_has_no_rows(app: TestClient) -> None:
+    """A truly empty search_log renders the quiet "no entries yet" branch.
+
+    Distinguishes a fresh install (or post Clear logs) from a filter that
+    happens to exclude every row: the route probes
+    ``search_log_has_any_row`` when the filtered query came back empty
+    and passes ``log_db_empty=True`` so the partial picks the
+    ``empty--quiet`` Station panel instead of the filter-mismatch copy.
+    """
     _login(app)
     resp = app.get("/api/logs/partial")
     assert resp.status_code == 200
-    assert b'class="empty"' in resp.content
-    assert b"No entries match those filters" in resp.content
+    assert b"empty--quiet" in resp.content
+    assert b"No log entries yet" in resp.content
+    assert b"No entries match those filters" not in resp.content
+
+
+@pytest.mark.asyncio()
+async def test_logs_partial_empty_when_only_system_rows_exist(
+    db: None, async_client: object
+) -> None:
+    """A search_log holding only the supervisor-startup row reads as empty.
+
+    Pin: the supervisor writes a ``cycle_trigger='system'``,
+    ``instance_id IS NULL``, ``action='info'`` row on every boot.
+    Without this regression, a naive "any row" probe would fire on the
+    very first app start and the new empty-state branch would never
+    surface for users.  The probe must mirror ``query_logs``'s
+    ``hide_system`` predicate so any DB whose only rows are system
+    lifecycle reads as empty.
+    """
+    from httpx import AsyncClient
+
+    assert isinstance(async_client, AsyncClient)
+
+    async with get_db() as conn:
+        await conn.execute(
+            """
+            INSERT INTO search_log
+                (
+                    instance_id,
+                    item_id,
+                    item_type,
+                    search_kind,
+                    cycle_id,
+                    cycle_trigger,
+                    item_label,
+                    action,
+                    reason,
+                    message,
+                    timestamp
+                )
+            VALUES (NULL, NULL, NULL, NULL, NULL, 'system', NULL, 'info', NULL,
+                    'Supervisor started 0 task(s)', '2024-01-01T00:00:00.000Z')
+            """
+        )
+        await conn.commit()
+
+    await async_client.post(
+        "/setup",
+        data={"username": "admin", "password": "ValidPass1!", "password_confirm": "ValidPass1!"},
+    )
+    await async_client.post("/login", data={"username": "admin", "password": "ValidPass1!"})
+
+    # ``hide_system=true`` matches the page-route default and the
+    # partial query the live UI sends after a filter change.  Under
+    # that filter the only row in the DB drops out, the partial
+    # returns an empty result, and the probe is consulted: it must
+    # ignore the system row and report the table as empty.
+    resp = await async_client.get("/api/logs/partial?hide_system=true")
+    assert resp.status_code == 200
+    body = resp.content
+    assert b"empty--quiet" in body
+    assert b"No log entries yet" in body
+    assert b"No entries match those filters" not in body
+
+
+@pytest.mark.asyncio()
+async def test_logs_partial_empty_when_filters_exclude_all_rows(
+    seeded_log: None, async_client: object
+) -> None:
+    """When rows exist but the filter excludes every one, keep the original copy.
+
+    Pin: ``log_db_empty`` must be False whenever the underlying table has
+    any row, even if the filtered query returns zero, so the user sees
+    the actionable "clear a filter" hint instead of the fresh-install copy.
+    """
+    from httpx import AsyncClient
+
+    assert isinstance(async_client, AsyncClient)
+
+    await async_client.post(
+        "/setup",
+        data={"username": "admin", "password": "ValidPass1!", "password_confirm": "ValidPass1!"},
+    )
+    await async_client.post("/login", data={"username": "admin", "password": "ValidPass1!"})
+
+    # search_kind=upgrade does not match any seeded row.
+    resp = await async_client.get("/api/logs/partial?search_kind=upgrade")
+    assert resp.status_code == 200
+    body = resp.content
+    assert b"No entries match those filters" in body
+    assert b"empty--quiet" not in body
+    assert b"No log entries yet" not in body
 
 
 @pytest.mark.asyncio()

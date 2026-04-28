@@ -13,6 +13,22 @@
 (function () {
   'use strict';
 
+  // Latest known Caps Lock state, captured from any keyboard or mouse
+  // event the user has produced.  FocusEvent does not expose
+  // getModifierState, so the caps-lock badge cannot read the live OS
+  // state at the moment a field gains focus; instead the focus handler
+  // below re-applies whatever this tracker last observed.  Bound once
+  // at module init so per-input wiring stays cheap.
+  var _capsLockOn = false;
+  function _trackCapsLock(e) {
+    if (e && typeof e.getModifierState === 'function') {
+      _capsLockOn = !!e.getModifierState('CapsLock');
+    }
+  }
+  document.addEventListener('keydown', _trackCapsLock, true);
+  document.addEventListener('keyup', _trackCapsLock, true);
+  document.addEventListener('mousedown', _trackCapsLock, true);
+
   function initPasswordToggle(btn) {
     var wrap = btn.closest('.input-wrap');
     if (!wrap) return;
@@ -51,6 +67,12 @@
     };
     input.addEventListener('keydown', update);
     input.addEventListener('keyup', update);
+    input.addEventListener('focus', function () {
+      // Caps Lock might have been on before the user entered this
+      // field; reapply the cached global state so the badge surfaces
+      // without waiting for a key press inside the input.
+      badge.classList.toggle('is-on', _capsLockOn);
+    });
     input.addEventListener('blur', function (e) {
       // Focus moving to a sibling inside the same field (eye toggle,
       // caps badge, etc.) is not a reason to hide the indicator; the
@@ -181,9 +203,12 @@
   });
   // HTMX swaps partials into the Settings page without a full reload, so
   // re-run the initializers when new password-form markup lands.
+  // Use evt.target (the new live content the event fires on) rather than
+  // evt.detail.target: with hx-swap="outerHTML" the latter is the original
+  // target the server response replaced, now detached from the DOM, so
+  // querySelectorAll finds the old (disconnected) buttons instead of the
+  // new visible ones and the eye toggle never gets a click listener.
   document.body.addEventListener('htmx:afterSwap', function (evt) {
-    if (evt.detail && evt.detail.target) {
-      initAll(evt.detail.target);
-    }
+    initAll(evt.target || document);
   });
 })();

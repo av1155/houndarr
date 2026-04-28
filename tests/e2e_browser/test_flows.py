@@ -349,6 +349,111 @@ def test_admin_security_confirm_password_match_indicator(
 
 
 @pytest.mark.integration
+def test_password_eye_toggle_works_after_422_swap(
+    logged_in_page: Page, houndarr_url: str, console_guard
+) -> None:
+    """The eye toggle on every password input still flips type after a 422 swap.
+
+    Regression for the case where ``hx-swap="outerHTML"`` replaced
+    ``#admin-security`` and ``auth.js`` re-bound listeners against the
+    detached pre-swap subtree, leaving the new visible buttons unwired.
+    Submitting the form with the current admin password in every field
+    triggers the same-password 422 branch; after that swap the toggle on
+    each field must still flip ``input.type`` from ``password`` to ``text``.
+    """
+    from tests.e2e_browser.conftest import ADMIN_PASS
+
+    for p in _EXPECTED_422_CONSOLE_NOISE:
+        console_guard.allow(p)
+
+    page = logged_in_page
+    page.goto(f"{houndarr_url}/settings")
+    section = page.locator("#admin-security")
+    expect(section).to_be_visible()
+
+    pw_form = section.locator('form[hx-post="/settings/account/password"]')
+    pw_form.locator('input[name="current_password"]').fill(ADMIN_PASS)
+    pw_form.locator('input[name="new_password"]').fill(ADMIN_PASS)
+    pw_form.locator('input[name="new_password_confirm"]').fill(ADMIN_PASS)
+
+    with page.expect_response(
+        lambda r: "/settings/account/password" in r.url and r.request.method == "POST"
+    ) as resp_info:
+        pw_form.evaluate("f => f.requestSubmit()")
+    assert resp_info.value.status == 422, resp_info.value.status
+    _wait_for_htmx_idle(page)
+
+    expect(page.locator("#admin-security")).to_contain_text(
+        "New password must be different from current password.",
+        timeout=5_000,
+    )
+
+    # After the swap, every password input in the form must respond to
+    # its eye-toggle button by flipping its ``type`` attribute.  All three
+    # fields share the same wiring path, so a regression in one would
+    # imply a regression in the others.
+    for input_id in ("current-password", "new-password", "confirm-password"):
+        field = page.locator("#admin-security").locator(f"#{input_id}")
+        expect(field).to_have_attribute("type", "password")
+        toggle = field.locator(
+            "xpath=ancestor::div[contains(@class, 'input-wrap')]//button[@data-pw-toggle]"
+        )
+        toggle.click()
+        expect(field).to_have_attribute("type", "text", timeout=2_000)
+        toggle.click()
+        expect(field).to_have_attribute("type", "password", timeout=2_000)
+
+
+@pytest.mark.integration
+def test_caps_lock_badge_surfaces_on_focus_when_already_on(
+    logged_in_page: Page, houndarr_url: str
+) -> None:
+    """Caps-lock badge appears on focus when CapsLock was already engaged.
+
+    FocusEvent has no ``getModifierState``, so the badge handler cannot
+    read live OS state at focus time.  ``auth.js`` keeps a module-scope
+    cache fed by document-level keydown/keyup/mousedown listeners and
+    re-applies that cache on focus.  This test seeds the cache with a
+    synthetic keydown that reports CapsLock=true, focuses a password
+    input, and asserts the badge picks it up without any in-field key
+    press.
+    """
+    page = logged_in_page
+    page.goto(f"{houndarr_url}/settings")
+    section = page.locator("#admin-security")
+    expect(section).to_be_visible()
+
+    field = section.locator("#new-password")
+    badge_locator = (
+        "xpath=ancestor::div[contains(@class, 'field')]//span[contains(@class, 'caps-badge')]"
+    )
+    badge = field.locator(badge_locator)
+
+    # Sanity: badge is NOT on before any caps event.
+    expect(badge).not_to_have_class(re.compile(r"is-on"))
+
+    # Seed the global tracker by dispatching a synthetic keydown whose
+    # getModifierState reports CapsLock active.  KeyboardEvent's own
+    # getModifierState is read-only, so override it on the dispatched
+    # instance via Object.defineProperty.  The capture-phase document
+    # listener inside auth.js consumes the event before any per-input
+    # listener can interfere.
+    page.evaluate(
+        """() => {
+            const ev = new KeyboardEvent('keydown', { bubbles: true });
+            Object.defineProperty(ev, 'getModifierState', {
+                value: (key) => key === 'CapsLock',
+            });
+            document.dispatchEvent(ev);
+        }"""
+    )
+
+    field.focus()
+
+    expect(badge).to_have_class(re.compile(r"is-on"), timeout=2_000)
+
+
+@pytest.mark.integration
 def test_admin_whats_new_button_opens_modal(logged_in_page: Page, houndarr_url: str) -> None:
     """The 'What's new' button force-opens the What's new modal."""
     page = logged_in_page

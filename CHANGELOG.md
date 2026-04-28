@@ -5,6 +5,47 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.10.0] - 2026-04-28
+
+### Added
+
+- Per-instance `upgrade_series_window_size` setting (default `5`, range `1-100`) for Sonarr and Whisparr v2 tunes the upgrade pool series window; existing instances pick up the default at migration time. (#495)
+- Dashboard counters auto-refresh every 10 minutes via a supervisor snapshot loop, displaying per-instance monitored and unreleased totals without polling each *arr on every status request. (#461)
+- Per-instance hourly budget meter, search-kind icons on `Recent hunts` and `Cooldown schedule` rows, live next-patrol countdown anchored on supervisor cycle-end signals, stale-snapshot pill when monitor data exceeds 15 minutes, multi-instance error banner, and tooltips on the headline stats. (#503)
+- Settings page `Admin` dropdown adds Maintenance (`clear logs`) and Danger (`factory reset`) controls, and reorganises password and changelog preferences into the same collapsible surface. (#475)
+- Caps Lock badge on password fields appears when Caps Lock is active or when the field receives focus while Caps Lock is already on. (#499)
+- Opt-in GitHub release check in the Updates panel (disabled by default) surfaces a link to the latest release on GitHub when a newer version is available. (#497)
+
+### Changed
+
+- Dashboard redesigned with per-instance cards displaying `WANTED`, `ELIGIBLE`, and `SEARCHED` stats, a `Cooldown schedule` inset, type-colored policy chips, and per-instance error banners with deep links to filtered logs. (#501)
+- Logs page rewritten from a 10-column table into a `cycle-card` stream with cursor pagination, multi-select instance filter, hide-skipped toggle, head-poll banner, and silent auto-refresh when scrolled to top. (#505)
+- Login and setup pages redesigned with a Station auth card (logo topbar, eyebrow, accented headings, single-column form, version footer). (#499)
+- Random search order now uses a stratified-shuffle page deck plus partial-page sentinel padding, so per-page and per-item dispatch probability stays uniform across the backlog without wrap-once or last-page over-selection. (#491)
+- Hourly rate-limit skip rows now read `hourly limit reached (N/hr)` across missing, cutoff, and upgrade passes. (#491)
+- Cooldown rows stamp their `search_kind` (missing, cutoff, upgrade) at insert time and a supervisor reconcile step prunes cooldowns whose items are no longer wanted on the *arr side, restoring accurate dashboard breakdown counts. (#463)
+- Build pipeline compiles Tailwind v4 and daisyUI v5 locally at Docker build time, eliminating the Tailwind play CDN and the `unpkg` htmx script. (#481)
+- Unified `status-dot`, `status-pill`, and `station-tooltip` components with a cyan accent band and accessible focus states across dashboard, settings, and instance forms. (#487)
+- Schema v16 disambiguates Whisparr v2 from the product family: an idempotent migration renames `whisparr_search_mode` and `upgrade_whisparr_search_mode` columns and rewrites stored `whisparr_episode` item-type values to their `whisparr_v2_*` counterparts; existing instances retain settings and id. (#493)
+
+### Fixed
+
+- Database upgrade safety: version-locked migration `CHECK` constants prevent `init_db` from crashing on v1.7.0-v1.9.0 deployments with Whisparr v2 instances, and the v10 migration now commits before disabling foreign keys to stop a `CASCADE` that wiped cooldowns on v1.0.x to v1.7.0+ upgrades. (#559)
+- Supervisor catches both `httpx.TransportError` and `ClientTransportError` on snapshot-refresh, reconcile-fetch, and scheduled-cycle paths, so transport failures log at `WARNING` with the retry signal instead of producing full tracebacks. (#561)
+- Hardened HTTP redirect handling and external repository URLs: a `_redirect_guard` event hook blocks redirects to loopback and link-local addresses, proxy username echo uses `hmac.compare_digest`, and GitHub release URLs and `HOUNDARR_UPDATE_CHECK_REPO` are validated with safe fallback. (#507)
+- Curated `InstanceValidationError.public_message` text replaces the raw exception in instance validation banners, so chained exception details no longer leak through the response. (#517)
+- Password field handlers no longer break after HTMX `outerHTML` swaps, and the Caps Lock badge surfaces on focus when Caps Lock is already engaged. (#564)
+- Cooldown schedule entries on dashboard cards anchor to the top of the card instead of floating vertically centered, eliminating empty rows when adjacent cards have differing heights. (#549)
+- Cycle left-edge accent bar stays visible when hovering log entries. (#547)
+- Logs page distinguishes a fresh install (`No log entries yet`) from a filter that matches nothing (`No entries match those filters.`). (#566)
+- Removed duplicate copy in the Changelog notifications section on the Settings page that paraphrased the toggle label. (#422)
+
+### Removed
+
+- Dropped the in-app `/settings/changelog/full` page in favour of a `Latest on GitHub` link to the repository `CHANGELOG.md`. (#497)
+
+---
+
 ## [1.9.0] - 2026-04-18
 
 ### Added

@@ -1,13 +1,19 @@
 """Parse CHANGELOG.md and decide when the "What's new" modal should render.
 
-The parser expects the strict subset of Keep a Changelog that
+The parser expects the strict subset of Keep a Changelog 1.1.0 that
 ``.github/workflows/version-check.yml`` enforces on every release PR:
 
-- ``## [X.Y.Z] - YYYY-MM-DD`` opens a block.
-- ``### Added|Changed|Fixed|Removed`` (or any other ``###`` header, rendered
-  permissively) opens a section within a block.
+- ``## [X.Y.Z] - YYYY-MM-DD`` opens a versioned block.
+- ``### Added|Changed|Deprecated|Removed|Fixed|Security`` (or any other
+  ``###`` header, rendered permissively) opens a section within a block.
 - ``- `` starts a bullet (may continue onto wrapped lines).
 - ``---`` closes the block.
+
+The ``## [Unreleased]`` block at the top of CHANGELOG.md is intentionally
+skipped: ``_VERSION_HEADING`` requires a strict ``X.Y.Z`` plus an ISO date,
+so the heading does not match and bullets accumulated for the next release
+stay invisible to the in-app modal until ``/bump`` promotes them to a
+versioned block.
 
 Unexpected content is skipped rather than raising; a malformed file
 degrades to an empty changelog so the modal short-circuits instead of

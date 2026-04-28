@@ -32,6 +32,11 @@ jobs:
           set -euo pipefail
           errors=0
 
+          # Allowed `### Section` headers per Keep a Changelog 1.1.0.
+          # Houndarr extends the strict set with Deprecated and Security so
+          # future deprecation/security entries do not need a workflow tweak.
+          ALLOWED_HEADERS='^### (Added|Changed|Deprecated|Removed|Fixed|Security)$'
+
           # --- VERSION file format ---
           if [ ! -f VERSION ]; then
             echo "::error::VERSION file not found"
@@ -44,6 +49,34 @@ jobs:
             errors=$((errors + 1))
           fi
 
+          # --- ## [Unreleased] section must exist and sit above every
+          #     versioned block (Keep a Changelog 1.1.0 §"Unreleased"). ---
+          if ! grep -qE '^## \[Unreleased\]$' CHANGELOG.md; then
+            echo "::error::CHANGELOG.md missing required '## [Unreleased]' section"
+            errors=$((errors + 1))
+          fi
+
+          FIRST_BLOCK=$(grep -m1 -E '^## \[' CHANGELOG.md || true)
+          if [ "$FIRST_BLOCK" != "## [Unreleased]" ]; then
+            echo "::error::'## [Unreleased]' must be the first '## [...]' block in CHANGELOG.md (got '$FIRST_BLOCK')"
+            errors=$((errors + 1))
+          fi
+
+          # --- Unreleased block: validate headers + trailing separator. ---
+          UNRELEASED=$(awk '/^## \[Unreleased\]$/{found=1; next} found && /^## \[/{exit} found{print}' CHANGELOG.md)
+
+          if ! echo "$UNRELEASED" | grep -qE '^---$'; then
+            echo "::error::'## [Unreleased]' block is missing trailing '---' separator"
+            errors=$((errors + 1))
+          fi
+
+          BAD_UNRELEASED=$(echo "$UNRELEASED" | grep -E '^### ' | grep -vE "$ALLOWED_HEADERS" || true)
+          if [ -n "$BAD_UNRELEASED" ]; then
+            echo "::error::'## [Unreleased]' contains disallowed ### headers:"
+            echo "$BAD_UNRELEASED"
+            errors=$((errors + 1))
+          fi
+
           # --- CHANGELOG heading must match VERSION ---
           if ! grep -qE "^## \[${FILE_VERSION}\] - [0-9]{4}-[0-9]{2}-[0-9]{2}" CHANGELOG.md; then
             echo "::error::CHANGELOG.md has no '## [${FILE_VERSION}] - YYYY-MM-DD' entry"
@@ -52,8 +85,8 @@ jobs:
 
           # --- Matched block must contain at least one ### subsection ---
           BLOCK=$(awk "/^## \[${FILE_VERSION}\]/{found=1; next} found && /^## \[/{exit} found{print}" CHANGELOG.md)
-          if ! echo "$BLOCK" | grep -qE '^### (Added|Fixed|Changed|Removed)'; then
-            echo "::error::CHANGELOG block for ${FILE_VERSION} has no valid ### subsection (Added/Fixed/Changed/Removed)"
+          if ! echo "$BLOCK" | grep -qE "$ALLOWED_HEADERS"; then
+            echo "::error::CHANGELOG block for ${FILE_VERSION} has no valid ### subsection"
             errors=$((errors + 1))
           fi
 
@@ -64,7 +97,7 @@ jobs:
           fi
 
           # --- ### headers must be from the allowed set ---
-          BAD_HEADERS=$(echo "$BLOCK" | grep -E '^### ' | grep -vE '^### (Added|Fixed|Changed|Removed)$' || true)
+          BAD_HEADERS=$(echo "$BLOCK" | grep -E '^### ' | grep -vE "$ALLOWED_HEADERS" || true)
           if [ -n "$BAD_HEADERS" ]; then
             echo "::error::CHANGELOG block for ${FILE_VERSION} contains disallowed ### headers:"
             echo "$BAD_HEADERS"
@@ -76,4 +109,4 @@ jobs:
             exit 1
           fi
 
-          echo "Version check passed: VERSION=${FILE_VERSION}, CHANGELOG entry valid"
+          echo "Version check passed: VERSION=${FILE_VERSION}, Unreleased section present, ${FILE_VERSION} block valid"

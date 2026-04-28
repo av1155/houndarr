@@ -8,6 +8,12 @@ allowed-tools: Read, Write, Edit, Bash(git *), Bash(gh *), Bash(date *), Bash(.v
 
 Prepare a release PR following the Houndarr versioning workflow.
 
+Houndarr follows Keep a Changelog 1.1.0: every shipped PR adds a
+bullet under `## [Unreleased]` as part of its own commit, so by the
+time `/bump` runs, the upcoming release's bullets are already in the
+file.  This command's job is to **promote** the Unreleased block to a
+versioned block, not to draft one from PR titles.
+
 ## 1. Read Current Version
 
 ```
@@ -26,15 +32,19 @@ Parse `$ARGUMENTS`:
 
 Validate the new version is greater than the current one.
 
-## 3. Draft CHANGELOG Entries
+## 3. Verify the Unreleased Block
 
-### 3a. Gather commits since the last tag
+### 3a. Refuse to bump an empty Unreleased
 
 ```
-git log $(git describe --tags --abbrev=0)..HEAD --oneline
+awk '/^## \[Unreleased\]$/{found=1; next} found && /^## \[/{exit} found{print}' CHANGELOG.md
 ```
 
-### 3b. Verify every claim before you write the bullet
+If the extracted block contains nothing more than the trailing `---`
+separator, stop with `"## [Unreleased] is empty. Nothing to release."`
+and do not touch VERSION or CHANGELOG.
+
+### 3b. Verify every bullet's claim before promoting
 
 **This step is mandatory. Skipping it is how inaccurate release
 notes ship.** The v1.9.0 release went out with two factually wrong
@@ -45,7 +55,7 @@ picks one random page per cycle) because the draft was built from
 PR titles and memory. Fixing it required a CHANGELOG-correction PR,
 a GitHub Release delete, a tag re-cut, and a Docker image rebuild.
 
-For every PR you plan to reference in the CHANGELOG:
+For every PR referenced in the Unreleased block:
 
 ```bash
 gh pr view N --repo <owner>/<repo> --json title,body
@@ -66,30 +76,56 @@ upgraders.
 reference: a PR-body sentence, a diff fragment, or a source
 `file:line`. If you cannot cite one, rewrite the bullet or drop it.
 
-### 3c. Filter to user-facing changes
+If the Unreleased block has any bullets that no longer reflect the
+current code (e.g. a feature was reverted between merge and bump),
+edit them in place before continuing.
 
-**Include:**
+### 3c. Final filter and language pass
+
+The /ship workflow should already filter out non-user-facing changes
+and apply the project style guide when adding to Unreleased.  Double-
+check here, against the **Changelog style guide** in `AGENTS.md`
+(`## Versioning, Changelog & Releases` → `### Changelog style guide`).
+
+**Keep only user-facing entries:**
+
 - Features (Added)
 - Bug fixes (Fixed)
-- Behavioral changes, UI changes, config changes (Changed)
+- Behavioural / UI / config changes (Changed)
 - Removed functionality (Removed)
+- Deprecations (Deprecated)
+- Security fixes (Security)
 
-**Exclude:**
-- CI changes, refactors, test-only changes, docs-only changes
-- Chore/infrastructure work that does not affect the user
+**Drop:**
 
-If after filtering there are NO user-facing changes, report
-"No user-facing changes since vX.Y.Z. Nothing to release." and stop.
-Do not create a branch, do not touch VERSION or CHANGELOG.
+- CI changes, pure refactors, test-only changes, docs-only changes
+- Chore / infrastructure work that does not affect the operator
+- Dependency bumps with no security or behaviour impact
 
-**Format:**
+If after filtering the Unreleased block has no user-facing entries,
+report `"No user-facing changes in Unreleased. Nothing to release."`
+and stop.
+
+**Language pass:**
+
+Walk every remaining bullet against the AGENTS.md style guide.
+Flag and rewrite any bullet that:
+
+- References an internal Python class, private helper, or `src/...`
+  file path (rewrite to describe the user-visible behaviour).
+- Exceeds 250 characters or stretches across more than one sentence
+  without a migration / upgrade reason (split it).
+- Uses banned phrasings: "various", "improved", "enhanced", "better",
+  marketing adverbs ("seamlessly", "robustly", "significantly"),
+  empty verbs ("leverages", "utilizes"), bold lead-ins, marketing
+  trail clauses, em dashes.
+- Reads as past-tense narration ("We added...") instead of noun-led
+  present-tense state ("Logs page distinguishes...").
+
+**Format reminder:**
 
 ```markdown
 ## [X.Y.Z] - YYYY-MM-DD
-
-### Fixed
-
-- One sentence. User-facing impact first. Issue/PR ref at end (#N).
 
 ### Added
 
@@ -99,6 +135,10 @@ Do not create a branch, do not touch VERSION or CHANGELOG.
 
 - One sentence per bullet. (#N)
 
+### Fixed
+
+- One sentence. User-facing impact first. Issue/PR ref at end (#N).
+
 ### Removed
 
 - One sentence per bullet. (#N)
@@ -107,11 +147,12 @@ Do not create a branch, do not touch VERSION or CHANGELOG.
 ```
 
 **Rules:**
+
 - Every bullet must be justified by a PR-body sentence, a diff
   fragment, or a source `file:line`. Do not draft from PR titles,
   commit messages, or memory alone. See §3b.
-- Allowed `###` headers: `Added`, `Fixed`, `Changed`, `Removed` only.
-  Omit any section that has no entries.
+- Allowed `###` headers: `Added`, `Changed`, `Deprecated`, `Removed`,
+  `Fixed`, `Security` only. Omit any section that has no entries.
 - One sentence per bullet; no multi-line prose.
 - Lead with user-facing impact, not implementation details.
 - End with `(#N)` issue/PR reference.
@@ -123,12 +164,14 @@ Do not create a branch, do not touch VERSION or CHANGELOG.
 - Be specific: `Connection errors now log at WARNING with instance name`
   not `Improved error handling`.
 - Each version block ends with a `---` line (blank line before and after).
-- Do not use `## [Unreleased]`.
 
-## 4. Present Draft for Review
+## 4. Present the Promotion Plan for Review
 
-Show me the draft CHANGELOG block before writing it. Wait for my
-approval or edits. Do not proceed until I confirm.
+Show me a unified diff of the planned CHANGELOG.md change: the renamed
+heading (`## [Unreleased]` → `## [X.Y.Z] - YYYY-MM-DD`), any bullet
+edits made in §3b, and the fresh empty `## [Unreleased]` block that
+will sit above it.  Wait for my approval or edits.  Do not proceed
+until I confirm.
 
 ## 5. Create Branch and Tracking Issue
 
@@ -150,10 +193,26 @@ gh issue create --title "chore: bump version to X.Y.Z" \
 Write the new version (single line, no `v` prefix, no trailing newline
 beyond what was already there).
 
-## 7. Write CHANGELOG.md
+## 7. Promote Unreleased in CHANGELOG.md
 
-Insert the new version block at the top of CHANGELOG.md, directly
-after any header content and before the previous version block.
+Two edits, in this order:
+
+1. Rename `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD` (today's date,
+   ISO 8601).
+2. Insert a fresh, empty Unreleased block at the top, directly after
+   the file header:
+
+   ```markdown
+   ## [Unreleased]
+
+   ---
+
+   ## [X.Y.Z] - YYYY-MM-DD
+   ```
+
+The fresh block intentionally has only the heading + `---` separator;
+the version-check workflow is fine with an empty body so long as the
+trailing `---` is present.
 
 ## 8. Run Quality Gates
 
@@ -186,7 +245,9 @@ Closes #N
 
 ## What changed
 
-Version bump to X.Y.Z. Only VERSION and CHANGELOG.md are modified.
+Version bump to X.Y.Z. Only VERSION and CHANGELOG.md are modified;
+the changelog promotes the existing `## [Unreleased]` block to a
+versioned heading and reseeds an empty Unreleased above it.
 
 ## Release notes (from CHANGELOG)
 
@@ -197,6 +258,7 @@ Version bump to X.Y.Z. Only VERSION and CHANGELOG.md are modified.
 - [x] Linked issue has `type:*` and `priority:*` labels
 - [x] Only VERSION and CHANGELOG.md changed
 - [x] CHANGELOG entry follows existing format
+- [x] Fresh `## [Unreleased]` block reseeded above the new version
 PREOF
 )"
 ```

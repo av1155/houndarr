@@ -39,6 +39,20 @@ _ALLOWED_ERROR_PATTERNS = [
     # mid-flight; allow the bare event-name console errors so the
     # autouse console_guard does not flag the teardown on webkit.
     re.compile(r"^htmx:[A-Za-z]+(?:Error|Request|Swap|Send|Response)?$"),
+    # Sibling of the bare-event-name pattern above, but at the
+    # ``pageerror`` (window-level) layer instead of console.error.
+    # Webkit reports any in-flight fetch canceled by a pending
+    # navigation as ``<URL> due to access control checks.`` even on
+    # same-origin requests.  The recurring trigger for this suite is
+    # the changelog popup's ``hx-trigger="load"`` GET still being in
+    # flight when ``HX-Refresh`` after a password change calls
+    # ``location.reload()``.  No client-side mitigation exists (the
+    # browser fires the error on its own abort path), and chromium /
+    # firefox swallow the same abort silently.  Documented upstream
+    # in TanStack/router#719 and supabase/supabase#20982.  Scope the
+    # match to the changelog popup path so a real auth failure on
+    # any other endpoint still fails the teardown.
+    re.compile(r"^pageerror:\s.*/settings/changelog/popup\b[^\n]*access control checks\.?$"),
 ]
 
 

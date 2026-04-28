@@ -25,7 +25,7 @@ from houndarr.engine.adapters.protocols import AppAdapterProto
 from houndarr.engine.retry import ReconnectState, run_with_reconnect
 from houndarr.engine.search_loop import _write_log, run_instance_search
 from houndarr.enums import CycleTrigger, SearchAction
-from houndarr.errors import ClientError, EngineError
+from houndarr.errors import ClientError, ClientTransportError, EngineError
 from houndarr.services.cooldown_reconcile import reconcile_cooldowns
 from houndarr.services.instances import (
     Instance,
@@ -371,7 +371,12 @@ class Supervisor:
                     cycle_trigger=cycle_trigger,
                 )
                 return False
-            except httpx.TransportError:
+            except (httpx.TransportError, ClientTransportError):
+                # ``ClientTransportError`` is the typed wrapper the *arr
+                # clients raise instead of the raw ``httpx.TransportError``
+                # since the typed-error refactor; both mean the same
+                # thing here (instance unreachable) and must take the
+                # same warning + retry path.
                 logger.warning(
                     "Supervisor: could not reach %r (%s); retrying in %d s",
                     instance.core.name,
@@ -475,7 +480,7 @@ class Supervisor:
                     snap = await adapter.fetch_instance_snapshot(client, instance)
                     try:
                         reconcile_sets = await adapter.fetch_reconcile_sets(client, instance)
-                    except httpx.TransportError:
+                    except (httpx.TransportError, ClientTransportError):
                         reconcile_sets = ReconcileSets.empty()
                         logger.debug(
                             "Supervisor: reconcile sets unreachable for %r; "
@@ -514,7 +519,7 @@ class Supervisor:
                     unreleased_count=snap.unreleased_count,
                 )
                 await reconcile_cooldowns(instance.core.id, reconcile_sets)
-            except httpx.TransportError:
+            except (httpx.TransportError, ClientTransportError):
                 logger.debug(
                     "Supervisor: snapshot refresh skipped for %r; instance unreachable",
                     instance.core.name,

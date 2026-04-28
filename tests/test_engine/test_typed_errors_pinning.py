@@ -12,8 +12,11 @@ These tests lock both ends of that contract:
   three escape types (``EngineError``, ``ClientError``,
   ``httpx.TransportError``) propagate unchanged.
 * The supervisor's ``_run_search_cycle`` writes a single error row
-  for ``EngineError`` and ``ClientError`` and still returns ``True``
-  on ``httpx.TransportError`` so the reconnect loop engages.
+  for ``EngineError`` and non-transport ``ClientError`` subclasses
+  (``ClientHTTPError``, ``ClientValidationError``), and returns
+  ``True`` for both ``httpx.TransportError`` and the typed
+  ``ClientTransportError`` wrapper so the reconnect loop engages on
+  either shape.
 """
 
 from __future__ import annotations
@@ -228,7 +231,7 @@ class TestSupervisorCycleCatchSurface:
     @pytest.mark.asyncio()
     @pytest.mark.parametrize(
         "cls",
-        [ClientHTTPError, ClientTransportError, ClientValidationError],
+        [ClientHTTPError, ClientValidationError],
     )
     async def test_client_error_writes_row_and_returns_false(
         self,
@@ -236,7 +239,13 @@ class TestSupervisorCycleCatchSurface:
         monkeypatch: pytest.MonkeyPatch,
         cls: type[ClientError],
     ) -> None:
-        """Every ClientError subclass lands on the same supervisor branch."""
+        """Non-transport ClientError subclasses land on the error-row branch.
+
+        ``ClientTransportError`` is intentionally excluded: it is a
+        transport failure dressed in the typed hierarchy, so it belongs
+        on the retry branch covered by
+        :meth:`test_transport_error_returns_true_and_writes_nothing`.
+        """
         monkeypatch.setattr(
             supervisor_module,
             "run_instance_search",
@@ -255,21 +264,34 @@ class TestSupervisorCycleCatchSurface:
         assert rows[0]["message"] == "client layer"
 
     @pytest.mark.asyncio()
+    @pytest.mark.parametrize(
+        "exc",
+        [
+            httpx.ConnectError("refused"),
+            ClientTransportError("wanted total: transport error reaching /api/v3/wanted/missing"),
+        ],
+        ids=["httpx_transport", "client_transport"],
+    )
     async def test_transport_error_returns_true_and_writes_nothing(
         self,
         seeded_supervisor_instance: None,
         monkeypatch: pytest.MonkeyPatch,
+        exc: BaseException,
     ) -> None:
-        """httpx.TransportError triggers the reconnect branch and skips the row.
+        """Transport errors trigger the reconnect branch and skip the row.
 
         Pinning: the row write happens in the outer reconnect loop the
         FIRST time a connection error is seen, not here.  This branch
         only signals the outer loop via the ``True`` return value.
+        Both the raw ``httpx.TransportError`` and the typed
+        ``ClientTransportError`` wrapper take this branch; the typed
+        wrapper used to fall through to the error-row branch before the
+        catch list was extended.
         """
         monkeypatch.setattr(
             supervisor_module,
             "run_instance_search",
-            AsyncMock(side_effect=httpx.ConnectError("refused")),
+            AsyncMock(side_effect=exc),
         )
         sup = Supervisor(master_key=_MASTER_KEY)
         instance = make_instance(instance_id=1)

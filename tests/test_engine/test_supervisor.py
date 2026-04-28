@@ -15,6 +15,7 @@ from cryptography.fernet import Fernet
 from houndarr.database import get_db
 from houndarr.engine import supervisor as _supervisor_mod
 from houndarr.engine.supervisor import Supervisor
+from houndarr.errors import ClientTransportError
 from houndarr.services.instances import (
     CutoffPolicy,
     Instance,
@@ -525,16 +526,33 @@ async def test_refresh_one_snapshot_quiet_on_small_unreleased_change(
     assert matching == []
 
 
+@pytest.mark.parametrize(
+    "transport_exc",
+    [
+        httpx.TransportError("unreachable"),
+        ClientTransportError("wanted total: transport error reaching /api/v3/wanted/missing"),
+    ],
+    ids=["httpx_transport", "client_transport"],
+)
 @pytest.mark.asyncio()
 async def test_refresh_all_snapshots_handles_transport_error(
     seeded_instances: None,
+    caplog: pytest.LogCaptureFixture,
+    transport_exc: BaseException,
 ) -> None:
-    """Transport errors are logged and suppressed; snapshot stays as-is."""
+    """Transport errors are logged at DEBUG and suppressed; no traceback escapes.
+
+    Pinned for both ``httpx.TransportError`` (the raw transport failure) and
+    ``ClientTransportError`` (the typed wrapper *arr clients raise after the
+    typed-error refactor). Both must take the silent-skip branch; the typed
+    wrapper used to fall through to the broad ``except Exception`` and emit a
+    full traceback every refresh interval.
+    """
     inst = _make_instance(enabled=True)
 
     class _BrokenCtx:
         async def __aenter__(self) -> Any:
-            raise httpx.TransportError("unreachable")
+            raise transport_exc
 
         async def __aexit__(self, exc_type: object, exc: object, tb: object) -> None:
             return None
@@ -546,9 +564,120 @@ async def test_refresh_all_snapshots_handles_transport_error(
     )()
 
     with (
+        caplog.at_level("DEBUG", logger="houndarr.engine.supervisor"),
         patch("houndarr.engine.supervisor.list_instances", AsyncMock(return_value=[inst])),
         patch("houndarr.engine.supervisor.get_adapter", return_value=fake_adapter),
     ):
         supervisor = Supervisor(master_key=MASTER_KEY)
         # Should not raise.
         await supervisor._refresh_all_snapshots_once()  # noqa: SLF001
+
+    error_records = [r for r in caplog.records if r.levelname in {"ERROR", "CRITICAL"}]
+    assert error_records == [], (
+        f"transport error should not log at ERROR; got {[r.getMessage() for r in error_records]}"
+    )
+    debug_msgs = [r.getMessage() for r in caplog.records if r.levelname == "DEBUG"]
+    assert any("snapshot refresh skipped" in msg for msg in debug_msgs), (
+        f"expected DEBUG skip log, got: {debug_msgs}"
+    )
+
+
+@pytest.mark.parametrize(
+    "reconcile_exc",
+    [
+        httpx.TransportError("unreachable"),
+        ClientTransportError("reconcile fetch: transport error reaching /api/v3/series"),
+    ],
+    ids=["httpx_transport", "client_transport"],
+)
+@pytest.mark.asyncio()
+async def test_refresh_one_snapshot_reconcile_transport_error_keeps_cooldowns(
+    seeded_instances: None,
+    caplog: pytest.LogCaptureFixture,
+    reconcile_exc: BaseException,
+) -> None:
+    """A transport error inside reconcile fetch falls back to empty without ERROR.
+
+    Snapshot fetch succeeds; reconcile fetch raises. The supervisor swallows
+    both raw and typed transport errors here so a transient *arr blip cannot
+    trigger a cooldown wipe.
+    """
+    from houndarr.clients.base import InstanceSnapshot
+
+    inst = _make_instance(enabled=True)
+
+    fake_client = AsyncMock()
+
+    class _CtxClient:
+        async def __aenter__(self) -> Any:
+            return fake_client
+
+        async def __aexit__(self, exc_type: object, exc: object, tb: object) -> None:
+            return None
+
+    fake_adapter = type(
+        "FakeAdapter",
+        (),
+        {
+            "make_client": staticmethod(lambda _inst: _CtxClient()),
+            "fetch_instance_snapshot": staticmethod(
+                AsyncMock(return_value=InstanceSnapshot(monitored_total=10, unreleased_count=0))
+            ),
+            "fetch_reconcile_sets": staticmethod(AsyncMock(side_effect=reconcile_exc)),
+        },
+    )()
+
+    with (
+        caplog.at_level("DEBUG", logger="houndarr.engine.supervisor"),
+        patch("houndarr.engine.supervisor.get_adapter", return_value=fake_adapter),
+    ):
+        supervisor = Supervisor(master_key=MASTER_KEY)
+        # Should not raise.
+        await supervisor._refresh_one_snapshot(inst)  # noqa: SLF001
+
+    error_records = [r for r in caplog.records if r.levelname in {"ERROR", "CRITICAL"}]
+    assert error_records == [], (
+        f"reconcile transport error should not log at ERROR; got "
+        f"{[r.getMessage() for r in error_records]}"
+    )
+    debug_msgs = [r.getMessage() for r in caplog.records if r.levelname == "DEBUG"]
+    assert any("reconcile sets unreachable" in msg for msg in debug_msgs), (
+        f"expected DEBUG reconcile-skip log, got: {debug_msgs}"
+    )
+
+
+@pytest.mark.parametrize(
+    "transport_exc",
+    [
+        httpx.TransportError("refused"),
+        ClientTransportError("wanted total: transport error reaching /api/v3/wanted/missing"),
+    ],
+    ids=["httpx_transport", "client_transport"],
+)
+@pytest.mark.asyncio()
+async def test_run_search_cycle_returns_retry_for_transport_error(
+    seeded_instances: None,
+    transport_exc: BaseException,
+) -> None:
+    """Both raw and typed transport errors take the warning + retry branch.
+
+    Pins the contract that ``ClientTransportError`` (the typed wrapper introduced
+    by the typed-error refactor) lands on the same retry-with-warning path as
+    ``httpx.TransportError`` instead of falling through to the
+    ``(EngineError, ClientError)`` branch that writes a search_log error row.
+    """
+    instance = _make_instance()
+
+    with patch(
+        "houndarr.engine.supervisor.run_instance_search",
+        AsyncMock(side_effect=transport_exc),
+    ):
+        supervisor = Supervisor(master_key=MASTER_KEY)
+        retry = await supervisor._run_search_cycle(  # noqa: SLF001
+            instance, cycle_trigger="scheduled"
+        )
+
+    assert retry is True, "transport error must signal retry, not error-path completion"
+    rows = await _get_log_rows()
+    error_rows = [r for r in rows if r["action"] == "error"]
+    assert error_rows == [], "transport-error retry branch must not write a search_log error row"

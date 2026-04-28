@@ -28,7 +28,7 @@ from houndarr.services.log_query import (
     head_snapshot,
     instance_accent_by_name,
     query_logs,
-    search_log_has_any_row,
+    search_log_has_any_user_row,
 )
 
 logger = logging.getLogger(__name__)
@@ -263,7 +263,7 @@ async def get_logs_partial(
     # so the partial picks the right empty-state copy.  Pagination
     # responses (``before`` is set, response targets ``#pagination-row``)
     # never reach the empty-state markup, so the probe is skipped there.
-    log_db_empty = (not rows) and filters.before is None and not await search_log_has_any_row()
+    log_db_empty = (not rows) and filters.before is None and not await search_log_has_any_user_row()
     return get_templates().TemplateResponse(
         request=request,
         name="partials/log_rows.html",

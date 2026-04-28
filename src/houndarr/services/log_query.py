@@ -43,17 +43,30 @@ still get the safety net.
 _LOAD_MORE_CHUNK_MAX = 100
 
 
-async def search_log_has_any_row() -> bool:
-    """Return ``True`` if at least one row exists in ``search_log``.
+async def search_log_has_any_user_row() -> bool:
+    """Return ``True`` if any non-system row exists in ``search_log``.
 
     Cheap LIMIT 1 probe used by the Logs page to distinguish a
     fresh-install / cleared-log empty state ("no entries yet") from a
     filter that happens to exclude every row ("no entries match those
-    filters").  Both ship the same DOM shape; the empty-state copy and
-    visual treatment differ by which case the route detected.
+    filters").
+
+    System lifecycle rows (``cycle_trigger='system'`` and the
+    ``instance_id IS NULL AND action='info'`` boot-status rows the
+    supervisor writes on every startup) do not count as user-visible
+    activity.  A search_log that contains only such rows reads as empty
+    to the user, and the route's default ``hide_system=True`` filter
+    would suppress them anyway, so the empty-state branch must fire.
+    The exclusion clause mirrors :func:`query_logs`'s own ``hide_system``
+    predicate so the two stay in lockstep.
     """
     async with get_db() as db:
-        async with db.execute("SELECT 1 FROM search_log LIMIT 1") as cur:
+        async with db.execute(
+            "SELECT 1 FROM search_log "
+            "WHERE NOT (COALESCE(cycle_trigger, '') = 'system' "
+            "OR (instance_id IS NULL AND action = 'info')) "
+            "LIMIT 1"
+        ) as cur:
             row = await cur.fetchone()
     return row is not None
 

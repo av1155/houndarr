@@ -82,6 +82,16 @@
 .input-wrap:has(.caps-badge.is-on) .station-input.has-trailing {
   padding-right: 4.5rem;
 }
+/* Eye-toggle reveal.  The toggle button sets ``data-pw-revealed="true"``
+   on the input instead of flipping ``input.type`` between password and
+   text, so password managers keep their autofill binding to
+   ``type=password``.  ``-webkit-text-security`` overrides the browser's
+   default password mask in Chromium / WebKit (and Firefox 117+ via the
+   spec alias), revealing the characters without changing the input's
+   type or focus state. */
+.station-input[data-pw-input][data-pw-revealed="true"] {
+  -webkit-text-security: none;
+}
 .is-auth .auth-form .station-input::placeholder {
   color: var(--color-text-subtle);
 }

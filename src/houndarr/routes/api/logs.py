@@ -28,6 +28,7 @@ from houndarr.services.log_query import (
     head_snapshot,
     instance_accent_by_name,
     query_logs,
+    search_log_has_any_user_row,
 )
 
 logger = logging.getLogger(__name__)
@@ -258,6 +259,11 @@ async def get_logs_partial(
 
     rows = await _fetch_filtered_rows(filters)
     accent_map = await instance_accent_by_name()
+    # Distinguish "table is empty" from "filters excluded everything"
+    # so the partial picks the right empty-state copy.  Pagination
+    # responses (``before`` is set, response targets ``#pagination-row``)
+    # never reach the empty-state markup, so the probe is skipped there.
+    log_db_empty = (not rows) and filters.before is None and not await search_log_has_any_user_row()
     return get_templates().TemplateResponse(
         request=request,
         name="partials/log_rows.html",
@@ -277,6 +283,7 @@ async def get_logs_partial(
             # "Load older"; omitting this context key falls the
             # template through to the default gray fallback.
             "instance_accent_by_name": accent_map,
+            "log_db_empty": log_db_empty,
         },
     )
 

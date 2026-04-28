@@ -316,8 +316,42 @@
   {% endif %}
 
 {% else %}
+{# Two distinct empty states share the .empty shell:                       #}
+{# - log_db_empty=True  → fresh install / cleared logs.  Quiet Station     #}
+{#   panel that explains what the page will eventually show.               #}
+{# - log_db_empty=False → the table has rows, the active filters happen   #}
+{#   to exclude every one of them.  The original copy stays since the     #}
+{#   user has filters worth clearing.                                      #}
+{% if log_db_empty | default(false) %}
+<div class="empty empty--quiet" id="log-empty-row" role="status">
+  <span class="empty__caption">Audit trail</span>
+  <span class="empty__icon" aria-hidden="true">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
+         stroke-linecap="round" stroke-linejoin="round">
+      <line x1="8" y1="9" x2="16" y2="9"/>
+      <line x1="8" y1="12" x2="16" y2="12"/>
+      <line x1="8" y1="15" x2="13" y2="15"/>
+    </svg>
+  </span>
+  <p class="empty__title">No log entries yet</p>
+  <p class="empty__body">
+    Cycles record every dispatch, skip, error, and recovery here.
+    They run on each instance's sleep interval, or via Run Now on the dashboard.
+  </p>
+  <a class="empty__cta"
+     href="/"
+     hx-get="/" hx-target="#app-content" hx-swap="innerHTML" hx-push-url="true">
+    Open dashboard
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+         stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <path d="M5 12h14"/><path d="m12 5 7 7-7 7"/>
+    </svg>
+  </a>
+</div>
+{% else %}
 <div class="empty" id="log-empty-row">
   <p class="empty__title">No entries match those filters.</p>
   <p>Try clearing a filter or waiting for new activity.</p>
 </div>
+{% endif %}
 {% endif %}

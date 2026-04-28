@@ -249,6 +249,7 @@ async def logs_page(
         compute_load_more_limit,
         instance_accent_by_name,
         query_logs,
+        search_log_has_any_user_row,
     )
 
     try:
@@ -281,6 +282,11 @@ async def logs_page(
         before=None,
         limit=50,
     )
+    # Distinguish "table is empty" from "filters excluded everything"
+    # so the partial can render the right empty-state copy.  Skip the
+    # extra SELECT when the filtered query already returned rows; the
+    # template only consults this flag in the empty branch.
+    log_db_empty = (not rows) and not await search_log_has_any_user_row()
 
     # Precompute the name -> accent-slug lookup the cycle-card template
     # uses to set --cycle-accent.  Queries the instances table once,
@@ -311,6 +317,7 @@ async def logs_page(
         hide_skipped=parsed_hide_skipped,
         before=None,
         instance_accent_by_name=accent_map,
+        log_db_empty=log_db_empty,
     )
 
 

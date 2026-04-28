@@ -368,6 +368,13 @@ def test_password_eye_toggle_works_after_422_swap(
 
     page = logged_in_page
     page.goto(f"{houndarr_url}/settings")
+    # ``#admin-security`` lives inside the collapsible ``#admin-grouped``
+    # panel that ships closed on every fresh page load.  ``fill`` /
+    # ``requestSubmit`` / text-assertions go through JS and work on a
+    # collapsed subtree, but the toggle ``click()`` below issues a real
+    # pointer event the closed panel intercepts.  Open the panel up
+    # front so the click can land on the post-swap button.
+    _open_admin_dropdown(page)
     section = page.locator("#admin-security")
     expect(section).to_be_visible()
 

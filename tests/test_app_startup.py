@@ -60,7 +60,7 @@ def test_periodic_retention_runs_during_uptime(
     assert len(purges) >= 2
 
 
-def test_lifespan_fails_when_css_bundle_missing(
+async def test_lifespan_fails_when_css_bundle_missing(
     test_settings: object,
     caplog: pytest.LogCaptureFixture,
     monkeypatch: pytest.MonkeyPatch,
@@ -74,6 +74,12 @@ def test_lifespan_fails_when_css_bundle_missing(
     silently-broken state where every page 404'd on the bundle.  The
     preflight in `_lifespan` now fails fast with an actionable log
     line pointing at the build command and the install guide.
+
+    Drives the lifespan via ``app.router.lifespan_context`` rather
+    than ``TestClient`` because Starlette's ``TestClient`` cleanup
+    can deadlock on Linux when startup raises before the lifespan
+    yield (the in-thread portal waits for a shutdown signal that
+    never arrives).
     """
     assert test_settings is not None
 
@@ -89,7 +95,7 @@ def test_lifespan_fails_when_css_bundle_missing(
 
     app = create_app()
     with pytest.raises(RuntimeError, match="Compiled CSS bundle missing"):
-        with TestClient(app, raise_server_exceptions=True):
+        async with app.router.lifespan_context(app):
             pass
 
     messages = [record.getMessage() for record in caplog.records]
@@ -97,16 +103,19 @@ def test_lifespan_fails_when_css_bundle_missing(
     assert any("from-source.md" in m for m in messages)
 
 
-def test_lifespan_succeeds_when_css_bundle_present(test_settings: object) -> None:
+async def test_lifespan_succeeds_when_css_bundle_present(
+    test_settings: object,
+) -> None:
     """Sanity check: the happy-path (bundle present) startup works.
 
     Pinned alongside the failure-path test so a future refactor that
-    breaks the preflight check still exercises both branches.
+    breaks the preflight check still exercises both branches.  Drives
+    the lifespan directly to mirror the failure-path test and avoid
+    the TestClient cleanup deadlock the failing case can trigger.
     """
     assert test_settings is not None
 
     app = create_app()
-    with TestClient(app, raise_server_exceptions=True) as client:
-        # Hitting any route confirms the lifespan completed.
-        resp = client.get("/api/health")
-        assert resp.status_code == 200
+    async with app.router.lifespan_context(app):
+        # Reaching the yield means the preflight passed.
+        pass

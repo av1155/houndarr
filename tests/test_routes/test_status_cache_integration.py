@@ -44,27 +44,6 @@ def _mock_supervisor_search(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.fixture(autouse=True)
-def _ensure_css_bundle_present() -> None:
-    """Recreate the CSS stub if a parallel xdist worker tore it down.
-
-    The session-scope ``_ensure_css_bundle_for_tests`` fixture in
-    ``tests/conftest.py`` creates the stub once per worker and deletes
-    it in finally.  Under ``pytest-xdist`` the workers can race on the
-    session boundary so a worker finishing its session deletes the
-    file out from under another worker still running tests.  This
-    function-scope guard reinstates the stub before the lifespan
-    preflight check runs.
-    """
-    from pathlib import Path
-
-    from houndarr import app as app_module
-
-    css_bundle = Path(app_module.__file__).parent / "static" / "css" / "app.built.css"
-    if not css_bundle.is_file():
-        css_bundle.write_text("/* pytest stub */\n", encoding="utf-8")
-
-
-@pytest.fixture(autouse=True)
 def _enable_dashboard_cache(monkeypatch: pytest.MonkeyPatch) -> None:
     """Re-enable the cache for this module by lifting conftest's patch.
 

@@ -21,8 +21,8 @@ from houndarr.database import init_db, set_db_path
 # ---------------------------------------------------------------------------
 
 
-@pytest.fixture(scope="session", autouse=True)
-def _ensure_css_bundle_for_tests() -> Generator[None, None, None]:
+@pytest.fixture(autouse=True)
+def _ensure_css_bundle_for_tests() -> None:
     """Stub `app.built.css` so the lifespan preflight passes in tests.
 
     The real bundle is produced by `pnpm run build-css` (run by the
@@ -32,22 +32,18 @@ def _ensure_css_bundle_for_tests() -> Generator[None, None, None]:
     to start without it, which would otherwise fail every TestClient
     fixture in the suite.
 
-    Tests do not exercise CSS contents, only header behaviour and
-    routing, so a small stub satisfies the contract.  Local dev
-    runs that already produced the real bundle keep theirs.
+    Function-scoped on purpose: under ``pytest-xdist`` the workers each
+    own their own session, and a session-scope teardown that deleted
+    the stub raced with sibling workers still running tests, sporadically
+    breaking unrelated TestClient fixtures.  No teardown here: the file
+    is gitignored, the next CI run starts clean, and local dev runs that
+    already produced the real bundle still see theirs.
     """
     from houndarr import app as app_module
 
     css_bundle = Path(app_module.__file__).parent / "static" / "css" / "app.built.css"
-    created = False
     if not css_bundle.is_file():
         css_bundle.write_text("/* pytest stub */\n", encoding="utf-8")
-        created = True
-    try:
-        yield
-    finally:
-        if created and css_bundle.is_file():
-            css_bundle.unlink()
 
 
 # ---------------------------------------------------------------------------

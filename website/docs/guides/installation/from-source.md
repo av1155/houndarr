@@ -16,6 +16,8 @@ is for development.
 
 - Python 3.12 or later
 - pip
+- Node.js 22 or later (only needed to compile the CSS bundle)
+- pnpm via `corepack enable` (Node 20+ ships corepack)
 
 ## Setup
 
@@ -24,17 +26,32 @@ is for development.
 git clone https://github.com/av1155/houndarr.git
 cd houndarr
 
-# Create a virtual environment
+# Create a Python virtual environment
 python3 -m venv .venv
 .venv/bin/pip install --upgrade pip
 .venv/bin/pip install -r requirements-dev.txt
 .venv/bin/pip install -e .
+
+# Compile the Tailwind + daisyUI CSS bundle
+corepack enable
+pnpm install --frozen-lockfile
+pnpm run build-css
 
 # Run in development mode
 .venv/bin/python -m houndarr --data-dir ./data-dev --dev
 ```
 
 The dev server listens on `http://localhost:8877`.
+
+The compiled `src/houndarr/static/css/app.built.css` is gitignored
+because it is a build artefact. Re-run `pnpm run build-css` whenever
+you pull commits that touch `src/houndarr/static/css/` or
+`src/houndarr/templates/`. Houndarr refuses to start if the bundle is
+missing and prints the exact command in the log.
+
+The Docker image runs the same `pnpm run build-css` step
+automatically as a multi-stage build, so Docker users do not need
+Node or pnpm installed.
 
 ## Development mode
 

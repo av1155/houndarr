@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import time
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
@@ -57,3 +58,55 @@ def test_periodic_retention_runs_during_uptime(
 
     # At least one startup purge + at least one periodic purge.
     assert len(purges) >= 2
+
+
+def test_lifespan_fails_when_css_bundle_missing(
+    test_settings: object,
+    caplog: pytest.LogCaptureFixture,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Lifespan refuses to start if `app.built.css` is missing.
+
+    Reproduces the failure mode that broke from-source installs in
+    v1.10.0 (#481): the compiled CSS bundle is gitignored and only
+    produced by the `pnpm run build-css` step (run automatically by
+    the Docker css-build stage).  Without it the app booted into a
+    silently-broken state where every page 404'd on the bundle.  The
+    preflight in `_lifespan` now fails fast with an actionable log
+    line pointing at the build command and the install guide.
+    """
+    assert test_settings is not None
+
+    real_is_file = Path.is_file
+
+    def _missing_css_only(self: Path) -> bool:
+        if self.name == "app.built.css":
+            return False
+        return real_is_file(self)
+
+    monkeypatch.setattr(Path, "is_file", _missing_css_only)
+    caplog.set_level(logging.CRITICAL)
+
+    app = create_app()
+    with pytest.raises(RuntimeError, match="Compiled CSS bundle missing"):
+        with TestClient(app, raise_server_exceptions=True):
+            pass
+
+    messages = [record.getMessage() for record in caplog.records]
+    assert any("pnpm run build-css" in m for m in messages)
+    assert any("from-source.md" in m for m in messages)
+
+
+def test_lifespan_succeeds_when_css_bundle_present(test_settings: object) -> None:
+    """Sanity check: the happy-path (bundle present) startup works.
+
+    Pinned alongside the failure-path test so a future refactor that
+    breaks the preflight check still exercises both branches.
+    """
+    assert test_settings is not None
+
+    app = create_app()
+    with TestClient(app, raise_server_exceptions=True) as client:
+        # Hitting any route confirms the lifespan completed.
+        resp = client.get("/api/health")
+        assert resp.status_code == 200

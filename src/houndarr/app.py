@@ -61,6 +61,26 @@ async def _lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         msg = "Invalid auth configuration; see log for details"
         raise RuntimeError(msg)
 
+    # The compiled CSS bundle is produced by the css-build Docker stage
+    # (or by `pnpm run build-css` for a from-source install) and is
+    # gitignored.  Without it every page renders unstyled and the only
+    # signal is a 404 on /static/css/app.built.css, which is what
+    # silently broke from-source installs after #481 in v1.10.0.  Fail
+    # fast at startup with an actionable message instead.
+    css_bundle = Path(__file__).parent / "static" / "css" / "app.built.css"
+    if not css_bundle.is_file():
+        logger.critical(
+            "Compiled CSS bundle not found at %s. Run "
+            "`corepack enable && pnpm install --frozen-lockfile && "
+            "pnpm run build-css` from the project root before starting "
+            "Houndarr, or use the official Docker image which builds "
+            "it automatically. See "
+            "docs/guides/installation/from-source.md.",
+            css_bundle,
+        )
+        msg = "Compiled CSS bundle missing; refusing to start"
+        raise RuntimeError(msg)
+
     # Ensure data directory exists
     Path(settings.data_dir).mkdir(parents=True, exist_ok=True)
 

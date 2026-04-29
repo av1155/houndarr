@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- From-source installs now refuse to start with a clear error message when the compiled `app.built.css` is missing instead of silently 404-ing every stylesheet request, and the from-source install guide documents the `pnpm install` and `pnpm run build-css` step required since `1.10.0`.
+
 ---
 
 ## [1.10.1] - 2026-04-29

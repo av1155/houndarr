@@ -7,9 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `HOUNDARR_LOG_RETENTION_DAYS` env var configures the search log retention threshold (default `30`; `0` disables automatic purges, `7` to `365` overrides the default). (#586)
+- Helm chart ships a `startupProbe` with a 10-minute default budget so first-boot migrations on Kubernetes finish before the liveness probe kicks in; `failureThreshold` and `periodSeconds` are exposed in `values.yaml`. (#586)
+
+### Changed
+
+- Dashboard aggregations cache for 20 seconds in-process so polling tabs share one DB scan; mutation routes invalidate immediately, and the HTMX poll drops new triggers while a previous response is still in flight. (#586)
+- SQLite connections are reused through a connection pool with the modern operational PRAGMA stack (`synchronous=NORMAL`, `temp_store=MEMORY`, larger per-connection cache, memory-mapped reads, capped WAL growth); `PRAGMA optimize` runs after migrations and after each daily retention pass. (#586)
+
 ### Fixed
 
 - From-source installs now refuse to start with a clear error message when the compiled `app.built.css` is missing instead of silently 404-ing every stylesheet request, and the from-source install guide documents the `pnpm install` and `pnpm run build-css` step required since `1.10.0`.
+- Dashboard no longer hangs on databases with large `search_log` tables: two new composite indexes serve the v14 cooldown back-fill and the dashboard aggregation queries instead of full-table scans, and the back-fill itself only touches cooldown rows still at the default `'missing'` stamp. (#586)
 
 ---
 

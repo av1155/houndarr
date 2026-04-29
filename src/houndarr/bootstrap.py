@@ -52,6 +52,7 @@ class AppSettingsOverrides(TypedDict, total=False):
     auth_mode: str
     auth_proxy_header: str
     update_check_repo: str
+    log_retention_days: int
 
 
 def bootstrap_non_web(
@@ -69,7 +70,8 @@ def bootstrap_non_web(
         **overrides: Additional :class:`AppSettings` field values (``host``,
             ``port``, ``dev``, ``log_level``, ``secure_cookies``,
             ``cookie_samesite``, ``trusted_proxies``, ``auth_mode``,
-            ``auth_proxy_header``, ``update_check_repo``). When any
+            ``auth_proxy_header``, ``update_check_repo``,
+            ``log_retention_days``). When any
             override is supplied, :class:`AppSettings` is constructed
             directly and pinned into the runtime singleton so the whole
             process agrees on the overridden values. When no overrides

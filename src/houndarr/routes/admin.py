@@ -47,6 +47,7 @@ from houndarr.services.admin import (
     request_process_exit,
     reset_all_instance_policy,
 )
+from houndarr.services.metrics import invalidate_dashboard_cache
 
 logger = logging.getLogger(__name__)
 
@@ -95,6 +96,8 @@ async def admin_reset_instances(
     supervisor = getattr(request.app.state, "supervisor", None)
     count = await reset_all_instance_policy(master_key=master_key, supervisor=supervisor)
 
+    invalidate_dashboard_cache(request.app.state)
+
     if count == 0:
         message = "No instances configured: nothing to reset."
     else:
@@ -113,6 +116,7 @@ async def admin_reset_instances(
 async def admin_clear_logs(request: Request) -> HTMLResponse:
     """Truncate ``search_log`` and leave a single audit breadcrumb."""
     removed = await clear_all_search_logs()
+    invalidate_dashboard_cache(request.app.state)
     if removed == 0:
         message = "Logs were already empty."
     else:

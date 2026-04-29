@@ -1,10 +1,16 @@
 """Pin app.py lifespan + RequestValidationError handler contract.
 
 Locks the startup-order sequence (validate -> master_key ->
-set_db_path -> init_db -> purge_old_logs -> Supervisor.start) and
-the HTMX-vs-JSON split on the validation-error handler so later
-changes to the lifespan wiring do not silently shift either
-contract.
+set_db_path -> init_db_schema -> purge_old_logs ->
+init_db_migrations -> Supervisor.start) and the HTMX-vs-JSON split
+on the validation-error handler so later changes to the lifespan
+wiring do not silently shift either contract.
+
+The schema/purge/migrations split lands log retention before the
+v14 cooldown back-fill (issue #586): on long-lived databases the
+back-fill grinds through 30+ days of unused rows otherwise, and
+the Kubernetes liveness probe has shipped pods to crash-loop in
+production over it.
 """
 
 from __future__ import annotations
@@ -14,7 +20,7 @@ from fastapi.testclient import TestClient
 
 from houndarr import app as app_module
 from houndarr.app import _periodic_log_retention
-from houndarr.config import DEFAULT_LOG_RETENTION_DAYS, AppSettings
+from houndarr.config import AppSettings
 
 pytestmark = pytest.mark.pinning
 
@@ -44,12 +50,19 @@ class TestLifespanStartup:
         test_settings: AppSettings,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """ensure_master_key -> set_db_path -> init_db -> purge_old_logs -> supervisor.start."""
+        """master_key -> set_db_path -> schema DDL -> purge -> migrations.
+
+        Schema DDL must precede the purge call so ``search_log`` exists
+        when ``DELETE FROM search_log`` fires on fresh installs.  The
+        purge then runs *before* migrations so the v14 cooldown back-fill
+        never sees rows that retention is about to delete.
+        """
         order: list[str] = []
 
         real_ensure = app_module.ensure_master_key
         real_set_db_path = app_module.set_db_path
-        real_init_db = app_module.init_db
+        real_init_schema = app_module.init_db_schema
+        real_init_migrations = app_module.init_db_migrations
         real_purge = app_module.purge_old_logs
 
         def spy_ensure(data_dir: str) -> bytes:
@@ -60,9 +73,13 @@ class TestLifespanStartup:
             order.append("set_db_path")
             real_set_db_path(path)
 
-        async def spy_init_db() -> None:
-            order.append("init_db")
-            await real_init_db()
+        async def spy_init_schema() -> None:
+            order.append("init_db_schema")
+            await real_init_schema()
+
+        async def spy_init_migrations() -> None:
+            order.append("init_db_migrations")
+            await real_init_migrations()
 
         async def spy_purge(days: int) -> int:
             order.append("purge_old_logs")
@@ -70,7 +87,8 @@ class TestLifespanStartup:
 
         monkeypatch.setattr(app_module, "ensure_master_key", spy_ensure)
         monkeypatch.setattr(app_module, "set_db_path", spy_set_db_path)
-        monkeypatch.setattr(app_module, "init_db", spy_init_db)
+        monkeypatch.setattr(app_module, "init_db_schema", spy_init_schema)
+        monkeypatch.setattr(app_module, "init_db_migrations", spy_init_migrations)
         monkeypatch.setattr(app_module, "purge_old_logs", spy_purge)
 
         fastapi_app = app_module.create_app()
@@ -80,8 +98,9 @@ class TestLifespanStartup:
         assert order == [
             "ensure_master_key",
             "set_db_path",
-            "init_db",
+            "init_db_schema",
             "purge_old_logs",
+            "init_db_migrations",
         ]
 
     def test_shutdown_cancels_retention_task(
@@ -94,6 +113,30 @@ class TestLifespanStartup:
         # TestClient has yielded (we are still inside the with-block via fixture).
         # Sanity: task was created and is alive.
         assert not retention.done()
+
+    def test_lifespan_skips_retention_task_when_retention_disabled(
+        self,
+        tmp_data_dir: str,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """``log_retention_days=0`` skips the periodic loop entirely.
+
+        Operators who set the env var to ``0`` opt out of automatic
+        purges.  The lifespan should reflect that by leaving
+        ``app.state.retention_task = None`` and never spawning the
+        24-hour task; otherwise the task wakes once a day and runs a
+        no-op ``DELETE`` on a disabled threshold.
+        """
+        from houndarr.config import bootstrap_settings
+
+        bootstrap_settings(data_dir=tmp_data_dir, log_retention_days=0)
+        from houndarr.auth import reset_auth_caches
+
+        reset_auth_caches()
+
+        fastapi_app = app_module.create_app()
+        with TestClient(fastapi_app) as client:
+            assert getattr(client.app.state, "retention_task", "missing") is None
 
 
 # RequestValidationError split
@@ -122,9 +165,9 @@ class TestModuleConstants:
     def test_log_retention_interval_is_24_hours(self) -> None:
         assert app_module._LOG_RETENTION_INTERVAL_SECONDS == 24 * 60 * 60
 
-    def test_default_log_retention_days_from_config(self) -> None:
-        """The lifespan's purge call uses DEFAULT_LOG_RETENTION_DAYS."""
-        assert DEFAULT_LOG_RETENTION_DAYS >= 1
+    def test_app_settings_default_log_retention_days(self) -> None:
+        """The AppSettings default preserves the v1.10.x 30-day baseline."""
+        assert AppSettings(data_dir="/tmp").log_retention_days == 30
 
     def test_periodic_log_retention_is_async(self) -> None:
         """_periodic_log_retention is an async def (not a sync function)."""

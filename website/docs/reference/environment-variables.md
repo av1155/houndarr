@@ -19,6 +19,7 @@ manifests, or the Unraid CA template.
 | `HOUNDARR_PORT` | `8877` | Port to bind the web server to |
 | `HOUNDARR_DEV` | `false` | Enable development mode (auto-reload, API docs at `/api/docs`) |
 | `HOUNDARR_LOG_LEVEL` | `info` | Log level: `debug`, `info`, `warning`, `error` |
+| `HOUNDARR_LOG_RETENTION_DAYS` | `30` | Days of `search_log` rows to retain. `0` disables automatic purges; `7` to `365` overrides the default |
 
 ## Security settings
 

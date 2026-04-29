@@ -16,31 +16,48 @@ from fastapi.staticfiles import StaticFiles
 from houndarr import __version__
 from houndarr.auth import AuthMiddleware
 from houndarr.cache_headers import CacheControlMiddleware
-from houndarr.config import DEFAULT_LOG_RETENTION_DAYS, get_settings
+from houndarr.config import get_settings
 from houndarr.crypto import ensure_master_key
-from houndarr.database import init_db, set_db_path
+from houndarr.database import (
+    close_all_pools,
+    get_db,
+    init_db_migrations,
+    init_db_schema,
+    set_db_path,
+)
 from houndarr.engine.supervisor import Supervisor
 from houndarr.repositories.search_log import purge_old_logs
 from houndarr.routes._htmx import is_hx_request
 from houndarr.services.instances import list_instances
+from houndarr.services.metrics import build_aggregate_cache
 
 logger = logging.getLogger(__name__)
 
 _LOG_RETENTION_INTERVAL_SECONDS = 24 * 60 * 60
 
 
-async def _periodic_log_retention() -> None:
-    """Periodically purge old search_log rows during app uptime."""
+async def _periodic_log_retention(retention_days: int) -> None:
+    """Periodically purge old search_log rows during app uptime.
+
+    The supervisor task fires once every 24 hours and respects
+    ``log_retention_days`` from :class:`AppSettings`.  When the value is
+    ``0`` the lifespan never spawns this task (see :func:`_lifespan`).
+    """
     while True:
         await asyncio.sleep(_LOG_RETENTION_INTERVAL_SECONDS)
         try:
-            purged = await purge_old_logs(DEFAULT_LOG_RETENTION_DAYS)
+            purged = await purge_old_logs(retention_days)
             if purged > 0:
                 logger.info(
                     "Periodic retention purged %d search_log rows older than %d days",
                     purged,
-                    DEFAULT_LOG_RETENTION_DAYS,
+                    retention_days,
                 )
+            # Refresh sqlite_stat1 so the planner reflects the post-purge
+            # row counts; otherwise dashboard aggregations could regress
+            # to a stale plan after a large delete (issue #586).
+            async with get_db() as conn:
+                await conn.execute("PRAGMA optimize")
         except asyncio.CancelledError:
             raise
         except Exception:  # noqa: BLE001
@@ -88,38 +105,64 @@ async def _lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     app.state.master_key = ensure_master_key(settings.data_dir)
     logger.info("Master key loaded from %s", settings.master_key_path)
 
-    # Configure and initialize the database
+    # Configure and initialize the database.  Retention runs between the
+    # schema DDL and the migration sweep so the v14 cooldown back-fill
+    # doesn't grind through 30+ days of unused rows on Kubernetes pods
+    # whose liveness probe would otherwise kill the process before any
+    # request lands (issue #586).
     set_db_path(str(settings.db_path))
-    await init_db()
-    logger.info("Database ready at %s", settings.db_path)
+    await init_db_schema()
 
-    # Purge old search log rows to prevent unbounded growth
-    purged = await purge_old_logs(DEFAULT_LOG_RETENTION_DAYS)
-    if purged > 0:
-        logger.info(
-            "Purged %d search_log rows older than %d days", purged, DEFAULT_LOG_RETENTION_DAYS
-        )
+    retention_days = settings.log_retention_days
+    if retention_days > 0:
+        purged = await purge_old_logs(retention_days)
+        if purged > 0:
+            logger.info("Purged %d search_log rows older than %d days", purged, retention_days)
+    else:
+        logger.info("Search log retention disabled (HOUNDARR_LOG_RETENTION_DAYS=0)")
+
+    await init_db_migrations()
+    logger.info("Database ready at %s", settings.db_path)
 
     # Warn if no instances are configured yet
     instances = await list_instances(master_key=app.state.master_key)
     if not instances:
         logger.warning("No instances configured. Visit the Settings page to add an instance.")
 
+    # Build the dashboard aggregate cache before the supervisor starts.
+    # Order matters: as soon as ``supervisor.start()`` returns, a
+    # background cycle can write to ``search_log`` and a request can
+    # land on ``/api/status``.  Attaching the cache first guarantees
+    # the route's ``getattr(app.state, 'aggregate_cache', None)`` lookup
+    # never sees ``None`` after lifespan completion, so the very first
+    # post-startup request still benefits from caching.  async-lru
+    # rejects cross-loop reuse with RuntimeError, so the cache lives
+    # per-app instead of as a module global; one app per event loop in
+    # production, one app per test in pytest-asyncio function scope.
+    app.state.aggregate_cache = build_aggregate_cache()
+
     # Start the background search supervisor
     supervisor = Supervisor(master_key=app.state.master_key)
     await supervisor.start()
     app.state.supervisor = supervisor
 
-    retention_task = asyncio.create_task(_periodic_log_retention(), name="log-retention-loop")
+    if retention_days > 0:
+        retention_task: asyncio.Task[None] | None = asyncio.create_task(
+            _periodic_log_retention(retention_days), name="log-retention-loop"
+        )
+    else:
+        retention_task = None
     app.state.retention_task = retention_task
 
     yield  # Application runs here
 
     logger.info("Houndarr shutting down")
-    retention_task.cancel()
-    with suppress(asyncio.CancelledError):
-        await retention_task
+    if retention_task is not None:
+        retention_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await retention_task
     await supervisor.stop()
+    await close_all_pools()
 
 
 def create_app() -> FastAPI:

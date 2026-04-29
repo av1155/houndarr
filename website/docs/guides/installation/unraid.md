@@ -118,6 +118,15 @@ the HTTP header your SSO provider injects with the authenticated
 username (for example `Remote-User` for Authelia,
 `X-authentik-username` for Authentik).
 
+### Log Retention Days (`HOUNDARR_LOG_RETENTION_DAYS`)
+
+Default: `30`. Houndarr deletes search log entries older than this
+once a day during the periodic retention sweep. Lower it to `7` or
+`14` if your dashboard feels slow on a long-running instance with
+several active *arrs; raise it (up to `365`) if you want a longer
+audit trail. Set to `0` to disable automatic purges entirely; the
+manual `Clear logs` button under Settings > Admin still works.
+
 ## First launch
 
 Apply the template. The container pulls and starts. Then:

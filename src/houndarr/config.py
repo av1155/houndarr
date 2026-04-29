@@ -157,6 +157,49 @@ _DEFAULT_UPDATE_CHECK_REPO = "av1155/houndarr"
 _UPDATE_CHECK_REPO_RE = re.compile(r"^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$")
 
 
+_LOG_RETENTION_MIN_DAYS = 7
+_LOG_RETENTION_MAX_DAYS = 365
+_LOG_RETENTION_DEFAULT_DAYS = 30
+
+
+def _parse_log_retention_days(raw: str) -> int:
+    """Validate HOUNDARR_LOG_RETENTION_DAYS, falling back to the default on junk.
+
+    Accepts ``0`` to disable automatic purges (operator opts out of
+    Houndarr's retention entirely), or a value in
+    ``[7, 365]`` days to override the default.  Anything else logs a
+    warning and falls back to :data:`_LOG_RETENTION_DEFAULT_DAYS`; the
+    bound matches what self-hosted peers expose (Pi-hole's ``maxDBdays``
+    range) and protects the dashboard polling path from a misconfigured
+    one-day window that would purge rows the metric queries still need.
+    """
+    value = raw.strip()
+    if not value:
+        return _LOG_RETENTION_DEFAULT_DAYS
+    try:
+        parsed = int(value)
+    except ValueError:
+        logger.warning(
+            "HOUNDARR_LOG_RETENTION_DAYS=%r is not an integer; falling back to %d days",
+            value,
+            _LOG_RETENTION_DEFAULT_DAYS,
+        )
+        return _LOG_RETENTION_DEFAULT_DAYS
+    if parsed == 0:
+        return 0
+    if parsed < _LOG_RETENTION_MIN_DAYS or parsed > _LOG_RETENTION_MAX_DAYS:
+        logger.warning(
+            "HOUNDARR_LOG_RETENTION_DAYS=%d is outside the allowed range "
+            "(0 disables, otherwise %d-%d); falling back to %d days",
+            parsed,
+            _LOG_RETENTION_MIN_DAYS,
+            _LOG_RETENTION_MAX_DAYS,
+            _LOG_RETENTION_DEFAULT_DAYS,
+        )
+        return _LOG_RETENTION_DEFAULT_DAYS
+    return parsed
+
+
 def _parse_update_check_repo(raw: str) -> str:
     """Validate HOUNDARR_UPDATE_CHECK_REPO; fall back to the default on junk.
 
@@ -203,6 +246,9 @@ def get_settings() -> AppSettings:
         update_check_repo=_parse_update_check_repo(
             os.environ.get("HOUNDARR_UPDATE_CHECK_REPO", "")
         ),
+        log_retention_days=_parse_log_retention_days(
+            os.environ.get("HOUNDARR_LOG_RETENTION_DAYS", "")
+        ),
     )
 
 
@@ -227,6 +273,7 @@ class BootstrapOverrides(TypedDict, total=False):
     auth_mode: str
     auth_proxy_header: str
     update_check_repo: str
+    log_retention_days: int
 
 
 def bootstrap_settings(**overrides: Unpack[BootstrapOverrides]) -> AppSettings:
@@ -308,6 +355,11 @@ class AppSettings:
             Houndarr repository; forks override via
             ``HOUNDARR_UPDATE_CHECK_REPO`` so no code change is needed to
             redirect the check at their own release stream.
+        log_retention_days: Number of days of ``search_log`` rows to keep
+            during the periodic retention sweep.  ``0`` disables automatic
+            purges; ``7`` to ``365`` overrides the default of ``30``
+            (which matches the value shipped through v1.10.x).
+            Corresponds to ``HOUNDARR_LOG_RETENTION_DAYS`` env var.
     """
 
     data_dir: str = "/data"
@@ -321,6 +373,7 @@ class AppSettings:
     auth_mode: str = "builtin"
     auth_proxy_header: str = ""
     update_check_repo: str = _DEFAULT_UPDATE_CHECK_REPO
+    log_retention_days: int = _LOG_RETENTION_DEFAULT_DAYS
 
     # Derived paths (computed from data_dir)
     db_path: Path = field(init=False)

@@ -104,6 +104,19 @@ from houndarr import __version__
         "(Authentik), 'X-Auth-Request-User' (oauth2-proxy)."
     ),
 )
+@click.option(
+    "--log-retention-days",
+    default="",
+    show_default=False,
+    envvar="HOUNDARR_LOG_RETENTION_DAYS",
+    help=(
+        "Number of days of search log rows to keep during the daily "
+        "retention sweep.  '0' disables automatic purges; '7' to '365' "
+        "overrides the default of 30 days.  Operators on small storage "
+        "lower this to keep the dashboard responsive on long-lived "
+        "instances; large libraries can extend it.  See issue #586."
+    ),
+)
 def cli(
     data_dir: str,
     host: str,
@@ -115,6 +128,7 @@ def cli(
     trusted_proxies: str,
     auth_mode: str,
     auth_proxy_header: str,
+    log_retention_days: str,
 ) -> None:
     """Houndarr: search for missing media in your *arr stack, politely.
 
@@ -128,7 +142,7 @@ def cli(
     import uvicorn
 
     from houndarr.bootstrap import bootstrap_non_web
-    from houndarr.config import _parse_samesite
+    from houndarr.config import _parse_log_retention_days, _parse_samesite
 
     # Configure the root logger so that application loggers (houndarr.*)
     # respect --log-level.  Without this, only uvicorn's own loggers are
@@ -154,6 +168,7 @@ def cli(
         trusted_proxies=trusted_proxies,
         auth_mode=auth_mode.lower(),
         auth_proxy_header=auth_proxy_header,
+        log_retention_days=_parse_log_retention_days(log_retention_days),
     )
 
     # Validate authentication configuration before starting
@@ -180,6 +195,7 @@ def cli(
     os.environ["HOUNDARR_TRUSTED_PROXIES"] = trusted_proxies
     os.environ["HOUNDARR_AUTH_MODE"] = auth_mode.lower()
     os.environ["HOUNDARR_AUTH_PROXY_HEADER"] = auth_proxy_header
+    os.environ["HOUNDARR_LOG_RETENTION_DAYS"] = log_retention_days
 
     uvicorn.run(
         "houndarr.app:create_app",

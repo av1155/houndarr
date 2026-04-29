@@ -7,6 +7,7 @@ from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
 import aiosqlite
+from aiosqlitepool import SQLiteConnectionPool
 
 logger = logging.getLogger(__name__)
 
@@ -135,6 +136,17 @@ CREATE INDEX IF NOT EXISTS idx_search_log_timestamp
     ON search_log(timestamp DESC);
 CREATE INDEX IF NOT EXISTS idx_search_log_instance
     ON search_log(instance_id, timestamp DESC);
+-- Serves the v14 cooldown back-fill correlated lookup and the cooldown
+-- item_label N+1 in services/metrics._COOLDOWNS_SQL.  Without this the
+-- back-fill runs O(N*M) against an unindexed search_log and starves the
+-- Kubernetes liveness probe on large databases (issue #586).
+CREATE INDEX IF NOT EXISTS idx_search_log_lookup
+    ON search_log(instance_id, item_id, item_type, timestamp DESC);
+-- Covers action-filtered window aggregations (24h SUMs, last-activity
+-- ROW_NUMBER) on the dashboard poll path.  The leading instance_id keeps
+-- per-instance scans bounded; trailing timestamp lets ORDER BY skip a sort.
+CREATE INDEX IF NOT EXISTS idx_search_log_action_time
+    ON search_log(instance_id, action, timestamp DESC);
 """
 
 
@@ -144,6 +156,15 @@ CREATE INDEX IF NOT EXISTS idx_search_log_instance
 
 _db_path: str = ""
 
+# Per-path pool registry.  ``_db_path`` is mutated per-test by the ``db``
+# fixture in tests/conftest.py (~2580 tests rely on per-test temp files);
+# a single global pool would bind to the first path and break every
+# subsequent test.  Keying on the path lets the same module-level state
+# back both the production lifecycle (one path, one pool) and the test
+# suite (many paths, many short-lived pools, all torn down by the
+# autouse close_all_pools fixture).
+_pools: dict[str, SQLiteConnectionPool] = {}
+
 
 def set_db_path(path: str) -> None:
     """Set the database path before the app starts."""
@@ -151,12 +172,102 @@ def set_db_path(path: str) -> None:
     _db_path = path
 
 
+async def _connection_factory() -> aiosqlite.Connection:
+    """Open and configure one connection for the active pool.
+
+    Called by aiosqlitepool whenever the pool needs to grow.  The PRAGMAs
+    set here apply once per pool member instead of on every borrow, which
+    is both faster (no extra round-trips) and safer (a connection cannot
+    leave the pool without the configured row factory and FK enforcement).
+
+    Why each PRAGMA matters:
+
+    * ``synchronous=NORMAL`` is corruption-safe in WAL mode and roughly
+      2-3x faster than ``FULL``; SQLite's own docs recommend it for WAL.
+    * ``temp_store=MEMORY`` keeps temp B-trees (used by the dashboard's
+      window-function aggregations) in RAM instead of spilling to /tmp.
+    * ``cache_size=-20000`` is 20 MB per connection (negative = KB).
+      Default 2 MB starves the page cache for the 280 k-row aggregation
+      queries on the dashboard hot path.
+    * ``mmap_size=134217728`` (128 MB) maps the DB file into the process
+      address space; cold reads become memcpy instead of pread().
+    * ``journal_size_limit=67108864`` (64 MB) caps WAL growth even if a
+      reader stalls; defends against a runaway WAL on long-lived pods.
+    * ``foreign_keys=ON`` enforces the FKs declared on cooldowns and
+      search_log; SQLite defaults to OFF on every fresh connection.
+    * ``busy_timeout=5000`` waits 5 s before raising SQLITE_BUSY, so
+      transient writer contention does not produce user-visible errors.
+    """
+    conn = await aiosqlite.connect(_db_path)
+    conn.row_factory = aiosqlite.Row
+    # journal_mode=WAL must precede synchronous=NORMAL: NORMAL is only
+    # corruption-safe in WAL mode (per sqlite.org/pragma.html#pragma_synchronous).
+    # The pragma is file-level and idempotent, so it is a no-op fetch on
+    # every pool member after the first.
+    await conn.execute("PRAGMA journal_mode=WAL")
+    await conn.execute("PRAGMA synchronous=NORMAL")
+    await conn.execute("PRAGMA temp_store=MEMORY")
+    await conn.execute("PRAGMA cache_size=-20000")
+    await conn.execute("PRAGMA mmap_size=134217728")
+    await conn.execute("PRAGMA journal_size_limit=67108864")
+    await conn.execute("PRAGMA foreign_keys=ON")
+    await conn.execute("PRAGMA busy_timeout=5000")
+    return conn
+
+
+def _get_or_create_pool() -> SQLiteConnectionPool:
+    """Return the pool for the active ``_db_path``, creating it on first use.
+
+    Lazy initialisation keeps the production lifecycle simple (the first
+    ``get_db()`` call after ``set_db_path`` builds the pool) and lets test
+    fixtures swap in a new path without touching pool plumbing.
+    """
+    pool = _pools.get(_db_path)
+    if pool is None:
+        # ``pool_size=10`` budgets two connections per concurrent dashboard
+        # request: the route's outer connection holds the instance fetch +
+        # cooldown gather, and ``_gather_dashboard_aggregates`` borrows a
+        # second connection on cache miss to run the four aggregations.  At
+        # the default 5 a thundering-herd cold start with 5 simultaneous
+        # tabs could saturate the pool and queue clients on
+        # ``acquisition_timeout=30s`` (audit finding from the #586 review).
+        # 10 leaves comfortable headroom for the supervisor's parallel
+        # instance loops without materially increasing memory cost (each
+        # SQLite connection holds ~20 MB of page cache via the configured
+        # cache_size pragma).
+        pool = SQLiteConnectionPool(_connection_factory, pool_size=10)
+        _pools[_db_path] = pool
+    return pool
+
+
+async def close_all_pools() -> None:
+    """Close every per-path pool and clear the registry.
+
+    Called from the FastAPI lifespan exit and from the autouse pytest
+    teardown so per-test temp DB files are released and their dedicated
+    aiosqlite threads exit cleanly.
+    """
+    pools = list(_pools.values())
+    _pools.clear()
+    for pool in pools:
+        try:
+            await pool.close()
+        except Exception:  # noqa: BLE001
+            logger.exception("Error closing SQLite connection pool")
+
+
 @asynccontextmanager
 async def get_db() -> AsyncGenerator[aiosqlite.Connection, None]:
-    """Yield a database connection with foreign keys enabled."""
-    async with aiosqlite.connect(_db_path) as db:
-        db.row_factory = aiosqlite.Row
-        await db.execute("PRAGMA foreign_keys=ON")
+    """Borrow a pooled connection with the configured PRAGMAs applied.
+
+    The pool is keyed on the active ``_db_path``, so production reuses
+    long-lived hot-cache connections and tests get a fresh pool per
+    temporary database file.  The yielded connection is returned to the
+    pool when the context exits; callers are responsible for committing
+    or rolling back, exactly as before.
+    """
+    pool = _get_or_create_pool()
+    async with pool.connection() as db:
         yield db
 
 
@@ -165,17 +276,27 @@ async def get_db() -> AsyncGenerator[aiosqlite.Connection, None]:
 # ---------------------------------------------------------------------------
 
 
-async def init_db() -> None:
-    """Create tables and run migrations if needed."""
+async def init_db_schema() -> None:
+    """Apply the fresh-install DDL so the core tables exist.
+
+    Split out from :func:`init_db` so the lifespan can run
+    :func:`~houndarr.repositories.search_log.purge_old_logs` between the
+    schema DDL and the migration sweep on upgrade boots.  Trimming the log
+    first keeps the v14 cooldown back-fill from grinding through 30+ days
+    of unused rows on Kubernetes deployments where the liveness probe
+    would otherwise kill the pod (issue #586).
+    """
     async with get_db() as db:
-        # WAL mode is a database-level setting that persists on the file.
-        # Set it once here rather than on every connection.
-        await db.execute("PRAGMA journal_mode=WAL")
-
-        # Create all tables
+        # WAL is set in :func:`_connection_factory`, so the connection
+        # this borrows from the pool is already in WAL mode by the time
+        # the DDL writes start.
         await db.executescript(_SCHEMA_SQL)
+        await db.commit()
 
-        # Check/set schema version
+
+async def init_db_migrations() -> None:
+    """Advance the schema to the current ``SCHEMA_VERSION`` and re-heal."""
+    async with get_db() as db:
         async with db.execute("SELECT value FROM settings WHERE key = 'schema_version'") as cur:
             row = await cur.fetchone()
 
@@ -187,26 +308,44 @@ async def init_db() -> None:
             await _ensure_v3_indexes(db)
             await db.commit()
             logger.info("Database initialized at schema version %d", SCHEMA_VERSION)
-        else:
-            current = int(row["value"])
-            if current < SCHEMA_VERSION:
-                await _run_migrations(db, current)
-            # Self-heal: re-apply the latest idempotent migration so that
-            # a corrupted state (version bumped but columns missing) is
-            # repaired automatically.  Each guard inside the migration
-            # checks _column_exists first, so this is a no-op on a
-            # healthy database.
-            await _migrate_to_v9(db)
-            await _migrate_to_v10(db)
-            await _migrate_to_v11(db)
-            await _migrate_to_v12(db)
-            await _migrate_to_v13(db)
-            await _migrate_to_v14(db)
-            await _migrate_to_v15(db)
-            await _migrate_to_v16(db)
-            await _migrate_to_v17(db)
-            await _ensure_v3_indexes(db)
-            await db.commit()
+            return
+
+        current = int(row["value"])
+        if current < SCHEMA_VERSION:
+            await _run_migrations(db, current)
+        # Self-heal: re-apply the latest idempotent migration so that
+        # a corrupted state (version bumped but columns missing) is
+        # repaired automatically.  Each guard inside the migration
+        # checks _column_exists first, so this is a no-op on a
+        # healthy database.
+        await _migrate_to_v9(db)
+        await _migrate_to_v10(db)
+        await _migrate_to_v11(db)
+        await _migrate_to_v12(db)
+        await _migrate_to_v13(db)
+        await _migrate_to_v14(db)
+        await _migrate_to_v15(db)
+        await _migrate_to_v16(db)
+        await _migrate_to_v17(db)
+        await _ensure_v3_indexes(db)
+        # PRAGMA optimize keeps the planner's sqlite_stat1 entries fresh as
+        # search_log grows.  Cheap on healthy DBs, prevents silent index
+        # regressions after large back-fills (issue #586).
+        await db.execute("PRAGMA optimize")
+        await db.commit()
+
+
+async def init_db() -> None:
+    """Compatibility shim: schema DDL then migrations, in order.
+
+    Call sites that don't need to interleave a step between the two
+    (tests, scripts, marketing seeders) can keep calling :func:`init_db`
+    unchanged.  The lifespan in :mod:`houndarr.app` calls
+    :func:`init_db_schema` and :func:`init_db_migrations` separately so
+    log retention can run in between.
+    """
+    await init_db_schema()
+    await init_db_migrations()
 
 
 async def _run_migrations(db: aiosqlite.Connection, from_version: int) -> None:
@@ -858,11 +997,21 @@ async def _migrate_to_v14(db: aiosqlite.Connection) -> None:
         await db.execute(
             "ALTER TABLE cooldowns ADD COLUMN search_kind TEXT NOT NULL DEFAULT 'missing'"
         )
-    # Backfill any rows that still carry the literal default from the
-    # ALTER.  The SELECT mirrors the classifier that used to live in
-    # services/metrics.py's cooldown breakdown SQL; newer log rows
-    # override older ones so the stamp matches what the dashboard used
-    # to infer at read time.
+    # Materialise idx_search_log_lookup before the UPDATE so the correlated
+    # subquery hits an index instead of full-scanning search_log per cooldown
+    # row.  Without this the back-fill is O(N_cooldowns * N_search_log) and
+    # blocks the lifespan past any reasonable Kubernetes liveness budget on
+    # 30+-day databases (issue #586).
+    await db.execute(
+        "CREATE INDEX IF NOT EXISTS idx_search_log_lookup "
+        "ON search_log(instance_id, item_id, item_type, timestamp DESC)"
+    )
+    # Back-fill rows that still carry the literal default from the ALTER.
+    # The leading ``cooldowns.search_kind = 'missing'`` filter short-circuits
+    # the correlated EXISTS on every row that has already been stamped, so
+    # the self-heal call in init_db() becomes a near-instant no-op once the
+    # initial back-fill has run; only newly-defaulted rows (none in normal
+    # operation) trigger the EXISTS scan.
     await db.execute(
         """
         UPDATE cooldowns
@@ -877,7 +1026,8 @@ async def _migrate_to_v14(db: aiosqlite.Connection) -> None:
                   ORDER BY sl.timestamp DESC
                   LIMIT 1
                )
-         WHERE EXISTS (
+         WHERE cooldowns.search_kind = 'missing'
+           AND EXISTS (
                  SELECT 1 FROM search_log sl2
                   WHERE sl2.instance_id = cooldowns.instance_id
                     AND sl2.item_id     = cooldowns.item_id
@@ -887,9 +1037,9 @@ async def _migrate_to_v14(db: aiosqlite.Connection) -> None:
                )
         """
     )
-    # Index creation lives in _ensure_v3_indexes so fresh installs
-    # (which skip migrations) still get it; the helper runs after both
-    # the fresh-install DDL and the upgrade migration path.
+    # idx_cooldowns_search_kind and idx_search_log_action_time are emitted by
+    # _ensure_v3_indexes so fresh installs (which skip migrations) still get
+    # them; the helper runs after both fresh DDL and the upgrade path.
 
 
 async def _migrate_to_v15(db: aiosqlite.Connection) -> None:
@@ -1180,6 +1330,18 @@ async def _ensure_v3_indexes(db: aiosqlite.Connection) -> None:
     await db.execute(
         "CREATE INDEX IF NOT EXISTS idx_cooldowns_search_kind "
         "ON cooldowns(instance_id, search_kind)"
+    )
+    # idx_search_log_lookup and idx_search_log_action_time are also emitted
+    # by _SCHEMA_SQL on fresh installs; re-running CREATE INDEX IF NOT EXISTS
+    # here picks up databases that migrated through earlier schema versions
+    # before these indexes existed (issue #586).
+    await db.execute(
+        "CREATE INDEX IF NOT EXISTS idx_search_log_lookup "
+        "ON search_log(instance_id, item_id, item_type, timestamp DESC)"
+    )
+    await db.execute(
+        "CREATE INDEX IF NOT EXISTS idx_search_log_action_time "
+        "ON search_log(instance_id, action, timestamp DESC)"
     )
 
 

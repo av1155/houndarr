@@ -18,14 +18,32 @@ unlock-time computation, batch-clone spread for ``unlocking_next``)
 lives next to the SQL: it has no useful lifetime apart from the
 rows the SQL produces, and pulling it apart would force the caller
 to re-derive the same per-row context.
+
+Single-process cache (issue #586):  :func:`build_aggregate_cache`
+returns an ``alru_cache``-wrapped coroutine that batches the four
+slow DB-aggregation gathers into a single :class:`DashboardAggregates`
+result and caches it for ~20 s.  The cache lives on ``app.state``
+because ``async-lru`` is event-loop-bound (a module-level decorator
+binds to the first test's loop and raises on every subsequent test);
+giving each FastAPI app its own cache makes the cross-loop case
+impossible.  Multi-replica deployments would have one cache per
+replica and rely on per-replica invalidation, so the dashboard would
+go stale (bounded to the TTL) on writes routed to a different
+replica; Houndarr's StatefulSet ships a PVC and ``replicaCount=1``
+so the single-process assumption holds in practice.
 """
 
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
+from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import aiosqlite
+from async_lru import alru_cache
+
+from houndarr.database import get_db
 
 _METRICS_SQL = """
 SELECT
@@ -242,10 +260,139 @@ def _build_instance_status_row(
     }
 
 
+# ---------------------------------------------------------------------------
+# Aggregate cache
+# ---------------------------------------------------------------------------
+
+# TTL is short enough that an operator action (Run Now, instance toggle)
+# always feels live within one polling cycle, but long enough that 30
+# tabs polling the same envelope land on a single DB scan.  Tuned to
+# the dashboard's 30 s HTMX trigger; keep them in lockstep.
+DASHBOARD_CACHE_TTL_SECONDS = 20
+
+
+@dataclass(slots=True, frozen=True)
+class DashboardAggregates:
+    """Frozen-shape bundle of every cached gather result.
+
+    Lives in the cache for at most :data:`DASHBOARD_CACHE_TTL_SECONDS`
+    seconds.  The route handler merges this with live-state fields
+    (cycle-end timestamps from the supervisor, cooldown rows) before
+    serialising the JSON envelope, so user actions and the
+    next-patrol countdown never wait on the cache window.
+
+    Read-only contract: ``frozen=True`` blocks field reassignment, but
+    the wrapped maps remain Python ``dict``/``list`` instances.
+    Callers must treat them as immutable.  Mutating a cached map (for
+    example, ``aggregates.metrics_map[iid]['errors_24h'] += 1``) would
+    silently poison every subsequent dashboard poll within the cache
+    TTL.  Defensive copies were considered and rejected: every call
+    site is read-only today, and copying ~5 dicts per request just
+    to defend against a hypothetical future mutator would erase the
+    point of caching.
+    """
+
+    metrics_map: dict[int, dict[str, Any]] = field(default_factory=dict)
+    activity_map: dict[int, tuple[str | None, str | None]] = field(default_factory=dict)
+    lifetime_map: dict[int, dict[str, Any]] = field(default_factory=dict)
+    error_map: dict[int, dict[str, Any]] = field(default_factory=dict)
+    recent: list[dict[str, Any]] = field(default_factory=list)
+
+
+# A function with ``cache_clear`` plus the alru_cache extras.  We keep
+# the surface narrow on purpose: the route only ever awaits the call,
+# and invalidation only ever calls cache_clear; the rest of alru_cache's
+# API (cache_info, cache_invalidate, jitter, etc.) is intentionally not
+# exposed because the centralised invalidation path is the supported
+# contract.
+DashboardAggregateCache = Callable[[tuple[int, ...]], Awaitable[DashboardAggregates]]
+
+
+async def _gather_dashboard_aggregates(
+    instance_ids_tuple: tuple[int, ...],
+) -> DashboardAggregates:
+    """Run the four slow gathers against a freshly-borrowed connection.
+
+    Opens its own pool connection because the cache wraps this function
+    once per app-lifetime and the cached result outlives the calling
+    request.  Returns an empty bundle for the no-instances case so the
+    cache key is stable (an empty tuple maps to the same bundle).
+    """
+    if not instance_ids_tuple:
+        return DashboardAggregates()
+
+    instance_ids = list(instance_ids_tuple)
+    async with get_db() as db:
+        metrics_map, activity_map = await gather_window_metrics(db, instance_ids)
+        lifetime_map = await gather_lifetime_metrics(db, instance_ids)
+        error_map = await gather_active_errors(db, instance_ids)
+        recent = await gather_recent_searches(db, limit=5)
+
+    return DashboardAggregates(
+        metrics_map=metrics_map,
+        activity_map=activity_map,
+        lifetime_map=lifetime_map,
+        error_map=error_map,
+        recent=recent,
+    )
+
+
+def build_aggregate_cache(
+    ttl_seconds: int | None = None,
+) -> DashboardAggregateCache | None:
+    """Return a fresh ``alru_cache``-wrapped aggregator, or ``None`` to disable.
+
+    Called once per FastAPI app instance from the lifespan startup so
+    each app owns its own cache and there is no cross-event-loop
+    sharing.  Tests that build many apps therefore get many caches and
+    no ``RuntimeError`` from async-lru's loop-affinity guard.
+
+    The default reads :data:`DASHBOARD_CACHE_TTL_SECONDS` at call
+    time, not at function-definition time, so the conftest fixture
+    that monkeypatches the module attribute to ``0`` opts every
+    legacy test out of caching without surgery.  Passing
+    ``ttl_seconds=0`` returns ``None``; the route handler's
+    ``aggregate_cache is None`` branch then falls through to a fresh
+    DB scan on every request.  Production sees the 20 s TTL.
+
+    The returned callable accepts a hashable ``tuple[int, ...]`` of
+    instance ids (lists are not hashable; the route converts) and
+    yields a :class:`DashboardAggregates` bundle.  ``cache_clear()``
+    on the returned callable invalidates every entry, which is the
+    only invalidation pattern Houndarr uses; per-args invalidation
+    via ``cache_invalidate`` is available but not used.
+    """
+    effective_ttl = DASHBOARD_CACHE_TTL_SECONDS if ttl_seconds is None else ttl_seconds
+    if effective_ttl <= 0:
+        return None
+    return alru_cache(maxsize=4, ttl=effective_ttl)(
+        _gather_dashboard_aggregates,
+    )
+
+
+def invalidate_dashboard_cache(app_state: Any) -> None:
+    """Drop every cached :class:`DashboardAggregates` on the active app.
+
+    Safe to call when the cache has not been built (early lifespan,
+    tests that bypass ``create_app``); the missing-attribute branch
+    short-circuits without touching the database.
+
+    Args:
+        app_state: The :class:`fastapi.FastAPI` ``app.state`` namespace
+            that owns the cache.  The route handlers pass
+            ``request.app.state`` here.
+    """
+    cache = getattr(app_state, "aggregate_cache", None)
+    if cache is None:
+        return
+    cache.cache_clear()
+
+
 async def gather_dashboard_status(
     db: aiosqlite.Connection,
     *,
     cycle_ends: dict[int, str] | None = None,
+    aggregate_cache: DashboardAggregateCache | None = None,
 ) -> dict[str, list[dict[str, Any]]]:
     """Build the full ``/api/status`` JSON envelope against an open connection.
 
@@ -279,11 +426,28 @@ async def gather_dashboard_status(
         return {"instances": [], "recent_searches": []}
 
     instance_ids = [row["id"] for row in instances]
-    metrics_map, activity_map = await gather_window_metrics(db, instance_ids)
-    lifetime_map = await gather_lifetime_metrics(db, instance_ids)
-    error_map = await gather_active_errors(db, instance_ids)
+    if aggregate_cache is not None:
+        # Sort the cache key so reordering the SELECT (e.g. switching
+        # ORDER BY columns later) cannot defeat the cache.  The route's
+        # consumer reads ``metrics_map[iid]`` by id, not by position,
+        # so canonicalising the key has no observable effect.
+        aggregates = await aggregate_cache(tuple(sorted(instance_ids)))
+        metrics_map = aggregates.metrics_map
+        activity_map = aggregates.activity_map
+        lifetime_map = aggregates.lifetime_map
+        error_map = aggregates.error_map
+        recent = aggregates.recent
+    else:
+        # Tests and direct callers that pass an open connection without
+        # a cache (the legacy contract) get a fresh DB scan every time.
+        metrics_map, activity_map = await gather_window_metrics(db, instance_ids)
+        lifetime_map = await gather_lifetime_metrics(db, instance_ids)
+        error_map = await gather_active_errors(db, instance_ids)
+        recent = await gather_recent_searches(db, limit=5)
+    # Cooldown rows reflect the most recent supervisor reconcile pass and
+    # the user's manual ``Run Now`` button presses; both expect the dash
+    # to update on the next 30 s poll, so this gather always runs live.
     cooldown_map = await gather_cooldown_data(db, list(instances))
-    recent = await gather_recent_searches(db, limit=5)
     cycle_ends = cycle_ends or {}
 
     rows: list[dict[str, Any]] = []

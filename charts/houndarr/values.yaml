@@ -40,6 +40,19 @@ env:
   authProxyHeader: ""
   # -- Log verbosity. One of: debug, info, warning, error.
   logLevel: info
+  # -- Number of days of search_log rows to retain.
+  # 0 disables automatic purges; 7 to 365 overrides the default of 30.
+  # Sets HOUNDARR_LOG_RETENTION_DAYS.  Lower this on small storage to
+  # keep the dashboard responsive; large libraries can extend it.
+  logRetentionDays: 30
+
+# -- Startup probe budget for first-boot migrations on large databases.
+# Defaults give 10 minutes (60 attempts * 10 s).  Raise failureThreshold
+# for v1.9.0 to v1.10.x upgrades against very large search_log tables
+# where the cooldown back-fill and index build take longer.
+startupProbe:
+  failureThreshold: 60
+  periodSeconds: 10
 
 # -- Persistent volume for /data (SQLite database and encryption master key).
 persistence:

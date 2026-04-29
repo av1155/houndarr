@@ -553,7 +553,7 @@ def test_dashboard_accessible_after_login(app: TestClient) -> None:
     assert response.status_code == 200
     assert b"Dashboard" in response.content
     assert b'id="instance-grid"' in response.content
-    assert b'hx-trigger="every 30s"' in response.content
+    assert b'hx-trigger="every 30s queue:none"' in response.content
     assert b'id="dash-initial-status"' in response.content
     assert b'class="dash-main"' in response.content
     assert b'id="dash-top"' in response.content

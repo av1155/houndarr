@@ -767,11 +767,20 @@
        below so the shell animation ships with content already in place
        (matching how logs and settings render).  HTMX polls every 30 s
        for subsequent updates; the beforeSwap listener parses those
-       responses and rewrites the grid + top section. -->
+       responses and rewrites the grid + top section.
+
+       ``queue:none`` drops new poll triggers while a previous response
+       is still in flight.  The default ``queue:last`` would cascade a
+       multi-second response into a backlog of pending polls (issue
+       #586): every 30 s another request entered the queue, so once
+       ``/api/status`` exceeded the interval the dashboard piled up
+       polls behind each other and the page never recovered until the
+       table was trimmed.  ``none`` lets a slow cycle skip rather than
+       stack. -->
   <div
     id="instance-grid"
     hx-get="/api/status"
-    hx-trigger="every 30s"
+    hx-trigger="every 30s queue:none"
     hx-swap="innerHTML"
     hx-target="#instance-grid"
   ></div>

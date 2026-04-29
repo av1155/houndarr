@@ -128,6 +128,9 @@ The `chartRef` field (instead of `chart.spec.sourceRef`) is what connects a `Hel
 | `env.authMode` | `builtin` | `HOUNDARR_AUTH_MODE`: `builtin` or `proxy` |
 | `env.authProxyHeader` | `""` | `HOUNDARR_AUTH_PROXY_HEADER` (e.g., `Remote-User`) |
 | `env.logLevel` | `info` | `HOUNDARR_LOG_LEVEL`: `debug`, `info`, `warning`, `error` |
+| `env.logRetentionDays` | `30` | `HOUNDARR_LOG_RETENTION_DAYS`: days of `search_log` rows to keep. `0` disables purges; `7` to `365` overrides the default |
+| `startupProbe.failureThreshold` | `60` | Probe attempts before the pod is marked unhealthy. Combined with `periodSeconds`, the default gives a 10-minute startup budget for first-boot migrations |
+| `startupProbe.periodSeconds` | `10` | Seconds between startup probe attempts |
 | `persistence.size` | `1Gi` | PVC size |
 | `persistence.storageClassName` | `""` | StorageClass. Empty uses the cluster default |
 | `persistence.accessMode` | `ReadWriteOnce` | PVC access mode |

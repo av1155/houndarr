@@ -75,12 +75,30 @@ spec:
             - name: HOUNDARR_LOG_LEVEL
               value: {{ .Values.env.logLevel | quote }}
             {{- end }}
+            {{- if ne (toString .Values.env.logRetentionDays) "30" }}
+            - name: HOUNDARR_LOG_RETENTION_DAYS
+              value: {{ .Values.env.logRetentionDays | quote }}
+            {{- end }}
             {{- with .Values.extraEnv }}
             {{- toYaml . | nindent 12 }}
             {{- end }}
           volumeMounts:
             - name: data
               mountPath: /data
+          # startupProbe gates the liveness and readiness checks until
+          # the lifespan finishes initialising the database.  On clean
+          # boots the schema/migrations/index sweep finishes in seconds,
+          # but a v1.9.0->v1.10.x upgrade against a 280k-row search_log
+          # used to spend several minutes back-filling cooldowns and
+          # building indexes (issue #586).  60 attempts at 10 s each
+          # gives up to 10 minutes; raise ``failureThreshold`` for very
+          # large histories where the first-boot index build is slower.
+          startupProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            failureThreshold: {{ .Values.startupProbe.failureThreshold }}
+            periodSeconds: {{ .Values.startupProbe.periodSeconds }}
           livenessProbe:
             httpGet:
               path: /api/health

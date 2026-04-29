@@ -111,6 +111,7 @@ class TestOverridesTypedDict:
             "auth_mode",
             "auth_proxy_header",
             "update_check_repo",
+            "log_retention_days",
         }
 
 

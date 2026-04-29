@@ -61,6 +61,7 @@ from houndarr.services.instances import (
     list_instances,
     update_instance,
 )
+from houndarr.services.metrics import invalidate_dashboard_cache
 
 router = APIRouter()
 
@@ -188,6 +189,8 @@ async def instance_create(
     if isinstance(supervisor, Supervisor):
         await supervisor.reconcile_instance(instance.core.id)
 
+    invalidate_dashboard_cache(request.app.state)
+
     instances = await list_instances(master_key=master_key)
     error_ids = await active_error_instance_ids()
     # HTMX: return just the refreshed table body partial
@@ -303,6 +306,8 @@ async def instance_update(
     except InstanceValidationError as exc:
         return connection_guard_response(exc.public_message)
 
+    invalidate_dashboard_cache(request.app.state)
+
     # HTMX: return just the refreshed row
     error_ids = await active_error_instance_ids()
     return render(
@@ -321,6 +326,7 @@ async def instance_delete(request: Request, instance_id: int) -> Response:
         await supervisor.stop_instance_task(instance_id)
 
     await delete_instance(instance_id)
+    invalidate_dashboard_cache(request.app.state)
     # Return an empty 200. HTMX hx-swap="outerHTML" with empty content
     # removes the row from the DOM.
     return Response(status_code=200)
@@ -355,6 +361,8 @@ async def instance_toggle_enabled(
     supervisor = getattr(request.app.state, "supervisor", None)
     if isinstance(supervisor, Supervisor):
         await supervisor.reconcile_instance(updated.core.id)
+
+    invalidate_dashboard_cache(request.app.state)
 
     error_ids = await active_error_instance_ids()
     return render(

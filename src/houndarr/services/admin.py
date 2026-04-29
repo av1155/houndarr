@@ -244,6 +244,17 @@ async def _factory_reset_impl(*, app: FastAPI, data_dir: str) -> None:
     # milliseconds the DB is being rebuilt. The key is atomically replaced
     # once the new one is ready.
 
+    # Close every pooled connection before unlinking the DB files.  On
+    # Unix, an unlinked file with an open fd survives as an orphaned
+    # inode that subsequent writes through that fd land on; if we leave
+    # the pool alive across the unlink, the recreated houndarr.db is an
+    # empty file and the running connections still write to the ghost.
+    # close_all_pools is idempotent and safe to call before the files are
+    # deleted.
+    from houndarr.database import close_all_pools
+
+    await close_all_pools()
+
     try:
         for path in paths_to_delete:
             try:
@@ -271,11 +282,24 @@ async def _factory_reset_impl(*, app: FastAPI, data_dir: str) -> None:
     # Lazy import avoids a circular dependency: houndarr.app imports
     # this module's siblings during router registration.
     from houndarr.app import _periodic_log_retention
+    from houndarr.config import get_settings
 
-    app.state.retention_task = asyncio.create_task(
-        _periodic_log_retention(),
-        name="log-retention-loop",
-    )
+    retention_days = get_settings().log_retention_days
+    if retention_days > 0:
+        app.state.retention_task = asyncio.create_task(
+            _periodic_log_retention(retention_days),
+            name="log-retention-loop",
+        )
+    else:
+        app.state.retention_task = None
+
+    # Drop every cached dashboard aggregate from the wiped DB so the
+    # next /api/status poll repopulates against the empty schema.
+    # invalidate_dashboard_cache is a no-op when no cache is attached
+    # (for tests that bypass create_app's lifespan).
+    from houndarr.services.metrics import invalidate_dashboard_cache
+
+    invalidate_dashboard_cache(app.state)
 
 
 def request_process_exit() -> None:

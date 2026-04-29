@@ -1006,12 +1006,26 @@ async def _migrate_to_v14(db: aiosqlite.Connection) -> None:
         "CREATE INDEX IF NOT EXISTS idx_search_log_lookup "
         "ON search_log(instance_id, item_id, item_type, timestamp DESC)"
     )
+    # Skip the back-fill if a previous boot already ran it to completion.
+    # The marker lives in ``settings`` so the gate persists across upgrades
+    # without a second schema bump; the row is created below right after
+    # the UPDATE commits, so a crash mid-back-fill leaves the marker
+    # absent and the next boot retries.  Even with the
+    # ``cooldowns.search_kind = 'missing'`` WHERE filter, a row whose
+    # latest search_log entry is also of kind ``'missing'`` would still
+    # match and be rewritten to the same value on every boot, producing
+    # bounded WAL write amplification on long-lived deployments; the
+    # marker eliminates that re-write entirely.
+    async with db.execute("SELECT 1 FROM settings WHERE key = 'v14_backfill_complete'") as cur:
+        already_done = await cur.fetchone() is not None
+    if already_done:
+        return
     # Back-fill rows that still carry the literal default from the ALTER.
     # The leading ``cooldowns.search_kind = 'missing'`` filter short-circuits
-    # the correlated EXISTS on every row that has already been stamped, so
-    # the self-heal call in init_db() becomes a near-instant no-op once the
-    # initial back-fill has run; only newly-defaulted rows (none in normal
-    # operation) trigger the EXISTS scan.
+    # the correlated EXISTS on rows the app has already stamped via
+    # ``upsert_cooldown``; only the rows added before v14 (or by a
+    # newly-installed instance whose search_log is empty) trigger the
+    # EXISTS scan.
     await db.execute(
         """
         UPDATE cooldowns
@@ -1036,6 +1050,10 @@ async def _migrate_to_v14(db: aiosqlite.Connection) -> None:
                     AND sl2.search_kind IN ('missing', 'cutoff', 'upgrade')
                )
         """
+    )
+    await db.execute(
+        "INSERT INTO settings (key, value) VALUES ('v14_backfill_complete', '1')"
+        " ON CONFLICT(key) DO NOTHING"
     )
     # idx_cooldowns_search_kind and idx_search_log_action_time are emitted by
     # _ensure_v3_indexes so fresh installs (which skip migrations) still get

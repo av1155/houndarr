@@ -31,7 +31,6 @@ from houndarr.database import (
     set_db_path,
 )
 
-
 _BACKFILL_SQL = """
 UPDATE cooldowns
    SET search_kind = (
@@ -68,8 +67,7 @@ async def _seed(rows: int, instance_count: int, cooldowns_per_instance: int) -> 
     chunk = 10_000
     async with get_db() as conn:
         await conn.executemany(
-            "INSERT INTO instances (id, name, type, url, encrypted_api_key)"
-            " VALUES (?, ?, ?, ?, ?)",
+            "INSERT INTO instances (id, name, type, url, encrypted_api_key) VALUES (?, ?, ?, ?, ?)",
             [
                 (i + 1, f"App{i + 1}", ["sonarr", "radarr", "lidarr"][i % 3], f"http://x/{i}", "")
                 for i in range(instance_count)
@@ -99,8 +97,7 @@ async def _seed(rows: int, instance_count: int, cooldowns_per_instance: int) -> 
         for instance_id in range(1, instance_count + 1):
             item_type = ("episode", "movie", "album")[(instance_id - 1) % 3]
             cool_batch = [
-                (instance_id, 100 + i, item_type, "missing",
-                 now.strftime("%Y-%m-%dT%H:%M:%S.000Z"))
+                (instance_id, 100 + i, item_type, "missing", now.strftime("%Y-%m-%dT%H:%M:%S.000Z"))
                 for i in range(cooldowns_per_instance)
             ]
             await conn.executemany(

@@ -36,7 +36,6 @@ from houndarr.database import (
     _migrate_to_v14,
     close_all_pools,
     get_db,
-    init_db,
     init_db_migrations,
     init_db_schema,
     set_db_path,
@@ -66,8 +65,7 @@ async def _seed_search_log(rows: int, instance_count: int) -> None:
 
     async with get_db() as conn:
         await conn.executemany(
-            "INSERT INTO instances (id, name, type, url, encrypted_api_key)"
-            " VALUES (?, ?, ?, ?, ?)",
+            "INSERT INTO instances (id, name, type, url, encrypted_api_key) VALUES (?, ?, ?, ?, ?)",
             [
                 (i + 1, f"App{i + 1}", ["sonarr", "radarr", "lidarr"][i % 3], f"http://x/{i}", "")
                 for i in range(instance_count)
@@ -87,7 +85,9 @@ async def _seed_search_log(rows: int, instance_count: int) -> None:
             action = ("searched", "skipped", "searched", "info")[action_idx]
             minutes_ago = row_idx % (30 * 24 * 60)
             ts = (now - timedelta(minutes=minutes_ago)).strftime("%Y-%m-%dT%H:%M:%S.000Z")
-            item_type = "episode" if instance_id == 1 else ("movie" if instance_id == 2 else "album")
+            item_type = (
+                "episode" if instance_id == 1 else ("movie" if instance_id == 2 else "album")
+            )
             batch.append((instance_id, item_id, item_type, kind, action, f"Item {row_idx}", ts))
 
         async with get_db() as conn:
@@ -107,10 +107,11 @@ async def _seed_cooldowns(instance_count: int, rows_per_instance: int) -> None:
     now = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%S.000Z")
     async with get_db() as conn:
         for instance_id in range(1, instance_count + 1):
-            item_type = "episode" if instance_id == 1 else ("movie" if instance_id == 2 else "album")
+            item_type = (
+                "episode" if instance_id == 1 else ("movie" if instance_id == 2 else "album")
+            )
             batch = [
-                (instance_id, 100 + i, item_type, "missing", now)
-                for i in range(rows_per_instance)
+                (instance_id, 100 + i, item_type, "missing", now) for i in range(rows_per_instance)
             ]
             await conn.executemany(
                 "INSERT OR IGNORE INTO cooldowns (instance_id, item_id, item_type,"
@@ -171,7 +172,7 @@ async def _measure_dashboard(samples: int = 5, *, with_cache: bool = False) -> l
 class _StateWith:
     """Stand-in for ``app.state`` that lets us call ``invalidate_dashboard_cache``."""
 
-    def __init__(self, cache):
+    def __init__(self, cache: object) -> None:
         self.aggregate_cache = cache
 
 

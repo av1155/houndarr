@@ -52,13 +52,13 @@ from datetime import UTC, datetime, timedelta
 
 import httpx
 import uvicorn
+from tests.mock_arr.server import SeedConfig
+from tests.mock_arr.server import create_app as create_mock_app
 
 import houndarr.engine.search_loop as _search_loop
 from houndarr.config import bootstrap_settings
 from houndarr.crypto import encrypt, ensure_master_key
 from houndarr.database import close_all_pools, get_db, set_db_path
-from tests.mock_arr.server import SeedConfig, create_app as create_mock_app
-
 
 _search_loop._INTER_SEARCH_DELAY_SECONDS = 0.0
 
@@ -113,13 +113,11 @@ def _stop_mock(server: uvicorn.Server, thread: threading.Thread) -> None:
 
 
 @asynccontextmanager
-async def _houndarr_app(
-    data_dir: str, *, cache_ttl: int = 20
-) -> AsyncIterator[httpx.AsyncClient]:
+async def _houndarr_app(data_dir: str, *, cache_ttl: int = 20) -> AsyncIterator[httpx.AsyncClient]:
     """Yield an httpx client wired to a fully-booted Houndarr ASGI app."""
+    import houndarr.services.metrics as metrics_module
     from houndarr import app as app_module
     from houndarr.auth import reset_auth_caches
-    import houndarr.services.metrics as metrics_module
 
     # Re-pin settings to point at the temp dir; this also resets the
     # runtime singleton.
@@ -204,8 +202,17 @@ async def _bulk_seed_search_log(rows: int, instance_ids: list[int]) -> None:
             ts = (now - timedelta(minutes=row_idx % (30 * 24 * 60))).strftime(
                 "%Y-%m-%dT%H:%M:%S.000Z"
             )
-            batch.append((instance_id, 100 + (row_idx % 5000), "episode", kind, "searched",
-                          f"Item {row_idx}", ts))
+            batch.append(
+                (
+                    instance_id,
+                    100 + (row_idx % 5000),
+                    "episode",
+                    kind,
+                    "searched",
+                    f"Item {row_idx}",
+                    ts,
+                )
+            )
         async with get_db() as conn:
             await conn.executemany(
                 "INSERT INTO search_log (instance_id, item_id, item_type, search_kind,"
@@ -257,9 +264,11 @@ def _stats(samples: list[float]) -> dict[str, float]:
 
 def _human_stats(label: str, samples: list[float]) -> str:
     s = _stats(samples)
-    return (f"  {label:30s} n={len(samples):>4d}  "
-            f"min={s['min']:>6.1f}ms  p50={s['p50']:>6.1f}ms  "
-            f"p95={s['p95']:>6.1f}ms  p99={s['p99']:>6.1f}ms  max={s['max']:>6.1f}ms")
+    return (
+        f"  {label:30s} n={len(samples):>4d}  "
+        f"min={s['min']:>6.1f}ms  p50={s['p50']:>6.1f}ms  "
+        f"p95={s['p95']:>6.1f}ms  p99={s['p99']:>6.1f}ms  max={s['max']:>6.1f}ms"
+    )
 
 
 async def _measure_status_polls(client: httpx.AsyncClient, samples: int) -> list[float]:
@@ -283,12 +292,14 @@ async def _measure_concurrent_polls(
     """
     timings = []
     for _ in range(rounds):
+
         async def _one() -> float:
             start = time.monotonic()
             resp = await client.get("/api/status")
             elapsed = time.monotonic() - start
             assert resp.status_code == 200
             return elapsed
+
         results = await asyncio.gather(*[_one() for _ in range(concurrent)])
         timings.extend(results)
     return timings
@@ -335,8 +346,8 @@ async def _run_variant(variant: str, rows: int) -> None:
                     await _drop_indexes_for_pre_fix_mode()
                     print("  DROPPED idx_search_log_lookup + idx_search_log_action_time")
 
-                from houndarr.repositories.search_log import purge_old_logs
                 from houndarr.database import init_db_migrations
+                from houndarr.repositories.search_log import purge_old_logs
 
                 # Simulate a process restart: re-run the migration sweep so
                 # any v14 self-heal hits the chosen index plan.
@@ -362,9 +373,7 @@ async def _run_variant(variant: str, rows: int) -> None:
                 # Concurrent: 5 simultaneous polls (realistic max-tabs case).
                 # Higher concurrency exists in the test but is not modeled
                 # by the reporter's scenario (single dashboard tab).
-                concurrent = await _measure_concurrent_polls(
-                    client, concurrent=5, rounds=2
-                )
+                concurrent = await _measure_concurrent_polls(client, concurrent=5, rounds=2)
                 print(_human_stats("/api/status (5 concurrent x2)", concurrent))
 
                 # Mutation invalidation: a settings toggle should clear the
@@ -386,8 +395,10 @@ async def _run_variant(variant: str, rows: int) -> None:
                 t = time.monotonic()
                 await client.get("/api/status")
                 post_invalidate = time.monotonic() - t
-                print(f"  toggle: {toggle_elapsed * 1000:.1f} ms;"
-                      f" first poll after invalidate: {post_invalidate * 1000:.1f} ms")
+                print(
+                    f"  toggle: {toggle_elapsed * 1000:.1f} ms;"
+                    f" first poll after invalidate: {post_invalidate * 1000:.1f} ms"
+                )
 
                 # Run-now: schedules a deferred re-clear after 3 s.
                 t = time.monotonic()
@@ -395,15 +406,18 @@ async def _run_variant(variant: str, rows: int) -> None:
                     f"/api/instances/{instance_id}/run-now", headers=_csrf(client)
                 )
                 run_now_elapsed = time.monotonic() - t
-                print(f"  run-now POST: {run_now_elapsed * 1000:.1f} ms"
-                      f" (status={resp.status_code})")
+                print(
+                    f"  run-now POST: {run_now_elapsed * 1000:.1f} ms (status={resp.status_code})"
+                )
 
                 # Factory-reset path is heavy; we skip it here (covered by
                 # the dedicated tests in test_services/test_admin.py).
 
                 rss_after = _peak_rss_mb()
-                print(f"  RSS at variant end:    {rss_after:.1f} MB"
-                      f" (delta={rss_after - rss_before_seed:+.1f} MB)")
+                print(
+                    f"  RSS at variant end:    {rss_after:.1f} MB"
+                    f" (delta={rss_after - rss_before_seed:+.1f} MB)"
+                )
         finally:
             await close_all_pools()
             _stop_mock(mock_server, mock_thread)
@@ -419,8 +433,8 @@ async def main() -> int:
     parser.add_argument("--rows", type=int, default=280_000)
     args = parser.parse_args()
 
-    variants = ("post-fix", "pre-fix", "cache-disabled") if args.variant == "all" else (
-        args.variant,
+    variants = (
+        ("post-fix", "pre-fix", "cache-disabled") if args.variant == "all" else (args.variant,)
     )
     for variant in variants:
         await _run_variant(variant, rows=args.rows)

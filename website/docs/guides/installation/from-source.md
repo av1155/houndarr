@@ -12,12 +12,12 @@ a local Python checkout. End users should prefer
 or [Install on Unraid](/docs/guides/installation/unraid); this page
 is for development.
 
-## Requirements
+## Prerequisites
 
 - Python 3.12 or later
 - pip
-- Node.js 22 or later (only needed to compile the CSS bundle)
-- pnpm via `corepack enable` (Node 20+ ships corepack)
+- Node.js 22 or later
+- pnpm (via `corepack enable`)
 
 ## Setup
 
@@ -43,15 +43,12 @@ pnpm run build-css
 
 The dev server listens on `http://localhost:8877`.
 
-The compiled `src/houndarr/static/css/app.built.css` is gitignored
-because it is a build artefact. Re-run `pnpm run build-css` whenever
-you pull commits that touch `src/houndarr/static/css/` or
-`src/houndarr/templates/`. Houndarr refuses to start if the bundle is
-missing and prints the exact command in the log.
+## Rebuild the CSS bundle
 
-The Docker image runs the same `pnpm run build-css` step
-automatically as a multi-stage build, so Docker users do not need
-Node or pnpm installed.
+Re-run `pnpm run build-css` after pulling commits that change
+`src/houndarr/static/css/` or `src/houndarr/templates/`. Houndarr
+refuses to start without the compiled bundle and prints the same
+command in the log.
 
 ## Development mode
 

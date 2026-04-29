@@ -92,8 +92,14 @@ def test_static_2xx_query_string_does_not_change_header(app: TestClient) -> None
 
 
 def test_static_css_sets_immutable(app: TestClient) -> None:
-    """CSS assets get the same immutable contract as JS."""
-    resp = app.get("/static/css/app.built.css")
+    """CSS assets get the same immutable contract as JS.
+
+    Targets ``app.css`` (a tracked source file) rather than
+    ``app.built.css``: the latter is compiled at Docker build time
+    by the css-build stage and is gitignored, so it does not exist
+    when tests run against the checked-out source tree in CI.
+    """
+    resp = app.get("/static/css/app.css")
     assert resp.status_code == 200
     assert resp.headers["cache-control"] == "public, max-age=31536000, immutable"
 

@@ -15,6 +15,7 @@ from fastapi.staticfiles import StaticFiles
 
 from houndarr import __version__
 from houndarr.auth import AuthMiddleware
+from houndarr.cache_headers import CacheControlMiddleware
 from houndarr.config import DEFAULT_LOG_RETENTION_DAYS, get_settings
 from houndarr.crypto import ensure_master_key
 from houndarr.database import init_db, set_db_path
@@ -160,7 +161,10 @@ def create_app() -> FastAPI:
     # -----------------------------------------------------------------------
     # Middleware (order matters: outermost = first to receive request)
     # -----------------------------------------------------------------------
+    # CacheControlMiddleware runs outermost so its headers land on every
+    # response, including AuthMiddleware redirects and error pages.
     app.add_middleware(AuthMiddleware)
+    app.add_middleware(CacheControlMiddleware)
 
     # -----------------------------------------------------------------------
     # Routes

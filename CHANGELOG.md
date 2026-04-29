@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+---
+
+## [1.11.0] - 2026-04-29
+
 ### Added
 
 - `HOUNDARR_LOG_RETENTION_DAYS` env var configures the search log retention threshold (default `30`; `0` disables automatic purges, `7` to `365` overrides the default). (#586)
@@ -19,7 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- From-source installs now refuse to start with a clear error message when the compiled `app.built.css` is missing instead of silently 404-ing every stylesheet request, and the from-source install guide documents the `pnpm install` and `pnpm run build-css` step required since `1.10.0`.
+- From-source installs now refuse to start with a clear error message when the compiled `app.built.css` is missing instead of silently 404-ing every stylesheet request, and the from-source install guide documents the `pnpm install` and `pnpm run build-css` step required since `1.10.0`. (#582)
 - Dashboard no longer hangs on databases with large `search_log` tables: two new composite indexes serve the v14 cooldown back-fill and the dashboard aggregation queries instead of full-table scans, and the back-fill itself only touches cooldown rows still at the default `'missing'` stamp. (#586)
 
 ---

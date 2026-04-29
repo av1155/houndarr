@@ -7,10 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+---
+
+## [1.10.1] - 2026-04-29
+
+### Changed
+
+- `/static/*` assets are returned with `Cache-Control: public, max-age=31536000, immutable` so browsers skip revalidation between releases. (#579)
+
 ### Fixed
 
 - Changelog modal and add-instance settings modal cap to a sensible desktop width again, restoring the limit lost from the production CSS bundle by the `1.10.0` macro refactor. (#574)
-- HTML responses set `Cache-Control: no-cache` and `Vary: HX-Request`, and `/static/*` assets set `Cache-Control: public, max-age=31536000, immutable`, so browsers pick up new asset paths after an upgrade without needing a manual hard reload and HTMX partials no longer share a browser-cache entry with full pages. (#579)
+- HTML responses set `Cache-Control: no-cache` and `Vary: HX-Request`, so browsers pick up new asset paths after an upgrade without a manual hard reload and HTMX partials no longer share a browser-cache entry with full pages. (#579)
 
 ---
 

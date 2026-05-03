@@ -38,7 +38,11 @@ dependencies = [
     "pydantic>=2.10.0",
 ]
 
-[project.optional-dependencies]
+# PEP 735 dependency groups: developer-only deps that are not part of the
+# published package metadata. uv auto-installs the `dev` group on `uv sync`,
+# so collaborators get the full dev toolchain with a single command.
+# See: https://peps.python.org/pep-0735/ and uv docs (sync ──no-default-groups).
+[dependency-groups]
 dev = [
     "ruff>=0.15.10",
     "mypy>=1.20.1",

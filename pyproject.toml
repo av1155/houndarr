@@ -143,8 +143,20 @@ module = ["aiosqlite.*", "aiosqlitepool.*", "bcrypt.*"]
 ignore_missing_imports = true
 
 # ---------------------------------------------------------------------------
-# Pytest
+# Pyright (editor LSP only; mypy --strict remains the CI gate)
 # ---------------------------------------------------------------------------
+# Pins the Python version, points at the project venv so third-party imports
+# resolve, and adds the repo root to extraPaths so test files importing
+# ``tests.conftest`` and similar resolve in editors. Default ``standard`` mode
+# is intentionally kept; basedpyright also reads this section for forward
+# compatibility.
+[tool.pyright]
+include = ["src", "tests", "scripts"]
+extraPaths = ["."]
+pythonVersion = "3.13"
+venvPath = "."
+venv = ".venv"
+
 # ---------------------------------------------------------------------------
 # Bandit (SAST)
 # ---------------------------------------------------------------------------

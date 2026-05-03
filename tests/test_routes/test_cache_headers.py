@@ -179,7 +179,7 @@ def test_authenticated_dashboard_html_sets_no_cache(app: TestClient) -> None:
 
 
 @pytest.fixture()
-def synthetic_app() -> Generator[TestClient, None, None]:
+def synthetic_app() -> Generator[TestClient]:
     """Build a minimal FastAPI app with only ``CacheControlMiddleware``."""
     fastapi_app = FastAPI()
     fastapi_app.add_middleware(CacheControlMiddleware)

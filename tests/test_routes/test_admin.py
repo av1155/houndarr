@@ -76,7 +76,7 @@ def proxy_settings(tmp_data_dir: str) -> AppSettings:
 
 
 @pytest.fixture()
-def proxy_app(proxy_settings: AppSettings) -> Generator[TestClient, None, None]:
+def proxy_app(proxy_settings: AppSettings) -> Generator[TestClient]:
     from houndarr.app import create_app
 
     application = create_app()
@@ -164,7 +164,7 @@ def test_reset_instances_no_instances_returns_flash(app: TestClient) -> None:
 
 
 @pytest_asyncio.fixture()
-async def seed_one_log_row() -> AsyncGenerator[None, None]:
+async def seed_one_log_row() -> AsyncGenerator[None]:
     """Insert one search_log row before the test so clear-logs removes something."""
     async with get_db() as conn:
         await conn.execute("INSERT INTO search_log (action, message) VALUES ('info', 'seed')")

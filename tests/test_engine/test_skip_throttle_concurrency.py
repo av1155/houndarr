@@ -64,7 +64,7 @@ _INSTANCE_ID = 1  # Sonarr (from seeded_instances)
 
 
 @pytest_asyncio.fixture()
-async def cooldowned_item(seeded_instances: None) -> AsyncGenerator[None, None]:  # noqa: F811
+async def cooldowned_item(seeded_instances: None) -> AsyncGenerator[None]:  # noqa: F811
     """Pre-seed a cooldowns row so ``is_on_cooldown`` returns True for the
     canonical ``(instance_id=1, item_id=101, item_type='episode')`` tuple used
     throughout this module.

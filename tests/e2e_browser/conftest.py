@@ -88,7 +88,7 @@ class _ConsoleGuard:
 
 
 @pytest.fixture(autouse=True)
-def console_guard(page: Page) -> Generator[_ConsoleGuard, None, None]:
+def console_guard(page: Page) -> Generator[_ConsoleGuard]:
     """Every browser test fails on console errors or uncaught JS exceptions.
 
     Applied via ``autouse`` so individual tests do not need to wire up the

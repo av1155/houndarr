@@ -22,12 +22,10 @@ panes:
     - split: horizontal
 
 post_create:
-    # Per-worktree virtualenv: `uv pip install -e .` writes the worktree's
-    # absolute src/ path into a .pth file, so a shared venv would break
-    # the editable install the moment a second worktree was created.
-    - uv venv
-    - uv pip install -r requirements-dev.txt
-    - uv pip install -e .
+    # Per-worktree virtualenv: `uv sync` writes the worktree's absolute
+    # src/ path into a .pth file, so a shared venv would break the
+    # editable install the moment a second worktree was created.
+    - uv sync
     # Node workspaces: root drives the Tailwind build, website/ runs
     # Docusaurus. pnpm hardlinks from the global store so isolated
     # node_modules stays fast.

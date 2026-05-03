@@ -21,7 +21,7 @@ async def _login(async_client: Any) -> None:
 
 
 @pytest_asyncio.fixture()
-async def seeded_cycles(db: None) -> AsyncGenerator[None, None]:
+async def seeded_cycles(db: None) -> AsyncGenerator[None]:
     """Seed search_log with three cycles across two instances.
 
     Cycle ordering by timestamp (newest first): cycle-c, cycle-b, cycle-a.

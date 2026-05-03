@@ -174,7 +174,7 @@ class TestRunInstanceSearchWrap:
 
 
 @pytest_asyncio.fixture()
-async def seeded_supervisor_instance(db: None) -> AsyncGenerator[None, None]:
+async def seeded_supervisor_instance(db: None) -> AsyncGenerator[None]:
     """Seed one enabled Sonarr instance keyed by FK constraints on search_log."""
     enc = _encrypt_key("test-api-key")
     async with get_db() as conn:

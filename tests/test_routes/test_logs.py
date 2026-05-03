@@ -93,7 +93,7 @@ async def _insert_extra_logs(count: int, *, start_index: int = 0) -> None:
 
 
 @pytest_asyncio.fixture()
-async def seeded_log(db: None) -> AsyncGenerator[None, None]:  # type: ignore[misc]
+async def seeded_log(db: None) -> AsyncGenerator[None]:  # type: ignore[misc]
     """Seed search_log with rows across two instances for filter/pagination tests."""
     async with get_db() as conn:
         # Seed two instances so FK constraint on search_log is satisfied

@@ -11,6 +11,7 @@ TestClient.
 from __future__ import annotations
 
 from collections.abc import AsyncGenerator
+from datetime import UTC, datetime, timedelta
 
 import pytest
 import pytest_asyncio
@@ -42,7 +43,7 @@ _ENC_KEY = (
 
 
 @pytest_asyncio.fixture()
-async def seeded_instances(db: None) -> AsyncGenerator[None, None]:
+async def seeded_instances(db: None) -> AsyncGenerator[None]:
     """Seed two instance rows with a valid Fernet-encrypted api_key sentinel."""
     async with get_db() as conn:
         await conn.executemany(
@@ -216,6 +217,14 @@ class TestRecentSearches:
 
     @pytest.mark.asyncio()
     async def test_returns_most_recent_within_limit(self, seeded_instances: None) -> None:
+        # Use timestamps relative to "now" so the test stays inside the
+        # rollup's 7-day window regardless of when it runs. C is the most
+        # recent and must lead the result; B follows; A drops off the limit.
+        now = datetime.now(UTC)
+
+        def ts(hours_ago: int) -> str:
+            return (now - timedelta(hours=hours_ago)).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+
         async with get_db() as conn:
             await conn.executemany(
                 """
@@ -224,9 +233,9 @@ class TestRecentSearches:
                 VALUES (1, ?, 'movie', 'searched', ?, ?)
                 """,
                 [
-                    (10, "Movie A", "2026-04-25T10:00:00.000Z"),
-                    (11, "Movie B", "2026-04-25T11:00:00.000Z"),
-                    (12, "Movie C", "2026-04-25T12:00:00.000Z"),
+                    (10, "Movie A", ts(3)),
+                    (11, "Movie B", ts(2)),
+                    (12, "Movie C", ts(1)),
                 ],
             )
             await conn.commit()

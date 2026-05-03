@@ -10,7 +10,7 @@ Whisparr that automatically searches for missing, cutoff-unmet, and
 upgrade-eligible media in small, rate-limited batches. It runs as a single Docker container alongside
 an existing *arr stack.
 
-**Tech stack:** Python 3.12 / FastAPI / aiosqlite (SQLite) / Jinja2 / HTMX /
+**Tech stack:** Python 3.13 / FastAPI / aiosqlite (SQLite) / Jinja2 / HTMX /
 Tailwind CSS CDN. Published to GHCR at `ghcr.io/av1155/houndarr`.
 
 **Scope guard:** Houndarr is a single-purpose tool. Every change must help
@@ -29,11 +29,9 @@ gate, every test slice, and the dev server, so most agent work goes
 through `just <recipe>` rather than `.venv/bin/...`.
 
 ```bash
-# Create venv and install (one-time bootstrap)
-python3 -m venv .venv
-.venv/bin/pip install --upgrade pip
-.venv/bin/pip install -r requirements-dev.txt
-.venv/bin/pip install -e .
+# Create venv and install (one-time bootstrap; uv reads pyproject.toml +
+# uv.lock and installs both runtime and the PEP 735 `dev` group by default).
+uv sync
 
 # Run locally (dev mode; auto-reload, API docs at /docs)
 just dev
@@ -110,8 +108,8 @@ Pytest config (`pyproject.toml`): `asyncio_mode = "auto"`,
 | Lint (ruff) | `quality.yml` | `ruff check .` |
 | Format (ruff) | `quality.yml` | `ruff format --check .` |
 | Type check (mypy) | `quality.yml` | `mypy src/` |
-| Test (Python 3.12) | `tests.yml` | `pytest -q --tb=short` + compile check + `--help` |
-| Dependency audit (pip-audit) | `security.yml` | `pip-audit -r requirements.txt -r requirements-dev.txt` |
+| Test (Python 3.13) | `tests.yml` | `pytest -q --tb=short` + compile check + `--help` |
+| Dependency audit (pip-audit) | `security.yml` | `pip-audit` against `requirements.txt` + `requirements-dev.txt` generated on the fly via `uv export --frozen` from `pyproject.toml` + `uv.lock` |
 | SAST (bandit) | `security.yml` | `bandit -r src/ -c pyproject.toml` |
 | Trivy filesystem scan | `security.yml` | `trivy fs .` (CRITICAL/HIGH with known fix) |
 | Dependency review | `dependency-review.yml` | PR dependency diff vs GitHub Advisory Database |
@@ -156,7 +154,7 @@ identical check names so branch protection is satisfied.
 
 - **Line length:** 100 characters
 - **Indentation:** 4 spaces (2 for YAML/JSON/TOML)
-- **Target Python:** 3.12+ (`target-version = "py312"` in `pyproject.toml`)
+- **Target Python:** 3.13+ (`target-version = "py313"` in `pyproject.toml`)
 - **Linter/formatter:** Ruff; selected rule sets: `E W F I B C4 UP SIM ANN S N`
 
 ### Punctuation
@@ -941,8 +939,10 @@ someone comments, so reporters get immediate feedback.
 - `.github/workflows/`: changes trigger workflow-lint and may affect required checks
 - `src/houndarr/database.py` schema migrations: requires `SCHEMA_VERSION` bump
 - `tests/conftest.py` shared fixtures: changes affect all test files
-- `requirements.txt` / `requirements-dev.txt`: dependency changes require
-  `pip-audit` to pass
+- `pyproject.toml` (`[project] dependencies` + `[dependency-groups] dev`)
+  and `uv.lock`: dependency changes require `pip-audit` to pass.
+  `requirements.txt` / `requirements-dev.txt` are no longer checked in;
+  the security workflow generates them on the fly via `uv export`
 
 ### When to add or update tests
 

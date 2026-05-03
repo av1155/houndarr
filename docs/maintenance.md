@@ -51,7 +51,7 @@ When the time comes:
    from houndarr._vendor.aiosqlitepool import SQLiteConnectionPool
    ```
 
-3. Drop `aiosqlitepool` from `requirements.txt` and `pyproject.toml`.
+3. Drop `aiosqlitepool` from `pyproject.toml` and re-run `uv lock`.
 4. Drop the `aiosqlitepool.*` entry from the mypy ignore-missing-imports
    override in `pyproject.toml`.
 5. Add a `tests/test_vendor_aiosqlitepool.py` smoke test that exercises

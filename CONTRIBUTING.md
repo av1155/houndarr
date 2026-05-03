@@ -10,10 +10,9 @@ Please keep changes aligned with the project goal and avoid scope expansion.
 ## Development setup
 
 ```bash
-python3 -m venv .venv
-.venv/bin/python -m pip install --upgrade pip
-.venv/bin/python -m pip install -r requirements-dev.txt
-.venv/bin/python -m pip install -e .
+# Reads pyproject.toml + uv.lock and installs runtime + the PEP 735
+# `dev` group (pytest, mypy, ruff, bandit, etc.) into .venv. Idempotent.
+uv sync
 ```
 
 ## Workflow
@@ -35,12 +34,14 @@ For releases, open a separate `chore: bump version to X.Y.Z` PR that changes onl
 ## Required local checks
 
 ```bash
-.venv/bin/python -m ruff check src/ tests/
-.venv/bin/python -m ruff format --check src/ tests/
-.venv/bin/python -m mypy src/
-.venv/bin/python -m bandit -r src/ -c pyproject.toml
-.venv/bin/pytest
+uv run ruff check src/ tests/
+uv run ruff format --check src/ tests/
+uv run mypy src/
+uv run bandit -r src/ -c pyproject.toml
+uv run pytest
 ```
+
+`just check` runs all of the above as a single recipe.
 
 ## Pull request guidance
 
@@ -51,6 +52,6 @@ For releases, open a separate `chore: bump version to X.Y.Z` PR that changes onl
 
 ## Code style
 
-- Python target is `>=3.12`.
+- Python target is `>=3.13`.
 - Follow existing project patterns and naming.
 - Prefer minimal, maintainable changes over broad rewrites.

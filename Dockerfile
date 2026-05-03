@@ -3,7 +3,7 @@
 # syntax=docker/dockerfile:1
 # =============================================================================
 # Houndarr — production Docker image
-# Base: python:3.12-slim (Debian bookworm slim)
+# Base: python:3.13-slim (Debian bookworm slim)
 # =============================================================================
 
 # -----------------------------------------------------------------------------
@@ -31,7 +31,7 @@ RUN pnpm run build-css
 # -----------------------------------------------------------------------------
 # Stage 2: runtime
 # -----------------------------------------------------------------------------
-FROM python:3.12-slim
+FROM python:3.13-slim
 
 ARG HOUNDARR_VERSION=dev
 
@@ -57,11 +57,18 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends gosu curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Python dependencies before copying source (better layer caching)
-COPY requirements.txt ./
+# Install Python dependencies before copying source (better layer caching).
+# pyproject.toml + uv.lock are the single source of truth; uv exports a
+# pinned requirements list at build time, no static requirements.txt needed.
+# VERSION + hatch_build.py are required by the hatchling metadata hook that
+# reads the project version; copy them too so `uv export` can resolve the
+# build backend without the rest of the source tree.
+COPY pyproject.toml uv.lock VERSION hatch_build.py ./
 # hadolint ignore=DL3013
-RUN pip install --no-cache-dir --upgrade pip \
-    && pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir --upgrade pip uv \
+    && uv export --frozen --no-hashes --no-emit-project --no-dev -o /tmp/requirements.txt \
+    && pip install --no-cache-dir -r /tmp/requirements.txt \
+    && rm /tmp/requirements.txt
 
 # Copy application source
 COPY src/ ./src/
@@ -92,5 +99,28 @@ VOLUME ["/data"]
 HEALTHCHECK --interval=60s --timeout=10s --start-period=10s --retries=3 \
     CMD curl --fail --silent http://localhost:8877/api/health || exit 1
 
+# -----------------------------------------------------------------------------
+# Privilege-drop strategy
+# -----------------------------------------------------------------------------
+# This image deliberately does NOT end with `USER appuser`. The image starts as
+# root, then the entrypoint (`entrypoint.sh`) handles three modes:
+#
+#   1. Container started non-root (Kubernetes runAsUser, `docker run --user`):
+#      preflights /data, then exec the app as the supplied UID.
+#   2. PUID=0 (LXC/Proxmox where isolation is at the hypervisor level):
+#      stays as root.
+#   3. Default: remaps `appuser` to PUID/PGID, chowns /data, then drops
+#      privileges via `gosu appuser` before exec-ing the app.
+#
+# Hard-coding `USER appuser` would silently break mode 3 (the most common one),
+# because `id -u` would return 1000 and the entrypoint would skip the
+# UID-remap branch. This is the canonical linuxserver.io PUID/PGID pattern
+# used by hundreds of self-hosted images. See `entrypoint.sh` for details.
+#
+# Static analyzers (Semgrep `last-user-is-root`, etc.) flag the absence of a
+# trailing `USER` directive without considering the entrypoint's runtime drop;
+# the suppressions below acknowledge that and point reviewers to entrypoint.sh.
+# nosemgrep: dockerfile.security.last-user-is-root.last-user-is-root
 ENTRYPOINT ["/entrypoint.sh"]
+# nosemgrep: dockerfile.security.last-user-is-root.last-user-is-root
 CMD ["python", "-m", "houndarr", "--data-dir", "/data"]

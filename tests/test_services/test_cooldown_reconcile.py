@@ -26,7 +26,7 @@ _ENC_KEY = "gAAAAABlX_fake_fernet_value_long_enough_to_pass_validation=="
 
 
 @pytest_asyncio.fixture()
-async def seeded_instance(db: None) -> AsyncGenerator[None, None]:  # noqa: ARG001
+async def seeded_instance(db: None) -> AsyncGenerator[None]:  # noqa: ARG001
     """Seed one instance row so cooldowns FKs resolve."""
     async with get_db() as conn:
         await conn.execute(

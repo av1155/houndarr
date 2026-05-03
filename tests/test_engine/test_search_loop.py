@@ -168,7 +168,7 @@ def _make_instance(
 
 
 @pytest_asyncio.fixture()
-async def seeded_instances(db: None) -> AsyncGenerator[None, None]:
+async def seeded_instances(db: None) -> AsyncGenerator[None]:
     """Seed FK-required rows into instances so cooldowns can reference them.
 
     encrypted_api_key is set to a valid Fernet-encrypted value so that

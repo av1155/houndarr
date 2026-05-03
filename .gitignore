@@ -105,9 +105,6 @@ website/.docusaurus/
 .claude/worktrees/
 .claude/.DS_Store
 
-# uv lock file (project uses requirements.txt — uv is a local dev runner)
-uv.lock
-
 # Git worktrees (local development only)
 .worktrees/
 

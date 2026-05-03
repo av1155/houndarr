@@ -34,7 +34,7 @@ def _login(client: TestClient) -> None:
 
 
 @pytest_asyncio.fixture()
-async def logged_in_client(app: TestClient) -> AsyncGenerator[TestClient, None]:
+async def logged_in_client(app: TestClient) -> AsyncGenerator[TestClient]:
     _login(app)
     yield app
 

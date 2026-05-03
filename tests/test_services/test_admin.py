@@ -37,7 +37,7 @@ _MASTER_KEY = Fernet.generate_key()
 
 
 @pytest_asyncio.fixture()
-async def seeded_instances(db: None) -> AsyncGenerator[list[int], None]:
+async def seeded_instances(db: None) -> AsyncGenerator[list[int]]:
     """Create two instances with non-default policy so a reset has something to prove."""
     inst1 = await create_instance(
         master_key=_MASTER_KEY,

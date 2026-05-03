@@ -21,7 +21,7 @@ from houndarr.database import get_db
 
 
 @pytest_asyncio.fixture()
-async def seeded_filter_data(db: None) -> AsyncGenerator[None, None]:
+async def seeded_filter_data(db: None) -> AsyncGenerator[None]:
     """Seed search_log with rows covering all search_kind and cycle_trigger values."""
     async with get_db() as conn:
         await conn.executemany(

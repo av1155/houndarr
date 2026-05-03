@@ -168,7 +168,7 @@ async def _get_log_rows() -> list[dict[str, Any]]:
 
 
 @pytest_asyncio.fixture()
-async def seeded_instances(db: None) -> AsyncGenerator[None, None]:
+async def seeded_instances(db: None) -> AsyncGenerator[None]:
     """Seed FK-required rows so cooldowns and search_log can reference them."""
     from houndarr.crypto import encrypt
 

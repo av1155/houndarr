@@ -19,7 +19,7 @@ All three scripts default to `./marketing-data/` for the scratch DB
 
 ## Prerequisites
 
-- Project venv with dev dependencies installed: `pip install -r requirements-dev.txt && pip install -e .`
+- Project venv with dev dependencies installed: `uv sync` (installs the PEP 735 `dev` group by default)
 - Playwright browsers: `.venv/bin/playwright install chromium`
 
 ## Full regeneration (populated + empty, one command pass each)

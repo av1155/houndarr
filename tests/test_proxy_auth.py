@@ -57,7 +57,7 @@ def proxy_settings(tmp_data_dir: str) -> AppSettings:
 
 
 @pytest.fixture()
-def proxy_app(proxy_settings: AppSettings) -> Generator[TestClient, None, None]:
+def proxy_app(proxy_settings: AppSettings) -> Generator[TestClient]:
     """TestClient for an app running in proxy auth mode.
 
     Starlette's TestClient uses ``"testclient"`` as the client host, which
@@ -81,7 +81,7 @@ def proxy_app(proxy_settings: AppSettings) -> Generator[TestClient, None, None]:
 
 
 @pytest.fixture()
-def untrusted_proxy_app(proxy_settings: AppSettings) -> Generator[TestClient, None, None]:
+def untrusted_proxy_app(proxy_settings: AppSettings) -> Generator[TestClient]:
     """TestClient simulating an untrusted (direct) connection in proxy mode."""
     from houndarr.app import create_app
 

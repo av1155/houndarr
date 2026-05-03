@@ -25,7 +25,7 @@ pytestmark = pytest.mark.pinning
 @pytest.fixture(autouse=True)
 def _reset_config_singleton(
     monkeypatch: pytest.MonkeyPatch,
-) -> Generator[None, None, None]:
+) -> Generator[None]:
     """Clear the pinned singleton + HOUNDARR_DATA_DIR before and after each test.
 
     The config module caches resolved settings in ``_runtime_settings``;

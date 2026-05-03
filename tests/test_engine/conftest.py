@@ -247,7 +247,7 @@ def make_instance(
 
 
 @pytest_asyncio.fixture()
-async def seeded_instances(db: None) -> AsyncGenerator[None, None]:
+async def seeded_instances(db: None) -> AsyncGenerator[None]:
     """Seed FK-required rows into instances so search_log/cooldowns can reference them."""
     from houndarr.crypto import encrypt
 

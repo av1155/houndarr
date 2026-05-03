@@ -257,7 +257,7 @@ async def close_all_pools() -> None:
 
 
 @asynccontextmanager
-async def get_db() -> AsyncGenerator[aiosqlite.Connection, None]:
+async def get_db() -> AsyncGenerator[aiosqlite.Connection]:
     """Borrow a pooled connection with the configured PRAGMAs applied.
 
     The pool is keyed on the active ``_db_path``, so production reuses

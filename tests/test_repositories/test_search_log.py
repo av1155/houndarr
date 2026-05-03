@@ -22,7 +22,7 @@ from houndarr.repositories import search_log as repo
 
 
 @pytest_asyncio.fixture()
-async def seeded_instances(db: None) -> AsyncGenerator[None, None]:
+async def seeded_instances(db: None) -> AsyncGenerator[None]:
     """Two stub instance rows so FK constraints are satisfied."""
     async with get_db() as conn:
         await conn.executemany(

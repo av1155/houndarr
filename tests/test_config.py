@@ -171,7 +171,7 @@ def test_validate_invalid_auth_mode() -> None:
 
 
 @pytest.fixture()
-def _isolate_pin() -> Generator[None, None, None]:
+def _isolate_pin() -> Generator[None]:
     """Clear the runtime-settings pin before and after each test in this section.
 
     bootstrap_settings pins a module-level singleton; without isolation

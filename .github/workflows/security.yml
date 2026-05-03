@@ -33,16 +33,25 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Set up Python
-        uses: actions/setup-python@v6
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
         with:
-          python-version: "3.12"
-          cache: pip
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install 3.13
 
       - name: Install pip-audit
+        run: uv tool install pip-audit
+
+      - name: Generate requirements files from uv.lock
+        # pyproject.toml + uv.lock are the single source of truth. Generate
+        # the requirements files at audit time so they can never drift.
+        # --no-emit-project drops the editable `-e .` line so pip-audit only
+        # sees the third-party dependencies.
         run: |
-          python -m pip install --upgrade pip
-          pip install pip-audit
+          uv export --frozen --no-hashes --no-emit-project --no-dev -o requirements.txt
+          uv export --frozen --no-hashes --no-emit-project --only-group dev -o requirements-dev.txt
 
       - name: Run dependency audit
         env:
@@ -67,19 +76,19 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Set up Python
-        uses: actions/setup-python@v6
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
         with:
-          python-version: "3.12"
-          cache: pip
+          enable-cache: true
 
-      - name: Install bandit
-        run: |
-          python -m pip install --upgrade pip
-          pip install bandit[toml]
+      - name: Set up Python
+        run: uv python install 3.13
+
+      - name: Install dependencies
+        run: uv sync --frozen
 
       - name: Run bandit
-        run: bandit -r src/ -c pyproject.toml
+        run: uv run bandit -r src/ -c pyproject.toml
 
   trivy-fs:
     name: Trivy filesystem scan

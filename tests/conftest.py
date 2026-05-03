@@ -88,14 +88,14 @@ def _disable_dashboard_cache(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.fixture()
-def tmp_data_dir() -> Generator[str, None, None]:
+def tmp_data_dir() -> Generator[str]:
     """Provide a temporary data directory for each test."""
     with tempfile.TemporaryDirectory() as d:
         yield d
 
 
 @pytest_asyncio.fixture()
-async def db(tmp_data_dir: str) -> AsyncGenerator[None, None]:
+async def db(tmp_data_dir: str) -> AsyncGenerator[None]:
     """Initialize a fresh in-memory-style SQLite DB for each test.
 
     Also resets the auth-package caches so tests that request only
@@ -136,7 +136,7 @@ def test_settings(tmp_data_dir: str) -> AppSettings:
 
 
 @pytest.fixture()
-def app(test_settings: AppSettings) -> Generator[TestClient, None, None]:
+def app(test_settings: AppSettings) -> Generator[TestClient]:
     """Create a TestClient for the FastAPI app."""
     from houndarr.app import create_app
 
@@ -148,7 +148,7 @@ def app(test_settings: AppSettings) -> Generator[TestClient, None, None]:
 @pytest_asyncio.fixture()
 async def async_client(
     test_settings: AppSettings,
-) -> AsyncGenerator[AsyncClient, None]:
+) -> AsyncGenerator[AsyncClient]:
     """Async HTTPX client for testing async endpoints."""
     from houndarr.app import create_app
 

@@ -65,7 +65,7 @@ async def _periodic_log_retention(retention_days: int) -> None:
 
 
 @asynccontextmanager
-async def _lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+async def _lifespan(app: FastAPI) -> AsyncGenerator[None]:
     """Application lifespan: initialize DB on startup, clean up on shutdown."""
     settings = get_settings()
 

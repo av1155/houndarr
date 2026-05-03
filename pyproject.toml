@@ -1,6 +1,6 @@
 [build-system]
-requires = ["setuptools>=82.0.1"]
-build-backend = "setuptools.build_meta"
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
 
 [project]
 name = "houndarr"
@@ -8,7 +8,7 @@ dynamic = ["version"]
 description = "A focused, self-hosted companion for Radarr, Sonarr, Lidarr, Readarr, and Whisparr that automatically searches for missing media in polite, controlled batches."
 readme = "README.md"
 license = { file = "LICENSE" }
-requires-python = ">=3.12"
+requires-python = ">=3.13"
 authors = [{ name = "Andrea A. Venti Fuentes", email = "av1155.dev@gmail.com" }]
 keywords = ["radarr", "sonarr", "lidarr", "readarr", "whisparr", "media", "automation", "self-hosted"]
 classifiers = [
@@ -16,7 +16,7 @@ classifiers = [
     "Intended Audience :: End Users/Desktop",
     "License :: OSI Approved :: GNU Affero General Public License v3",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Topic :: Multimedia",
 ]
 
@@ -38,7 +38,11 @@ dependencies = [
     "pydantic>=2.10.0",
 ]
 
-[project.optional-dependencies]
+# PEP 735 dependency groups: developer-only deps that are not part of the
+# published package metadata. uv auto-installs the `dev` group on `uv sync`,
+# so collaborators get the full dev toolchain with a single command.
+# https://peps.python.org/pep-0735/
+[dependency-groups]
 dev = [
     "ruff>=0.15.10",
     "mypy>=1.20.1",
@@ -55,11 +59,29 @@ dev = [
 [project.scripts]
 houndarr = "houndarr.__main__:cli"
 
-[tool.setuptools.packages.find]
-where = ["src"]
+# ---------------------------------------------------------------------------
+# Hatchling
+# ---------------------------------------------------------------------------
+# Use a tiny custom metadata hook (hatch_build.py) so the version stays sourced
+# from the VERSION file. The release workflow (release.yml, chart.yml,
+# version-check.yml) and the /bump command continue to treat VERSION as the
+# single source of truth.
+[tool.hatch.metadata.hooks.custom]
+path = "hatch_build.py"
 
-[tool.setuptools.dynamic]
-version = { file = "VERSION" }
+[tool.hatch.build.targets.wheel]
+packages = ["src/houndarr"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "src/houndarr",
+    "VERSION",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md",
+    "hatch_build.py",
+    "pyproject.toml",
+]
 
 # ---------------------------------------------------------------------------
 # Ruff
@@ -67,7 +89,7 @@ version = { file = "VERSION" }
 [tool.ruff]
 src = ["src"]
 line-length = 100
-target-version = "py312"
+target-version = "py313"
 
 [tool.ruff.lint]
 select = [
@@ -102,7 +124,7 @@ known-first-party = ["houndarr"]
 # Mypy
 # ---------------------------------------------------------------------------
 [tool.mypy]
-python_version = "3.12"
+python_version = "3.13"
 mypy_path = "src"
 strict = true
 warn_return_any = true

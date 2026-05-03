@@ -32,7 +32,7 @@ def _encrypt_key(value: str) -> str:
 
 
 @pytest_asyncio.fixture()
-async def seeded_instances(db: None) -> AsyncGenerator[None, None]:
+async def seeded_instances(db: None) -> AsyncGenerator[None]:
     """Seed one enabled Sonarr instance and one disabled Radarr."""
     enc = _encrypt_key("test-api-key")
     async with get_db() as conn:
@@ -55,7 +55,7 @@ async def seeded_instances(db: None) -> AsyncGenerator[None, None]:
 async def supervisor(
     seeded_instances: None,
     monkeypatch: pytest.MonkeyPatch,
-) -> AsyncGenerator[Supervisor, None]:
+) -> AsyncGenerator[Supervisor]:
     """Return a supervisor whose lifecycle is cleanly torn down."""
     # Disarm the real search loop so ``start_instance_task`` never hits *arr.
     monkeypatch.setattr(supervisor_module, "run_instance_search", AsyncMock(return_value=0))

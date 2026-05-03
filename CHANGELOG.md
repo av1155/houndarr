@@ -10,8 +10,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Python floor raised from 3.12 to 3.13. From-source installs and the Docker image now require a 3.13 interpreter; Python 3.13 has upstream support through October 2029. (#596)
-- Tracked `uv.lock` and removed checked-in `requirements.txt` / `requirements-dev.txt`; CI regenerates them on the fly via `uv export` for `pip-audit`. (#596)
-- `starlette` 0.52 to 1.0, `pydantic` 2.12 to 2.13, plus refreshed transitive pins. (#596)
 
 ---
 

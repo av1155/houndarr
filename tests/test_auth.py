@@ -9,9 +9,9 @@ import pytest
 from fastapi.testclient import TestClient
 
 from houndarr.auth import (
-    _CSRF_PROTECTED_METHODS,  # noqa: SLF001
-    _LOGOUT_PATH,  # noqa: SLF001
-    _PUBLIC_PATHS,  # noqa: SLF001
+    _CSRF_PROTECTED_METHODS,
+    _LOGOUT_PATH,
+    _PUBLIC_PATHS,
     BCRYPT_COST,
     CSRF_COOKIE_NAME,
     SESSION_COOKIE_NAME,
@@ -155,7 +155,7 @@ def test_client_ip_honours_xff_for_cidr_trusted_proxy(
     """_client_ip honours X-Forwarded-For when direct IP is in a trusted subnet."""
     from unittest.mock import MagicMock
 
-    from houndarr.auth import _client_ip  # noqa: SLF001
+    from houndarr.auth import _client_ip
     from houndarr.config import bootstrap_settings
 
     try:
@@ -174,7 +174,7 @@ def test_client_ip_ignores_xff_when_not_in_trusted_subnet(
     """_client_ip ignores X-Forwarded-For when direct IP is NOT in trusted subnet."""
     from unittest.mock import MagicMock
 
-    from houndarr.auth import _client_ip  # noqa: SLF001
+    from houndarr.auth import _client_ip
     from houndarr.config import bootstrap_settings
 
     try:
@@ -767,7 +767,7 @@ def test_clear_login_attempts_drops_bucket(test_settings: object) -> None:
     from unittest.mock import MagicMock
 
     from houndarr.auth import (
-        _login_attempts,  # noqa: SLF001
+        _login_attempts,
         check_login_rate_limit,
         clear_login_attempts,
         record_failed_login,
@@ -800,8 +800,8 @@ def test_check_login_rate_limit_prunes_stale_entries(
 
     import houndarr.auth as _auth
     from houndarr.auth import (
-        _LOGIN_WINDOW_SECONDS,  # noqa: SLF001
-        _login_attempts,  # noqa: SLF001
+        _LOGIN_WINDOW_SECONDS,
+        _login_attempts,
         check_login_rate_limit,
         record_failed_login,
     )
@@ -839,7 +839,7 @@ async def test_reset_auth_caches_clears_every_module_global(db: None) -> None:
 
     import houndarr.auth as _auth
     from houndarr.auth import (
-        _get_serializer,  # noqa: SLF001
+        _get_serializer,
         record_failed_login,
         reset_auth_caches,
         set_password,
@@ -853,15 +853,15 @@ async def test_reset_auth_caches_clears_every_module_global(db: None) -> None:
     req.headers.get.return_value = None
     record_failed_login(req)
 
-    assert _auth._setup_complete is True  # noqa: SLF001
-    assert _auth._serializer is not None  # noqa: SLF001
-    assert _auth._login_attempts  # noqa: SLF001
+    assert _auth._setup_complete is True
+    assert _auth._serializer is not None
+    assert _auth._login_attempts
 
     reset_auth_caches()
 
-    assert _auth._setup_complete is None  # noqa: SLF001
-    assert _auth._serializer is None  # noqa: SLF001
-    assert _auth._login_attempts == {}  # noqa: SLF001
+    assert _auth._setup_complete is None
+    assert _auth._serializer is None
+    assert _auth._login_attempts == {}
 
 
 # Session seam
@@ -872,13 +872,13 @@ async def test_reset_auth_caches_clears_every_module_global(db: None) -> None:
 async def test_get_serializer_lazy_init_reads_session_secret(db: None) -> None:
     """First call generates-and-persists the secret; subsequent calls reuse it."""
     import houndarr.auth as _auth
-    from houndarr.auth import _get_serializer  # noqa: SLF001
+    from houndarr.auth import _get_serializer
 
-    assert _auth._serializer is None  # noqa: SLF001
+    assert _auth._serializer is None
     assert await get_setting("session_secret") is None
 
     first = await _get_serializer()
-    assert _auth._serializer is first  # noqa: SLF001
+    assert _auth._serializer is first
     persisted = await get_setting("session_secret")
     assert persisted is not None and len(persisted) == 64  # 32 bytes hex
 
@@ -899,7 +899,7 @@ async def test_rotate_session_secret_invalidates_prior_token(db: None) -> None:
     """
     from itsdangerous import BadSignature
 
-    from houndarr.auth import _get_serializer, rotate_session_secret  # noqa: SLF001
+    from houndarr.auth import _get_serializer, rotate_session_secret
 
     serializer = await _get_serializer()
     signed = serializer.dumps({"ts": 1, "csrf": "tok"})
@@ -1034,7 +1034,7 @@ def test_extract_proxy_username_returns_none_on_missing_or_blank(
     """
     from unittest.mock import MagicMock
 
-    from houndarr.auth import _extract_proxy_username  # noqa: SLF001
+    from houndarr.auth import _extract_proxy_username
     from houndarr.config import bootstrap_settings
 
     try:
@@ -1131,7 +1131,7 @@ async def test_dispatch_proxy_calls_trust_gate_before_header_read(
         request.method = "GET"
         request.client.host = "10.0.0.1"
         call_next = AsyncMock()
-        await middleware._dispatch_proxy(request, call_next, "/settings")  # noqa: SLF001
+        await middleware._dispatch_proxy(request, call_next, "/settings")
 
         assert calls == ["trust"], (
             f"expected only trust gate to run when IP is untrusted, got {calls!r}"

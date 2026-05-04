@@ -330,7 +330,7 @@ async def fetch_reconcile_sets(client: LidarrClient, instance: Instance) -> Reco
 
 async def fetch_instance_snapshot(
     client: LidarrClient,
-    instance: Instance,  # noqa: ARG001
+    instance: Instance,
 ) -> InstanceSnapshot:
     """Compose the dashboard snapshot for a Lidarr instance.
 
@@ -338,10 +338,11 @@ async def fetch_instance_snapshot(
     (single ISO string).  Albums with no release date fall through to
     "already released", consistent with :func:`_lidarr_unreleased_reason`.
     """
-    return await compute_default_snapshot(
-        client,
-        anchor_fn=lambda al: al.release_date,
-    )
+
+    def _anchor(album: MissingAlbum) -> str | None:
+        return album.release_date
+
+    return await compute_default_snapshot(client, anchor_fn=_anchor)
 
 
 class LidarrAdapter:

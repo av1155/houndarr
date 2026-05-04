@@ -468,7 +468,7 @@ async def insert_instance(payload: InstanceInsert, *, master_key: bytes) -> int:
         )
         await db.commit()
         row_id = cur.lastrowid
-        assert row_id is not None  # noqa: S101
+        assert row_id is not None
         return row_id
 
 
@@ -509,9 +509,9 @@ async def update_instance(
 
     assignments.append("updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')")
     values.append(instance_id)
-    sql = f"UPDATE instances SET {', '.join(assignments)} WHERE id = ?"  # noqa: S608  # nosec B608
+    sql = f"UPDATE instances SET {', '.join(assignments)} WHERE id = ?"  # noqa: S608  # nosec
     async with get_db() as db:
-        await db.execute(sql, values)
+        await db.execute(sql, values)  # nosem
         await db.commit()
 
 

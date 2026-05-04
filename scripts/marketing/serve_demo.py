@@ -28,6 +28,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
+# E402 is acknowledged: the sys.path adjustment above must precede this import.
 from houndarr.bootstrap import bootstrap_non_web  # noqa: E402
 
 
@@ -44,7 +45,7 @@ async def _noop(*_args: object, **_kwargs: object) -> int:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = argparse.ArgumentParser(description=(__doc__ or "").splitlines()[0])
     parser.add_argument(
         "--data-dir",
         type=Path,
@@ -78,7 +79,7 @@ def main() -> None:
     # background-task harness from flagging every teardown as a failure.
     import signal
 
-    def _handle_signal(signum: int, frame: object | None) -> None:  # noqa: ARG001
+    def _handle_signal(signum: int, frame: object | None) -> None:
         raise SystemExit(0)
 
     signal.signal(signal.SIGTERM, _handle_signal)

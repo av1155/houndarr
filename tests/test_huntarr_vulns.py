@@ -22,7 +22,7 @@ from fastapi.testclient import TestClient
 
 import houndarr.auth as _auth_module
 from houndarr.auth import (
-    _PUBLIC_PATHS,  # noqa: SLF001
+    _PUBLIC_PATHS,
     CSRF_COOKIE_NAME,
     SESSION_COOKIE_NAME,
     SESSION_MAX_AGE_SECONDS,

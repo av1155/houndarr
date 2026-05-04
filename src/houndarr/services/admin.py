@@ -202,7 +202,7 @@ async def factory_reset(*, app: FastAPI, data_dir: str) -> None:
         # Already typed by an inner boundary (e.g. file deletion); keep
         # the richer message.
         raise
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         logger.exception("Factory reset: unhandled error in re-init")
         raise ServiceError(f"factory reset re-init failed: {exc}") from exc
 
@@ -261,7 +261,7 @@ async def _factory_reset_impl(*, app: FastAPI, data_dir: str) -> None:
                 path.unlink()
             except FileNotFoundError:
                 continue
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         logger.exception("Factory reset: file deletion failed")
         raise ServiceError(f"factory reset file deletion failed: {exc}") from exc
 

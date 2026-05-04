@@ -235,14 +235,14 @@ class TestPartialValidationError:
 
     def test_detail_is_html_escaped(self) -> None:
         resp = _partial_validation_error("<script>alert(1)</script>")
-        body = resp.body.decode("utf-8")
+        body = bytes(resp.body).decode("utf-8")
         assert "&lt;script&gt;" in body
         assert "<script>" not in body
 
     def test_response_is_feed_shaped(self) -> None:
         """Pin the shape so HTMX swap into #log-feed keeps feed structure."""
         resp = _partial_validation_error("bad input")
-        body = resp.body.decode("utf-8")
+        body = bytes(resp.body).decode("utf-8")
         assert body.startswith('<div id="log-error-row"')
         assert 'class="empty empty--error"' in body
         assert body.endswith("</div>")

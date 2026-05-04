@@ -6,7 +6,7 @@ import ipaddress
 import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Any, ClassVar, Literal
+from typing import Any, ClassVar, Literal, Self
 from urllib.parse import urlparse
 
 import httpx
@@ -224,7 +224,7 @@ class ArrClient(ABC):
 
     # Context-manager support
 
-    async def __aenter__(self) -> ArrClient:
+    async def __aenter__(self) -> Self:
         await self._client.__aenter__()
         return self
 

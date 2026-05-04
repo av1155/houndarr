@@ -419,7 +419,7 @@ async def fetch_reconcile_sets(client: WhisparrV2Client, instance: Instance) -> 
 
 async def fetch_instance_snapshot(
     client: WhisparrV2Client,
-    instance: Instance,  # noqa: ARG001
+    instance: Instance,
 ) -> InstanceSnapshot:
     """Compose the dashboard snapshot for a Whisparr v2 instance.
 
@@ -430,9 +430,13 @@ async def fetch_instance_snapshot(
     helper takes the dt-typed branch via ``anchor_is_dt=True`` so the
     re-parse step is skipped.
     """
+
+    def _anchor(ep: MissingWhisparrV2Episode) -> datetime | None:
+        return ep.release_date
+
     return await compute_default_snapshot(
         client,
-        anchor_fn=lambda ep: ep.release_date,
+        anchor_fn=_anchor,
         anchor_is_dt=True,
     )
 

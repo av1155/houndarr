@@ -26,6 +26,7 @@ Locked invariants:
 from __future__ import annotations
 
 import dataclasses
+from typing import Any
 
 import pytest
 
@@ -75,16 +76,24 @@ def test_instance_is_plain_dataclass_with_seven_sub_struct_fields() -> None:
 
 
 def test_instance_rejects_pre_refactor_flat_kwargs() -> None:
-    """The flat-kwarg __init__ surface raises ``TypeError``."""
+    """The flat-kwarg __init__ surface raises ``TypeError``.
+
+    The flat kwargs travel through ``**dict`` so pyright cannot resolve
+    them to named parameters and (correctly) flag this negative test.
+    The runtime semantics are identical: Instance's actual __init__ only
+    accepts the seven sub-struct fields, so any of these legacy names
+    raise ``TypeError``.
+    """
+    legacy_flat_kwargs: dict[str, Any] = {
+        "id": 1,
+        "name": "legacy",
+        "type": InstanceType.sonarr,
+        "url": "http://host:8989",
+        "api_key": "k",
+        "enabled": True,
+    }
     with pytest.raises(TypeError):
-        Instance(  # type: ignore[call-arg]
-            id=1,
-            name="legacy",
-            type=InstanceType.sonarr,
-            url="http://host:8989",
-            api_key="k",
-            enabled=True,
-        )
+        Instance(**legacy_flat_kwargs)
 
 
 def test_flat_attribute_access_raises_attribute_error() -> None:

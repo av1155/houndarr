@@ -210,7 +210,7 @@ async def query_logs(
         # query parameterised (placeholders only, never user values)
         # and leaves the bandit suppression below honest.
         placeholders = ",".join("?" * len(instance_ids))
-        conditions.append(f"sl.instance_id IN ({placeholders})")  # noqa: S608  # nosec B608
+        conditions.append(f"sl.instance_id IN ({placeholders})")
         params.extend(instance_ids)
 
     if action is not None:
@@ -301,10 +301,10 @@ async def query_logs(
         {where_clause}
         ORDER BY sl.timestamp DESC, sl.id DESC
         LIMIT ?
-    """  # noqa: S608  # nosec B608
+    """  # noqa: S608  # nosec
     params.append(limit)
 
-    async with get_db() as db, db.execute(sql, params) as cur:
+    async with get_db() as db, db.execute(sql, params) as cur:  # nosem
         rows = await cur.fetchall()
 
     raw = [dict(row) for row in rows]

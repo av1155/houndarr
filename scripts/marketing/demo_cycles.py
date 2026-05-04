@@ -24,9 +24,23 @@ from typing import Any
 # (instance_id, pool_key, pool_index, item_type, search_kind, action,
 #  reason or None, message or None).  ``item_label`` resolves from the
 #  pool at build time so the fixture stays in step with the title JSONs.
-_CYCLE_SPECS: list[
-    tuple[int, str, list[tuple[int | None, str, str, str, str, str | None, str | None]]]
-] = [
+#
+# ``pool_key`` / ``item_type`` / ``search_kind`` are ``None`` only on the
+# whole-cycle ``info`` and ``error`` rows where the row stands in for the
+# cycle as a unit (no per-item dispatch); the leading ``instance_id`` is
+# always known.
+RowSpec = tuple[
+    int,  # instance_id
+    str | None,  # pool_key
+    int,  # pool_idx
+    str | None,  # item_type
+    str | None,  # search_kind
+    str,  # action
+    str | None,  # reason
+    str | None,  # message
+]
+
+_CYCLE_SPECS: list[tuple[int, str, list[RowSpec]]] = [
     # minutes_ago, trigger, rows
     (
         12,

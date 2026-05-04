@@ -249,7 +249,7 @@ No alternative logging libraries (structlog, loguru) are used.
 | `SIM117` | Nested `async with` required by aiosqlite pattern |
 | `S104` | Intentional bind to `0.0.0.0` for self-hosted server |
 | `B008` | FastAPI `Depends()` in function defaults |
-| `S608` + `nosec B608` | Dynamic SQL with explicit column allowlist (4 files) |
+| `S608` + `nosec` | Dynamic SQL with explicit column allowlist (4 files). Use bare `# nosec` (no test ID) per [bandit#1204](https://github.com/PyCQA/bandit/issues/1204): the test-ID form emits a spurious `WARNING nosec encountered (B608), but no failed test` per f-string interpolation on bandit 1.7.3+ |
 | `BLE001` | Broad exception in background loops (always with logging) |
 | `A002` | Parameter names `type`/`id` shadowing builtins (FastAPI form/function signature convention) |
 | `SLF001` | Test fixtures and `__main__.py` accessing private module state |

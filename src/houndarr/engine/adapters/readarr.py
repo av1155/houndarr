@@ -320,7 +320,7 @@ async def fetch_reconcile_sets(client: ReadarrClient, instance: Instance) -> Rec
 
 async def fetch_instance_snapshot(
     client: ReadarrClient,
-    instance: Instance,  # noqa: ARG001
+    instance: Instance,
 ) -> InstanceSnapshot:
     """Compose the dashboard snapshot for a Readarr instance.
 
@@ -328,10 +328,11 @@ async def fetch_instance_snapshot(
     (single ISO string).  Books with no release date fall through to
     "already released", consistent with :func:`_readarr_unreleased_reason`.
     """
-    return await compute_default_snapshot(
-        client,
-        anchor_fn=lambda bk: bk.release_date,
-    )
+
+    def _anchor(book: MissingBook) -> str | None:
+        return book.release_date
+
+    return await compute_default_snapshot(client, anchor_fn=_anchor)
 
 
 class ReadarrAdapter:

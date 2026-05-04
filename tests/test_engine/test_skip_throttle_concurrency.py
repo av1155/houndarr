@@ -113,10 +113,10 @@ async def test_concurrent_passes_produce_at_most_one_skip_row(
     # candidate.  fetch_fn returns exactly one raw item per call.
     _raw_item: dict[str, Any] = {"id": _ITEM_ID}
 
-    async def fetch_one(page: int, page_size: int) -> list[Any]:  # noqa: ARG001
+    async def fetch_one(page: int, page_size: int) -> list[Any]:
         return [_raw_item]
 
-    def adapt_passthrough(item: Any, instance: Any) -> SearchCandidate:  # noqa: ARG001
+    def adapt_passthrough(item: Any, instance: Any) -> SearchCandidate:
         return candidate
 
     # dispatch_fn must be awaitable; it should NEVER be called in this test

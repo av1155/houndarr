@@ -30,6 +30,20 @@ from datetime import UTC, datetime, timedelta
 from houndarr.engine.candidates import ItemType
 from houndarr.value_objects import ItemRef
 
+__all__ = [
+    "InfoLogKey",
+    "SkipLogKey",
+    "_reset_info_log_cache",
+    "_reset_skip_log_cache",
+    "clear_cooldowns",
+    "is_on_cooldown",
+    "is_on_cooldown_ref",
+    "record_search",
+    "record_search_ref",
+    "should_log_info",
+    "should_log_skip",
+]
+
 # Skip-log throttle sentinel (single-process LRU with TTL)
 
 SkipLogKey = tuple[int, int, str, str]

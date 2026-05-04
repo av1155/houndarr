@@ -36,6 +36,9 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT / "src"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+# E402 is acknowledged: the path adjustments above must precede these imports
+# so the script runs both as `python -m scripts.marketing.seed_demo_data`
+# (no editable install needed) and from the repo root.
 import aiosqlite  # noqa: E402
 import bcrypt  # noqa: E402
 from cryptography.fernet import Fernet  # noqa: E402
@@ -384,7 +387,7 @@ async def _run(
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = argparse.ArgumentParser(description=(__doc__ or "").splitlines()[0])
     parser.add_argument(
         "--mode",
         choices=["populated", "empty"],

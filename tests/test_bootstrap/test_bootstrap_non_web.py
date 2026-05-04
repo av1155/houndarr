@@ -189,12 +189,12 @@ class TestRuntimeSettingsPinning:
         # get_settings() on every call. Pinning would trap the derived
         # object and break later env changes, so we explicitly do not.
         bootstrap_non_web(data_dir=str(tmp_path))
-        assert _cfg._runtime_settings is None  # noqa: SLF001
+        assert _cfg._runtime_settings is None
 
     def test_overrides_pin_the_singleton(self, tmp_path: Path) -> None:
         bootstrap_non_web(data_dir=str(tmp_path), port=9999)
-        assert _cfg._runtime_settings is not None  # noqa: SLF001
-        assert _cfg._runtime_settings.port == 9999  # noqa: SLF001
+        assert _cfg._runtime_settings is not None
+        assert _cfg._runtime_settings.port == 9999
 
     def test_prior_pin_is_cleared_before_resolving(self, tmp_path: Path) -> None:
         # A stale pin from a previous run must not leak into the new one.

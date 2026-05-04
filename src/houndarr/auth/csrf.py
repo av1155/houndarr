@@ -17,6 +17,8 @@ from fastapi import Request
 
 from houndarr.auth.session import get_session_csrf_token
 
+__all__ = ["_CSRF_PROTECTED_METHODS", "validate_csrf"]
+
 # HTTP methods that mutate state and require CSRF protection.
 _CSRF_PROTECTED_METHODS = frozenset(["POST", "PUT", "PATCH", "DELETE"])
 

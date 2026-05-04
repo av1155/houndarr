@@ -300,4 +300,4 @@ async def test_client_aclose_callable() -> None:
     """aclose() can be called without error, closing the underlying client."""
     client = SonarrClient(url="http://sonarr:8989", api_key="test")
     await client.aclose()
-    assert client._client.is_closed  # noqa: SLF001
+    assert client._client.is_closed

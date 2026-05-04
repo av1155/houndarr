@@ -170,7 +170,7 @@ async def submit_create(
     *,
     master_key: bytes,
     name: str,
-    type: str,  # noqa: A002
+    type: str,
     url: str,
     api_key: str,
     batch_size: int,
@@ -305,7 +305,7 @@ async def submit_update(
     *,
     master_key: bytes,
     name: str,
-    type: str,  # noqa: A002
+    type: str,
     url: str,
     api_key: str,
     batch_size: int,

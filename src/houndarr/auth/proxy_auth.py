@@ -29,6 +29,16 @@ from fastapi import Request, Response
 from houndarr.auth.session import CSRF_COOKIE_NAME, SESSION_MAX_AGE_SECONDS
 from houndarr.config import get_settings
 
+__all__ = [
+    "_PROXY_DEAD_PATHS",
+    "_ensure_proxy_csrf_cookie",
+    "_extract_proxy_username",
+    "_is_proxy_auth_mode",
+    "_is_trusted_proxy",
+    "_validate_proxy_auth",
+    "_validate_proxy_csrf",
+]
+
 # Paths that serve no purpose in proxy mode and redirect to the dashboard.
 _PROXY_DEAD_PATHS = frozenset(["/setup", "/login"])
 
@@ -110,11 +120,13 @@ def _ensure_proxy_csrf_cookie(request: Request, response: Response) -> None:
     if request.cookies.get(CSRF_COOKIE_NAME):
         return
     settings = get_settings()
+    # HttpOnly stays off: HTMX reads the cookie via JS to echo it back as
+    # the X-CSRF-Token header for the double-submit comparison.
     response.set_cookie(
         key=CSRF_COOKIE_NAME,
         value=secrets.token_hex(32),
         max_age=SESSION_MAX_AGE_SECONDS,
-        httponly=False,
+        httponly=False,  # nosem
         samesite=settings.cookie_samesite,
         secure=settings.secure_cookies,
     )

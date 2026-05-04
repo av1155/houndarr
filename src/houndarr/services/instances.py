@@ -300,7 +300,7 @@ async def create_instance(
     *,
     master_key: bytes,
     name: str,
-    type: InstanceType,  # noqa: A002
+    type: InstanceType,
     url: str,
     api_key: str,
     enabled: bool = True,
@@ -422,11 +422,11 @@ async def create_instance(
     row_id = await _repo_insert_instance(payload, master_key=master_key)
 
     instance = await get_instance(row_id, master_key=master_key)
-    assert instance is not None  # just inserted, cannot be None  # noqa: S101
+    assert instance is not None  # just inserted, cannot be None
     return instance
 
 
-async def get_instance(id: int, *, master_key: bytes) -> Instance | None:  # noqa: A002
+async def get_instance(id: int, *, master_key: bytes) -> Instance | None:
     """Fetch a single instance by *id*, or ``None`` if not found.
 
     Thin delegator over
@@ -482,7 +482,7 @@ async def active_error_instance_ids() -> set[int]:
 
 
 async def update_instance(
-    id: int,  # noqa: A002
+    id: int,
     *,
     master_key: bytes,
     **fields: Any,
@@ -538,7 +538,7 @@ async def update_instance(
     return await get_instance(id, master_key=master_key)
 
 
-async def delete_instance(id: int) -> bool:  # noqa: A002
+async def delete_instance(id: int) -> bool:
     """Delete an instance row (cascade removes cooldowns).
 
     Thin delegator over
@@ -556,7 +556,7 @@ async def delete_instance(id: int) -> bool:  # noqa: A002
 
 
 async def update_instance_snapshot(
-    id: int,  # noqa: A002
+    id: int,
     *,
     monitored_total: int,
     unreleased_count: int,

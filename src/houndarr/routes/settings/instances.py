@@ -84,7 +84,7 @@ async def instance_add_form(request: Request) -> HTMLResponse:
 @router.post("/settings/instances/test-connection", response_class=HTMLResponse)
 async def instance_test_connection(
     master_key: Annotated[bytes, Depends(get_master_key)],
-    type: Annotated[str, Form()],  # noqa: A002
+    type: Annotated[str, Form()],
     url: Annotated[str, Form()],
     api_key: Annotated[str, Form()],
     instance_id: Annotated[str, Form()] = "",
@@ -115,7 +115,7 @@ async def instance_create(
     request: Request,
     master_key: Annotated[bytes, Depends(get_master_key)],
     name: Annotated[str, Form()],
-    type: Annotated[str, Form()],  # noqa: A002
+    type: Annotated[str, Form()],
     url: Annotated[str, Form()],
     api_key: Annotated[str, Form()],
     batch_size: Annotated[int, Form()] = DEFAULT_BATCH_SIZE,
@@ -227,7 +227,7 @@ async def instance_update(
     master_key: Annotated[bytes, Depends(get_master_key)],
     instance_id: int,
     name: Annotated[str, Form()],
-    type: Annotated[str, Form()],  # noqa: A002
+    type: Annotated[str, Form()],
     url: Annotated[str, Form()],
     api_key: Annotated[str, Form()],
     batch_size: Annotated[int, Form()] = DEFAULT_BATCH_SIZE,

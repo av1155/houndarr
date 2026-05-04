@@ -310,17 +310,26 @@ async def seed_release_timing_retry(
     *,
     instance_id: int,
     item_id: int,
-    item_type: ItemType,
+    item_type: ItemType | str,
     reason: str = "not yet released",
 ) -> None:
-    """Set up an item on cooldown with a release-timing skip reason."""
+    """Set up an item on cooldown with a release-timing skip reason.
+
+    ``item_type`` accepts ``ItemType | str`` to match the production
+    helpers (:func:`houndarr.services.cooldown.record_search` and
+    :func:`insert_search_log_row` both accept the StrEnum or its raw
+    string value).  Tests typically pass the bare ``"episode"`` /
+    ``"movie"`` form because the enum compares equal to its value at
+    runtime; widening the signature lets pyright agree with that
+    intentional duck typing.
+    """
     from houndarr.services.cooldown import record_search
 
     await record_search(instance_id, item_id, item_type)
     await insert_search_log_row(
         instance_id=instance_id,
         item_id=item_id,
-        item_type=item_type,
+        item_type=str(item_type),
         search_kind="missing",
         action="skipped",
         reason=reason,

@@ -441,7 +441,7 @@ class Supervisor:
                 await self._refresh_all_snapshots_once()
             except asyncio.CancelledError:
                 raise
-            except Exception:  # noqa: BLE001
+            except Exception:
                 logger.exception("Supervisor: snapshot refresh iteration failed")
 
             try:
@@ -487,7 +487,7 @@ class Supervisor:
                             "keeping existing cooldowns.",
                             instance.core.name,
                         )
-                    except Exception:  # noqa: BLE001
+                    except Exception:
                         reconcile_sets = ReconcileSets.empty()
                         logger.exception(
                             "Supervisor: reconcile fetch failed for %r; "
@@ -524,7 +524,7 @@ class Supervisor:
                     "Supervisor: snapshot refresh skipped for %r; instance unreachable",
                     instance.core.name,
                 )
-            except Exception:  # noqa: BLE001
+            except Exception:
                 logger.exception("Supervisor: snapshot refresh failed for %r", instance.core.name)
 
     async def _refresh_all_snapshots_once(self) -> None:

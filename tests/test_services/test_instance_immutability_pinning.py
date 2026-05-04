@@ -69,7 +69,13 @@ def test_instance_is_frozen_after_freeze() -> None:
     compose :func:`dataclasses.replace`.
     """
     assert dataclasses.is_dataclass(Instance)
-    assert Instance.__dataclass_params__.frozen is True
+    # ``__dataclass_params__`` is a runtime attribute the ``@dataclass``
+    # decorator stamps on every dataclass type; pyright does not model it
+    # on ``type[T]`` because the dunder is private to the dataclasses
+    # module.  Direct access reads cleanly in CPython, and the
+    # ``# pyright: ignore`` keeps the editor LSP quiet without losing
+    # the assertion.
+    assert Instance.__dataclass_params__.frozen is True  # pyright: ignore[reportAttributeAccessIssue]
     assert set(Instance.__slots__) == {
         "core",
         "missing",
@@ -129,11 +135,11 @@ class _ForbiddenWriteVisitor(ast.NodeVisitor):
             isinstance(target.value, ast.Attribute)
             and target.value.attr in _FORBIDDEN_ATTR_PREFIXES
         ):
-            self.findings.append((node.lineno, target.attr))
+            self.findings.append((getattr(node, "lineno", 0), target.attr))
             return
         # Match foo.missing_page_offset etc. (flat writes through the facade).
         if target.attr in _FORBIDDEN_ATTRS:
-            self.findings.append((node.lineno, target.attr))
+            self.findings.append((getattr(node, "lineno", 0), target.attr))
 
 
 def test_offset_advancement_persisted_via_repository_only() -> None:

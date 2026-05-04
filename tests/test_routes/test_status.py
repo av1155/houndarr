@@ -908,7 +908,7 @@ def test_status_v2_cooldown_breakdown_splits_by_kind(app: TestClient) -> None:
     assert body["cooldown_breakdown"] == {"missing": 2, "cutoff": 1, "upgrade": 1}
 
 
-def test_status_monitored_total_reads_column(app: TestClient, async_client: object) -> None:  # noqa: ARG001
+def test_status_monitored_total_reads_column(app: TestClient, async_client: object) -> None:
     """monitored_total reflects the authoritative column written by the
     supervisor's snapshot refresh task."""
     from houndarr.services.instances import update_instance_snapshot

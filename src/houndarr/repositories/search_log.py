@@ -172,9 +172,9 @@ async def fetch_log_rows(
     where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ""
     values.append(int(limit))
 
-    sql = f"SELECT * FROM search_log {where_clause} ORDER BY timestamp DESC, id DESC LIMIT ?"  # noqa: S608  # nosec B608
+    sql = f"SELECT * FROM search_log {where_clause} ORDER BY timestamp DESC, id DESC LIMIT ?"  # noqa: S608  # nosec
     async with get_db() as db:
-        async with db.execute(sql, values) as cur:
+        async with db.execute(sql, values) as cur:  # nosem
             rows = await cur.fetchall()
     return [dict(row) for row in rows]
 

@@ -57,6 +57,17 @@ class ReleaseEntry:
     sections: list[ReleaseSection]
 
 
+__all__ = [
+    "CHANGELOG_PATH",
+    "ReleaseEntry",
+    "ReleaseSection",
+    "_reset_changelog_cache",
+    "get_changelog",
+    "releases_between",
+    "should_show",
+]
+
+
 # ---------------------------------------------------------------------------
 # Regexes (module-level so the compile cost is paid once)
 # ---------------------------------------------------------------------------
@@ -198,7 +209,7 @@ def get_changelog() -> list[ReleaseEntry]:
     ``routes/pages.py`` so parse failures surface on the route that needs
     them, not during app startup.
     """
-    global _cache  # noqa: PLW0603
+    global _cache
     if _cache is None:
         _cache = _parse_changelog(CHANGELOG_PATH)
     return _cache
@@ -206,7 +217,7 @@ def get_changelog() -> list[ReleaseEntry]:
 
 def _reset_changelog_cache() -> None:
     """Clear the cache. Test-only hook."""
-    global _cache  # noqa: PLW0603
+    global _cache
     _cache = None
 
 

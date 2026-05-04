@@ -55,6 +55,16 @@ dev = [
     "respx>=0.23.1",
     "anyio>=4.13.0",
 ]
+# Optional browser-e2e group: playwright is heavy (~80 MB of browser
+# binaries) and only the dedicated CI job and the marketing screenshot
+# script need it.  Editor users can opt in with ``uv sync --group e2e``
+# to silence the three ``reportMissingImports`` findings on
+# ``scripts/marketing/capture_screenshots.py`` and ``tests/e2e_browser/``;
+# default ``uv sync`` keeps the dev install lean.
+e2e = [
+    "playwright>=1.55.0",
+    "pytest-playwright>=0.7.1",
+]
 
 [project.scripts]
 houndarr = "houndarr.__main__:cli"
@@ -145,17 +155,16 @@ ignore_missing_imports = true
 # ---------------------------------------------------------------------------
 # Pyright (editor LSP only; mypy --strict remains the CI gate)
 # ---------------------------------------------------------------------------
-# Pins the Python version, points at the project venv so third-party imports
-# resolve, and adds the repo root to extraPaths so test files importing
-# ``tests.conftest`` and similar resolve in editors. Default ``standard`` mode
-# is intentionally kept; basedpyright also reads this section for forward
-# compatibility.
+# typeCheckingMode is pinned to "standard" so basedpyright matches upstream
+# pyright; basedpyright defaults to "all", which surfaces diagnostics that
+# mypy strict (the binding gate) does not enforce.
 [tool.pyright]
 include = ["src", "tests", "scripts"]
 extraPaths = ["."]
 pythonVersion = "3.13"
 venvPath = "."
 venv = ".venv"
+typeCheckingMode = "standard"
 
 # ---------------------------------------------------------------------------
 # Bandit (SAST)

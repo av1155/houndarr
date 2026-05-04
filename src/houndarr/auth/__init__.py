@@ -16,16 +16,24 @@ the authoritative value the submodule owns.
 
 from __future__ import annotations
 
-# time is re-exported so tests that monkeypatch
-# ``houndarr.auth.time.time`` continue to propagate the patch through
-# to ``houndarr.auth.rate_limit``'s usage (the ``time`` module is a
-# singleton, so patching via the auth namespace affects every
-# importer).
-import time  # noqa: F401
-from typing import Any
+# Re-export ``time`` (PEP 484 explicit-export form) so tests that monkeypatch
+# ``houndarr.auth.time.time`` propagate the patch into rate_limit's calls.
+import time as time
+from typing import TYPE_CHECKING, Any
 
 from houndarr.auth import session as _session
 from houndarr.auth import setup as _setup
+
+if TYPE_CHECKING:
+    import re
+
+    from itsdangerous import URLSafeTimedSerializer
+
+    # Static declarations of names resolved live by ``__getattr__`` below;
+    # under TYPE_CHECKING so runtime stays untouched.
+    _serializer: URLSafeTimedSerializer | None
+    _setup_complete: bool | None
+    _USERNAME_PATTERN: re.Pattern[str]
 from houndarr.auth.csrf import _CSRF_PROTECTED_METHODS, validate_csrf
 from houndarr.auth.identity import resolve_signed_in_as
 from houndarr.auth.middleware import _LOGOUT_PATH, _PUBLIC_PATHS, AuthMiddleware

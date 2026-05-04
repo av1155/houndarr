@@ -52,9 +52,9 @@ class ReadarrClient(ArrClient):
     _WANTED_BASE_PATH: ClassVar[str] = "/api/v1/wanted"
     _WANTED_SORT_KEY: ClassVar[str] = "releaseDate"
     _WANTED_INCLUDE_PARAM: ClassVar[str | None] = "includeAuthor"
-    _WANTED_ENVELOPE: ClassVar[type[PaginatedResponse[ReadarrWantedBook]]] = PaginatedResponse[
-        ReadarrWantedBook
-    ]
+    # See SonarrClient for the rationale on dropping the per-subclass
+    # ``ClassVar`` re-annotation.
+    _WANTED_ENVELOPE = PaginatedResponse[ReadarrWantedBook]
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
@@ -74,7 +74,7 @@ class ReadarrClient(ArrClient):
             return self._author_name_cache
         try:
             records = await self._get("/api/v1/author")
-        except Exception:  # noqa: BLE001
+        except Exception:
             # Transport failure fall-through: leave books with empty
             # author_name rather than bubbling a secondary failure that
             # would mask the primary wanted-page success.

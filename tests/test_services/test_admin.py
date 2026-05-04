@@ -5,11 +5,13 @@ from __future__ import annotations
 import os
 from collections.abc import AsyncGenerator
 from pathlib import Path
+from typing import Any, cast
 from unittest.mock import AsyncMock
 
 import pytest
 import pytest_asyncio
 from cryptography.fernet import Fernet
+from fastapi import FastAPI
 
 from houndarr.config import (
     DEFAULT_BATCH_SIZE,
@@ -238,6 +240,18 @@ class _FakeSupervisor:
 
 
 class _FakeApp:
+    """Test double for ``FastAPI`` covering only the ``state`` surface
+    that :func:`houndarr.services.admin.factory_reset` reads / writes.
+
+    ``state`` is typed ``Any`` so the dynamic attribute assignment and
+    access used by ``factory_reset`` (``state.supervisor`` and
+    ``state.master_key``) type-check without extra annotations.  The
+    :func:`factory_reset` call sites in this module cast the test double
+    to ``FastAPI`` since the helper takes a fully-typed ``FastAPI`` arg.
+    """
+
+    state: Any
+
     def __init__(self, supervisor: object | None, master_key: bytes) -> None:
         self.state = type("State", (), {})()
         self.state.supervisor = supervisor
@@ -267,7 +281,7 @@ async def test_factory_reset_deletes_files_and_reinits(
         AsyncMock(return_value=None),
     )
 
-    await factory_reset(app=fake_app, data_dir=tmp_data_dir)
+    await factory_reset(app=cast("FastAPI", fake_app), data_dir=tmp_data_dir)
 
     # DB file recreated, master-key file rotated.
     assert Path(db_path).exists()
@@ -281,9 +295,9 @@ async def test_factory_reset_deletes_files_and_reinits(
     # Auth caches reset.
     import houndarr.auth as _auth
 
-    assert _auth._setup_complete is None  # noqa: SLF001
-    assert _auth._serializer is None  # noqa: SLF001
-    assert _auth._login_attempts == {}  # noqa: SLF001
+    assert _auth._setup_complete is None
+    assert _auth._serializer is None
+    assert _auth._login_attempts == {}
 
 
 @pytest.mark.asyncio()
@@ -315,7 +329,7 @@ async def test_factory_reset_propagates_reinit_failure(
     monkeypatch.setattr("houndarr.services.admin.init_db", _boom)
 
     with pytest.raises(ServiceError) as exc_info:
-        await factory_reset(app=fake_app, data_dir=tmp_data_dir)
+        await factory_reset(app=cast("FastAPI", fake_app), data_dir=tmp_data_dir)
 
     # Typed wrap: the original RuntimeError lives on __cause__ so the
     # observability hook still sees the underlying shape.

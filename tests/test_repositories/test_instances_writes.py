@@ -401,7 +401,7 @@ async def test_service_delete_instance_delegates_to_repo(db: None, master_key: b
 @pytest.mark.pinning()
 def test_instance_insert_is_frozen_dataclass_with_slots() -> None:
     """InstanceInsert is a frozen slotted dataclass for immutability + memory."""
-    with pytest.raises(Exception):  # noqa: B017, PT011
+    with pytest.raises(Exception):  # noqa: B017
         payload = InstanceInsert(
             name="x",
             type=InstanceType.sonarr,
@@ -414,7 +414,7 @@ def test_instance_insert_is_frozen_dataclass_with_slots() -> None:
 @pytest.mark.pinning()
 def test_instance_update_is_frozen_dataclass_with_slots() -> None:
     """InstanceUpdate is a frozen slotted dataclass for immutability + memory."""
-    with pytest.raises(Exception):  # noqa: B017, PT011
+    with pytest.raises(Exception):  # noqa: B017
         payload = InstanceUpdate(name="x")
         payload.name = "mutated"  # type: ignore[misc]
 

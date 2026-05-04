@@ -35,10 +35,10 @@ so the single-process assumption holds in practice.
 
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Any, Protocol, runtime_checkable
 
 import aiosqlite
 from async_lru import alru_cache
@@ -299,13 +299,20 @@ class DashboardAggregates:
     recent: list[dict[str, Any]] = field(default_factory=list)
 
 
-# A function with ``cache_clear`` plus the alru_cache extras.  We keep
-# the surface narrow on purpose: the route only ever awaits the call,
-# and invalidation only ever calls cache_clear; the rest of alru_cache's
-# API (cache_info, cache_invalidate, jitter, etc.) is intentionally not
-# exposed because the centralised invalidation path is the supported
-# contract.
-DashboardAggregateCache = Callable[[tuple[int, ...]], Awaitable[DashboardAggregates]]
+# Narrow surface: the route awaits the call; invalidation calls cache_clear.
+# The rest of alru_cache's API (cache_info, cache_invalidate, jitter) stays
+# off the contract so the centralised invalidation path is the only seam.
+@runtime_checkable
+class DashboardAggregateCache(Protocol):
+    """Callable cache exposing ``cache_clear`` for the invalidation path."""
+
+    def __call__(self, instance_ids_tuple: tuple[int, ...]) -> Awaitable[DashboardAggregates]:
+        """Return the cached aggregate bundle for *instance_ids_tuple*."""
+        ...
+
+    def cache_clear(self) -> None:
+        """Drop every cached entry; the next call repopulates from source."""
+        ...
 
 
 async def _gather_dashboard_aggregates(
@@ -417,9 +424,8 @@ async def gather_dashboard_status(
         ``JSONResponse``.  Empty installs short-circuit with both
         lists empty.
     """
-    async with db.execute(
-        f"SELECT {_STATUS_INSTANCE_COLS} FROM instances ORDER BY id ASC"  # noqa: S608  # nosec B608
-    ) as cur:
+    sql = f"SELECT {_STATUS_INSTANCE_COLS} FROM instances ORDER BY id ASC"  # noqa: S608  # nosec
+    async with db.execute(sql) as cur:  # nosem
         instances = await cur.fetchall()
 
     if not instances:
@@ -494,7 +500,9 @@ async def gather_window_metrics(
     placeholders = ",".join("?" * len(instance_ids))
 
     metrics: dict[int, dict[str, Any]] = {}
-    async with db.execute(_METRICS_SQL.format(placeholders=placeholders), instance_ids) as cur:
+    async with db.execute(  # nosem
+        _METRICS_SQL.format(placeholders=placeholders), instance_ids
+    ) as cur:
         async for row in cur:
             iid = row["instance_id"]
             metrics[iid] = {
@@ -506,7 +514,7 @@ async def gather_window_metrics(
             }
 
     activity: dict[int, tuple[str | None, str | None]] = {}
-    async with db.execute(
+    async with db.execute(  # nosem
         _LAST_ACTIVITY_SQL.format(placeholders=placeholders), instance_ids
     ) as cur:
         async for row in cur:
@@ -534,7 +542,9 @@ async def gather_lifetime_metrics(
         return {}
     placeholders = ",".join("?" * len(instance_ids))
     out: dict[int, dict[str, Any]] = {}
-    async with db.execute(_LIFETIME_SQL.format(placeholders=placeholders), instance_ids) as cur:
+    async with db.execute(  # nosem
+        _LIFETIME_SQL.format(placeholders=placeholders), instance_ids
+    ) as cur:
         async for row in cur:
             out[row["instance_id"]] = {
                 "lifetime_searched": int(row["lifetime_searched"] or 0),
@@ -570,7 +580,9 @@ async def gather_active_errors(
         return {}
     placeholders = ",".join("?" * len(instance_ids))
     out: dict[int, dict[str, Any]] = {}
-    async with db.execute(_LATEST_ROW_SQL.format(placeholders=placeholders), instance_ids) as cur:
+    async with db.execute(  # nosem
+        _LATEST_ROW_SQL.format(placeholders=placeholders), instance_ids
+    ) as cur:
         async for row in cur:
             if row["action"] != "error":
                 continue
@@ -680,7 +692,9 @@ async def gather_cooldown_data(
     }
 
     per_instance_rows: dict[int, list[dict[str, Any]]] = {iid: [] for iid in instance_ids}
-    async with db.execute(_COOLDOWNS_SQL.format(placeholders=placeholders), instance_ids) as cur:
+    async with db.execute(  # nosem
+        _COOLDOWNS_SQL.format(placeholders=placeholders), instance_ids
+    ) as cur:
         async for row in cur:
             iid = int(row["instance_id"])
             # search_kind is a stamped column constrained to the three

@@ -15,7 +15,13 @@ from typing import Any
 
 from houndarr.enums import ItemType
 
-__all__ = ["ItemType", "SearchCandidate"]
+__all__ = [
+    "ItemType",
+    "SearchCandidate",
+    "_is_unreleased",
+    "_is_unreleased_dt",
+    "_is_within_post_release_grace",
+]
 
 
 @dataclass(frozen=True, slots=True)

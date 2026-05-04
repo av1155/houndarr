@@ -37,12 +37,15 @@ class SettingsRepository(Protocol):
 
     def get_setting(self, key: str) -> Awaitable[str | None]:
         """Return the stored value for *key*, or ``None`` if absent."""
+        ...
 
     def set_setting(self, key: str, value: str) -> Awaitable[None]:
         """Insert or update *key* with *value*."""
+        ...
 
     def delete_setting(self, key: str) -> Awaitable[None]:
         """Remove *key* if it exists (no error if already absent)."""
+        ...
 
 
 @runtime_checkable
@@ -61,9 +64,11 @@ class InstanceRepository(Protocol):
 
     def list_instances(self, *, master_key: bytes) -> Awaitable[list[Instance]]:
         """Return every instance ordered by id ascending."""
+        ...
 
     def get_instance(self, instance_id: int, *, master_key: bytes) -> Awaitable[Instance | None]:
         """Return the instance identified by *instance_id*, or ``None``."""
+        ...
 
     def insert_instance(
         self,
@@ -78,6 +83,7 @@ class InstanceRepository(Protocol):
         the Protocol; the concrete implementation takes an
         :class:`~houndarr.repositories.instances.InstanceInsert`.
         """
+        ...
 
     def update_instance(
         self,
@@ -93,9 +99,11 @@ class InstanceRepository(Protocol):
         takes an :class:`~houndarr.repositories.instances.InstanceUpdate`
         and no-ops when every field is ``None``.
         """
+        ...
 
     def delete_instance(self, instance_id: int) -> Awaitable[bool]:
         """Delete the instance row; return ``True`` iff a row was removed."""
+        ...
 
     def update_instance_snapshot(
         self,
@@ -105,6 +113,7 @@ class InstanceRepository(Protocol):
         unreleased_count: int,
     ) -> Awaitable[None]:
         """Refresh the three v13 snapshot columns for *instance_id*."""
+        ...
 
 
 @runtime_checkable
@@ -118,12 +127,15 @@ class CooldownRepository(Protocol):
 
     def exists_active_cooldown(self, ref: ItemRef, cooldown_days: int) -> Awaitable[bool]:
         """Return ``True`` when *ref* is within its cooldown window."""
+        ...
 
     def upsert_cooldown(self, ref: ItemRef) -> Awaitable[None]:
         """Record *ref* as just-searched, upserting the existing row."""
+        ...
 
     def delete_cooldowns_for_instance(self, instance_id: int) -> Awaitable[int]:
         """Delete every cooldown row for *instance_id* and return the count."""
+        ...
 
 
 @runtime_checkable
@@ -150,6 +162,7 @@ class SearchLogRepository(Protocol):
         message: str | None = None,
     ) -> Awaitable[None]:
         """Insert a single row into ``search_log``."""
+        ...
 
     def fetch_log_rows(
         self,
@@ -162,6 +175,7 @@ class SearchLogRepository(Protocol):
         after_id: int | None = None,
     ) -> Awaitable[list[dict[str, Any]]]:
         """Return a filtered page of log rows."""
+        ...
 
     def fetch_recent_searches(
         self,
@@ -171,9 +185,11 @@ class SearchLogRepository(Protocol):
         within_seconds: int,
     ) -> Awaitable[int]:
         """Count ``action='searched'`` rows in the trailing window."""
+        ...
 
     def delete_logs_for_instance(self, instance_id: int) -> Awaitable[int]:
         """Delete every ``search_log`` row for *instance_id*."""
+        ...
 
 
 # Supervisor
@@ -193,12 +209,15 @@ class SupervisorProto(Protocol):
 
     async def trigger_run_now(self, instance_id: int) -> RunNowStatus:
         """Kick off one manual cycle for the instance identified by id."""
+        ...
 
     async def reconcile_instance(self, instance_id: int) -> None:
         """Re-evaluate whether the instance should have a running task."""
+        ...
 
     async def stop_instance_task(self, instance_id: int) -> bool:
         """Stop the instance's running task; return ``True`` if one was cancelled."""
+        ...
 
 
 # Client construction
@@ -219,6 +238,7 @@ class ClientFactory(Protocol):
 
     def __call__(self, instance: Instance) -> ArrClient:
         """Build a fresh (unopened) :class:`ArrClient` for *instance*."""
+        ...
 
 
 # Re-exports for downstream imports

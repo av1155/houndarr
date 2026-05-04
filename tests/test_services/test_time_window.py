@@ -298,7 +298,7 @@ def test_validate_rejects_zero_duration(spec: str) -> None:
 def test_validate_messages_do_not_echo_user_input() -> None:
     """Error strings must be constants, so nothing from the raw spec flows
     into HTTP responses. Regression guard for CodeQL py/stack-trace-exposure."""
-    suspicious_token = "<script>EVIL</script>"  # noqa: S105 - literal marker
+    suspicious_token = "<script>EVIL</script>"
     probe = f"09:00-12:00,{suspicious_token}"
     msg = validate_allowed_time_window(probe)
     assert msg is not None

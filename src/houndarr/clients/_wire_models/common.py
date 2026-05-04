@@ -14,7 +14,21 @@ Every model extends :class:`_ArrModel` which sets
 
 from __future__ import annotations
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field
+
+__all__ = [
+    "ArrArtist",
+    "ArrAuthor",
+    "ArrSeries",
+    "PaginatedResponse",
+    "QueueStatus",
+    "SystemStatus",
+    "_ArrModel",
+    "_WireAlbumStatistics",
+    "_WireBookStatistics",
+    "_WireEpisodeFile",
+    "_WireMovieFile",
+]
 
 
 class _ArrModel(BaseModel):
@@ -49,9 +63,23 @@ class SystemStatus(_ArrModel):
     Both fields are optional because *arr forks (Bookshelf, Reading Glasses)
     sometimes omit ``appName`` or ``version`` from their status payload and
     Houndarr must still report the instance as reachable.
+
+    The ``app_name`` field uses ``validation_alias=AliasChoices(...)``
+    rather than ``alias=`` so the constructor parameter exposed to static
+    analysers stays the snake_case Python name.  Pyright's Pydantic
+    plugin reflects ``alias=`` directly into ``__init__`` and ignores
+    ``populate_by_name=True``, which would force every test caller to
+    write ``SystemStatus(appName=...)``; using ``validation_alias`` gives
+    us snake_case in code while still parsing the upstream camelCase
+    payload.  ``serialization_alias`` preserves the camelCase output for
+    the rare case anyone serialises this model back to wire form.
     """
 
-    app_name: str | None = Field(default=None, alias="appName")
+    app_name: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("appName", "app_name"),
+        serialization_alias="appName",
+    )
     version: str | None = None
 
 

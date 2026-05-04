@@ -148,7 +148,7 @@ def adapt_upgrade(item: LibraryMovie, instance: Instance) -> SearchCandidate:
 
 async def fetch_upgrade_pool(
     client: RadarrClient,
-    instance: Instance,  # noqa: ARG001
+    instance: Instance,
 ) -> list[LibraryMovie]:
     """Fetch and filter Radarr library for upgrade-eligible movies.
 
@@ -218,7 +218,7 @@ def make_client(instance: Instance) -> RadarrClient:
 
 async def fetch_instance_snapshot(
     client: RadarrClient,
-    instance: Instance,  # noqa: ARG001
+    instance: Instance,
 ) -> InstanceSnapshot:
     """Compose the dashboard snapshot for a Radarr instance.
 

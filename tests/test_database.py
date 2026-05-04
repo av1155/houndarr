@@ -697,7 +697,9 @@ async def test_init_db_self_heals_v9_and_v10_when_version_already_current(
 
         # v10 self-heal: 'whisparr_v3_movie' accepted in cooldowns CHECK.
         v3_id_row = await conn.execute("SELECT id FROM instances WHERE name = 'v10 guard'")
-        v3_id = (await v3_id_row.fetchone())[0]
+        v3_row = await v3_id_row.fetchone()
+        assert v3_row is not None, "expected v10 guard row to exist"
+        v3_id = v3_row[0]
         await conn.execute(
             "INSERT INTO cooldowns (instance_id, item_id, item_type, searched_at)"
             " VALUES (?, 1, 'whisparr_v3_movie', '2024-01-01T00:00:00Z')",
@@ -927,7 +929,7 @@ async def test_migrate_to_v12_adds_search_order_column(tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio()
-async def test_cooldowns_search_kind_check_enforced(db: None) -> None:  # noqa: ARG001
+async def test_cooldowns_search_kind_check_enforced(db: None) -> None:
     """Every initialised DB rejects search_kind values outside the CHECK.
 
     Fresh installs pick this up from ``_SCHEMA_SQL``; databases that

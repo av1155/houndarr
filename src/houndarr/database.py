@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
+from typing import cast
 
 import aiosqlite
 from aiosqlitepool import SQLiteConnectionPool
+from aiosqlitepool.protocols import Connection as PoolConnection
 
 logger = logging.getLogger(__name__)
 
@@ -168,7 +170,7 @@ _pools: dict[str, SQLiteConnectionPool] = {}
 
 def set_db_path(path: str) -> None:
     """Set the database path before the app starts."""
-    global _db_path  # noqa: PLW0603
+    global _db_path
     _db_path = path
 
 
@@ -235,7 +237,11 @@ def _get_or_create_pool() -> SQLiteConnectionPool:
         # instance loops without materially increasing memory cost (each
         # SQLite connection holds ~20 MB of page cache via the configured
         # cache_size pragma).
-        pool = SQLiteConnectionPool(_connection_factory, pool_size=10)
+        # Cast scopes the Coroutine-vs-Awaitable variance flex to one line
+        # at the library boundary; aiosqlite.Connection structurally
+        # satisfies aiosqlitepool's Connection Protocol.
+        factory = cast("Callable[[], Awaitable[PoolConnection]]", _connection_factory)
+        pool = SQLiteConnectionPool(factory, pool_size=10)
         _pools[_db_path] = pool
     return pool
 
@@ -252,12 +258,12 @@ async def close_all_pools() -> None:
     for pool in pools:
         try:
             await pool.close()
-        except Exception:  # noqa: BLE001
+        except Exception:
             logger.exception("Error closing SQLite connection pool")
 
 
 @asynccontextmanager
-async def get_db() -> AsyncGenerator[aiosqlite.Connection]:
+async def get_db() -> AsyncIterator[aiosqlite.Connection]:
     """Borrow a pooled connection with the configured PRAGMAs applied.
 
     The pool is keyed on the active ``_db_path``, so production reuses
@@ -268,7 +274,9 @@ async def get_db() -> AsyncGenerator[aiosqlite.Connection]:
     """
     pool = _get_or_create_pool()
     async with pool.connection() as db:
-        yield db
+        # The pool re-types the connection as its structural Protocol; the
+        # underlying object is the aiosqlite.Connection from the factory.
+        yield cast("aiosqlite.Connection", db)
 
 
 # ---------------------------------------------------------------------------
@@ -448,7 +456,7 @@ async def _migrate_to_v5(db: aiosqlite.Connection) -> None:
     # -- 1) Recreate instances with expanded type CHECK ----------------------
     # Use the v5 snapshot of _INSTANCE_TYPES so this rebuild stays correct even
     # when the current alias rotates in a later migration.
-    await db.execute(
+    await db.execute(  # nosem
         f"""
         CREATE TABLE instances_new (
             id                   INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -497,7 +505,7 @@ async def _migrate_to_v5(db: aiosqlite.Connection) -> None:
     # -- 2) Recreate cooldowns with expanded item_type CHECK -----------------
     # v5 snapshot still allows 'whisparr_episode'; the rename to
     # 'whisparr_v2_episode' belongs to v16, not here.
-    await db.execute(
+    await db.execute(  # nosem
         f"""
         CREATE TABLE cooldowns_new (
             id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -524,7 +532,7 @@ async def _migrate_to_v5(db: aiosqlite.Connection) -> None:
     )
 
     # -- 3) Recreate search_log with expanded item_type CHECK ----------------
-    await db.execute(
+    await db.execute(  # nosem
         f"""
         CREATE TABLE search_log_new (
             id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -755,7 +763,7 @@ async def _migrate_to_v10(db: aiosqlite.Connection) -> None:
     # -- 1) Recreate instances with expanded type CHECK + rename whisparr ------
     # v10 snapshot of _INSTANCE_TYPES locks the CHECK clause to what this
     # migration introduced; later renames live in their own migrations.
-    await db.execute(
+    await db.execute(  # nosem
         f"""
         CREATE TABLE instances_new (
             id                   INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -806,9 +814,9 @@ async def _migrate_to_v10(db: aiosqlite.Connection) -> None:
             created_at           TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
             updated_at           TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
         )
-        """  # noqa: S608  # nosec B608
+        """  # nosec
     )
-    await db.execute(
+    await db.execute(  # nosem
         f"""
         INSERT INTO instances_new
         SELECT id, name,
@@ -827,7 +835,7 @@ async def _migrate_to_v10(db: aiosqlite.Connection) -> None:
                missing_page_offset, cutoff_page_offset,
                enabled, created_at, updated_at
         FROM instances
-        """  # noqa: S608  # nosec B608
+        """,  # noqa: S608  # nosec
     )
     await db.execute("DROP TABLE instances")
     await db.execute("ALTER TABLE instances_new RENAME TO instances")
@@ -836,7 +844,7 @@ async def _migrate_to_v10(db: aiosqlite.Connection) -> None:
     # v10 snapshot still allows 'whisparr_episode'; v16 is the migration that
     # renames it.  Keeping that responsibility in one place keeps each
     # migration's intent clear.
-    await db.execute(
+    await db.execute(  # nosem
         f"""
         CREATE TABLE cooldowns_new (
             id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -863,7 +871,7 @@ async def _migrate_to_v10(db: aiosqlite.Connection) -> None:
     )
 
     # -- 3) Recreate search_log with expanded item_type CHECK ------------------
-    await db.execute(
+    await db.execute(  # nosem
         f"""
         CREATE TABLE search_log_new (
             id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1104,7 +1112,7 @@ async def _migrate_to_v15(db: aiosqlite.Connection) -> None:
         # below would otherwise leave cooldowns_new behind and break retry.
         await db.execute("DROP TABLE IF EXISTS cooldowns_new")
 
-        await db.execute(
+        await db.execute(  # nosem
             f"""
             CREATE TABLE cooldowns_new (
                 id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1204,7 +1212,7 @@ async def _migrate_to_v16(db: aiosqlite.Connection) -> None:
         # Use the v16 snapshot — this migration is the rename, so it pins
         # the post-rename list and is unaffected by future changes to the
         # current _ITEM_TYPES alias.
-        await db.execute(
+        await db.execute(  # nosem
             f"""
             CREATE TABLE cooldowns_new (
                 id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1243,7 +1251,7 @@ async def _migrate_to_v16(db: aiosqlite.Connection) -> None:
         )
 
         # search_log rebuild with the v16 item_type CHECK + UPDATE rows.
-        await db.execute(
+        await db.execute(  # nosem
             f"""
             CREATE TABLE search_log_new (
                 id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1385,6 +1393,8 @@ async def _migrate_to_v17(db: aiosqlite.Connection) -> None:
 
 async def _column_exists(db: aiosqlite.Connection, table_name: str, column_name: str) -> bool:
     """Return whether *column_name* exists on *table_name*."""
-    async with db.execute(f"PRAGMA table_info({table_name})") as cur:  # noqa: S608  # nosec B608
+    async with db.execute(  # nosec  # nosem
+        f"PRAGMA table_info({table_name})"
+    ) as cur:
         rows = await cur.fetchall()
     return any(row[1] == column_name for row in rows)

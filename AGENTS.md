@@ -17,7 +17,10 @@ Tailwind CSS CDN. Published to GHCR at `ghcr.io/av1155/houndarr`.
 search for missing, cutoff-unmet, or upgrade-eligible media in a controlled,
 polite way.
 Do not add download-client integration, indexer management, request workflows,
-multi-user support, or media file manipulation.
+multi-user support, or media file manipulation. External API endpoints expose
+curated read-only views of Houndarr's existing data; write actions and broad
+data access via external API are out of scope and require dedicated scope
+review before being added.
 
 ---
 

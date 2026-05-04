@@ -262,7 +262,7 @@ async def test_second_cycle_items_skipped_on_cooldown(
 @respx.mock
 async def test_hourly_cap_enforced(
     db: None,
-    master_key: bytes,  # noqa: ARG001
+    master_key: bytes,
 ) -> None:
     """When hourly cap is already exhausted, the next item is skipped immediately."""
     # Create an instance with cap=1
@@ -316,7 +316,7 @@ async def test_hourly_cap_enforced(
 @respx.mock
 async def test_supervisor_graceful_shutdown(
     sonarr_instance: Instance,
-    master_key: bytes,  # noqa: ARG001
+    master_key: bytes,
 ) -> None:
     """Supervisor tasks are cancelled on stop() with no unhandled exceptions."""
     # The search loop will block on get_missing; we just need it to be running
@@ -325,14 +325,14 @@ async def test_supervisor_graceful_shutdown(
 
     sup = Supervisor(master_key=master_key)
     await sup.start()
-    assert len(sup._tasks) == 1  # noqa: SLF001
+    assert len(sup._tasks) == 1
 
     # Give the task a moment to spin up and hit the (failing) HTTP call
     await asyncio.sleep(0.05)
 
     # stop() must complete without raising
     await sup.stop()
-    assert sup._tasks == {}  # noqa: SLF001
+    assert sup._tasks == {}
 
 
 @pytest.mark.integration
@@ -341,7 +341,7 @@ async def test_supervisor_no_instances_starts_cleanly(db: None, master_key: byte
     """Supervisor with zero instances should start and stop without error."""
     sup = Supervisor(master_key=master_key)
     await sup.start()
-    assert sup._tasks == {}  # noqa: SLF001
+    assert sup._tasks == {}
     await sup.stop()  # must be a no-op
 
 
@@ -379,7 +379,7 @@ async def test_supervisor_runs_both_instances(
     ):
         sup = Supervisor(master_key=master_key)
         await sup.start()
-        assert len(sup._tasks) == 2  # noqa: SLF001
+        assert len(sup._tasks) == 2
 
         # Let both tasks complete their first search cycle before stopping
         await asyncio.sleep(0.2)

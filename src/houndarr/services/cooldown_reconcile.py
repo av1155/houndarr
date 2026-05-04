@@ -101,8 +101,8 @@ async def reconcile_cooldowns(instance_id: int, sets: ReconcileSets) -> int:
         for chunk_start in range(0, len(stale), batch_size):
             chunk = stale[chunk_start : chunk_start + batch_size]
             placeholders = ",".join("?" for _ in chunk)
-            await db.execute(
-                f"DELETE FROM cooldowns WHERE id IN ({placeholders})",  # noqa: S608  # nosec B608
+            await db.execute(  # nosem
+                f"DELETE FROM cooldowns WHERE id IN ({placeholders})",  # noqa: S608  # nosec
                 chunk,
             )
         await db.commit()

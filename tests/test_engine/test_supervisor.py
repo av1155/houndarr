@@ -140,8 +140,8 @@ async def test_instance_loop_waits_startup_grace_before_first_cycle(
         ) as mock_search,
     ):
         supervisor = Supervisor(master_key=MASTER_KEY)
-        with pytest.raises(asyncio.CancelledError):  # noqa: PT012
-            await supervisor._instance_loop(instance.core.id)  # noqa: SLF001
+        with pytest.raises(asyncio.CancelledError):
+            await supervisor._instance_loop(instance.core.id)
 
     # The very first sleep must be the startup grace, not the inter-cycle sleep.
     assert sleep_calls, "expected at least one asyncio.sleep call"
@@ -172,8 +172,8 @@ async def test_instance_loop_applies_startup_offset(
         ) as mock_search,
     ):
         supervisor = Supervisor(master_key=MASTER_KEY)
-        with pytest.raises(asyncio.CancelledError):  # noqa: PT012
-            await supervisor._instance_loop(instance.core.id, startup_offset=60)  # noqa: SLF001
+        with pytest.raises(asyncio.CancelledError):
+            await supervisor._instance_loop(instance.core.id, startup_offset=60)
 
     assert sleep_calls, "expected at least one asyncio.sleep call"
     assert sleep_calls[0] == 70  # 10 (grace) + 60 (offset)
@@ -194,7 +194,7 @@ async def test_start_staggers_instance_tasks() -> None:
     ):
         supervisor = Supervisor(master_key=MASTER_KEY)
         mock_start = AsyncMock(return_value=True)
-        supervisor.start_instance_task = mock_start  # noqa: SLF001
+        supervisor.start_instance_task = mock_start
         await supervisor.start()
 
     assert mock_start.call_count == 2
@@ -235,7 +235,7 @@ async def test_first_connect_error_writes_exactly_one_error_row(
     ):
         supervisor = Supervisor(master_key=MASTER_KEY)
         with pytest.raises(asyncio.CancelledError):
-            await supervisor._instance_loop(instance.core.id)  # noqa: SLF001
+            await supervisor._instance_loop(instance.core.id)
 
     rows = await _get_log_rows()
     error_rows = [r for r in rows if r["action"] == "error"]
@@ -269,7 +269,7 @@ async def test_repeated_connect_errors_write_only_one_error_row(
     ):
         supervisor = Supervisor(master_key=MASTER_KEY)
         with pytest.raises(asyncio.CancelledError):
-            await supervisor._instance_loop(instance.core.id)  # noqa: SLF001
+            await supervisor._instance_loop(instance.core.id)
 
     rows = await _get_log_rows()
     error_rows = [r for r in rows if r["action"] == "error"]
@@ -306,7 +306,7 @@ async def test_recovery_after_connect_error_writes_info_row(
     ):
         supervisor = Supervisor(master_key=MASTER_KEY)
         with pytest.raises(asyncio.CancelledError):
-            await supervisor._instance_loop(instance.core.id)  # noqa: SLF001
+            await supervisor._instance_loop(instance.core.id)
 
     rows = await _get_log_rows()
     info_rows = [r for r in rows if r["action"] == "info"]
@@ -343,7 +343,7 @@ async def test_no_extra_log_rows_during_retry_sequence(
     ):
         supervisor = Supervisor(master_key=MASTER_KEY)
         with pytest.raises(asyncio.CancelledError):
-            await supervisor._instance_loop(instance.core.id)  # noqa: SLF001
+            await supervisor._instance_loop(instance.core.id)
 
     rows = await _get_log_rows()
     # Expect exactly: 1 error (first failure) + 1 info (recovery) = 2 rows total
@@ -395,7 +395,7 @@ async def test_refresh_all_snapshots_once_updates_enabled_instances(
         patch("houndarr.engine.supervisor.get_adapter", return_value=fake_adapter),
     ):
         supervisor = Supervisor(master_key=MASTER_KEY)
-        await supervisor._refresh_all_snapshots_once()  # noqa: SLF001
+        await supervisor._refresh_all_snapshots_once()
 
     refreshed = await get_instance(inst.core.id, master_key=MASTER_KEY)
     assert refreshed is not None
@@ -419,7 +419,7 @@ async def test_refresh_all_snapshots_skips_disabled(
         patch("houndarr.engine.supervisor.get_adapter", side_effect=fake_client_call),
     ):
         supervisor = Supervisor(master_key=MASTER_KEY)
-        await supervisor._refresh_all_snapshots_once()  # noqa: SLF001
+        await supervisor._refresh_all_snapshots_once()
 
     assert fake_client_call.await_count == 0
     refreshed = await get_instance(inst.core.id, master_key=MASTER_KEY)
@@ -468,7 +468,7 @@ async def test_refresh_one_snapshot_logs_big_unreleased_jump(
         patch("houndarr.engine.supervisor.get_adapter", return_value=fake_adapter),
     ):
         supervisor = Supervisor(master_key=MASTER_KEY)
-        await supervisor._refresh_one_snapshot(inst)  # noqa: SLF001
+        await supervisor._refresh_one_snapshot(inst)
 
     matching = [r for r in caplog.records if "unreleased jumped" in r.getMessage()]
     assert len(matching) == 1
@@ -520,7 +520,7 @@ async def test_refresh_one_snapshot_quiet_on_small_unreleased_change(
         patch("houndarr.engine.supervisor.get_adapter", return_value=fake_adapter),
     ):
         supervisor = Supervisor(master_key=MASTER_KEY)
-        await supervisor._refresh_one_snapshot(inst)  # noqa: SLF001
+        await supervisor._refresh_one_snapshot(inst)
 
     matching = [r for r in caplog.records if "unreleased jumped" in r.getMessage()]
     assert matching == []
@@ -570,7 +570,7 @@ async def test_refresh_all_snapshots_handles_transport_error(
     ):
         supervisor = Supervisor(master_key=MASTER_KEY)
         # Should not raise.
-        await supervisor._refresh_all_snapshots_once()  # noqa: SLF001
+        await supervisor._refresh_all_snapshots_once()
 
     error_records = [r for r in caplog.records if r.levelname in {"ERROR", "CRITICAL"}]
     assert error_records == [], (
@@ -633,7 +633,7 @@ async def test_refresh_one_snapshot_reconcile_transport_error_keeps_cooldowns(
     ):
         supervisor = Supervisor(master_key=MASTER_KEY)
         # Should not raise.
-        await supervisor._refresh_one_snapshot(inst)  # noqa: SLF001
+        await supervisor._refresh_one_snapshot(inst)
 
     error_records = [r for r in caplog.records if r.levelname in {"ERROR", "CRITICAL"}]
     assert error_records == [], (
@@ -673,9 +673,7 @@ async def test_run_search_cycle_returns_retry_for_transport_error(
         AsyncMock(side_effect=transport_exc),
     ):
         supervisor = Supervisor(master_key=MASTER_KEY)
-        retry = await supervisor._run_search_cycle(  # noqa: SLF001
-            instance, cycle_trigger="scheduled"
-        )
+        retry = await supervisor._run_search_cycle(instance, cycle_trigger="scheduled")
 
     assert retry is True, "transport error must signal retry, not error-path completion"
     rows = await _get_log_rows()

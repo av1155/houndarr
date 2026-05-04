@@ -180,5 +180,5 @@ class TestEmptySlotResponse:
 
     def test_body_is_single_div_with_aria_hidden(self) -> None:
         resp = _empty_slot_response()
-        body = resp.body.decode("utf-8")
+        body = bytes(resp.body).decode("utf-8")
         assert body == '<div id="changelog-slot" aria-hidden="true"></div>'

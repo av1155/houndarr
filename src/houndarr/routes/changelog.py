@@ -36,6 +36,8 @@ from houndarr.services.changelog import (
     should_show,
 )
 
+__all__ = ["_render_changelog_bullet", "router"]
+
 router = APIRouter(prefix="/settings/changelog", tags=["changelog"])
 
 _GITHUB_ISSUES_URL = "https://github.com/av1155/houndarr/issues"
@@ -112,7 +114,7 @@ def _render_changelog_bullet(raw: str) -> Markup:
     # Input was escape()d first, then a closed vocabulary of markdown patterns
     # (code, bold, links, issue refs) was re-applied with escaped capture groups.
     # No user-authored raw HTML reaches the template context.
-    return Markup(safe)  # noqa: S704  # nosec B704
+    return Markup(safe)  # noqa: S704  # nosec  # nosem
 
 
 def _empty_slot_response() -> HTMLResponse:

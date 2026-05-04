@@ -41,7 +41,7 @@ async def _get_serializer() -> URLSafeTimedSerializer:
     every subsequent call reuses the cached serializer until
     :func:`reset_serializer` clears it.
     """
-    global _serializer  # noqa: PLW0603
+    global _serializer
     if _serializer is None:
         secret = await get_setting("session_secret")
         if not secret:
@@ -58,7 +58,7 @@ def reset_serializer() -> None:
     and ``reset_auth_caches`` (factory reset) so cross-seam callers
     never touch this module's global directly.
     """
-    global _serializer  # noqa: PLW0603
+    global _serializer
     _serializer = None
 
 

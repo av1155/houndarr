@@ -154,7 +154,7 @@ def adapt_upgrade(item: LibraryWhisparrV3Movie, instance: Instance) -> SearchCan
 
 async def fetch_upgrade_pool(
     client: WhisparrV3Client,
-    instance: Instance,  # noqa: ARG001
+    instance: Instance,
 ) -> list[LibraryWhisparrV3Movie]:
     """Fetch and filter the Whisparr v3 library for upgrade-eligible movies/scenes.
 
@@ -197,7 +197,7 @@ def make_client(instance: Instance) -> WhisparrV3Client:
 
 async def fetch_reconcile_sets(
     client: WhisparrV3Client,
-    instance: Instance,  # noqa: ARG001
+    instance: Instance,
 ) -> ReconcileSets:
     """Return the authoritative wanted / upgrade-pool sets for Whisparr v3.
 
@@ -231,7 +231,7 @@ async def fetch_reconcile_sets(
 
 async def fetch_instance_snapshot(
     client: WhisparrV3Client,
-    instance: Instance,  # noqa: ARG001
+    instance: Instance,
 ) -> InstanceSnapshot:
     """Compose the dashboard snapshot for a Whisparr v3 instance.
 

@@ -45,6 +45,8 @@ from houndarr.services.time_window import (
 )
 from houndarr.value_objects import ItemRef
 
+__all__ = ["_reset_random_deck", "run_instance_search"]
+
 logger = logging.getLogger(__name__)
 
 _MAX_LIST_PAGES_PER_PASS = 5
@@ -127,7 +129,7 @@ def _draw_next_random_page(instance_id: int, search_kind: SearchKind | str, max_
     state = _random_decks.get(key)
     if state is None or state.max_page != max_page or not state.remaining:
         deck = list(range(1, max_page + 1))
-        random.shuffle(deck)  # noqa: S311  # nosec B311
+        random.shuffle(deck)  # nosec B311
         state = _RandomDeckState(max_page=max_page, remaining=deck)
         _random_decks[key] = state
     return state.remaining.pop()
@@ -367,7 +369,7 @@ async def _dispatch_with_typed_wrap(
             await dispatch_fn(client, candidate)
     except (EngineError, ClientError):
         raise
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         raise EngineDispatchError(str(exc)) from exc
 
 
@@ -407,7 +409,7 @@ async def _persist_offset_with_typed_wrap(
         await update_instance(instance_id, master_key=master_key, **offsets)
     except (EngineError, ClientError):
         raise
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         raise EngineOffsetPersistError(str(exc)) from exc
 
 
@@ -438,14 +440,14 @@ async def _fetch_pool_with_typed_wrap(
             return await adapter.fetch_upgrade_pool(client, instance)
     except (EngineError, ClientError):
         raise
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         raise EnginePoolFetchError(str(exc)) from exc
 
 
 # Unified search pass
 
 
-async def _run_search_pass(  # noqa: C901
+async def _run_search_pass(
     instance: Instance,
     adapter: AppAdapterProto,
     config: SearchPassConfig,
@@ -507,7 +509,7 @@ async def _run_search_pass(  # noqa: C901
     if instance.schedule.search_order == SearchOrder.random and total_fn is not None:
         try:
             total = await total_fn()
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             logger.warning(
                 "[%s] %stotal probe failed (%s); falling back to page %d",
                 instance.core.name,
@@ -541,7 +543,7 @@ async def _run_search_pass(  # noqa: C901
             while len(items) < page_size:
                 items.append(_SHUFFLE_PAD)
         if instance.schedule.search_order == SearchOrder.random and items:
-            random.shuffle(items)  # noqa: S311  # nosec B311
+            random.shuffle(items)  # nosec B311
         logger.debug(
             "[%s] fetched %d %sitem(s) from page %d",
             instance.core.name,
@@ -900,7 +902,7 @@ async def _run_upgrade_pass(
     # Chronological mode keeps the deterministic rotation so coverage is
     # guaranteed over time.
     if instance.schedule.search_order == SearchOrder.random:
-        random.shuffle(pool)  # noqa: S311  # nosec B311
+        random.shuffle(pool)  # nosec B311
         offset = 0
         rotated = pool
     else:
@@ -1091,7 +1093,7 @@ async def run_instance_search(
         raise
     except (EngineError, ClientError):
         raise
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         raise EngineError(
             f"unhandled error in search cycle for {instance.core.name!r}: {exc}"
         ) from exc

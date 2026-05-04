@@ -11,8 +11,10 @@ from __future__ import annotations
 
 import asyncio
 from datetime import UTC, datetime, timedelta
+from typing import cast
 
 import pytest
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from houndarr.clients._wire_models import SystemStatus
@@ -191,7 +193,7 @@ async def test_run_now_schedules_deferred_reinvalidation(
 
             return DashboardAggregates()
 
-    app.app.state.aggregate_cache = _RecordingCache()
+    cast("FastAPI", app.app).state.aggregate_cache = _RecordingCache()
 
     resp = app.post("/api/instances/1/run-now", headers=csrf_headers(app))
     assert resp.status_code == 202

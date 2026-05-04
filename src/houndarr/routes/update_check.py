@@ -31,6 +31,8 @@ from houndarr.services.update_check import (
     set_enabled,
 )
 
+__all__ = ["_timeago", "router"]
+
 router = APIRouter(prefix="/settings/admin/update-check", tags=["update-check"])
 
 

@@ -119,7 +119,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Mock *arr service for Houndarr e2e")
     parser.add_argument("--app", required=True, choices=["Sonarr", "Radarr"])
     parser.add_argument("--port", type=int, required=True)
-    parser.add_argument("--host", default="0.0.0.0")  # noqa: S104
+    parser.add_argument("--host", default="0.0.0.0")
     args = parser.parse_args()
 
     app = make_app(args.app)

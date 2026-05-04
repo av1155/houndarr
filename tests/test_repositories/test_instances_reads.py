@@ -140,7 +140,7 @@ async def test_get_instance_decrypts_with_correct_key(db: None, master_key: byte
         api_key="s3cret",
     )
     other_key = Fernet.generate_key()
-    with pytest.raises(Exception):  # noqa: B017, PT011
+    with pytest.raises(Exception):  # noqa: B017
         await repo.get_instance(created.core.id, master_key=other_key)
 
 

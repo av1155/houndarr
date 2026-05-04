@@ -42,7 +42,7 @@ async def is_setup_complete() -> bool:
     The result is cached once True because the password_hash setting is
     monotonic: it transitions from absent to present and is never deleted.
     """
-    global _setup_complete  # noqa: PLW0603
+    global _setup_complete
     if _setup_complete is True:
         return True
     result = (await get_setting("password_hash")) is not None
@@ -53,7 +53,7 @@ async def is_setup_complete() -> bool:
 
 async def set_password(password: str) -> None:
     """Hash and persist the application password."""
-    global _setup_complete  # noqa: PLW0603
+    global _setup_complete
     await set_setting("password_hash", hash_password(password))
     _setup_complete = True
 
@@ -140,7 +140,7 @@ def reset_auth_caches() -> None:
     decisions, but resetting them keeps the module honest if the operator
     later switches modes.
     """
-    global _setup_complete  # noqa: PLW0603
+    global _setup_complete
     _session.reset_serializer()
     _setup_complete = None
     _rate_limit.reset_login_attempts()

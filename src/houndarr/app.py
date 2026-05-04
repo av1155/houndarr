@@ -60,7 +60,7 @@ async def _periodic_log_retention(retention_days: int) -> None:
                 await conn.execute("PRAGMA optimize")
         except asyncio.CancelledError:
             raise
-        except Exception:  # noqa: BLE001
+        except Exception:
             logger.exception("Periodic log retention task failed")
 
 

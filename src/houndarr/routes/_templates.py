@@ -39,7 +39,7 @@ def get_templates() -> Jinja2Templates:
     ``module._templates = None`` before calling :func:`get_templates`
     again.
     """
-    global _templates  # noqa: PLW0603
+    global _templates
     if _templates is None:
         templates_dir = Path(__file__).resolve().parent.parent / "templates"
         _templates = Jinja2Templates(directory=str(templates_dir))

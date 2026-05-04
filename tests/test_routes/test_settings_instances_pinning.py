@@ -165,7 +165,7 @@ class TestConnectionResponses:
     def test_success_status_response_shape(self) -> None:
         resp = connection_status_response("Connected", ok=True, status_code=200)
         assert resp.status_code == 200
-        body = resp.body.decode("utf-8")
+        body = bytes(resp.body).decode("utf-8")
         assert "text-green-400" in body
         assert "Connected" in body
         assert resp.headers.get("HX-Trigger") == "houndarr-connection-test-success"
@@ -173,14 +173,14 @@ class TestConnectionResponses:
     def test_failure_status_response_shape(self) -> None:
         resp = connection_status_response("Failed", ok=False, status_code=422)
         assert resp.status_code == 422
-        body = resp.body.decode("utf-8")
+        body = bytes(resp.body).decode("utf-8")
         assert "text-red-400" in body
         assert "Failed" in body
         assert resp.headers.get("HX-Trigger") == "houndarr-connection-test-failure"
 
     def test_status_response_escapes_message(self) -> None:
         resp = connection_status_response("<script>alert(1)</script>", ok=False, status_code=422)
-        body = resp.body.decode("utf-8")
+        body = bytes(resp.body).decode("utf-8")
         assert "&lt;script&gt;" in body
         assert "<script>" not in body
 
@@ -190,10 +190,10 @@ class TestConnectionResponses:
         assert resp.headers.get("HX-Retarget") == "#instance-connection-status"
         assert resp.headers.get("HX-Reswap") == "innerHTML"
         assert resp.headers.get("HX-Trigger") == "houndarr-connection-test-failure"
-        assert "Verify first" in resp.body.decode("utf-8")
+        assert "Verify first" in bytes(resp.body).decode("utf-8")
 
     def test_guard_response_escapes_message(self) -> None:
         resp = connection_guard_response("<b>bold</b>")
-        body = resp.body.decode("utf-8")
+        body = bytes(resp.body).decode("utf-8")
         assert "&lt;b&gt;bold&lt;/b&gt;" in body
         assert "<b>bold</b>" not in body

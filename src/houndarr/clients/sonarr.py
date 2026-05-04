@@ -49,9 +49,13 @@ class SonarrClient(ArrClient):
 
     _WANTED_SORT_KEY: ClassVar[str] = "airDateUtc"
     _WANTED_INCLUDE_PARAM: ClassVar[str | None] = "includeSeries"
-    _WANTED_ENVELOPE: ClassVar[type[PaginatedResponse[SonarrWantedEpisode]]] = PaginatedResponse[
-        SonarrWantedEpisode
-    ]
+    # Annotation is inherited from ``ArrClient._WANTED_ENVELOPE``
+    # (``ClassVar[type[PaginatedResponse[Any]] | None]``).  Redeclaring with
+    # ``ClassVar[type[PaginatedResponse[SonarrWantedEpisode]]]`` is invariant
+    # against the parent in pyright's variable-override check; assigning the
+    # concrete envelope under the parent's annotation lets covariance through
+    # ``type[]`` carry the narrower runtime type without re-annotation.
+    _WANTED_ENVELOPE = PaginatedResponse[SonarrWantedEpisode]
 
     async def get_missing(
         self,

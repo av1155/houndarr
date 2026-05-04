@@ -306,7 +306,7 @@ def bootstrap_settings(**overrides: Unpack[BootstrapOverrides]) -> AppSettings:
         pinned instance; without overrides this is an unpinned
         env-resolved instance.
     """
-    global _runtime_settings  # noqa: PLW0603
+    global _runtime_settings
 
     if not overrides:
         _runtime_settings = None

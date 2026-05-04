@@ -33,5 +33,5 @@ def verify_password(password: str, hashed: str) -> bool:
     """
     try:
         return bool(bcrypt.checkpw(password.encode(), hashed.encode()))
-    except Exception:  # noqa: BLE001
+    except Exception:
         return False

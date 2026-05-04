@@ -29,26 +29,32 @@ class AppAdapterProto(Protocol):
     @property
     def adapt_missing(self) -> Callable[..., SearchCandidate]:
         """Build a :class:`SearchCandidate` from a raw missing-pass item."""
+        ...
 
     @property
     def adapt_cutoff(self) -> Callable[..., SearchCandidate]:
         """Build a :class:`SearchCandidate` from a raw cutoff-unmet item."""
+        ...
 
     @property
     def adapt_upgrade(self) -> Callable[..., SearchCandidate]:
         """Build a :class:`SearchCandidate` from a raw upgrade-pool item."""
+        ...
 
     @property
     def fetch_upgrade_pool(self) -> Callable[..., Awaitable[list[Any]]]:
         """Fetch the per-cycle upgrade candidate list from the *arr app."""
+        ...
 
     @property
     def dispatch_search(self) -> Callable[..., Awaitable[None]]:
         """Send the *arr search command for one candidate."""
+        ...
 
     @property
     def make_client(self) -> Callable[[Instance], ArrClient]:
         """Return a fresh (unopened) :class:`ArrClient` for *instance*."""
+        ...
 
     @property
     def fetch_reconcile_sets(self) -> Callable[..., Awaitable[ReconcileSets]]:
@@ -63,6 +69,7 @@ class AppAdapterProto(Protocol):
         the synthetic parent ids derived from leaf parent metadata so
         the DB match stays pure set membership.
         """
+        ...
 
     @property
     def fetch_instance_snapshot(self) -> Callable[..., Awaitable[InstanceSnapshot]]:
@@ -79,3 +86,4 @@ class AppAdapterProto(Protocol):
         :func:`compute_default_snapshot` while Whisparr v3 walks its
         cached ``/api/v3/movie`` response inline.
         """
+        ...

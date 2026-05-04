@@ -15,7 +15,10 @@ production over it.
 
 from __future__ import annotations
 
+from typing import cast
+
 import pytest
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from houndarr import app as app_module
@@ -108,7 +111,7 @@ class TestLifespanStartup:
         app: TestClient,
     ) -> None:
         """After the TestClient exits the lifespan, retention_task is cancelled."""
-        retention = getattr(app.app.state, "retention_task", None)
+        retention = getattr(cast("FastAPI", app.app).state, "retention_task", None)
         assert retention is not None
         # TestClient has yielded (we are still inside the with-block via fixture).
         # Sanity: task was created and is alive.
@@ -136,7 +139,7 @@ class TestLifespanStartup:
 
         fastapi_app = app_module.create_app()
         with TestClient(fastapi_app) as client:
-            assert getattr(client.app.state, "retention_task", "missing") is None
+            assert getattr(cast("FastAPI", client.app).state, "retention_task", "missing") is None
 
 
 # RequestValidationError split

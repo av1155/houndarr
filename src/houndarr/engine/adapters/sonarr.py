@@ -31,6 +31,19 @@ from houndarr.engine.candidates import (
 )
 from houndarr.services.instances import Instance, SonarrSearchMode
 
+__all__ = [
+    "SonarrAdapter",
+    "_UPGRADE_MAX_SERIES_PER_CYCLE",
+    "adapt_cutoff",
+    "adapt_missing",
+    "adapt_upgrade",
+    "dispatch_search",
+    "fetch_instance_snapshot",
+    "fetch_reconcile_sets",
+    "fetch_upgrade_pool",
+    "make_client",
+]
+
 logger = logging.getLogger(__name__)
 
 _UPGRADE_MAX_SERIES_PER_CYCLE = 5
@@ -426,7 +439,7 @@ async def fetch_reconcile_sets(client: SonarrClient, instance: Instance) -> Reco
 
 async def fetch_instance_snapshot(
     client: SonarrClient,
-    instance: Instance,  # noqa: ARG001
+    instance: Instance,
 ) -> InstanceSnapshot:
     """Compose the dashboard snapshot for a Sonarr instance.
 
@@ -436,10 +449,11 @@ async def fetch_instance_snapshot(
     the search-loop's classification — Sonarr-without-air-date is not
     something Houndarr should flag as pre-release on the dashboard.
     """
-    return await compute_default_snapshot(
-        client,
-        anchor_fn=lambda ep: ep.air_date_utc,
-    )
+
+    def _anchor(ep: MissingEpisode) -> str | None:
+        return ep.air_date_utc
+
+    return await compute_default_snapshot(client, anchor_fn=_anchor)
 
 
 class SonarrAdapter:

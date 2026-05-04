@@ -54,9 +54,9 @@ class RadarrClient(ArrClient):
     # for cutoff); the template's ``include_sort=True`` default captures
     # both passes here.
     _WANTED_SORT_KEY: ClassVar[str] = "inCinemas"
-    _WANTED_ENVELOPE: ClassVar[type[PaginatedResponse[RadarrWantedMovie]]] = PaginatedResponse[
-        RadarrWantedMovie
-    ]
+    # See SonarrClient for the rationale on dropping the per-subclass
+    # ``ClassVar`` re-annotation.
+    _WANTED_ENVELOPE = PaginatedResponse[RadarrWantedMovie]
 
     async def get_missing(
         self,

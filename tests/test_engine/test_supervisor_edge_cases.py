@@ -157,11 +157,11 @@ async def test_run_now_duplicate_returns_accepted(seeded_instances: None) -> Non
     assert r1 == "accepted"
     assert r2 == "accepted"
     # Only one manual task should exist
-    assert len(supervisor._manual_runs) <= 1  # noqa: SLF001
+    assert len(supervisor._manual_runs) <= 1
 
     # Cleanup: release the event and cancel tasks
     long_running.set()
-    for task in list(supervisor._manual_runs.values()):  # noqa: SLF001
+    for task in list(supervisor._manual_runs.values()):
         task.cancel()
         with contextlib.suppress(asyncio.CancelledError):
             await task
@@ -221,7 +221,7 @@ async def test_stop_instance_task_cancels_task(seeded_instances: None) -> None:
         result = await supervisor.stop_instance_task(1)
 
     assert result is True
-    assert 1 not in supervisor._tasks  # noqa: SLF001
+    assert 1 not in supervisor._tasks
 
 
 # ---------------------------------------------------------------------------
@@ -240,7 +240,7 @@ async def test_reconcile_starts_for_enabled(seeded_instances: None) -> None:
     with patch.object(Supervisor, "_instance_loop", _wait_forever):
         await supervisor.reconcile_instance(1)
 
-    assert 1 in supervisor._tasks  # noqa: SLF001
+    assert 1 in supervisor._tasks
     await supervisor.stop()
 
 
@@ -260,7 +260,7 @@ async def test_reconcile_stops_for_disabled(seeded_instances: None) -> None:
         await conn.commit()
 
     await supervisor.reconcile_instance(1)
-    assert 1 not in supervisor._tasks  # noqa: SLF001
+    assert 1 not in supervisor._tasks
 
 
 # ---------------------------------------------------------------------------
@@ -284,7 +284,7 @@ async def test_connection_error_first_failure_logs_error(seeded_instances: None)
         return 0
 
     async def _sleep_then_cancel(secs: float) -> None:
-        if secs == _supervisor_mod._CONNECT_RETRY_SECS:  # noqa: SLF001
+        if secs == _supervisor_mod._CONNECT_RETRY_SECS:
             raise asyncio.CancelledError
 
     with (
@@ -293,7 +293,7 @@ async def test_connection_error_first_failure_logs_error(seeded_instances: None)
         patch("asyncio.sleep", side_effect=_sleep_then_cancel),
     ):
         with contextlib.suppress(asyncio.CancelledError):
-            await supervisor._instance_loop(1, startup_offset=0)  # noqa: SLF001
+            await supervisor._instance_loop(1, startup_offset=0)
 
     rows = await _get_log_rows()
     error_rows = [r for r in rows if r["action"] == "error"]
@@ -330,7 +330,7 @@ async def test_connection_recovery_logs_info(seeded_instances: None) -> None:
         patch("asyncio.sleep", side_effect=_controlled_sleep),
     ):
         with contextlib.suppress(asyncio.CancelledError):
-            await supervisor._instance_loop(1, startup_offset=0)  # noqa: SLF001
+            await supervisor._instance_loop(1, startup_offset=0)
 
     rows = await _get_log_rows()
     info_rows = [r for r in rows if r["action"] == "info" and r.get("message")]
@@ -388,9 +388,9 @@ async def test_graceful_shutdown_cancels_tasks(seeded_instances: None) -> None:
     with patch.object(Supervisor, "_instance_loop", _wait_forever):
         await supervisor.start_instance_task(1)
 
-    assert 1 in supervisor._tasks  # noqa: SLF001
+    assert 1 in supervisor._tasks
     await supervisor.stop()
-    assert len(supervisor._tasks) == 0  # noqa: SLF001
+    assert len(supervisor._tasks) == 0
 
 
 @pytest.mark.asyncio()
@@ -405,7 +405,7 @@ async def test_instance_deleted_exits_loop(seeded_instances: None) -> None:
         patch.object(_supervisor_mod, "get_instance", return_value=None),
         patch("asyncio.sleep", side_effect=_controlled_sleep),
     ):
-        await supervisor._instance_loop(1, startup_offset=0)  # noqa: SLF001
+        await supervisor._instance_loop(1, startup_offset=0)
 
     # Loop should have exited without error
 
@@ -423,7 +423,7 @@ async def test_instance_disabled_exits_loop(seeded_instances: None) -> None:
         patch.object(_supervisor_mod, "get_instance", return_value=instance),
         patch("asyncio.sleep", side_effect=_controlled_sleep),
     ):
-        await supervisor._instance_loop(1, startup_offset=0)  # noqa: SLF001
+        await supervisor._instance_loop(1, startup_offset=0)
 
 
 @pytest.mark.asyncio()
@@ -453,7 +453,7 @@ async def test_normal_cycle_sleeps_instance_interval(seeded_instances: None) -> 
         patch("asyncio.sleep", side_effect=_capture_sleep),
     ):
         with contextlib.suppress(asyncio.CancelledError):
-            await supervisor._instance_loop(1, startup_offset=0)  # noqa: SLF001
+            await supervisor._instance_loop(1, startup_offset=0)
 
     # First sleep is startup grace (10 + 0), second is interval (5 * 60 = 300)
     assert len(sleep_values) >= 2
@@ -486,7 +486,7 @@ async def test_connection_retry_sleeps_30s(seeded_instances: None) -> None:
         patch("asyncio.sleep", side_effect=_capture_sleep),
     ):
         with contextlib.suppress(asyncio.CancelledError):
-            await supervisor._instance_loop(1, startup_offset=0)  # noqa: SLF001
+            await supervisor._instance_loop(1, startup_offset=0)
 
     # First sleep is startup grace, second is retry interval
     assert len(sleep_values) >= 2

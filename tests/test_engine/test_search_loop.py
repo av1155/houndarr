@@ -228,7 +228,7 @@ async def _seed_release_timing_retry(
     *,
     instance_id: int,
     item_id: int,
-    item_type: ItemType,
+    item_type: ItemType | str,
     reason: str = "not yet released",
 ) -> None:
     from houndarr.services.cooldown import record_search
@@ -237,7 +237,7 @@ async def _seed_release_timing_retry(
     await _insert_search_log_row(
         instance_id=instance_id,
         item_id=item_id,
-        item_type=item_type,
+        item_type=str(item_type),
         search_kind="missing",
         action="skipped",
         reason=reason,
@@ -1996,7 +1996,7 @@ async def test_supervisor_starts_and_stops_cleanly(db: None) -> None:
     sup = Supervisor(master_key=MASTER_KEY)
     await sup.start()
     await sup.stop()
-    assert sup._tasks == {}  # noqa: SLF001
+    assert sup._tasks == {}
 
 
 @pytest.mark.asyncio()
@@ -2043,7 +2043,7 @@ async def test_supervisor_stop_cancels_tasks(seeded_instances: None) -> None:
         await asyncio.sleep(0.05)
         await sup.stop()
 
-    assert sup._tasks == {}  # noqa: SLF001
+    assert sup._tasks == {}
 
 
 @pytest.mark.asyncio()
@@ -2072,7 +2072,7 @@ async def test_supervisor_stop_completes_within_timeout(seeded_instances: None) 
 
     # Should complete far below the 10s timeout (tasks cancel immediately)
     assert elapsed < 5.0
-    assert sup._tasks == {}  # noqa: SLF001
+    assert sup._tasks == {}
 
 
 @pytest.mark.asyncio()
@@ -2087,7 +2087,7 @@ async def test_supervisor_reconcile_starts_task_for_enabled_instance(db: None) -
     ):
         sup = Supervisor(master_key=MASTER_KEY)
         await sup.start()
-        assert sup._tasks == {}  # noqa: SLF001
+        assert sup._tasks == {}
 
         encrypted = encrypt("test-api-key", MASTER_KEY)
         async with get_db() as conn:
@@ -2101,7 +2101,7 @@ async def test_supervisor_reconcile_starts_task_for_enabled_instance(db: None) -
             await conn.commit()
 
         await sup.reconcile_instance(1)
-        assert 1 in sup._tasks  # noqa: SLF001
+        assert 1 in sup._tasks
 
         await sup.stop()
 
@@ -2125,14 +2125,14 @@ async def test_supervisor_reconcile_stops_task_when_instance_disabled(
     ):
         sup = Supervisor(master_key=MASTER_KEY)
         await sup.start()
-        assert 1 in sup._tasks  # noqa: SLF001
+        assert 1 in sup._tasks
 
         async with get_db() as conn:
             await conn.execute("UPDATE instances SET enabled = 0 WHERE id = ?", (1,))
             await conn.commit()
 
         await sup.reconcile_instance(1)
-        assert 1 not in sup._tasks  # noqa: SLF001
+        assert 1 not in sup._tasks
 
         await sup.stop()
 
@@ -2164,7 +2164,7 @@ async def test_trigger_run_now_deduplicates_pending_manual_runs(
 
         assert status_1 == "accepted"
         assert status_2 == "accepted"
-        assert len(sup._manual_runs) == 1  # noqa: SLF001
+        assert len(sup._manual_runs) == 1
 
         gate.set()
         await asyncio.sleep(0)

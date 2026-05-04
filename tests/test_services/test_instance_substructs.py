@@ -502,16 +502,21 @@ def test_instance_rejects_pre_refactor_flat_kwargs() -> None:
     A caller that still passes ``Instance(id=..., name=...)`` must
     fail loudly at the call site instead of silently ignoring the
     kwargs; sub-struct kwargs are the only accepted form.
+
+    The kwargs travel through ``**dict`` so pyright cannot resolve them
+    against Instance's seven sub-struct __init__ parameters and (rightly)
+    flag the negative case statically.  Runtime behaviour is identical.
     """
+    legacy_flat_kwargs: dict[str, Any] = {
+        "id": 1,
+        "name": "legacy",
+        "type": InstanceType.sonarr,
+        "url": "http://host:8989",
+        "api_key": "k",
+        "enabled": True,
+    }
     with pytest.raises(TypeError):
-        Instance(  # type: ignore[call-arg]
-            id=1,
-            name="legacy",
-            type=InstanceType.sonarr,
-            url="http://host:8989",
-            api_key="k",
-            enabled=True,
-        )
+        Instance(**legacy_flat_kwargs)
 
 
 @pytest.mark.parametrize("flat_name", sorted(FLAT_TO_SUB))

@@ -154,7 +154,10 @@ async def _login(client: httpx.AsyncClient) -> None:
 def _csrf(client: httpx.AsyncClient) -> dict[str, str]:
     from houndarr.auth import CSRF_COOKIE_NAME
 
-    token = client.cookies.get(CSRF_COOKIE_NAME, "")
+    # ``Cookies.get(name, default)`` is overloaded: pyright in standard mode
+    # collapses both arms to ``str | None``.  A redundant ``or ""`` makes
+    # the absent / empty cases collapse to a ``str`` defensively.
+    token = client.cookies.get(CSRF_COOKIE_NAME) or ""
     return {"X-CSRF-Token": token}
 
 
@@ -327,7 +330,7 @@ async def _run_variant(variant: str, rows: int) -> None:
         master_key = ensure_master_key(data_dir)
         set_db_path(os.path.join(data_dir, "houndarr.db"))
 
-        mock_server, mock_thread, mock_url = _start_mock(items=200, seed=42)
+        mock_server, mock_thread, _ = _start_mock(items=200, seed=42)
         try:
             async with _houndarr_app(data_dir, cache_ttl=cache_ttl) as client:
                 rss_before_seed = _peak_rss_mb()

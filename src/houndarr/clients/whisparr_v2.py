@@ -58,9 +58,9 @@ class WhisparrV2Client(ArrClient):
     # ``series`` parent like Sonarr does.
     _WANTED_SORT_KEY: ClassVar[str] = "releaseDate"
     _WANTED_INCLUDE_PARAM: ClassVar[str | None] = "includeSeries"
-    _WANTED_ENVELOPE: ClassVar[type[PaginatedResponse[WhisparrV2WantedEpisode]]] = (
-        PaginatedResponse[WhisparrV2WantedEpisode]
-    )
+    # See SonarrClient for the rationale on dropping the per-subclass
+    # ``ClassVar`` re-annotation.
+    _WANTED_ENVELOPE = PaginatedResponse[WhisparrV2WantedEpisode]
 
     async def get_missing(
         self,

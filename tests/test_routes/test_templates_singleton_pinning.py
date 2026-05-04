@@ -26,7 +26,7 @@ from houndarr.routes._templates import get_templates
 @pytest.fixture(autouse=True)
 def _reset_templates() -> None:
     """Clear the cached singleton before each test."""
-    tpl._templates = None  # noqa: SLF001
+    tpl._templates = None
 
 
 @pytest.mark.pinning()
@@ -65,7 +65,7 @@ def test_timeago_filter_is_registered() -> None:
 def test_reset_hook_rebuilds_singleton() -> None:
     """Setting the module-level cache to None forces a fresh build."""
     first = get_templates()
-    tpl._templates = None  # noqa: SLF001
+    tpl._templates = None
     second = get_templates()
     assert first is not second
 

@@ -51,8 +51,8 @@ def proxy_settings(tmp_data_dir: str) -> AppSettings:
         auth_proxy_header=_AUTH_HEADER,
         trusted_proxies=_TRUSTED_IP,
     )
-    _auth_mod._serializer = None  # noqa: SLF001
-    _auth_mod._login_attempts.clear()  # noqa: SLF001
+    _auth_mod._serializer = None
+    _auth_mod._login_attempts.clear()
     return settings
 
 
@@ -71,7 +71,7 @@ def proxy_app(proxy_settings: AppSettings) -> Generator[TestClient]:
     # Wrap the ASGI app to inject a trusted-proxy client IP
     original_app = application
 
-    async def _patched_app(scope, receive, send):  # type: ignore[no-untyped-def]  # noqa: ANN001
+    async def _patched_app(scope, receive, send):  # type: ignore[no-untyped-def]
         if scope["type"] == "http":
             scope["client"] = (_TRUSTED_IP, 0)
         await original_app(scope, receive, send)
@@ -89,7 +89,7 @@ def untrusted_proxy_app(proxy_settings: AppSettings) -> Generator[TestClient]:
 
     original_app = application
 
-    async def _patched_app(scope, receive, send):  # type: ignore[no-untyped-def]  # noqa: ANN001
+    async def _patched_app(scope, receive, send):  # type: ignore[no-untyped-def]
         if scope["type"] == "http":
             scope["client"] = (_UNTRUSTED_IP, 0)
         await original_app(scope, receive, send)

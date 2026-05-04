@@ -23,10 +23,11 @@ service layer can raise.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import pytest
 from cryptography.fernet import Fernet
+from fastapi import FastAPI
 
 from houndarr.errors import ServiceError
 from houndarr.services.admin import factory_reset
@@ -78,7 +79,7 @@ class TestFactoryResetTypedSurface:
         app = _FakeApp()
 
         with pytest.raises(ServiceError) as exc_info:
-            await factory_reset(app=app, data_dir=str(tmp_data_dir_factory))
+            await factory_reset(app=cast("FastAPI", app), data_dir=str(tmp_data_dir_factory))
 
         assert exc_info.value.__cause__ is original
         assert "file deletion failed" in str(exc_info.value)
@@ -99,7 +100,7 @@ class TestFactoryResetTypedSurface:
         app = _FakeApp()
 
         with pytest.raises(ServiceError) as exc_info:
-            await factory_reset(app=app, data_dir=str(tmp_data_dir_factory))
+            await factory_reset(app=cast("FastAPI", app), data_dir=str(tmp_data_dir_factory))
 
         assert exc_info.value.__cause__ is original
         assert "re-init failed" in str(exc_info.value)
@@ -124,7 +125,7 @@ class TestFactoryResetTypedSurface:
         app = _FakeApp()
 
         with pytest.raises(ServiceError) as exc_info:
-            await factory_reset(app=app, data_dir=str(tmp_data_dir_factory))
+            await factory_reset(app=cast("FastAPI", app), data_dir=str(tmp_data_dir_factory))
 
         assert exc_info.value.__cause__ is original
 
@@ -144,7 +145,7 @@ class TestFactoryResetTypedSurface:
         app = _FakeApp()
 
         with pytest.raises(ServiceError) as exc_info:
-            await factory_reset(app=app, data_dir=str(tmp_data_dir_factory))
+            await factory_reset(app=cast("FastAPI", app), data_dir=str(tmp_data_dir_factory))
 
         assert exc_info.value is inner
 
@@ -167,6 +168,6 @@ class TestFactoryResetTypedSurface:
         monkeypatch.setattr("houndarr.services.admin._factory_reset_impl", _noop)
         app = _FakeApp()
 
-        result = await factory_reset(app=app, data_dir=str(tmp_data_dir_factory))
+        result = await factory_reset(app=cast("FastAPI", app), data_dir=str(tmp_data_dir_factory))
 
         assert result is None

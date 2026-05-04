@@ -26,7 +26,7 @@ _ENC_KEY = "gAAAAABlX_fake_fernet_value_long_enough_to_pass_validation=="
 
 
 @pytest_asyncio.fixture()
-async def seeded_instance(db: None) -> AsyncGenerator[None]:  # noqa: ARG001
+async def seeded_instance(db: None) -> AsyncGenerator[None]:
     """Seed one instance row so cooldowns FKs resolve."""
     async with get_db() as conn:
         await conn.execute(
@@ -65,7 +65,7 @@ async def _count_cooldowns(instance_id: int) -> int:
 
 
 @pytest.mark.asyncio()
-async def test_empty_sets_skip_delete(seeded_instance: None) -> None:  # noqa: ARG001
+async def test_empty_sets_skip_delete(seeded_instance: None) -> None:
     """An empty ReconcileSets is a hard skip: never wipe the table."""
     await _seed_cooldown(1, 100, "episode", "missing")
     await _seed_cooldown(1, 200, "episode", "cutoff")
@@ -75,7 +75,7 @@ async def test_empty_sets_skip_delete(seeded_instance: None) -> None:  # noqa: A
 
 
 @pytest.mark.asyncio()
-async def test_keeps_matching_rows(seeded_instance: None) -> None:  # noqa: ARG001
+async def test_keeps_matching_rows(seeded_instance: None) -> None:
     """Rows whose (item_type, item_id) is in the matching set stay."""
     await _seed_cooldown(1, 100, "episode", "missing")
     await _seed_cooldown(1, 200, "episode", "cutoff")
@@ -90,7 +90,7 @@ async def test_keeps_matching_rows(seeded_instance: None) -> None:  # noqa: ARG0
 
 
 @pytest.mark.asyncio()
-async def test_deletes_orphan_rows(seeded_instance: None) -> None:  # noqa: ARG001
+async def test_deletes_orphan_rows(seeded_instance: None) -> None:
     """Rows not in the matching set get deleted."""
     await _seed_cooldown(1, 100, "episode", "missing")  # orphan
     await _seed_cooldown(1, 101, "episode", "missing")  # keeper
@@ -106,7 +106,7 @@ async def test_deletes_orphan_rows(seeded_instance: None) -> None:  # noqa: ARG0
 
 
 @pytest.mark.asyncio()
-async def test_search_kind_scoped_to_pass(seeded_instance: None) -> None:  # noqa: ARG001
+async def test_search_kind_scoped_to_pass(seeded_instance: None) -> None:
     """A row tagged 'missing' matches the missing set even if the cutoff
     set contains the same (item_type, item_id)."""
     await _seed_cooldown(1, 100, "episode", "missing")
@@ -121,7 +121,7 @@ async def test_search_kind_scoped_to_pass(seeded_instance: None) -> None:  # noq
 
 
 @pytest.mark.asyncio()
-async def test_context_synth_id_kept(seeded_instance: None) -> None:  # noqa: ARG001
+async def test_context_synth_id_kept(seeded_instance: None) -> None:
     """Season-context synthetic negative id survives reconcile when the
     adapter unions it into the pass set."""
     synth = -1234  # -(series_id * 1000 + season_number) for (1, 234)
@@ -137,7 +137,7 @@ async def test_context_synth_id_kept(seeded_instance: None) -> None:  # noqa: AR
 
 
 @pytest.mark.asyncio()
-async def test_batched_delete_many_rows(seeded_instance: None) -> None:  # noqa: ARG001
+async def test_batched_delete_many_rows(seeded_instance: None) -> None:
     """Deleting more than the batch size (500) still succeeds."""
     # Seed 600 orphan rows.
     tasks = [_seed_cooldown(1, i, "episode", "missing") for i in range(1, 601)]

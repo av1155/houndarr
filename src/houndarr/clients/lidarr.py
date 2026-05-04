@@ -49,9 +49,9 @@ class LidarrClient(ArrClient):
     _WANTED_BASE_PATH: ClassVar[str] = "/api/v1/wanted"
     _WANTED_SORT_KEY: ClassVar[str] = "releaseDate"
     _WANTED_INCLUDE_PARAM: ClassVar[str | None] = "includeArtist"
-    _WANTED_ENVELOPE: ClassVar[type[PaginatedResponse[LidarrWantedAlbum]]] = PaginatedResponse[
-        LidarrWantedAlbum
-    ]
+    # See SonarrClient for the rationale on dropping the per-subclass
+    # ``ClassVar`` re-annotation.
+    _WANTED_ENVELOPE = PaginatedResponse[LidarrWantedAlbum]
 
     async def get_missing(
         self,

@@ -1,1 +1,0 @@
-../../.agents/skills/houndarr-database/SKILL.md

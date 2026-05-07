@@ -1,1 +1,0 @@
-../../.agents/skills/houndarr-architecture/SKILL.md

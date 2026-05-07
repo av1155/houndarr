@@ -1,1 +1,0 @@
-../../.agents/skills/verify-algorithms/SKILL.md

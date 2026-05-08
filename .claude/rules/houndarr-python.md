@@ -1,1 +1,0 @@
-../../.agents/skills/houndarr-python/SKILL.md

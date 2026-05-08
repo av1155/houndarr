@@ -1,1 +1,0 @@
-../../.agents/skills/houndarr-testing/SKILL.md

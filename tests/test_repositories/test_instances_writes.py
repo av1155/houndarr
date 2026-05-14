@@ -91,6 +91,7 @@ async def test_insert_instance_applies_schema_defaults(db: None, master_key: byt
     inst = await repo.get_instance(row_id, master_key=master_key)
     assert inst is not None
     assert inst.core.enabled is True
+    assert inst.missing.missing_enabled is True
     assert inst.missing.batch_size == 2
     assert inst.missing.sleep_interval_mins == 30
     assert inst.missing.hourly_cap == 4
@@ -216,12 +217,18 @@ async def test_update_instance_coerces_bool_fields(db: None, master_key: bytes) 
 
     await update_instance(
         created.core.id,
-        InstanceUpdate(enabled=False, cutoff_enabled=True, upgrade_enabled=True),
+        InstanceUpdate(
+            enabled=False,
+            missing_enabled=False,
+            cutoff_enabled=True,
+            upgrade_enabled=True,
+        ),
         master_key=master_key,
     )
     inst = await repo.get_instance(created.core.id, master_key=master_key)
     assert inst is not None
     assert inst.core.enabled is False
+    assert inst.missing.missing_enabled is False
     assert inst.cutoff.cutoff_enabled is True
     assert inst.upgrade.upgrade_enabled is True
 
@@ -428,6 +435,7 @@ def test_instance_update_has_every_updatable_column() -> None:
         "url",
         "api_key",
         "enabled",
+        "missing_enabled",
         "batch_size",
         "sleep_interval_mins",
         "hourly_cap",

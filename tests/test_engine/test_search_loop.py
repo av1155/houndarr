@@ -118,6 +118,7 @@ def _make_instance(
     instance_id: int = 1,
     itype: InstanceType = InstanceType.sonarr,
     url: str = SONARR_URL,
+    missing_enabled: bool = True,
     batch_size: int = 10,
     hourly_cap: int = 20,
     cooldown_days: int = 7,
@@ -128,6 +129,8 @@ def _make_instance(
     lidarr_search_mode: LidarrSearchMode = LidarrSearchMode.album,
     readarr_search_mode: ReadarrSearchMode = ReadarrSearchMode.book,
     whisparr_v2_search_mode: WhisparrV2SearchMode = WhisparrV2SearchMode.episode,
+    cutoff_enabled: bool = False,
+    upgrade_enabled: bool = False,
     search_order: SearchOrder = SearchOrder.chronological,
 ) -> Instance:
     return Instance(
@@ -140,6 +143,7 @@ def _make_instance(
             enabled=enabled,
         ),
         missing=MissingPolicy(
+            missing_enabled=missing_enabled,
             batch_size=batch_size,
             sleep_interval_mins=15,
             hourly_cap=hourly_cap,
@@ -152,12 +156,12 @@ def _make_instance(
             whisparr_v2_search_mode=whisparr_v2_search_mode,
         ),
         cutoff=CutoffPolicy(
-            cutoff_enabled=False,
+            cutoff_enabled=cutoff_enabled,
             cutoff_batch_size=5,
             cutoff_cooldown_days=21,
             cutoff_hourly_cap=1,
         ),
-        upgrade=UpgradePolicy(),
+        upgrade=UpgradePolicy(upgrade_enabled=upgrade_enabled),
         schedule=SchedulePolicy(search_order=search_order),
         snapshot=RuntimeSnapshot(),
         timestamps=InstanceTimestamps(
@@ -2838,3 +2842,91 @@ async def test_missing_random_falls_back_when_probe_fails(seeded_instances: None
     assert count == 1
     # Probe was attempted and the fetch still happened (second call).
     assert missing_route.call_count >= 2
+
+
+# ---------------------------------------------------------------------------
+# Missing pass master switch (missing_enabled, issue #619)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_missing_pass_skipped_when_missing_disabled(seeded_instances: None) -> None:
+    """When ``missing_enabled=False`` the ``/wanted/missing`` endpoint must
+    never be called and no ``searched`` rows are written for the missing
+    pass.  Reproducer for issue #619: previously the missing pass had no
+    master switch and the only way to disable it was to zero
+    ``batch_size``, which discarded the user's preserved rate setting.
+    """
+    missing_route = respx.get(f"{SONARR_URL}/api/v3/wanted/missing").mock(
+        return_value=httpx.Response(200, json=_MISSING_SONARR)
+    )
+    search_route = respx.post(f"{SONARR_URL}/api/v3/command").mock(
+        return_value=httpx.Response(201, json=_COMMAND_RESP)
+    )
+
+    instance = _make_instance(missing_enabled=False)
+    count = await run_instance_search(instance, MASTER_KEY)
+
+    assert count == 0
+    assert not missing_route.called
+    assert not search_route.called
+    rows = await _get_log_rows()
+    assert [r for r in rows if r["action"] == "searched"] == []
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_missing_pass_runs_when_missing_enabled_default(
+    seeded_instances: None,
+) -> None:
+    """``missing_enabled`` defaults to ``True`` so the missing pass continues
+    to run for every existing instance after the v18 migration.  This is the
+    happy-path lock that pins the backwards-compatible default in the
+    dataclass + database schema.
+    """
+    respx.get(f"{SONARR_URL}/api/v3/wanted/missing").mock(
+        return_value=httpx.Response(200, json=_MISSING_SONARR)
+    )
+    respx.post(f"{SONARR_URL}/api/v3/command").mock(
+        return_value=httpx.Response(201, json=_COMMAND_RESP)
+    )
+
+    # No explicit ``missing_enabled=`` argument: relies on the default.
+    instance = _make_instance()
+    count = await run_instance_search(instance, MASTER_KEY)
+
+    assert count == 1
+    rows = await _get_log_rows()
+    assert any(r["action"] == "searched" and r["search_kind"] == "missing" for r in rows)
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_missing_disabled_does_not_block_cutoff_pass(
+    seeded_instances: None,
+) -> None:
+    """The master switch is search-dispatch-only and pass-local: turning the
+    missing pass off must not affect the cutoff pass.  This is the
+    "upgrade-only" use case described in issue #619 (operator keeps cutoff
+    on while pausing missing).
+    """
+    missing_route = respx.get(f"{SONARR_URL}/api/v3/wanted/missing").mock(
+        return_value=httpx.Response(200, json=_MISSING_SONARR)
+    )
+    cutoff_route = respx.get(f"{SONARR_URL}/api/v3/wanted/cutoff").mock(
+        return_value=httpx.Response(200, json=_CUTOFF_SONARR)
+    )
+    respx.post(f"{SONARR_URL}/api/v3/command").mock(
+        return_value=httpx.Response(201, json=_COMMAND_RESP)
+    )
+
+    instance = _make_instance(missing_enabled=False, cutoff_enabled=True)
+    count = await run_instance_search(instance, MASTER_KEY)
+
+    assert count == 1
+    assert not missing_route.called
+    assert cutoff_route.called
+    rows = await _get_log_rows()
+    cutoff_rows = [r for r in rows if r["action"] == "searched" and r["search_kind"] == "cutoff"]
+    assert len(cutoff_rows) == 1

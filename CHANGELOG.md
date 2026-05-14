@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Instance settings form gains an `Enable missing search` checkbox per instance; turning it off pauses the missing-search pass while preserving the rate settings, cooldowns, and dashboard counters. Schema v18 migrates existing instances with the toggle enabled. (#619)
+
 ### Changed
 
 - Python floor raised from 3.12 to 3.13. From-source installs and the Docker image now require a 3.13 interpreter; Python 3.13 has upstream support through October 2029. (#596)

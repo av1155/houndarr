@@ -235,6 +235,52 @@ def test_create_instance_defaults_to_enabled(app: TestClient) -> None:
     assert b"Search enabled" in resp.content
 
 
+def test_create_instance_missing_enabled_on_checkbox_round_trips(app: TestClient) -> None:
+    """The new missing_enabled checkbox (issue #619) round-trips through
+    the route handler when checked: the form sends ``missing_enabled=on``
+    and the resulting edit form re-renders the checkbox as ``checked``.
+    """
+    _login(app)
+    form = {**_VALID_FORM, "missing_enabled": "on"}
+    resp = app.post("/settings/instances", data=form, headers=csrf_headers(app))
+    assert resp.status_code == 200
+
+    edit_resp = app.get("/settings/instances/1/edit")
+    assert edit_resp.status_code == 200
+    body = edit_resp.content
+    assert b'name="missing_enabled"' in body
+    # The macro emits the bare ``checked`` attribute (whitespace-delimited)
+    # just after ``value="on"``; the leading space disambiguates it from
+    # the ``check`` substring in ``type="checkbox"`` that lives in the
+    # same tag.
+    name_idx = body.index(b'name="missing_enabled"')
+    input_window = body[name_idx : name_idx + 300]
+    assert b" checked" in input_window
+
+
+def test_create_instance_missing_enabled_omitted_round_trips_unchecked(
+    app: TestClient,
+) -> None:
+    """When the checkbox is unchecked the browser omits the field; the
+    route handler coerces an absent value to ``missing_enabled=False`` so
+    operators can disable the missing pass without zeroing their batch
+    size (the workaround issue #619 was designed to retire).
+    """
+    _login(app)
+    # _VALID_FORM intentionally omits missing_enabled so this asserts the
+    # "field absent -> False" branch of the == "on" coercion.
+    resp = app.post("/settings/instances", data=_VALID_FORM, headers=csrf_headers(app))
+    assert resp.status_code == 200
+
+    edit_resp = app.get("/settings/instances/1/edit")
+    assert edit_resp.status_code == 200
+    body = edit_resp.content
+    assert b'name="missing_enabled"' in body
+    name_idx = body.index(b'name="missing_enabled"')
+    input_window = body[name_idx : name_idx + 300]
+    assert b" checked" not in input_window
+
+
 def test_create_instance_invalid_type_returns_422(app: TestClient) -> None:
     _login(app)
     form = {**_VALID_FORM, "type": "plex"}

@@ -145,6 +145,7 @@ def _row_to_instance(row: aiosqlite.Row, master_key: bytes) -> Instance:
             enabled=bool(row["enabled"]),
         ),
         missing=MissingPolicy(
+            missing_enabled=bool(row["missing_enabled"]),
             batch_size=row["batch_size"],
             sleep_interval_mins=row["sleep_interval_mins"],
             hourly_cap=row["hourly_cap"],
@@ -250,6 +251,7 @@ class InstanceInsert:
     url: str
     api_key: str
     enabled: bool = True
+    missing_enabled: bool = True
     batch_size: int = DEFAULT_BATCH_SIZE
     sleep_interval_mins: int = DEFAULT_SLEEP_INTERVAL_MINUTES
     hourly_cap: int = DEFAULT_HOURLY_CAP
@@ -307,6 +309,7 @@ class InstanceUpdate:
     url: str | None = None
     api_key: str | None = None
     enabled: bool | None = None
+    missing_enabled: bool | None = None
     batch_size: int | None = None
     sleep_interval_mins: int | None = None
     hourly_cap: int | None = None
@@ -363,6 +366,7 @@ _ENUM_UPDATE_FIELDS: frozenset[str] = frozenset(
 _BOOL_UPDATE_FIELDS: frozenset[str] = frozenset(
     {
         "enabled",
+        "missing_enabled",
         "cutoff_enabled",
         "upgrade_enabled",
     }
@@ -417,7 +421,7 @@ async def insert_instance(payload: InstanceInsert, *, master_key: bytes) -> int:
             """
             INSERT INTO instances (
                 name, type, url, encrypted_api_key,
-                enabled, batch_size, sleep_interval_mins,
+                enabled, missing_enabled, batch_size, sleep_interval_mins,
                 hourly_cap, cooldown_days, post_release_grace_hrs, queue_limit,
                 cutoff_enabled, cutoff_batch_size, cutoff_cooldown_days, cutoff_hourly_cap,
                 sonarr_search_mode, lidarr_search_mode, readarr_search_mode,
@@ -429,7 +433,7 @@ async def insert_instance(payload: InstanceInsert, *, master_key: bytes) -> int:
                 upgrade_series_window_size,
                 allowed_time_window, search_order
             ) VALUES (
-                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
                 ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
             )
             """,
@@ -439,6 +443,7 @@ async def insert_instance(payload: InstanceInsert, *, master_key: bytes) -> int:
                 payload.url,
                 encrypted,
                 int(payload.enabled),
+                int(payload.missing_enabled),
                 payload.batch_size,
                 payload.sleep_interval_mins,
                 payload.hourly_cap,

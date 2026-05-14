@@ -95,6 +95,11 @@
   <p>Episode (default) fires one command per missing episode. Season-context groups by season with a single SeasonSearch: fewer calls but may pull noisier results.</p>
   <p class="tip__hint">Cooldown is tracked at the season level in season-context mode.</p>
 </template>
+<template id="tip-missing_enabled">
+  <p class="tip__eyebrow">Missing search</p>
+  <p>Master switch for the missing-item search pass on this instance. Enabled by default; turn off to keep the instance configured (cooldowns, snapshot counts, and the *arr connection still work) while pausing every search this pass would dispatch.</p>
+  <p class="tip__hint">Useful when you are only adding a handful of episodes at a time and don't want the auto-search to compete for indexer budget.</p>
+</template>
 <template id="tip-cutoff_enabled">
   <p class="tip__eyebrow">Cutoff search</p>
   <p>Optional second pass that searches items below your quality cutoff. Keep it off until the missing backlog is stable; enabling both passes at once competes for indexer budget.</p>
@@ -238,9 +243,25 @@
 
     <!-- Search Policy section -->
     <section class="rounded-container border border-border-subtle bg-surface-base/50 p-4 sm:p-5 space-y-4">
-      <div>
-        <h4 class="text-sm font-semibold text-slate-200">Search Policy</h4>
-        <p class="text-xs text-slate-500 mt-0.5">Cadence and guardrails for missing-item searches.</p>
+      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div>
+          <h4 class="text-sm font-semibold text-slate-200">Search Policy</h4>
+          <p class="text-xs text-slate-500 mt-0.5">Cadence and guardrails for missing-item searches.</p>
+        </div>
+        {# Mirrors the cutoff / upgrade section toggles: header gets a
+           master switch so operators can pause the missing pass without
+           zeroing their rate settings. sm:flex-row-reverse keeps the
+           help icon to the LEFT of the toggle on desktop and to the
+           right (icon-after-label) below the sm breakpoint. #}
+        <div class="inline-flex items-center gap-1.5 sm:flex-row-reverse">
+          {{ forms.checkbox(
+              name="missing_enabled",
+              label="Enable missing search",
+              checked=instance.missing.missing_enabled if is_edit else defaults.missing.missing_enabled,
+              data_default_checked=1 if defaults.missing.missing_enabled else 0,
+          ) }}
+          {{ tip_icon("missing_enabled", "Missing search") }}
+        </div>
       </div>
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>

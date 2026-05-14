@@ -559,3 +559,45 @@ class TestFetchInstanceSnapshot:
         assert snap.unreleased_count == 0
         client.get_wanted_total.assert_any_await("missing")
         client.get_wanted_total.assert_any_await("cutoff")
+
+
+class TestFetchReconcileSetsMissingDisabled:
+    """Verify ``missing_enabled=False`` does NOT short-circuit the reconcile
+    missing fetch.
+
+    The master switch added in issue #619 is search-dispatch-only.  If the
+    flag also gated the reconcile path, an operator who turned the missing
+    pass off would orphan every existing missing cooldown on the next
+    supervisor snapshot refresh (the reconcile loop would see an empty
+    ``missing`` set and prune every row).  This test pins the invariant:
+    ``fetch_reconcile_sets`` always walks ``/wanted/missing`` regardless of
+    the flag.
+    """
+
+    @pytest.mark.asyncio()
+    async def test_reconcile_walks_missing_even_when_master_switch_off(self):
+        import dataclasses
+
+        missing_item = MissingEpisode(
+            episode_id=101,
+            series_id=55,
+            series_title="My Show",
+            episode_title="Pilot",
+            season=1,
+            episode=1,
+            air_date_utc=None,
+        )
+        client = AsyncMock(spec=SonarrClient)
+        client.get_missing.return_value = [missing_item]
+        client.get_cutoff_unmet.return_value = []
+
+        base = _make_instance()
+        instance = dataclasses.replace(
+            base,
+            missing=dataclasses.replace(base.missing, missing_enabled=False),
+        )
+
+        sets = await fetch_reconcile_sets(client, instance)
+
+        assert sets.missing == frozenset({("episode", 101)})
+        client.get_missing.assert_awaited()

@@ -299,6 +299,7 @@ _PRE_REFACTOR_FLAT_FIELDS = {
     "api_key",
     "enabled",
     # MissingPolicy
+    "missing_enabled",
     "batch_size",
     "sleep_interval_mins",
     "hourly_cap",
@@ -356,4 +357,4 @@ def test_sub_struct_field_union_covers_pre_refactor_surface() -> None:
     for cls in substructs:
         union.update(f.name for f in dataclasses.fields(cls))
     assert union == _PRE_REFACTOR_FLAT_FIELDS
-    assert len(union) == 40
+    assert len(union) == 41

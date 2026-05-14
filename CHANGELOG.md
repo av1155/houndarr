@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Python floor raised from 3.12 to 3.13. From-source installs and the Docker image now require a 3.13 interpreter; Python 3.13 has upstream support through October 2029. (#596)
 
+### Fixed
+
+- Lidarr and Readarr upgrade pass no longer repeats `upgrade pool fetch failed` log rows when the album/book library endpoint is transiently unavailable. (#620)
+
 ---
 
 ## [1.11.0] - 2026-04-29

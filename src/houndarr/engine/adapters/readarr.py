@@ -246,7 +246,14 @@ async def fetch_upgrade_pool(
             _UPGRADE_CUTOFF_EXCLUSION_HARD_CAP * 250,
         )
 
-    library = await client.get_books()
+    try:
+        library = await client.get_books()
+    except (httpx.HTTPError, httpx.InvalidURL, ValidationError):
+        logger.warning(
+            "[%s] failed to fetch book library for upgrade pool; skipping upgrade pass this cycle",
+            instance.core.name,
+        )
+        return []
     return [b for b in library if b.monitored and b.has_file and b.book_id not in exclusion]
 
 

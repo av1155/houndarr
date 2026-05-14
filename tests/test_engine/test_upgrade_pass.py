@@ -446,11 +446,20 @@ async def test_upgrade_empty_pool_returns_zero(
     "houndarr.engine.search_loop.update_instance",
     new_callable=AsyncMock,
 )
-async def test_upgrade_pool_fetch_error_returns_zero(
+async def test_upgrade_pool_fetch_transient_error_no_error_row(
     mock_update: AsyncMock,
     seeded_instances: None,
 ) -> None:
-    """Exception from fetch: logged, returns 0."""
+    """Transient httpx failure on the library fetch: cycle returns 0 and no
+    ``error`` row is written.  The deferred-empty INFO row fires through
+    the existing 6-hour throttle so the operator-facing log feed stays
+    calm.  See issue #620: a recurring upgrade-pass ERROR row was
+    polluting the dashboard on every cycle when Lidarr/Readarr's
+    library endpoint was briefly unavailable.
+    """
+    from houndarr.services.cooldown import _reset_info_log_cache
+
+    _reset_info_log_cache()
     _mock_radarr_empty_missing()
     respx.get(f"{RADARR_URL}/api/v3/movie").mock(
         side_effect=httpx.ConnectError("timeout"),
@@ -462,7 +471,83 @@ async def test_upgrade_pool_fetch_error_returns_zero(
     assert count == 0
     rows = await get_log_rows()
     error_rows = [r for r in rows if r["action"] == "error" and r["search_kind"] == "upgrade"]
+    info_rows = [r for r in rows if r["action"] == "info" and r["search_kind"] == "upgrade"]
+    assert error_rows == []
+    assert len(info_rows) == 1
+    assert "nothing to upgrade right now" in (info_rows[0].get("message") or "")
+
+
+@pytest.mark.asyncio()
+@respx.mock
+@patch(
+    "houndarr.engine.search_loop.update_instance",
+    new_callable=AsyncMock,
+)
+async def test_upgrade_pool_fetch_nontransient_error_writes_error_row(
+    mock_update: AsyncMock,
+    seeded_instances: None,
+) -> None:
+    """Non-transient exception on the library fetch (e.g. a programming
+    bug) still writes an ``error`` row so it surfaces in the log feed.
+    The transient-cause routing in ``_run_upgrade_pass`` checks the
+    wrapped exception's ``__cause__``; only httpx / pydantic
+    ValidationError causes go quiet."""
+    _mock_radarr_empty_missing()
+    respx.get(f"{RADARR_URL}/api/v3/movie").mock(
+        side_effect=RuntimeError("bug"),
+    )
+
+    inst = _radarr_instance()
+    count = await run_instance_search(inst, MASTER_KEY)
+
+    assert count == 0
+    rows = await get_log_rows()
+    error_rows = [r for r in rows if r["action"] == "error" and r["search_kind"] == "upgrade"]
     assert len(error_rows) == 1
+
+
+@pytest.mark.asyncio()
+@respx.mock
+@patch(
+    "houndarr.engine.search_loop.update_instance",
+    new_callable=AsyncMock,
+)
+async def test_upgrade_pool_fetch_transient_error_no_error_row_lidarr(
+    mock_update: AsyncMock,
+    seeded_instances: None,
+) -> None:
+    """Direct regression test for the Reddit-reported scenario in #620:
+    a transient ``GET /api/v1/album`` failure on Lidarr no longer
+    writes a recurring ``error`` row to the in-app log feed.  The
+    dispatcher lives in the shared ``_run_upgrade_pass``, so the
+    Radarr test above proves correctness; this case defends against
+    future adapter-specific drift on the originally reported path.
+    """
+    from houndarr.services.cooldown import _reset_info_log_cache
+
+    from .conftest import LIDARR_URL
+
+    _reset_info_log_cache()
+    respx.get(f"{LIDARR_URL}/api/v1/wanted/missing").mock(
+        return_value=httpx.Response(200, json=_EMPTY_PAGE),
+    )
+    respx.get(f"{LIDARR_URL}/api/v1/wanted/cutoff").mock(
+        return_value=httpx.Response(200, json=_EMPTY_PAGE),
+    )
+    respx.get(f"{LIDARR_URL}/api/v1/album").mock(
+        side_effect=httpx.ConnectError("timeout"),
+    )
+
+    inst = _lidarr_instance()
+    count = await run_instance_search(inst, MASTER_KEY)
+
+    assert count == 0
+    rows = await get_log_rows()
+    error_rows = [r for r in rows if r["action"] == "error" and r["search_kind"] == "upgrade"]
+    info_rows = [r for r in rows if r["action"] == "info" and r["search_kind"] == "upgrade"]
+    assert error_rows == []
+    assert len(info_rows) == 1
+    assert "nothing to upgrade right now" in (info_rows[0].get("message") or "")
 
 
 # ---------------------------------------------------------------------------

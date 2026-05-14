@@ -1222,43 +1222,53 @@ async def _run_instance_search_impl(
             )
 
     # --- Missing pass ---
-    missing_target = max(0, instance.missing.batch_size)
-    if missing_target > 0:
-        client = adapter.make_client(instance)
-        async with client:
-            missing_searched, next_missing_page = await _run_search_pass(
-                instance,
-                adapter,
-                SearchPassConfig(
-                    adapt_fn=adapter.adapt_missing,
-                    dispatch_fn=adapter.dispatch_search,
-                    fetch_fn=client.get_missing,
-                    search_kind="missing",
-                    batch_size=instance.missing.batch_size,
-                    hourly_cap=instance.missing.hourly_cap,
-                    cooldown_days=instance.missing.cooldown_days,
-                    page_size=_missing_page_size(missing_target),
-                    scan_budget=_missing_scan_budget(missing_target),
-                    cycle_id=cycle_id_value,
-                    cycle_trigger=cycle_trigger,
-                    start_page=instance.schedule.missing_page_offset,
-                    total_fn=lambda: client.get_wanted_total("missing"),
-                ),
-            )
-        searched += missing_searched
-        # In random mode the "next page" returned by the pass is derived from
-        # a random pick, not a rotation offset, so persisting it would write
-        # a misleading value to the column and churn the row every cycle.
-        # Only advance the offset in chronological mode.
-        if instance.schedule.search_order == SearchOrder.chronological:
-            try:
-                await _persist_offset_with_typed_wrap(
-                    instance.core.id,
-                    master_key=master_key,
-                    missing_page_offset=next_missing_page,
+    # The outer gate is the per-instance master switch (issue #619).  It
+    # mirrors ``instance.cutoff.cutoff_enabled`` / ``upgrade.upgrade_enabled``
+    # and is search-dispatch-only: snapshot fetches and cooldown
+    # reconciliation in the supervisor path still walk the missing
+    # wanted list so dashboard counts stay accurate and missing
+    # cooldowns are still pruned when items leave the *arr's wanted
+    # state.  The inner ``missing_target > 0`` check is the existing
+    # implicit gate; both compose so either path skips the pass.
+    if instance.missing.missing_enabled:
+        missing_target = max(0, instance.missing.batch_size)
+        if missing_target > 0:
+            client = adapter.make_client(instance)
+            async with client:
+                missing_searched, next_missing_page = await _run_search_pass(
+                    instance,
+                    adapter,
+                    SearchPassConfig(
+                        adapt_fn=adapter.adapt_missing,
+                        dispatch_fn=adapter.dispatch_search,
+                        fetch_fn=client.get_missing,
+                        search_kind="missing",
+                        batch_size=instance.missing.batch_size,
+                        hourly_cap=instance.missing.hourly_cap,
+                        cooldown_days=instance.missing.cooldown_days,
+                        page_size=_missing_page_size(missing_target),
+                        scan_budget=_missing_scan_budget(missing_target),
+                        cycle_id=cycle_id_value,
+                        cycle_trigger=cycle_trigger,
+                        start_page=instance.schedule.missing_page_offset,
+                        total_fn=lambda: client.get_wanted_total("missing"),
+                    ),
                 )
-            except EngineOffsetPersistError:
-                logger.warning("[%s] failed to persist missing_page_offset", instance.core.name)
+            searched += missing_searched
+            # In random mode the "next page" returned by the pass is
+            # derived from a random pick, not a rotation offset, so
+            # persisting it would write a misleading value to the column
+            # and churn the row every cycle.  Only advance the offset in
+            # chronological mode.
+            if instance.schedule.search_order == SearchOrder.chronological:
+                try:
+                    await _persist_offset_with_typed_wrap(
+                        instance.core.id,
+                        master_key=master_key,
+                        missing_page_offset=next_missing_page,
+                    )
+                except EngineOffsetPersistError:
+                    logger.warning("[%s] failed to persist missing_page_offset", instance.core.name)
 
     logger.info("[%s] cycle complete: %d searched", instance.core.name, searched)
 

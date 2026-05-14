@@ -183,7 +183,8 @@ EMPTY_METRICS: dict[str, Any] = {
 # Fernet decrypt round trip never runs on this hot path; the status
 # endpoint never needs plaintext credentials.
 _STATUS_INSTANCE_COLS = (
-    "id, name, type, enabled, batch_size, sleep_interval_mins, hourly_cap,"
+    "id, name, type, enabled, missing_enabled,"
+    " batch_size, sleep_interval_mins, hourly_cap,"
     " cooldown_days, cutoff_enabled, cutoff_batch_size,"
     " cutoff_cooldown_days, cutoff_hourly_cap,"
     " post_release_grace_hrs, queue_limit,"
@@ -228,6 +229,7 @@ def _build_instance_status_row(
         "name": inst["name"],
         "type": inst["type"],
         "enabled": bool(inst["enabled"]),
+        "missing_enabled": bool(inst["missing_enabled"]),
         "last_search_at": window_metrics["last_search_at"],
         "last_cycle_end": last_cycle_end,
         "searched_24h": window_metrics["searched_24h"],

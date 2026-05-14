@@ -166,6 +166,12 @@ def test_status_returns_correct_shape(app: TestClient) -> None:
     assert item["sleep_interval_mins"] == 30
     assert item["hourly_cap"] == 4
     assert item["cooldown_days"] == 14
+    # _VALID_FORM omits the new missing_enabled checkbox, so the route
+    # coerces the absent field to False (matching the cutoff_enabled
+    # pattern below).  A real form submission with the box checked
+    # would persist True; the dashboard chip flips between the two
+    # via inst.missing_enabled.
+    assert item["missing_enabled"] is False
     assert item["cutoff_enabled"] is False
     assert item["cutoff_batch_size"] == 1
     assert item["post_release_grace_hrs"] == 6

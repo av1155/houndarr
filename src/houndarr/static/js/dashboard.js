@@ -517,8 +517,13 @@ function initDashboardPage() {
   </div>
 </div>`;
       }
+      // ``missing_enabled !== false`` defaults to "on" when the field is
+      // absent (e.g. a stale cached response from a pre-v18 server) so
+      // the dashboard never under-reports the effective cap before the
+      // first post-upgrade poll lands.
+      const missingOn = inst.missing_enabled !== false;
       const effectiveCap =
-        hourlyCap
+        (missingOn ? hourlyCap : 0)
         + (inst.cutoff_enabled ? toNumber(inst.cutoff_hourly_cap) : 0)
         + (inst.upgrade_enabled ? toNumber(inst.upgrade_hourly_cap) : 0);
       const used = Math.max(0, toNumber(inst.searches_last_hour));
@@ -529,7 +534,8 @@ function initDashboardPage() {
       // label keeps the detailed breakdown for screen readers.
       const tip = `Searches dispatched this hour against this instance's combined hourly cap.`;
       const aria = `${used} of ${effectiveCap} searches used this hour. `
-        + `Missing cap ${hourlyCap}, cutoff cap ${inst.cutoff_enabled ? toNumber(inst.cutoff_hourly_cap) : 'off'}, `
+        + `Missing cap ${missingOn ? hourlyCap : 'off'}, `
+        + `cutoff cap ${inst.cutoff_enabled ? toNumber(inst.cutoff_hourly_cap) : 'off'}, `
         + `upgrade cap ${inst.upgrade_enabled ? toNumber(inst.upgrade_hourly_cap) : 'off'}.`;
       return `
 <div class="dash-card__budget" data-level="${level}"${atCap ? ' data-at-cap="true"' : ''} data-tip="${escapeHtml(tip)}">
@@ -625,6 +631,19 @@ function initDashboardPage() {
           label: 'Queue',
           value: `≤${queue}`,
           tip:   `Queue backpressure: skip cycle when the arr download queue has ${queue}+ items`,
+        });
+      }
+      // ``missing_enabled !== false`` keeps the chip "on" when the field
+      // is absent from a stale envelope, so the dashboard never falsely
+      // shows the missing pass as paused before the first post-upgrade
+      // poll lands.
+      const missingOn = inst.missing_enabled !== false;
+      if (!missingOn) {
+        chips.push({
+          label: 'Missing',
+          value: 'off',
+          state: 'off',
+          tip:   'Missing-search pass paused for this instance. Cutoff and upgrade passes are unaffected.',
         });
       }
       if (inst.upgrade_enabled) {

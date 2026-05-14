@@ -147,6 +147,7 @@ def blank_instance() -> Instance:
             enabled=True,
         ),
         missing=MissingPolicy(
+            missing_enabled=True,
             batch_size=DEFAULT_BATCH_SIZE,
             sleep_interval_mins=DEFAULT_SLEEP_INTERVAL_MINUTES,
             hourly_cap=DEFAULT_HOURLY_CAP,

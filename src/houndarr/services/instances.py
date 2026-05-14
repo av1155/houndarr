@@ -110,19 +110,26 @@ class InstanceCore:
 class MissingPolicy:
     """Tunables controlling one missing-search pass on an instance.
 
-    Captures the rate shape (``batch_size`` / ``sleep_interval_mins`` /
-    ``hourly_cap``), the per-item cooldown (``cooldown_days``), the
-    post-release grace window (``post_release_grace_hrs``), the queue
-    backpressure gate (``queue_limit``; ``0`` disables the check), and
-    the per-app search-strategy mode for the four *arr variants that
-    expose one (Sonarr, Lidarr, Readarr, Whisparr v2).  Radarr and
-    Whisparr v3 have no strategy knob and so never read any of the
-    mode fields.
+    ``missing_enabled`` is the master switch (mirrors
+    :class:`CutoffPolicy.cutoff_enabled` and
+    :class:`UpgradePolicy.upgrade_enabled`); defaults to ``True`` so
+    every existing instance keeps its current behaviour and only
+    operators who deliberately uncheck it in the UI opt out.
+
+    The rest of the struct captures the rate shape (``batch_size`` /
+    ``sleep_interval_mins`` / ``hourly_cap``), the per-item cooldown
+    (``cooldown_days``), the post-release grace window
+    (``post_release_grace_hrs``), the queue backpressure gate
+    (``queue_limit``; ``0`` disables the check), and the per-app
+    search-strategy mode for the four *arr variants that expose one
+    (Sonarr, Lidarr, Readarr, Whisparr v2).  Radarr and Whisparr v3
+    have no strategy knob and so never read any of the mode fields.
 
     Defaults match :mod:`houndarr.config`; the field set matches the
     ``instances`` table columns written on fresh ``INSERT``.
     """
 
+    missing_enabled: bool = True
     batch_size: int = DEFAULT_BATCH_SIZE
     sleep_interval_mins: int = DEFAULT_SLEEP_INTERVAL_MINUTES
     hourly_cap: int = DEFAULT_HOURLY_CAP
@@ -304,6 +311,7 @@ async def create_instance(
     url: str,
     api_key: str,
     enabled: bool = True,
+    missing_enabled: bool = True,
     batch_size: int = DEFAULT_BATCH_SIZE,
     sleep_interval_mins: int = DEFAULT_SLEEP_INTERVAL_MINUTES,
     hourly_cap: int = DEFAULT_HOURLY_CAP,
@@ -349,6 +357,10 @@ async def create_instance(
         url: Base URL of the *arr instance (e.g. ``http://sonarr:8989``).
         api_key: Plaintext API key; will be encrypted before being written.
         enabled: Whether the search engine should process this instance.
+        missing_enabled: Whether the missing-search pass dispatches on
+            this instance.  Defaults to ``True`` so existing call sites
+            and database rows keep their current behaviour; the new
+            settings-form checkbox surfaces this as an opt-out.
         batch_size: Number of missing items to search per run.
         sleep_interval_mins: Minutes to sleep between search cycles.
         hourly_cap: Maximum searches allowed per hour.
@@ -393,6 +405,7 @@ async def create_instance(
         url=url,
         api_key=api_key,
         enabled=enabled,
+        missing_enabled=missing_enabled,
         batch_size=batch_size,
         sleep_interval_mins=sleep_interval_mins,
         hourly_cap=hourly_cap,

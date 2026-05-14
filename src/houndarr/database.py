@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Schema version: bump when adding new migrations
 # ---------------------------------------------------------------------------
-SCHEMA_VERSION = 17
+SCHEMA_VERSION = 18
 
 # ---------------------------------------------------------------------------
 # DDL
@@ -56,6 +56,7 @@ CREATE TABLE IF NOT EXISTS instances (
     type                 TEXT    NOT NULL CHECK(type IN ({_INSTANCE_TYPES})),
     url                  TEXT    NOT NULL,
     encrypted_api_key    TEXT    NOT NULL DEFAULT '',
+    missing_enabled      INTEGER NOT NULL DEFAULT 1,
     batch_size           INTEGER NOT NULL DEFAULT 2,
     sleep_interval_mins  INTEGER NOT NULL DEFAULT 30,
     hourly_cap           INTEGER NOT NULL DEFAULT 4,
@@ -335,6 +336,7 @@ async def init_db_migrations() -> None:
         await _migrate_to_v15(db)
         await _migrate_to_v16(db)
         await _migrate_to_v17(db)
+        await _migrate_to_v18(db)
         await _ensure_v3_indexes(db)
         # PRAGMA optimize keeps the planner's sqlite_stat1 entries fresh as
         # search_log grows.  Cheap on healthy DBs, prevents silent index
@@ -390,6 +392,8 @@ async def _run_migrations(db: aiosqlite.Connection, from_version: int) -> None:
         await _migrate_to_v16(db)
     if from_version < 17:
         await _migrate_to_v17(db)
+    if from_version < 18:
+        await _migrate_to_v18(db)
 
     logger.info("Migrated database from schema version %d to %d", from_version, SCHEMA_VERSION)
     await db.execute(
@@ -1388,6 +1392,22 @@ async def _migrate_to_v17(db: aiosqlite.Connection) -> None:
     if not await _column_exists(db, "instances", "upgrade_series_window_size"):
         await db.execute(
             "ALTER TABLE instances ADD COLUMN upgrade_series_window_size INTEGER NOT NULL DEFAULT 5"
+        )
+
+
+async def _migrate_to_v18(db: aiosqlite.Connection) -> None:
+    """Add ``missing_enabled`` so the missing-search pass becomes opt-out.
+
+    Mirrors the existing ``cutoff_enabled`` and ``upgrade_enabled``
+    master switches on the cutoff and upgrade passes.  The column
+    defaults to ``1`` so every existing instance keeps its current
+    behaviour after migration; only operators who uncheck the new
+    "Enable missing search" toggle in the settings form opt out.
+    Closes #619.
+    """
+    if not await _column_exists(db, "instances", "missing_enabled"):
+        await db.execute(
+            "ALTER TABLE instances ADD COLUMN missing_enabled INTEGER NOT NULL DEFAULT 1"
         )
 
 

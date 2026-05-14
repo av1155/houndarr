@@ -157,6 +157,7 @@ def make_instance(
     instance_id: int = 1,
     itype: InstanceType = InstanceType.sonarr,
     url: str | None = None,
+    missing_enabled: bool = True,
     batch_size: int = 10,
     hourly_cap: int = 20,
     cooldown_days: int = 7,
@@ -198,6 +199,7 @@ def make_instance(
             enabled=enabled,
         ),
         missing=MissingPolicy(
+            missing_enabled=missing_enabled,
             batch_size=batch_size,
             sleep_interval_mins=15,
             hourly_cap=hourly_cap,

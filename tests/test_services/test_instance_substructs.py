@@ -102,6 +102,7 @@ FLAT_TO_SUB: dict[str, str] = {
     "api_key": "core",
     "enabled": "core",
     # MissingPolicy
+    "missing_enabled": "missing",
     "batch_size": "missing",
     "sleep_interval_mins": "missing",
     "hourly_cap": "missing",
@@ -244,8 +245,14 @@ def test_instance_core_defaults() -> None:
 
 
 def test_missing_policy_fields_in_declaration_order() -> None:
-    """MissingPolicy exposes the ten missing-pass tunables in order."""
+    """MissingPolicy exposes the eleven missing-pass tunables in order.
+
+    ``missing_enabled`` is declared first so the master switch reads as
+    the gate for everything below it (mirrors :class:`CutoffPolicy` and
+    :class:`UpgradePolicy`).
+    """
     assert _field_names(MissingPolicy) == [
+        "missing_enabled",
         "batch_size",
         "sleep_interval_mins",
         "hourly_cap",
@@ -429,7 +436,7 @@ def test_substruct_field_union_matches_flat_surface() -> None:
 
 
 def test_substruct_field_union_count_matches_pre_refactor_surface() -> None:
-    """Forty flat fields, partitioned across seven sub-structs.
+    """Forty-one flat fields, partitioned across seven sub-structs.
 
     Canary for arithmetic drift: if someone bumps :data:`FLAT_TO_SUB` or
     adds a sub-struct field without updating the other, this test
@@ -437,8 +444,8 @@ def test_substruct_field_union_count_matches_pre_refactor_surface() -> None:
     clearer failure.
     """
     total = sum(len(_field_names(cls)) for cls in SUBSTRUCTS)
-    assert total == 40
-    assert len(FLAT_TO_SUB) == 40
+    assert total == 41
+    assert len(FLAT_TO_SUB) == 41
 
 
 # Instance shape.

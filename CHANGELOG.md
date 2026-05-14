@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Instance settings gain an `Enable missing search` toggle that pauses the missing-search pass per instance; existing instances stay enabled after the v18 migration. (#619)
+
 ### Changed
 
 - Python floor raised from 3.12 to 3.13. From-source installs and the Docker image now require a 3.13 interpreter; Python 3.13 has upstream support through October 2029. (#596)

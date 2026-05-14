@@ -13,7 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- Lidarr and Readarr upgrade pass no longer repeats `upgrade pool fetch failed` log rows when the album/book library endpoint is transiently unavailable. (#620)
+- Transient library-fetch failures on any *arr no longer produce a recurring `upgrade pool fetch failed` log row each upgrade cycle. (#620)
 
 ---
 

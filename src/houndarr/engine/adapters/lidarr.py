@@ -247,14 +247,7 @@ async def fetch_upgrade_pool(
             _UPGRADE_CUTOFF_EXCLUSION_HARD_CAP * 250,
         )
 
-    try:
-        library = await client.get_albums()
-    except (httpx.HTTPError, httpx.InvalidURL, ValidationError):
-        logger.warning(
-            "[%s] failed to fetch album library for upgrade pool; skipping upgrade pass this cycle",
-            instance.core.name,
-        )
-        return []
+    library = await client.get_albums()
     return [a for a in library if a.monitored and a.has_file and a.album_id not in exclusion]
 
 

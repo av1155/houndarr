@@ -19,6 +19,7 @@ from typing import Any
 from uuid import uuid4
 
 import httpx
+from pydantic import ValidationError
 
 from houndarr.engine.adapters import get_adapter
 from houndarr.engine.adapters.protocols import AppAdapterProto
@@ -838,23 +839,37 @@ async def _run_upgrade_pass(
     if batch_size == 0:
         return 0
 
-    # Fetch upgrade-eligible pool via the adapter
+    # Fetch upgrade-eligible pool via the adapter.  A transient HTTP,
+    # transport, or wire-validation failure (the *arr is briefly
+    # unreachable or still rebuilding metadata) is treated as an empty
+    # pool for this cycle: the warning lands in the app log for
+    # operators, but no ``error`` row is written so a flaky *arr does
+    # not spam the in-app log feed every cycle.  The reconcile path
+    # (``Supervisor.refresh_snapshot``) still sees the same exception
+    # propagate through ``fetch_reconcile_sets`` and uses
+    # ``ReconcileSets.empty()`` to skip cooldown reconciliation, so
+    # upgrade cooldowns are preserved across transient failures.
     try:
         pool = await _fetch_pool_with_typed_wrap(adapter, instance)
     except EnginePoolFetchError as exc:
         msg = str(exc)
-        logger.warning("[%s] upgrade pool fetch failed: %s", instance.core.name, msg)
-        await _write_log(
-            instance.core.id,
-            None,
-            None,
-            SearchAction.error.value,
-            search_kind="upgrade",
-            cycle_id=cycle_id,
-            cycle_trigger=cycle_trigger,
-            message=f"upgrade pool fetch failed: {msg}",
-        )
-        return 0
+        cause = exc.__cause__
+        if isinstance(cause, (httpx.HTTPError, httpx.InvalidURL, ValidationError)):
+            logger.warning("[%s] upgrade pool fetch deferred: %s", instance.core.name, msg)
+            pool = []
+        else:
+            logger.warning("[%s] upgrade pool fetch failed: %s", instance.core.name, msg)
+            await _write_log(
+                instance.core.id,
+                None,
+                None,
+                SearchAction.error.value,
+                search_kind="upgrade",
+                cycle_id=cycle_id,
+                cycle_trigger=cycle_trigger,
+                message=f"upgrade pool fetch failed: {msg}",
+            )
+            return 0
 
     # Advance series offset for series-based apps (Sonarr/Whisparr v2),
     # but only when the slice produced something. Rotating through an

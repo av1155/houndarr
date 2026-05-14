@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Instance settings form gains an `Enable missing search` checkbox per instance; turning it off pauses the missing-search pass while preserving the rate settings, cooldowns, and dashboard counters. Schema v18 migrates existing instances with the toggle enabled. (#619)
+- Instance settings gain an `Enable missing search` toggle that pauses the missing-search pass per instance; existing instances stay enabled after the v18 migration. (#619)
 
 ### Changed
 

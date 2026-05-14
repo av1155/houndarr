@@ -506,6 +506,50 @@ async def test_upgrade_pool_fetch_nontransient_error_writes_error_row(
     assert len(error_rows) == 1
 
 
+@pytest.mark.asyncio()
+@respx.mock
+@patch(
+    "houndarr.engine.search_loop.update_instance",
+    new_callable=AsyncMock,
+)
+async def test_upgrade_pool_fetch_transient_error_no_error_row_lidarr(
+    mock_update: AsyncMock,
+    seeded_instances: None,
+) -> None:
+    """Direct regression test for the Reddit-reported scenario in #620:
+    a transient ``GET /api/v1/album`` failure on Lidarr no longer
+    writes a recurring ``error`` row to the in-app log feed.  The
+    dispatcher lives in the shared ``_run_upgrade_pass``, so the
+    Radarr test above proves correctness; this case defends against
+    future adapter-specific drift on the originally reported path.
+    """
+    from houndarr.services.cooldown import _reset_info_log_cache
+
+    from .conftest import LIDARR_URL
+
+    _reset_info_log_cache()
+    respx.get(f"{LIDARR_URL}/api/v1/wanted/missing").mock(
+        return_value=httpx.Response(200, json=_EMPTY_PAGE),
+    )
+    respx.get(f"{LIDARR_URL}/api/v1/wanted/cutoff").mock(
+        return_value=httpx.Response(200, json=_EMPTY_PAGE),
+    )
+    respx.get(f"{LIDARR_URL}/api/v1/album").mock(
+        side_effect=httpx.ConnectError("timeout"),
+    )
+
+    inst = _lidarr_instance()
+    count = await run_instance_search(inst, MASTER_KEY)
+
+    assert count == 0
+    rows = await get_log_rows()
+    error_rows = [r for r in rows if r["action"] == "error" and r["search_kind"] == "upgrade"]
+    info_rows = [r for r in rows if r["action"] == "info" and r["search_kind"] == "upgrade"]
+    assert error_rows == []
+    assert len(info_rows) == 1
+    assert "nothing to upgrade right now" in (info_rows[0].get("message") or "")
+
+
 # ---------------------------------------------------------------------------
 # Offset rotation
 # ---------------------------------------------------------------------------

@@ -4,13 +4,9 @@ from __future__ import annotations
 
 import sys
 
-# Minimum Python the codebase parses against.  Mirrors
-# ``pyproject.toml``'s ``requires-python``; ``_check_python_version``
-# below is the runtime backstop for the rare path where the install
-# bypasses package metadata (``pip install --ignore-requires-python``,
-# a pre-existing venv reused after a downgrade, etc.).  Keep the
-# tuple form so ``sys.version_info[:2] < _REQUIRED_PYTHON`` is a plain
-# tuple comparison.
+# Mirrors ``pyproject.toml``'s ``requires-python``.  Tuple form lets
+# ``sys.version_info[:2] < _REQUIRED_PYTHON`` stay a plain tuple
+# comparison without parse-time string surgery.
 _REQUIRED_PYTHON: tuple[int, int] = (3, 13)
 
 
@@ -29,6 +25,10 @@ def _check_python_version(version_info: tuple[int, int] | None = None) -> None:
         version_info: Optional ``(major, minor)`` tuple, used by tests
             to inject a synthetic Python version.  Defaults to
             ``sys.version_info[:2]`` for the real runtime path.
+
+    Raises:
+        SystemExit: Code 2 when the running interpreter is older than
+            :data:`_REQUIRED_PYTHON`.
     """
     actual = version_info if version_info is not None else sys.version_info[:2]
     if actual < _REQUIRED_PYTHON:

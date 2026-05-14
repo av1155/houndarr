@@ -2,9 +2,51 @@
 
 from __future__ import annotations
 
-import click
+import sys
 
-from houndarr import __version__
+# Mirrors ``pyproject.toml``'s ``requires-python``.  Tuple form lets
+# ``sys.version_info[:2] < _REQUIRED_PYTHON`` stay a plain tuple
+# comparison without parse-time string surgery.
+_REQUIRED_PYTHON: tuple[int, int] = (3, 13)
+
+
+def _check_python_version(version_info: tuple[int, int] | None = None) -> None:
+    """Refuse to start on a Python older than :data:`_REQUIRED_PYTHON`.
+
+    Writes a short stderr message naming the version requirement and a
+    handful of common installer paths, then exits with code 2.  The
+    package metadata gate in ``pyproject.toml`` handles the normal
+    install path; this function is the safety net for forced-install
+    or stale-venv scenarios where the import below would otherwise
+    crash with a bare ``SyntaxError`` from a 3.13-only feature with no
+    context for the operator.
+
+    Args:
+        version_info: Optional ``(major, minor)`` tuple, used by tests
+            to inject a synthetic Python version.  Defaults to
+            ``sys.version_info[:2]`` for the real runtime path.
+
+    Raises:
+        SystemExit: Code 2 when the running interpreter is older than
+            :data:`_REQUIRED_PYTHON`.
+    """
+    actual = version_info if version_info is not None else sys.version_info[:2]
+    if actual < _REQUIRED_PYTHON:
+        required = ".".join(str(p) for p in _REQUIRED_PYTHON)
+        running = ".".join(str(p) for p in actual)
+        sys.stderr.write(
+            f"Houndarr requires Python {required} or newer; running Python {running}.\n"
+            f"Install a newer Python (`uv python install 3.13`, `pyenv install 3.13`, "
+            f"or your distro's `python3.13` package) and re-run.\n"
+        )
+        raise SystemExit(2)
+
+
+_check_python_version()
+
+import click  # noqa: E402
+
+from houndarr import __version__  # noqa: E402
 
 
 @click.command(context_settings={"help_option_names": ["-h", "--help"]})

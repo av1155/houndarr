@@ -7,7 +7,7 @@ invariants for the rest of the codebase to rely on them:
   ``isinstance(obj, Proto)`` as a conformance check.
 * Every Protocol can be imported from ``houndarr.protocols``
   without pulling in any runtime-heavy modules (e.g. FastAPI).
-* The module's ``__all__`` re-exports the five Protocol names.
+* The module's ``__all__`` re-exports the repository and factory Protocol names.
 """
 
 from __future__ import annotations
@@ -20,6 +20,7 @@ from houndarr.protocols import (
     InstanceRepository,
     SearchLogRepository,
     SettingsRepository,
+    WidgetApiKeyRepository,
 )
 
 pytestmark = pytest.mark.pinning
@@ -36,6 +37,7 @@ class TestRepositoryProtocolsDeclared:
             InstanceRepository,
             SearchLogRepository,
             SettingsRepository,
+            WidgetApiKeyRepository,
         ],
     )
     def test_each_protocol_is_runtime_checkable(self, proto: type) -> None:
@@ -43,7 +45,7 @@ class TestRepositoryProtocolsDeclared:
 
         ``@runtime_checkable`` Protocols raise ``TypeError`` from
         ``isinstance`` only when the Protocol carries non-method
-        members; all five declarations here use method-only syntax, so
+        members; all declarations here use method-only syntax, so
         a no-op ``isinstance(object(), proto)`` should return ``False``
         cleanly without raising.
         """
@@ -52,7 +54,7 @@ class TestRepositoryProtocolsDeclared:
     def test_module_all_exports_every_protocol(self) -> None:
         """``houndarr.protocols.__all__`` must list every declared symbol.
 
-        Covers the five repository + factory Protocols plus
+        Covers the repository + factory Protocols plus
         the :class:`SupervisorProto` and the :data:`RunNowStatus`
         Literal declared in :mod:`houndarr.protocols`.
         """
@@ -66,6 +68,7 @@ class TestRepositoryProtocolsDeclared:
             "SearchLogRepository",
             "SettingsRepository",
             "SupervisorProto",
+            "WidgetApiKeyRepository",
         }
 
     def test_empty_stub_is_not_accepted_as_instance_repository(self) -> None:

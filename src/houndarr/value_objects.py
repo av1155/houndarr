@@ -14,6 +14,21 @@ from houndarr.enums import ItemType
 
 
 @dataclass(frozen=True, slots=True)
+class WidgetApiKey:
+    """Stored Houndarr API key metadata for widget access.
+
+    Attributes:
+        hash: SHA-256 hex digest of the plaintext token.
+        created_at: UTC timestamp when the active key was generated.
+        last_used_at: UTC timestamp of the most recent successful use, if any.
+    """
+
+    hash: str
+    created_at: str
+    last_used_at: str | None
+
+
+@dataclass(frozen=True, slots=True)
 class ItemRef:
     """A reference to an *arr library item that the search engine tracks.
 

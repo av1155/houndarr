@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- External `/api/v1/widget` endpoint returns API-key-protected dashboard totals, backed by schema v19 `widget_api_key` storage. (#604)
 - Instance settings gain an `Enable missing search` toggle that pauses the missing-search pass per instance; existing instances stay enabled after the v18 migration. (#619)
 
 ### Changed
@@ -17,7 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- Transient library-fetch failures on any *arr no longer produce a recurring `upgrade pool fetch failed` log row each upgrade cycle. (#620)
+- Transient library-fetch failures on any \*arr no longer produce a recurring `upgrade pool fetch failed` log row each upgrade cycle. (#620)
 
 ### Security
 
@@ -62,7 +63,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Per-instance `upgrade_series_window_size` setting (default `5`, range `1-100`) for Sonarr and Whisparr v2 tunes the upgrade pool series window; existing instances pick up the default at migration time. (#495)
-- Dashboard counters auto-refresh every 10 minutes via a supervisor snapshot loop, displaying per-instance monitored and unreleased totals without polling each *arr on every status request. (#461)
+- Dashboard counters auto-refresh every 10 minutes via a supervisor snapshot loop, displaying per-instance monitored and unreleased totals without polling each \*arr on every status request. (#461)
 - Per-instance hourly budget meter, search-kind icons on `Recent hunts` and `Cooldown schedule` rows, live next-patrol countdown anchored on supervisor cycle-end signals, stale-snapshot pill when monitor data exceeds 15 minutes, multi-instance error banner, and tooltips on the headline stats. (#503)
 - Settings page `Admin` dropdown adds Maintenance (`clear logs`) and Danger (`factory reset`) controls, and reorganises password and changelog preferences into the same collapsible surface. (#475)
 - Caps Lock badge on password fields appears when Caps Lock is active or when the field receives focus while Caps Lock is already on. (#499)
@@ -75,7 +76,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Login and setup pages redesigned with a Station auth card (logo topbar, eyebrow, accented headings, single-column form, version footer). (#499)
 - Random search order now uses a stratified-shuffle page deck plus partial-page sentinel padding, so per-page and per-item dispatch probability stays uniform across the backlog without wrap-once or last-page over-selection. (#491)
 - Hourly rate-limit skip rows now read `hourly limit reached (N/hr)` across missing, cutoff, and upgrade passes. (#491)
-- Cooldown rows stamp their `search_kind` (missing, cutoff, upgrade) at insert time and a supervisor reconcile step prunes cooldowns whose items are no longer wanted on the *arr side, restoring accurate dashboard breakdown counts. (#463)
+- Cooldown rows stamp their `search_kind` (missing, cutoff, upgrade) at insert time and a supervisor reconcile step prunes cooldowns whose items are no longer wanted on the \*arr side, restoring accurate dashboard breakdown counts. (#463)
 - Build pipeline compiles Tailwind v4 and daisyUI v5 locally at Docker build time, eliminating the Tailwind play CDN and the `unpkg` htmx script. (#481)
 - Unified `status-dot`, `status-pill`, and `station-tooltip` components with a cyan accent band and accessible focus states across dashboard, settings, and instance forms. (#487)
 - Schema v16 disambiguates Whisparr v2 from the product family: an idempotent migration renames `whisparr_search_mode` and `upgrade_whisparr_search_mode` columns and rewrites stored `whisparr_episode` item-type values to their `whisparr_v2_*` counterparts; existing instances retain settings and id. (#493)
@@ -149,7 +150,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Connection testing now verifies the remote application type matches the selected instance type, preventing misconfiguration (e.g. a Sonarr URL saved as Radarr). (#333)
-- Compatibility table in the installation docs listing tested *arr versions and Readarr fork support. (#333)
+- Compatibility table in the installation docs listing tested \*arr versions and Readarr fork support. (#333)
 
 ### Fixed
 
@@ -241,7 +242,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `HOUNDARR_TRUSTED_PROXIES` now accepts CIDR subnets (e.g. `172.18.0.0/16`) in addition to individual IP addresses (#245, #248)
 - Kubernetes deployment guide with StatefulSet, headless Service, and Ingress examples (#255)
-- FAQ entry explaining why Houndarr exists alongside built-in *arr search (#253)
+- FAQ entry explaining why Houndarr exists alongside built-in \*arr search (#253)
 
 ---
 
@@ -324,7 +325,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Settings help panel now describes search modes for all four apps that support them (Sonarr, Lidarr, Readarr, Whisparr) instead of Sonarr only (#210)
-- All *arr app listings across code, UI, docs, and website now use the canonical order: Radarr, Sonarr, Lidarr, Readarr, Whisparr (#210)
+- All \*arr app listings across code, UI, docs, and website now use the canonical order: Radarr, Sonarr, Lidarr, Readarr, Whisparr (#210)
 - Bug report template version field expanded from "Sonarr / Radarr" to include all five apps (#210)
 
 ---
@@ -369,9 +370,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- Connection errors now write exactly one `action="error"` log row per outage instead of one per retry, preventing the dashboard *24h errors* counter from inflating during startup races or service restarts (#140)
+- Connection errors now write exactly one `action="error"` log row per outage instead of one per retry, preventing the dashboard _24h errors_ counter from inflating during startup races or service restarts (#140)
 - A recovery `action="info"` row is now written to `search_log` when an unreachable instance becomes reachable again, making the recovery event visible on the Logs page (#140)
-- A 10-second startup grace delay before the first search cycle gives co-located *arr services time to become ready (#140)
+- A 10-second startup grace delay before the first search cycle gives co-located \*arr services time to become ready (#140)
 
 ---
 
@@ -402,7 +403,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   waiting the full search interval, and logs an `INFO` recovery message once
   the instance is reachable again (#119)
 - UI Logs page message for connection errors now reads `"Could not reach
-  <url>"` instead of the raw internal error string (#119)
+<url>"` instead of the raw internal error string (#119)
 
 ---
 
@@ -441,6 +442,7 @@ First stable public release.
 ### Added
 
 #### Core
+
 - Automated missing-media search engine for Radarr and Sonarr instances
 - Episode-level search for Sonarr (`EpisodeSearch` + `episodeIds`) with optional
   season-context mode (`SeasonSearch`)
@@ -454,6 +456,7 @@ First stable public release.
   10-second shutdown
 
 #### Web UI
+
 - Dark-themed responsive web interface (FastAPI + Jinja2 + HTMX + Tailwind CSS CDN)
 - Live dashboard with instance status cards, stats grid, and run-now buttons
 - HTMX-driven partial updates (no full-page reloads after initial load)
@@ -464,6 +467,7 @@ First stable public release.
 - Cycle-grouped log display with summary statistics
 
 #### Authentication and Security
+
 - Single-admin username + bcrypt password authentication (cost 12)
 - Signed session tokens via itsdangerous
 - CSRF double-submit cookie protection on all mutating endpoints
@@ -476,6 +480,7 @@ First stable public release.
 - API key masking in UI (sentinel `__UNCHANGED__` pattern)
 
 #### Infrastructure
+
 - Single-container Docker deployment (`python:3.12-slim`, `gosu` for PUID/PGID)
 - Multi-arch container builds (amd64/arm64) via GitHub Actions
 - Automated GHCR publishing on version tags
@@ -485,6 +490,7 @@ First stable public release.
 - Click CLI with environment variable support for all configuration options
 
 #### CI/CD
+
 - Ruff linting and formatting checks
 - mypy strict type checking
 - Bandit SAST scanning

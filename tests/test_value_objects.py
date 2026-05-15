@@ -5,7 +5,19 @@ from __future__ import annotations
 import pytest
 
 from houndarr.enums import ItemType
-from houndarr.value_objects import ItemRef
+from houndarr.value_objects import ItemRef, WidgetApiKey
+
+
+class TestWidgetApiKey:
+    def test_frozen_and_slotted(self) -> None:
+        key = WidgetApiKey(
+            hash="digest",
+            created_at="2026-05-15T00:00:00.000Z",
+            last_used_at=None,
+        )
+        assert set(WidgetApiKey.__slots__) == {"hash", "created_at", "last_used_at"}
+        with pytest.raises(AttributeError):
+            key.hash = "other"  # type: ignore[misc]
 
 
 class TestItemRef:

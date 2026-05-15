@@ -144,3 +144,4 @@ def reset_auth_caches() -> None:
     _session.reset_serializer()
     _setup_complete = None
     _rate_limit.reset_login_attempts()
+    _rate_limit.reset_widget_key_attempts()

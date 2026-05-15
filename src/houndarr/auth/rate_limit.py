@@ -21,6 +21,7 @@ from fastapi import Request
 from houndarr.config import get_settings
 
 _login_attempts: dict[str, list[float]] = {}
+_widget_key_attempts: dict[str, list[float]] = {}
 _LOGIN_MAX_ATTEMPTS = 5
 _LOGIN_WINDOW_SECONDS = 60
 
@@ -53,30 +54,55 @@ def _client_ip(request: Request) -> str:
     return direct_ip
 
 
-def check_login_rate_limit(request: Request) -> bool:
-    """Return True if the client is allowed to attempt login."""
+def _check_rate_limit(bucket: dict[str, list[float]], request: Request) -> bool:
+    """Return whether *request* may try another authentication attempt."""
     ip = _client_ip(request)
     now = time.time()
-    attempts = _login_attempts.get(ip, [])
-    # Remove attempts outside the window
+    attempts = bucket.get(ip, [])
     attempts = [t for t in attempts if now - t < _LOGIN_WINDOW_SECONDS]
-    _login_attempts[ip] = attempts
+    bucket[ip] = attempts
     return len(attempts) < _LOGIN_MAX_ATTEMPTS
+
+
+def _record_failed_attempt(bucket: dict[str, list[float]], request: Request) -> None:
+    """Record one failed authentication attempt in *bucket*."""
+    ip = _client_ip(request)
+    now = time.time()
+    attempts = bucket.get(ip, [])
+    attempts.append(now)
+    bucket[ip] = attempts
+
+
+def check_login_rate_limit(request: Request) -> bool:
+    """Return True if the client is allowed to attempt login."""
+    return _check_rate_limit(_login_attempts, request)
 
 
 def record_failed_login(request: Request) -> None:
     """Record a failed login attempt for rate limiting."""
-    ip = _client_ip(request)
-    now = time.time()
-    attempts = _login_attempts.get(ip, [])
-    attempts.append(now)
-    _login_attempts[ip] = attempts
+    _record_failed_attempt(_login_attempts, request)
+
+
+def check_widget_key_rate_limit(request: Request) -> bool:
+    """Return True if the client is allowed to try a widget API key."""
+    return _check_rate_limit(_widget_key_attempts, request)
+
+
+def record_failed_widget_key_attempt(request: Request) -> None:
+    """Record a failed widget API key attempt for rate limiting."""
+    _record_failed_attempt(_widget_key_attempts, request)
 
 
 def clear_login_attempts(request: Request) -> None:
     """Clear login attempts on successful login."""
     ip = _client_ip(request)
     _login_attempts.pop(ip, None)
+
+
+def clear_widget_key_attempts(request: Request) -> None:
+    """Clear widget key attempts on successful API key verification."""
+    ip = _client_ip(request)
+    _widget_key_attempts.pop(ip, None)
 
 
 def reset_login_attempts() -> None:
@@ -88,3 +114,8 @@ def reset_login_attempts() -> None:
     seam's module-private dict.
     """
     _login_attempts.clear()
+
+
+def reset_widget_key_attempts() -> None:
+    """Drop every tracked widget API key failure bucket."""
+    _widget_key_attempts.clear()

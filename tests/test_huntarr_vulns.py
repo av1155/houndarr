@@ -22,6 +22,7 @@ from fastapi.testclient import TestClient
 
 import houndarr.auth as _auth_module
 from houndarr.auth import (
+    _API_KEY_PATHS,
     _PUBLIC_PATHS,
     CSRF_COOKIE_NAME,
     SESSION_COOKIE_NAME,
@@ -118,6 +119,12 @@ class TestUnauthenticatedAccessSweep:
         assert resp.headers.get("location") in _AUTH_LOCATIONS, (
             f"{method} {path} redirected to unexpected location: {resp.headers.get('location')!r}"
         )
+
+    def test_widget_route_uses_api_key_challenge_without_session(self, app: TestClient) -> None:
+        """The external widget route is protected by API key auth, not session redirects."""
+        resp = app.get("/api/v1/widget", follow_redirects=False)
+        assert resp.status_code == 401
+        assert resp.headers["WWW-Authenticate"] == "ApiKey"
 
 
 # ---------------------------------------------------------------------------
@@ -533,6 +540,13 @@ class TestCSRFImplementation:
         expected = frozenset(["/setup", "/login", "/api/health", "/static"])
         assert expected == _PUBLIC_PATHS, (
             f"_PUBLIC_PATHS changed: got {_PUBLIC_PATHS!r}, expected {expected!r}"
+        )
+
+    def test_api_key_paths_is_exact_expected_set(self) -> None:
+        """_API_KEY_PATHS must contain only the widget endpoint."""
+        expected = frozenset(["/api/v1/widget"])
+        assert expected == _API_KEY_PATHS, (
+            f"_API_KEY_PATHS changed: got {_API_KEY_PATHS!r}, expected {expected!r}"
         )
 
     @pytest.mark.parametrize(

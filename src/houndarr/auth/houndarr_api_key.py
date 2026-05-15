@@ -17,6 +17,8 @@ def generate_api_key() -> str:
 
 def hash_api_key(token: str) -> str:
     """Return the SHA-256 hex digest for *token*."""
+    # API keys are 256-bit random bearer tokens; SHA-256 stores a deterministic lookup digest.
+    # codeql[py/weak-sensitive-data-hashing]
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 

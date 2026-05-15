@@ -35,8 +35,9 @@ if TYPE_CHECKING:
     _setup_complete: bool | None
     _USERNAME_PATTERN: re.Pattern[str]
 from houndarr.auth.csrf import _CSRF_PROTECTED_METHODS, validate_csrf
+from houndarr.auth.houndarr_api_key import generate_api_key, hash_api_key, verify_api_key
 from houndarr.auth.identity import resolve_signed_in_as
-from houndarr.auth.middleware import _LOGOUT_PATH, _PUBLIC_PATHS, AuthMiddleware
+from houndarr.auth.middleware import _API_KEY_PATHS, _LOGOUT_PATH, _PUBLIC_PATHS, AuthMiddleware
 from houndarr.auth.password import BCRYPT_COST, hash_password, verify_password
 from houndarr.auth.proxy_auth import (
     _PROXY_DEAD_PATHS,
@@ -52,10 +53,15 @@ from houndarr.auth.rate_limit import (
     _LOGIN_WINDOW_SECONDS,
     _client_ip,
     _login_attempts,
+    _widget_key_attempts,
     check_login_rate_limit,
+    check_widget_key_rate_limit,
     clear_login_attempts,
+    clear_widget_key_attempts,
     record_failed_login,
+    record_failed_widget_key_attempt,
     reset_login_attempts,
+    reset_widget_key_attempts,
 )
 from houndarr.auth.session import (
     CSRF_COOKIE_NAME,
@@ -90,6 +96,7 @@ __all__ = [
     "USERNAME_MAX_LENGTH",
     "USERNAME_MIN_LENGTH",
     "AuthMiddleware",
+    "_API_KEY_PATHS",
     "_CSRF_PROTECTED_METHODS",
     "_LOGIN_MAX_ATTEMPTS",
     "_LOGIN_WINDOW_SECONDS",
@@ -105,20 +112,27 @@ __all__ = [
     "_login_attempts",
     "_validate_proxy_auth",
     "_validate_proxy_csrf",
+    "_widget_key_attempts",
     "check_credentials",
     "check_login_rate_limit",
     "check_password",
+    "check_widget_key_rate_limit",
     "clear_login_attempts",
     "clear_session",
+    "clear_widget_key_attempts",
     "create_session",
+    "generate_api_key",
     "get_session_csrf_token",
     "get_username",
+    "hash_api_key",
     "hash_password",
     "is_setup_complete",
     "normalize_username",
     "record_failed_login",
+    "record_failed_widget_key_attempt",
     "reset_auth_caches",
     "reset_login_attempts",
+    "reset_widget_key_attempts",
     "resolve_signed_in_as",
     "rotate_session_secret",
     "set_password",
@@ -126,6 +140,7 @@ __all__ = [
     "validate_csrf",
     "validate_session",
     "validate_username",
+    "verify_api_key",
     "verify_password",
 ]
 

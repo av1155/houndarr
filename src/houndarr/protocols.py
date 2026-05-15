@@ -18,7 +18,7 @@ from typing import Any, Literal, Protocol, runtime_checkable
 
 from houndarr.clients.base import ArrClient
 from houndarr.services.instances import Instance
-from houndarr.value_objects import ItemRef
+from houndarr.value_objects import ItemRef, WidgetApiKey
 
 # ``RunNowStatus`` is duplicated here (rather than imported from
 # ``houndarr.engine.supervisor``) so this Protocol module stays
@@ -45,6 +45,27 @@ class SettingsRepository(Protocol):
 
     def delete_setting(self, key: str) -> Awaitable[None]:
         """Remove *key* if it exists (no error if already absent)."""
+        ...
+
+
+@runtime_checkable
+class WidgetApiKeyRepository(Protocol):
+    """Storage boundary for the single widget API key row."""
+
+    def get(self) -> Awaitable[WidgetApiKey | None]:
+        """Return the active widget API key metadata, if configured."""
+        ...
+
+    def set(self, key_hash: str) -> Awaitable[WidgetApiKey]:
+        """Store *key_hash* as the active widget API key."""
+        ...
+
+    def touch_last_used(self) -> Awaitable[None]:
+        """Mark the active widget API key as successfully used."""
+        ...
+
+    def revoke(self) -> Awaitable[None]:
+        """Remove the active widget API key if one exists."""
         ...
 
 
@@ -252,4 +273,5 @@ __all__ = [
     "SearchLogRepository",
     "SettingsRepository",
     "SupervisorProto",
+    "WidgetApiKeyRepository",
 ]

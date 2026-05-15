@@ -85,9 +85,22 @@ fix:
     {{python}} -m ruff check --fix src/ tests/
     {{python}} -m ruff format src/ tests/
 
+# Hydrate the dev venv (idempotent). Run before `just dev` on a fresh clone
+# or after dependency edits. Symphony's Stage D bring-up uses this as
+# `webapp.build_cmd` so the `.venv/bin/python` referenced by `serve` is
+# guaranteed to exist before the screencast recorder targets the server.
+sync:
+    uv sync
+
 # Start the dev server against ./data-dev with hot-reload and debug logs.
 dev:
     {{python}} -m houndarr --data-dir ./data-dev --dev
+
+# Start the server without hot-reload, suitable for Stage D recording.
+# Symphony's screencast catches a gray-flicker frame if uvicorn reloads
+# mid-recording, so the Stage D bring-up uses this recipe instead of `dev`.
+serve:
+    {{python}} -m houndarr --data-dir ./data-dev
 
 # Launch the seeded mock *arr server. Mounts all six apps under one process
 # at distinct path prefixes (e.g. http://127.0.0.1:9100/sonarr). `items`

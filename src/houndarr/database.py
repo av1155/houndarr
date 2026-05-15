@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Schema version: bump when adding new migrations
 # ---------------------------------------------------------------------------
-SCHEMA_VERSION = 18
+SCHEMA_VERSION = 19
 
 # ---------------------------------------------------------------------------
 # DDL
@@ -48,6 +48,13 @@ _SCHEMA_SQL = f"""
 CREATE TABLE IF NOT EXISTS settings (
     key   TEXT PRIMARY KEY,
     value TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS widget_api_key (
+    id           INTEGER PRIMARY KEY CHECK(id = 1),
+    hash         TEXT    NOT NULL CHECK(length(hash) = 64 AND hash NOT GLOB '*[^0-9a-f]*'),
+    created_at   TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    last_used_at TEXT
 );
 
 CREATE TABLE IF NOT EXISTS instances (
@@ -337,6 +344,7 @@ async def init_db_migrations() -> None:
         await _migrate_to_v16(db)
         await _migrate_to_v17(db)
         await _migrate_to_v18(db)
+        await _migrate_to_v19(db)
         await _ensure_v3_indexes(db)
         # PRAGMA optimize keeps the planner's sqlite_stat1 entries fresh as
         # search_log grows.  Cheap on healthy DBs, prevents silent index
@@ -394,6 +402,8 @@ async def _run_migrations(db: aiosqlite.Connection, from_version: int) -> None:
         await _migrate_to_v17(db)
     if from_version < 18:
         await _migrate_to_v18(db)
+    if from_version < 19:
+        await _migrate_to_v19(db)
 
     logger.info("Migrated database from schema version %d to %d", from_version, SCHEMA_VERSION)
     await db.execute(
@@ -1409,6 +1419,20 @@ async def _migrate_to_v18(db: aiosqlite.Connection) -> None:
         await db.execute(
             "ALTER TABLE instances ADD COLUMN missing_enabled INTEGER NOT NULL DEFAULT 1"
         )
+
+
+async def _migrate_to_v19(db: aiosqlite.Connection) -> None:
+    """Add the single-row Houndarr API key table for widget access."""
+    await db.execute(
+        """
+        CREATE TABLE IF NOT EXISTS widget_api_key (
+            id           INTEGER PRIMARY KEY CHECK(id = 1),
+            hash         TEXT    NOT NULL CHECK(length(hash) = 64 AND hash NOT GLOB '*[^0-9a-f]*'),
+            created_at   TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+            last_used_at TEXT
+        )
+        """
+    )
 
 
 async def _column_exists(db: aiosqlite.Connection, table_name: str, column_name: str) -> bool:

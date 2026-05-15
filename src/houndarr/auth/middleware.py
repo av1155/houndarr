@@ -1,10 +1,9 @@
 """ASGI middleware that composes every auth seam.
 
-Two dispatch branches share the same middleware: ``_dispatch_builtin``
-for session-cookie mode (the default) and ``_dispatch_proxy`` for
-reverse-proxy / SSO mode.  Each branch reads its public-path list and
-then delegates trust, identity, and CSRF decisions to the appropriate
-seam submodule.
+Three dispatch buckets share the same middleware: API-key-only routes,
+``_dispatch_builtin`` for session-cookie mode (the default), and
+``_dispatch_proxy`` for reverse-proxy / SSO mode.  Each bucket delegates
+trust, identity, and CSRF decisions to the appropriate seam submodule.
 
 Helpers are called through their owning modules (for example
 ``proxy_auth._is_trusted_proxy(request)`` instead of a direct
@@ -18,16 +17,18 @@ from __future__ import annotations
 import logging
 
 from fastapi import Request, Response
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.types import ASGIApp
 
+from houndarr.auth import houndarr_api_key as _houndarr_api_key
 from houndarr.auth import proxy_auth as _proxy_auth
 from houndarr.auth import rate_limit as _rate_limit
 from houndarr.auth.csrf import _CSRF_PROTECTED_METHODS, validate_csrf
 from houndarr.auth.session import CSRF_COOKIE_NAME, validate_session
 from houndarr.auth.setup import is_setup_complete
 from houndarr.config import get_settings
+from houndarr.repositories import widget_api_key as _widget_api_key_repo
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +41,8 @@ _PUBLIC_PATHS = frozenset(
         "/static",
     ]
 )
+
+_API_KEY_PATHS = frozenset(["/api/v1/widget"])
 
 # Logout is a safe, destructive-free action (session invalidation only).
 # We allow it without CSRF/session validation so stale legacy sessions
@@ -82,9 +85,49 @@ class AuthMiddleware(BaseHTTPMiddleware):
         """
         path = request.url.path
 
+        if path in _API_KEY_PATHS:
+            return await self._dispatch_api_key(request, call_next)
         if _proxy_auth._is_proxy_auth_mode():
             return await self._dispatch_proxy(request, call_next, path)
         return await self._dispatch_builtin(request, call_next, path)
+
+    # ------------------------------------------------------------------
+    # API key auth path
+    # ------------------------------------------------------------------
+
+    async def _dispatch_api_key(
+        self,
+        request: Request,
+        call_next: RequestResponseEndpoint,
+    ) -> Response:
+        """Require a valid Houndarr API key for external widget routes."""
+        submitted = request.headers.get("X-Api-Key")
+        stored = await _widget_api_key_repo.get()
+        if (
+            submitted is not None
+            and stored is not None
+            and _houndarr_api_key.verify_api_key(
+                submitted,
+                stored.hash,
+            )
+        ):
+            _rate_limit.clear_widget_key_attempts(request)
+            await _widget_api_key_repo.touch_last_used()
+            return await call_next(request)
+
+        if not _rate_limit.check_widget_key_rate_limit(request):
+            return JSONResponse(
+                {"detail": "Too many API key attempts."},
+                status_code=429,
+                headers={"Retry-After": "60"},
+            )
+
+        _rate_limit.record_failed_widget_key_attempt(request)
+        return JSONResponse(
+            {"detail": "Invalid API key."},
+            status_code=401,
+            headers={"WWW-Authenticate": "ApiKey"},
+        )
 
     # ------------------------------------------------------------------
     # Builtin auth path (existing behaviour, unchanged)

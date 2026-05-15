@@ -9,6 +9,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from houndarr.auth import (
+    _API_KEY_PATHS,
     _CSRF_PROTECTED_METHODS,
     _LOGOUT_PATH,
     _PUBLIC_PATHS,
@@ -785,6 +786,37 @@ def test_clear_login_attempts_drops_bucket(test_settings: object) -> None:
 
 
 @pytest.mark.pinning()
+def test_check_widget_key_rate_limit_prunes_stale_entries(
+    test_settings: object,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Widget API key attempts use the same sliding-window threshold as login."""
+    from unittest.mock import MagicMock
+
+    import houndarr.auth as _auth
+    from houndarr.auth import (
+        _LOGIN_WINDOW_SECONDS,
+        _widget_key_attempts,
+        check_widget_key_rate_limit,
+        record_failed_widget_key_attempt,
+    )
+
+    now = {"t": 1_700_000_000.0}
+    monkeypatch.setattr(_auth.time, "time", lambda: now["t"])
+
+    request = MagicMock()
+    request.client.host = "198.51.100.10"
+    request.headers.get.return_value = None
+    for _ in range(5):
+        record_failed_widget_key_attempt(request)
+    assert check_widget_key_rate_limit(request) is False
+
+    now["t"] += _LOGIN_WINDOW_SECONDS + 1
+    assert check_widget_key_rate_limit(request) is True
+    assert _widget_key_attempts["198.51.100.10"] == []
+
+
+@pytest.mark.pinning()
 def test_check_login_rate_limit_prunes_stale_entries(
     test_settings: object,
     monkeypatch: pytest.MonkeyPatch,
@@ -828,7 +860,7 @@ def test_check_login_rate_limit_prunes_stale_entries(
 @pytest.mark.asyncio()
 @pytest.mark.pinning()
 async def test_reset_auth_caches_clears_every_module_global(db: None) -> None:
-    """reset_auth_caches must clear _serializer, _setup_complete, _login_attempts.
+    """reset_auth_caches must clear session, setup, and rate-limit state.
 
     Called on factory reset (services/admin.py:263).  A stale
     ``_setup_complete=True`` after the database is wiped would short-
@@ -841,6 +873,7 @@ async def test_reset_auth_caches_clears_every_module_global(db: None) -> None:
     from houndarr.auth import (
         _get_serializer,
         record_failed_login,
+        record_failed_widget_key_attempt,
         reset_auth_caches,
         set_password,
     )
@@ -852,16 +885,19 @@ async def test_reset_auth_caches_clears_every_module_global(db: None) -> None:
     req.client.host = "198.51.100.11"
     req.headers.get.return_value = None
     record_failed_login(req)
+    record_failed_widget_key_attempt(req)
 
     assert _auth._setup_complete is True
     assert _auth._serializer is not None
     assert _auth._login_attempts
+    assert _auth._widget_key_attempts
 
     reset_auth_caches()
 
     assert _auth._setup_complete is None
     assert _auth._serializer is None
     assert _auth._login_attempts == {}
+    assert _auth._widget_key_attempts == {}
 
 
 # Session seam
@@ -1005,6 +1041,12 @@ def test_logout_path_constant_is_slash_logout() -> None:
 def test_csrf_protected_methods_constant() -> None:
     """The set of CSRF-protected methods must stay exactly {POST, PUT, PATCH, DELETE}."""
     assert frozenset(["POST", "PUT", "PATCH", "DELETE"]) == _CSRF_PROTECTED_METHODS
+
+
+@pytest.mark.pinning()
+def test_api_key_paths_constant_has_exact_contents() -> None:
+    """_API_KEY_PATHS must stay disjoint from public and mode-dependent routes."""
+    assert frozenset(["/api/v1/widget"]) == _API_KEY_PATHS
 
 
 @pytest.mark.pinning()

@@ -20,8 +20,8 @@ rows the SQL produces, and pulling it apart would force the caller
 to re-derive the same per-row context.
 
 Single-process cache (issue #586):  :func:`build_aggregate_cache`
-returns an ``alru_cache``-wrapped coroutine that batches the four
-slow DB-aggregation gathers into a single :class:`DashboardAggregates`
+returns an ``alru_cache``-wrapped coroutine that batches the slow
+DB-aggregation gathers into a single :class:`DashboardAggregates`
 result and caches it for ~20 s.  The cache lives on ``app.state``
 because ``async-lru`` is event-loop-bound (a module-level decorator
 binds to the first test's loop and raises on every subsequent test);
@@ -69,6 +69,13 @@ SELECT
 FROM search_log
 WHERE instance_id IN ({placeholders})
 GROUP BY instance_id
+"""
+
+_SEARCHES_7D_SQL = """
+SELECT COUNT(*) AS searches_7d
+FROM search_log
+WHERE action = 'searched'
+  AND timestamp > strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-7 days')
 """
 
 _LAST_ACTIVITY_SQL = """
@@ -299,6 +306,7 @@ class DashboardAggregates:
     lifetime_map: dict[int, dict[str, Any]] = field(default_factory=dict)
     error_map: dict[int, dict[str, Any]] = field(default_factory=dict)
     recent: list[dict[str, Any]] = field(default_factory=list)
+    searches_7d: int = 0
 
 
 # Narrow surface: the route awaits the call; invalidation calls cache_clear.
@@ -327,11 +335,11 @@ async def _gather_dashboard_aggregates(
     request.  Returns an empty bundle for the no-instances case so the
     cache key is stable (an empty tuple maps to the same bundle).
     """
-    if not instance_ids_tuple:
-        return DashboardAggregates()
-
     instance_ids = list(instance_ids_tuple)
     async with get_db() as db:
+        searches_7d = await gather_searches_7d(db)
+        if not instance_ids:
+            return DashboardAggregates(searches_7d=searches_7d)
         metrics_map, activity_map = await gather_window_metrics(db, instance_ids)
         lifetime_map = await gather_lifetime_metrics(db, instance_ids)
         error_map = await gather_active_errors(db, instance_ids)
@@ -343,6 +351,7 @@ async def _gather_dashboard_aggregates(
         lifetime_map=lifetime_map,
         error_map=error_map,
         recent=recent,
+        searches_7d=searches_7d,
     )
 
 
@@ -473,6 +482,26 @@ async def gather_dashboard_status(
             )
         )
     return {"instances": rows, "recent_searches": recent}
+
+
+async def gather_searches_7d(db: aiosqlite.Connection) -> int:
+    """Return the rolling 7-day successful search count."""
+    async with db.execute(_SEARCHES_7D_SQL) as cur:  # nosem
+        row = await cur.fetchone()
+    return int(row["searches_7d"] if row is not None else 0)
+
+
+async def gather_cached_searches_7d(
+    db: aiosqlite.Connection,
+    *,
+    instance_ids: list[int],
+    aggregate_cache: DashboardAggregateCache | None = None,
+) -> int:
+    """Return the rolling 7-day searched count using the dashboard cache when available."""
+    if aggregate_cache is None:
+        return await gather_searches_7d(db)
+    aggregates = await aggregate_cache(tuple(sorted(instance_ids)))
+    return aggregates.searches_7d
 
 
 async def gather_window_metrics(

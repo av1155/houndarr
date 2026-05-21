@@ -22,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Security
 
 - `urllib3` bumped to 2.7.0; closes two upstream advisories on decompression-bomb safeguards and sensitive-header forwarding through proxied redirects. Houndarr does not exercise either code path today, but the bump removes the alerts from `pip-audit` and Trivy. (#623)
+- `idna` bumped to 3.15; closes CVE-2026-45409 by short-circuiting oversized input in `check_label` before contextual-rule processing. Houndarr does not pass attacker-controlled hostnames through the IDN encoder, but the bump removes the alert from `pip-audit` and Trivy. (#639)
 
 ---
 

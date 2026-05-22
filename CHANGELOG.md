@@ -21,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Transient library-fetch failures on any \*arr no longer produce a recurring `upgrade pool fetch failed` log row each upgrade cycle. (#620)
+- Login and widget rate limiters no longer leak one in-memory entry per unique source IP under sustained probing; entries evict on read and via a five-minute background sweep. (#632)
 
 ### Security
 

@@ -14,16 +14,21 @@ keeps pinning the helper here.
 
 from __future__ import annotations
 
+import asyncio
+import logging
 import time
 
 from fastapi import Request
 
 from houndarr.config import get_settings
 
+logger = logging.getLogger(__name__)
+
 _login_attempts: dict[str, list[float]] = {}
 _widget_key_attempts: dict[str, list[float]] = {}
 _LOGIN_MAX_ATTEMPTS = 5
 _LOGIN_WINDOW_SECONDS = 60
+_RATE_LIMIT_SWEEP_INTERVAL_SECONDS = 5 * 60
 
 
 def _client_ip(request: Request) -> str:
@@ -55,12 +60,23 @@ def _client_ip(request: Request) -> str:
 
 
 def _check_rate_limit(bucket: dict[str, list[float]], request: Request) -> bool:
-    """Return whether *request* may try another authentication attempt."""
+    """Return whether *request* may try another authentication attempt.
+
+    Filters timestamps older than ``_LOGIN_WINDOW_SECONDS`` out of the
+    per-IP bucket.  When pruning leaves the bucket empty the IP key is
+    popped instead of being written back as ``[]``; without this, every
+    probe from a unique source IP would leave a permanent empty entry
+    and the dict would grow with the count of distinct IPs that have
+    ever hit ``/login`` (issue #632).
+    """
     ip = _client_ip(request)
     now = time.time()
     attempts = bucket.get(ip, [])
     attempts = [t for t in attempts if now - t < _LOGIN_WINDOW_SECONDS]
-    bucket[ip] = attempts
+    if attempts:
+        bucket[ip] = attempts
+    else:
+        bucket.pop(ip, None)
     return len(attempts) < _LOGIN_MAX_ATTEMPTS
 
 
@@ -71,6 +87,57 @@ def _record_failed_attempt(bucket: dict[str, list[float]], request: Request) -> 
     attempts = bucket.get(ip, [])
     attempts.append(now)
     bucket[ip] = attempts
+
+
+def _sweep_bucket(bucket: dict[str, list[float]], now: float) -> int:
+    """Evict IP buckets whose timestamps have all expired.
+
+    ``_check_rate_limit`` already evicts the requesting IP on read, but
+    a scanner that hits ``/login`` once per source IP and never returns
+    leaves ``[t1]`` behind forever (issue #632).  The periodic sweep
+    walks both buckets and pops every entry whose most-recent timestamp
+    is older than the rate-limit window.
+
+    ``_record_failed_attempt`` appends monotonically, so the last
+    element is the youngest; checking ``attempts[-1]`` is sufficient.
+    The stale-key list is materialised before mutating ``bucket`` to
+    avoid ``RuntimeError: dictionary changed size during iteration``.
+
+    Returns the count of evicted IP entries (for log gating).
+    """
+    stale_ips = [
+        ip
+        for ip, attempts in bucket.items()
+        if not attempts or now - attempts[-1] >= _LOGIN_WINDOW_SECONDS
+    ]
+    for ip in stale_ips:
+        bucket.pop(ip, None)
+    return len(stale_ips)
+
+
+async def periodic_rate_limit_sweep() -> None:
+    """Evict stale rate-limit buckets on a fixed cadence.
+
+    Cancellation is propagated so the lifespan shutdown path can stop
+    the task cleanly; any other exception is logged and the loop keeps
+    running so a transient error never silently disables rate-limit GC.
+    """
+    while True:
+        await asyncio.sleep(_RATE_LIMIT_SWEEP_INTERVAL_SECONDS)
+        try:
+            now = time.time()
+            login_evicted = _sweep_bucket(_login_attempts, now)
+            widget_evicted = _sweep_bucket(_widget_key_attempts, now)
+            if login_evicted or widget_evicted:
+                logger.debug(
+                    "Rate-limit sweep evicted %d login and %d widget-key buckets",
+                    login_evicted,
+                    widget_evicted,
+                )
+        except asyncio.CancelledError:
+            raise
+        except Exception:  # noqa: BLE001
+            logger.exception("Rate-limit sweep task failed")
 
 
 def check_login_rate_limit(request: Request) -> bool:

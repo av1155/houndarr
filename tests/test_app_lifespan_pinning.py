@@ -117,6 +117,23 @@ class TestLifespanStartup:
         # Sanity: task was created and is alive.
         assert not retention.done()
 
+    def test_lifespan_spawns_rate_limit_sweep_task(
+        self,
+        app: TestClient,
+    ) -> None:
+        """The rate-limit sweep task spawns alongside retention and runs.
+
+        Pins the issue #632 fix: without an always-on sweep, scanners
+        that probe ``/login`` once per source IP leak permanent entries
+        into ``_login_attempts`` until container restart.  Unlike
+        retention there is no operator knob: rate-limiting is always
+        on, so the sweep is always spawned.
+        """
+        sweep = getattr(cast("FastAPI", app.app).state, "rate_limit_sweep_task", None)
+        assert sweep is not None
+        assert not sweep.done()
+        assert sweep.get_name() == "rate-limit-sweep-loop"
+
     def test_lifespan_skips_retention_task_when_retention_disabled(
         self,
         tmp_data_dir: str,
@@ -177,3 +194,13 @@ class TestModuleConstants:
         import inspect
 
         assert inspect.iscoroutinefunction(_periodic_log_retention)
+
+    def test_rate_limit_sweep_interval_is_five_minutes(self) -> None:
+        """Pin the sweep cadence so dwell time for a stale bucket stays bounded.
+
+        Issue #632.  With ``_LOGIN_WINDOW_SECONDS = 60``, a five-minute
+        cadence caps worst-case post-window dwell at roughly five minutes.
+        """
+        from houndarr.auth import _RATE_LIMIT_SWEEP_INTERVAL_SECONDS
+
+        assert _RATE_LIMIT_SWEEP_INTERVAL_SECONDS == 5 * 60

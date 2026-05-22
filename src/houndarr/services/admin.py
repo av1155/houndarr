@@ -238,6 +238,13 @@ async def _factory_reset_impl(*, app: FastAPI, data_dir: str) -> None:
             await retention_task
     app.state.retention_task = None
 
+    rate_limit_sweep_task = getattr(app.state, "rate_limit_sweep_task", None)
+    if rate_limit_sweep_task is not None and not rate_limit_sweep_task.done():
+        rate_limit_sweep_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await rate_limit_sweep_task
+    app.state.rate_limit_sweep_task = None
+
     # app.state.master_key is deliberately not nulled here. Keeping the old
     # key in memory prevents any inflight request that reads it (e.g. the
     # dashboard poll) from hitting ``decrypt(None)`` during the few hundred
@@ -292,6 +299,15 @@ async def _factory_reset_impl(*, app: FastAPI, data_dir: str) -> None:
         )
     else:
         app.state.retention_task = None
+
+    # Respawn the rate-limit sweep cancelled above so the bounded-memory
+    # guarantee from issue #632 survives an in-process factory reset.
+    from houndarr.auth import periodic_rate_limit_sweep
+
+    app.state.rate_limit_sweep_task = asyncio.create_task(
+        periodic_rate_limit_sweep(),
+        name="rate-limit-sweep-loop",
+    )
 
     # Drop every cached dashboard aggregate from the wiped DB so the
     # next /api/status poll repopulates against the empty schema.

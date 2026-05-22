@@ -11,7 +11,7 @@ paths:
 
 SQLite via aiosqlite. `get_db()` is an async context manager that opens
 a fresh connection per call (FKs enabled per connection; WAL mode set
-once in `init_db()`). Schema version is currently 13. Bump
+once in `init_db()`). Schema version is currently 19. Bump
 `SCHEMA_VERSION` and add a `_migrate_to_vN` when changing schema.
 
 ## Schema reference
@@ -19,6 +19,7 @@ once in `init_db()`). Schema version is currently 13. Bump
 | Table | Purpose | Key constraints |
 |-------|---------|-----------------|
 | `settings` | Key-value config store | `key TEXT PK` |
+| `widget_api_key` | External widget API key, single row (v19) | `id INTEGER PRIMARY KEY CHECK(id = 1)`; `hash` is SHA-256 hex digest with `CHECK(length(hash) = 64 AND hash NOT GLOB '*[^0-9a-f]*')`; no FK |
 | `instances` | *arr instance configs | `type CHECK IN ('radarr','sonarr','lidarr','readarr','whisparr_v2','whisparr_v3')`; many policy columns with CHECK constraints; `monitored_total` / `unreleased_count` / `snapshot_refreshed_at` populated by the supervisor's snapshot refresh task |
 | `cooldowns` | Per-item search cooldown tracking | `instance_id FK→instances ON DELETE CASCADE`; `UNIQUE(instance_id, item_id, item_type)`; `search_kind CHECK IN ('missing','cutoff','upgrade')` (v15) |
 | `search_log` | Audit trail | `instance_id FK→instances ON DELETE SET NULL`; `action CHECK IN ('searched','skipped','error','info')` |

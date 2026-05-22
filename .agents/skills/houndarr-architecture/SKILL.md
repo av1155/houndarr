@@ -100,8 +100,21 @@ src/houndarr/
 
 ## Auth composition
 
-Global `AuthMiddleware` (Starlette `BaseHTTPMiddleware`) handles
-session validation and CSRF enforcement; no per-route auth decorators.
+Global `AuthMiddleware` (Starlette `BaseHTTPMiddleware`) routes every
+request through one of three path buckets; no per-route auth decorators:
+
+- `_API_KEY_PATHS` (currently `/api/v1/widget`): the top-level
+  `dispatch()` sends the request straight to `_dispatch_api_key`,
+  which verifies `X-Api-Key` against the `widget_api_key` table
+  (constant-time compare on the SHA-256 digest) and applies a
+  per-IP attempt rate limit. Bypasses session and CSRF.
+- `_PUBLIC_PATHS` (`/setup`, `/login`, `/api/health`, `/static`): no
+  auth. Each of `_dispatch_builtin` and `_dispatch_proxy`
+  short-circuits these before any session or proxy-header check.
+- Everything else: mode-dependent. `_dispatch_builtin` enforces the
+  session cookie + CSRF (default); `_dispatch_proxy` enforces the
+  proxy-trust gate + CSRF when `HOUNDARR_AUTH_MODE=proxy`.
+
 Proxy-auth trust and header reads flow through two primitives in
 `auth.py`: `_is_trusted_proxy(request)` (IP gate) and
 `_extract_proxy_username(request)` (header read, assumes trust already

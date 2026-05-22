@@ -13,6 +13,11 @@ dashboard as the rest of your stack. The widget reads Houndarr's
 key-gated `/api/v1/widget` endpoint and displays the same library-health
 rollup that the Houndarr dashboard uses.
 
+<Image
+  img={require('@site/static/img/screenshots/houndarr-homepage-widget.png')}
+  alt="The Houndarr service card in Homepage rendered via the customapi widget, with four blocks below the service title and description: Eligible, Gated, Unreleased, and Searches, each showing a count drawn from Houndarr's /api/v1/widget endpoint"
+/>
+
 ## Before you start
 
 | Requirement | Why it matters |

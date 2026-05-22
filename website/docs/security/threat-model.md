@@ -23,6 +23,28 @@ alongside your *arr stack. The design assumes:
 - Your *arr instances are reachable on the same LAN or container
   network
 
+## Credential classes
+
+Houndarr has three independent credential lanes:
+
+| Credential | Authorizes | Mode |
+|------------|------------|------|
+| Built-in session cookie | Browser UI, Settings, logs, and session-scoped routes | Built-in auth |
+| Proxy auth header | Browser UI, Settings, logs, and session-scoped routes after the request comes from a trusted proxy IP | Proxy auth |
+| Houndarr API key | `GET /api/v1/widget` only | Built-in auth and proxy auth |
+
+The Houndarr API key lane is independent of browser sessions and proxy
+headers. A proxy-auth header without `X-Api-Key` does not authorize
+`/api/v1/widget`, and a Houndarr API key does not authorize Settings,
+logs, instance configuration, or write actions.
+
+Regenerate and revoke are immediate because Houndarr checks the stored
+`widget_api_key` row on every widget request. A stolen Houndarr API key
+exposes only the widget summary contract until it is rotated or revoked.
+
+This split is captured in
+[ADR-0001](https://github.com/av1155/houndarr/blob/main/docs/adr/0001-auth-mode-agnostic-api-key-lane.md).
+
 ## Network trust boundaries
 
 ### Plain HTTP
@@ -87,18 +109,17 @@ It is not persisted to disk.
 ### Decrypted keys in process memory
 
 When Houndarr loads instance data (settings page, status polling,
-search execution), the decrypted API key lives in Python process
-memory as part of the `Instance` object. Templates never render this
-value and no HTTP response carries it, but a process memory dump
+search execution), the decrypted Instance API key lives in Python
+process memory as part of the `Instance` object. Templates never render
+this value and no HTTP response carries it, but a process memory dump
 could theoretically expose it. This is inherent to any application
 that uses secrets at runtime.
 
-### CDN dependency
+### Browser-side font dependency
 
-The Tailwind CSS Play CDN script is not pinned to a specific
-version. The HTMX script is pinned to `2.0.4`. If either CDN is
-unavailable, the UI will not render correctly. Both are loaded by
-the browser, not by the server.
+The production UI serves compiled CSS and HTMX from Houndarr's own
+`/static/*` assets. The compiled stylesheet imports Google Fonts. If
+Google Fonts is unavailable, the UI falls back to system fonts.
 
 ### Private network ranges allowed
 

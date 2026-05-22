@@ -8,7 +8,8 @@ description: What Houndarr protects, what it does not, and how to harden a deplo
 
 This page covers Houndarr's outbound behavior, its container
 security posture, and a hardening checklist for production installs.
-For credential internals (API key encryption, session handling) see
+For credential internals (Instance API key encryption, Houndarr API key
+hashing, session handling) see
 [Credential Handling](/docs/security/credential-handling). For the
 formal security boundary (what is in scope, what is not) see
 [Threat Model](/docs/security/threat-model). For independent audit
@@ -17,12 +18,17 @@ results see [Audit](/docs/security/audit).
 If you find a discrepancy between this page and the code,
 [report it](https://github.com/av1155/houndarr/security/advisories/new).
 
-## Does Houndarr call home?
+## Does Houndarr call home by default?
 
-**No.** The Houndarr server makes zero outbound connections to any
-developer, analytics, telemetry, or third-party service. No update
-checks, no version polling, no usage reporting, no crash reporting,
+**No.** By default, the Houndarr server makes zero outbound
+connections to any developer, analytics, telemetry, or third-party
+service. No version polling, no usage reporting, no crash reporting,
 no beacons.
+
+The only optional exception is the Admin release check. When
+**Automatically check for new releases** is enabled, or when you select
+**Check now**, Houndarr requests the latest release metadata from
+`https://api.github.com/repos/av1155/houndarr/releases/latest`.
 
 ### What the server connects to
 
@@ -30,7 +36,7 @@ Only your own *arr instances (Radarr, Sonarr, Lidarr, Readarr,
 Whisparr), over their standard REST API (v3 for Radarr / Sonarr /
 Whisparr, v1 for Lidarr / Readarr). Each request carries:
 
-- `X-Api-Key`: the API key you configured
+- `X-Api-Key`: the Instance API key you configured
 - `Accept: application/json`
 - Standard API parameters (pagination, command IDs)
 
@@ -42,18 +48,15 @@ is present in the source tree.
 
 - No analytics, error tracking, or telemetry services
 - No developer-controlled servers
-- No package registries, update servers, or version-check endpoints
+- No package registries
+- No update servers unless the Admin release check is enabled or run manually
 
-### Browser-side CDN resources
+### Browser-side external resources
 
-The web UI loads two JavaScript libraries from external CDNs:
-
-- Tailwind CSS from `cdn.tailwindcss.com` (Play CDN)
-- HTMX 2.0.4 from `unpkg.com` (pinned version)
-
-Your browser fetches these, not the Houndarr server. CDN providers
-log the standard metadata any CDN sees (IP, User-Agent). The
-Houndarr server itself never contacts these CDNs.
+The web UI serves its compiled CSS and HTMX from Houndarr's own
+`/static/*` assets. The compiled stylesheet imports Google Fonts, so
+your browser may request font CSS and font files from Google. The UI
+falls back to system fonts if those requests fail.
 
 A footer link to the Houndarr GitHub repository is present in the UI
 but only loads when clicked.
@@ -114,11 +117,20 @@ mapping.
 
 :::
 
-### Health check
+### Public and key-gated API routes
 
 The Docker `HEALTHCHECK` polls `http://localhost:8877/api/health`
-inside the container. The endpoint is intentionally unauthenticated
-and returns only `{"status": "ok"}`.
+inside the container. `/api/health` is intentionally public and
+returns only `{"status": "ok"}`.
+
+`/api/v1/widget` is different: it is an external dashboard endpoint
+gated by the Houndarr API key. Session cookies and proxy-auth headers
+do not authorize it. Clients must send `X-Api-Key` with the current
+Houndarr API key.
+
+See [API keys](/docs/reference/api-keys) and
+[Widget API](/docs/reference/widget-api) for the key lifecycle and
+response contract.
 
 ## Deployment hardening checklist
 

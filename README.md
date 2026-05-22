@@ -139,6 +139,7 @@ Replace `/path/to/data` with an absolute path on your host where Houndarr should
 </details>
 
 For environment variables, reverse proxy setup, Kubernetes, Helm, and building from source, see the [full documentation](https://av1155.github.io/houndarr/docs/guides/installation/docker).
+For Homepage dashboard setup, see the [Homepage integration guide](website/docs/guides/homepage-integration.md).
 
 <details>
 <summary><strong>What Houndarr Does NOT Do</strong></summary>
@@ -156,7 +157,7 @@ For environment variables, reverse proxy setup, Kubernetes, Helm, and building f
 ## Security and Trust
 
 - No telemetry, analytics, or call-home. The only outbound connections go to your configured \*arr instances.
-- API keys are encrypted at rest with Fernet (AES-128-CBC + HMAC-SHA256) and never sent back to the browser.
+- Instance API keys are encrypted at rest with Fernet (AES-128-CBC + HMAC-SHA256) and never sent back to the browser.
 - Authentication uses bcrypt password hashing, signed session tokens, CSRF protection, and login rate limiting.
 - The container runs as a non-root user after PUID/PGID remapping.
 - 63 integration tests validate immunity to every finding from the Huntarr.io security review; a live smoke test runs in CI on every PR.

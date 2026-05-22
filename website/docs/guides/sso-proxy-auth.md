@@ -211,11 +211,28 @@ services:
 | Admin > Danger zone | Factory reset asks you to type your proxy username (echoed from the auth header) instead of entering a password |
 | Factory reset redirect | Goes to `/` (empty dashboard) instead of `/setup` because `/setup` is not reachable in proxy mode |
 | `/api/health` | Still public, no auth required |
+| `/api/v1/widget` | Requires `X-Api-Key`; proxy sessions and proxy-auth headers do not authorize it |
 | CSRF | Still enforced on mutations via double-submit cookie |
 | Startup | Logs the configured auth mode and trusted proxy range |
 
 See [Admin actions](/docs/guides/admin-actions) for what each button in
 Settings > Admin does and when to use it.
+
+## API-key endpoints in proxy mode
+
+Homepage and other external clients can call `/api/v1/widget` with the
+Houndarr API key even when `HOUNDARR_AUTH_MODE=proxy`. The widget lane
+is separate from the proxy gate so integrations do not need to forward a
+browser session or proxy-auth header.
+
+A request to `/api/v1/widget` must include `X-Api-Key` with the current
+Houndarr API key. A trusted proxy header alone still returns `401` with
+`WWW-Authenticate: ApiKey`.
+
+See [API keys](/docs/reference/api-keys),
+[Widget API](/docs/reference/widget-api), and
+[ADR-0001](https://github.com/av1155/houndarr/blob/main/docs/adr/0001-auth-mode-agnostic-api-key-lane.md)
+for the credential split.
 
 ## Switching back to built-in auth
 

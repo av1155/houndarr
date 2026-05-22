@@ -102,6 +102,15 @@ VIEWS: list[View] = [
         filename="houndarr-settings-account.png",
     ),
     View(
+        name="settings-admin",
+        path="/settings",
+        wait_selector="#admin-toggle",
+        filename="houndarr-settings-admin.png",
+        viewport_width=1846,
+        viewport_height=1994,
+        full_page=False,
+    ),
+    View(
         name="settings-help",
         path="/settings/help",
         wait_selector="main, #app-content",
@@ -137,9 +146,20 @@ async def _prepare_view(page: Page, view: View) -> None:
             " if (el) el.open = true; }"
         )
         await page.wait_for_selector('form[hx-post="/settings/account/password"]', timeout=5_000)
+    elif view.name == "settings-admin":
+        await page.click("#admin-toggle")
+        await page.wait_for_selector("#admin-api-key", state="visible", timeout=5_000)
     elif view.name == "add-instance":
         await page.get_by_role("button", name=re.compile(r"add\s*instance", re.I)).first.click()
         await page.wait_for_selector('form[data-form-mode="add"]', state="visible", timeout=5_000)
+
+
+async def _close_auto_changelog_modal(page: Page) -> None:
+    """Close the release modal when it auto-opens during screenshot setup."""
+    await page.evaluate(
+        "() => { const el = document.querySelector('#changelog-modal');"
+        " if (el instanceof HTMLDialogElement && el.open) el.close(); }"
+    )
 
 
 async def _capture_view(
@@ -155,8 +175,12 @@ async def _capture_view(
     await page.set_viewport_size({"width": view.viewport_width, "height": view.viewport_height})
     await page.goto(f"{base_url}{view.path}")
     await page.wait_for_selector(view.wait_selector, timeout=10_000)
+    # The What's New modal can auto-open after login; view screenshots
+    # should capture the underlying page unless a dedicated modal view is added.
+    await _close_auto_changelog_modal(page)
     await _prepare_view(page, view)
     await page.wait_for_timeout(view.settle_ms)
+    await _close_auto_changelog_modal(page)
 
     # Park the mouse at the far bottom-right corner of the viewport and
     # clear any lingering focus so screenshots render a pristine state.

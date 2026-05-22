@@ -11,7 +11,111 @@ function initSettingsPage() {
   window.__houndarrSettingsPageController = controller;
   const { signal } = controller;
 
-  (function () {
+  (() => {
+    async function writeClipboard(text) {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+        return;
+      }
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.focus();
+      ta.select();
+      try {
+        if (!document.execCommand('copy')) {
+          throw new Error('Copy command failed');
+        }
+      } finally {
+        document.body.removeChild(ta);
+      }
+    }
+
+    function showToast(message) {
+      if (typeof window.houndarrShowToast === 'function') {
+        window.houndarrShowToast(message);
+      }
+    }
+
+    document.body.addEventListener('click', (event) => {
+      const copyBtn = event.target.closest('[data-copy-api-key]');
+      if (!copyBtn) return;
+      const targetSelector = copyBtn.getAttribute('data-copy-target');
+      const target = targetSelector ? document.querySelector(targetSelector) : null;
+      const text = target?.textContent?.trim();
+      if (!text) {
+        showToast('Nothing to copy');
+        return;
+      }
+      writeClipboard(text)
+        .then(() => showToast('Houndarr API key copied'))
+        .catch(() => showToast('Copy failed'));
+    }, { signal });
+  })();
+
+  // API key reveal modal. The modal element is only present in the DOM
+  // after a /settings/api-key/generate POST swaps the section, so every
+  // handler looks the element up on dispatch instead of caching it at
+  // IIFE init. The HX-Trigger-After-Swap=houndarr-show-api-key header on
+  // the generate response triggers the open after the section is in
+  // place; close goes via the explicit "I copied it" button.
+  (() => {
+    const closeAnimationMs = 160;
+
+    function getModal() {
+      return document.getElementById('api-key-reveal-modal');
+    }
+
+    function showModal(modal) {
+      if (!modal || modal.open) return;
+      if (typeof modal.showModal === 'function') {
+        modal.showModal();
+        document.body.style.overflow = 'hidden';
+        return;
+      }
+      modal.setAttribute('open', '');
+    }
+
+    function removeModal(modal) {
+      document.body.style.overflow = '';
+      modal.remove();
+    }
+
+    function closeModal(modal) {
+      if (typeof hxCloseDialogAnimated === 'function') {
+        hxCloseDialogAnimated(modal, closeAnimationMs, () => removeModal(modal));
+        return;
+      }
+      if (typeof modal.close === 'function' && modal.open) {
+        modal.close();
+      }
+      removeModal(modal);
+    }
+
+    document.body.addEventListener('houndarr-show-api-key', () => {
+      const modal = getModal();
+      if (modal) showModal(modal);
+    }, { signal });
+
+    // `cancel` does not bubble, so the body-level listener uses the
+    // capture phase to intercept Esc from a freshly-inserted modal.
+    document.body.addEventListener('cancel', (event) => {
+      if (event.target && event.target.id === 'api-key-reveal-modal') {
+        event.preventDefault();
+      }
+    }, { signal, capture: true });
+
+    document.body.addEventListener('click', (event) => {
+      if (event.target.closest('[data-close-api-key-reveal]')) {
+        const modal = getModal();
+        if (modal) closeModal(modal);
+      }
+    }, { signal });
+  })();
+
+  (() => {
     const addInstanceBtn = document.getElementById('add-instance-btn');
     const addInstanceModal = document.getElementById('add-instance-modal');
     const addInstanceModalContent = document.getElementById('add-instance-modal-content');
@@ -24,18 +128,6 @@ function initSettingsPage() {
 
     if (!addInstanceBtn || !addInstanceModal || !addInstanceModalContent) {
       return;
-    }
-
-    function flashUpdatedInstanceRow(row) {
-      if (!row) {
-        return;
-      }
-      row.classList.remove('just-updated');
-      void row.offsetWidth;
-      row.classList.add('just-updated');
-      window.setTimeout(() => {
-        row.classList.remove('just-updated');
-      }, 450);
     }
 
     function setAddInstanceModalChrome(mode, instanceName) {
@@ -90,9 +182,9 @@ function initSettingsPage() {
 
       const t = typeSelect.value;
       const appOnlyAttrs = ['data-sonarr-only', 'data-lidarr-only', 'data-readarr-only', 'data-whisparr_v2-only', 'data-whisparr_v3-only'];
-      appOnlyAttrs.forEach(function (attr) {
+      appOnlyAttrs.forEach((attr) => {
         const appType = attr.replace('data-', '').replace('-only', '');
-        addInstanceModalContent.querySelectorAll('[' + attr + '="true"]').forEach(function (el) {
+        addInstanceModalContent.querySelectorAll('[' + attr + '="true"]').forEach((el) => {
           if (!(el instanceof HTMLElement)) {
             return;
           }
@@ -212,7 +304,7 @@ function initSettingsPage() {
         return;
       }
 
-      addInstanceModalContent.querySelectorAll('[data-default-value]').forEach(function (el) {
+      addInstanceModalContent.querySelectorAll('[data-default-value]').forEach((el) => {
         if (!(el instanceof HTMLInputElement) && !(el instanceof HTMLSelectElement)) {
           return;
         }
@@ -220,7 +312,7 @@ function initSettingsPage() {
         el.dispatchEvent(new Event('change', { bubbles: true }));
       });
 
-      addInstanceModalContent.querySelectorAll('[data-default-checked]').forEach(function (el) {
+      addInstanceModalContent.querySelectorAll('[data-default-checked]').forEach((el) => {
         if (!(el instanceof HTMLInputElement)) {
           return;
         }
@@ -231,14 +323,14 @@ function initSettingsPage() {
       syncAppOnlyControls();
     }
 
-    window.houndarrOpenAddInstanceModal = function () {
+    window.houndarrOpenAddInstanceModal = () => {
       addInstanceModal.classList.remove('is-closing');
       addInstanceModal.__hxClosing = false;
       pendingModalShow = !addInstanceModal.open;
       setAddInstanceModalChrome('add');
     };
 
-    window.houndarrCloseAddInstanceModal = function () {
+    window.houndarrCloseAddInstanceModal = () => {
       hxCloseDialogAnimated(addInstanceModal, closeAnimationMs, () => {
         addInstanceModalContent.replaceChildren();
         pendingModalShow = false;
@@ -249,7 +341,7 @@ function initSettingsPage() {
 
     document.body.addEventListener(
       'click',
-      function (event) {
+      (event) => {
         const target = event.target;
         if (!(target instanceof Element)) {
           return;
@@ -271,7 +363,7 @@ function initSettingsPage() {
 
     addInstanceModal.addEventListener(
       'cancel',
-      function (event) {
+      (event) => {
         event.preventDefault();
         window.houndarrCloseAddInstanceModal();
       },
@@ -280,7 +372,7 @@ function initSettingsPage() {
 
     addInstanceModal.addEventListener(
       'click',
-      function (event) {
+      (event) => {
         if (event.target === addInstanceModal) {
           window.houndarrCloseAddInstanceModal();
         }
@@ -290,7 +382,7 @@ function initSettingsPage() {
 
     addInstanceModalContent.addEventListener(
       'change',
-      function (event) {
+      (event) => {
         if (event.target.matches('[data-instance-field="type"]')) {
           syncAddInstancePlaceholders();
           syncAppOnlyControls();
@@ -302,7 +394,7 @@ function initSettingsPage() {
 
     addInstanceModalContent.addEventListener(
       'input',
-      function (event) {
+      (event) => {
         resetConnectionStateOnFieldChange(event.target);
       },
       { signal },
@@ -310,7 +402,7 @@ function initSettingsPage() {
 
     addInstanceModalContent.addEventListener(
       'click',
-      function (event) {
+      (event) => {
         const target = event.target;
         if (!(target instanceof Element)) {
           return;
@@ -327,7 +419,7 @@ function initSettingsPage() {
 
     document.body.addEventListener(
       'htmx:beforeRequest',
-      function (evt) {
+      (evt) => {
         const triggerEl = evt.detail.elt;
         if (!triggerEl || !triggerEl.matches('[data-test-connection-btn="true"]')) {
           return;
@@ -339,7 +431,7 @@ function initSettingsPage() {
 
     document.body.addEventListener(
       'houndarr-connection-test-success',
-      function () {
+      () => {
         if (!isConnectionGuardedFormLoaded() || getModalFormMode() === null) {
           return;
         }
@@ -353,7 +445,7 @@ function initSettingsPage() {
 
     document.body.addEventListener(
       'houndarr-connection-test-failure',
-      function () {
+      () => {
         if (!isConnectionGuardedFormLoaded()) {
           return;
         }
@@ -367,7 +459,7 @@ function initSettingsPage() {
 
     document.body.addEventListener(
       'htmx:afterRequest',
-      function (evt) {
+      (evt) => {
         const triggerEl = evt.detail.elt;
         if (!triggerEl || !triggerEl.matches('[data-test-connection-btn="true"]')) {
           return;
@@ -384,7 +476,7 @@ function initSettingsPage() {
 
     document.body.addEventListener(
       'htmx:afterSwap',
-      function (evt) {
+      (evt) => {
         if (evt.detail.target.id === 'app-content') {
           document.body.style.overflow = '';
         }
@@ -438,7 +530,7 @@ function initSettingsPage() {
 
     document.body.addEventListener(
       'htmx:responseError',
-      function () {
+      () => {
         pendingModalShow = false;
       },
       { signal },
@@ -446,7 +538,7 @@ function initSettingsPage() {
 
     document.body.addEventListener(
       'htmx:sendError',
-      function () {
+      () => {
         pendingModalShow = false;
       },
       { signal },
@@ -456,7 +548,7 @@ function initSettingsPage() {
   /* Admin dropdown: collapse + expand animation, plus confirm-dialog
      wiring for destructive actions inside the dropdown. Animation falls
      back to an instant toggle when prefers-reduced-motion is set. */
-  (function () {
+  (() => {
     const panel = document.getElementById('admin-grouped');
     const body = document.getElementById('admin-body');
     const toggle = document.getElementById('admin-toggle');
@@ -535,7 +627,7 @@ function initSettingsPage() {
   })();
 
   /* ── Confirm dialog (Admin > Maintenance + Danger zone) ───── */
-  (function () {
+  (() => {
     const dialog = document.getElementById('confirm-dialog');
     const form = document.getElementById('confirm-form');
     if (!dialog || !form) return;
@@ -800,7 +892,7 @@ function initSettingsPage() {
      innerHTML-swaps into the stable #admin-flash wrapper.  After 3.2s
      we fade the inner child to 0 opacity and clear it so the wrapper
      is ready for the next flash. */
-  (function () {
+  (() => {
     const FADE_MS = 3200;
     let fadeTimer = null;
     document.body.addEventListener('htmx:afterSwap', (evt) => {
@@ -829,7 +921,7 @@ function initSettingsPage() {
      server state stayed the opposite. Listen for htmx:responseError
      scoped to that form and flip the checkbox back so the DOM stays in
      sync with what actually persisted. */
-  (function () {
+  (() => {
     document.body.addEventListener('htmx:responseError', (evt) => {
       const form = evt.detail && evt.detail.elt;
       if (!(form instanceof HTMLFormElement)) return;
@@ -842,17 +934,18 @@ function initSettingsPage() {
 
 }
 
+function hasSettingsControllerPage() {
+  return document.querySelector('[data-page-key="settings"]');
+}
+
 // Direct load (e.g. the Settings page is the initial URL).
-if (document.querySelector('[data-page-key="settings"]')) {
+if (hasSettingsControllerPage()) {
   initSettingsPage();
 }
 
 // HTMX navigation into the Settings page.
 document.body.addEventListener('htmx:afterSwap', (evt) => {
-  if (
-    evt.detail?.target?.id === 'app-content' &&
-    document.querySelector('[data-page-key="settings"]')
-  ) {
+  if (evt.detail?.target?.id === 'app-content' && hasSettingsControllerPage()) {
     initSettingsPage();
   }
 });

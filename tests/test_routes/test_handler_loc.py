@@ -88,13 +88,13 @@ def _walk_handlers() -> list[tuple[str, str, int]]:
 
 
 def test_handler_count_matches_audit_snapshot() -> None:
-    """The handler inventory count matches the current snapshot (34 handlers).
+    """The handler inventory count matches the current snapshot (36 handlers).
 
     A regression here means a handler was added or removed without
     an accompanying update to this count.  Update this count
     together with the route change so the audit stays honest.
     """
-    assert len(_walk_handlers()) == 34
+    assert len(_walk_handlers()) == 36
 
 
 def test_every_handler_under_soft_cap() -> None:

@@ -113,27 +113,6 @@
     transform: translateY(1px);
   }
 
-  [id^='instance-row-'].just-updated {
-    animation: instance-row-flash 420ms ease-out;
-  }
-
-  @keyframes instance-row-flash {
-    0% {
-      background-color: rgba(6, 182, 212, 0.16);
-      box-shadow: inset 0 0 0 1px rgba(34, 211, 238, 0.28);
-    }
-    100% {
-      background-color: transparent;
-      box-shadow: inset 0 0 0 0 rgba(34, 211, 238, 0);
-    }
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    [id^='instance-row-'].just-updated {
-      animation: none;
-    }
-  }
-
   /* ── Mobile: instance table → cards ─────────────────────────────────── */
   @media (max-width: 639px) {
     .instance-table-wrapper {
@@ -537,7 +516,7 @@
         <div class="min-w-0">
           <h2 class="text-base font-semibold text-slate-100">Admin</h2>
           <p class="text-xs text-slate-500 mt-0.5">
-            Security, updates, maintenance, and factory-reset actions.
+            Security, system, and maintenance settings.
           </p>
         </div>
       </div>
@@ -558,6 +537,7 @@
     <div id="admin-body" class="admin-panel__body">
       <div class="px-5 sm:px-6 py-5 sm:py-6 space-y-8">
         {% include "partials/admin/security.html" %}
+        {% include "partials/admin/api_key.html" %}
         {% include "partials/admin/updates.html" %}
         {% include "partials/admin/maintenance.html" %}
         {% include "partials/admin/danger.html" %}

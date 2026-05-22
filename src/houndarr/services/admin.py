@@ -28,7 +28,7 @@ from pathlib import Path
 
 from fastapi import FastAPI
 
-from houndarr.auth import reset_auth_caches
+from houndarr.auth import periodic_rate_limit_sweep, reset_auth_caches
 from houndarr.config import (
     DEFAULT_ALLOWED_TIME_WINDOW,
     DEFAULT_BATCH_SIZE,
@@ -302,8 +302,6 @@ async def _factory_reset_impl(*, app: FastAPI, data_dir: str) -> None:
 
     # Respawn the rate-limit sweep cancelled above so the bounded-memory
     # guarantee from issue #632 survives an in-process factory reset.
-    from houndarr.auth import periodic_rate_limit_sweep
-
     app.state.rate_limit_sweep_task = asyncio.create_task(
         periodic_rate_limit_sweep(),
         name="rate-limit-sweep-loop",

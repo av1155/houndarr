@@ -13,7 +13,7 @@ import styles from './index.module.css';
    @theme/IdealImage. IdealImage picks the smallest srcset variant
    that fits the rendered box (640w for the gallery's narrow cards),
    and medium-zoom then upscales that 640w bitmap to viewport width
-   when the user clicks to zoom — that's the visible blur on the
+   when the user clicks to zoom, which is the visible blur on the
    homepage. Loading the full optimized PNG keeps zoom crisp; the
    gallery is below the fold so loading="lazy" defers the cost until
    the user scrolls into view. */
@@ -47,7 +47,7 @@ const SUPPORTING_SCREENSHOTS: ScreenshotItem[] = [
   },
   {
     src: '/img/screenshots/houndarr-settings-admin.png',
-    alt: 'Houndarr Admin panel: password change form with strength meter, plus release-check toggle, Check now button, changelog modal toggle, and Latest on GitHub link',
+    alt: 'Houndarr Admin panel: Security, API key, Updates, Maintenance, and Danger controls under Settings',
     caption: 'Admin',
   },
   {

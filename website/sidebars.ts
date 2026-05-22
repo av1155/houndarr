@@ -36,6 +36,7 @@ const sidebars: SidebarsConfig = {
         'guides/backup-and-restore',
         'guides/reverse-proxy',
         'guides/sso-proxy-auth',
+        'guides/homepage-integration',
       ],
     },
     {
@@ -45,6 +46,8 @@ const sidebars: SidebarsConfig = {
       items: [
         'reference/environment-variables',
         'reference/instance-settings',
+        'reference/api-keys',
+        'reference/widget-api',
         'reference/search-commands',
         'reference/skip-reasons',
         'reference/compatibility',

@@ -11,7 +11,7 @@ website needs a fresh capture.
 |------|---------|
 | `seed_demo_data.py` | Fills a scratch data dir with demo instances, cooldowns, search log rows, and an admin user |
 | `serve_demo.py` | Runs `uvicorn` against a seeded data dir with the supervisor's search loop patched to a no-op |
-| `capture_screenshots.py` | Drives Playwright through every documented view and writes the PNG + JPEG pair each page references |
+| `capture_screenshots.py` | Drives Playwright through every documented view and writes the PNG files each page references |
 | `demo_titles/` | TV, movies, albums, books pools the seed script draws from. Edit these to refresh the fictional library without touching Python |
 
 All three scripts default to `./marketing-data/` for the scratch DB
@@ -19,29 +19,29 @@ All three scripts default to `./marketing-data/` for the scratch DB
 
 ## Prerequisites
 
-- Project venv with dev dependencies installed: `uv sync` (installs the PEP 735 `dev` group by default)
+- Project venv with dev and browser-e2e dependencies installed: `uv sync --group e2e`
 - Playwright browsers: `.venv/bin/playwright install chromium`
 
 ## Full regeneration (populated + empty, one command pass each)
 
 ```bash
-# 1. Populated state — covers every view except the empty-dashboard hero shot.
+# 1. Populated state: covers every view except the empty-dashboard hero shot.
 .venv/bin/python scripts/marketing/seed_demo_data.py --mode populated
 .venv/bin/python scripts/marketing/serve_demo.py &                  # background
 .venv/bin/python scripts/marketing/capture_screenshots.py           # --seed-mode populated
 kill %1
 
-# 2. Empty state — only the empty-dashboard view.
+# 2. Empty state: only the empty-dashboard view.
 .venv/bin/python scripts/marketing/seed_demo_data.py --mode empty
 .venv/bin/python scripts/marketing/serve_demo.py &
 .venv/bin/python scripts/marketing/capture_screenshots.py --seed-mode empty
 kill %1
 ```
 
-The scripts write to the canonical locations the docs already reference
-(`website/static/img/screenshots/*.png` and `docs/images/*.jpeg`), so
-the website + README pick up new shots on the next build with no path
-changes.
+The scripts write PNGs to the canonical locations the docs already
+reference (`website/static/img/screenshots/*.png` and
+`docs/images/*.png`), so the website + README pick up new shots on the
+next build with no path changes.
 
 ## Capturing a single view
 
@@ -50,8 +50,8 @@ changes.
 ```
 
 View names: `dashboard`, `dashboard-empty`, `logs`, `logs-mobile`,
-`settings-instances`, `settings-account`, `settings-help`,
-`add-instance`.
+`settings-instances`, `settings-account`, `settings-admin`,
+`settings-help`, `add-instance`.
 
 ## Refreshing the demo library
 
@@ -68,8 +68,8 @@ files (the seed script uses these as `cooldowns.item_id` and
    exist during loading states).
 3. If the view needs an interaction (click a tab, expand a `<details>`,
    open a modal), add a branch to `_prepare_view()`.
-4. Drop the expected PNG + JPEG filenames so the paths align with where
-   the docs already reference them.
+4. Drop the expected PNG filenames so the paths align with where the
+   docs already reference them.
 
 ## Notes
 

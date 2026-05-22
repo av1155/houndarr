@@ -6,20 +6,21 @@ description: How Houndarr stores API keys, the master key, passwords, session to
 
 # Credential Handling
 
-Reference for every credential Houndarr handles: your stored *arr
-API keys, the Fernet master key that encrypts them, the admin
-password, session tokens, and the CSRF state.
+Reference for every credential Houndarr handles: your stored Instance
+API keys, the Houndarr API key, the Fernet master key that encrypts
+Instance API keys, the admin password, session tokens, and the CSRF
+state.
 
-## API keys on disk
+## Instance API keys on disk
 
-API keys are encrypted before being written to the database using
+Instance API keys are encrypted before being written to the database using
 [Fernet](https://cryptography.io/en/latest/fernet/) symmetric
 encryption from the `cryptography` library. Fernet uses AES-128 in
 CBC mode for confidentiality and HMAC-SHA256 for integrity and
 tamper detection.
 
-The database column is named `encrypted_api_key`. Plaintext API
-keys are never written to disk.
+The database column is named `encrypted_api_key`. Plaintext Instance
+API keys are never written to disk.
 
 Relevant source files:
 
@@ -49,13 +50,13 @@ HTTP responses, or template output.
 :::danger[Master key is critical]
 
 Anyone with access to both `houndarr.masterkey` and `houndarr.db`
-can decrypt all stored API keys. See
+can decrypt all stored Instance API keys. See
 [Backup and Restore](/docs/guides/backup-and-restore) for how to
 back up the data directory safely.
 
 :::
 
-## API keys in the web UI
+## Instance API keys in the web UI
 
 When you edit an existing instance, the API key field shows a
 placeholder sentinel (`__UNCHANGED__`), not the actual key. The
@@ -68,8 +69,8 @@ On submit:
 - If a new value was entered, the server encrypts and stores the
   new key.
 
-The decrypted API key never appears in any HTTP response body, HTML
-template output, or JSON API payload. Specifically:
+The decrypted Instance API key never appears in any HTTP response body,
+HTML template output, or JSON API payload. Specifically:
 
 - `/api/status` constructs its response by selecting specific
   fields; `api_key` is excluded
@@ -87,6 +88,28 @@ Relevant source files:
   pre-fills sentinel, not the key
 - `src/houndarr/routes/api/status.py`: field-level selection
   omitting `api_key`
+
+## Houndarr API keys
+
+The Houndarr API key is different from an Instance API key. It is the
+inbound key Houndarr issues for external read-only clients that call
+`/api/v1/widget`.
+
+| Property | Behavior |
+|----------|----------|
+| Created in | `Settings > Admin > API key` |
+| Format | `hndarr_` prefix plus URL-safe random data generated from 32 random bytes |
+| Display | Plaintext is shown once after generation or regeneration |
+| Storage | SHA-256 hash in the single-row `widget_api_key` table |
+| Transport | `X-Api-Key` header on `/api/v1/widget` |
+| Metadata | `created_at` and `last_used_at` appear in Settings |
+
+Houndarr cannot recover the plaintext key after the reveal dialog is
+closed. If the key is lost, regenerate it and update external clients.
+Regenerate and revoke both take effect on the next widget request.
+
+See [API keys](/docs/reference/api-keys) and
+[Widget API](/docs/reference/widget-api) for the endpoint contract.
 
 ## Authentication modes
 

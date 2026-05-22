@@ -1,5 +1,7 @@
 ---
 sidebar_position: 4
+title: Admin Actions
+description: Use Settings > Admin for security, API key, update, maintenance, and factory-reset actions.
 ---
 
 import Image from '@theme/IdealImage';
@@ -7,12 +9,12 @@ import Image from '@theme/IdealImage';
 # Admin actions
 
 The Settings page groups every global administrative action inside the
-**Admin** collapsible. Four sub-sections: Security, Updates,
-Maintenance, Danger zone.
+**Admin** collapsible. Five sub-sections: Security, API key,
+Updates, Maintenance, Danger zone.
 
 <Image
   img={require('@site/static/img/screenshots/houndarr-settings-admin.png')}
-  alt="The Houndarr Admin panel expanded under the Settings page, showing the Admin header (Security, updates, maintenance, and factory-reset actions) above the Security section (Signed in as admin, Current / New / Confirm password fields, strength meter, Update Password button) and the Updates section (Automatically check for new releases toggle, Check now button, Show changelog after each update toggle, What's new button, Latest on GitHub link), with the Maintenance heading visible at the bottom edge"
+  alt="The Houndarr Admin panel expanded under the Settings page, showing the Admin header with the subtitle Security, system, and maintenance settings, followed by the Security, API key, Updates, Maintenance, and Danger sub-sections"
 />
 
 Everything below works the same under built-in auth and proxy / SSO
@@ -43,6 +45,31 @@ username your upstream proxy forwarded on the request. Credential
 rotation is handled at the proxy layer (Authelia, Authentik,
 oauth2-proxy, or whatever you're using); see [SSO / proxy
 auth](/docs/guides/sso-proxy-auth).
+
+## API key
+
+Generate, rotate, or revoke the Houndarr API key used by external
+read-only clients. Homepage uses this key to call `/api/v1/widget`
+through the `X-Api-Key` header.
+
+- **Generate key** creates the active Houndarr API key and shows the
+  plaintext once. Copy it before closing the dialog.
+- **Regenerate key** creates a replacement and invalidates the old key
+  on the next request. Update external clients after copying the new
+  value.
+- **Revoke** deletes the active key. `/api/v1/widget` returns HTTP
+  401 until a new key is generated.
+- **Last used** updates after a successful widget request and shows
+  `Never` before first use.
+
+The API key lane works the same in built-in auth and proxy / SSO mode.
+A browser session or proxy-auth header alone does not authorize
+`/api/v1/widget`; the request must include the Houndarr API key.
+
+See [API keys](/docs/reference/api-keys),
+[Widget API](/docs/reference/widget-api), and
+[Homepage Integration](/docs/guides/homepage-integration) for setup
+and endpoint details.
 
 ## Updates
 

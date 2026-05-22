@@ -1,0 +1,7 @@
+# pnpm 11 only reads build-script allow-lists from this file. The
+# legacy `pnpm.onlyBuiltDependencies` block in package.json is
+# silently ignored after pnpm v11. This project compiles the
+# Tailwind + daisyUI CSS bundle at Docker build time; @parcel/watcher
+# runs an install-time native build for the optional watch path.
+allowBuilds:
+  "@parcel/watcher": true

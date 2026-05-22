@@ -18,8 +18,9 @@ WORKDIR /build
 # in package.json pins the exact pnpm version.
 RUN corepack enable
 
-# Copy manifest + lockfile first for better layer caching.
-COPY package.json pnpm-lock.yaml ./
+# Copy manifest + lockfile + workspace config first for better layer caching.
+# pnpm 11 reads `allowBuilds` and `overrides` only from pnpm-workspace.yaml.
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 RUN pnpm install --frozen-lockfile
 
 # Copy only the inputs Tailwind needs to scan and import.

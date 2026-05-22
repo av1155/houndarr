@@ -1,0 +1,45 @@
+# pnpm 11 only reads overrides and build-script allow-lists from this
+# file. The legacy `pnpm.overrides` and `pnpm.onlyBuiltDependencies`
+# blocks in package.json are silently ignored after pnpm v11.
+
+overrides:
+  # GHSA-76p7-773f-r4q5: serialize-javascript <6.0.2 leaks XSS via
+  # crafted Object.prototype payloads. Pulled transitively through
+  # the Docusaurus webpack plugins; not a direct dep.
+  serialize-javascript: ">=7.0.5"
+  # CVE-2026-41305 (GHSA-qx2v-qp2m-jg93): postcss <8.5.10 has XSS via
+  # unescaped </style> in stringify output. Transitive via
+  # @docusaurus/core.
+  postcss: ">=8.5.10"
+  # uuid <14.0.0 floor for a single resolved major across the tree;
+  # multiple Docusaurus transitives still pin older 9.x/10.x lines.
+  uuid: ">=14.0.0"
+  # GHSA-rwhq-pwvg-2vrg: @babel/plugin-transform-modules-systemjs
+  # 7.12.0..=7.29.3 can generate arbitrary code when compiling
+  # malicious input. Transitive via @docusaurus/core > @babel.
+  "@babel/plugin-transform-modules-systemjs": ">=7.29.4"
+  # GHSA-86c8-pmm6-93fp: fast-uri <=3.1.1 is vulnerable to host
+  # confusion via percent-encoded authority delimiters. Transitive
+  # via @docusaurus/core > webpack > schema-utils > ajv > fast-uri.
+  fast-uri: ">=3.1.2"
+  # mermaid <11.15.0 resolves four moderate alerts on classDef,
+  # classDefs, configuration, and Gantt-chart sanitisation.
+  # Transitive via @docusaurus/theme-mermaid.
+  mermaid: ">=11.15.0"
+  # CVE-2026-6402 (GHSA-79cf-xcqc-c78w): webpack-dev-server <=5.2.3
+  # lets a malicious site exfiltrate dev-server source via
+  # cross-origin asset requests in non-default browsers. Transitive
+  # via @docusaurus/core; only active during `pnpm start`.
+  webpack-dev-server: ">=5.2.4"
+  # CVE-2026-45736 (GHSA-58qx-3vcg-4xpx): ws >=8.0.0 <8.20.1 leaks
+  # uninitialized memory when websocket.close() receives a
+  # TypedArray reason. Transitive via webpack-dev-server.
+  ws: ">=8.20.1"
+
+# pnpm 11 replaces `onlyBuiltDependencies` with an explicit allow-map.
+# Each entry permits the named package's install scripts to run;
+# everything else is blocked by default.
+allowBuilds:
+  "@swc/core": true
+  core-js: true
+  sharp: true

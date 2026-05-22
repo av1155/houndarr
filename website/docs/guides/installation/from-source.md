@@ -14,10 +14,10 @@ is for development.
 
 ## Prerequisites
 
-- Python 3.12 or later
-- pip
+- Python 3.13 or later
+- [uv](https://docs.astral.sh/uv/) (preferred) or pip
 - Node.js 22 or later
-- pnpm (via `corepack enable`)
+- pnpm 11 or later (via `corepack enable`)
 
 ## Setup
 
@@ -26,11 +26,10 @@ is for development.
 git clone https://github.com/av1155/houndarr.git
 cd houndarr
 
-# Create a Python virtual environment
-python3 -m venv .venv
-.venv/bin/pip install --upgrade pip
-.venv/bin/pip install -r requirements-dev.txt
-.venv/bin/pip install -e .
+# Create the Python virtual environment and install runtime + dev deps.
+# uv reads pyproject.toml + uv.lock and installs the PEP 735 `dev` group
+# by default.
+uv sync
 
 # Compile the Tailwind + daisyUI CSS bundle
 corepack enable
@@ -38,7 +37,7 @@ pnpm install --frozen-lockfile
 pnpm run build-css
 
 # Run in development mode
-.venv/bin/python -m houndarr --data-dir ./data-dev --dev
+uv run houndarr --data-dir ./data-dev --dev
 ```
 
 The dev server listens on `http://localhost:8877`.

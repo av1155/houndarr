@@ -790,7 +790,13 @@ def test_check_widget_key_rate_limit_prunes_stale_entries(
     test_settings: object,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Widget API key attempts use the same sliding-window threshold as login."""
+    """Widget API key attempts use the same sliding-window threshold as login.
+
+    After the window expires the IP key must be popped, not written back
+    as an empty list (issue #632): every unique probe would otherwise
+    leave a permanent entry and ``_widget_key_attempts`` would grow with
+    the count of distinct IPs that ever hit the widget endpoint.
+    """
     from unittest.mock import MagicMock
 
     import houndarr.auth as _auth
@@ -813,7 +819,7 @@ def test_check_widget_key_rate_limit_prunes_stale_entries(
 
     now["t"] += _LOGIN_WINDOW_SECONDS + 1
     assert check_widget_key_rate_limit(request) is True
-    assert _widget_key_attempts["198.51.100.10"] == []
+    assert "198.51.100.10" not in _widget_key_attempts
 
 
 @pytest.mark.pinning()
@@ -827,6 +833,11 @@ def test_check_login_rate_limit_prunes_stale_entries(
     scrolled past the window hours ago, and the counter would grow
     unboundedly in memory.  Pin the semantics by clock-travelling past
     the window and confirming the limiter re-admits the client.
+
+    Per issue #632, when pruning empties the bucket the IP key must be
+    popped, not written back as ``[]``; otherwise every probe leaves a
+    permanent empty entry and ``_login_attempts`` grows with the count
+    of distinct source IPs that have ever hit ``/login``.
     """
     from unittest.mock import MagicMock
 
@@ -851,7 +862,82 @@ def test_check_login_rate_limit_prunes_stale_entries(
     # Advance past the window; the next check must prune and re-admit.
     now["t"] += _LOGIN_WINDOW_SECONDS + 1
     assert check_login_rate_limit(request) is True
-    assert _login_attempts["198.51.100.9"] == []
+    assert "198.51.100.9" not in _login_attempts
+
+
+@pytest.mark.pinning()
+def test_sweep_bucket_evicts_non_returning_ips(
+    test_settings: object,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The periodic sweep must drop entries whose newest timestamp is stale.
+
+    Regression test for issue #632: ``_check_rate_limit`` only prunes
+    the bucket of the IP that is currently asking, so a scanner that
+    hits ``/login`` once per source IP and never returns leaves one
+    entry per IP behind for the lifetime of the process.  The sweep
+    helper closes that gap by walking the dict on a fixed cadence and
+    popping every bucket whose youngest timestamp has aged past the
+    window.
+    """
+    from unittest.mock import MagicMock
+
+    import houndarr.auth as _auth
+    from houndarr.auth import (
+        _LOGIN_WINDOW_SECONDS,
+        _login_attempts,
+        _sweep_bucket,
+        _widget_key_attempts,
+        record_failed_login,
+        record_failed_widget_key_attempt,
+    )
+
+    now = {"t": 1_700_000_000.0}
+    monkeypatch.setattr(_auth.time, "time", lambda: now["t"])
+
+    # Seed each bucket with five distinct one-shot IPs.
+    for i in range(5):
+        req = MagicMock()
+        req.client.host = f"203.0.113.{i}"
+        req.headers.get.return_value = None
+        record_failed_login(req)
+        record_failed_widget_key_attempt(req)
+
+    assert len(_login_attempts) == 5
+    assert len(_widget_key_attempts) == 5
+
+    # Within the window the sweep must keep entries intact: a legitimate
+    # rate-limited client is still inside the window and must stay
+    # accounted for.
+    evicted_in_window = _sweep_bucket(_login_attempts, now["t"])
+    assert evicted_in_window == 0
+    assert len(_login_attempts) == 5
+
+    # Advance past the window; the sweep must now evict every entry,
+    # even though none of the IPs ever returned to trigger lazy pruning.
+    now["t"] += _LOGIN_WINDOW_SECONDS + 1
+    evicted_login = _sweep_bucket(_login_attempts, now["t"])
+    evicted_widget = _sweep_bucket(_widget_key_attempts, now["t"])
+    assert evicted_login == 5
+    assert evicted_widget == 5
+    assert _login_attempts == {}
+    assert _widget_key_attempts == {}
+
+
+@pytest.mark.asyncio()
+@pytest.mark.pinning()
+async def test_periodic_rate_limit_sweep_is_async(test_settings: object) -> None:
+    """``periodic_rate_limit_sweep`` is an async def the lifespan can schedule.
+
+    Pins the public contract the lifespan in ``houndarr.app`` relies on:
+    a coroutine function that ``asyncio.create_task`` accepts and can
+    cancel cleanly during shutdown.
+    """
+    import inspect
+
+    from houndarr.auth import periodic_rate_limit_sweep
+
+    assert inspect.iscoroutinefunction(periodic_rate_limit_sweep)
 
 
 # Setup seam

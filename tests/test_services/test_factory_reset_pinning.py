@@ -41,6 +41,7 @@ class _FakeAppState:
     supervisor: Any = None
     master_key: bytes = b"old-key"
     retention_task: Any = None
+    rate_limit_sweep_task: Any = None
 
 
 class _FakeApp:

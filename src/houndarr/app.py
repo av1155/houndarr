@@ -14,7 +14,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from houndarr import __version__
-from houndarr.auth import AuthMiddleware
+from houndarr.auth import AuthMiddleware, periodic_rate_limit_sweep
 from houndarr.cache_headers import CacheControlMiddleware
 from houndarr.config import get_settings
 from houndarr.crypto import ensure_master_key
@@ -154,6 +154,15 @@ async def _lifespan(app: FastAPI) -> AsyncGenerator[None]:
         retention_task = None
     app.state.retention_task = retention_task
 
+    # Rate-limit buckets need active eviction in addition to the lazy
+    # clean-up `_check_rate_limit` does on read: scanners that hit
+    # /login once per source IP and never return otherwise leave one
+    # entry per IP behind for the lifetime of the process (issue #632).
+    rate_limit_sweep_task: asyncio.Task[None] = asyncio.create_task(
+        periodic_rate_limit_sweep(), name="rate-limit-sweep-loop"
+    )
+    app.state.rate_limit_sweep_task = rate_limit_sweep_task
+
     yield  # Application runs here
 
     logger.info("Houndarr shutting down")
@@ -161,6 +170,9 @@ async def _lifespan(app: FastAPI) -> AsyncGenerator[None]:
         retention_task.cancel()
         with suppress(asyncio.CancelledError):
             await retention_task
+    rate_limit_sweep_task.cancel()
+    with suppress(asyncio.CancelledError):
+        await rate_limit_sweep_task
     await supervisor.stop()
     await close_all_pools()
 

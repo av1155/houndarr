@@ -53,7 +53,7 @@ with values from your deployment.
 ```yaml
 - Media:
     - Houndarr:
-        icon: houndarr.png
+        icon: https://av1155.github.io/houndarr/img/houndarr-logo-dark.png
         href: http://houndarr:8877
         description: Polite media search scheduler
         widget:

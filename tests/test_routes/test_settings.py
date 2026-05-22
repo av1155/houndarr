@@ -118,6 +118,7 @@ def test_settings_page_renders(app: TestClient) -> None:
     # factory reset.
     assert b'id="admin-grouped"' in resp.content
     assert b'id="admin-security"' in resp.content
+    assert b'id="admin-api-key"' in resp.content
     assert b'id="admin-updates"' in resp.content
     assert b'id="admin-maintenance"' in resp.content
     assert b'id="admin-danger"' in resp.content

@@ -239,12 +239,23 @@ def cli(
     os.environ["HOUNDARR_AUTH_PROXY_HEADER"] = auth_proxy_header
     os.environ["HOUNDARR_LOG_RETENTION_DAYS"] = log_retention_days
 
+    # In --dev, narrow the WatchFiles reload watcher to the running
+    # Python source.  The default watches the whole cwd, which on macOS
+    # FSEvents drains slowly on Ctrl-C when the repo has high event
+    # volume (test edits, ruff/mypy hook writes, __pycache__, .venv
+    # churn).  Restricting the scope cuts the event volume to just the
+    # source the server actually loads and lets the reloader exit
+    # cleanly.  Templates auto-reload through Jinja2's own env-level
+    # ``auto_reload``; static CSS/JS load per request, so neither
+    # needs server-restart coverage.
+    reload_dirs = ["src/houndarr"] if dev else None
     uvicorn.run(
         "houndarr.app:create_app",
         factory=True,
         host=host,
         port=port,
         reload=dev,
+        reload_dirs=reload_dirs,
         log_level=log_level.lower(),
         access_log=dev,
     )

@@ -1,0 +1,201 @@
+{#
+  Admin > API Key sub-section.  Manages the single Houndarr API key
+  used by external read-only widget clients to authenticate against
+  /api/v1/widget.
+
+  Rendered by:
+    - GET /settings inline within the Admin parent dropdown.
+    - POST /settings/api-key/generate (outerHTML swap of
+      #admin-api-key, with plaintext_key set so the reveal modal
+      renders inside the section and HX-Trigger=houndarr-show-api-key
+      opens it on afterSwap).
+    - POST /settings/api-key/revoke (outerHTML swap with no
+      plaintext_key).
+
+  The reveal modal lives inside the section: the POST response is the
+  whole section (including the modal markup), and HTMX swaps the
+  outer <section> so the modal element is freshly in the DOM when the
+  HX-Trigger event fires.
+#}
+{%- import "_macros/alerts.html" as alerts -%}
+{%- import "_macros/layout.html" as layout -%}
+{%- import "_macros/modals.html" as modals -%}
+{% call layout.admin_section(id="admin-api-key", title="API key") %}
+  <div class="rounded-container border border-border-subtle bg-surface-1 p-5 sm:p-6 space-y-4">
+    <div class="flex flex-wrap items-start justify-between gap-3">
+      <div class="min-w-0 max-w-2xl">
+        <h4 class="text-sm font-semibold text-slate-100">Houndarr API key</h4>
+        <p class="text-xs text-slate-500 mt-0.5">
+          Lets external read-only clients call
+          <code class="text-slate-400">/api/v1/widget</code>.
+          Regenerating invalidates the old key immediately.
+        </p>
+      </div>
+      {% if api_key %}
+      <span class="text-[0.6875rem] px-2 py-0.5 rounded-full border border-success-border bg-success-bg text-green-100 font-medium font-sans shrink-0">
+        Configured
+      </span>
+      {% else %}
+      <span class="text-[0.6875rem] px-2 py-0.5 rounded-full border border-border-subtle bg-surface-2 text-slate-400 font-medium font-sans shrink-0">
+        Not configured
+      </span>
+      {% endif %}
+    </div>
+
+    {% if api_key %}
+    <dl class="grid gap-3 sm:grid-cols-2 text-sm rounded-inset border border-border-subtle bg-surface-base/50 p-3">
+      <div>
+        <dt class="text-xs font-medium uppercase tracking-wide text-slate-500">Created</dt>
+        <dd class="mt-1 font-mono text-slate-200">
+          <time datetime="{{ api_key.created_at }}">{{ api_key.created_at }}</time>
+        </dd>
+      </div>
+      <div>
+        <dt class="text-xs font-medium uppercase tracking-wide text-slate-500">Last used</dt>
+        <dd class="mt-1 font-mono text-slate-200">
+          {% if api_key.last_used_at %}
+          <time datetime="{{ api_key.last_used_at }}">{{ api_key.last_used_at }}</time>
+          {% else %}
+          <span class="font-sans text-slate-400">Never</span>
+          {% endif %}
+        </dd>
+      </div>
+    </dl>
+    {% endif %}
+
+    <div class="flex flex-wrap gap-2">
+      <form
+        method="post"
+        action="/settings/api-key/generate"
+        hx-post="/settings/api-key/generate"
+        hx-target="#admin-api-key"
+        hx-swap="outerHTML"
+        hx-disabled-elt="find button"
+        {% if api_key %}
+        hx-confirm="Regenerate the Houndarr API key?"
+        data-confirm-title="Regenerate Houndarr API key?"
+        data-confirm-body="The old key stops working immediately. Update external clients after copying the new key."
+        data-confirm-cta="Regenerate key"
+        data-confirm-tone="danger"
+        {% endif %}
+      >
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+        <button type="submit" class="btn btn-primary px-3 py-2 text-sm font-medium font-sans">
+          {% if api_key %}Regenerate key{% else %}Generate key{% endif %}
+        </button>
+      </form>
+
+      {% if api_key %}
+      <form
+        method="post"
+        action="/settings/api-key/revoke"
+        hx-post="/settings/api-key/revoke"
+        hx-target="#admin-api-key"
+        hx-swap="outerHTML"
+        hx-disabled-elt="find button"
+        hx-confirm="Revoke the Houndarr API key?"
+        data-confirm-title="Revoke Houndarr API key?"
+        data-confirm-body="External clients will receive 401 from /api/v1/widget until a new key is generated."
+        data-confirm-cta="Revoke key"
+        data-confirm-tone="danger"
+      >
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+        <button type="submit" class="btn btn-soft btn-error px-3 py-2 text-sm font-medium font-sans">
+          Revoke
+        </button>
+      </form>
+      {% endif %}
+    </div>
+
+    <p class="text-xs text-slate-500">
+      Full key lifecycle and usage details live in the
+      <a
+        href="https://av1155.github.io/houndarr/docs/reference/api-keys"
+        target="_blank"
+        rel="noopener noreferrer"
+        class="text-brand-300 hover:text-brand-200 underline underline-offset-4 decoration-dotted"
+      >API keys reference<svg class="inline-link-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></a>
+    </p>
+  </div>
+
+  {% if plaintext_key %}
+  {% call modals.dialog_shell(
+    id="api-key-reveal-modal",
+    width="42rem",
+    aria_labelledby="api-key-reveal-title",
+    aria_describedby="api-key-reveal-description"
+  ) %}
+    <div class="border-b border-border-subtle px-6 py-5">
+      <p class="text-xs font-medium uppercase tracking-wide text-brand-300">One-time secret</p>
+      <h2 id="api-key-reveal-title" class="mt-1 text-xl font-semibold tracking-tight text-white">
+        Copy your Houndarr API key
+      </h2>
+      <p id="api-key-reveal-description" class="mt-2 text-sm leading-relaxed text-slate-400">
+        This plaintext key is shown only now. Copy it before closing this dialog.
+      </p>
+    </div>
+
+    <div class="space-y-4 px-6 py-5">
+      {% call alerts.alert("warning", extra="text-sm text-amber-50") %}
+        Store this key in your external client's configuration. Houndarr keeps only a hash.
+      {% endcall %}
+      <div class="rounded-inset border border-border-subtle bg-slate-950/70 p-3">
+        <code id="houndarr-api-key-token" class="block break-all font-mono text-sm text-brand-100">{{ plaintext_key }}</code>
+      </div>
+      <div class="flex flex-wrap items-center justify-end gap-2">
+        <button
+          type="button"
+          data-copy-api-key="true"
+          data-copy-target="#houndarr-api-key-token"
+          class="btn btn-soft btn-neutral px-3 py-2 text-sm font-medium font-sans"
+        >
+          Copy key
+        </button>
+        <button
+          type="button"
+          data-close-api-key-reveal="true"
+          class="btn btn-primary px-3 py-2 text-sm font-medium font-sans"
+        >
+          I copied it
+        </button>
+      </div>
+    </div>
+  {% endcall %}
+
+  <style>
+    #api-key-reveal-modal {
+      opacity: 0;
+      transform: translateY(0.75rem) scale(0.98);
+    }
+    #api-key-reveal-modal[open] {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+      animation: hx-modal-in 180ms ease-out;
+    }
+    #api-key-reveal-modal[open].is-closing {
+      animation: hx-modal-out 160ms ease-in forwards;
+    }
+    #api-key-reveal-modal::backdrop {
+      background: rgba(2, 6, 23, 0);
+    }
+    #api-key-reveal-modal[open]::backdrop {
+      animation: hx-backdrop-in var(--dur-base, 180ms) var(--ease-station, cubic-bezier(0.16,1,0.3,1)) forwards;
+      backdrop-filter: blur(3px);
+    }
+    #api-key-reveal-modal[open].is-closing::backdrop {
+      animation: hx-backdrop-out 160ms ease-in forwards;
+    }
+    @media (prefers-reduced-motion: reduce) {
+      #api-key-reveal-modal,
+      #api-key-reveal-modal[open],
+      #api-key-reveal-modal::backdrop,
+      #api-key-reveal-modal[open]::backdrop {
+        animation: none;
+        transition: none;
+        transform: none;
+        opacity: 1;
+      }
+    }
+  </style>
+  {% endif %}
+{% endcall %}

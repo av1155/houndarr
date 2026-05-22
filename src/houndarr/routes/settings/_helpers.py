@@ -212,6 +212,7 @@ async def render_settings_page(
     account_success: str | None = None,
 ) -> HTMLResponse:
     """Render the settings page with common account and instance context."""
+    from houndarr.repositories import widget_api_key as widget_api_key_repo
     from houndarr.repositories.settings import get_setting
 
     instances = await list_instances(master_key=master_key(request))
@@ -222,6 +223,7 @@ async def render_settings_page(
     signed_in_as = await resolve_signed_in_as(request)
     changelog_popups_enabled = (await get_setting("changelog_popups_disabled")) != "1"
     update_check_enabled = (await get_setting("update_check_enabled")) == "1"
+    api_key = await widget_api_key_repo.get()
     template_name = (
         "partials/pages/settings_content.html" if is_hx_request(request) else "settings.html"
     )
@@ -237,4 +239,5 @@ async def render_settings_page(
         account_success=account_success,
         changelog_popups_enabled=changelog_popups_enabled,
         update_check_enabled=update_check_enabled,
+        api_key=api_key,
     )

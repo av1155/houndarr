@@ -144,7 +144,12 @@ class TestResolveTagFilterIds:
 
         ``get_tags_result`` is the dict the client returns; ``raises`` is
         an exception to throw instead (for the failure-mode test).
+        ``make_client`` is wired as a ``MagicMock`` (not a lambda) so the
+        short-circuit assertions in the no-filter test can inspect call
+        history.
         """
+        from unittest.mock import MagicMock  # noqa: PLC0415
+
         client = AsyncMock()
         if raises is not None:
             client.get_tags = AsyncMock(side_effect=raises)
@@ -156,26 +161,31 @@ class TestResolveTagFilterIds:
         ctx.__aexit__ = AsyncMock(return_value=None)
 
         adapter = AsyncMock()
-        adapter.make_client = lambda _instance: ctx
+        adapter.make_client = MagicMock(return_value=ctx)
         return adapter
 
     @pytest.mark.asyncio()
     async def test_empty_filter_short_circuits(self, instance: Any, seeded_instances: None) -> None:
-        """When both directions are empty the resolver returns ``(None, None)``."""
+        """When both directions are empty the resolver returns ``(None, None)``
+        without opening a client (and therefore without firing the /tag GET)."""
         adapter = self._stub_adapter()
         include_ids, exclude_ids = await _resolve_tag_filter_ids(
             instance, adapter, cycle_id="c1", cycle_trigger="scheduled"
         )
         assert include_ids is None
         assert exclude_ids is None
-        # No GET fired: the early return must skip the adapter entirely.
-        adapter.make_client.assert_not_called() if hasattr(  # type: ignore[func-returns-value]
-            adapter.make_client, "assert_not_called"
-        ) else None
+        adapter.make_client.assert_not_called()
 
     @pytest.mark.asyncio()
     async def test_resolves_labels_to_ids(self, instance: Any, seeded_instances: None) -> None:
-        """Known labels are mapped to their IDs, lower-case-insensitive."""
+        """Known labels are mapped to their IDs.
+
+        Both sides of the lookup are normalised to lowercase before the
+        dict.get fires: the *arr's labels are lowercased in
+        :func:`ArrClient.get_tags`, and the operator's labels are
+        lowercased in :func:`validate_tag_filter`.  The match itself
+        is a plain case-sensitive ``dict.get`` against pre-lowered keys.
+        """
         import dataclasses  # noqa: PLC0415
 
         scoped = dataclasses.replace(

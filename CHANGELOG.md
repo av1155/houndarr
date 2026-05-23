@@ -15,7 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - External `/api/v1/widget` endpoint returns API-key-protected dashboard totals, backed by schema v19 `widget_api_key` storage. (#604)
 - Settings page can generate, regenerate, and revoke the Houndarr API key, showing plaintext only once for widget clients. (#605)
-- Homepage dashboard setup now covers `/api/v1/widget`, `X-Api-Key`, and Settings > Admin > API key rotation. (#606)
+- New [Homepage integration guide](https://av1155.github.io/houndarr/docs/guides/homepage-integration) covers `/api/v1/widget`, `X-Api-Key`, and Settings > Admin > API key rotation. (#606)
 - Instance settings gain an `Enable missing search` toggle that pauses the missing-search pass per instance; existing instances stay enabled after the v18 migration. (#619)
 - Instance settings gain `Tag Filter · Include` and `Tag Filter · Exclude` fields that scope searches to (or away from) items tagged in the upstream \*arr, resolved against `/tag` each cycle. Schema v20 adds the two columns with empty defaults. (#637)
 - Missing search settings gain optional hot retry windows after post-release grace, backed by schema v21 window and interval columns. (#630)

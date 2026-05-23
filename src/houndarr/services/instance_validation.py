@@ -175,6 +175,23 @@ def validate_cutoff_controls(
     return None
 
 
+def validate_missing_hot_retry_controls(
+    window_hrs: int,
+    interval_hrs: int,
+) -> str | None:
+    """Validate missing-pass hot retry controls from form submissions.
+
+    Returns:
+        User-facing error string on the first failed bound, or
+        ``None`` when every value is valid.
+    """
+    if window_hrs < 0:
+        return "Missing hot retry window must be 0 or greater."
+    if window_hrs > 0 and interval_hrs < 1:
+        return "Missing hot retry interval must be at least 1 hour when the window is enabled."
+    return None
+
+
 def validate_upgrade_controls(
     upgrade_batch_size: int,
     upgrade_cooldown_days: int,

@@ -60,6 +60,16 @@
   <p>Hours to wait after an item's release date before searching. Items still inside this window log as <code>post-release grace (Nh)</code> and skip; items with no date log as <code>not yet released</code>.</p>
   <p class="tip__hint">Default 6 hours. Release-date priority differs per *arr (see the docs).</p>
 </template>
+<template id="tip-missing_hot_retry_window_hrs">
+  <p class="tip__eyebrow">Hot retry window</p>
+  <p>Optional hours after post-release grace when a missing item can retry on a short interval before the long cooldown takes over.</p>
+  <p class="tip__hint">Default 0 hours, disabled.</p>
+</template>
+<template id="tip-missing_hot_retry_interval_hrs">
+  <p class="tip__eyebrow">Hot retry interval</p>
+  <p>Minimum hours between hot retry attempts while the window is active. Manual Run Now bypasses this interval but not the window.</p>
+  <p class="tip__hint">Default 2 hours.</p>
+</template>
 <template id="tip-queue_limit">
   <p class="tip__eyebrow">Queue backpressure</p>
   <p>Skip the cycle if the download-client queue is at or above this count. Keeps Houndarr from piling on when downloads are already backed up; an unreachable queue endpoint lets the cycle proceed.</p>
@@ -328,6 +338,33 @@
               label="Post-Release Grace (hrs)",
               help_text="Hours to wait after release date. Unreleased items are always skipped.",
               tip_ref="post_release_grace_hrs",
+          ) }}
+        </div>
+        <div>
+          {{ forms.form_field(
+              id=form_id ~ "-hot-retry-window",
+              name="missing_hot_retry_window_hrs",
+              type="number",
+              min=0,
+              value=instance.missing.missing_hot_retry_window_hrs,
+              data_default_value=defaults.missing.missing_hot_retry_window_hrs,
+              input_class=mono_input_cls,
+              label="Hot Retry Window (hrs)",
+              help_text="0 = disabled. Starts after a post-release grace skip.",
+              tip_ref="missing_hot_retry_window_hrs",
+          ) }}
+        </div>
+        <div>
+          {{ forms.form_field(
+              id=form_id ~ "-hot-retry-interval",
+              name="missing_hot_retry_interval_hrs",
+              type="number",
+              min=1,
+              value=instance.missing.missing_hot_retry_interval_hrs,
+              data_default_value=defaults.missing.missing_hot_retry_interval_hrs,
+              input_class=mono_input_cls,
+              label="Hot Retry Interval (hrs)",
+              tip_ref="missing_hot_retry_interval_hrs",
           ) }}
         </div>
         <div>

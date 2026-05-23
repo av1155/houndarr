@@ -189,6 +189,8 @@ class TestSkipLogReasonBuckets:
         """ "cd" is not a prefix of "cutoff_cd" for the purposes of dedup."""
         short = (1, 101, "cutoff", "cd")
         long = (1, 101, "cutoff", "cutoff_cd")
+        hot = (1, 101, "missing", "hot_retry")
 
         assert await should_log_skip(short) is True
         assert await should_log_skip(long) is True  # distinct
+        assert await should_log_skip(hot) is True  # distinct

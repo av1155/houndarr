@@ -20,6 +20,8 @@ from houndarr.config import (
     DEFAULT_CUTOFF_COOLDOWN_DAYS,
     DEFAULT_CUTOFF_HOURLY_CAP,
     DEFAULT_HOURLY_CAP,
+    DEFAULT_MISSING_HOT_RETRY_INTERVAL_HOURS,
+    DEFAULT_MISSING_HOT_RETRY_WINDOW_HOURS,
     DEFAULT_POST_RELEASE_GRACE_HOURS,
     DEFAULT_QUEUE_LIMIT,
     DEFAULT_SLEEP_INTERVAL_MINUTES,
@@ -52,6 +54,8 @@ async def seeded_instances(db: None) -> AsyncGenerator[list[int]]:
         hourly_cap=99,
         cooldown_days=42,
         post_release_grace_hrs=48,
+        missing_hot_retry_window_hrs=24,
+        missing_hot_retry_interval_hrs=4,
         queue_limit=10,
         cutoff_enabled=True,
         cutoff_batch_size=7,
@@ -98,6 +102,8 @@ async def test_reset_all_instance_policy_reverts_columns(
     assert inst.missing.hourly_cap == DEFAULT_HOURLY_CAP
     assert inst.missing.cooldown_days == DEFAULT_COOLDOWN_DAYS
     assert inst.missing.post_release_grace_hrs == DEFAULT_POST_RELEASE_GRACE_HOURS
+    assert inst.missing.missing_hot_retry_window_hrs == DEFAULT_MISSING_HOT_RETRY_WINDOW_HOURS
+    assert inst.missing.missing_hot_retry_interval_hrs == DEFAULT_MISSING_HOT_RETRY_INTERVAL_HOURS
     assert inst.missing.queue_limit == DEFAULT_QUEUE_LIMIT
     assert inst.cutoff.cutoff_enabled is False
     assert inst.cutoff.cutoff_batch_size == DEFAULT_CUTOFF_BATCH_SIZE

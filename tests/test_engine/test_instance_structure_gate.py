@@ -119,7 +119,7 @@ def test_flat_attribute_write_raises() -> None:
 
     inst = _make_instance()
     with pytest.raises((AttributeError, TypeError, dataclasses.FrozenInstanceError)):
-        inst.batch_size = 5  # type: ignore[attr-defined,misc]
+        inst.batch_size = 5  # type: ignore[attr-defined]
 
 
 def _make_instance() -> Instance:
@@ -249,6 +249,7 @@ def test_cooldowns_repository_public_api() -> None:
 
     expected = {
         "exists_active_cooldown",
+        "fetch_active_cooldown_searched_at",
         "upsert_cooldown",
         "delete_cooldowns_for_instance",
     }
@@ -268,6 +269,7 @@ def test_search_log_repository_public_api() -> None:
         "delete_all_logs",
         "insert_admin_audit",
         "fetch_latest_missing_reason",
+        "fetch_latest_missing_grace_skip",
         "fetch_active_error_instance_ids",
     }
     for name in expected:
@@ -305,6 +307,8 @@ _PRE_REFACTOR_FLAT_FIELDS = {
     "hourly_cap",
     "cooldown_days",
     "post_release_grace_hrs",
+    "missing_hot_retry_window_hrs",
+    "missing_hot_retry_interval_hrs",
     "queue_limit",
     "sonarr_search_mode",
     "lidarr_search_mode",
@@ -357,4 +361,4 @@ def test_sub_struct_field_union_covers_pre_refactor_surface() -> None:
     for cls in substructs:
         union.update(f.name for f in dataclasses.fields(cls))
     assert union == _PRE_REFACTOR_FLAT_FIELDS
-    assert len(union) == 41
+    assert len(union) == 43

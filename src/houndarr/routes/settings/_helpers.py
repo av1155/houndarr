@@ -27,6 +27,8 @@ from houndarr.config import (
     DEFAULT_CUTOFF_HOURLY_CAP,
     DEFAULT_HOURLY_CAP,
     DEFAULT_LIDARR_SEARCH_MODE,
+    DEFAULT_MISSING_HOT_RETRY_INTERVAL_HOURS,
+    DEFAULT_MISSING_HOT_RETRY_WINDOW_HOURS,
     DEFAULT_POST_RELEASE_GRACE_HOURS,
     DEFAULT_QUEUE_LIMIT,
     DEFAULT_READARR_SEARCH_MODE,
@@ -51,6 +53,7 @@ from houndarr.services.instance_validation import (
     resolve_search_modes,
     type_mismatch_message,
     validate_cutoff_controls,
+    validate_missing_hot_retry_controls,
     validate_upgrade_controls,
 )
 from houndarr.services.instances import (
@@ -91,6 +94,7 @@ __all__ = [
     "resolve_search_modes",
     "type_mismatch_message",
     "validate_cutoff_controls",
+    "validate_missing_hot_retry_controls",
     "validate_upgrade_controls",
 ]
 
@@ -153,6 +157,8 @@ def blank_instance() -> Instance:
             hourly_cap=DEFAULT_HOURLY_CAP,
             cooldown_days=DEFAULT_COOLDOWN_DAYS,
             post_release_grace_hrs=DEFAULT_POST_RELEASE_GRACE_HOURS,
+            missing_hot_retry_window_hrs=DEFAULT_MISSING_HOT_RETRY_WINDOW_HOURS,
+            missing_hot_retry_interval_hrs=DEFAULT_MISSING_HOT_RETRY_INTERVAL_HOURS,
             queue_limit=DEFAULT_QUEUE_LIMIT,
             sonarr_search_mode=SonarrSearchMode(DEFAULT_SONARR_SEARCH_MODE),
             lidarr_search_mode=LidarrSearchMode(DEFAULT_LIDARR_SEARCH_MODE),

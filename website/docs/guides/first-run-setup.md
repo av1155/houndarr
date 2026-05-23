@@ -25,8 +25,8 @@ Dashboard greets you with an empty-state panel until you add your
 first instance:
 
 <Image
-  img={require('@site/static/img/screenshots/houndarr-dashboard-empty.png')}
-  alt="The Houndarr Dashboard in its empty first-run state: the subheader reads 'No hounds on patrol yet.' above a centered panel with a dashed-circle icon, 'No instances configured' title, body copy naming Sonarr, Radarr, Lidarr, Readarr, and Whisparr, and a primary '+ Add your first instance' button"
+img={require('@site/static/img/screenshots/houndarr-dashboard-empty.png')}
+alt="The Houndarr Dashboard in its empty first-run state: the subheader reads 'No hounds on patrol yet.' above a centered panel with a dashed-circle icon, 'No instances configured' title, body copy naming Sonarr, Radarr, Lidarr, Readarr, and Whisparr, and a primary '+ Add your first instance' button"
 />
 
 Click **Add your first instance** or open the **Settings** link in
@@ -34,19 +34,19 @@ the top nav to continue.
 
 ## 3. Add your instances
 
-Go to **Settings** and click **Add Instance** to connect your *arr instances.
+Go to **Settings** and click **Add Instance** to connect your \*arr instances.
 
 <Image
-  img={require('@site/static/img/screenshots/houndarr-settings-instances.png')}
-  alt="The Houndarr Settings page showing the Instances table with multiple active rows (Sonarr, Radarr, Radarr 4K, Lidarr, Readarr, Whisparr v3) each with Disable / Edit / Delete actions, plus a collapsed Admin section underneath"
+img={require('@site/static/img/screenshots/houndarr-settings-instances.png')}
+alt="The Houndarr Settings page showing the Instances table with multiple active rows (Sonarr, Radarr, Radarr 4K, Lidarr, Readarr, Whisparr v3) each with Disable / Edit / Delete actions, plus a collapsed Admin section underneath"
 />
 
 For each instance you need:
 
 - **Name**: a friendly label (e.g., "Radarr Movies", "Sonarr 4K", "Lidarr Music")
 - **Type**: Radarr, Sonarr, Lidarr, Readarr, Whisparr v2, or Whisparr v3
-- **URL**: the base URL of the instance (e.g., `http://sonarr:8989`). For Docker Compose, this must be the *arr's internal container port, not the host port you published. See [Troubleshoot Connection](/docs/guides/troubleshoot-connection) if the connection test fails.
-- **API Key**: found in your *arr instance under Settings > General
+- **URL**: the base URL of the instance (e.g., `http://sonarr:8989`). For Docker Compose, this must be the \*arr's internal container port, not the host port you published. See [Troubleshoot Connection](/docs/guides/troubleshoot-connection) if the connection test fails.
+- **API Key**: found in your \*arr instance under Settings > General
 
 :::tip
 API keys are encrypted at rest using Fernet symmetric encryption and are never
@@ -59,20 +59,22 @@ for details.
 Each instance has its own search settings. The defaults are tuned
 to stay well under typical indexer limits:
 
-| Setting | Default | Purpose |
-|---------|---------|---------|
-| Batch Size | 2 | Items per search cycle |
-| Sleep (minutes) | 30 | Wait between cycles |
-| Hourly Cap | 4 | Max searches per hour |
-| Cooldown (days) | 14 | Min days before re-searching an item |
-| Post-Release Grace (hrs) | 6 | Hours to wait after release date before searching |
-| Queue Limit | 0 (disabled) | Skip cycle when download queue meets or exceeds this count |
+| Setting                  | Default      | Purpose                                                    |
+| ------------------------ | ------------ | ---------------------------------------------------------- |
+| Batch Size               | 2            | Items per search cycle                                     |
+| Sleep (minutes)          | 30           | Wait between cycles                                        |
+| Hourly Cap               | 4            | Max searches per hour                                      |
+| Cooldown (days)          | 14           | Min days before re-searching an item                       |
+| Post-Release Grace (hrs) | 6            | Hours to wait after release date before searching          |
+| Hot Retry Window (hrs)   | 0 (disabled) | Optional short retry window after post-release grace       |
+| Hot Retry Interval (hrs) | 2            | Hours between hot retries while the window is active       |
+| Queue Limit              | 0 (disabled) | Skip cycle when download queue meets or exceeds this count |
 
 For detailed explanations of all settings, see [Instance Settings](/docs/reference/instance-settings).
 
 <Image
-  img={require('@site/static/img/screenshots/houndarr-add-instance-form.png')}
-  alt="The Houndarr Add Instance modal with Connection fields (Name, Type, URL, API Key) and Search Policy fields (Batch Size, Sleep, Hourly Cap, Cooldown, Post-Release Grace, Queue Limit)"
+img={require('@site/static/img/screenshots/houndarr-add-instance-form.png')}
+alt="The Houndarr Add Instance modal with Connection fields (Name, Type, URL, API Key) and Search Policy fields including cooldown, post-release grace, hot retry, and queue limit"
 />
 
 ## 5. Enable the instance
@@ -88,7 +90,7 @@ Once instances are enabled, the Dashboard has two sections.
 
 The top section shows:
 
-- An **adaptive subheader** with an *N of M hounds on patrol* sentence
+- An **adaptive subheader** with an _N of M hounds on patrol_ sentence
   and the most recent dispatch timestamp
 - A **library-health bar** with five gating segments (eligible,
   cooldown, cutoff cooldown, upgrade cooldown, unreleased) summed
@@ -97,8 +99,8 @@ The top section shows:
   7 days, each in its instance's type color
 
 <Image
-  img={require('@site/static/img/screenshots/houndarr-dashboard-library-health.png')}
-  alt="The Houndarr Dashboard library-health section with the adaptive subheader, a five-segment library-health bar, and the Recent hunts strip of the last five dispatches"
+img={require('@site/static/img/screenshots/houndarr-dashboard-library-health.png')}
+alt="The Houndarr Dashboard library-health section with the adaptive subheader, a five-segment library-health bar, and the Recent hunts strip of the last five dispatches"
 />
 
 <figure className="docs-screenshot-portrait">
@@ -130,8 +132,8 @@ The lower section lays out one **card per instance** with:
   footer, disabled Run Now) for any instance with `enabled=0`
 
 <Image
-  img={require('@site/static/img/screenshots/houndarr-dashboard-instances.png')}
-  alt="The Houndarr Dashboard Instances section showing per-instance cards with WANTED / ELIGIBLE / SEARCHED stats, Cooldown schedule panel, policy chips, and Run Now button"
+img={require('@site/static/img/screenshots/houndarr-dashboard-instances.png')}
+alt="The Houndarr Dashboard Instances section showing per-instance cards with WANTED / ELIGIBLE / SEARCHED stats, Cooldown schedule panel, policy chips, and Run Now button"
 />
 
 <figure className="docs-screenshot-portrait">

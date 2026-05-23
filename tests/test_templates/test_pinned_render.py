@@ -56,6 +56,8 @@ def _instance_stub(
     stub.missing.sleep_interval_mins = 30
     stub.missing.cooldown_days = 14
     stub.missing.post_release_grace_hrs = 6
+    stub.missing.missing_hot_retry_window_hrs = 0
+    stub.missing.missing_hot_retry_interval_hrs = 2
     stub.missing.queue_limit = 0
 
     stub.cutoff = MagicMock()
@@ -239,20 +241,34 @@ class TestLogRowsRender:
         # "Cycle paused" message should not restate an item count.
         assert "<strong>3</strong>" not in html
 
+    def test_skip_only_summary_all_hot_retry(self, render) -> None:
+        rows = self._skip_only_rows(
+            [
+                "in hot retry window (24h)",
+                "in hot retry window (24h)",
+            ]
+        )
+        html = render("partials/log_rows.html", rows=rows, limit=50)
+        assert 'all <span class="cycle__summary-reason">inside hot retry window</span>' in html
+        assert "Waiting for the retry interval" in html
+        assert "other" not in html
+
     def test_skip_only_summary_mixed(self, render) -> None:
         rows = self._skip_only_rows(
             [
                 "on cooldown (14d)",
                 "on cooldown (14d)",
                 "not yet released",
+                "in hot retry window (24h)",
                 "hourly limit reached (20/hr)",
             ]
         )
         html = render("partials/log_rows.html", rows=rows, limit=50)
         # Mixed variant renders both counts and the separator.
-        assert "<strong>4</strong> items:" in html
+        assert "<strong>5</strong> items:" in html
         assert "2 on cooldown" in html
         assert "1 not yet released" in html
+        assert "1 in hot retry window" in html
         assert "1 hit hourly limit" in html
         assert "No dispatches needed" in html
 

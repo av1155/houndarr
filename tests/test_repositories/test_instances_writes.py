@@ -97,6 +97,8 @@ async def test_insert_instance_applies_schema_defaults(db: None, master_key: byt
     assert inst.missing.hourly_cap == 4
     assert inst.missing.cooldown_days == 14
     assert inst.missing.post_release_grace_hrs == 6
+    assert inst.missing.missing_hot_retry_window_hrs == 0
+    assert inst.missing.missing_hot_retry_interval_hrs == 2
     assert inst.missing.queue_limit == 0
     assert inst.cutoff.cutoff_enabled is False
     assert inst.cutoff.cutoff_batch_size == 1
@@ -441,6 +443,8 @@ def test_instance_update_has_every_updatable_column() -> None:
         "hourly_cap",
         "cooldown_days",
         "post_release_grace_hrs",
+        "missing_hot_retry_window_hrs",
+        "missing_hot_retry_interval_hrs",
         "queue_limit",
         "cutoff_enabled",
         "cutoff_batch_size",

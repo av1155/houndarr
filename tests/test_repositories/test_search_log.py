@@ -357,6 +357,157 @@ async def test_fetch_latest_missing_reason_ignores_non_missing_rows(
 
 @pytest.mark.pinning()
 @pytest.mark.asyncio()
+async def test_fetch_latest_missing_grace_skip_returns_newest_match(
+    seeded_instances: None,
+) -> None:
+    """fetch_latest_missing_grace_skip returns the newest grace skip tuple."""
+    async with get_db() as conn:
+        await conn.executemany(
+            """
+            INSERT INTO search_log (
+                instance_id, item_id, item_type, action, search_kind, reason, timestamp
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                (
+                    1,
+                    42,
+                    "episode",
+                    "skipped",
+                    "missing",
+                    "post-release grace (6h)",
+                    "2026-05-22T10:00:00.000Z",
+                ),
+                (
+                    1,
+                    42,
+                    "episode",
+                    "searched",
+                    "missing",
+                    None,
+                    "2026-05-22T11:00:00.000Z",
+                ),
+                (
+                    1,
+                    42,
+                    "episode",
+                    "skipped",
+                    "missing",
+                    "post-release grace (6h)",
+                    "2026-05-22T12:00:00.000Z",
+                ),
+            ],
+        )
+        await conn.commit()
+
+    result = await repo.fetch_latest_missing_grace_skip(1, 42, "episode")
+
+    assert result == ("post-release grace (6h)", "2026-05-22T12:00:00.000Z")
+
+
+@pytest.mark.pinning()
+@pytest.mark.asyncio()
+async def test_fetch_latest_missing_grace_skip_returns_none_when_no_match(
+    seeded_instances: None,
+) -> None:
+    """fetch_latest_missing_grace_skip returns None when no grace skip exists."""
+    await repo.insert_log_row(
+        instance_id=1,
+        item_id=42,
+        item_type="episode",
+        action="skipped",
+        search_kind="missing",
+        reason="not yet released",
+    )
+
+    assert await repo.fetch_latest_missing_grace_skip(1, 42, "episode") is None
+
+
+@pytest.mark.pinning()
+@pytest.mark.asyncio()
+async def test_fetch_latest_missing_grace_skip_ignores_non_missing_rows(
+    seeded_instances: None,
+) -> None:
+    """fetch_latest_missing_grace_skip only consults missing-pass rows."""
+    await repo.insert_log_row(
+        instance_id=1,
+        item_id=42,
+        item_type="episode",
+        action="skipped",
+        search_kind="cutoff",
+        reason="post-release grace (6h)",
+    )
+
+    assert await repo.fetch_latest_missing_grace_skip(1, 42, "episode") is None
+
+
+@pytest.mark.pinning()
+@pytest.mark.asyncio()
+async def test_fetch_latest_missing_grace_skip_scopes_by_ref_and_action(
+    seeded_instances: None,
+) -> None:
+    """Grace anchors must match instance, item type, and skipped action."""
+    await repo.insert_log_row(
+        instance_id=2,
+        item_id=42,
+        item_type="episode",
+        action="skipped",
+        search_kind="missing",
+        reason="post-release grace (6h)",
+    )
+    await repo.insert_log_row(
+        instance_id=1,
+        item_id=42,
+        item_type="movie",
+        action="skipped",
+        search_kind="missing",
+        reason="post-release grace (6h)",
+    )
+    await repo.insert_log_row(
+        instance_id=1,
+        item_id=42,
+        item_type="episode",
+        action="searched",
+        search_kind="missing",
+        reason="post-release grace (6h)",
+    )
+
+    assert await repo.fetch_latest_missing_grace_skip(1, 42, "episode") is None
+
+
+@pytest.mark.pinning()
+@pytest.mark.asyncio()
+async def test_fetch_latest_missing_grace_skip_ignores_newer_searched_row(
+    seeded_instances: None,
+) -> None:
+    """Newer searched rows do not hide the grace skip anchor."""
+    await repo.insert_log_row(
+        instance_id=1,
+        item_id=42,
+        item_type="episode",
+        action="skipped",
+        search_kind="missing",
+        reason="post-release grace (6h)",
+    )
+    await repo.insert_log_row(
+        instance_id=1,
+        item_id=42,
+        item_type="episode",
+        action="searched",
+        search_kind="missing",
+        reason=None,
+    )
+
+    result = await repo.fetch_latest_missing_grace_skip(1, 42, "episode")
+
+    assert result is not None
+    reason, timestamp = result
+    assert reason == "post-release grace (6h)"
+    assert timestamp
+
+
+@pytest.mark.pinning()
+@pytest.mark.asyncio()
 async def test_fetch_active_error_instance_ids_includes_recent_error(
     seeded_instances: None,
 ) -> None:

@@ -1,9 +1,11 @@
 """Cooldowns aggregate: SQL boundary for the ``cooldowns`` table.
 
-Three functions cover the full surface:
+Four functions cover the full surface:
 
 - :func:`exists_active_cooldown`: the SELECT that decides whether
   an item is still inside its cooldown window.
+- :func:`fetch_active_cooldown_searched_at`: the same active-window read,
+  returning the stored timestamp for interval-based gates.
 - :func:`upsert_cooldown`: the ``INSERT ... ON CONFLICT ... DO
   UPDATE`` that records a freshly-searched item.
 - :func:`delete_cooldowns_for_instance`: the admin "reset cooldowns"
@@ -87,6 +89,39 @@ async def exists_active_cooldown(ref: ItemRef, cooldown_days: int) -> bool:
         ) as cur:
             row = await cur.fetchone()
     return row is not None
+
+
+async def fetch_active_cooldown_searched_at(ref: ItemRef, cooldown_days: int) -> str | None:
+    """Return active cooldown ``searched_at`` for *ref*, if present.
+
+    Args:
+        ref: The (instance, item_id, item_type) triple to check.
+        cooldown_days: Length of the cooldown window in days. Pass a
+            non-positive value to disable cooldowns.
+
+    Returns:
+        Stored ``searched_at`` timestamp when the cooldown is active,
+        otherwise ``None``.
+    """
+    if cooldown_days <= 0:
+        return None
+
+    cutoff = _iso(_now_utc() - timedelta(days=cooldown_days))
+    async with get_db() as db:
+        async with db.execute(
+            """
+            SELECT searched_at FROM cooldowns
+            WHERE instance_id = ?
+              AND item_id     = ?
+              AND item_type   = ?
+              AND searched_at > ?
+            ORDER BY searched_at DESC
+            LIMIT 1
+            """,
+            (ref.instance_id, ref.item_id, ref.item_type.value, cutoff),
+        ) as cur:
+            row = await cur.fetchone()
+    return str(row[0]) if row and row[0] is not None else None
 
 
 async def upsert_cooldown(ref: ItemRef, search_kind: str) -> None:

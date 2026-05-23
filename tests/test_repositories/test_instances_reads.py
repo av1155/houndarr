@@ -63,6 +63,8 @@ async def test_get_instance_roundtrip(db: None, master_key: bytes) -> None:
         type=InstanceType.sonarr,
         url="http://sonarr:8989",
         api_key="top-secret",
+        missing_hot_retry_window_hrs=24,
+        missing_hot_retry_interval_hrs=3,
     )
 
     fetched = await repo.get_instance(created.core.id, master_key=master_key)
@@ -73,6 +75,8 @@ async def test_get_instance_roundtrip(db: None, master_key: bytes) -> None:
     assert fetched.core.type == InstanceType.sonarr
     assert fetched.core.url == "http://sonarr:8989"
     assert fetched.core.api_key == "top-secret"
+    assert fetched.missing.missing_hot_retry_window_hrs == 24
+    assert fetched.missing.missing_hot_retry_interval_hrs == 3
 
 
 @pytest.mark.pinning()

@@ -20,6 +20,8 @@ from houndarr.config import (
     DEFAULT_CUTOFF_HOURLY_CAP,
     DEFAULT_HOURLY_CAP,
     DEFAULT_LIDARR_SEARCH_MODE,
+    DEFAULT_MISSING_HOT_RETRY_INTERVAL_HOURS,
+    DEFAULT_MISSING_HOT_RETRY_WINDOW_HOURS,
     DEFAULT_POST_RELEASE_GRACE_HOURS,
     DEFAULT_QUEUE_LIMIT,
     DEFAULT_READARR_SEARCH_MODE,
@@ -119,8 +121,9 @@ class MissingPolicy:
     The rest of the struct captures the rate shape (``batch_size`` /
     ``sleep_interval_mins`` / ``hourly_cap``), the per-item cooldown
     (``cooldown_days``), the post-release grace window
-    (``post_release_grace_hrs``), the queue backpressure gate
-    (``queue_limit``; ``0`` disables the check), and the per-app
+    (``post_release_grace_hrs``), the optional hot retry window
+    (``missing_hot_retry_window_hrs`` / ``missing_hot_retry_interval_hrs``),
+    the queue backpressure gate (``queue_limit``; ``0`` disables the check), and the per-app
     search-strategy mode for the four *arr variants that expose one
     (Sonarr, Lidarr, Readarr, Whisparr v2).  Radarr and Whisparr v3
     have no strategy knob and so never read any of the mode fields.
@@ -135,6 +138,8 @@ class MissingPolicy:
     hourly_cap: int = DEFAULT_HOURLY_CAP
     cooldown_days: int = DEFAULT_COOLDOWN_DAYS
     post_release_grace_hrs: int = DEFAULT_POST_RELEASE_GRACE_HOURS
+    missing_hot_retry_window_hrs: int = DEFAULT_MISSING_HOT_RETRY_WINDOW_HOURS
+    missing_hot_retry_interval_hrs: int = DEFAULT_MISSING_HOT_RETRY_INTERVAL_HOURS
     queue_limit: int = DEFAULT_QUEUE_LIMIT
     sonarr_search_mode: SonarrSearchMode = SonarrSearchMode(DEFAULT_SONARR_SEARCH_MODE)
     lidarr_search_mode: LidarrSearchMode = LidarrSearchMode(DEFAULT_LIDARR_SEARCH_MODE)
@@ -317,6 +322,8 @@ async def create_instance(
     hourly_cap: int = DEFAULT_HOURLY_CAP,
     cooldown_days: int = DEFAULT_COOLDOWN_DAYS,
     post_release_grace_hrs: int = DEFAULT_POST_RELEASE_GRACE_HOURS,
+    missing_hot_retry_window_hrs: int = DEFAULT_MISSING_HOT_RETRY_WINDOW_HOURS,
+    missing_hot_retry_interval_hrs: int = DEFAULT_MISSING_HOT_RETRY_INTERVAL_HOURS,
     queue_limit: int = DEFAULT_QUEUE_LIMIT,
     cutoff_enabled: bool = False,
     cutoff_batch_size: int = DEFAULT_CUTOFF_BATCH_SIZE,
@@ -366,6 +373,9 @@ async def create_instance(
         hourly_cap: Maximum searches allowed per hour.
         cooldown_days: Days to wait before re-searching the same item.
         post_release_grace_hrs: Hours to wait after release before searching.
+        missing_hot_retry_window_hrs: Hours after post-release grace when
+            missing items can retry on a short interval. ``0`` disables the check.
+        missing_hot_retry_interval_hrs: Minimum hours between hot retry attempts.
         queue_limit: Skip search cycles when the download queue exceeds
             this count.  ``0`` disables the check.
         cutoff_enabled: Whether cutoff-unmet searching is active.
@@ -411,6 +421,8 @@ async def create_instance(
         hourly_cap=hourly_cap,
         cooldown_days=cooldown_days,
         post_release_grace_hrs=post_release_grace_hrs,
+        missing_hot_retry_window_hrs=missing_hot_retry_window_hrs,
+        missing_hot_retry_interval_hrs=missing_hot_retry_interval_hrs,
         queue_limit=queue_limit,
         cutoff_enabled=cutoff_enabled,
         cutoff_batch_size=cutoff_batch_size,

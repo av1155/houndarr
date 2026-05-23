@@ -42,6 +42,8 @@ from houndarr.config import (
     DEFAULT_CUTOFF_HOURLY_CAP,
     DEFAULT_HOURLY_CAP,
     DEFAULT_LIDARR_SEARCH_MODE,
+    DEFAULT_MISSING_HOT_RETRY_INTERVAL_HOURS,
+    DEFAULT_MISSING_HOT_RETRY_WINDOW_HOURS,
     DEFAULT_POST_RELEASE_GRACE_HOURS,
     DEFAULT_QUEUE_LIMIT,
     DEFAULT_READARR_SEARCH_MODE,
@@ -108,6 +110,8 @@ FLAT_TO_SUB: dict[str, str] = {
     "hourly_cap": "missing",
     "cooldown_days": "missing",
     "post_release_grace_hrs": "missing",
+    "missing_hot_retry_window_hrs": "missing",
+    "missing_hot_retry_interval_hrs": "missing",
     "queue_limit": "missing",
     "sonarr_search_mode": "missing",
     "lidarr_search_mode": "missing",
@@ -245,7 +249,7 @@ def test_instance_core_defaults() -> None:
 
 
 def test_missing_policy_fields_in_declaration_order() -> None:
-    """MissingPolicy exposes the eleven missing-pass tunables in order.
+    """MissingPolicy exposes the thirteen missing-pass tunables in order.
 
     ``missing_enabled`` is declared first so the master switch reads as
     the gate for everything below it (mirrors :class:`CutoffPolicy` and
@@ -258,6 +262,8 @@ def test_missing_policy_fields_in_declaration_order() -> None:
         "hourly_cap",
         "cooldown_days",
         "post_release_grace_hrs",
+        "missing_hot_retry_window_hrs",
+        "missing_hot_retry_interval_hrs",
         "queue_limit",
         "sonarr_search_mode",
         "lidarr_search_mode",
@@ -274,6 +280,8 @@ def test_missing_policy_defaults_match_config() -> None:
     assert policy.hourly_cap == DEFAULT_HOURLY_CAP
     assert policy.cooldown_days == DEFAULT_COOLDOWN_DAYS
     assert policy.post_release_grace_hrs == DEFAULT_POST_RELEASE_GRACE_HOURS
+    assert policy.missing_hot_retry_window_hrs == DEFAULT_MISSING_HOT_RETRY_WINDOW_HOURS
+    assert policy.missing_hot_retry_interval_hrs == DEFAULT_MISSING_HOT_RETRY_INTERVAL_HOURS
     assert policy.queue_limit == DEFAULT_QUEUE_LIMIT
     assert policy.sonarr_search_mode == SonarrSearchMode(DEFAULT_SONARR_SEARCH_MODE)
     assert policy.lidarr_search_mode == LidarrSearchMode(DEFAULT_LIDARR_SEARCH_MODE)
@@ -421,7 +429,7 @@ def test_substruct_field_sets_are_disjoint() -> None:
 
 
 def test_substruct_field_union_matches_flat_surface() -> None:
-    """The seven sub-structs cover the 39-field flat surface.
+    """The seven sub-structs cover the 43-field flat surface.
 
     :data:`FLAT_TO_SUB` encodes the authoritative flat-name surface;
     the test asserts that the declared sub-struct fields cover it
@@ -436,7 +444,7 @@ def test_substruct_field_union_matches_flat_surface() -> None:
 
 
 def test_substruct_field_union_count_matches_pre_refactor_surface() -> None:
-    """Forty-one flat fields, partitioned across seven sub-structs.
+    """Forty-three flat fields, partitioned across seven sub-structs.
 
     Canary for arithmetic drift: if someone bumps :data:`FLAT_TO_SUB` or
     adds a sub-struct field without updating the other, this test
@@ -444,8 +452,8 @@ def test_substruct_field_union_count_matches_pre_refactor_surface() -> None:
     clearer failure.
     """
     total = sum(len(_field_names(cls)) for cls in SUBSTRUCTS)
-    assert total == 41
-    assert len(FLAT_TO_SUB) == 41
+    assert total == 43
+    assert len(FLAT_TO_SUB) == 43
 
 
 # Instance shape.

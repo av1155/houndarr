@@ -17,12 +17,14 @@
     `(Nd)` / `(N/hr)` / `(Nh)` parameter shapes inside a family do not
     require a template change. -#}
 {%- macro _skip_only_summary(instance_name, group) -%}
-{%- set ns = namespace(cooldown=0, unreleased=0, capped=0, other=0) -%}
+{%- set ns = namespace(cooldown=0, unreleased=0, hot_retry=0, capped=0, other=0) -%}
 {%- for row in group -%}
 {%- if row.action == 'skipped' -%}
 {%- set r = row.reason or '' -%}
 {%- if r.startswith('on ') and 'cooldown' in r -%}
 {%- set ns.cooldown = ns.cooldown + 1 -%}
+{%- elif r.startswith('in hot retry window') -%}
+{%- set ns.hot_retry = ns.hot_retry + 1 -%}
 {%- elif r in ('not yet released', 'radarr reports not available', 'radarr status indicates unreleased', 'future title not yet available') or r.startswith('post-release grace') -%}
 {%- set ns.unreleased = ns.unreleased + 1 -%}
 {%- elif 'limit reached' in r -%}
@@ -32,12 +34,14 @@
 {%- endif -%}
 {%- endif -%}
 {%- endfor -%}
-{%- set total = ns.cooldown + ns.unreleased + ns.capped + ns.other -%}
+{%- set total = ns.cooldown + ns.unreleased + ns.hot_retry + ns.capped + ns.other -%}
 {%- set _item = 'item' if total == 1 else 'items' -%}
 {%- if total > 0 and ns.cooldown == total -%}
 <strong>{{ instance_name }}</strong> checked <strong>{{ total }}</strong> {{ _item }}: all <span class="cycle__summary-reason">on cooldown</span>. Healthy pacing.
 {%- elif total > 0 and ns.unreleased == total -%}
 <strong>{{ instance_name }}</strong> checked <strong>{{ total }}</strong> {{ _item }}: all <span class="cycle__summary-reason">not yet released</span>.
+{%- elif total > 0 and ns.hot_retry == total -%}
+<strong>{{ instance_name }}</strong> checked <strong>{{ total }}</strong> {{ _item }}: all <span class="cycle__summary-reason">inside hot retry window</span>. Waiting for the retry interval.
 {%- elif total > 0 and ns.capped == total -%}
 <strong>{{ instance_name }}</strong> hit the <span class="cycle__summary-reason">hourly limit</span>. Cycle paused; will resume next hour.
 {%- elif total > 0 -%}
@@ -45,6 +49,7 @@
 {%- set parts = [] -%}
 {%- if ns.cooldown -%}{%- set _ = parts.append(ns.cooldown ~ ' on cooldown') -%}{%- endif -%}
 {%- if ns.unreleased -%}{%- set _ = parts.append(ns.unreleased ~ ' not yet released') -%}{%- endif -%}
+{%- if ns.hot_retry -%}{%- set _ = parts.append(ns.hot_retry ~ ' in hot retry window') -%}{%- endif -%}
 {%- if ns.capped -%}{%- set _ = parts.append(ns.capped ~ ' hit hourly limit') -%}{%- endif -%}
 {%- if ns.other -%}{%- set _ = parts.append(ns.other ~ ' other') -%}{%- endif %}
  <span class="cycle__summary-reason">{{ parts | join(', ') }}</span>. No dispatches needed.

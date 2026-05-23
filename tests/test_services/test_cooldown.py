@@ -230,12 +230,14 @@ async def test_should_log_skip_distinct_keys_independent() -> None:
     k_missing = (1, 101, "missing", "cooldown")
     k_cutoff = (1, 101, "cutoff", "cutoff_cd")
     k_upgrade = (1, 101, "upgrade", "upgrade_cd")
+    k_hot_retry = (1, 101, "missing", "hot_retry")
     k_other_item = (1, 102, "missing", "cooldown")
     k_other_instance = (2, 101, "missing", "cooldown")
 
     assert await should_log_skip(k_missing) is True
     assert await should_log_skip(k_cutoff) is True
     assert await should_log_skip(k_upgrade) is True
+    assert await should_log_skip(k_hot_retry) is True
     assert await should_log_skip(k_other_item) is True
     assert await should_log_skip(k_other_instance) is True
 
@@ -243,6 +245,7 @@ async def test_should_log_skip_distinct_keys_independent() -> None:
     assert await should_log_skip(k_missing) is False
     assert await should_log_skip(k_cutoff) is False
     assert await should_log_skip(k_upgrade) is False
+    assert await should_log_skip(k_hot_retry) is False
 
 
 @pytest.mark.asyncio()

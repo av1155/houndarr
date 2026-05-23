@@ -39,6 +39,8 @@ from houndarr.config import (
     DEFAULT_CUTOFF_HOURLY_CAP,
     DEFAULT_HOURLY_CAP,
     DEFAULT_LIDARR_SEARCH_MODE,
+    DEFAULT_MISSING_HOT_RETRY_INTERVAL_HOURS,
+    DEFAULT_MISSING_HOT_RETRY_WINDOW_HOURS,
     DEFAULT_POST_RELEASE_GRACE_HOURS,
     DEFAULT_QUEUE_LIMIT,
     DEFAULT_READARR_SEARCH_MODE,
@@ -151,6 +153,8 @@ def _row_to_instance(row: aiosqlite.Row, master_key: bytes) -> Instance:
             hourly_cap=row["hourly_cap"],
             cooldown_days=row["cooldown_days"],
             post_release_grace_hrs=row["post_release_grace_hrs"],
+            missing_hot_retry_window_hrs=row["missing_hot_retry_window_hrs"],
+            missing_hot_retry_interval_hrs=row["missing_hot_retry_interval_hrs"],
             queue_limit=row["queue_limit"],
             sonarr_search_mode=SonarrSearchMode(row["sonarr_search_mode"]),
             lidarr_search_mode=LidarrSearchMode(row["lidarr_search_mode"]),
@@ -257,6 +261,8 @@ class InstanceInsert:
     hourly_cap: int = DEFAULT_HOURLY_CAP
     cooldown_days: int = DEFAULT_COOLDOWN_DAYS
     post_release_grace_hrs: int = DEFAULT_POST_RELEASE_GRACE_HOURS
+    missing_hot_retry_window_hrs: int = DEFAULT_MISSING_HOT_RETRY_WINDOW_HOURS
+    missing_hot_retry_interval_hrs: int = DEFAULT_MISSING_HOT_RETRY_INTERVAL_HOURS
     queue_limit: int = DEFAULT_QUEUE_LIMIT
     cutoff_enabled: bool = False
     cutoff_batch_size: int = DEFAULT_CUTOFF_BATCH_SIZE
@@ -315,6 +321,8 @@ class InstanceUpdate:
     hourly_cap: int | None = None
     cooldown_days: int | None = None
     post_release_grace_hrs: int | None = None
+    missing_hot_retry_window_hrs: int | None = None
+    missing_hot_retry_interval_hrs: int | None = None
     queue_limit: int | None = None
     cutoff_enabled: bool | None = None
     cutoff_batch_size: int | None = None
@@ -422,7 +430,8 @@ async def insert_instance(payload: InstanceInsert, *, master_key: bytes) -> int:
             INSERT INTO instances (
                 name, type, url, encrypted_api_key,
                 enabled, missing_enabled, batch_size, sleep_interval_mins,
-                hourly_cap, cooldown_days, post_release_grace_hrs, queue_limit,
+                hourly_cap, cooldown_days, post_release_grace_hrs,
+                missing_hot_retry_window_hrs, missing_hot_retry_interval_hrs, queue_limit,
                 cutoff_enabled, cutoff_batch_size, cutoff_cooldown_days, cutoff_hourly_cap,
                 sonarr_search_mode, lidarr_search_mode, readarr_search_mode,
                 whisparr_v2_search_mode,
@@ -434,7 +443,7 @@ async def insert_instance(payload: InstanceInsert, *, master_key: bytes) -> int:
                 allowed_time_window, search_order
             ) VALUES (
                 ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
             )
             """,
             (
@@ -449,6 +458,8 @@ async def insert_instance(payload: InstanceInsert, *, master_key: bytes) -> int:
                 payload.hourly_cap,
                 payload.cooldown_days,
                 payload.post_release_grace_hrs,
+                payload.missing_hot_retry_window_hrs,
+                payload.missing_hot_retry_interval_hrs,
                 payload.queue_limit,
                 int(payload.cutoff_enabled),
                 payload.cutoff_batch_size,

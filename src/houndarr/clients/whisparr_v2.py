@@ -35,6 +35,7 @@ class LibraryWhisparrV2Episode:
     monitored: bool
     has_file: bool
     cutoff_met: bool
+    tags: tuple[int, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -48,6 +49,7 @@ class MissingWhisparrV2Episode:
     season_number: int
     absolute_episode_number: int | None
     release_date: datetime | None  # parsed from DateOnly {year, month, day}
+    tags: tuple[int, ...] = ()
 
 
 class WhisparrV2Client(ArrClient):
@@ -197,6 +199,7 @@ def _parse_library_episode(wire: WhisparrV2LibraryEpisode) -> LibraryWhisparrV2E
         cutoff_not_met = wire.episode_file.quality_cutoff_not_met
     series_id = wire.series_id or (wire.series.id if wire.series else None) or 0
     series_title = (wire.series.title if wire.series else None) or ""
+    series_tags = tuple(wire.series.tags or ()) if wire.series else ()
     return LibraryWhisparrV2Episode(
         episode_id=wire.id,
         series_id=series_id,
@@ -207,6 +210,7 @@ def _parse_library_episode(wire: WhisparrV2LibraryEpisode) -> LibraryWhisparrV2E
         monitored=bool(wire.monitored),
         has_file=has_file,
         cutoff_met=not cutoff_not_met if has_file else False,
+        tags=series_tags,
     )
 
 
@@ -238,6 +242,7 @@ def _parse_episode(wire: WhisparrV2WantedEpisode) -> MissingWhisparrV2Episode:
         wire.series_id if wire.series_id is not None else (wire.series.id if wire.series else None)
     )
     series_title = (wire.series.title if wire.series else None) or wire.series_title or ""
+    series_tags = tuple(wire.series.tags or ()) if wire.series else ()
     return MissingWhisparrV2Episode(
         episode_id=wire.id,
         series_id=series_id,
@@ -246,4 +251,5 @@ def _parse_episode(wire: WhisparrV2WantedEpisode) -> MissingWhisparrV2Episode:
         season_number=wire.season_number or 0,
         absolute_episode_number=wire.absolute_episode_number,
         release_date=_parse_date_only(wire.release_date),
+        tags=series_tags,
     )

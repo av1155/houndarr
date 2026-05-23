@@ -469,6 +469,8 @@ def test_instance_update_has_every_updatable_column() -> None:
         "cutoff_page_offset",
         "allowed_time_window",
         "search_order",
+        "tag_filter_include",
+        "tag_filter_exclude",
         "monitored_total",
         "unreleased_count",
         "snapshot_refreshed_at",

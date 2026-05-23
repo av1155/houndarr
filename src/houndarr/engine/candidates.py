@@ -45,6 +45,13 @@ class SearchCandidate:
             author-context, or ``None`` for item-level modes.
         search_payload: Opaque data consumed only by the adapter's
             ``dispatch_search`` function.
+        tags: Tag IDs that apply to the candidate's parent entity.  For
+            Radarr / Whisparr v3 these come from the movie itself; for
+            Sonarr / Whisparr v2 from the embedded series; for Lidarr /
+            Readarr from the embedded artist / author.  Consumed by the
+            engine's per-cycle tag filter (issue #637); empty tuple when
+            the *arr did not return tags or the operator has not enabled
+            the filter on this instance.
     """
 
     item_id: int
@@ -53,6 +60,7 @@ class SearchCandidate:
     unreleased_reason: str | None
     group_key: tuple[int, int] | None
     search_payload: dict[str, Any]
+    tags: tuple[int, ...] = ()
 
 
 def _parse_iso_utc(value: str | None) -> datetime | None:

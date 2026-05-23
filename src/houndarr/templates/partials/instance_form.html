@@ -80,6 +80,16 @@
   <p>Restrict scheduled cycles to one or more <code>HH:MM-HH:MM</code> ranges in the container's local time. Manual Run Now bypasses the window.</p>
   <p class="tip__hint">Blank = always allowed. Ranges can wrap past midnight (e.g. <code>22:00-06:00</code>).</p>
 </template>
+<template id="tip-tag_filter_include">
+  <p class="tip__eyebrow">Tag filter · include</p>
+  <p>Only search items that carry at least one of these tags. Comma-separated, case-insensitive labels matched against this *arr's defined tags each cycle. Items with no tags are skipped while the include list is non-empty.</p>
+  <p class="tip__hint">Blank = include every item. Unknown labels are logged once per cycle and ignored.</p>
+</template>
+<template id="tip-tag_filter_exclude">
+  <p class="tip__eyebrow">Tag filter · exclude</p>
+  <p>Never search items that carry any of these tags. Comma-separated, case-insensitive labels. Items with no tags are always allowed past the exclude list.</p>
+  <p class="tip__hint">Blank = exclude nothing. Tag labels are resolved against the *arr's <code>/tag</code> endpoint at cycle time.</p>
+</template>
 <template id="tip-search_order">
   <p class="tip__eyebrow">Search order</p>
   <p>Chronological walks the wanted list oldest-first with a persistent page offset so items further down do not starve. Random picks a different slice each cycle so searches feel spread across the catalogue rather than clustered by release date.</p>
@@ -394,6 +404,37 @@
               tip_ref="allowed_time_window",
           ) }}
           <p class="mt-1.5 text-xs text-slate-600">Restrict scheduled cycles to one or more <code>HH:MM-HH:MM</code> windows (container local time via <code>TZ</code>). Blank = always allowed. Run Now bypasses the window.</p>
+        </div>
+        <div class="sm:col-span-2">
+          {# Tag filters resolve operator-typed labels against the *arr's
+             /tag endpoint each cycle, so a future tag rename does not
+             require touching this form.  Issue #637. #}
+          {{ forms.form_field(
+              id=form_id ~ "-tag-include",
+              name="tag_filter_include",
+              type="text",
+              value=instance.tag_filter.include | join(","),
+              data_default_value="",
+              placeholder="e.g. 1080p,kids",
+              input_class=mono_input_cls,
+              label="Tag Filter · Include",
+              tip_ref="tag_filter_include",
+          ) }}
+          <p class="mt-1.5 text-xs text-slate-600">Comma-separated tag labels. Only search items carrying at least one of these. Blank = no include filter.</p>
+        </div>
+        <div class="sm:col-span-2">
+          {{ forms.form_field(
+              id=form_id ~ "-tag-exclude",
+              name="tag_filter_exclude",
+              type="text",
+              value=instance.tag_filter.exclude | join(","),
+              data_default_value="",
+              placeholder="e.g. uncut,private",
+              input_class=mono_input_cls,
+              label="Tag Filter · Exclude",
+              tip_ref="tag_filter_exclude",
+          ) }}
+          <p class="mt-1.5 text-xs text-slate-600">Comma-separated tag labels. Skip items carrying any of these. Blank = no exclude filter.</p>
         </div>
         <div class="sm:col-span-2">
           {{ forms.select_field(

@@ -159,6 +159,8 @@ class TestSearchPassConfigDeclaration:
             "cycle_trigger",
             "start_page",
             "total_fn",
+            "tag_filter_include_ids",
+            "tag_filter_exclude_ids",
             "missing_hot_retry_window_hrs",
             "missing_hot_retry_interval_hrs",
         ]

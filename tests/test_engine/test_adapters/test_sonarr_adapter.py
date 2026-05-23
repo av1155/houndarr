@@ -32,6 +32,7 @@ from houndarr.services.instances import (
     SchedulePolicy,
     SearchOrder,
     SonarrSearchMode,
+    TagFilterPolicy,
     UpgradePolicy,
 )
 
@@ -73,6 +74,7 @@ def _make_instance(
         ),
         upgrade=UpgradePolicy(),
         schedule=SchedulePolicy(search_order=SearchOrder.chronological),
+        tag_filter=TagFilterPolicy(),
         snapshot=RuntimeSnapshot(),
         timestamps=InstanceTimestamps(
             created_at="2024-01-01T00:00:00Z",
@@ -445,6 +447,7 @@ class TestFetchReconcileSetsUpgrade:
             cutoff=instance.cutoff,
             upgrade=UpgradePolicy(upgrade_enabled=True, upgrade_series_offset=0),
             schedule=instance.schedule,
+            tag_filter=instance.tag_filter,
             snapshot=instance.snapshot,
             timestamps=instance.timestamps,
         )

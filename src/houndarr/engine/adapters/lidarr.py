@@ -110,6 +110,7 @@ def adapt_missing(item: MissingAlbum, instance: Instance) -> SearchCandidate:
             "album_id": item.album_id,
         },
         context=context,
+        tags=item.tags,
     )
 
 
@@ -136,6 +137,7 @@ def adapt_cutoff(item: MissingAlbum, instance: Instance) -> SearchCandidate:
             "command": "AlbumSearch",
             "album_id": item.album_id,
         },
+        tags=item.tags,
     )
 
 
@@ -193,6 +195,7 @@ def adapt_upgrade(item: LibraryAlbum, instance: Instance) -> SearchCandidate:
         unreleased_reason=None,
         group_key=group_key,
         search_payload=search_payload,
+        tags=item.tags,
     )
 
 

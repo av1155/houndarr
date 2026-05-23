@@ -31,3 +31,4 @@ class WhisparrV3LibraryMovie(_ArrModel):
     physical_release: str | None = Field(default=None, alias="physicalRelease")
     digital_release: str | None = Field(default=None, alias="digitalRelease")
     release_date: str | None = Field(default=None, alias="releaseDate")
+    tags: list[int] | None = None

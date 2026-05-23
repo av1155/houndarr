@@ -152,6 +152,8 @@ async def instance_create(
     upgrade_series_window_size: Annotated[int, Form()] = DEFAULT_UPGRADE_SERIES_WINDOW_SIZE,
     allowed_time_window: Annotated[str, Form()] = DEFAULT_ALLOWED_TIME_WINDOW,
     search_order: Annotated[str, Form()] = DEFAULT_SEARCH_ORDER,
+    tag_filter_include: Annotated[str, Form()] = "",
+    tag_filter_exclude: Annotated[str, Form()] = "",
     connection_verified: Annotated[str, Form()] = "false",
 ) -> HTMLResponse:
     """Create a new instance and return the updated instance table body."""
@@ -190,6 +192,8 @@ async def instance_create(
             upgrade_series_window_size=upgrade_series_window_size,
             allowed_time_window=allowed_time_window,
             search_order=search_order,
+            tag_filter_include=tag_filter_include,
+            tag_filter_exclude=tag_filter_exclude,
             connection_verified=connection_verified == "true",
         )
     except InstanceValidationError as exc:
@@ -272,6 +276,8 @@ async def instance_update(
     upgrade_series_window_size: Annotated[int, Form()] = DEFAULT_UPGRADE_SERIES_WINDOW_SIZE,
     allowed_time_window: Annotated[str, Form()] = DEFAULT_ALLOWED_TIME_WINDOW,
     search_order: Annotated[str, Form()] = DEFAULT_SEARCH_ORDER,
+    tag_filter_include: Annotated[str, Form()] = "",
+    tag_filter_exclude: Annotated[str, Form()] = "",
     connection_verified: Annotated[str, Form()] = "false",
 ) -> HTMLResponse:
     """Update an existing instance and return the refreshed row partial.
@@ -317,6 +323,8 @@ async def instance_update(
             upgrade_series_window_size=upgrade_series_window_size,
             allowed_time_window=allowed_time_window,
             search_order=search_order,
+            tag_filter_include=tag_filter_include,
+            tag_filter_exclude=tag_filter_exclude,
             connection_verified=connection_verified == "true",
         )
     except InstanceNotFoundError:

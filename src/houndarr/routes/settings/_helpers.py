@@ -69,6 +69,7 @@ from houndarr.services.instances import (
     SchedulePolicy,
     SearchOrder,
     SonarrSearchMode,
+    TagFilterPolicy,
     UpgradePolicy,
     WhisparrV2SearchMode,
     active_error_instance_ids,
@@ -176,6 +177,7 @@ def blank_instance() -> Instance:
             allowed_time_window=DEFAULT_ALLOWED_TIME_WINDOW,
             search_order=SearchOrder(DEFAULT_SEARCH_ORDER),
         ),
+        tag_filter=TagFilterPolicy(),
         snapshot=RuntimeSnapshot(),
         timestamps=InstanceTimestamps(
             created_at="",

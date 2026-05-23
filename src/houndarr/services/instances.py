@@ -266,16 +266,36 @@ class InstanceTimestamps:
 
 
 @dataclass(frozen=True, slots=True)
+class TagFilterPolicy:
+    """Per-instance tag-based include / exclude filter for processed items.
+
+    Tags are stored as case-insensitive labels (``"1080p"``, ``"4k"``) the
+    operator types into the settings form; the engine resolves them to
+    numeric *arr tag IDs once per cycle by GET-ing the instance's
+    ``/tag`` endpoint.  Storing labels (not IDs) keeps the configuration
+    portable across instances and survives tag rename / re-creation.
+
+    Both lists default to empty: with neither set the filter is a no-op
+    and the engine processes items exactly as before.  Issue #637.
+    """
+
+    include: tuple[str, ...] = ()
+    exclude: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
 class Instance:
     """In-memory representation of a configured *arr instance.
 
-    Composes seven sub-structs that partition the row into coherent
+    Composes eight sub-structs that partition the row into coherent
     policy groups: :class:`InstanceCore` for identity and wire
     credentials, :class:`MissingPolicy` / :class:`CutoffPolicy` /
     :class:`UpgradePolicy` for the three search passes,
     :class:`SchedulePolicy` for when and in what order the engine
-    runs, :class:`RuntimeSnapshot` for dashboard telemetry, and
-    :class:`InstanceTimestamps` for audit metadata.
+    runs, :class:`TagFilterPolicy` for the per-instance tag-based
+    include / exclude filter (issue #637), :class:`RuntimeSnapshot`
+    for dashboard telemetry, and :class:`InstanceTimestamps` for
+    audit metadata.
 
     :class:`Instance` is frozen.  Offset rotations and snapshot
     updates travel through the repository (``update_instance`` or
@@ -304,6 +324,7 @@ class Instance:
     cutoff: CutoffPolicy
     upgrade: UpgradePolicy
     schedule: SchedulePolicy
+    tag_filter: TagFilterPolicy
     snapshot: RuntimeSnapshot
     timestamps: InstanceTimestamps
 
@@ -354,6 +375,8 @@ async def create_instance(
     upgrade_series_window_size: int = DEFAULT_UPGRADE_SERIES_WINDOW_SIZE,
     allowed_time_window: str = DEFAULT_ALLOWED_TIME_WINDOW,
     search_order: SearchOrder = SearchOrder(DEFAULT_SEARCH_ORDER),
+    tag_filter_include: str = "",
+    tag_filter_exclude: str = "",
 ) -> Instance:
     """Insert a new instance row and return the populated :class:`Instance`.
 
@@ -443,6 +466,8 @@ async def create_instance(
         upgrade_series_window_size=upgrade_series_window_size,
         allowed_time_window=allowed_time_window,
         search_order=search_order,
+        tag_filter_include=tag_filter_include,
+        tag_filter_exclude=tag_filter_exclude,
     )
     row_id = await _repo_insert_instance(payload, master_key=master_key)
 

@@ -16,7 +16,20 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Schema version: bump when adding new migrations
 # ---------------------------------------------------------------------------
-SCHEMA_VERSION = 20
+SCHEMA_VERSION = 21
+
+# v20: per-instance tag-based include / exclude filter for *arr items.
+# Column names are baked in here as constants so a future rename never
+# retroactively invalidates the v20 ALTER TABLE statements when an older
+# database is rebuilt through the migration ladder.
+_V20_TAG_FILTER_INCLUDE_COLUMN = "tag_filter_include"
+_V20_TAG_FILTER_EXCLUDE_COLUMN = "tag_filter_exclude"
+
+# v21: per-instance missing-pass hot retry window after post-release grace.
+# Same version-locking discipline as v20: the column names are pinned here
+# so a future rename cannot retroactively break the rebuild ladder.
+_V21_HOT_RETRY_WINDOW_COLUMN = "missing_hot_retry_window_hrs"
+_V21_HOT_RETRY_INTERVAL_COLUMN = "missing_hot_retry_interval_hrs"
 
 # ---------------------------------------------------------------------------
 # DDL
@@ -110,6 +123,8 @@ CREATE TABLE IF NOT EXISTS instances (
     monitored_total      INTEGER NOT NULL DEFAULT 0,
     unreleased_count     INTEGER NOT NULL DEFAULT 0,
     snapshot_refreshed_at TEXT   NOT NULL DEFAULT '',
+    tag_filter_include   TEXT    NOT NULL DEFAULT '',
+    tag_filter_exclude   TEXT    NOT NULL DEFAULT '',
     enabled              INTEGER NOT NULL DEFAULT 1,
     created_at           TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     updated_at           TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
@@ -348,6 +363,7 @@ async def init_db_migrations() -> None:
         await _migrate_to_v18(db)
         await _migrate_to_v19(db)
         await _migrate_to_v20(db)
+        await _migrate_to_v21(db)
         await _ensure_v3_indexes(db)
         # PRAGMA optimize keeps the planner's sqlite_stat1 entries fresh as
         # search_log grows.  Cheap on healthy DBs, prevents silent index
@@ -409,6 +425,8 @@ async def _run_migrations(db: aiosqlite.Connection, from_version: int) -> None:
         await _migrate_to_v19(db)
     if from_version < 20:
         await _migrate_to_v20(db)
+    if from_version < 21:
+        await _migrate_to_v21(db)
 
     logger.info("Migrated database from schema version %d to %d", from_version, SCHEMA_VERSION)
     await db.execute(
@@ -1441,16 +1459,41 @@ async def _migrate_to_v19(db: aiosqlite.Connection) -> None:
 
 
 async def _migrate_to_v20(db: aiosqlite.Connection) -> None:
-    """Add optional missing-pass hot retry controls."""
-    if not await _column_exists(db, "instances", "missing_hot_retry_window_hrs"):
+    """Add tag include / exclude filter columns on the instances table.
+
+    Issue #637.  Both columns hold comma-separated tag labels and default to
+    empty so existing instances after migration behave identically to today.
+    Resolution from label to numeric tag ID happens at engine-cycle time
+    against the live ``/tag`` endpoint of each *arr instance.
+    """
+    if not await _column_exists(db, "instances", _V20_TAG_FILTER_INCLUDE_COLUMN):
         await db.execute(
-            "ALTER TABLE instances ADD COLUMN "
-            "missing_hot_retry_window_hrs INTEGER NOT NULL DEFAULT 0"
+            f"ALTER TABLE instances ADD COLUMN {_V20_TAG_FILTER_INCLUDE_COLUMN} "
+            "TEXT NOT NULL DEFAULT ''"
         )
-    if not await _column_exists(db, "instances", "missing_hot_retry_interval_hrs"):
+    if not await _column_exists(db, "instances", _V20_TAG_FILTER_EXCLUDE_COLUMN):
         await db.execute(
-            "ALTER TABLE instances ADD COLUMN "
-            "missing_hot_retry_interval_hrs INTEGER NOT NULL DEFAULT 2"
+            f"ALTER TABLE instances ADD COLUMN {_V20_TAG_FILTER_EXCLUDE_COLUMN} "
+            "TEXT NOT NULL DEFAULT ''"
+        )
+
+
+async def _migrate_to_v21(db: aiosqlite.Connection) -> None:
+    """Add optional missing-pass hot retry controls on the instances table.
+
+    Issue #630.  Both columns default to safe values (window=0 disables
+    hot retry entirely; interval=2h is harmless when the window is off)
+    so existing instances after migration behave identically to today.
+    """
+    if not await _column_exists(db, "instances", _V21_HOT_RETRY_WINDOW_COLUMN):
+        await db.execute(
+            f"ALTER TABLE instances ADD COLUMN {_V21_HOT_RETRY_WINDOW_COLUMN} "
+            "INTEGER NOT NULL DEFAULT 0"
+        )
+    if not await _column_exists(db, "instances", _V21_HOT_RETRY_INTERVAL_COLUMN):
+        await db.execute(
+            f"ALTER TABLE instances ADD COLUMN {_V21_HOT_RETRY_INTERVAL_COLUMN} "
+            "INTEGER NOT NULL DEFAULT 2"
         )
 
 

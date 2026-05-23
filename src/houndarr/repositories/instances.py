@@ -72,9 +72,36 @@ from houndarr.services.instances import (
     SchedulePolicy,
     SearchOrder,
     SonarrSearchMode,
+    TagFilterPolicy,
     UpgradePolicy,
     WhisparrV2SearchMode,
 )
+
+
+def _parse_tag_labels(value: str) -> tuple[str, ...]:
+    """Split a comma-separated tag-label column into a normalised tuple.
+
+    Empty entries are dropped; remaining labels are stripped and
+    lowercased so the engine's filter comparison is case-insensitive
+    against operator-typed input.  Issue #637.
+    """
+    if not value:
+        return ()
+    seen: list[str] = []
+    for raw in value.split(","):
+        label = raw.strip().lower()
+        if label and label not in seen:
+            seen.append(label)
+    return tuple(seen)
+
+
+def _serialise_tag_labels(labels: tuple[str, ...]) -> str:
+    """Inverse of :func:`_parse_tag_labels`: tuple -> comma-joined string.
+
+    Empty tuple -> empty string, which matches the column default in
+    the v20 migration.
+    """
+    return ",".join(labels)
 
 
 def _optional_row_int(row: aiosqlite.Row, key: str) -> int:
@@ -188,6 +215,10 @@ def _row_to_instance(row: aiosqlite.Row, master_key: bytes) -> Instance:
             missing_page_offset=row["missing_page_offset"],
             cutoff_page_offset=row["cutoff_page_offset"],
         ),
+        tag_filter=TagFilterPolicy(
+            include=_parse_tag_labels(_optional_row_str(row, "tag_filter_include")),
+            exclude=_parse_tag_labels(_optional_row_str(row, "tag_filter_exclude")),
+        ),
         snapshot=RuntimeSnapshot(
             monitored_total=_optional_row_int(row, "monitored_total"),
             unreleased_count=_optional_row_int(row, "unreleased_count"),
@@ -293,6 +324,10 @@ class InstanceInsert:
     upgrade_series_window_size: int = DEFAULT_UPGRADE_SERIES_WINDOW_SIZE
     allowed_time_window: str = DEFAULT_ALLOWED_TIME_WINDOW
     search_order: SearchOrder = SearchOrder(DEFAULT_SEARCH_ORDER)
+    # Comma-separated, lowercased tag labels.  Empty string means no filter.
+    # Resolved to numeric tag IDs at engine-cycle time (issue #637).
+    tag_filter_include: str = ""
+    tag_filter_exclude: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -347,6 +382,8 @@ class InstanceUpdate:
     cutoff_page_offset: int | None = None
     allowed_time_window: str | None = None
     search_order: SearchOrder | None = None
+    tag_filter_include: str | None = None
+    tag_filter_exclude: str | None = None
     monitored_total: int | None = None
     unreleased_count: int | None = None
     snapshot_refreshed_at: str | None = None
@@ -440,10 +477,11 @@ async def insert_instance(payload: InstanceInsert, *, master_key: bytes) -> int:
                 upgrade_sonarr_search_mode, upgrade_lidarr_search_mode,
                 upgrade_readarr_search_mode, upgrade_whisparr_v2_search_mode,
                 upgrade_series_window_size,
-                allowed_time_window, search_order
+                allowed_time_window, search_order,
+                tag_filter_include, tag_filter_exclude
             ) VALUES (
                 ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
             )
             """,
             (
@@ -480,6 +518,8 @@ async def insert_instance(payload: InstanceInsert, *, master_key: bytes) -> int:
                 payload.upgrade_series_window_size,
                 payload.allowed_time_window,
                 payload.search_order.value,
+                payload.tag_filter_include,
+                payload.tag_filter_exclude,
             ),
         )
         await db.commit()

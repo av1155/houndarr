@@ -25,6 +25,7 @@ from houndarr.services.instances import (
     SchedulePolicy,
     SearchOrder,
     SonarrSearchMode,
+    TagFilterPolicy,
     UpgradePolicy,
     WhisparrV2SearchMode,
 )
@@ -239,6 +240,7 @@ def make_instance(
             missing_page_offset=missing_page_offset,
             cutoff_page_offset=cutoff_page_offset,
         ),
+        tag_filter=TagFilterPolicy(),
         snapshot=RuntimeSnapshot(),
         timestamps=InstanceTimestamps(
             created_at="2024-01-01T00:00:00Z",

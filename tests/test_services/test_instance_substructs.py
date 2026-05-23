@@ -72,6 +72,7 @@ from houndarr.services.instances import (
     SchedulePolicy,
     SearchOrder,
     SonarrSearchMode,
+    TagFilterPolicy,
     UpgradePolicy,
     WhisparrV2SearchMode,
 )
@@ -459,12 +460,13 @@ def test_substruct_field_union_count_matches_pre_refactor_surface() -> None:
 # Instance shape.
 
 
-def test_instance_is_dataclass_with_seven_sub_struct_fields() -> None:
-    """Instance is a plain dataclass whose fields are the seven sub-structs.
+def test_instance_is_dataclass_with_eight_sub_struct_fields() -> None:
+    """Instance is a plain dataclass whose fields are the eight sub-structs.
 
     Locks that :class:`Instance` is no longer a facade: the sub-struct
     fields are the only shape the constructor accepts and the only
-    surface :func:`dataclasses.fields` returns.
+    surface :func:`dataclasses.fields` returns.  ``tag_filter`` was added
+    with issue #637.
     """
     assert dataclasses.is_dataclass(Instance)
     expected = [
@@ -473,6 +475,7 @@ def test_instance_is_dataclass_with_seven_sub_struct_fields() -> None:
         ("cutoff", CutoffPolicy),
         ("upgrade", UpgradePolicy),
         ("schedule", SchedulePolicy),
+        ("tag_filter", TagFilterPolicy),
         ("snapshot", RuntimeSnapshot),
         ("timestamps", InstanceTimestamps),
     ]
@@ -507,6 +510,7 @@ def test_instance_accepts_only_sub_struct_kwargs() -> None:
     assert isinstance(instance.cutoff, CutoffPolicy)
     assert isinstance(instance.upgrade, UpgradePolicy)
     assert isinstance(instance.schedule, SchedulePolicy)
+    assert isinstance(instance.tag_filter, TagFilterPolicy)
     assert isinstance(instance.snapshot, RuntimeSnapshot)
     assert isinstance(instance.timestamps, InstanceTimestamps)
 
@@ -602,6 +606,7 @@ def _minimal_instance() -> Instance:
         cutoff=CutoffPolicy(),
         upgrade=UpgradePolicy(),
         schedule=SchedulePolicy(),
+        tag_filter=TagFilterPolicy(),
         snapshot=RuntimeSnapshot(),
         timestamps=InstanceTimestamps(
             created_at="2024-01-01T00:00:00Z",

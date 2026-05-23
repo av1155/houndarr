@@ -29,6 +29,7 @@ from houndarr.services.instances import (
     SchedulePolicy,
     SearchOrder,
     SonarrSearchMode,
+    TagFilterPolicy,
     UpgradePolicy,
     WhisparrV2SearchMode,
 )
@@ -163,6 +164,7 @@ def _make_instance(
         ),
         upgrade=UpgradePolicy(upgrade_enabled=upgrade_enabled),
         schedule=SchedulePolicy(search_order=search_order),
+        tag_filter=TagFilterPolicy(),
         snapshot=RuntimeSnapshot(),
         timestamps=InstanceTimestamps(
             created_at="2024-01-01T00:00:00Z",
@@ -2282,6 +2284,7 @@ def _make_cutoff_instance(
         ),
         upgrade=UpgradePolicy(),
         schedule=SchedulePolicy(search_order=SearchOrder.chronological),
+        tag_filter=TagFilterPolicy(),
         snapshot=RuntimeSnapshot(),
         timestamps=InstanceTimestamps(
             created_at="2024-01-01T00:00:00Z",
@@ -2930,3 +2933,247 @@ async def test_missing_disabled_does_not_block_cutoff_pass(
     rows = await _get_log_rows()
     cutoff_rows = [r for r in rows if r["action"] == "searched" and r["search_kind"] == "cutoff"]
     assert len(cutoff_rows) == 1
+
+
+# ---------------------------------------------------------------------------
+# Tag-filter integration (issue #637)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_tag_filter_include_blocks_untagged_radarr_item(seeded_instances: None) -> None:
+    """A non-empty include filter must skip items that carry no matching tag.
+
+    Issue #637.  End-to-end test through ``run_instance_search``:
+    ``_resolve_tag_filter_ids`` GETs ``/api/v3/tag``, ``adapt_missing``
+    threads ``tags`` from the wire model into the SearchCandidate, the
+    per-candidate filter in ``_run_search_pass`` rejects on mismatch,
+    and one skip row lands in ``search_log``.
+    """
+    respx.get(f"{RADARR_URL}/api/v3/tag").mock(
+        return_value=httpx.Response(
+            200, json=[{"id": 7, "label": "1080p"}, {"id": 8, "label": "kids"}]
+        )
+    )
+    respx.get(f"{RADARR_URL}/api/v3/wanted/missing").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "page": 1,
+                "pageSize": 10,
+                "totalRecords": 1,
+                "records": [{**_MOVIE_RECORD, "tags": [8]}],  # has "kids", not "1080p"
+            },
+        )
+    )
+    search_route = respx.post(f"{RADARR_URL}/api/v3/command").mock(
+        return_value=httpx.Response(201, json={"id": 2})
+    )
+
+    instance = dataclasses.replace(
+        _make_instance(instance_id=2, itype=InstanceType.radarr, url=RADARR_URL),
+        tag_filter=TagFilterPolicy(include=("1080p",), exclude=()),
+    )
+    count = await run_instance_search(instance, MASTER_KEY)
+
+    assert count == 0
+    assert not search_route.called
+    rows = await _get_log_rows()
+    skipped = [r for r in rows if r["action"] == "skipped"]
+    assert len(skipped) == 1
+    assert skipped[0]["reason"] == "tag filter (no included tag)"
+    assert skipped[0]["item_id"] == 201
+    assert skipped[0]["item_type"] == "movie"
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_tag_filter_include_passes_matching_radarr_item(seeded_instances: None) -> None:
+    """An item carrying at least one included tag is dispatched normally."""
+    respx.get(f"{RADARR_URL}/api/v3/tag").mock(
+        return_value=httpx.Response(200, json=[{"id": 7, "label": "1080p"}])
+    )
+    respx.get(f"{RADARR_URL}/api/v3/wanted/missing").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "page": 1,
+                "pageSize": 10,
+                "totalRecords": 1,
+                "records": [{**_MOVIE_RECORD, "tags": [7]}],
+            },
+        )
+    )
+    search_route = respx.post(f"{RADARR_URL}/api/v3/command").mock(
+        return_value=httpx.Response(201, json={"id": 2})
+    )
+
+    instance = dataclasses.replace(
+        _make_instance(instance_id=2, itype=InstanceType.radarr, url=RADARR_URL),
+        tag_filter=TagFilterPolicy(include=("1080p",), exclude=()),
+    )
+    count = await run_instance_search(instance, MASTER_KEY)
+
+    assert count == 1
+    assert search_route.called
+    rows = await _get_log_rows()
+    assert rows[-1]["action"] == "searched"
+    assert rows[-1]["item_id"] == 201
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_tag_filter_exclude_blocks_excluded_radarr_item(seeded_instances: None) -> None:
+    """An exclude filter skips items carrying any of the excluded tags."""
+    respx.get(f"{RADARR_URL}/api/v3/tag").mock(
+        return_value=httpx.Response(200, json=[{"id": 7, "label": "uncut"}])
+    )
+    respx.get(f"{RADARR_URL}/api/v3/wanted/missing").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "page": 1,
+                "pageSize": 10,
+                "totalRecords": 1,
+                "records": [{**_MOVIE_RECORD, "tags": [7]}],
+            },
+        )
+    )
+    search_route = respx.post(f"{RADARR_URL}/api/v3/command").mock(
+        return_value=httpx.Response(201, json={"id": 2})
+    )
+
+    instance = dataclasses.replace(
+        _make_instance(instance_id=2, itype=InstanceType.radarr, url=RADARR_URL),
+        tag_filter=TagFilterPolicy(include=(), exclude=("uncut",)),
+    )
+    count = await run_instance_search(instance, MASTER_KEY)
+
+    assert count == 0
+    assert not search_route.called
+    rows = await _get_log_rows()
+    skipped = [r for r in rows if r["action"] == "skipped"]
+    assert len(skipped) == 1
+    assert skipped[0]["reason"] == "tag filter (excluded tag)"
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_tag_filter_skipped_when_every_pass_disabled(seeded_instances: None) -> None:
+    """A paused instance with a tag filter set must not GET /tag at all.
+
+    Issue #637.  Avoids the wasted request (and the info-row noise on
+    failure) when the operator has flipped every pass off.
+    """
+    tag_route = respx.get(f"{RADARR_URL}/api/v3/tag").mock(
+        return_value=httpx.Response(200, json=[])
+    )
+
+    instance = dataclasses.replace(
+        _make_instance(
+            instance_id=2,
+            itype=InstanceType.radarr,
+            url=RADARR_URL,
+            missing_enabled=False,
+            cutoff_enabled=False,
+        ),
+        tag_filter=TagFilterPolicy(include=("1080p",), exclude=()),
+    )
+    count = await run_instance_search(instance, MASTER_KEY)
+
+    assert count == 0
+    assert not tag_route.called
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_tag_filter_blocks_cutoff_pass_too(seeded_instances: None) -> None:
+    """Cutoff-pass candidates are filtered on the same tag-filter contract.
+
+    Issue #637.  The cutoff branch passes ``tag_filter_*_ids`` into its
+    :class:`SearchPassConfig`; this test confirms the wiring by mocking a
+    cutoff endpoint with one untagged episode under a non-empty include
+    filter.  A regression that drops the kwarg from the cutoff branch
+    would unblock this dispatch and fail the assertion.
+    """
+    respx.get(f"{SONARR_URL}/api/v3/tag").mock(
+        return_value=httpx.Response(200, json=[{"id": 7, "label": "1080p"}])
+    )
+    respx.get(f"{SONARR_URL}/api/v3/wanted/missing").mock(
+        return_value=httpx.Response(200, json={"records": []})
+    )
+    respx.get(f"{SONARR_URL}/api/v3/wanted/cutoff").mock(
+        return_value=httpx.Response(200, json=_CUTOFF_SONARR)
+    )
+    search_route = respx.post(f"{SONARR_URL}/api/v3/command").mock(
+        return_value=httpx.Response(201, json=_COMMAND_RESP)
+    )
+
+    instance = dataclasses.replace(
+        _make_cutoff_instance(cutoff_enabled=True),
+        tag_filter=TagFilterPolicy(include=("1080p",), exclude=()),
+    )
+    count = await run_instance_search(instance, MASTER_KEY)
+
+    assert count == 0
+    assert not search_route.called
+    rows = await _get_log_rows()
+    skipped = [r for r in rows if r["action"] == "skipped" and r["search_kind"] == "cutoff"]
+    assert len(skipped) == 1
+    assert skipped[0]["reason"] == "tag filter (no included tag)"
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_tag_filter_blocks_upgrade_pass_too(seeded_instances: None) -> None:
+    """Upgrade-pass candidates honour the same tag filter as missing / cutoff.
+
+    Issue #637.  ``_run_upgrade_pass`` is invoked with two new kwargs
+    (``tag_filter_include_ids`` / ``tag_filter_exclude_ids``); this test
+    proves the kwargs land on the upgrade branch by mocking a Radarr
+    library movie with no tags and asserting the upgrade pool ignores it.
+    """
+    library_movie = {
+        "id": 201,
+        "title": "My Movie",
+        "year": 2023,
+        "monitored": True,
+        "hasFile": True,
+        "movieFile": {"qualityCutoffNotMet": False},
+        "tags": [],  # no matching include tag
+    }
+    respx.get(f"{RADARR_URL}/api/v3/tag").mock(
+        return_value=httpx.Response(200, json=[{"id": 7, "label": "1080p"}])
+    )
+    respx.get(f"{RADARR_URL}/api/v3/wanted/missing").mock(
+        return_value=httpx.Response(200, json={"records": []})
+    )
+    respx.get(f"{RADARR_URL}/api/v3/movie").mock(
+        return_value=httpx.Response(200, json=[library_movie])
+    )
+    search_route = respx.post(f"{RADARR_URL}/api/v3/command").mock(
+        return_value=httpx.Response(201, json={"id": 1, "name": "MoviesSearch"})
+    )
+
+    instance = _make_instance(
+        itype=InstanceType.radarr, url=RADARR_URL, instance_id=2, batch_size=0
+    )
+    instance = dataclasses.replace(
+        instance,
+        upgrade=UpgradePolicy(
+            upgrade_enabled=True,
+            upgrade_batch_size=1,
+            upgrade_cooldown_days=7,
+            upgrade_hourly_cap=5,
+        ),
+        tag_filter=TagFilterPolicy(include=("1080p",), exclude=()),
+    )
+    count = await run_instance_search(instance, MASTER_KEY)
+
+    assert count == 0
+    assert not search_route.called
+    rows = await _get_log_rows()
+    skipped = [r for r in rows if r["action"] == "skipped" and r["search_kind"] == "upgrade"]
+    assert len(skipped) == 1
+    assert skipped[0]["reason"] == "tag filter (no included tag)"

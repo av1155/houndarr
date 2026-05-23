@@ -23,6 +23,7 @@ from houndarr.routes.settings._helpers import (
     validate_missing_hot_retry_controls,
     validate_upgrade_controls,
 )
+from houndarr.services.instance_validation import validate_tag_filter
 from houndarr.services.instances import (
     InstanceType,
     LidarrSearchMode,
@@ -93,6 +94,51 @@ class TestValidateUpgradeControls:
     def test_hourly_cap_negative_rejected(self) -> None:
         msg = validate_upgrade_controls(1, 7, -1)
         assert msg == "Upgrade hourly cap must be 0 or greater."
+
+
+# validate_tag_filter (issue #637)
+
+
+class TestValidateTagFilter:
+    """Lock the comma-separated-label parser used by the settings form.
+
+    Each test asserts the ``(error, canonical)`` pair so the route layer
+    can render the canonical value back into the form on success and
+    surface a clear message on failure.
+    """
+
+    def test_empty_input_returns_empty_canonical(self) -> None:
+        assert validate_tag_filter("", direction="include") == (None, "")
+        assert validate_tag_filter("   ", direction="exclude") == (None, "")
+
+    def test_strips_lowercases_and_dedupes(self) -> None:
+        err, canonical = validate_tag_filter("  1080p, 4K ,1080p ,kids", direction="include")
+        assert err is None
+        assert canonical == "1080p,4k,kids"
+
+    def test_label_too_long_rejected(self) -> None:
+        too_long = "a" * 65
+        err, canonical = validate_tag_filter(too_long, direction="include")
+        assert err is not None
+        assert "include" in err
+        assert canonical == ""
+
+    def test_too_many_entries_rejected(self) -> None:
+        labels = ",".join(f"tag{i}" for i in range(33))
+        err, canonical = validate_tag_filter(labels, direction="exclude")
+        assert err is not None
+        assert "exclude" in err
+        assert canonical == ""
+
+    def test_direction_word_appears_in_error(self) -> None:
+        """The direction is surfaced verbatim so the operator can tell which
+        of the two fields tripped the bound."""
+        err_include, _ = validate_tag_filter("a" * 65, direction="include")
+        err_exclude, _ = validate_tag_filter("a" * 65, direction="exclude")
+        assert err_include is not None
+        assert err_exclude is not None
+        assert "include" in err_include
+        assert "exclude" in err_exclude
 
 
 # resolve_search_modes

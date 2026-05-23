@@ -159,6 +159,127 @@ _SHUFFLE_PAD: object = object()
 # search_log helpers
 
 
+# Tag-filter helpers (issue #637)
+
+_TAG_FILTER_INCLUDE_REASON = "tag filter (no included tag)"
+_TAG_FILTER_EXCLUDE_REASON = "tag filter (excluded tag)"
+
+
+def _tag_filter_skip_reason(
+    candidate: SearchCandidate,
+    include_ids: frozenset[int] | None,
+    exclude_ids: frozenset[int] | None,
+) -> str | None:
+    """Return None if the candidate passes the tag filter; a reason otherwise.
+
+    Include semantics: when *include_ids* is provided and non-empty, the
+    candidate must carry at least one matching tag.  Items with zero tags
+    fail a non-empty include filter (they have nothing that could match).
+
+    Exclude semantics: when *exclude_ids* is provided, no tag on the
+    candidate may appear in it.  Items with zero tags always pass an
+    exclude filter.
+
+    Either side is ``None`` when the operator has not configured that
+    direction (or when the per-cycle ``/tag`` fetch failed and the
+    filter was disabled for graceful degradation).
+    """
+    if include_ids is not None and (not include_ids or not (set(candidate.tags) & include_ids)):
+        return _TAG_FILTER_INCLUDE_REASON
+    if exclude_ids and (set(candidate.tags) & exclude_ids):
+        return _TAG_FILTER_EXCLUDE_REASON
+    return None
+
+
+async def _resolve_tag_filter_ids(
+    instance: Instance,
+    adapter: AppAdapterProto,
+    *,
+    cycle_id: str,
+    cycle_trigger: CycleTrigger | str,
+) -> tuple[frozenset[int] | None, frozenset[int] | None]:
+    """Resolve the per-instance tag-label filter to numeric tag IDs.
+
+    Returns ``(include_ids, exclude_ids)`` where each side is:
+
+    - ``None`` when the operator has not enabled that direction
+      (empty list in settings), so the filter is a no-op for the pass.
+    - ``None`` when the upstream ``/tag`` fetch fails: we log one info
+      row to ``search_log`` and degrade gracefully rather than blocking
+      the whole cycle on a transient *arr error.
+    - A possibly-empty ``frozenset[int]`` of resolved tag IDs.  An
+      empty set for *include* means every operator-typed label was
+      unknown to the *arr; in that case no candidate can match.
+
+    Labels that do not resolve against the *arr's current /tag list
+    are dropped silently for the cycle but recorded as an info row so
+    the operator can see the typo without the loop failing on every
+    candidate.
+    """
+    include = instance.tag_filter.include
+    exclude = instance.tag_filter.exclude
+    if not include and not exclude:
+        return None, None
+
+    try:
+        async with adapter.make_client(instance) as client:
+            label_to_id = await client.get_tags()
+    except (ClientError, httpx.InvalidURL) as exc:
+        message = f"tag filter disabled this cycle: {exc}"
+        logger.warning("[%s] %s", instance.core.name, message)
+        await _write_log(
+            instance.core.id,
+            None,
+            None,
+            SearchAction.info.value,
+            cycle_id=cycle_id,
+            cycle_trigger=cycle_trigger,
+            reason="tag filter (fetch failed)",
+            message=message,
+        )
+        return None, None
+
+    def _resolve(labels: tuple[str, ...]) -> tuple[frozenset[int], list[str]]:
+        ids: set[int] = set()
+        unknown: list[str] = []
+        for label in labels:
+            tag_id = label_to_id.get(label)
+            if tag_id is None:
+                unknown.append(label)
+            else:
+                ids.add(tag_id)
+        return frozenset(ids), unknown
+
+    include_ids: frozenset[int] | None = None
+    exclude_ids: frozenset[int] | None = None
+    all_unknown: list[str] = []
+    if include:
+        include_ids, unknown = _resolve(include)
+        all_unknown.extend(unknown)
+    if exclude:
+        exclude_ids, unknown = _resolve(exclude)
+        all_unknown.extend(unknown)
+
+    if all_unknown:
+        message = (
+            f"tag filter: unknown label(s) on {instance.core.name}: "
+            f"{', '.join(sorted(set(all_unknown)))}"
+        )
+        logger.info("[%s] %s", instance.core.name, message)
+        await _write_log(
+            instance.core.id,
+            None,
+            None,
+            SearchAction.info.value,
+            cycle_id=cycle_id,
+            cycle_trigger=cycle_trigger,
+            reason="tag filter (unknown label)",
+            message=message,
+        )
+
+    return include_ids, exclude_ids
+
+
 def _format_hourly_limit_reason(kind: SearchKind | str, cap: int) -> str:
     """Return the skip-reason string for a cap-exhausted pass.
 
@@ -732,6 +853,35 @@ async def _run_search_pass(
                     continue
                 seen_item_ids.add(candidate.item_id)
 
+            # Tag filter (issue #637).  Cheap set lookup; runs before the
+            # DB-hitting cooldown check and before hourly-cap accounting so
+            # filtered items never count against either gate.  Throttled
+            # under its own log bucket so a cycle that filters thousands
+            # of items writes at most one row per (item, direction).
+            tag_skip_reason = _tag_filter_skip_reason(
+                candidate,
+                config.tag_filter_include_ids,
+                config.tag_filter_exclude_ids,
+            )
+            if tag_skip_reason is not None:
+                skip_key = (
+                    instance.core.id,
+                    candidate.item_id,
+                    search_kind,
+                    "tag_filter",
+                )
+                if cycle_trigger == "run_now" or await should_log_skip(skip_key):
+                    await _write_item_log(
+                        ref,
+                        SearchAction.skipped.value,
+                        search_kind=search_kind,
+                        cycle_id=cycle_id,
+                        cycle_trigger=cycle_trigger,
+                        item_label=candidate.label,
+                        reason=tag_skip_reason,
+                    )
+                continue
+
             # Hourly cap.
             if hourly_cap > 0 and searches_this_hour >= hourly_cap:
                 reason = _format_hourly_limit_reason(
@@ -895,6 +1045,8 @@ async def _run_upgrade_pass(
     *,
     cycle_id: str,
     cycle_trigger: CycleTrigger | str,
+    tag_filter_include_ids: frozenset[int] | None = None,
+    tag_filter_exclude_ids: frozenset[int] | None = None,
 ) -> int:
     """Execute the upgrade search pass for *instance*.
 
@@ -908,6 +1060,10 @@ async def _run_upgrade_pass(
         master_key: Fernet key for persisting offset updates.
         cycle_id: Shared cycle identifier for all log rows.
         cycle_trigger: How this cycle was initiated.
+        tag_filter_include_ids: Resolved include tag-IDs from
+            :func:`_resolve_tag_filter_ids`, or ``None`` when the
+            operator has not enabled an include filter.  Issue #637.
+        tag_filter_exclude_ids: Resolved exclude tag-IDs, or ``None``.
 
     Returns:
         Count of items searched in this upgrade pass.
@@ -1046,6 +1202,28 @@ async def _run_upgrade_pass(
             if candidate.item_id in seen_item_ids:
                 continue
             seen_item_ids.add(candidate.item_id)
+
+        # Tag filter (issue #637).  Mirrors the missing/cutoff pass placement:
+        # runs after dedup, before the DB-hitting cooldown check, with its own
+        # log-throttle bucket.
+        tag_skip_reason = _tag_filter_skip_reason(
+            candidate,
+            tag_filter_include_ids,
+            tag_filter_exclude_ids,
+        )
+        if tag_skip_reason is not None:
+            skip_key = (instance.core.id, candidate.item_id, "upgrade", "tag_filter")
+            if cycle_trigger == "run_now" or await should_log_skip(skip_key):
+                await _write_item_log(
+                    ref,
+                    SearchAction.skipped.value,
+                    search_kind="upgrade",
+                    cycle_id=cycle_id,
+                    cycle_trigger=cycle_trigger,
+                    item_label=candidate.label,
+                    reason=tag_skip_reason,
+                )
+            continue
 
         # Hourly cap
         if hourly_cap > 0 and searches_this_hour >= hourly_cap:
@@ -1302,6 +1480,32 @@ async def _run_instance_search_impl(
                 exc_info=True,
             )
 
+    # --- Tag-filter resolution (issue #637) ---
+    # Resolve the operator-typed labels to numeric tag IDs once at the top
+    # of the cycle so all three passes share one ``/tag`` GET.  Falls back
+    # to ``(None, None)`` (filter disabled for this cycle) when the
+    # endpoint is unreachable; an info row in ``search_log`` records the
+    # fall-back so operators can debug.
+    #
+    # Skip the GET entirely when every search pass is disabled for this
+    # instance: a paused instance that still carries a tag-filter config
+    # would otherwise burn one ``/tag`` request per cycle (and one info
+    # row on failure) for no behavioural benefit.
+    any_pass_enabled = (
+        instance.missing.missing_enabled
+        or instance.cutoff.cutoff_enabled
+        or instance.upgrade.upgrade_enabled
+    )
+    if any_pass_enabled:
+        tag_filter_include_ids, tag_filter_exclude_ids = await _resolve_tag_filter_ids(
+            instance,
+            adapter,
+            cycle_id=cycle_id_value,
+            cycle_trigger=cycle_trigger,
+        )
+    else:
+        tag_filter_include_ids, tag_filter_exclude_ids = None, None
+
     # --- Missing pass ---
     # The outer gate is the per-instance master switch (issue #619).  It
     # mirrors ``instance.cutoff.cutoff_enabled`` / ``upgrade.upgrade_enabled``
@@ -1333,6 +1537,8 @@ async def _run_instance_search_impl(
                         cycle_trigger=cycle_trigger,
                         start_page=instance.schedule.missing_page_offset,
                         total_fn=lambda: client.get_wanted_total("missing"),
+                        tag_filter_include_ids=tag_filter_include_ids,
+                        tag_filter_exclude_ids=tag_filter_exclude_ids,
                         missing_hot_retry_window_hrs=(
                             instance.missing.missing_hot_retry_window_hrs
                         ),
@@ -1387,6 +1593,8 @@ async def _run_instance_search_impl(
                         cycle_trigger=cycle_trigger,
                         start_page=instance.schedule.cutoff_page_offset,
                         total_fn=lambda: cutoff_client.get_wanted_total("cutoff"),
+                        tag_filter_include_ids=tag_filter_include_ids,
+                        tag_filter_exclude_ids=tag_filter_exclude_ids,
                     ),
                 )
             logger.info(
@@ -1423,6 +1631,8 @@ async def _run_instance_search_impl(
                 master_key,
                 cycle_id=cycle_id_value,
                 cycle_trigger=cycle_trigger,
+                tag_filter_include_ids=tag_filter_include_ids,
+                tag_filter_exclude_ids=tag_filter_exclude_ids,
             )
             logger.info(
                 "[%s] upgrade pass complete: %d searched",

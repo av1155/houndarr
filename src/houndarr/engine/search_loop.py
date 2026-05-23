@@ -35,6 +35,7 @@ from houndarr.errors import (
 )
 from houndarr.services.cooldown import (
     active_cooldown_searched_at_ref,
+    is_on_cooldown_ref,
     record_search_ref,
     should_log_skip,
 )
@@ -952,7 +953,7 @@ async def _run_search_pass(
                                     continue
                         if not should_retry:
                             latest_reason = await _latest_missing_reason_ref(ref)
-                            should_retry = latest_reason == "not yet released"
+                            should_retry = _is_release_timing_reason(latest_reason)
 
                     if should_retry:
                         logger.info(
@@ -1241,7 +1242,7 @@ async def _run_upgrade_pass(
             break
 
         # Cooldown
-        if await active_cooldown_searched_at_ref(ref, cooldown_days) is not None:
+        if await is_on_cooldown_ref(ref, cooldown_days):
             reason = f"on upgrade cooldown ({cooldown_days}d)"
             skip_key = (instance.core.id, candidate.item_id, "upgrade", "upgrade_cd")
             if cycle_trigger == "run_now" or await should_log_skip(skip_key):

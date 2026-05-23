@@ -21,7 +21,7 @@ search and **how many** items per batch.
 flowchart TD
     A["1. Ask the *arr instance:<br/>what's missing, cutoff-unmet, or upgrade-eligible?"]
     B["2. Instance returns its wanted list<br/>monitored items only"]
-    C["3. Apply scheduling rules:<br/>cooldown, hot retry, hourly cap, post-release grace, batch size"]
+    C["3. Apply scheduling rules:<br/>tag filter, cooldown, hot retry, hourly cap,<br/>post-release grace, batch size"]
     D["4. Eligible: send search command<br/>to the instance"]
     E["5. Ineligible: log as skipped,<br/>retry next cycle"]
     A --> B
@@ -30,7 +30,7 @@ flowchart TD
     C --> E
 ```
 
-Each cycle asks the *arr instance for missing, cutoff-unmet, or upgrade-eligible items, reads back the wanted list of monitored items, applies scheduling rules (cooldown, hot retry, hourly cap, post-release grace, batch size), sends a search command for each eligible item, and logs the rest as skipped for retry next cycle. Your *arr instances do all the actual searching. Houndarr controls the pacing.
+Each cycle asks the *arr instance for missing, cutoff-unmet, or upgrade-eligible items, reads back the wanted list of monitored items, applies scheduling rules (optional tag filter, cooldown, hot retry, hourly cap, post-release grace, batch size), sends a search command for each eligible item, and logs the rest as skipped for retry next cycle. Your *arr instances do all the actual searching. Houndarr controls the pacing.
 
 ## Monitored vs. wanted
 
@@ -58,7 +58,7 @@ If you want to build, test, and deploy quality profiles and custom formats acros
 
 ## Why only a few items get searched each cycle
 
-Think of it as a funnel: your monitored library narrows to the wanted list (the \*arr filter keeps only missing, cutoff-unmet, or upgrade-eligible items), then narrows again to what's eligible this cycle (the Houndarr filter applies cooldown, hot retry, post-release grace, and hourly cap), and finally to what's actually searched (capped by batch size, often just 1 to 3 items).
+Think of it as a funnel: your monitored library narrows to the wanted list (the \*arr filter keeps only missing, cutoff-unmet, or upgrade-eligible items), then narrows again to what's eligible this cycle (the Houndarr filter applies tag filter, cooldown, hot retry, post-release grace, and hourly cap), and finally to what's actually searched (capped by batch size, often just 1 to 3 items).
 
 ```mermaid
 flowchart TD
@@ -67,7 +67,7 @@ flowchart TD
     C["Eligible this cycle<br/>(smaller still)"]
     D["Actually searched<br/>(often just 1-3 items)"]
     A -->|"*arr filter:<br/>missing, cutoff-unmet, upgrade-eligible"| B
-    B -->|"Houndarr filter:<br/>cooldown, hot retry, grace, hourly cap"| C
+    B -->|"Houndarr filter:<br/>tag filter, cooldown, hot retry, grace, hourly cap"| C
     C -->|"Batch size limit"| D
 ```
 

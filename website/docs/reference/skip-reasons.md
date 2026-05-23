@@ -22,6 +22,8 @@ reasons are normal scheduling behavior, not errors.
 | `hourly limit reached (N/hr)` | per-item | Missing pass hit `Hourly Cap` of `N` for the current hour. |
 | `cutoff hourly limit reached (N/hr)` | per-item | Cutoff pass hit `Cutoff Cap` of `N`. |
 | `upgrade hourly limit reached (N/hr)` | per-item | Upgrade pass hit `Upgrade Cap` of `N`. |
+| `tag filter (no included tag)` | per-item | `Tag Filter · Include` is set and the item does not carry any matching tag. |
+| `tag filter (excluded tag)` | per-item | `Tag Filter · Exclude` is set and the item carries one of those tags. |
 | `queue backpressure (N/M)` | cycle-level | Download queue has `N` items, at or above `Queue Limit` of `M`. Entire cycle is skipped. |
 | `outside allowed time window` | cycle-level | Current time falls outside every window defined in `Allowed Search Window`. Entire cycle is skipped. |
 
@@ -55,14 +57,38 @@ falls outside every configured window, the cycle writes one
 configured windows, then sleeps. Manual `Run Now` clicks bypass this
 gate.
 
+## Tag filter
+
+`Tag Filter · Include` and `Tag Filter · Exclude` in instance
+settings scope the missing, cutoff, and upgrade passes to (or away
+from) items carrying specific *arr tags. Both fields take
+comma-separated tag labels and default to empty. With both empty the
+filter is a no-op and behavior matches earlier versions.
+
+The engine resolves labels to numeric tag IDs once per cycle by
+GET-ing each instance's `/tag` endpoint, so renaming a tag in Radarr
+or Sonarr does not require re-editing the field. Two cycle-level info
+rows can appear:
+
+- `tag filter (unknown label)` lists labels the operator typed that
+  did not resolve to any *arr tag on the current cycle. The remaining
+  labels still apply.
+- `tag filter (fetch failed)` indicates the `/tag` GET failed for
+  that one cycle. The filter is disabled for that cycle and the
+  search pass proceeds normally; the next cycle retries the fetch.
+
+See [Instance Settings > Tag filter](/docs/reference/instance-settings#tag-filter)
+for the field reference and the per-app tag-source mapping.
+
 ## Log deduplication
 
-Three reasons are deduplicated in the log: `on cooldown`, `on cutoff
-cooldown`, and `on upgrade cooldown`. Each `(instance, item, reason)`
-triple writes at most one `search_log` row per 24 hours. The engine
-still evaluates every candidate every cycle; only the log write is
-suppressed. This keeps the logs scannable when hundreds of items
-share the same cooldown.
+Four reasons are deduplicated in the log: `on cooldown`, `on cutoff
+cooldown`, `on upgrade cooldown`, and the two `tag filter` skip
+reasons. Each `(instance, item, reason)` triple writes at most one
+`search_log` row per 24 hours. The engine still evaluates every
+candidate every cycle; only the log write is suppressed. This keeps
+the logs scannable when hundreds of items share the same cooldown or
+the same tag-filter outcome.
 
 The other reasons in the table above write a row every cycle they
 apply.

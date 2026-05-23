@@ -21,7 +21,7 @@ search and **how many** items per batch.
 flowchart TD
     A["1. Ask the *arr instance:<br/>what's missing, cutoff-unmet, or upgrade-eligible?"]
     B["2. Instance returns its wanted list<br/>monitored items only"]
-    C["3. Apply scheduling rules:<br/>cooldown, hourly cap, post-release grace, batch size"]
+    C["3. Apply scheduling rules:<br/>tag filter, cooldown, hourly cap,<br/>post-release grace, batch size"]
     D["4. Eligible: send search command<br/>to the instance"]
     E["5. Ineligible: log as skipped,<br/>retry next cycle"]
     A --> B
@@ -30,7 +30,7 @@ flowchart TD
     C --> E
 ```
 
-Each cycle asks the *arr instance for missing, cutoff-unmet, or upgrade-eligible items, reads back the wanted list of monitored items, applies scheduling rules (cooldown, hourly cap, post-release grace, batch size), sends a search command for each eligible item, and logs the rest as skipped for retry next cycle. Your *arr instances do all the actual searching. Houndarr controls the pacing.
+Each cycle asks the *arr instance for missing, cutoff-unmet, or upgrade-eligible items, reads back the wanted list of monitored items, applies scheduling rules (optional tag filter, cooldown, hourly cap, post-release grace, batch size), sends a search command for each eligible item, and logs the rest as skipped for retry next cycle. Your *arr instances do all the actual searching. Houndarr controls the pacing.
 
 ## Monitored vs. wanted
 
@@ -67,7 +67,7 @@ flowchart TD
     C["Eligible this cycle<br/>(smaller still)"]
     D["Actually searched<br/>(often just 1-3 items)"]
     A -->|"*arr filter:<br/>missing, cutoff-unmet, upgrade-eligible"| B
-    B -->|"Houndarr filter:<br/>cooldown, grace, hourly cap"| C
+    B -->|"Houndarr filter:<br/>tag filter, cooldown, grace, hourly cap"| C
     C -->|"Batch size limit"| D
 ```
 

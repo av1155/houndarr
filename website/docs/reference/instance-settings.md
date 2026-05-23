@@ -131,6 +131,50 @@ pass.
 Whisparr v3 has no search mode selection; it always searches at the
 movie level.
 
+## Tag filter
+
+Scope a per-instance search to (or away from) items carrying specific
+*arr tags. Applies to missing, cutoff, and upgrade passes uniformly.
+Two fields, both empty by default:
+
+### Tag Filter · Include
+
+Comma-separated list of *arr tag labels. When non-empty, only items
+carrying at least one of these tags are searched.
+
+- Default: empty (no include filter)
+- Items with no tags fail a non-empty include filter and skip with
+  `tag filter (no included tag)`.
+
+### Tag Filter · Exclude
+
+Comma-separated list of *arr tag labels. Items carrying any of these
+tags are skipped with `tag filter (excluded tag)`.
+
+- Default: empty (no exclude filter)
+- Items with no tags always pass the exclude filter.
+
+Labels are normalized to lowercase, stripped, and de-duplicated on
+save. Labels are resolved against each instance's `/tag` endpoint at
+the start of every cycle, so renaming a tag in Radarr or Sonarr keeps
+the filter working without re-editing the field. Operator-typed labels
+that do not resolve to any *arr tag are logged once per cycle and
+otherwise ignored. If the `/tag` fetch fails for that cycle, the
+filter is disabled for that one cycle and `tag filter (fetch failed)`
+appears as an info row; the search pass proceeds.
+
+Item-to-tag mapping by app:
+
+| App | Tags read from |
+|-----|----------------|
+| Radarr, Whisparr v3 | The movie row itself |
+| Sonarr, Whisparr v2 | The series row that owns the episode |
+| Lidarr | The artist row that owns the album |
+| Readarr | The author row that owns the book |
+
+For the skip-row format see
+[Skip Reasons](/docs/reference/skip-reasons#tag-filter).
+
 ## Search Order
 
 See [Search Order](/docs/concepts/search-order) for the full

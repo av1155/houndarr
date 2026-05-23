@@ -1405,12 +1405,25 @@ async def _run_instance_search_impl(
     # to ``(None, None)`` (filter disabled for this cycle) when the
     # endpoint is unreachable; an info row in ``search_log`` records the
     # fall-back so operators can debug.
-    tag_filter_include_ids, tag_filter_exclude_ids = await _resolve_tag_filter_ids(
-        instance,
-        adapter,
-        cycle_id=cycle_id_value,
-        cycle_trigger=cycle_trigger,
+    #
+    # Skip the GET entirely when every search pass is disabled for this
+    # instance: a paused instance that still carries a tag-filter config
+    # would otherwise burn one ``/tag`` request per cycle (and one info
+    # row on failure) for no behavioural benefit.
+    any_pass_enabled = (
+        instance.missing.missing_enabled
+        or instance.cutoff.cutoff_enabled
+        or instance.upgrade.upgrade_enabled
     )
+    if any_pass_enabled:
+        tag_filter_include_ids, tag_filter_exclude_ids = await _resolve_tag_filter_ids(
+            instance,
+            adapter,
+            cycle_id=cycle_id_value,
+            cycle_trigger=cycle_trigger,
+        )
+    else:
+        tag_filter_include_ids, tag_filter_exclude_ids = None, None
 
     # --- Missing pass ---
     # The outer gate is the per-instance master switch (issue #619).  It

@@ -16,7 +16,14 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Schema version: bump when adding new migrations
 # ---------------------------------------------------------------------------
-SCHEMA_VERSION = 19
+SCHEMA_VERSION = 20
+
+# v20: per-instance tag-based include / exclude filter for *arr items.
+# Column names are baked in here as constants so a future rename never
+# retroactively invalidates the v20 ALTER TABLE statements when an older
+# database is rebuilt through the migration ladder.
+_V20_TAG_FILTER_INCLUDE_COLUMN = "tag_filter_include"
+_V20_TAG_FILTER_EXCLUDE_COLUMN = "tag_filter_exclude"
 
 # ---------------------------------------------------------------------------
 # DDL
@@ -108,6 +115,8 @@ CREATE TABLE IF NOT EXISTS instances (
     monitored_total      INTEGER NOT NULL DEFAULT 0,
     unreleased_count     INTEGER NOT NULL DEFAULT 0,
     snapshot_refreshed_at TEXT   NOT NULL DEFAULT '',
+    tag_filter_include   TEXT    NOT NULL DEFAULT '',
+    tag_filter_exclude   TEXT    NOT NULL DEFAULT '',
     enabled              INTEGER NOT NULL DEFAULT 1,
     created_at           TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     updated_at           TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
@@ -345,6 +354,7 @@ async def init_db_migrations() -> None:
         await _migrate_to_v17(db)
         await _migrate_to_v18(db)
         await _migrate_to_v19(db)
+        await _migrate_to_v20(db)
         await _ensure_v3_indexes(db)
         # PRAGMA optimize keeps the planner's sqlite_stat1 entries fresh as
         # search_log grows.  Cheap on healthy DBs, prevents silent index
@@ -404,6 +414,8 @@ async def _run_migrations(db: aiosqlite.Connection, from_version: int) -> None:
         await _migrate_to_v18(db)
     if from_version < 19:
         await _migrate_to_v19(db)
+    if from_version < 20:
+        await _migrate_to_v20(db)
 
     logger.info("Migrated database from schema version %d to %d", from_version, SCHEMA_VERSION)
     await db.execute(
@@ -1433,6 +1445,26 @@ async def _migrate_to_v19(db: aiosqlite.Connection) -> None:
         )
         """
     )
+
+
+async def _migrate_to_v20(db: aiosqlite.Connection) -> None:
+    """Add tag include / exclude filter columns on the instances table.
+
+    Issue #637.  Both columns hold comma-separated tag labels and default to
+    empty so existing instances after migration behave identically to today.
+    Resolution from label to numeric tag ID happens at engine-cycle time
+    against the live ``/tag`` endpoint of each *arr instance.
+    """
+    if not await _column_exists(db, "instances", _V20_TAG_FILTER_INCLUDE_COLUMN):
+        await db.execute(
+            f"ALTER TABLE instances ADD COLUMN {_V20_TAG_FILTER_INCLUDE_COLUMN} "
+            "TEXT NOT NULL DEFAULT ''"
+        )
+    if not await _column_exists(db, "instances", _V20_TAG_FILTER_EXCLUDE_COLUMN):
+        await db.execute(
+            f"ALTER TABLE instances ADD COLUMN {_V20_TAG_FILTER_EXCLUDE_COLUMN} "
+            "TEXT NOT NULL DEFAULT ''"
+        )
 
 
 async def _column_exists(db: aiosqlite.Connection, table_name: str, column_name: str) -> bool:

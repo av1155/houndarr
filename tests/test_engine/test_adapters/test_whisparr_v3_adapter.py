@@ -39,6 +39,7 @@ from houndarr.services.instances import (
     SchedulePolicy,
     SearchOrder,
     SonarrSearchMode,
+    TagFilterPolicy,
     UpgradePolicy,
 )
 
@@ -74,6 +75,7 @@ def _make_instance(*, post_release_grace_hrs: int = 6) -> Instance:
         ),
         upgrade=UpgradePolicy(),
         schedule=SchedulePolicy(search_order=SearchOrder.chronological),
+        tag_filter=TagFilterPolicy(),
         snapshot=RuntimeSnapshot(),
         timestamps=InstanceTimestamps(
             created_at="2024-01-01T00:00:00Z",

@@ -103,6 +103,7 @@ def adapt_missing(item: MissingWhisparrV3Movie, instance: Instance) -> SearchCan
             "command": "MoviesSearch",
             "movie_id": item.movie_id,
         },
+        tags=item.tags,
     )
 
 
@@ -149,6 +150,7 @@ def adapt_upgrade(item: LibraryWhisparrV3Movie, instance: Instance) -> SearchCan
             "command": "MoviesSearch",
             "movie_id": item.movie_id,
         },
+        tags=item.tags,
     )
 
 

@@ -18,6 +18,7 @@ class RadarrWantedMovie(_ArrModel):
     physical_release: str | None = Field(default=None, alias="physicalRelease")
     release_date: str | None = Field(default=None, alias="releaseDate")
     digital_release: str | None = Field(default=None, alias="digitalRelease")
+    tags: list[int] | None = None
 
 
 class RadarrLibraryMovie(_ArrModel):
@@ -31,3 +32,4 @@ class RadarrLibraryMovie(_ArrModel):
     physical_release: str | None = Field(default=None, alias="physicalRelease")
     digital_release: str | None = Field(default=None, alias="digitalRelease")
     release_date: str | None = Field(default=None, alias="releaseDate")
+    tags: list[int] | None = None

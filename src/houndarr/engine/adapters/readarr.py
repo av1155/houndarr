@@ -109,6 +109,7 @@ def adapt_missing(item: MissingBook, instance: Instance) -> SearchCandidate:
             "book_id": item.book_id,
         },
         context=context,
+        tags=item.tags,
     )
 
 
@@ -135,6 +136,7 @@ def adapt_cutoff(item: MissingBook, instance: Instance) -> SearchCandidate:
             "command": "BookSearch",
             "book_id": item.book_id,
         },
+        tags=item.tags,
     )
 
 
@@ -192,6 +194,7 @@ def adapt_upgrade(item: LibraryBook, instance: Instance) -> SearchCandidate:
         unreleased_reason=None,
         group_key=group_key,
         search_payload=search_payload,
+        tags=item.tags,
     )
 
 

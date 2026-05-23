@@ -23,6 +23,7 @@ from houndarr.services.instances import (
     MissingPolicy,
     RuntimeSnapshot,
     SchedulePolicy,
+    TagFilterPolicy,
     UpgradePolicy,
 )
 
@@ -42,6 +43,7 @@ def _make_instance() -> Instance:
         cutoff=CutoffPolicy(),
         upgrade=UpgradePolicy(),
         schedule=SchedulePolicy(),
+        tag_filter=TagFilterPolicy(),
         snapshot=RuntimeSnapshot(),
         timestamps=InstanceTimestamps(
             created_at="2024-01-01T00:00:00Z",

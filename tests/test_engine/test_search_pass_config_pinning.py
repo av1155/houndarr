@@ -141,6 +141,8 @@ class TestSearchPassConfigDeclaration:
             "cycle_trigger",
             "start_page",
             "total_fn",
+            "tag_filter_include_ids",
+            "tag_filter_exclude_ids",
         ]
 
     def test_optional_total_fn_accepts_bound_coroutine(self) -> None:

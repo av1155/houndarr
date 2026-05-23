@@ -20,6 +20,7 @@ __all__ = [
     "ArrArtist",
     "ArrAuthor",
     "ArrSeries",
+    "ArrTag",
     "PaginatedResponse",
     "QueueStatus",
     "SystemStatus",
@@ -106,18 +107,33 @@ class ArrSeries(_ArrModel):
     id: int | None = None
     title: str | None = None
     monitored: bool | None = None
+    tags: list[int] | None = None
 
 
 class ArrArtist(_ArrModel):
     id: int | None = None
     artist_name: str | None = Field(default=None, alias="artistName")
     monitored: bool | None = None
+    tags: list[int] | None = None
 
 
 class ArrAuthor(_ArrModel):
     id: int | None = None
     author_name: str | None = Field(default=None, alias="authorName")
     monitored: bool | None = None
+    tags: list[int] | None = None
+
+
+class ArrTag(_ArrModel):
+    """A single tag definition row returned by ``/api/v*/tag``.
+
+    Houndarr's tag-based filter (issue #637) resolves operator-typed labels
+    to numeric IDs by fetching this list once per cycle per filtered
+    instance.
+    """
+
+    id: int
+    label: str
 
 
 # ---------------------------------------------------------------------------

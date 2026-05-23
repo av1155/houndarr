@@ -26,6 +26,7 @@ class LibraryAlbum:
     monitored: bool
     has_file: bool
     release_date: str | None
+    tags: tuple[int, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -37,6 +38,7 @@ class MissingAlbum:
     artist_name: str
     title: str
     release_date: str | None  # ISO-8601 nullable string
+    tags: tuple[int, ...] = ()
 
 
 class LidarrClient(ArrClient):
@@ -44,6 +46,7 @@ class LidarrClient(ArrClient):
 
     _SYSTEM_STATUS_PATH: str = "/api/v1/system/status"
     _QUEUE_STATUS_PATH: str = "/api/v1/queue/status"
+    _TAG_PATH: ClassVar[str] = "/api/v1/tag"
     # Lidarr is a v1 API (Sonarr / Radarr / Whisparr v2 are v3); the
     # override routes the /wanted template at /api/v1/wanted/{kind}.
     _WANTED_BASE_PATH: ClassVar[str] = "/api/v1/wanted"
@@ -170,6 +173,7 @@ def _parse_library_album(wire: LidarrLibraryAlbum) -> LibraryAlbum:
     )
     artist_id = wire.artist_id or (wire.artist.id if wire.artist else None) or 0
     artist_name = (wire.artist.artist_name if wire.artist else None) or ""
+    artist_tags = tuple(wire.artist.tags or ()) if wire.artist else ()
     return LibraryAlbum(
         album_id=wire.id,
         artist_id=artist_id,
@@ -178,16 +182,19 @@ def _parse_library_album(wire: LidarrLibraryAlbum) -> LibraryAlbum:
         monitored=bool(wire.monitored),
         has_file=track_file_count > 0,
         release_date=wire.release_date,
+        tags=artist_tags,
     )
 
 
 def _parse_album(wire: LidarrWantedAlbum) -> MissingAlbum:
     artist_id = wire.artist_id or (wire.artist.id if wire.artist else None) or 0
     artist_name = (wire.artist.artist_name if wire.artist else None) or ""
+    artist_tags = tuple(wire.artist.tags or ()) if wire.artist else ()
     return MissingAlbum(
         album_id=wire.id,
         artist_id=artist_id,
         artist_name=artist_name,
         title=wire.title or "",
         release_date=wire.release_date,
+        tags=artist_tags,
     )

@@ -32,7 +32,7 @@ async def test_schema_created(db: None) -> None:
 async def test_schema_version_set(db: None) -> None:
     """Schema version should be set after init."""
     version = await get_setting("schema_version")
-    assert version == "19"
+    assert version == "20"
 
 
 @pytest.mark.asyncio()
@@ -84,6 +84,29 @@ async def test_search_log_and_instance_v3_columns_exist(db: None) -> None:
     assert "readarr_search_mode" in instance_columns
     assert "whisparr_v2_search_mode" in instance_columns
     assert "post_release_grace_hrs" in instance_columns
+    # v20 (issue #637): per-instance tag-filter columns
+    assert "tag_filter_include" in instance_columns
+    assert "tag_filter_exclude" in instance_columns
+
+
+@pytest.mark.asyncio()
+async def test_v20_tag_filter_columns_default_to_empty_string(db: None) -> None:
+    """Issue #637.  Inserting an instance without setting the v20 columns
+    must leave them at empty string so existing rows continue to behave
+    identically to pre-migration behaviour (no filter applied)."""
+    async with get_db() as conn:
+        await conn.execute(
+            "INSERT INTO instances (name, type, url) VALUES ('default-tags', 'radarr', 'http://r')"
+        )
+        await conn.commit()
+        async with conn.execute(
+            "SELECT tag_filter_include, tag_filter_exclude FROM instances"
+            " WHERE name = 'default-tags'"
+        ) as cur:
+            row = await cur.fetchone()
+    assert row is not None
+    assert row[0] == ""
+    assert row[1] == ""
 
 
 @pytest.mark.asyncio()
@@ -142,7 +165,7 @@ async def test_init_db_migrates_v1_schema_to_v3(tmp_path: Path) -> None:
         instance_columns = {row[1] async for row in instances_cur}
         widget_table = await widget_cur.fetchone()
 
-    assert await get_setting("schema_version") == "19"
+    assert await get_setting("schema_version") == "20"
     assert widget_table is not None
     assert "item_label" in search_log_columns
     assert "search_kind" in search_log_columns
@@ -212,7 +235,7 @@ async def test_init_db_migrates_v2_schema_to_v4(tmp_path: Path) -> None:
         async with conn.execute("PRAGMA table_info(search_log)") as cur:
             search_log_columns = {row[1] async for row in cur}
 
-    assert await get_setting("schema_version") == "19"
+    assert await get_setting("schema_version") == "20"
     assert "cycle_id" in search_log_columns
     assert "cycle_trigger" in search_log_columns
 
@@ -279,7 +302,7 @@ async def test_init_db_migrates_v3_schema_to_v4(tmp_path: Path) -> None:
     set_db_path(str(db_path))
     await init_db()
 
-    assert await get_setting("schema_version") == "19"
+    assert await get_setting("schema_version") == "20"
     async with get_db() as conn:
         async with conn.execute("PRAGMA table_info(instances)") as cur:
             instance_columns = {row[1] async for row in cur}
@@ -362,7 +385,7 @@ async def test_init_db_migrates_v4_schema_to_v6(tmp_path: Path) -> None:
     set_db_path(str(db_path))
     await init_db()
 
-    assert await get_setting("schema_version") == "19"
+    assert await get_setting("schema_version") == "20"
 
     async with get_db() as conn:
         # Verify new columns exist
@@ -496,7 +519,7 @@ async def test_init_db_migrates_v5_schema_to_v6(tmp_path: Path) -> None:
     set_db_path(str(db_path))
     await init_db()
 
-    assert await get_setting("schema_version") == "19"
+    assert await get_setting("schema_version") == "20"
 
     async with get_db() as conn:
         async with conn.execute("PRAGMA table_info(instances)") as cur:
@@ -593,7 +616,7 @@ async def test_init_db_migrates_v6_schema_to_v7(tmp_path: Path) -> None:
     set_db_path(str(db_path))
     await init_db()
 
-    assert await get_setting("schema_version") == "19"
+    assert await get_setting("schema_version") == "20"
 
     async with get_db() as conn:
         async with conn.execute("PRAGMA table_info(instances)") as cur:
@@ -706,7 +729,7 @@ async def test_init_db_self_heals_v9_and_v10_when_version_already_current(
     set_db_path(str(db_path))
     await init_db()
 
-    assert await get_setting("schema_version") == "19"
+    assert await get_setting("schema_version") == "20"
 
     async with get_db() as conn:
         async with conn.execute("PRAGMA table_info(instances)") as cur:
@@ -849,7 +872,7 @@ async def test_init_db_is_idempotent_on_healthy_v12(tmp_path: Path) -> None:
 
     # Second call: should be a no-op through the self-heal branch.
     await init_db()
-    assert await get_setting("schema_version") == first_version == "19"
+    assert await get_setting("schema_version") == first_version == "20"
 
     async with get_db() as conn:
         async with conn.execute("PRAGMA table_info(instances)") as cur:
@@ -944,7 +967,7 @@ async def test_migrate_to_v12_adds_search_order_column(tmp_path: Path) -> None:
     set_db_path(str(db_path))
     await init_db()
 
-    assert await get_setting("schema_version") == "19"
+    assert await get_setting("schema_version") == "20"
 
     async with get_db() as conn:
         async with conn.execute("PRAGMA table_info(instances)") as cur:
@@ -1087,7 +1110,7 @@ async def test_migrate_to_v15_coerces_invalid_search_kind(tmp_path: Path) -> Non
     set_db_path(str(db_path))
     await init_db()
 
-    assert await get_setting("schema_version") == "19"
+    assert await get_setting("schema_version") == "20"
 
     async with get_db() as conn:
         await conn.execute("PRAGMA foreign_keys=ON")
@@ -1591,7 +1614,7 @@ async def test_init_db_migrates_whisparr_episode_rows_through_to_current(
         async with conn.execute("SELECT value FROM settings WHERE key = 'schema_version'") as cur:
             row = await cur.fetchone()
         assert row is not None
-        assert row[0] == "19"
+        assert row[0] == "20"
 
         # 2. The Whisparr v2 cooldown rows survived and were renamed.
         async with conn.execute(
@@ -1709,7 +1732,7 @@ async def test_init_db_migrates_v4_preserves_cooldowns_through_v10_rebuild(
         async with conn.execute("SELECT value FROM settings WHERE key = 'schema_version'") as cur:
             row = await cur.fetchone()
         assert row is not None
-        assert row[0] == "19"
+        assert row[0] == "20"
 
         # All four cooldown rows must survive the v10 instances rebuild.
         async with conn.execute(

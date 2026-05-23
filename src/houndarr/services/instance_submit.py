@@ -34,6 +34,8 @@ route boundary.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 from houndarr.errors import InstanceValidationError
 from houndarr.services.instance_validation import (
     API_KEY_UNCHANGED,
@@ -42,6 +44,7 @@ from houndarr.services.instance_validation import (
     resolve_search_modes,
     type_mismatch_message,
     validate_cutoff_controls,
+    validate_tag_filter,
     validate_upgrade_controls,
 )
 from houndarr.services.instances import (
@@ -87,6 +90,23 @@ def _parse_search_order(raw: str) -> SearchOrder:
         raise InstanceValidationError("Invalid search order.") from exc
 
 
+@dataclass(frozen=True, slots=True)
+class _FormCanonical:
+    """Canonical form values returned by :func:`_validate_form`.
+
+    Keeps the validator's return shape extensible: previously the
+    function returned a single canonical-time-window string, which
+    forced new canonical values (tag-filter lists) to be re-validated
+    at the call site.  Bundling them here lets the call site read each
+    field by name and avoids parameter sprawl when the next form
+    control gets added.
+    """
+
+    allowed_time_window: str
+    tag_filter_include: str
+    tag_filter_exclude: str
+
+
 def _validate_form(
     *,
     url: str,
@@ -97,8 +117,10 @@ def _validate_form(
     upgrade_batch_size: int,
     upgrade_cooldown_days: int,
     upgrade_hourly_cap: int,
-) -> str:
-    """Run every static validator and return the canonical time window.
+    tag_filter_include: str,
+    tag_filter_exclude: str,
+) -> _FormCanonical:
+    """Run every static validator and return canonical form values.
 
     Raises:
         InstanceValidationError: First validator failure; message is
@@ -124,7 +146,19 @@ def _validate_form(
     if upgrade_error is not None:
         raise InstanceValidationError(upgrade_error)
 
-    return format_ranges(parse_time_window(allowed_time_window))
+    include_error, canonical_include = validate_tag_filter(tag_filter_include, direction="include")
+    if include_error is not None:
+        raise InstanceValidationError(include_error)
+
+    exclude_error, canonical_exclude = validate_tag_filter(tag_filter_exclude, direction="exclude")
+    if exclude_error is not None:
+        raise InstanceValidationError(exclude_error)
+
+    return _FormCanonical(
+        allowed_time_window=format_ranges(parse_time_window(allowed_time_window)),
+        tag_filter_include=canonical_include,
+        tag_filter_exclude=canonical_exclude,
+    )
 
 
 async def _verify_remote(
@@ -199,6 +233,8 @@ async def submit_create(
     upgrade_series_window_size: int,
     allowed_time_window: str,
     search_order: str,
+    tag_filter_include: str,
+    tag_filter_exclude: str,
     connection_verified: bool,
 ) -> Instance:
     """Validate + persist a new instance, returning the populated row.
@@ -215,6 +251,10 @@ async def submit_create(
         name / type / url / api_key / ...: Raw form fields.  Booleans
             are passed in already converted (the route maps the
             string ``"on"`` to ``True``).
+        tag_filter_include / tag_filter_exclude: Raw comma-separated
+            tag-label strings from the per-instance filter form.  The
+            service canonicalises and persists; the engine resolves
+            labels to numeric IDs at cycle time (issue #637).
         connection_verified: Whether the UI's test-connection step
             previously succeeded.  Required ``True`` to proceed.
 
@@ -227,7 +267,7 @@ async def submit_create(
             the route renders into the guard banner.
     """
     instance_type = _parse_type(type)
-    canonical_window = _validate_form(
+    canonical = _validate_form(
         url=url,
         allowed_time_window=allowed_time_window,
         cutoff_batch_size=cutoff_batch_size,
@@ -236,6 +276,8 @@ async def submit_create(
         upgrade_batch_size=upgrade_batch_size,
         upgrade_cooldown_days=upgrade_cooldown_days,
         upgrade_hourly_cap=upgrade_hourly_cap,
+        tag_filter_include=tag_filter_include,
+        tag_filter_exclude=tag_filter_exclude,
     )
 
     if not connection_verified:
@@ -297,8 +339,10 @@ async def submit_create(
         upgrade_readarr_search_mode=upgrade_modes.readarr,
         upgrade_whisparr_v2_search_mode=upgrade_modes.whisparr_v2,
         upgrade_series_window_size=upgrade_series_window_size,
-        allowed_time_window=canonical_window,
+        allowed_time_window=canonical.allowed_time_window,
         search_order=parsed_search_order,
+        tag_filter_include=canonical.tag_filter_include,
+        tag_filter_exclude=canonical.tag_filter_exclude,
     )
 
 
@@ -336,6 +380,8 @@ async def submit_update(
     upgrade_series_window_size: int,
     allowed_time_window: str,
     search_order: str,
+    tag_filter_include: str,
+    tag_filter_exclude: str,
     connection_verified: bool,
 ) -> Instance:
     """Validate + persist an instance update, returning the refreshed row.
@@ -370,7 +416,7 @@ async def submit_update(
         raise InstanceNotFoundError("Instance not found.")
 
     instance_type = _parse_type(type)
-    canonical_window = _validate_form(
+    canonical = _validate_form(
         url=url,
         allowed_time_window=allowed_time_window,
         cutoff_batch_size=cutoff_batch_size,
@@ -379,6 +425,8 @@ async def submit_update(
         upgrade_batch_size=upgrade_batch_size,
         upgrade_cooldown_days=upgrade_cooldown_days,
         upgrade_hourly_cap=upgrade_hourly_cap,
+        tag_filter_include=tag_filter_include,
+        tag_filter_exclude=tag_filter_exclude,
     )
 
     resolved_api_key = current.core.api_key if api_key == API_KEY_UNCHANGED else api_key
@@ -443,8 +491,10 @@ async def submit_update(
         "upgrade_series_window_size": upgrade_series_window_size,
         "missing_page_offset": 1,
         "cutoff_page_offset": 1,
-        "allowed_time_window": canonical_window,
+        "allowed_time_window": canonical.allowed_time_window,
         "search_order": parsed_search_order,
+        "tag_filter_include": canonical.tag_filter_include,
+        "tag_filter_exclude": canonical.tag_filter_exclude,
     }
     # Reset offsets when upgrade is toggled off so a future re-enable
     # starts from a clean position rather than picking up halfway

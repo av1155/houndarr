@@ -39,6 +39,7 @@ from houndarr.services.instances import (
     MissingPolicy,
     RuntimeSnapshot,
     SchedulePolicy,
+    TagFilterPolicy,
     UpgradePolicy,
 )
 
@@ -48,12 +49,13 @@ pytestmark = pytest.mark.pinning
 # Instance shape
 
 
-def test_instance_is_plain_dataclass_with_seven_sub_struct_fields() -> None:
-    """Instance's declared dataclass fields are the seven sub-structs.
+def test_instance_is_plain_dataclass_with_eight_sub_struct_fields() -> None:
+    """Instance's declared dataclass fields are the eight sub-structs.
 
-    Instance is now ``@dataclass(frozen=True, slots=True)`` and its
-    field surface is the seven sub-structs listed below; any
-    future field add or rename surfaces here.
+    Instance is ``@dataclass(frozen=True, slots=True)`` and its field
+    surface is the eight sub-structs listed below; any future field add
+    or rename surfaces here.  ``tag_filter`` was added with issue #637
+    and groups the per-instance tag-based include / exclude filter.
     """
     assert dataclasses.is_dataclass(Instance)
     params = Instance.__dataclass_params__  # type: ignore[attr-defined]
@@ -65,6 +67,7 @@ def test_instance_is_plain_dataclass_with_seven_sub_struct_fields() -> None:
         ("cutoff", CutoffPolicy),
         ("upgrade", UpgradePolicy),
         ("schedule", SchedulePolicy),
+        ("tag_filter", TagFilterPolicy),
         ("snapshot", RuntimeSnapshot),
         ("timestamps", InstanceTimestamps),
     ]
@@ -136,6 +139,7 @@ def _make_instance() -> Instance:
         cutoff=CutoffPolicy(),
         upgrade=UpgradePolicy(),
         schedule=SchedulePolicy(),
+        tag_filter=TagFilterPolicy(),
         snapshot=RuntimeSnapshot(),
         timestamps=InstanceTimestamps(
             created_at="2024-01-01T00:00:00Z",

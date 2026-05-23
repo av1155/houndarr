@@ -172,6 +172,7 @@ def build_missing_candidate(
     unreleased_reason: str | None,
     search_payload: dict[str, Any],
     context: ContextOverride | None = None,
+    tags: tuple[int, ...] = (),
 ) -> SearchCandidate:
     """Construct a :class:`SearchCandidate` for the missing pass.
 
@@ -210,6 +211,7 @@ def build_missing_candidate(
             unreleased_reason=unreleased_reason,
             group_key=context.group_key,
             search_payload=context.search_payload,
+            tags=tags,
         )
     return SearchCandidate(
         item_id=item_id,
@@ -218,6 +220,7 @@ def build_missing_candidate(
         unreleased_reason=unreleased_reason,
         group_key=None,
         search_payload=search_payload,
+        tags=tags,
     )
 
 
@@ -228,6 +231,7 @@ def build_cutoff_candidate(
     label: str,
     unreleased_reason: str | None,
     search_payload: dict[str, Any],
+    tags: tuple[int, ...] = (),
 ) -> SearchCandidate:
     """Construct a :class:`SearchCandidate` for the cutoff pass.
 
@@ -261,6 +265,7 @@ def build_cutoff_candidate(
         unreleased_reason=unreleased_reason,
         group_key=None,
         search_payload=search_payload,
+        tags=tags,
     )
 
 

@@ -12,7 +12,7 @@ from urllib.parse import urlparse
 import httpx
 from pydantic import ValidationError
 
-from houndarr.clients._wire_models import PaginatedResponse, QueueStatus, SystemStatus
+from houndarr.clients._wire_models import ArrTag, PaginatedResponse, QueueStatus, SystemStatus
 from houndarr.errors import (
     ClientError,
     ClientHTTPError,
@@ -188,6 +188,7 @@ class ArrClient(ABC):
 
     _SYSTEM_STATUS_PATH: str = "/api/v3/system/status"
     _QUEUE_STATUS_PATH: str = "/api/v3/queue/status"
+    _TAG_PATH: ClassVar[str] = "/api/v3/tag"
 
     # Class-level hooks for the /wanted template.  Subclasses with a /wanted
     # endpoint override these; Whisparr v3 leaves them unset because it
@@ -316,6 +317,50 @@ class ArrClient(ABC):
             raise ClientValidationError(
                 f"queue status: malformed payload from {self._QUEUE_STATUS_PATH}"
             ) from exc
+
+    # /tag definitions (used by the engine's per-cycle tag filter, issue #637)
+
+    async def get_tags(self) -> dict[str, int]:
+        """Return a label -> id map of every tag defined on the *arr instance.
+
+        Calls :attr:`_TAG_PATH` (``/api/v3/tag`` for Radarr / Sonarr /
+        Whisparr v2 / v3; ``/api/v1/tag`` for Lidarr / Readarr).  The
+        engine's tag-filter feature (issue #637) calls this once per cycle
+        per filtered instance to resolve operator-typed labels to numeric
+        tag IDs.
+
+        Labels are lowercased so look-ups are case-insensitive against the
+        operator's typed input.  When the response contains duplicate
+        lowercased labels the last one wins; in practice *arr does not
+        permit duplicates so this is a safety net rather than a real case.
+
+        Raises:
+            ClientHTTPError: The server returned a non-2xx status.
+            ClientTransportError: The request failed before a response
+                arrived.
+            ClientValidationError: The response did not match the
+                :class:`ArrTag` list shape.
+        """
+        try:
+            result = await self._get(self._TAG_PATH)
+        except httpx.HTTPStatusError as exc:
+            raise ClientHTTPError(
+                f"get_tags: HTTP {exc.response.status_code} from {self._TAG_PATH}"
+            ) from exc
+        except (httpx.RequestError, httpx.InvalidURL) as exc:
+            raise ClientTransportError(
+                f"get_tags: transport error reaching {self._TAG_PATH}: {exc}"
+            ) from exc
+
+        if not isinstance(result, list):
+            raise ClientValidationError(f"get_tags: expected a JSON list from {self._TAG_PATH}")
+        try:
+            tags = [ArrTag.model_validate(row) for row in result]
+        except ValidationError as exc:
+            raise ClientValidationError(
+                f"get_tags: malformed payload from {self._TAG_PATH}"
+            ) from exc
+        return {tag.label.lower(): tag.id for tag in tags}
 
     # /wanted template (paginated clients only; Whisparr v3 does not use it)
 

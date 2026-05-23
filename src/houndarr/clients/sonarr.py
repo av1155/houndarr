@@ -29,6 +29,7 @@ class LibraryEpisode:
     monitored: bool
     has_file: bool
     cutoff_met: bool
+    tags: tuple[int, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -42,6 +43,7 @@ class MissingEpisode:
     season: int
     episode: int
     air_date_utc: str | None  # ISO-8601 or None if not yet aired
+    tags: tuple[int, ...] = ()
 
 
 class SonarrClient(ArrClient):
@@ -193,6 +195,7 @@ def _parse_library_episode(wire: SonarrLibraryEpisode) -> LibraryEpisode:
         cutoff_not_met = wire.episode_file.quality_cutoff_not_met
     series_id = wire.series_id or (wire.series.id if wire.series else None) or 0
     series_title = (wire.series.title if wire.series else None) or ""
+    series_tags = tuple(wire.series.tags or ()) if wire.series else ()
     return LibraryEpisode(
         episode_id=wire.id,
         series_id=series_id,
@@ -203,6 +206,7 @@ def _parse_library_episode(wire: SonarrLibraryEpisode) -> LibraryEpisode:
         monitored=bool(wire.monitored),
         has_file=has_file,
         cutoff_met=not cutoff_not_met if has_file else False,
+        tags=series_tags,
     )
 
 
@@ -211,6 +215,7 @@ def _parse_episode(wire: SonarrWantedEpisode) -> MissingEpisode:
         wire.series_id if wire.series_id is not None else (wire.series.id if wire.series else None)
     )
     series_title = (wire.series.title if wire.series else None) or wire.series_title or ""
+    series_tags = tuple(wire.series.tags or ()) if wire.series else ()
     return MissingEpisode(
         episode_id=wire.id,
         series_id=series_id,
@@ -219,4 +224,5 @@ def _parse_episode(wire: SonarrWantedEpisode) -> MissingEpisode:
         season=wire.season_number or 0,
         episode=wire.episode_number or 0,
         air_date_utc=wire.air_date_utc,
+        tags=series_tags,
     )

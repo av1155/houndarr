@@ -3084,3 +3084,96 @@ async def test_tag_filter_skipped_when_every_pass_disabled(seeded_instances: Non
 
     assert count == 0
     assert not tag_route.called
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_tag_filter_blocks_cutoff_pass_too(seeded_instances: None) -> None:
+    """Cutoff-pass candidates are filtered on the same tag-filter contract.
+
+    Issue #637.  The cutoff branch passes ``tag_filter_*_ids`` into its
+    :class:`SearchPassConfig`; this test confirms the wiring by mocking a
+    cutoff endpoint with one untagged episode under a non-empty include
+    filter.  A regression that drops the kwarg from the cutoff branch
+    would unblock this dispatch and fail the assertion.
+    """
+    respx.get(f"{SONARR_URL}/api/v3/tag").mock(
+        return_value=httpx.Response(200, json=[{"id": 7, "label": "1080p"}])
+    )
+    respx.get(f"{SONARR_URL}/api/v3/wanted/missing").mock(
+        return_value=httpx.Response(200, json={"records": []})
+    )
+    respx.get(f"{SONARR_URL}/api/v3/wanted/cutoff").mock(
+        return_value=httpx.Response(200, json=_CUTOFF_SONARR)
+    )
+    search_route = respx.post(f"{SONARR_URL}/api/v3/command").mock(
+        return_value=httpx.Response(201, json=_COMMAND_RESP)
+    )
+
+    instance = dataclasses.replace(
+        _make_cutoff_instance(cutoff_enabled=True),
+        tag_filter=TagFilterPolicy(include=("1080p",), exclude=()),
+    )
+    count = await run_instance_search(instance, MASTER_KEY)
+
+    assert count == 0
+    assert not search_route.called
+    rows = await _get_log_rows()
+    skipped = [r for r in rows if r["action"] == "skipped" and r["search_kind"] == "cutoff"]
+    assert len(skipped) == 1
+    assert skipped[0]["reason"] == "tag filter (no included tag)"
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_tag_filter_blocks_upgrade_pass_too(seeded_instances: None) -> None:
+    """Upgrade-pass candidates honour the same tag filter as missing / cutoff.
+
+    Issue #637.  ``_run_upgrade_pass`` is invoked with two new kwargs
+    (``tag_filter_include_ids`` / ``tag_filter_exclude_ids``); this test
+    proves the kwargs land on the upgrade branch by mocking a Radarr
+    library movie with no tags and asserting the upgrade pool ignores it.
+    """
+    library_movie = {
+        "id": 201,
+        "title": "My Movie",
+        "year": 2023,
+        "monitored": True,
+        "hasFile": True,
+        "movieFile": {"qualityCutoffNotMet": False},
+        "tags": [],  # no matching include tag
+    }
+    respx.get(f"{RADARR_URL}/api/v3/tag").mock(
+        return_value=httpx.Response(200, json=[{"id": 7, "label": "1080p"}])
+    )
+    respx.get(f"{RADARR_URL}/api/v3/wanted/missing").mock(
+        return_value=httpx.Response(200, json={"records": []})
+    )
+    respx.get(f"{RADARR_URL}/api/v3/movie").mock(
+        return_value=httpx.Response(200, json=[library_movie])
+    )
+    search_route = respx.post(f"{RADARR_URL}/api/v3/command").mock(
+        return_value=httpx.Response(201, json={"id": 1, "name": "MoviesSearch"})
+    )
+
+    instance = _make_instance(
+        itype=InstanceType.radarr, url=RADARR_URL, instance_id=2, batch_size=0
+    )
+    instance = dataclasses.replace(
+        instance,
+        upgrade=UpgradePolicy(
+            upgrade_enabled=True,
+            upgrade_batch_size=1,
+            upgrade_cooldown_days=7,
+            upgrade_hourly_cap=5,
+        ),
+        tag_filter=TagFilterPolicy(include=("1080p",), exclude=()),
+    )
+    count = await run_instance_search(instance, MASTER_KEY)
+
+    assert count == 0
+    assert not search_route.called
+    rows = await _get_log_rows()
+    skipped = [r for r in rows if r["action"] == "skipped" and r["search_kind"] == "upgrade"]
+    assert len(skipped) == 1
+    assert skipped[0]["reason"] == "tag filter (no included tag)"

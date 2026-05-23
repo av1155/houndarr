@@ -814,3 +814,77 @@ def test_changelog_preferences_switch_rolls_back_on_error(
         )
     finally:
         page.unroute(pattern)
+
+
+@pytest.mark.integration
+def test_api_key_reveal_copy_fallback_targets_open_dialog(
+    logged_in_page: Page, houndarr_url: str
+) -> None:
+    """The Copy key button writes the plaintext key in non-secure contexts.
+
+    The reveal modal opens via ``<dialog>.showModal()``; content outside
+    an open modal dialog is inert per the HTML spec, so a fallback
+    textarea appended to ``document.body`` never receives focus or
+    selection and ``execCommand('copy')`` silently succeeds over nothing
+    while the toast misleadingly reports success.  The fallback host
+    must therefore be the open dialog itself.  Instrument
+    ``execCommand`` and assert the textarea sits inside the dialog and
+    the selection covers the full key at call time.
+    """
+    page = logged_in_page
+    page.goto(f"{houndarr_url}/settings")
+    _open_admin_dropdown(page)
+
+    # Open the reveal dialog. Generate from a clean state, or regenerate
+    # if a previous test in the session already configured a key.
+    submit = page.locator('form[action="/settings/api-key/generate"] button[type="submit"]')
+    if submit.inner_text().strip() == "Regenerate key":
+        submit.click()
+        page.locator("#confirm-go").click()
+    else:
+        submit.click()
+    reveal = page.locator("dialog#api-key-reveal-modal[open]")
+    expect(reveal).to_be_visible(timeout=4_000)
+
+    # Force the non-secure-context fallback path by removing the
+    # clipboard API, and instrument execCommand to capture the textarea
+    # state at the moment the copy call fires.
+    page.evaluate(
+        """() => {
+            Object.defineProperty(navigator, 'clipboard', {
+                value: undefined,
+                configurable: true,
+            });
+            window.__execCopyState = null;
+            const orig = document.execCommand.bind(document);
+            document.execCommand = function(cmd) {
+                const ta =
+                    document.querySelector('dialog[open] textarea')
+                    || document.querySelector('body > textarea');
+                window.__execCopyState = {
+                    cmd,
+                    selectionEnd: ta ? ta.selectionEnd : null,
+                    valueLength: ta ? ta.value.length : null,
+                    parentTag: ta ? ta.parentElement.tagName : null,
+                };
+                return orig(cmd);
+            };
+        }"""
+    )
+
+    page.get_by_role("button", name="Copy key").click()
+    page.wait_for_function("() => window.__execCopyState !== null")
+    state = page.evaluate("() => window.__execCopyState")
+
+    assert state["cmd"] == "copy"
+    assert state["valueLength"] is not None and state["valueLength"] > 0, (
+        f"fallback textarea never received the key text: {state!r}"
+    )
+    assert state["selectionEnd"] == state["valueLength"], (
+        f"selection covered {state['selectionEnd']} of "
+        f"{state['valueLength']} chars; the fallback textarea was likely "
+        "inert because it landed outside the open modal dialog"
+    )
+    assert state["parentTag"] == "DIALOG", (
+        f"fallback textarea parent was {state['parentTag']!r}, expected DIALOG"
+    )

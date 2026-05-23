@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- `Copy key` button in the API key reveal dialog now writes the plaintext key to the clipboard on HTTP installs; the textarea fallback was silently running over an empty selection while the toast claimed success. (#647)
+
 ---
 
 ## [1.12.0] - 2026-05-22

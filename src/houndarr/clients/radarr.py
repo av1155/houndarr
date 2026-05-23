@@ -28,6 +28,7 @@ class LibraryMovie:
     in_cinemas: str | None
     physical_release: str | None
     digital_release: str | None
+    tags: tuple[int, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -44,6 +45,7 @@ class MissingMovie:
     physical_release: str | None
     release_date: str | None
     digital_release: str | None  # ISO-8601 date or None if unknown
+    tags: tuple[int, ...] = ()
 
 
 class RadarrClient(ArrClient):
@@ -160,6 +162,7 @@ def _parse_library_movie(wire: RadarrLibraryMovie) -> LibraryMovie:
         in_cinemas=wire.in_cinemas,
         physical_release=wire.physical_release,
         digital_release=wire.digital_release,
+        tags=tuple(wire.tags or ()),
     )
 
 
@@ -175,4 +178,5 @@ def _parse_movie(wire: RadarrWantedMovie) -> MissingMovie:
         physical_release=wire.physical_release,
         release_date=wire.release_date,
         digital_release=wire.digital_release,
+        tags=tuple(wire.tags or ()),
     )

@@ -66,6 +66,7 @@ from houndarr.services.instances import (
     SchedulePolicy,
     SearchOrder,
     SonarrSearchMode,
+    TagFilterPolicy,
     UpgradePolicy,
     WhisparrV2SearchMode,
 )
@@ -139,6 +140,7 @@ def _build_instance_sonarr(*, base_url: str, batch_size: int, hourly_cap: int) -
         ),
         upgrade=UpgradePolicy(),
         schedule=SchedulePolicy(search_order=SearchOrder.random),
+        tag_filter=TagFilterPolicy(),
         snapshot=RuntimeSnapshot(),
         timestamps=InstanceTimestamps(
             created_at="2026-01-01T00:00:00Z",
@@ -178,6 +180,7 @@ def _build_instance_whisparr_v2(*, base_url: str, batch_size: int, hourly_cap: i
         ),
         upgrade=UpgradePolicy(),
         schedule=SchedulePolicy(search_order=SearchOrder.random),
+        tag_filter=TagFilterPolicy(),
         snapshot=RuntimeSnapshot(),
         timestamps=InstanceTimestamps(
             created_at="2026-01-01T00:00:00Z",
@@ -217,6 +220,7 @@ def _build_instance_lidarr(*, base_url: str, batch_size: int, hourly_cap: int) -
         ),
         upgrade=UpgradePolicy(),
         schedule=SchedulePolicy(search_order=SearchOrder.random),
+        tag_filter=TagFilterPolicy(),
         snapshot=RuntimeSnapshot(),
         timestamps=InstanceTimestamps(
             created_at="2026-01-01T00:00:00Z",
@@ -256,6 +260,7 @@ def _build_instance_readarr(*, base_url: str, batch_size: int, hourly_cap: int) 
         ),
         upgrade=UpgradePolicy(),
         schedule=SchedulePolicy(search_order=SearchOrder.random),
+        tag_filter=TagFilterPolicy(),
         snapshot=RuntimeSnapshot(),
         timestamps=InstanceTimestamps(
             created_at="2026-01-01T00:00:00Z",

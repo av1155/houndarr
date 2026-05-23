@@ -175,6 +175,60 @@ def validate_cutoff_controls(
     return None
 
 
+# Per issue #637.  Caps a single tag label and the total list length
+# at sizes well beyond any realistic *arr install: tag labels are
+# typically short (e.g. ``"1080p"``, ``"4k"``, ``"kids"``) and a
+# single operator rarely curates more than a handful per instance.
+# These bounds are defense in depth, blocking pathological CSV blobs
+# from being persisted through the route.
+_TAG_LABEL_MAX_LENGTH = 64
+_TAG_LIST_MAX_ENTRIES = 32
+
+
+def validate_tag_filter(raw: str, *, direction: str) -> tuple[str | None, str]:
+    """Validate and canonicalise a comma-separated tag-filter string.
+
+    Splits *raw* on commas, strips and lowercases each entry, drops
+    empties, and de-duplicates while preserving order.  Returns a
+    ``(error, canonical)`` pair: when ``error`` is ``None`` the
+    canonical comma-joined string is safe to persist; otherwise the
+    error is a user-facing string suitable for the settings-form
+    guard banner.
+
+    Args:
+        raw: The raw form value (empty string when the operator left
+            the field blank).
+        direction: ``"include"`` or ``"exclude"``; appears verbatim in
+            error messages so the operator can spot which field
+            tripped the bound.
+
+    Returns:
+        ``(None, canonical)`` on success.  ``(error, "")`` on failure
+        (canonical is the empty string, which is the safe default to
+        write back into the form so a re-submit clears the bad value).
+    """
+    if not raw or not raw.strip():
+        return None, ""
+
+    seen: list[str] = []
+    for entry in raw.split(","):
+        label = entry.strip().lower()
+        if not label:
+            continue
+        if len(label) > _TAG_LABEL_MAX_LENGTH:
+            return (
+                f"Tag filter {direction}: each label must be {_TAG_LABEL_MAX_LENGTH} "
+                "characters or fewer."
+            ), ""
+        if label not in seen:
+            seen.append(label)
+
+    if len(seen) > _TAG_LIST_MAX_ENTRIES:
+        return (f"Tag filter {direction}: at most {_TAG_LIST_MAX_ENTRIES} tags allowed."), ""
+
+    return None, ",".join(seen)
+
+
 def validate_upgrade_controls(
     upgrade_batch_size: int,
     upgrade_cooldown_days: int,

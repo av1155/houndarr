@@ -30,6 +30,7 @@ from houndarr.services.instances import (
     MissingPolicy,
     RuntimeSnapshot,
     SchedulePolicy,
+    TagFilterPolicy,
     UpgradePolicy,
 )
 
@@ -52,6 +53,7 @@ def _make_instance() -> Instance:
         cutoff=CutoffPolicy(),
         upgrade=UpgradePolicy(),
         schedule=SchedulePolicy(),
+        tag_filter=TagFilterPolicy(),
         snapshot=RuntimeSnapshot(),
         timestamps=InstanceTimestamps(
             created_at="2024-01-01T00:00:00Z",
@@ -64,9 +66,10 @@ def test_instance_is_frozen_after_freeze() -> None:
     """Instance is ``@dataclass(frozen=True, slots=True)``.
 
     Any per-attribute assignment must raise
-    ``FrozenInstanceError`` and the seven sub-struct names must
+    ``FrozenInstanceError`` and the eight sub-struct names must
     appear in ``__slots__``.  Callers that need a modified Instance
-    compose :func:`dataclasses.replace`.
+    compose :func:`dataclasses.replace`.  ``tag_filter`` was added
+    with issue #637.
     """
     assert dataclasses.is_dataclass(Instance)
     # ``__dataclass_params__`` is a runtime attribute the ``@dataclass``
@@ -82,6 +85,7 @@ def test_instance_is_frozen_after_freeze() -> None:
         "cutoff",
         "upgrade",
         "schedule",
+        "tag_filter",
         "snapshot",
         "timestamps",
     }

@@ -62,6 +62,16 @@ class SearchPassConfig:
             Used by random search order to pick a random start page.
             ``None`` disables the random probe and falls back to
             *start_page*.
+        tag_filter_include_ids: Resolved tag IDs the operator wants to
+            *only* search.  ``None`` means the include direction is
+            disabled for this pass (no constraint).  Empty frozenset
+            means the operator typed labels that did not resolve, so
+            no item can match: every candidate fails the include
+            filter for this cycle.  Issue #637.
+        tag_filter_exclude_ids: Resolved tag IDs the operator wants to
+            skip.  ``None`` disables the exclude direction.  Empty
+            frozenset behaves like ``None`` (no items match an empty
+            set, so no exclusion fires).
     """
 
     search_kind: SearchKind | str
@@ -77,6 +87,8 @@ class SearchPassConfig:
     cycle_trigger: CycleTrigger | str
     start_page: int = 1
     total_fn: Callable[[], Awaitable[int]] | None = None
+    tag_filter_include_ids: frozenset[int] | None = None
+    tag_filter_exclude_ids: frozenset[int] | None = None
 
 
 __all__ = ["SearchPassConfig"]

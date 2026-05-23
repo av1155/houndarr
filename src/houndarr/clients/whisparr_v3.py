@@ -62,6 +62,7 @@ class MissingWhisparrV3Movie:
     physical_release: str | None
     release_date: str | None
     digital_release: str | None
+    tags: tuple[int, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -78,6 +79,7 @@ class LibraryWhisparrV3Movie:
     physical_release: str | None
     digital_release: str | None
     release_date: str | None
+    tags: tuple[int, ...] = ()
 
 
 class WhisparrV3Client(ArrClient):
@@ -271,6 +273,7 @@ def _parse_library_movie(wire: WhisparrV3LibraryMovie) -> LibraryWhisparrV3Movie
         physical_release=wire.physical_release,
         digital_release=wire.digital_release,
         release_date=wire.release_date,
+        tags=tuple(wire.tags or ()),
     )
 
 
@@ -286,4 +289,5 @@ def _parse_movie(wire: WhisparrV3LibraryMovie) -> MissingWhisparrV3Movie:
         physical_release=wire.physical_release,
         release_date=wire.release_date,
         digital_release=wire.digital_release,
+        tags=tuple(wire.tags or ()),
     )

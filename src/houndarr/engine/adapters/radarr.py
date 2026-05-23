@@ -94,6 +94,7 @@ def adapt_missing(item: MissingMovie, instance: Instance) -> SearchCandidate:
             "command": "MoviesSearch",
             "movie_id": item.movie_id,
         },
+        tags=item.tags,
     )
 
 
@@ -143,6 +144,7 @@ def adapt_upgrade(item: LibraryMovie, instance: Instance) -> SearchCandidate:
             "command": "MoviesSearch",
             "movie_id": item.movie_id,
         },
+        tags=item.tags,
     )
 
 

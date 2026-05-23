@@ -26,6 +26,7 @@ class LibraryBook:
     monitored: bool
     has_file: bool
     release_date: str | None
+    tags: tuple[int, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -37,6 +38,7 @@ class MissingBook:
     author_name: str
     title: str
     release_date: str | None  # ISO-8601 nullable string
+    tags: tuple[int, ...] = ()
 
 
 _BookT = TypeVar("_BookT", "MissingBook", "LibraryBook")
@@ -47,6 +49,7 @@ class ReadarrClient(ArrClient):
 
     _SYSTEM_STATUS_PATH: str = "/api/v1/system/status"
     _QUEUE_STATUS_PATH: str = "/api/v1/queue/status"
+    _TAG_PATH: ClassVar[str] = "/api/v1/tag"
     # Readarr is a v1 API; the override routes the /wanted template at
     # /api/v1/wanted/{kind} (matches Lidarr's pattern).
     _WANTED_BASE_PATH: ClassVar[str] = "/api/v1/wanted"
@@ -229,6 +232,7 @@ def _parse_library_book(wire: ReadarrLibraryBook) -> LibraryBook:
     )
     author_id = wire.author_id or (wire.author.id if wire.author else None) or 0
     author_name = (wire.author.author_name if wire.author else None) or ""
+    author_tags = tuple(wire.author.tags or ()) if wire.author else ()
     return LibraryBook(
         book_id=wire.id,
         author_id=author_id,
@@ -237,16 +241,19 @@ def _parse_library_book(wire: ReadarrLibraryBook) -> LibraryBook:
         monitored=bool(wire.monitored),
         has_file=book_file_count > 0,
         release_date=wire.release_date,
+        tags=author_tags,
     )
 
 
 def _parse_book(wire: ReadarrWantedBook) -> MissingBook:
     author_id = wire.author_id or (wire.author.id if wire.author else None) or 0
     author_name = (wire.author.author_name if wire.author else None) or ""
+    author_tags = tuple(wire.author.tags or ()) if wire.author else ()
     return MissingBook(
         book_id=wire.id,
         author_id=author_id,
         author_name=author_name,
         title=wire.title or "",
         release_date=wire.release_date,
+        tags=author_tags,
     )

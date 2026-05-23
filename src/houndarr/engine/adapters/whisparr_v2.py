@@ -146,6 +146,7 @@ def adapt_missing(item: MissingWhisparrV2Episode, instance: Instance) -> SearchC
             "episode_id": item.episode_id,
         },
         context=context,
+        tags=item.tags,
     )
 
 
@@ -178,6 +179,7 @@ def adapt_cutoff(item: MissingWhisparrV2Episode, instance: Instance) -> SearchCa
             "command": "EpisodeSearch",
             "episode_id": item.episode_id,
         },
+        tags=item.tags,
     )
 
 
@@ -240,6 +242,7 @@ def adapt_upgrade(
         unreleased_reason=None,
         group_key=group_key,
         search_payload=search_payload,
+        tags=item.tags,
     )
 
 

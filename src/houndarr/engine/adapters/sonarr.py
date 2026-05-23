@@ -154,6 +154,7 @@ def adapt_missing(item: MissingEpisode, instance: Instance) -> SearchCandidate:
             "episode_id": item.episode_id,
         },
         context=context,
+        tags=item.tags,
     )
 
 
@@ -182,6 +183,7 @@ def adapt_cutoff(item: MissingEpisode, instance: Instance) -> SearchCandidate:
             "command": "EpisodeSearch",
             "episode_id": item.episode_id,
         },
+        tags=item.tags,
     )
 
 
@@ -242,6 +244,7 @@ def adapt_upgrade(item: LibraryEpisode, instance: Instance) -> SearchCandidate:
         unreleased_reason=None,
         group_key=group_key,
         search_payload=search_payload,
+        tags=item.tags,
     )
 
 

@@ -12,24 +12,30 @@ function initSettingsPage() {
   const { signal } = controller;
 
   (() => {
-    async function writeClipboard(text) {
+    async function writeClipboard(text, host = document.body) {
       if (navigator.clipboard?.writeText) {
         await navigator.clipboard.writeText(text);
         return;
       }
+      // Non-secure-context fallback: a textarea + execCommand('copy') shim.
+      // The textarea must live inside any open modal <dialog> because
+      // content outside an open modal dialog is inert per the HTML spec:
+      // focus() and select() become no-ops, the selection stays empty,
+      // and execCommand('copy') silently runs over nothing while still
+      // returning true.
       const ta = document.createElement('textarea');
       ta.value = text;
       ta.style.position = 'fixed';
       ta.style.opacity = '0';
-      document.body.appendChild(ta);
+      host.appendChild(ta);
       ta.focus();
       ta.select();
       try {
-        if (!document.execCommand('copy')) {
+        if (!document.execCommand('copy') || ta.selectionEnd !== ta.value.length) {
           throw new Error('Copy command failed');
         }
       } finally {
-        document.body.removeChild(ta);
+        host.removeChild(ta);
       }
     }
 
@@ -49,7 +55,8 @@ function initSettingsPage() {
         showToast('Nothing to copy');
         return;
       }
-      writeClipboard(text)
+      const host = copyBtn.closest('dialog[open]') || document.body;
+      writeClipboard(text, host)
         .then(() => showToast('Houndarr API key copied'))
         .catch(() => showToast('Copy failed'));
     }, { signal });

@@ -7,13 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+---
+
+## [1.12.0] - 2026-05-22
+
 ### Added
 
 - External `/api/v1/widget` endpoint returns API-key-protected dashboard totals, backed by schema v19 `widget_api_key` storage. (#604)
 - Settings page can generate, regenerate, and revoke the Houndarr API key, showing plaintext only once for widget clients. (#605)
-- Homepage dashboard setup now covers `/api/v1/widget`, `X-Api-Key`, and Settings > Admin > API key rotation. (#606)
+- New [Homepage integration guide](https://av1155.github.io/houndarr/docs/guides/homepage-integration) covers `/api/v1/widget`, `X-Api-Key`, and Settings > Admin > API key rotation. (#606)
 - Instance settings gain an `Enable missing search` toggle that pauses the missing-search pass per instance; existing instances stay enabled after the v18 migration. (#619)
-- Instance settings gain `Tag Filter · Include` and `Tag Filter · Exclude` fields that scope searches to (or away from) items tagged in the upstream *arr; comma-separated labels are resolved against `/tag` each cycle. Schema v20 adds the two columns with empty defaults. (#637)
+- Instance settings gain `Tag Filter · Include` and `Tag Filter · Exclude` fields that scope searches to (or away from) items tagged in the upstream \*arr, resolved against `/tag` each cycle. Schema v20 adds the two columns with empty defaults. (#637)
 - Missing search settings gain optional hot retry windows after post-release grace, backed by schema v21 window and interval columns. (#630)
 
 ### Changed
@@ -27,8 +31,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
-- `urllib3` bumped to 2.7.0; closes two upstream advisories on decompression-bomb safeguards and sensitive-header forwarding through proxied redirects. Houndarr does not exercise either code path today, but the bump removes the alerts from `pip-audit` and Trivy. (#623)
-- `idna` bumped to 3.15; closes CVE-2026-45409 by short-circuiting oversized input in `check_label` before contextual-rule processing. Houndarr does not pass attacker-controlled hostnames through the IDN encoder, but the bump removes the alert from `pip-audit` and Trivy. (#639)
+- `urllib3` bumped to 2.7.0, closing two upstream advisories on decompression-bomb safeguards and sensitive-header forwarding through proxied redirects. Houndarr exercises neither path; the bump clears `pip-audit` and Trivy alerts. (#623)
+- `idna` bumped to 3.15; closes CVE-2026-45409 (oversized input in `check_label` before contextual-rule processing). Houndarr does not pass attacker-controlled hostnames through the IDN encoder; the bump clears `pip-audit` and Trivy alerts. (#639)
 
 ---
 

@@ -120,6 +120,24 @@ class TestSearchPassConfigDeclaration:
         )
         assert config.total_fn is None
 
+    def test_hot_retry_defaults_are_disabled(self) -> None:
+        """Omitting hot retry fields preserves existing pass behavior."""
+        config = SearchPassConfig(
+            search_kind=SearchKind.missing,
+            adapt_fn=_adapt,
+            dispatch_fn=_dispatch,
+            fetch_fn=_fetch,
+            batch_size=1,
+            hourly_cap=0,
+            cooldown_days=0,
+            page_size=1,
+            scan_budget=1,
+            cycle_id="c",
+            cycle_trigger=CycleTrigger.system,
+        )
+        assert config.missing_hot_retry_window_hrs == 0
+        assert config.missing_hot_retry_interval_hrs == 2
+
     def test_field_order_matches_current_kwargs(self) -> None:
         """Field order is the same as ``_run_search_pass``'s kwarg order.
 
@@ -143,6 +161,8 @@ class TestSearchPassConfigDeclaration:
             "total_fn",
             "tag_filter_include_ids",
             "tag_filter_exclude_ids",
+            "missing_hot_retry_window_hrs",
+            "missing_hot_retry_interval_hrs",
         ]
 
     def test_optional_total_fn_accepts_bound_coroutine(self) -> None:

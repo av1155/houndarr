@@ -27,8 +27,8 @@ what a reset touches.
 :::
 
 <Image
-  img={require('@site/static/img/screenshots/houndarr-add-instance-form.png')}
-  alt="The Houndarr Add Instance form showing search, cutoff, and upgrade configuration fields"
+img={require('@site/static/img/screenshots/houndarr-add-instance-form.png')}
+alt="The Houndarr Add Instance form showing search, cutoff, and upgrade configuration fields"
 />
 
 The same form opens when you click **Edit** on an existing row, with
@@ -36,8 +36,8 @@ the current values pre-populated. The API key stays masked until you
 overwrite it.
 
 <Image
-  img={require('@site/static/img/screenshots/houndarr-edit-instance-form.png')}
-  alt="The Houndarr Edit Instance modal, pre-populated with an existing Sonarr instance's connection, search policy, and schedule values"
+img={require('@site/static/img/screenshots/houndarr-edit-instance-form.png')}
+alt="The Houndarr Edit Instance modal, pre-populated with an existing Sonarr instance's connection, search policy, and schedule values"
 />
 
 ## Missing search controls
@@ -83,15 +83,33 @@ Hours to wait after an item's release date before searching.
 - Items not yet released (no date, or a future date) log as
   `not yet released` regardless of this setting.
 
+### Hot Retry Window (hours)
+
+Optional hours after post-release grace when a missing item can retry
+on a short interval before the normal missing cooldown takes over.
+
+- Default: `0` (disabled)
+- The latest `post-release grace (Nh)` skip opens the window.
+- Hot retries still count against Batch Size and Hourly Cap.
+
+### Hot Retry Interval (hours)
+
+Minimum hours between hot retry attempts while the hot retry window is
+active.
+
+- Default: `2`
+- Must be at least `1` when Hot Retry Window is enabled.
+- Manual Run Now bypasses the interval, but it does not reopen an expired window.
+
 Release date evaluation varies by app type:
 
-| App | Date priority chain |
-|-----|---------------------|
-| Radarr | `digitalRelease` -> `physicalRelease` -> `releaseDate` -> `inCinemas`. Unavailable or pre-release titles may be skipped via `isAvailable` / `status`. |
-| Sonarr, Whisparr v2 | `airDateUtc` (Sonarr) or `releaseDate` (Whisparr v2) |
-| Whisparr v3 | Same chain as Radarr: `digitalRelease` -> `physicalRelease` -> `inCinemas` |
-| Lidarr | Album `releaseDate` |
-| Readarr | Book `releaseDate` |
+| App                 | Date priority chain                                                                                                                                   |
+| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Radarr              | `digitalRelease` -> `physicalRelease` -> `releaseDate` -> `inCinemas`. Unavailable or pre-release titles may be skipped via `isAvailable` / `status`. |
+| Sonarr, Whisparr v2 | `airDateUtc` (Sonarr) or `releaseDate` (Whisparr v2)                                                                                                  |
+| Whisparr v3         | Same chain as Radarr: `digitalRelease` -> `physicalRelease` -> `inCinemas`                                                                            |
+| Lidarr              | Album `releaseDate`                                                                                                                                   |
+| Readarr             | Book `releaseDate`                                                                                                                                    |
 
 ### Sonarr Missing Search Mode
 
@@ -220,12 +238,12 @@ missing-pass release-aware retry does not apply to cutoff searches.
 ### Upgrade search
 
 Re-search items that already have files and meet your quality
-cutoff. Lets your *arr instance find better releases based on
+cutoff. Lets your \*arr instance find better releases based on
 quality profiles and custom format scoring.
 
 - Default: Off
-- Unlike cutoff search (which targets items *below* cutoff),
-  upgrade search targets items that *already meet* cutoff.
+- Unlike cutoff search (which targets items _below_ cutoff),
+  upgrade search targets items that _already meet_ cutoff.
 
 ### Upgrade Batch
 
@@ -266,7 +284,7 @@ library cycles through over time.
 - Larger windows finish a full library rotation faster but make
   every upgrade cycle hit more series at once. Raise this on a
   large Sonarr library if you can absorb the higher per-cycle load
-  on the *arr instance.
+  on the \*arr instance.
 - No effect on Radarr, Whisparr v3, Lidarr, or Readarr.
 
 ### Offset-based rotation
@@ -310,30 +328,32 @@ Restricts scheduled cycles to one or more time-of-day windows.
 - Manual `Run Now` always runs, even outside the window. The gate
   applies to scheduled cycles only.
 - When the gate fires, the cycle logs one `outside allowed time
-  window` info row and sleeps normally. See
+window` info row and sleeps normally. See
   [Skip Reasons: outside allowed time window](/docs/reference/skip-reasons#outside-allowed-time-window).
 
 ## Recommended starting profile
 
-| Setting | Value |
-|---------|-------|
-| Batch Size | `2` |
-| Sleep (minutes) | `30` |
-| Hourly Cap | `4` |
-| Cooldown (days) | `14` |
-| Post-Release Grace (hrs) | `6` |
-| Queue Limit | `0` (disabled) |
-| Allowed Search Window | (blank, 24/7) |
-| Search Order | `Random` |
-| Cutoff search | Off |
-| Cutoff Batch | `1` |
-| Cutoff Cooldown | `21` |
-| Cutoff Cap | `1` |
-| Upgrade search | Off |
-| Upgrade Batch | `1` (hard cap: 5) |
-| Upgrade Cooldown | `90` (min: 7) |
-| Upgrade Series Window | `5` (range 1-100, Sonarr/Whisparr v2 only) |
-| Upgrade Cap | `1` (hard cap: 5) |
+| Setting                  | Value                                      |
+| ------------------------ | ------------------------------------------ |
+| Batch Size               | `2`                                        |
+| Sleep (minutes)          | `30`                                       |
+| Hourly Cap               | `4`                                        |
+| Cooldown (days)          | `14`                                       |
+| Post-Release Grace (hrs) | `6`                                        |
+| Hot Retry Window (hrs)   | `0` (disabled)                             |
+| Hot Retry Interval (hrs) | `2`                                        |
+| Queue Limit              | `0` (disabled)                             |
+| Allowed Search Window    | (blank, 24/7)                              |
+| Search Order             | `Random`                                   |
+| Cutoff search            | Off                                        |
+| Cutoff Batch             | `1`                                        |
+| Cutoff Cooldown          | `21`                                       |
+| Cutoff Cap               | `1`                                        |
+| Upgrade search           | Off                                        |
+| Upgrade Batch            | `1` (hard cap: 5)                          |
+| Upgrade Cooldown         | `90` (min: 7)                              |
+| Upgrade Series Window    | `5` (range 1-100, Sonarr/Whisparr v2 only) |
+| Upgrade Cap              | `1` (hard cap: 5)                          |
 
 ## Status control
 
@@ -341,8 +361,8 @@ Instance enabled / disabled state is controlled from the row toggle
 in Settings. New instances are created as enabled by default.
 
 <Image
-  img={require('@site/static/img/screenshots/houndarr-settings-instances.png')}
-  alt="The Houndarr Settings page showing the instance list with per-row enable toggles"
+img={require('@site/static/img/screenshots/houndarr-settings-instances.png')}
+alt="The Houndarr Settings page showing the instance list with per-row enable toggles"
 />
 
 <figure className="docs-screenshot-portrait">
@@ -355,4 +375,3 @@ in Settings. New instances are created as enabled by default.
     Disable / Edit / Delete controls.
   </figcaption>
 </figure>
-

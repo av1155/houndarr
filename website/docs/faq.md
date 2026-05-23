@@ -11,7 +11,7 @@ links to the full coverage.
 
 ## Why not just use Sonarr's built-in search?
 
-Sonarr, Radarr, and the other *arr apps monitor RSS feeds for new
+Sonarr, Radarr, and the other \*arr apps monitor RSS feeds for new
 releases as they appear on your indexers. RSS does not re-search
 content that was already available before you set up your current
 indexers or changed your quality profile.
@@ -49,9 +49,16 @@ the signal that something is wrong; skips are not. See
 [Skip Reasons](/docs/reference/skip-reasons) for what each reason
 string means.
 
+## Why isn't Houndarr finding new releases right after they come out?
+
+Some indexers surface releases hours after the release date. Post-release
+grace prevents searching too early, and Hot Retry Window can keep checking
+on a short interval before the normal missing cooldown takes over. Keep
+batch size and hourly cap conservative when you enable it.
+
 ## Does Houndarr decide whether my file meets cutoff?
 
-No. Your *arr instance maintains the Wanted -> Cutoff Unmet list
+No. Your \*arr instance maintains the Wanted -> Cutoff Unmet list
 based on your quality profiles. Houndarr reads that list and
 schedules searches for items on it. If something should be on the
 cutoff list but is not, check the quality profile in your instance
@@ -87,11 +94,11 @@ Upgrade search reads the full library rather than the
 `wanted/cutoff` list, and the engine enforces hard caps: batch
 capped at 5, cooldown floored at 7 days (default 90), hourly cap
 capped at 5. Enable it only after missing and cutoff backlogs are
-stable. When an upgrade search triggers, your *arr instance
+stable. When an upgrade search triggers, your \*arr instance
 evaluates the results against your quality profile and custom
 format scores; Houndarr does not influence that decision.
 
-## Can Houndarr search for things that aren't in my *arr instance yet?
+## Can Houndarr search for things that aren't in my \*arr instance yet?
 
 No. Houndarr only triggers searches within your *arr instances for
 items already tracked there. For request workflows, use Overseerr
@@ -103,12 +110,12 @@ If the items are still monitored in your *arr instance, yes: they
 will appear in the `wanted/missing` list and Houndarr will
 eventually search for them. To prevent re-downloads, unmonitor the
 items in your *arr instance before or after deleting the files.
-Houndarr only acts on what your *arr instance reports as wanted.
+Houndarr only acts on what your \*arr instance reports as wanted.
 
 ## Does Houndarr respect custom format scores?
 
 Houndarr does not evaluate quality, custom formats, or release
-attributes. It only triggers search commands. Your *arr instance
+attributes. It only triggers search commands. Your \*arr instance
 handles all quality evaluation, custom format scoring, and
 download decisions. When your quality profile and custom formats
 are set up, Houndarr's searches produce results that satisfy them.

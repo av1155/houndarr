@@ -12,30 +12,37 @@ reasons are normal scheduling behavior, not errors.
 
 ## Reasons
 
-| Reason string | Scope | What it means |
-|---------------|-------|---------------|
-| `on cooldown (Nd)` | per-item | Missing item was searched less than `Cooldown (days)` ago. |
-| `on cutoff cooldown (Nd)` | per-item | Cutoff item was searched less than `Cutoff Cooldown` ago. |
-| `on upgrade cooldown (Nd)` | per-item | Upgrade item was searched less than `Upgrade Cooldown (days)` ago. Default 90 days. |
-| `not yet released` | per-item | No release date, or the release date is in the future. |
-| `post-release grace (Nh)` | per-item | Release date passed but the grace window (default 6 hours) has not elapsed. |
-| `hourly limit reached (N/hr)` | per-item | Missing pass hit `Hourly Cap` of `N` for the current hour. |
-| `cutoff hourly limit reached (N/hr)` | per-item | Cutoff pass hit `Cutoff Cap` of `N`. |
-| `upgrade hourly limit reached (N/hr)` | per-item | Upgrade pass hit `Upgrade Cap` of `N`. |
-| `tag filter (no included tag)` | per-item | `Tag Filter · Include` is set and the item does not carry any matching tag. |
-| `tag filter (excluded tag)` | per-item | `Tag Filter · Exclude` is set and the item carries one of those tags. |
-| `queue backpressure (N/M)` | cycle-level | Download queue has `N` items, at or above `Queue Limit` of `M`. Entire cycle is skipped. |
-| `outside allowed time window` | cycle-level | Current time falls outside every window defined in `Allowed Search Window`. Entire cycle is skipped. |
+| Reason string                         | Scope       | What it means                                                                                        |
+| ------------------------------------- | ----------- | ---------------------------------------------------------------------------------------------------- |
+| `on cooldown (Nd)`                    | per-item    | Missing item was searched less than `Cooldown (days)` ago.                                           |
+| `on cutoff cooldown (Nd)`             | per-item    | Cutoff item was searched less than `Cutoff Cooldown` ago.                                            |
+| `on upgrade cooldown (Nd)`            | per-item    | Upgrade item was searched less than `Upgrade Cooldown (days)` ago. Default 90 days.                  |
+| `not yet released`                    | per-item    | No release date, or the release date is in the future.                                               |
+| `post-release grace (Nh)`             | per-item    | Release date passed but the grace window (default 6 hours) has not elapsed.                          |
+| `in hot retry window (Nh)`            | per-item    | Missing item is inside its hot retry window, but the retry interval has not elapsed.                 |
+| `hourly limit reached (N/hr)`         | per-item    | Missing pass hit `Hourly Cap` of `N` for the current hour.                                           |
+| `cutoff hourly limit reached (N/hr)`  | per-item    | Cutoff pass hit `Cutoff Cap` of `N`.                                                                 |
+| `upgrade hourly limit reached (N/hr)` | per-item    | Upgrade pass hit `Upgrade Cap` of `N`.                                                               |
+| `tag filter (no included tag)`        | per-item    | `Tag Filter · Include` is set and the item does not carry any matching tag.                          |
+| `tag filter (excluded tag)`           | per-item    | `Tag Filter · Exclude` is set and the item carries one of those tags.                                |
+| `queue backpressure (N/M)`            | cycle-level | Download queue has `N` items, at or above `Queue Limit` of `M`. Entire cycle is skipped.             |
+| `outside allowed time window`         | cycle-level | Current time falls outside every window defined in `Allowed Search Window`. Entire cycle is skipped. |
 
 Cycle-level skips write one log row and the supervisor sleeps until
 the next cycle. Per-item skips write one row per candidate evaluated.
 
 ## Release-aware retry
 
-Missing items skipped with `not yet released` or `post-release grace
-(Nh)` get one immediate retry on a later cycle once the release-timing
-gate clears, even when the normal missing cooldown has not fully
-elapsed. After that one retry, normal missing cooldown applies again.
+With the default hot retry window of `0`, missing items skipped with
+`not yet released` or `post-release grace (Nh)` get one immediate
+retry on a later cycle once the release-timing gate clears, even when
+the normal missing cooldown has not fully elapsed. After that one retry,
+normal missing cooldown applies again.
+
+When `Hot Retry Window (hrs)` is enabled, the latest `post-release grace
+(Nh)` row opens a short retry window. Houndarr can retry the item after
+`Hot Retry Interval (hrs)` elapses, still respecting batch size and the
+hourly cap. When the window closes, normal missing cooldown applies.
 
 Cutoff and upgrade passes do not use this early retry. They always
 wait for their full cooldown.
@@ -82,13 +89,14 @@ for the field reference and the per-app tag-source mapping.
 
 ## Log deduplication
 
-Four reasons are deduplicated in the log: `on cooldown`, `on cutoff
-cooldown`, `on upgrade cooldown`, and the two `tag filter` skip
-reasons. Each `(instance, item, reason)` triple writes at most one
-`search_log` row per 24 hours. The engine still evaluates every
-candidate every cycle; only the log write is suppressed. This keeps
-the logs scannable when hundreds of items share the same cooldown or
-the same tag-filter outcome.
+Six reasons are deduplicated in the log: `on cooldown`, `on cutoff
+cooldown`, `on upgrade cooldown`, `in hot retry window`, and the two
+`tag filter` skip reasons. Each `(instance, item, reason)` triple
+writes at most one `search_log` row per 24 hours. The engine still
+evaluates every candidate every cycle; only the log write is
+suppressed. This keeps the logs scannable when hundreds of items
+share the same cooldown, the same hot-retry interval throttle, or the
+same tag-filter outcome.
 
 The other reasons in the table above write a row every cycle they
 apply.

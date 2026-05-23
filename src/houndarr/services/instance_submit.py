@@ -44,6 +44,7 @@ from houndarr.services.instance_validation import (
     resolve_search_modes,
     type_mismatch_message,
     validate_cutoff_controls,
+    validate_missing_hot_retry_controls,
     validate_tag_filter,
     validate_upgrade_controls,
 )
@@ -114,6 +115,8 @@ def _validate_form(
     cutoff_batch_size: int,
     cutoff_cooldown_days: int,
     cutoff_hourly_cap: int,
+    missing_hot_retry_window_hrs: int,
+    missing_hot_retry_interval_hrs: int,
     upgrade_batch_size: int,
     upgrade_cooldown_days: int,
     upgrade_hourly_cap: int,
@@ -139,6 +142,13 @@ def _validate_form(
     )
     if cutoff_error is not None:
         raise InstanceValidationError(cutoff_error)
+
+    hot_retry_error = validate_missing_hot_retry_controls(
+        missing_hot_retry_window_hrs,
+        missing_hot_retry_interval_hrs,
+    )
+    if hot_retry_error is not None:
+        raise InstanceValidationError(hot_retry_error)
 
     upgrade_error = validate_upgrade_controls(
         upgrade_batch_size, upgrade_cooldown_days, upgrade_hourly_cap
@@ -213,6 +223,8 @@ async def submit_create(
     hourly_cap: int,
     cooldown_days: int,
     post_release_grace_hrs: int,
+    missing_hot_retry_window_hrs: int,
+    missing_hot_retry_interval_hrs: int,
     queue_limit: int,
     cutoff_enabled: bool,
     cutoff_batch_size: int,
@@ -273,6 +285,8 @@ async def submit_create(
         cutoff_batch_size=cutoff_batch_size,
         cutoff_cooldown_days=cutoff_cooldown_days,
         cutoff_hourly_cap=cutoff_hourly_cap,
+        missing_hot_retry_window_hrs=missing_hot_retry_window_hrs,
+        missing_hot_retry_interval_hrs=missing_hot_retry_interval_hrs,
         upgrade_batch_size=upgrade_batch_size,
         upgrade_cooldown_days=upgrade_cooldown_days,
         upgrade_hourly_cap=upgrade_hourly_cap,
@@ -321,6 +335,8 @@ async def submit_create(
         hourly_cap=hourly_cap,
         cooldown_days=cooldown_days,
         post_release_grace_hrs=post_release_grace_hrs,
+        missing_hot_retry_window_hrs=missing_hot_retry_window_hrs,
+        missing_hot_retry_interval_hrs=missing_hot_retry_interval_hrs,
         queue_limit=queue_limit,
         cutoff_enabled=cutoff_enabled,
         cutoff_batch_size=cutoff_batch_size,
@@ -360,6 +376,8 @@ async def submit_update(
     hourly_cap: int,
     cooldown_days: int,
     post_release_grace_hrs: int,
+    missing_hot_retry_window_hrs: int,
+    missing_hot_retry_interval_hrs: int,
     queue_limit: int,
     cutoff_enabled: bool,
     cutoff_batch_size: int,
@@ -422,6 +440,8 @@ async def submit_update(
         cutoff_batch_size=cutoff_batch_size,
         cutoff_cooldown_days=cutoff_cooldown_days,
         cutoff_hourly_cap=cutoff_hourly_cap,
+        missing_hot_retry_window_hrs=missing_hot_retry_window_hrs,
+        missing_hot_retry_interval_hrs=missing_hot_retry_interval_hrs,
         upgrade_batch_size=upgrade_batch_size,
         upgrade_cooldown_days=upgrade_cooldown_days,
         upgrade_hourly_cap=upgrade_hourly_cap,
@@ -471,6 +491,8 @@ async def submit_update(
         "hourly_cap": hourly_cap,
         "cooldown_days": cooldown_days,
         "post_release_grace_hrs": post_release_grace_hrs,
+        "missing_hot_retry_window_hrs": missing_hot_retry_window_hrs,
+        "missing_hot_retry_interval_hrs": missing_hot_retry_interval_hrs,
         "queue_limit": queue_limit,
         "cutoff_enabled": cutoff_enabled,
         "cutoff_batch_size": cutoff_batch_size,

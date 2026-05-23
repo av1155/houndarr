@@ -74,6 +74,8 @@ async def test_create_applies_defaults(db: None, master_key: bytes) -> None:
     assert inst.missing.hourly_cap == 4
     assert inst.missing.cooldown_days == 14
     assert inst.missing.post_release_grace_hrs == 6
+    assert inst.missing.missing_hot_retry_window_hrs == 0
+    assert inst.missing.missing_hot_retry_interval_hrs == 2
     assert inst.missing.queue_limit == 0
     assert inst.cutoff.cutoff_enabled is False
     assert inst.cutoff.cutoff_batch_size == 1
@@ -200,6 +202,20 @@ async def test_update_multiple_fields(db: None, master_key: bytes) -> None:
     assert updated.missing.batch_size == 20
     assert updated.missing.hourly_cap == 50
     assert updated.core.enabled is False
+
+
+@pytest.mark.asyncio()
+async def test_update_hot_retry_fields(db: None, master_key: bytes) -> None:
+    inst = await _make(master_key)
+    updated = await update_instance(
+        inst.core.id,
+        master_key=master_key,
+        missing_hot_retry_window_hrs=24,
+        missing_hot_retry_interval_hrs=2,
+    )
+    assert updated is not None
+    assert updated.missing.missing_hot_retry_window_hrs == 24
+    assert updated.missing.missing_hot_retry_interval_hrs == 2
 
 
 @pytest.mark.asyncio()

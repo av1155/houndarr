@@ -10,10 +10,10 @@ belong in a repository.
 
 Public surface:
 
-* :func:`is_on_cooldown_ref` and :func:`record_search_ref` are thin
-  delegators over the repository.  They are the canonical API; new
-  engine code should build an :class:`~houndarr.value_objects.ItemRef`
-  and call them.
+* :func:`is_on_cooldown_ref`, :func:`active_cooldown_searched_at_ref`,
+  and :func:`record_search_ref` are thin delegators over the repository.
+  They are the canonical API; new engine code should build an
+  :class:`~houndarr.value_objects.ItemRef` and call them.
 * :func:`is_on_cooldown` and :func:`record_search` are positional
   compat shims kept for test seeds and any caller that still uses
   the positional triple directly.
@@ -35,6 +35,7 @@ __all__ = [
     "SkipLogKey",
     "_reset_info_log_cache",
     "_reset_skip_log_cache",
+    "active_cooldown_searched_at_ref",
     "clear_cooldowns",
     "is_on_cooldown",
     "is_on_cooldown_ref",
@@ -75,6 +76,26 @@ async def is_on_cooldown_ref(ref: ItemRef, cooldown_days: int) -> bool:
     from houndarr.repositories.cooldowns import exists_active_cooldown
 
     return await exists_active_cooldown(ref, cooldown_days)
+
+
+async def active_cooldown_searched_at_ref(ref: ItemRef, cooldown_days: int) -> str | None:
+    """Return active cooldown ``searched_at`` for *ref*, if present.
+
+    Thin delegator over
+    :func:`houndarr.repositories.cooldowns.fetch_active_cooldown_searched_at`.
+
+    Args:
+        ref: The item to check.
+        cooldown_days: Number of days before the same item can be
+            re-searched. Pass ``0`` or a negative value to disable cooldowns.
+
+    Returns:
+        Stored ``searched_at`` timestamp when a cooldown record exists
+        and has not yet expired, otherwise ``None``.
+    """
+    from houndarr.repositories.cooldowns import fetch_active_cooldown_searched_at
+
+    return await fetch_active_cooldown_searched_at(ref, cooldown_days)
 
 
 async def record_search_ref(ref: ItemRef, search_kind: str) -> None:
@@ -195,7 +216,8 @@ async def should_log_skip(key: SkipLogKey) -> bool:
     Args:
         key: ``(instance_id, item_id, search_kind, reason_bucket)``.
             ``reason_bucket`` is a coarse category string, e.g.
-            ``"cooldown"``, ``"cutoff_cd"``, ``"upgrade_cd"``.
+            ``"cooldown"``, ``"cutoff_cd"``, ``"upgrade_cd"``,
+            ``"hot_retry"``.
 
     Returns:
         ``True`` if the caller should write the skip row (cache miss or

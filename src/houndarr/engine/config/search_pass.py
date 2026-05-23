@@ -1,11 +1,11 @@
 """Frozen value object for one missing or cutoff search pass.
 
-:func:`houndarr.engine.search_loop._run_search_pass` takes 13 values
-that fall naturally into four groups: pass identity
+:func:`houndarr.engine.search_loop._run_search_pass` takes a value object
+whose fields fall naturally into four groups: pass identity
 (``search_kind``), adapter bindings (``adapt_fn``, ``dispatch_fn``,
 ``fetch_fn``, ``total_fn``), behaviour knobs (``batch_size``,
-``hourly_cap``, ``cooldown_days``, ``page_size``, ``scan_budget``),
-and cycle metadata (``cycle_id``, ``cycle_trigger``,
+``hourly_cap``, ``cooldown_days``, hot retry controls,
+``page_size``, ``scan_budget``), and cycle metadata (``cycle_id``, ``cycle_trigger``,
 ``start_page``).  :class:`SearchPassConfig` collapses them into a
 single frozen dataclass so
 :func:`~houndarr.engine.search_loop.run_instance_search` passes one
@@ -49,6 +49,11 @@ class SearchPassConfig:
             (``0`` disables the cap).
         cooldown_days: Days since last search after which an item is
             eligible again.
+        missing_hot_retry_window_hrs: Missing-pass-only hours after a
+            post-release grace skip during which short-interval retries
+            can bypass the long cooldown. ``0`` disables the feature.
+        missing_hot_retry_interval_hrs: Minimum hours between hot retry
+            attempts while the window is active.
         page_size: Items to request per page from *arr.
         scan_budget: Upper bound on candidates evaluated before the
             pass aborts (guards against scanning past the end of the
@@ -89,6 +94,8 @@ class SearchPassConfig:
     total_fn: Callable[[], Awaitable[int]] | None = None
     tag_filter_include_ids: frozenset[int] | None = None
     tag_filter_exclude_ids: frozenset[int] | None = None
+    missing_hot_retry_window_hrs: int = 0
+    missing_hot_retry_interval_hrs: int = 2
 
 
 __all__ = ["SearchPassConfig"]

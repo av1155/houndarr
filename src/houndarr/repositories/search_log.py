@@ -269,6 +269,48 @@ async def fetch_latest_missing_reason(
     return str(row[0]) if row and row[0] is not None else None
 
 
+async def fetch_latest_missing_grace_skip(
+    instance_id: int,
+    item_id: int,
+    item_type: str,
+) -> tuple[str, str] | None:
+    """Return the latest post-release-grace missing skip reason and timestamp.
+
+    Unlike :func:`fetch_latest_missing_reason`, this helper intentionally
+    ignores newer ``searched`` rows so the hot retry window can stay anchored
+    to the post-grace skip that opened it.
+
+    Args:
+        instance_id: Owning instance primary key.
+        item_id: *arr per-type item identifier.
+        item_type: ``ItemType`` string value.
+
+    Returns:
+        ``(reason, timestamp)`` from the newest matching skip row, or
+        ``None`` when no post-release-grace missing skip exists.
+    """
+    async with get_db() as db:
+        async with db.execute(
+            """
+            SELECT reason, timestamp
+            FROM search_log
+            WHERE instance_id = ?
+              AND item_id = ?
+              AND item_type = ?
+              AND search_kind = 'missing'
+              AND action = 'skipped'
+              AND reason LIKE 'post-release grace%'
+            ORDER BY timestamp DESC, id DESC
+            LIMIT 1
+            """,
+            (instance_id, item_id, item_type),
+        ) as cur:
+            row = await cur.fetchone()
+    if row is None or row[0] is None or row[1] is None:
+        return None
+    return str(row[0]), str(row[1])
+
+
 async def fetch_active_error_instance_ids() -> set[int]:
     """Return the set of instance IDs whose newest log row is an error.
 

@@ -20,6 +20,7 @@ from houndarr.routes.settings._helpers import (
     resolve_search_modes,
     type_mismatch_message,
     validate_cutoff_controls,
+    validate_missing_hot_retry_controls,
     validate_upgrade_controls,
 )
 from houndarr.services.instance_validation import validate_tag_filter
@@ -53,6 +54,25 @@ class TestValidateCutoffControls:
     def test_hourly_cap_negative_rejected(self) -> None:
         msg = validate_cutoff_controls(1, 0, -1)
         assert msg == "Cutoff hourly cap must be 0 or greater."
+
+
+# validate_missing_hot_retry_controls
+
+
+class TestValidateMissingHotRetryControls:
+    def test_valid_inputs_return_none(self) -> None:
+        assert validate_missing_hot_retry_controls(0, 0) is None
+        assert validate_missing_hot_retry_controls(24, 2) is None
+
+    def test_window_negative_rejected(self) -> None:
+        msg = validate_missing_hot_retry_controls(-1, 2)
+        assert msg == "Missing hot retry window must be 0 or greater."
+
+    def test_interval_below_one_rejected_when_window_enabled(self) -> None:
+        msg = validate_missing_hot_retry_controls(24, 0)
+        assert msg == (
+            "Missing hot retry interval must be at least 1 hour when the window is enabled."
+        )
 
 
 # validate_upgrade_controls

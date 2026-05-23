@@ -101,6 +101,33 @@
       </div>
       <div class="rounded-inset border border-border-subtle bg-surface-base/50 p-3">
         <div class="flex items-center justify-between gap-3">
+          <h3 class="text-sm font-semibold text-slate-200">Hot Retry Window (hrs)</h3>
+          <span
+            class="text-[0.6875rem] px-2 py-0.5 rounded-full bg-brand-900/40 text-brand-200 border border-brand-800/40"
+            >Default: 0 (disabled)</span
+          >
+        </div>
+        <p class="mt-1 text-sm text-slate-300">
+          Optional hours after post-release grace when a missing item can retry on a short interval
+          before the normal cooldown takes over. Hot retries still count against batch size and the
+          hourly cap.
+        </p>
+      </div>
+      <div class="rounded-inset border border-border-subtle bg-surface-base/50 p-3">
+        <div class="flex items-center justify-between gap-3">
+          <h3 class="text-sm font-semibold text-slate-200">Hot Retry Interval (hrs)</h3>
+          <span
+            class="text-[0.6875rem] px-2 py-0.5 rounded-full bg-brand-900/40 text-brand-200 border border-brand-800/40"
+            >Default: 2</span
+          >
+        </div>
+        <p class="mt-1 text-sm text-slate-300">
+          Minimum delay between hot retries while the window is active. Manual Run Now bypasses the
+          interval but does not reopen an expired window.
+        </p>
+      </div>
+      <div class="rounded-inset border border-border-subtle bg-surface-base/50 p-3">
+        <div class="flex items-center justify-between gap-3">
           <h3 class="text-sm font-semibold text-slate-200">Missing Search Mode</h3>
           <span class="text-[0.6875rem] px-2 py-0.5 rounded-full bg-surface-3 text-slate-400 border border-border-default font-mono"
             >Per-app setting</span
@@ -294,6 +321,12 @@
       </div>
       <div class="rounded-chip border border-border-subtle bg-surface-base/50 px-3 py-2 text-slate-300 font-sans">
         Post-Release Grace: <strong class="text-slate-100">6 hrs</strong>
+      </div>
+      <div class="rounded-chip border border-border-subtle bg-surface-base/50 px-3 py-2 text-slate-300 font-sans">
+        Hot Retry Window: <strong class="text-slate-100">0 (disabled)</strong>
+      </div>
+      <div class="rounded-chip border border-border-subtle bg-surface-base/50 px-3 py-2 text-slate-300 font-sans">
+        Hot Retry Interval: <strong class="text-slate-100">2 hrs</strong>
       </div>
       <div class="rounded-chip border border-border-subtle bg-surface-base/50 px-3 py-2 text-slate-300 font-sans">
         Queue Limit: <strong class="text-slate-100">0 (disabled)</strong>

@@ -84,6 +84,33 @@ async def test_exists_active_cooldown_true_after_upsert(seeded_instances: None) 
 
 @pytest.mark.pinning()
 @pytest.mark.asyncio()
+async def test_fetch_active_cooldown_searched_at_returns_timestamp(
+    seeded_instances: None,
+) -> None:
+    """Active cooldown timestamp read returns the stored searched_at value."""
+    ref = ItemRef(1, 42, ItemType.episode)
+    await repo.upsert_cooldown(ref, "missing")
+
+    searched_at = await repo.fetch_active_cooldown_searched_at(ref, cooldown_days=7)
+
+    assert searched_at is not None
+    assert searched_at.endswith("Z")
+
+
+@pytest.mark.pinning()
+@pytest.mark.asyncio()
+async def test_fetch_active_cooldown_searched_at_returns_none_when_disabled(
+    seeded_instances: None,
+) -> None:
+    """cooldown_days <= 0 disables the timestamp read too."""
+    ref = ItemRef(1, 42, ItemType.episode)
+    await repo.upsert_cooldown(ref, "missing")
+
+    assert await repo.fetch_active_cooldown_searched_at(ref, cooldown_days=0) is None
+
+
+@pytest.mark.pinning()
+@pytest.mark.asyncio()
 async def test_exists_active_cooldown_expired_row_returns_false(
     seeded_instances: None,
 ) -> None:
@@ -100,6 +127,25 @@ async def test_exists_active_cooldown_expired_row_returns_false(
         await conn.commit()
 
     assert await repo.exists_active_cooldown(ref, cooldown_days=7) is False
+
+
+@pytest.mark.pinning()
+@pytest.mark.asyncio()
+async def test_fetch_active_cooldown_searched_at_expired_row_returns_none(
+    seeded_instances: None,
+) -> None:
+    """The timestamp helper matches the active cooldown predicate."""
+    ref = ItemRef(1, 42, ItemType.episode)
+    stale_time = (datetime.now(UTC) - timedelta(days=10)).strftime("%Y-%m-%dT%H:%M:%S.%f") + "Z"
+    async with get_db() as conn:
+        await conn.execute(
+            "INSERT INTO cooldowns (instance_id, item_id, item_type, searched_at)"
+            " VALUES (?, ?, ?, ?)",
+            (ref.instance_id, ref.item_id, ref.item_type.value, stale_time),
+        )
+        await conn.commit()
+
+    assert await repo.fetch_active_cooldown_searched_at(ref, cooldown_days=7) is None
 
 
 @pytest.mark.pinning()
@@ -193,6 +239,22 @@ async def test_service_record_search_ref_delegates(seeded_instances: None) -> No
     ref = ItemRef(1, 42, ItemType.episode)
     await svc_record(ref, "missing")
     assert await repo.exists_active_cooldown(ref, cooldown_days=7) is True
+
+
+@pytest.mark.pinning()
+@pytest.mark.asyncio()
+async def test_service_active_cooldown_searched_at_ref_delegates(
+    seeded_instances: None,
+) -> None:
+    """services.cooldown.active_cooldown_searched_at_ref delegates to the repo."""
+    from houndarr.services.cooldown import active_cooldown_searched_at_ref as svc_timestamp
+
+    ref = ItemRef(1, 42, ItemType.episode)
+    await repo.upsert_cooldown(ref, "missing")
+
+    repo_timestamp = await repo.fetch_active_cooldown_searched_at(ref, cooldown_days=7)
+
+    assert await svc_timestamp(ref, cooldown_days=7) == repo_timestamp
 
 
 @pytest.mark.pinning()

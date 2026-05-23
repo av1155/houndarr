@@ -179,6 +179,8 @@ def test_settings_help_page_renders(app: TestClient) -> None:
     resp = app.get("/settings/help")
     assert resp.status_code == 200
     assert b"Instance Settings Help" in resp.content
+    assert b"Hot Retry Window" in resp.content
+    assert b"Hot Retry Interval" in resp.content
     assert b"https://av1155.github.io/houndarr/docs/reference/instance-settings" in resp.content
 
 
@@ -508,6 +510,10 @@ def test_add_form_partial_renders(app: TestClient) -> None:
     assert b'value="14"' in resp.content
     assert b'name="post_release_grace_hrs" type="number" min="0"' in resp.content
     assert b'value="6"' in resp.content
+    assert b'name="missing_hot_retry_window_hrs" type="number" min="0"' in resp.content
+    assert b'name="missing_hot_retry_interval_hrs" type="number" min="1"' in resp.content
+    assert b"tip-missing_hot_retry_window_hrs" in resp.content
+    assert b"tip-missing_hot_retry_interval_hrs" in resp.content
     assert b'name="sonarr_search_mode"' in resp.content
     assert b"Season-context search (advanced)" in resp.content
     assert b'href="/settings/help"' not in resp.content
@@ -526,6 +532,12 @@ def test_add_form_exposes_reset_button_and_default_attrs(app: TestClient) -> Non
     assert b'data-default-value="2"' in resp.content  # batch_size default
     assert b'data-default-value="30"' in resp.content  # sleep_interval_mins default
     assert b'data-default-value="14"' in resp.content  # cooldown_days default
+    hot_window_idx = resp.content.find(b'name="missing_hot_retry_window_hrs"')
+    hot_window_tag_end = resp.content.find(b"/>", hot_window_idx)
+    assert b'data-default-value="0"' in resp.content[hot_window_idx:hot_window_tag_end]
+    hot_interval_idx = resp.content.find(b'name="missing_hot_retry_interval_hrs"')
+    hot_interval_tag_end = resp.content.find(b"/>", hot_interval_idx)
+    assert b'data-default-value="2"' in resp.content[hot_interval_idx:hot_interval_tag_end]
     assert b'data-default-checked="0"' in resp.content  # cutoff/upgrade defaults
     # Connection fields must NOT carry default attributes.
     assert b'name="name"' in resp.content
@@ -539,7 +551,13 @@ def test_edit_form_default_and_live_value_are_independent(app: TestClient) -> No
     _login(app)
     created = app.post(
         "/settings/instances",
-        data={**_VALID_FORM, "batch_size": "50", "cooldown_days": "99"},
+        data={
+            **_VALID_FORM,
+            "batch_size": "50",
+            "cooldown_days": "99",
+            "missing_hot_retry_window_hrs": "24",
+            "missing_hot_retry_interval_hrs": "3",
+        },
         headers=csrf_headers(app),
     )
     assert created.status_code == 200
@@ -549,6 +567,8 @@ def test_edit_form_default_and_live_value_are_independent(app: TestClient) -> No
     # Live value reflects the saved configuration.
     assert b'value="50"' in resp.content
     assert b'value="99"' in resp.content
+    assert b'value="24"' in resp.content
+    assert b'value="3"' in resp.content
     # Default attributes continue to expose the Houndarr defaults.
     assert b'data-default-value="2"' in resp.content
     assert b'data-default-value="14"' in resp.content
@@ -679,6 +699,73 @@ def test_create_instance_rejects_invalid_cutoff_controls(app: TestClient) -> Non
     resp = app.post("/settings/instances", data=form, headers=csrf_headers(app))
     assert resp.status_code == 422
     assert b"Cutoff batch size" in resp.content
+
+
+def test_create_instance_rejects_invalid_hot_retry_controls(app: TestClient) -> None:
+    _login(app)
+    form = {
+        **_VALID_FORM,
+        "missing_hot_retry_window_hrs": "24",
+        "missing_hot_retry_interval_hrs": "0",
+    }
+    resp = app.post("/settings/instances", data=form, headers=csrf_headers(app))
+    assert resp.status_code == 422
+    assert b"Missing hot retry interval" in resp.content
+
+
+def test_create_instance_rejects_negative_hot_retry_window(app: TestClient) -> None:
+    _login(app)
+    form = {**_VALID_FORM, "missing_hot_retry_window_hrs": "-1"}
+    resp = app.post("/settings/instances", data=form, headers=csrf_headers(app))
+    assert resp.status_code == 422
+    assert b"Missing hot retry window" in resp.content
+
+
+def test_update_instance_rejects_invalid_hot_retry_controls(app: TestClient) -> None:
+    _login(app)
+    create_resp = app.post("/settings/instances", data=_VALID_FORM, headers=csrf_headers(app))
+    assert create_resp.status_code == 200
+
+    form = {
+        **_VALID_FORM,
+        "api_key": "__UNCHANGED__",
+        "missing_hot_retry_window_hrs": "12",
+        "missing_hot_retry_interval_hrs": "0",
+    }
+    resp = app.post("/settings/instances/1", data=form, headers=csrf_headers(app))
+    assert resp.status_code == 422
+    assert b"Missing hot retry interval" in resp.content
+
+
+def test_create_and_update_hot_retry_controls_round_trip(app: TestClient) -> None:
+    _login(app)
+    form = {
+        **_VALID_FORM,
+        "missing_hot_retry_window_hrs": "24",
+        "missing_hot_retry_interval_hrs": "2",
+    }
+    create_resp = app.post("/settings/instances", data=form, headers=csrf_headers(app))
+    assert create_resp.status_code == 200
+
+    edit_resp = app.get("/settings/instances/1/edit")
+    assert edit_resp.status_code == 200
+    assert b'name="missing_hot_retry_window_hrs"' in edit_resp.content
+    assert b'value="24"' in edit_resp.content
+    assert b'value="2"' in edit_resp.content
+
+    updated = {
+        **_VALID_FORM,
+        "api_key": "__UNCHANGED__",
+        "missing_hot_retry_window_hrs": "12",
+        "missing_hot_retry_interval_hrs": "3",
+    }
+    update_resp = app.post("/settings/instances/1", data=updated, headers=csrf_headers(app))
+    assert update_resp.status_code == 200
+
+    refreshed = app.get("/settings/instances/1/edit")
+    assert refreshed.status_code == 200
+    assert b'value="12"' in refreshed.content
+    assert b'value="3"' in refreshed.content
 
 
 def test_password_change_success(app: TestClient) -> None:

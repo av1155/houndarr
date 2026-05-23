@@ -34,6 +34,7 @@ from houndarr.errors import (
     EnginePoolFetchError,
 )
 from houndarr.services.cooldown import (
+    active_cooldown_searched_at_ref,
     is_on_cooldown_ref,
     record_search_ref,
     should_log_skip,
@@ -441,6 +442,37 @@ async def _latest_missing_reason_ref(ref: ItemRef) -> str | None:
     )
 
 
+async def _latest_missing_grace_skip_ref(ref: ItemRef) -> tuple[str, str] | None:
+    """Return the newest post-release-grace missing skip for *ref*, if any."""
+    from houndarr.repositories.search_log import fetch_latest_missing_grace_skip
+
+    return await fetch_latest_missing_grace_skip(
+        ref.instance_id,
+        ref.item_id,
+        ref.item_type.value,
+    )
+
+
+def _parse_log_timestamp(value: str) -> datetime:
+    """Parse SQLite UTC timestamps written by cooldowns and search_log."""
+    return datetime.fromisoformat(value.removesuffix("Z") + "+00:00")
+
+
+def _elapsed_hours_since(timestamp: str) -> float:
+    """Return hours elapsed since a stored UTC timestamp."""
+    return (datetime.now(UTC) - _parse_log_timestamp(timestamp)).total_seconds() / 3600
+
+
+def _is_hot_retry_window_active(grace_timestamp: str, window_hrs: int) -> bool:
+    """Return whether a post-release-grace skip still anchors hot retries."""
+    return _elapsed_hours_since(grace_timestamp) < window_hrs
+
+
+def _format_hot_retry_reason(window_hrs: int) -> str:
+    """Return the search-log reason for an interval-throttled hot retry."""
+    return f"in hot retry window ({window_hrs}h)"
+
+
 def _is_release_timing_reason(reason: str | None) -> bool:
     """Return ``True`` when *reason* indicates a release-timing block."""
     return reason == "not yet released" or (
@@ -449,6 +481,66 @@ def _is_release_timing_reason(reason: str | None) -> bool:
 
 
 # Typed wrap helpers for adapter calls
+
+
+async def _dispatch_candidate_and_record(
+    instance: Instance,
+    adapter: AppAdapterProto,
+    dispatch_fn: Callable[..., Awaitable[None]],
+    candidate: SearchCandidate,
+    ref: ItemRef,
+    *,
+    search_kind: SearchKind | str,
+    cycle_id: str,
+    cycle_trigger: CycleTrigger | str,
+    log_prefix: str,
+) -> bool:
+    """Dispatch one candidate and write the matching item-level log row.
+
+    Returns:
+        ``True`` when the dispatch succeeded and the search was recorded,
+        ``False`` when dispatch failed and an error row was written.
+    """
+    try:
+        await _dispatch_with_typed_wrap(adapter, instance, dispatch_fn, candidate)
+    except EngineDispatchError as exc:
+        msg = str(exc)
+        logger.warning(
+            "[%s] %ssearch failed for %s: %s",
+            instance.core.name,
+            log_prefix,
+            candidate.item_id,
+            msg,
+        )
+        await _write_item_log(
+            ref,
+            SearchAction.error.value,
+            search_kind=search_kind,
+            cycle_id=cycle_id,
+            cycle_trigger=cycle_trigger,
+            item_label=candidate.label,
+            message=msg,
+        )
+        return False
+
+    await record_search_ref(ref, search_kind)
+    await _write_item_log(
+        ref,
+        SearchAction.searched.value,
+        search_kind=search_kind,
+        cycle_id=cycle_id,
+        cycle_trigger=cycle_trigger,
+        item_label=candidate.label,
+    )
+    logger.info(
+        "[%s] %ssearched %s %s",
+        instance.core.name,
+        log_prefix,
+        candidate.item_type,
+        candidate.item_id,
+    )
+    await asyncio.sleep(_INTER_SEARCH_DELAY_SECONDS)
+    return True
 
 
 async def _dispatch_with_typed_wrap(
@@ -812,59 +904,77 @@ async def _run_search_pass(
                 break
 
             # Cooldown.
-            if await is_on_cooldown_ref(ref, cooldown_days):
+            cooldown_searched_at = await active_cooldown_searched_at_ref(ref, cooldown_days)
+            if cooldown_searched_at is not None:
                 if search_kind == "missing":
-                    latest_reason = await _latest_missing_reason_ref(ref)
-                    if _is_release_timing_reason(latest_reason):
+                    window_hrs = config.missing_hot_retry_window_hrs
+                    interval_hrs = config.missing_hot_retry_interval_hrs
+                    if window_hrs <= 0:
+                        latest_reason = await _latest_missing_reason_ref(ref)
+                        should_retry = _is_release_timing_reason(latest_reason)
+                    else:
+                        grace_skip = await _latest_missing_grace_skip_ref(ref)
+                        should_retry = False
+                        if grace_skip is not None:
+                            _, grace_timestamp = grace_skip
+                            if _is_hot_retry_window_active(grace_timestamp, window_hrs):
+                                should_retry = cycle_trigger == "run_now" or (
+                                    _elapsed_hours_since(cooldown_searched_at) >= interval_hrs
+                                )
+                                if not should_retry:
+                                    reason = _format_hot_retry_reason(window_hrs)
+                                    skip_key = (
+                                        instance.core.id,
+                                        candidate.item_id,
+                                        search_kind,
+                                        "hot_retry",
+                                    )
+                                    should_write_hot_retry_skip = (
+                                        cycle_trigger == "run_now"
+                                        or await should_log_skip(skip_key)
+                                    )
+                                    if should_write_hot_retry_skip:
+                                        logger.debug(
+                                            "[%s] %s%s: %s",
+                                            instance.core.name,
+                                            log_prefix,
+                                            candidate.item_id,
+                                            reason,
+                                        )
+                                        await _write_item_log(
+                                            ref,
+                                            SearchAction.skipped.value,
+                                            search_kind=search_kind,
+                                            cycle_id=cycle_id,
+                                            cycle_trigger=cycle_trigger,
+                                            item_label=candidate.label,
+                                            reason=reason,
+                                        )
+                                    continue
+                        if not should_retry:
+                            latest_reason = await _latest_missing_reason_ref(ref)
+                            should_retry = _is_release_timing_reason(latest_reason)
+
+                    if should_retry:
                         logger.info(
                             "[%s] allowing missing retry for %s after release-timing block",
                             instance.core.name,
                             candidate.item_id,
                         )
                         scanned += 1
-                        try:
-                            await _dispatch_with_typed_wrap(
-                                adapter, instance, dispatch_fn, candidate
-                            )
-                        except EngineDispatchError as exc:
-                            msg = str(exc)
-                            logger.warning(
-                                "[%s] %ssearch failed for %s: %s",
-                                instance.core.name,
-                                log_prefix,
-                                candidate.item_id,
-                                msg,
-                            )
-                            await _write_item_log(
-                                ref,
-                                SearchAction.error.value,
-                                search_kind=search_kind,
-                                cycle_id=cycle_id,
-                                cycle_trigger=cycle_trigger,
-                                item_label=candidate.label,
-                                message=msg,
-                            )
-                            continue
-
-                        await record_search_ref(ref, search_kind)
-                        await _write_item_log(
+                        if await _dispatch_candidate_and_record(
+                            instance,
+                            adapter,
+                            dispatch_fn,
+                            candidate,
                             ref,
-                            SearchAction.searched.value,
                             search_kind=search_kind,
                             cycle_id=cycle_id,
                             cycle_trigger=cycle_trigger,
-                            item_label=candidate.label,
-                        )
-                        searched += 1
-                        searches_this_hour += 1
-                        logger.info(
-                            "[%s] %ssearched %s %s",
-                            instance.core.name,
-                            log_prefix,
-                            candidate.item_type,
-                            candidate.item_id,
-                        )
-                        await asyncio.sleep(_INTER_SEARCH_DELAY_SECONDS)
+                            log_prefix=log_prefix,
+                        ):
+                            searched += 1
+                            searches_this_hour += 1
                         continue
 
                 reason = (
@@ -897,47 +1007,19 @@ async def _run_search_pass(
             scanned += 1
 
             # Dispatch search via a fresh client context.
-            try:
-                await _dispatch_with_typed_wrap(adapter, instance, dispatch_fn, candidate)
-            except EngineDispatchError as exc:
-                msg = str(exc)
-                logger.warning(
-                    "[%s] %ssearch failed for %s: %s",
-                    instance.core.name,
-                    log_prefix,
-                    candidate.item_id,
-                    msg,
-                )
-                await _write_item_log(
-                    ref,
-                    SearchAction.error.value,
-                    search_kind=search_kind,
-                    cycle_id=cycle_id,
-                    cycle_trigger=cycle_trigger,
-                    item_label=candidate.label,
-                    message=msg,
-                )
-                continue
-
-            await record_search_ref(ref, search_kind)
-            await _write_item_log(
+            if await _dispatch_candidate_and_record(
+                instance,
+                adapter,
+                dispatch_fn,
+                candidate,
                 ref,
-                SearchAction.searched.value,
                 search_kind=search_kind,
                 cycle_id=cycle_id,
                 cycle_trigger=cycle_trigger,
-                item_label=candidate.label,
-            )
-            searched += 1
-            searches_this_hour += 1
-            logger.info(
-                "[%s] %ssearched %s %s",
-                instance.core.name,
-                log_prefix,
-                candidate.item_type,
-                candidate.item_id,
-            )
-            await asyncio.sleep(_INTER_SEARCH_DELAY_SECONDS)
+                log_prefix=log_prefix,
+            ):
+                searched += 1
+                searches_this_hour += 1
 
         if stop_pass:
             break
@@ -1458,6 +1540,12 @@ async def _run_instance_search_impl(
                         total_fn=lambda: client.get_wanted_total("missing"),
                         tag_filter_include_ids=tag_filter_include_ids,
                         tag_filter_exclude_ids=tag_filter_exclude_ids,
+                        missing_hot_retry_window_hrs=(
+                            instance.missing.missing_hot_retry_window_hrs
+                        ),
+                        missing_hot_retry_interval_hrs=(
+                            instance.missing.missing_hot_retry_interval_hrs
+                        ),
                     ),
                 )
             searched += missing_searched

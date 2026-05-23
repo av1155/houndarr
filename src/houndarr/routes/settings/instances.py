@@ -23,6 +23,8 @@ from houndarr.config import (
     DEFAULT_CUTOFF_HOURLY_CAP,
     DEFAULT_HOURLY_CAP,
     DEFAULT_LIDARR_SEARCH_MODE,
+    DEFAULT_MISSING_HOT_RETRY_INTERVAL_HOURS,
+    DEFAULT_MISSING_HOT_RETRY_WINDOW_HOURS,
     DEFAULT_POST_RELEASE_GRACE_HOURS,
     DEFAULT_QUEUE_LIMIT,
     DEFAULT_READARR_SEARCH_MODE,
@@ -124,6 +126,10 @@ async def instance_create(
     hourly_cap: Annotated[int, Form()] = DEFAULT_HOURLY_CAP,
     cooldown_days: Annotated[int, Form()] = DEFAULT_COOLDOWN_DAYS,
     post_release_grace_hrs: Annotated[int, Form()] = DEFAULT_POST_RELEASE_GRACE_HOURS,
+    missing_hot_retry_window_hrs: Annotated[int, Form()] = (DEFAULT_MISSING_HOT_RETRY_WINDOW_HOURS),
+    missing_hot_retry_interval_hrs: Annotated[int, Form()] = (
+        DEFAULT_MISSING_HOT_RETRY_INTERVAL_HOURS
+    ),
     queue_limit: Annotated[int, Form()] = DEFAULT_QUEUE_LIMIT,
     cutoff_enabled: Annotated[str, Form()] = "",
     cutoff_batch_size: Annotated[int, Form()] = DEFAULT_CUTOFF_BATCH_SIZE,
@@ -164,6 +170,8 @@ async def instance_create(
             hourly_cap=hourly_cap,
             cooldown_days=cooldown_days,
             post_release_grace_hrs=post_release_grace_hrs,
+            missing_hot_retry_window_hrs=missing_hot_retry_window_hrs,
+            missing_hot_retry_interval_hrs=missing_hot_retry_interval_hrs,
             queue_limit=queue_limit,
             cutoff_enabled=cutoff_enabled == "on",
             cutoff_batch_size=cutoff_batch_size,
@@ -242,6 +250,10 @@ async def instance_update(
     hourly_cap: Annotated[int, Form()] = DEFAULT_HOURLY_CAP,
     cooldown_days: Annotated[int, Form()] = DEFAULT_COOLDOWN_DAYS,
     post_release_grace_hrs: Annotated[int, Form()] = DEFAULT_POST_RELEASE_GRACE_HOURS,
+    missing_hot_retry_window_hrs: Annotated[int, Form()] = (DEFAULT_MISSING_HOT_RETRY_WINDOW_HOURS),
+    missing_hot_retry_interval_hrs: Annotated[int, Form()] = (
+        DEFAULT_MISSING_HOT_RETRY_INTERVAL_HOURS
+    ),
     queue_limit: Annotated[int, Form()] = DEFAULT_QUEUE_LIMIT,
     cutoff_enabled: Annotated[str, Form()] = "",
     cutoff_batch_size: Annotated[int, Form()] = DEFAULT_CUTOFF_BATCH_SIZE,
@@ -289,6 +301,8 @@ async def instance_update(
             hourly_cap=hourly_cap,
             cooldown_days=cooldown_days,
             post_release_grace_hrs=post_release_grace_hrs,
+            missing_hot_retry_window_hrs=missing_hot_retry_window_hrs,
+            missing_hot_retry_interval_hrs=missing_hot_retry_interval_hrs,
             queue_limit=queue_limit,
             cutoff_enabled=cutoff_enabled == "on",
             cutoff_batch_size=cutoff_batch_size,

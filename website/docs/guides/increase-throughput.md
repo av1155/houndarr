@@ -25,13 +25,16 @@ full day before moving to the next step.
    often. Watch for indexer errors.
 3. **Raise Hourly Cap** from 4 to 6 or 8. Only move this if
    indexers remain healthy after the first two changes.
-4. **Enable Cutoff search** once the missing backlog is under
+4. **Enable Hot Retry Window** only if just-released items often appear
+   hours after post-release grace. Keep the interval at 2 hours until
+   the logs show your indexers can handle the extra retries.
+5. **Enable Cutoff search** once the missing backlog is under
    control. Cutoff defaults (batch 1, cap 1, cooldown 21 days) are
    intentionally more cautious because quality upgrades matter
    less than acquiring missing content. Quality profile tuning
    lives in [TRaSH-Guides](https://trash-guides.info/) if you need
    help deciding what to mark cutoff-unmet.
-5. **Enable Upgrade search** last, only after both missing and
+6. **Enable Upgrade search** last, only after both missing and
    cutoff backlogs are stable. Upgrade defaults (batch 1 hard-
    capped at 5, cap 1 hard-capped at 5, cooldown 90 days with a
    7-day floor) cannot be loosened past the engine-enforced hard
@@ -53,7 +56,7 @@ full day before moving to the next step.
 Stop at the first profile where:
 
 - Logs show zero errors across a 7-day window.
-- Your *arr instance's Activity or History shows consistent grabs
+- Your \*arr instance's Activity or History shows consistent grabs
   for items you expect to be available.
 - Your indexers stay healthy (no HTTP 429s, no bans, no account
   suspensions).

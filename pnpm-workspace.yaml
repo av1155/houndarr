@@ -1,7 +1,15 @@
-# pnpm 11 only reads build-script allow-lists from this file. The
-# legacy `pnpm.onlyBuiltDependencies` block in package.json is
-# silently ignored after pnpm v11. This project compiles the
-# Tailwind + daisyUI CSS bundle at Docker build time; @parcel/watcher
-# runs an install-time native build for the optional watch path.
+# pnpm 11 reads these workspace settings during the Docker css-build.
+#
+# trustLockfile: pnpm 11.9.0 added a supply-chain verification pass
+# ("Verifying lockfile against supply-chain policies") that re-checks
+# minimumReleaseAge / trustPolicy against the registry on every
+# install. Under the emulated linux/arm64 image build that pass crawls
+# to a near-hang and blew past the 45-minute Docker job. The committed
+# lockfile is our own trusted base, so skip the re-verification here.
+trustLockfile: true
+
+# allowBuilds: this project compiles the Tailwind + daisyUI CSS bundle
+# at Docker build time; @parcel/watcher runs an install-time native
+# build for the optional watch path.
 allowBuilds:
   "@parcel/watcher": true

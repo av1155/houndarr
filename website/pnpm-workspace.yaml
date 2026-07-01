@@ -26,11 +26,11 @@ overrides:
   # classDefs, configuration, and Gantt-chart sanitisation.
   # Transitive via @docusaurus/theme-mermaid.
   mermaid: ">=11.15.0"
-  # CVE-2026-6402 (GHSA-79cf-xcqc-c78w): webpack-dev-server <=5.2.3
-  # lets a malicious site exfiltrate dev-server source via
-  # cross-origin asset requests in non-default browsers. Transitive
-  # via @docusaurus/core; only active during `pnpm start`.
-  webpack-dev-server: ">=5.2.4"
+  # GHSA-mx8g-39q3-5c79: webpack-dev-server <5.2.5 lets a malicious
+  # page intercept the HMR WebSocket through permissive user proxies;
+  # supersedes the earlier CVE-2026-6402 <=5.2.3 floor. Transitive via
+  # @docusaurus/core; only active during `pnpm start`.
+  webpack-dev-server: ">=5.2.5 <6"
   # CVE-2026-48779 (GHSA-96hv-2xvq-fx4p): ws >=8.0.0 <8.21.0 allows a
   # memory-exhaustion DoS from a flood of tiny WebSocket fragments;
   # supersedes the earlier CVE-2026-45736 <8.20.1 floor. Transitive
@@ -50,6 +50,43 @@ overrides:
   # line since the fix landed in 7.28.0 and nothing in the tree needs
   # undici 8.
   undici: ">=7.28.0 <8"
+  # dompurify <3.4.11 carries a cluster of eight sanitizer-bypass and
+  # config-pollution advisories (GHSA-x4vx-rjvf-j5p4,
+  # GHSA-vxr8-fq34-vvx9, GHSA-gvmj-g25r-r7wr, GHSA-rp9w-3fw7-7cwq,
+  # GHSA-hpcv-96wg-7vj8, GHSA-r47g-fvhr-h676, GHSA-76mc-f452-cxcm,
+  # GHSA-cmwh-pvxp-8882), all fixed by 3.4.11. Transitive via
+  # @docusaurus/theme-mermaid > mermaid.
+  dompurify: ">=3.4.11 <4"
+  # GHSA-4x5r-pxfx-6jf8: @babel/core <7.29.1 can read arbitrary files
+  # through a crafted sourceMappingURL comment during compilation.
+  # Transitive via @docusaurus/core > @docusaurus/babel.
+  "@babel/core": ">=7.29.1 <8"
+  # GHSA-64mm-vxmg-q3vj: http-proxy-middleware <2.0.10 matches its
+  # router by host+path substring, letting a crafted Host header reach
+  # an unintended backend. Transitive via @docusaurus/core >
+  # webpack-dev-server; only active during `pnpm start`.
+  http-proxy-middleware: ">=2.0.10 <3"
+  # GHSA-q7cg-457f-vx79: joi <17.13.4 throws an uncaught RangeError on
+  # deeply nested input through recursive link() schemas. Transitive
+  # via @docusaurus/core > @docusaurus/utils > @docusaurus/types.
+  joi: ">=17.13.4 <18"
+  # GHSA-h67p-54hq-rp68: js-yaml quadratic-complexity DoS in merge-key
+  # handling via repeated aliases, fixed in 3.15.0 and 4.1.2. Two
+  # lines resolve in the tree: gray-matter pins js-yaml 3 (kept on the
+  # 3.x fix so its safeLoad API survives) and Docusaurus build tooling
+  # pulls js-yaml 4.
+  "js-yaml@3": ">=3.15.0 <4"
+  "js-yaml@4": ">=4.1.2 <5"
+  # GHSA-v6wh-96g9-6wx3: launch-editor <2.14.1 leaks an NTLMv2 hash
+  # through UNC path handling on Windows. Transitive via
+  # @docusaurus/core > webpack-dev-server; only active during
+  # `pnpm start`.
+  launch-editor: ">=2.14.1 <3"
+  # GHSA-q8mj-m7cp-5q26: qs 6.11.1..=6.15.1 crashes with a TypeError
+  # (DoS) on null/undefined entries in comma-format arrays when
+  # encodeValuesOnly is set. Transitive via @docusaurus/core >
+  # webpack-dev-server > express > body-parser.
+  qs: ">=6.15.2 <7"
 
 # pnpm 11 replaces `onlyBuiltDependencies` with an explicit allow-map.
 # Each entry permits the named package's install scripts to run;
@@ -58,3 +95,6 @@ allowBuilds:
   "@swc/core": true
   core-js: true
   sharp: true
+
+minimumReleaseAgeExclude:
+  - lucide-react@1.23.0

@@ -11,6 +11,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `Copy key` button in the API key reveal dialog now writes the plaintext key to the clipboard on HTTP installs; the textarea fallback was silently running over an empty selection while the toast claimed success. (#647)
 
+### Security
+
+- `starlette` bumped to 1.3.1, clearing the `pip-audit` and Trivy advisories on its request parsing (CVE-2026-48817, CVE-2026-48818, CVE-2026-54283) that underlies every FastAPI route in Houndarr. (#658)
+- `python-multipart` bumped to 0.0.32, clearing CVE-2026-53538, CVE-2026-53539, and CVE-2026-53540 in the form and multipart parser behind the login, setup, and instance-settings posts. (#658)
+- `cryptography` bumped to 49.0.0, clearing GHSA-537c-gmf6-5ccf, a vulnerable OpenSSL build bundled in the wheels; Houndarr links it only through Fernet encryption of stored \*arr API keys. (#658)
+
 ---
 
 ## [1.12.0] - 2026-05-22

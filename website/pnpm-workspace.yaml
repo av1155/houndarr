@@ -31,10 +31,25 @@ overrides:
   # cross-origin asset requests in non-default browsers. Transitive
   # via @docusaurus/core; only active during `pnpm start`.
   webpack-dev-server: ">=5.2.4"
-  # CVE-2026-45736 (GHSA-58qx-3vcg-4xpx): ws >=8.0.0 <8.20.1 leaks
-  # uninitialized memory when websocket.close() receives a
-  # TypedArray reason. Transitive via webpack-dev-server.
-  ws: ">=8.20.1"
+  # CVE-2026-48779 (GHSA-96hv-2xvq-fx4p): ws >=8.0.0 <8.21.0 allows a
+  # memory-exhaustion DoS from a flood of tiny WebSocket fragments;
+  # supersedes the earlier CVE-2026-45736 <8.20.1 floor. Transitive
+  # via @docusaurus/core > webpack-dev-server and
+  # webpack-bundle-analyzer.
+  ws: ">=8.21.0"
+  # CVE-2026-9277 (GHSA-w7jw-789q-3m8p): shell-quote <=1.8.3 fails to
+  # escape newlines in quote(), enabling command injection when the
+  # output is handed to a shell. Transitive via @docusaurus/core >
+  # webpack-dev-server > launch-editor.
+  shell-quote: ">=1.8.4"
+  # undici <7.28.0 carries three high-severity advisories, all fixed
+  # in 7.28.0: GHSA-vmh5-mc38-953g (TLS certificate validation
+  # bypass), GHSA-vxpw-j846-p89q (WebSocket client DoS), and
+  # GHSA-hm92-r4w5-c3mj (cross-origin request routing). Transitive via
+  # @easyops-cn/docusaurus-search-local > cheerio. Held to the 7.x
+  # line since the fix landed in 7.28.0 and nothing in the tree needs
+  # undici 8.
+  undici: ">=7.28.0 <8"
 
 # pnpm 11 replaces `onlyBuiltDependencies` with an explicit allow-map.
 # Each entry permits the named package's install scripts to run;

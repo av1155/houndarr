@@ -106,7 +106,7 @@ _ADMIN_POSTS = [
 @pytest.mark.parametrize("path", _ADMIN_POSTS)
 def test_admin_post_redirects_unauthenticated(app: TestClient, path: str) -> None:
     resp = app.post(path, follow_redirects=False)
-    assert resp.status_code in (302, 303)
+    assert resp.status_code in {302, 303}
 
 
 @pytest.mark.parametrize("path", _ADMIN_POSTS)
@@ -126,7 +126,7 @@ _VALID_INSTANCE = {
     "name": "My Sonarr",
     "type": "sonarr",
     "url": "http://sonarr:8989",
-    "api_key": "test-api-key-abc123",
+    "api_key": "test-api-key",
     "sonarr_search_mode": "episode",
     "connection_verified": "true",
 }
@@ -222,7 +222,8 @@ def test_factory_reset_rejects_wrong_password(
         headers=csrf_headers(app),
     )
     assert resp.status_code == 422
-    assert b"password is incorrect" in resp.content
+    error_message = b"password is incorrect"
+    assert resp.content.count(error_message) > 0
     _stub_factory_reset.assert_not_called()
 
 

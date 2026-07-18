@@ -10,7 +10,9 @@ the wiring the audit flagged as unverified at the HTTP boundary.
 from __future__ import annotations
 
 import asyncio
+import threading
 from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
 from typing import cast
 
 import pytest
@@ -21,6 +23,7 @@ from houndarr.clients._wire_models import SystemStatus
 from houndarr.clients.base import ArrClient
 from houndarr.database import get_db
 from houndarr.engine import supervisor as supervisor_module
+from houndarr.services.metrics import invalidate_dashboard_cache
 from tests.conftest import csrf_headers
 
 
@@ -81,7 +84,10 @@ def _create_instance(client: TestClient, name: str = "Cache Sonarr") -> int:
     client.post("/settings/instances", data=form, headers=csrf_headers(client))
     resp = client.get("/api/status")
     assert resp.status_code == 200
-    return int(resp.json()["instances"][0]["id"])
+    try:
+        return int(resp.json()["instances"][0]["id"])
+    except (IndexError, KeyError, TypeError, ValueError) as exc:
+        pytest.fail(f"Unexpected status payload: {exc}")
 
 
 async def _insert_search_log_row(instance_id: int, label: str) -> None:
@@ -163,6 +169,23 @@ async def test_clear_logs_route_invalidates_cache(app: TestClient) -> None:
 
 
 @pytest.mark.asyncio()
+async def test_reinvalidate_after_clears_cache() -> None:
+    """The production deferred helper clears the configured aggregate cache."""
+    import houndarr.routes.api.status as status_module
+
+    cleared = threading.Event()
+
+    class _RecordingCache:
+        def cache_clear(self) -> None:
+            cleared.set()
+
+    app_state = SimpleNamespace(aggregate_cache=_RecordingCache())
+    await status_module._reinvalidate_after(0, app_state)
+
+    assert cleared.is_set()
+
+
+@pytest.mark.asyncio()
 async def test_run_now_schedules_deferred_reinvalidation(
     app: TestClient,
     monkeypatch: pytest.MonkeyPatch,
@@ -171,22 +194,33 @@ async def test_run_now_schedules_deferred_reinvalidation(
 
     Pins the deferred ``asyncio.create_task`` that reclears the cache
     once the supervisor's background search-log write should have
-    landed.  Reduces the delay constant so the test does not rely on
-    real-time waits.
+    landed. The gate keeps the deferred clear from racing the route
+    response while the test observes both invalidations.
     """
     import houndarr.routes.api.status as status_module
 
-    monkeypatch.setattr(status_module, "_RUN_NOW_REINVALIDATE_DELAY_SECONDS", 0.05)
+    reinvalidation_started = threading.Event()
+    release_reinvalidation = threading.Event()
+
+    async def _gated_reinvalidate(_delay_seconds: float, app_state: object) -> None:
+        reinvalidation_started.set()
+        await asyncio.to_thread(release_reinvalidation.wait)
+        invalidate_dashboard_cache(app_state)
+
+    monkeypatch.setattr(status_module, "_reinvalidate_after", _gated_reinvalidate)
 
     _login(app)
     _create_instance(app, "Cache Sonarr C")
 
-    # Seed app.state with a fake cache that records cache_clear calls.
+    # Seed app.state with a fake cache that signals the deferred cache_clear call.
     clear_count = {"n": 0}
+    reinvalidated = threading.Event()
 
     class _RecordingCache:
         def cache_clear(self) -> None:
             clear_count["n"] += 1
+            if clear_count["n"] == 2:
+                reinvalidated.set()
 
         async def __call__(self, _ids: tuple[int, ...]) -> object:
             from houndarr.services.metrics import DashboardAggregates
@@ -195,12 +229,16 @@ async def test_run_now_schedules_deferred_reinvalidation(
 
     cast("FastAPI", app.app).state.aggregate_cache = _RecordingCache()
 
-    resp = app.post("/api/instances/1/run-now", headers=csrf_headers(app))
-    assert resp.status_code == 202
+    try:
+        resp = app.post("/api/instances/1/run-now", headers=csrf_headers(app))
+        assert resp.status_code == 202
+        assert await asyncio.to_thread(reinvalidation_started.wait, 1.0)
 
-    # Synchronous invalidate: 1 clear right now.
-    assert clear_count["n"] == 1
+        # The route invalidates synchronously before the deferred task is released.
+        assert clear_count["n"] == 1
 
-    # Wait for the deferred reinvalidation to fire.
-    await asyncio.sleep(0.2)
-    assert clear_count["n"] == 2
+        release_reinvalidation.set()
+        assert await asyncio.to_thread(reinvalidated.wait, 1.0)
+        assert clear_count["n"] == 2
+    finally:
+        release_reinvalidation.set()

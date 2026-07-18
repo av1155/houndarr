@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import dataclasses
+import json
 from collections.abc import AsyncGenerator
 from typing import Any
 from unittest.mock import AsyncMock, patch
@@ -203,6 +204,16 @@ async def seeded_instances(db: None) -> AsyncGenerator[None]:
 # ---------------------------------------------------------------------------
 
 
+def _request_json(request: httpx.Request) -> dict[str, Any]:
+    try:
+        payload = json.loads(request.content)
+    except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+        pytest.fail(f"Unexpected request payload: {exc}")
+    if not isinstance(payload, dict):
+        pytest.fail("Expected a JSON object request payload")
+    return payload
+
+
 async def _get_log_rows() -> list[dict[str, Any]]:
     async with get_db() as conn:
         async with conn.execute("SELECT * FROM search_log ORDER BY id ASC") as cur:
@@ -310,10 +321,8 @@ async def test_sonarr_season_context_missing_pass_uses_season_search(
     assert count == 2
     assert search_route.call_count == 2
 
-    import json
-
-    first_payload = json.loads(search_route.calls[0].request.content)
-    second_payload = json.loads(search_route.calls[1].request.content)
+    first_payload = _request_json(search_route.calls[0].request)
+    second_payload = _request_json(search_route.calls[1].request)
     assert first_payload == {"name": "SeasonSearch", "seriesId": 55, "seasonNumber": 1}
     assert second_payload == {"name": "SeasonSearch", "seriesId": 55, "seasonNumber": 2}
 
@@ -358,9 +367,7 @@ async def test_sonarr_season_context_missing_pass_respects_season_cooldown(
     assert count == 1
     assert search_route.call_count == 1
 
-    import json
-
-    payload = json.loads(search_route.calls[0].request.content)
+    payload = _request_json(search_route.calls[0].request)
     assert payload == {"name": "SeasonSearch", "seriesId": 55, "seasonNumber": 2}
 
     rows = await _get_log_rows()
@@ -419,8 +426,6 @@ async def test_sonarr_season_context_cross_cycle_cooldown(
     cycles: cycle-1 page-1, cycle-1 empty terminator, cycle-2 page-1 (rotated),
     cycle-2 empty terminator.
     """
-    import json
-
     # Five missing episodes from the same season - more than batch_size so the
     # representative *would* rotate in the old (buggy) implementation.
     season_episodes = {
@@ -443,7 +448,7 @@ async def test_sonarr_season_context_cross_cycle_cooldown(
             {**_EPISODE_RECORD, "id": 101, "seriesId": 55, "seasonNumber": 1, "episodeNumber": 1},
         ]
     }
-    empty = {"records": []}
+    empty: dict[str, list[Any]] = {"records": []}
 
     # Cycle 1 with batch_size=1: the loop finds the season on page 1, searches
     # it (searched==missing_target==1), and exits before fetching page 2.
@@ -476,7 +481,7 @@ async def test_sonarr_season_context_cross_cycle_cooldown(
     count_1 = await run_instance_search(instance, MASTER_KEY)
     assert count_1 == 1, "Cycle 1 must search the season once"
     assert search_route.call_count == 1
-    payload = json.loads(search_route.calls[0].request.content)
+    payload = _request_json(search_route.calls[0].request)
     assert payload == {"name": "SeasonSearch", "seriesId": 55, "seasonNumber": 1}
 
     # --- Cycle 2 ---------------------------------------------------------------
@@ -2010,9 +2015,12 @@ async def test_supervisor_start_logs_system_row_with_null_cycle_id(seeded_instan
     """Supervisor lifecycle rows are classified as system and keep cycle_id NULL."""
     from houndarr.engine.supervisor import Supervisor
 
-    with patch(
-        "houndarr.engine.supervisor.run_instance_search",
-        new=AsyncMock(return_value=0),
+    with (
+        patch(
+            "houndarr.engine.supervisor.run_instance_search",
+            new=AsyncMock(return_value=0),
+        ),
+        patch.object(Supervisor, "_refresh_one_snapshot", new=AsyncMock(return_value=None)),
     ):
         sup = Supervisor(master_key=MASTER_KEY)
         await sup.start()
@@ -2028,25 +2036,30 @@ async def test_supervisor_start_logs_system_row_with_null_cycle_id(seeded_instan
 @pytest.mark.asyncio()
 async def test_supervisor_stop_cancels_tasks(seeded_instances: None) -> None:
     """Supervisor tasks should be cancelled cleanly on stop()."""
+    import asyncio
+
+    import houndarr.engine.supervisor as _sup_mod
     from houndarr.engine.supervisor import Supervisor
 
-    # Patch run_instance_search to block indefinitely so we can test cancellation
-    async def _block(*_: object, **__: object) -> int:
-        import asyncio
+    started = asyncio.Event()
+    release = asyncio.Event()
 
-        await asyncio.sleep(9999)
+    async def _block(*_: object, **__: object) -> int:
+        started.set()
+        await release.wait()
         return 0
 
-    with patch(
-        "houndarr.engine.supervisor.run_instance_search",
-        new=AsyncMock(side_effect=_block),
+    with (
+        patch.object(_sup_mod, "_STARTUP_GRACE_SECS", 0),
+        patch.object(Supervisor, "_refresh_one_snapshot", new=AsyncMock(return_value=None)),
+        patch(
+            "houndarr.engine.supervisor.run_instance_search",
+            new=AsyncMock(side_effect=_block),
+        ),
     ):
         sup = Supervisor(master_key=MASTER_KEY)
         await sup.start()
-        # Give the tasks a moment to start and enter their sleep
-        import asyncio
-
-        await asyncio.sleep(0.05)
+        await asyncio.wait_for(started.wait(), timeout=1.0)
         await sup.stop()
 
     assert sup._tasks == {}
@@ -2058,19 +2071,28 @@ async def test_supervisor_stop_completes_within_timeout(seeded_instances: None) 
     import asyncio
     import time
 
+    import houndarr.engine.supervisor as _sup_mod
     from houndarr.engine.supervisor import Supervisor
 
+    started = asyncio.Event()
+    release = asyncio.Event()
+
     async def _block(*_: object, **__: object) -> int:
-        await asyncio.sleep(9999)
+        started.set()
+        await release.wait()
         return 0
 
-    with patch(
-        "houndarr.engine.supervisor.run_instance_search",
-        new=AsyncMock(side_effect=_block),
+    with (
+        patch.object(_sup_mod, "_STARTUP_GRACE_SECS", 0),
+        patch.object(Supervisor, "_refresh_one_snapshot", new=AsyncMock(return_value=None)),
+        patch(
+            "houndarr.engine.supervisor.run_instance_search",
+            new=AsyncMock(side_effect=_block),
+        ),
     ):
         sup = Supervisor(master_key=MASTER_KEY)
         await sup.start()
-        await asyncio.sleep(0.05)
+        await asyncio.wait_for(started.wait(), timeout=1.0)
 
         t0 = time.monotonic()
         await sup.stop()
@@ -2087,9 +2109,12 @@ async def test_supervisor_reconcile_starts_task_for_enabled_instance(db: None) -
     from houndarr.crypto import encrypt
     from houndarr.engine.supervisor import Supervisor
 
-    with patch(
-        "houndarr.engine.supervisor.run_instance_search",
-        new=AsyncMock(return_value=0),
+    with (
+        patch(
+            "houndarr.engine.supervisor.run_instance_search",
+            new=AsyncMock(return_value=0),
+        ),
+        patch.object(Supervisor, "_refresh_one_snapshot", new=AsyncMock(return_value=None)),
     ):
         sup = Supervisor(master_key=MASTER_KEY)
         await sup.start()
@@ -2119,28 +2144,40 @@ async def test_supervisor_reconcile_stops_task_when_instance_disabled(
     """reconcile_instance() should cancel an existing task after disable."""
     import asyncio
 
+    import houndarr.engine.supervisor as _sup_mod
     from houndarr.engine.supervisor import Supervisor
 
+    started = asyncio.Event()
+    release = asyncio.Event()
+
     async def _block(*_: object, **__: object) -> int:
-        await asyncio.sleep(9999)
+        started.set()
+        await release.wait()
         return 0
 
-    with patch(
-        "houndarr.engine.supervisor.run_instance_search",
-        new=AsyncMock(side_effect=_block),
+    with (
+        patch.object(_sup_mod, "_STARTUP_GRACE_SECS", 0),
+        patch.object(Supervisor, "_refresh_one_snapshot", new=AsyncMock(return_value=None)),
+        patch(
+            "houndarr.engine.supervisor.run_instance_search",
+            new=AsyncMock(side_effect=_block),
+        ),
     ):
         sup = Supervisor(master_key=MASTER_KEY)
-        await sup.start()
-        assert 1 in sup._tasks
+        try:
+            await sup.start()
+            await asyncio.wait_for(started.wait(), timeout=1.0)
+            assert 1 in sup._tasks
 
-        async with get_db() as conn:
-            await conn.execute("UPDATE instances SET enabled = 0 WHERE id = ?", (1,))
-            await conn.commit()
+            async with get_db() as conn:
+                await conn.execute("UPDATE instances SET enabled = 0 WHERE id = ?", (1,))
+                await conn.commit()
 
-        await sup.reconcile_instance(1)
-        assert 1 not in sup._tasks
-
-        await sup.stop()
+            await sup.reconcile_instance(1)
+            assert 1 not in sup._tasks
+        finally:
+            release.set()
+            await sup.stop()
 
 
 @pytest.mark.asyncio()
@@ -2158,9 +2195,12 @@ async def test_trigger_run_now_deduplicates_pending_manual_runs(
         await gate.wait()
         return 0
 
-    with patch(
-        "houndarr.engine.supervisor.run_instance_search",
-        new=AsyncMock(side_effect=_block),
+    with (
+        patch.object(Supervisor, "_refresh_one_snapshot", new=AsyncMock(return_value=None)),
+        patch(
+            "houndarr.engine.supervisor.run_instance_search",
+            new=AsyncMock(side_effect=_block),
+        ),
     ):
         sup = Supervisor(master_key=MASTER_KEY)
         await sup.start()
@@ -2172,8 +2212,9 @@ async def test_trigger_run_now_deduplicates_pending_manual_runs(
         assert status_2 == "accepted"
         assert len(sup._manual_runs) == 1
 
+        manual_task = sup._manual_runs[1]
         gate.set()
-        await asyncio.sleep(0)
+        await asyncio.wait_for(manual_task, timeout=1.0)
         await sup.stop()
 
 
@@ -2185,22 +2226,33 @@ async def test_supervisor_scheduled_cycles_pass_scheduled_trigger(seeded_instanc
     import houndarr.engine.supervisor as _sup_mod
     from houndarr.engine.supervisor import Supervisor
 
+    started = asyncio.Event()
+    release = asyncio.Event()
+
+    async def _record_call(*_: object, **__: object) -> int:
+        started.set()
+        await release.wait()
+        return 0
+
     with (
         patch.object(_sup_mod, "_STARTUP_GRACE_SECS", 0),
+        patch.object(Supervisor, "_refresh_one_snapshot", new=AsyncMock(return_value=None)),
         patch(
             "houndarr.engine.supervisor.run_instance_search",
-            new=AsyncMock(return_value=0),
+            new=AsyncMock(side_effect=_record_call),
         ) as run_mock,
     ):
         sup = Supervisor(master_key=MASTER_KEY)
         await sup.start()
-        await asyncio.sleep(0.05)
-        await sup.stop()
+        await asyncio.wait_for(started.wait(), timeout=1.0)
 
-    assert run_mock.call_count >= 1
-    trigger_values = [call.kwargs.get("cycle_trigger") for call in run_mock.call_args_list]
-    assert "scheduled" in trigger_values
-    assert all(call.kwargs.get("cycle_id") for call in run_mock.call_args_list)
+        assert run_mock.call_count >= 1
+        trigger_values = [call.kwargs.get("cycle_trigger") for call in run_mock.call_args_list]
+        assert "scheduled" in trigger_values
+        assert all(call.kwargs.get("cycle_id") for call in run_mock.call_args_list)
+
+        release.set()
+        await sup.stop()
 
 
 @pytest.mark.asyncio()
@@ -2210,9 +2262,11 @@ async def test_supervisor_run_now_passes_run_now_trigger(seeded_instances: None)
 
     from houndarr.engine.supervisor import Supervisor
 
+    started = asyncio.Event()
     gate = asyncio.Event()
 
     async def _block(*_: object, **__: object) -> int:
+        started.set()
         await gate.wait()
         return 0
 
@@ -2223,7 +2277,7 @@ async def test_supervisor_run_now_passes_run_now_trigger(seeded_instances: None)
         sup = Supervisor(master_key=MASTER_KEY)
         status = await sup.trigger_run_now(1)
         assert status == "accepted"
-        await asyncio.sleep(0.05)
+        await asyncio.wait_for(started.wait(), timeout=1.0)
 
         called_with_run_now = any(
             call.kwargs.get("cycle_trigger") == "run_now" for call in run_mock.call_args_list
@@ -2231,8 +2285,9 @@ async def test_supervisor_run_now_passes_run_now_trigger(seeded_instances: None)
         assert called_with_run_now
         assert all(call.kwargs.get("cycle_id") for call in run_mock.call_args_list)
 
+        manual_task = sup._manual_runs[1]
         gate.set()
-        await asyncio.sleep(0)
+        await asyncio.wait_for(manual_task, timeout=1.0)
         await sup.stop()
 
 
@@ -2344,9 +2399,7 @@ async def test_cutoff_stays_episode_level_when_sonarr_season_context_enabled(
     assert count == 1
     assert search_route.called
 
-    import json
-
-    payload = json.loads(search_route.calls[0].request.content)
+    payload = _request_json(search_route.calls[0].request)
     assert payload["name"] == "EpisodeSearch"
     assert payload["episodeIds"] == [101]
 
@@ -2710,7 +2763,6 @@ async def test_cutoff_hourly_cap_stops_additional_page_fetches(seeded_instances:
 @respx.mock
 async def test_missing_random_shuffles_page_items(seeded_instances: None) -> None:
     """Random order shuffles items within a fetched page before dispatch."""
-    import json
     import random as _random
 
     records = [{**_EPISODE_RECORD, "id": 2500 + i, "episodeNumber": i + 1} for i in range(6)]
@@ -2736,9 +2788,7 @@ async def test_missing_random_shuffles_page_items(seeded_instances: None) -> Non
     with patch("houndarr.engine.search_loop._INTER_SEARCH_DELAY_SECONDS", 0):
         await run_instance_search(instance, MASTER_KEY)
 
-    searched_ids = [
-        json.loads(call.request.content)["episodeIds"][0] for call in search_route.calls
-    ]
+    searched_ids = [_request_json(call.request)["episodeIds"][0] for call in search_route.calls]
     original_ids = [r["id"] for r in records]
     assert sorted(searched_ids) == sorted(original_ids)
     assert searched_ids != original_ids, "random order should differ from fetched order"
@@ -2748,8 +2798,6 @@ async def test_missing_random_shuffles_page_items(seeded_instances: None) -> Non
 @respx.mock
 async def test_missing_chronological_preserves_order(seeded_instances: None) -> None:
     """Chronological mode (default) dispatches items in fetched order."""
-    import json
-
     records = [{**_EPISODE_RECORD, "id": 2600 + i, "episodeNumber": i + 1} for i in range(4)]
     page_response = {
         "page": 1,
@@ -2768,9 +2816,7 @@ async def test_missing_chronological_preserves_order(seeded_instances: None) -> 
     with patch("houndarr.engine.search_loop._INTER_SEARCH_DELAY_SECONDS", 0):
         await run_instance_search(instance, MASTER_KEY)
 
-    searched_ids = [
-        json.loads(call.request.content)["episodeIds"][0] for call in search_route.calls
-    ]
+    searched_ids = [_request_json(call.request)["episodeIds"][0] for call in search_route.calls]
     assert searched_ids == [2600, 2601, 2602, 2603]
 
 

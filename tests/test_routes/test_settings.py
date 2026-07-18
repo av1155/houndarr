@@ -17,7 +17,7 @@ _VALID_FORM = {
     "name": "My Sonarr",
     "type": "sonarr",
     "url": "http://sonarr:8989",
-    "api_key": "test-api-key-abc123",
+    "api_key": "test-api-key",
     "sonarr_search_mode": "episode",
     "connection_verified": "true",
 }
@@ -804,7 +804,8 @@ def test_password_change_requires_correct_current_password(app: TestClient) -> N
         headers=csrf_headers(app),
     )
     assert resp.status_code == 422
-    assert b"Current password is incorrect" in resp.content
+    error_message = b"Current password is incorrect"
+    assert resp.content.count(error_message) > 0
     assert b'id="admin-security"' in resp.content
 
 

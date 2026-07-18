@@ -37,6 +37,7 @@ from tests.conftest import csrf_headers
 # ---------------------------------------------------------------------------
 
 _AUTH_LOCATIONS = {"/setup", "/login", "http://testserver/setup", "http://testserver/login"}
+_FAKE_INSTANCE_KEY = "test-api-key"
 
 # Patterns that must never appear in any HTTP response body.
 # Excludes "password" intentionally: the word appears in login form labels.
@@ -49,7 +50,7 @@ _VALID_INSTANCE_FORM: dict[str, str] = {
     "name": "Test Radarr",
     "type": "radarr",
     "url": "http://radarr:7878",
-    "api_key": "test-api-key-abc123",
+    "api_key": _FAKE_INSTANCE_KEY,
     "connection_verified": "true",
 }
 
@@ -445,7 +446,7 @@ class TestAPIKeyNeverExposed:
         assert resp.status_code == 200
         assert "__UNCHANGED__" in resp.text
         assert "gAAAAA" not in resp.text
-        assert "test-api-key-abc123" not in resp.text
+        assert _FAKE_INSTANCE_KEY not in resp.text
 
     def test_api_logs_contains_no_api_key_or_fernet_token(self, app: TestClient) -> None:
         """/api/logs JSON must not contain api_key fields or Fernet-encrypted values."""
@@ -483,7 +484,7 @@ class TestCookieSecurityFlags:
             data={"username": "admin", "password": "ValidPass1!"},
             follow_redirects=False,
         )
-        return resp.headers.get_list("set-cookie")
+        return list(resp.headers.get_list("set-cookie"))
 
     def test_session_cookie_is_httponly(self, app: TestClient) -> None:
         """houndarr_session cookie must have HttpOnly to prevent JS access."""

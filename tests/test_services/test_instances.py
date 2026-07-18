@@ -68,7 +68,7 @@ async def test_create_decrypts_api_key(db: None, master_key: bytes) -> None:
 @pytest.mark.asyncio()
 async def test_create_applies_defaults(db: None, master_key: bytes) -> None:
     inst = await _make(master_key)
-    assert inst.core.enabled is True
+    assert inst.core.enabled
     assert inst.missing.batch_size == 2
     assert inst.missing.sleep_interval_mins == 30
     assert inst.missing.hourly_cap == 4
@@ -77,7 +77,7 @@ async def test_create_applies_defaults(db: None, master_key: bytes) -> None:
     assert inst.missing.missing_hot_retry_window_hrs == 0
     assert inst.missing.missing_hot_retry_interval_hrs == 2
     assert inst.missing.queue_limit == 0
-    assert inst.cutoff.cutoff_enabled is False
+    assert not inst.cutoff.cutoff_enabled
     assert inst.cutoff.cutoff_batch_size == 1
     assert inst.cutoff.cutoff_cooldown_days == 21
     assert inst.cutoff.cutoff_hourly_cap == 1
@@ -201,7 +201,7 @@ async def test_update_multiple_fields(db: None, master_key: bytes) -> None:
     assert updated is not None
     assert updated.missing.batch_size == 20
     assert updated.missing.hourly_cap == 50
-    assert updated.core.enabled is False
+    assert not updated.core.enabled
 
 
 @pytest.mark.asyncio()
@@ -251,16 +251,20 @@ async def test_update_nonexistent_returns_none(db: None, master_key: bytes) -> N
 
 @pytest.mark.asyncio()
 async def test_update_refreshes_updated_at(db: None, master_key: bytes) -> None:
-    inst = await _make(master_key)
-    original_updated_at = inst.timestamps.updated_at
-    # Brief sleep to ensure the timestamp differs
-    import asyncio
+    from houndarr.database import get_db
 
-    await asyncio.sleep(0.01)
+    inst = await _make(master_key)
+    old_updated_at = "2000-01-01T00:00:00.000Z"
+    async with get_db() as conn:
+        await conn.execute(
+            "UPDATE instances SET updated_at = ? WHERE id = ?",
+            (old_updated_at, inst.core.id),
+        )
+        await conn.commit()
+
     updated = await update_instance(inst.core.id, master_key=master_key, name="Changed")
     assert updated is not None
-    # updated_at should be >= original (may be equal at ms resolution, never less)
-    assert updated.timestamps.updated_at >= original_updated_at
+    assert updated.timestamps.updated_at > old_updated_at
 
 
 # ---------------------------------------------------------------------------
@@ -272,14 +276,14 @@ async def test_update_refreshes_updated_at(db: None, master_key: bytes) -> None:
 async def test_delete_existing(db: None, master_key: bytes) -> None:
     inst = await _make(master_key)
     result = await delete_instance(inst.core.id)
-    assert result is True
+    assert result
     assert await get_instance(inst.core.id, master_key=master_key) is None
 
 
 @pytest.mark.asyncio()
 async def test_delete_nonexistent(db: None, master_key: bytes) -> None:
     result = await delete_instance(9999)
-    assert result is False
+    assert not result
 
 
 @pytest.mark.asyncio()

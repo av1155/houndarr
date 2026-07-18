@@ -806,12 +806,11 @@ def test_changelog_preferences_switch_rolls_back_on_error(
             toggle_label.click()
         assert resp_info.value.status == 500
 
-        # The htmx:responseError handler flips the checkbox back; give it a
-        # moment to run and then assert the state matches the initial value.
-        page.wait_for_timeout(200)
-        assert checkbox.is_checked() == initial_checked, (
-            "switch should roll back to its persisted state when the server rejects /preferences"
-        )
+        # The click flips the switch optimistically and the
+        # htmx:responseError handler flips it back.  expect() retries the
+        # read until the handler lands, so the rollback does not have to
+        # finish inside a fixed wait.
+        expect(checkbox).to_be_checked(checked=initial_checked)
     finally:
         page.unroute(pattern)
 

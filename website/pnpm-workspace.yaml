@@ -87,6 +87,14 @@ overrides:
   # encodeValuesOnly is set. Transitive via @docusaurus/core >
   # webpack-dev-server > express > body-parser.
   qs: ">=6.15.2 <7"
+  # websocket-driver <0.7.5 carries two advisories, both fixed in
+  # 0.7.5: GHSA-xv26-6w52-cph6 (CVE-2026-54466, message corruption by
+  # abusing protocol length headers) and GHSA-mp7j-qc5w-4988
+  # (CVE-2026-54490, resource-limit bypass via message compression).
+  # Transitive via @docusaurus/core > webpack-dev-server > sockjs >
+  # faye-websocket; only active during `pnpm start`. Held to the 0.7
+  # line because sockjs 0.3.24 declares ^0.7.4.
+  websocket-driver: ">=0.7.5 <0.8"
 
 # pnpm 11 replaces `onlyBuiltDependencies` with an explicit allow-map.
 # Each entry permits the named package's install scripts to run;

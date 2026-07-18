@@ -23,6 +23,7 @@ overrides:
   js-yaml@4: '>=4.1.2 <5'
   launch-editor: '>=2.14.1 <3'
   qs: '>=6.15.2 <7'
+  websocket-driver: '>=0.7.5 <0.8'
 
 importers:
 
@@ -6222,8 +6223,8 @@ packages:
       webpack:
         optional: true
 
-  websocket-driver@0.7.4:
-    resolution: {integrity: sha512-b17KeDIQVjvb0ssuSDF2cYXSg2iztliJ4B9WdsuB6J952qCPKmnVq4DyW5motImXHDC1cBT/1UezrJVsKw5zjg==}
+  websocket-driver@0.7.5:
+    resolution: {integrity: sha512-ZL2+3c7kMBdIRCMz6l8jQMHyGVxj+UL+xVk74Ombiciboca8rHa15L86B19E5oh1pL9Ii/uj54gtsIrZGMo6zA==}
     engines: {node: '>=0.8.0'}
 
   websocket-extensions@0.1.4:
@@ -10968,7 +10969,7 @@ snapshots:
 
   faye-websocket@0.11.4:
     dependencies:
-      websocket-driver: 0.7.4
+      websocket-driver: 0.7.5
 
   feed@4.2.2:
     dependencies:
@@ -13601,7 +13602,7 @@ snapshots:
     dependencies:
       faye-websocket: 0.11.4
       uuid: 14.0.0
-      websocket-driver: 0.7.4
+      websocket-driver: 0.7.5
 
   sort-css-media-queries@2.2.0: {}
 
@@ -14148,7 +14149,7 @@ snapshots:
       '@rspack/core': 1.7.11
       webpack: 5.106.2(@swc/core@1.15.33)
 
-  websocket-driver@0.7.4:
+  websocket-driver@0.7.5:
     dependencies:
       http-parser-js: 0.5.10
       safe-buffer: 5.2.1

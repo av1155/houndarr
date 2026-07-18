@@ -2,7 +2,7 @@
   "name": "houndarr-css-build",
   "private": true,
   "description": "Build-time CSS toolchain for Houndarr. Not shipped in the runtime Docker image.",
-  "packageManager": "pnpm@11.9.0",
+  "packageManager": "pnpm@11.14.0",
   "scripts": {
     "build-css": "tailwindcss -i src/houndarr/static/css/input.css -o src/houndarr/static/css/app.built.css --minify",
     "watch-css": "tailwindcss -i src/houndarr/static/css/input.css -o src/houndarr/static/css/app.built.css --watch"

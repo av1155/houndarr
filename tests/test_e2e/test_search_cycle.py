@@ -9,6 +9,7 @@ are intercepted by respx.
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Awaitable, Callable
 from dataclasses import replace
 from typing import Any
 from unittest.mock import patch
@@ -79,7 +80,7 @@ _MISSING_RADARR_1 = {"records": [_MOVIE]}
 _MISSING_LIDARR_1 = {"records": [_ALBUM]}
 _MISSING_READARR_1 = {"records": [_BOOK]}
 _MISSING_WHISPARR_V2_1 = {"records": [_WHISPARR_V2_EP]}
-_MISSING_EMPTY = {"records": []}
+_MISSING_EMPTY: dict[str, list[Any]] = {"records": []}
 _FUTURE_AIR_DATE = "2999-01-01T00:00:00Z"
 
 _CMD_OK = {"id": 1, "name": "EpisodeSearch"}
@@ -138,6 +139,14 @@ async def _log_rows() -> list[dict[str, Any]]:
         async with conn.execute("SELECT * FROM search_log ORDER BY id ASC") as cur:
             rows = await cur.fetchall()
     return [dict(r) for r in rows]
+
+
+async def _wait_until(predicate: Callable[[], Awaitable[bool]], *, timeout: float = 2.0) -> None:
+    async def _poll() -> None:
+        while not await predicate():
+            await asyncio.sleep(0.01)
+
+    await asyncio.wait_for(_poll(), timeout=timeout)
 
 
 async def _cooldown_rows(instance_id: int) -> list[dict[str, Any]]:
@@ -319,19 +328,29 @@ async def test_supervisor_graceful_shutdown(
     master_key: bytes,
 ) -> None:
     """Supervisor tasks are cancelled on stop() with no unhandled exceptions."""
-    # The search loop will block on get_missing; we just need it to be running
-    # long enough for us to cancel it.
-    respx.get(f"{SONARR_URL}/api/v3/wanted/missing").mock(side_effect=httpx.ConnectError("blocked"))
+    missing_requested = asyncio.Event()
 
-    sup = Supervisor(master_key=master_key)
-    await sup.start()
-    assert len(sup._tasks) == 1
+    def _blocked_missing(_request: httpx.Request) -> httpx.Response:
+        missing_requested.set()
+        raise httpx.ConnectError("blocked")
 
-    # Give the task a moment to spin up and hit the (failing) HTTP call
-    await asyncio.sleep(0.05)
+    async def _skip_snapshot_prime(*_: object) -> None:
+        return None
 
-    # stop() must complete without raising
-    await sup.stop()
+    respx.get(f"{SONARR_URL}/api/v3/wanted/missing").mock(side_effect=_blocked_missing)
+
+    with (
+        patch.object(_supervisor_mod, "_STARTUP_GRACE_SECS", 0),
+        patch.object(Supervisor, "_refresh_one_snapshot", new=_skip_snapshot_prime),
+    ):
+        sup = Supervisor(master_key=master_key)
+        await sup.start()
+        assert len(sup._tasks) == 1
+
+        await asyncio.wait_for(missing_requested.wait(), timeout=2.0)
+
+        # stop() must complete without raising
+        await sup.stop()
     assert sup._tasks == {}
 
 
@@ -373,21 +392,28 @@ async def test_supervisor_runs_both_instances(
         return_value=httpx.Response(201, json={"id": 2})
     )
 
+    async def _skip_snapshot_prime(*_: object) -> None:
+        return None
+
+    async def _both_instances_searched() -> bool:
+        logs = await _log_rows()
+        searched = [r for r in logs if r["action"] == "searched"]
+        instance_ids = {r["instance_id"] for r in searched}
+        return {sonarr_instance.core.id, radarr_instance.core.id} <= instance_ids
+
     with (
         patch.object(_supervisor_mod, "_STARTUP_GRACE_SECS", 0),
         patch.object(_supervisor_mod, "_STARTUP_STAGGER_SECS", 0),
+        patch.object(Supervisor, "_refresh_one_snapshot", new=_skip_snapshot_prime),
     ):
         sup = Supervisor(master_key=master_key)
         await sup.start()
         assert len(sup._tasks) == 2
 
-        # Let both tasks complete their first search cycle before stopping
-        await asyncio.sleep(0.2)
+        await _wait_until(_both_instances_searched)
         await sup.stop()
 
-    # Both instances must have a 'searched' log entry
     logs = await _log_rows()
-    # Filter out the supervisor info row (instance_id=None)
     searched = [r for r in logs if r["action"] == "searched"]
     instance_ids = {r["instance_id"] for r in searched}
     assert sonarr_instance.core.id in instance_ids
@@ -519,7 +545,7 @@ async def whisparr_v2_instance(db: None, master_key: bytes) -> Instance:
         name="E2E Whisparr v2",
         type=InstanceType.whisparr_v2,
         url=WHISPARR_V2_URL,
-        api_key="whisparr-v2-key",
+        api_key="test-api-key",
         batch_size=5,
         hourly_cap=10,
         cooldown_days=7,

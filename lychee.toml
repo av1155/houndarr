@@ -36,4 +36,8 @@ exclude = [
   "^https?://authentik-proxy([:./]|$)",
   "^https?://[^/]*\\.example\\.com",
   "^https?://your-host",
+  # Chart-rendering service used by the README star-history embed.
+  # Intermittently returns 5xx under load (star-history/star-history#546),
+  # so its availability is not a signal about our docs.
+  "^https?://api\\.star-history\\.com/",
 ]

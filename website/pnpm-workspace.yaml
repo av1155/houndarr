@@ -18,10 +18,14 @@ overrides:
   # 7.12.0..=7.29.3 can generate arbitrary code when compiling
   # malicious input. Transitive via @docusaurus/core > @babel.
   "@babel/plugin-transform-modules-systemjs": ">=7.29.4"
-  # GHSA-86c8-pmm6-93fp: fast-uri <=3.1.1 is vulnerable to host
-  # confusion via percent-encoded authority delimiters. Transitive
-  # via @docusaurus/core > webpack > schema-utils > ajv > fast-uri.
-  fast-uri: ">=3.1.2"
+  # fast-uri <3.1.4 carries three advisories on the 3.x line, all
+  # fixed by 3.1.4: GHSA-86c8-pmm6-93fp (host confusion via
+  # percent-encoded authority delimiters), CVE-2026-13676 (security
+  # policy bypass via improper Unicode hostname canonicalisation),
+  # and CVE-2026-16221; supersedes the earlier >=3.1.2 floor.
+  # Transitive via @docusaurus/core > webpack > schema-utils > ajv.
+  # Held to the 3.x line expected by ajv.
+  fast-uri: ">=3.1.4 <4"
   # mermaid <11.15.0 resolves four moderate alerts on classDef,
   # classDefs, configuration, and Gantt-chart sanitisation.
   # Transitive via @docusaurus/theme-mermaid.
@@ -95,6 +99,21 @@ overrides:
   # faye-websocket; only active during `pnpm start`. Held to the 0.7
   # line because sockjs 0.3.24 declares ^0.7.4.
   websocket-driver: ">=0.7.5 <0.8"
+  # CVE-2026-13149: brace-expansion 1.x <1.1.16 has an exponential-
+  # time complexity DoS in pattern expansion. Transitive via the many
+  # minimatch 3.x consumers in the webpack toolchain. Held to the 1.x
+  # line because minimatch 3 declares ^1.1.7.
+  "brace-expansion@1": ">=1.1.16 <2"
+  # GHSA-f88m-g3jw-g9cj: sharp <0.35.0 bundles libvips builds subject
+  # to CVE-2026-33327, CVE-2026-33328, CVE-2026-35590, and
+  # CVE-2026-35591. Transitive via @docusaurus/plugin-ideal-image >
+  # responsive-loader; only used at build time to resize doc images.
+  sharp: ">=0.35.0 <0.36"
+  # GHSA-2p49-hgcm-8545: svgo <3.3.4 leaves some executable scripts
+  # intact despite the removeScripts plugin. Transitive via
+  # @docusaurus/core > @svgr/webpack and cssnano > postcss-svgo. Held
+  # to the 3.x line declared by both consumers.
+  svgo: ">=3.3.4 <4"
 
 # pnpm 11 replaces `onlyBuiltDependencies` with an explicit allow-map.
 # Each entry permits the named package's install scripts to run;

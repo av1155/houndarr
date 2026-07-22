@@ -7,7 +7,7 @@
 **Automated missing-media search for your \*arr stack.**<br>
 Small batches. Polite intervals. Zero indexer abuse.
 
-[![GitHub stars](https://img.shields.io/github/stars/av1155/houndarr?style=flat)](https://github.com/av1155/houndarr/stargazers)
+[![GitHub stars](https://img.shields.io/github/stars/av1155/houndarr?style=flat)](https://github.com/av1155/houndarr)
 [![License: AGPL-3.0](https://img.shields.io/github/license/av1155/houndarr?style=flat)](LICENSE)
 [![Last commit](https://img.shields.io/github/last-commit/av1155/houndarr?style=flat)](https://github.com/av1155/houndarr/commits/main)
 [![GitHub release](https://img.shields.io/github/v/release/av1155/houndarr?style=flat)](https://github.com/av1155/houndarr/releases/latest)
@@ -172,8 +172,12 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for development workflow, coding standard
 
 <div align="center">
 
-<a href="https://star-history.com/#av1155/houndarr&Date">
-  <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=av1155/houndarr&type=Date&theme=dark" width="600" />
+<a href="https://www.star-history.com/?repos=av1155%2Fhoundarr&type=date&legend=top-left">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=av1155/houndarr&type=date&theme=dark&legend=top-left&sealed_token=K3eOjhjW2u-nB5sBsV3NFXcQiLyWa7ZjxAJ1Z3hteRW0T_sZugG2mrcvaflvj4IpWzWb6MSe-AZq8W9Icbvrp8EdhlTwosEbMLf9kyQ8SDELsOyH_A3q7EhwYgv6uRTUpBCs_SEIN_7GmGkE5LJhxCJ-6Xh-8DPUMUItk6iOn3VEyG0QCaTZo7GdTZXd" />
+    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=av1155/houndarr&type=date&legend=top-left&sealed_token=K3eOjhjW2u-nB5sBsV3NFXcQiLyWa7ZjxAJ1Z3hteRW0T_sZugG2mrcvaflvj4IpWzWb6MSe-AZq8W9Icbvrp8EdhlTwosEbMLf9kyQ8SDELsOyH_A3q7EhwYgv6uRTUpBCs_SEIN_7GmGkE5LJhxCJ-6Xh-8DPUMUItk6iOn3VEyG0QCaTZo7GdTZXd" />
+    <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=av1155/houndarr&type=date&legend=top-left&sealed_token=K3eOjhjW2u-nB5sBsV3NFXcQiLyWa7ZjxAJ1Z3hteRW0T_sZugG2mrcvaflvj4IpWzWb6MSe-AZq8W9Icbvrp8EdhlTwosEbMLf9kyQ8SDELsOyH_A3q7EhwYgv6uRTUpBCs_SEIN_7GmGkE5LJhxCJ-6Xh-8DPUMUItk6iOn3VEyG0QCaTZo7GdTZXd" width="600" />
+  </picture>
 </a>
 
 <br><br>
@@ -184,7 +188,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for development workflow, coding standard
 
 <br><br>
 
-If Houndarr is useful to you, consider giving it a <a href="https://github.com/av1155/houndarr/stargazers">star on GitHub</a>.
+If Houndarr is useful to you, consider giving it a <a href="https://github.com/av1155/houndarr">star on GitHub</a>.
 
 </div>
 

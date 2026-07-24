@@ -30,11 +30,12 @@ overrides:
   # classDefs, configuration, and Gantt-chart sanitisation.
   # Transitive via @docusaurus/theme-mermaid.
   mermaid: ">=11.15.0"
-  # GHSA-mx8g-39q3-5c79: webpack-dev-server <5.2.5 lets a malicious
-  # page intercept the HMR WebSocket through permissive user proxies;
-  # supersedes the earlier CVE-2026-6402 <=5.2.3 floor. Transitive via
-  # @docusaurus/core; only active during `pnpm start`.
-  webpack-dev-server: ">=5.2.5 <6"
+  # webpack-dev-server <=5.2.5 carries GHSA-m28w-2pqf-7qgj (DoS via a
+  # malformed Host or Origin header) and GHSA-f5vj-f2hx-8m93 (CSRF
+  # through internal developer endpoints), both fixed in 5.2.6;
+  # supersedes the earlier GHSA-mx8g-39q3-5c79 <5.2.5 floor.
+  # Transitive via @docusaurus/core; only active during `pnpm start`.
+  webpack-dev-server: ">=5.2.6 <6"
   # CVE-2026-48779 (GHSA-96hv-2xvq-fx4p): ws >=8.0.0 <8.21.0 allows a
   # memory-exhaustion DoS from a flood of tiny WebSocket fragments;
   # supersedes the earlier CVE-2026-45736 <8.20.1 floor. Transitive
@@ -54,13 +55,15 @@ overrides:
   # line since the fix landed in 7.28.0 and nothing in the tree needs
   # undici 8.
   undici: ">=7.28.0 <8"
-  # dompurify <3.4.11 carries a cluster of eight sanitizer-bypass and
-  # config-pollution advisories (GHSA-x4vx-rjvf-j5p4,
-  # GHSA-vxr8-fq34-vvx9, GHSA-gvmj-g25r-r7wr, GHSA-rp9w-3fw7-7cwq,
-  # GHSA-hpcv-96wg-7vj8, GHSA-r47g-fvhr-h676, GHSA-76mc-f452-cxcm,
-  # GHSA-cmwh-pvxp-8882), all fixed by 3.4.11. Transitive via
-  # @docusaurus/theme-mermaid > mermaid.
-  dompurify: ">=3.4.11 <4"
+  # dompurify <=3.4.11 lets an allowed custom element bypass
+  # afterSanitizeElements via CUSTOM_ELEMENT_HANDLING
+  # (GHSA-c2j3-45gr-mqc4), fixed in 3.4.12; supersedes the earlier
+  # >=3.4.11 floor that cleared the eight-advisory sanitizer-bypass
+  # cluster (GHSA-x4vx-rjvf-j5p4, GHSA-vxr8-fq34-vvx9,
+  # GHSA-gvmj-g25r-r7wr, GHSA-rp9w-3fw7-7cwq, GHSA-hpcv-96wg-7vj8,
+  # GHSA-r47g-fvhr-h676, GHSA-76mc-f452-cxcm, GHSA-cmwh-pvxp-8882).
+  # Transitive via @docusaurus/theme-mermaid > mermaid.
+  dompurify: ">=3.4.12 <4"
   # GHSA-4x5r-pxfx-6jf8: @babel/core <7.29.1 can read arbitrary files
   # through a crafted sourceMappingURL comment during compilation.
   # Transitive via @docusaurus/core > @docusaurus/babel.
@@ -91,6 +94,12 @@ overrides:
   # encodeValuesOnly is set. Transitive via @docusaurus/core >
   # webpack-dev-server > express > body-parser.
   qs: ">=6.15.2 <7"
+  # GHSA-v422-hmwv-36x6: body-parser <1.20.6 silently disables size
+  # enforcement when the `limit` option parses to an invalid value,
+  # allowing an unbounded-body DoS. Transitive via @docusaurus/core >
+  # webpack-dev-server > express; only active during `pnpm start`.
+  # Held to the 1.x line that express 4 declares.
+  body-parser: ">=1.20.6 <2"
   # websocket-driver <0.7.5 carries two advisories, both fixed in
   # 0.7.5: GHSA-xv26-6w52-cph6 (CVE-2026-54466, message corruption by
   # abusing protocol length headers) and GHSA-mp7j-qc5w-4988

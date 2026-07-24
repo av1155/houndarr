@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+---
+
+## [1.13.0] - 2026-07-24
+
 ### Added
 
 - Dashboard cards show a `waiting for first sync` pill and muted dashes for Wanted / Eligible until an instance's first snapshot completes. (#678)

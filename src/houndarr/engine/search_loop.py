@@ -1642,4 +1642,34 @@ async def _run_instance_search_impl(
             )
             searched += upgrade_searched
 
+    # --- Run-now empty-cycle epilogue ---
+    # A manual cycle that wrote no rows at all (empty wanted list, or
+    # every pass disabled) would otherwise finish with no visible
+    # outcome anywhere: the button flashes success and the history stays
+    # empty, which reads as "Run now is broken" to the operator.  One
+    # info row keeps the explicit user action observable.  Scheduled
+    # cycles stay quiet on purpose; they repeat every interval and an
+    # info row per empty cycle would flood the feed.
+    if cycle_trigger == "run_now" and searched == 0:
+        from houndarr.repositories.search_log import has_rows_for_cycle
+
+        if not await has_rows_for_cycle(cycle_id_value):
+            message = (
+                "Run now finished: no wanted items to evaluate"
+                if any_pass_enabled
+                else "Run now finished: every search pass is disabled for this instance"
+            )
+            # Message-only, like the reconnect rows: the logs page renders
+            # ``reason or message``, so setting a reason here would shadow
+            # the full sentence and both variants would display alike.
+            await _write_log(
+                instance.core.id,
+                None,
+                None,
+                SearchAction.info.value,
+                cycle_id=cycle_id_value,
+                cycle_trigger=cycle_trigger,
+                message=message,
+            )
+
     return searched

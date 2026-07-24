@@ -226,6 +226,31 @@ async def fetch_recent_searches(
     return int(row[0]) if row else 0
 
 
+async def has_rows_for_cycle(cycle_id: str) -> bool:
+    """Return whether any ``search_log`` row was written for *cycle_id*.
+
+    Used by the engine's run-now epilogue: a manual cycle that wrote no
+    rows at all (empty wanted list, or every pass disabled) would
+    otherwise finish invisibly, so the engine probes this and writes a
+    single info row explaining there was nothing to evaluate.  The
+    equality lookup rides ``idx_search_log_cycle``.
+
+    Args:
+        cycle_id: Shared cycle identifier stamped on every row of one
+            cycle.
+
+    Returns:
+        ``True`` when at least one row carries *cycle_id*.
+    """
+    async with get_db() as db:
+        async with db.execute(
+            "SELECT 1 FROM search_log WHERE cycle_id = ? LIMIT 1",
+            (cycle_id,),
+        ) as cur:
+            row = await cur.fetchone()
+    return row is not None
+
+
 async def fetch_latest_missing_reason(
     instance_id: int,
     item_id: int,

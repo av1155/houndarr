@@ -308,6 +308,89 @@ async def test_success_with_app_name_no_version(monkeypatch: pytest.MonkeyPatch)
     assert outcome.message == "Connected to Sonarr. You can now add this instance."
 
 
+@pytest.mark.asyncio()
+async def test_success_with_custom_instance_name_shows_it(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A customised instanceName is echoed so multi-instance mixups are visible."""
+
+    async def fake_check_connection(instance_type: Any, url: str, api_key: str) -> ConnectionCheck:
+        return ConnectionCheck(
+            reachable=True, app_name="Radarr", version="5.11.0", instance_name="Radarr4K"
+        )
+
+    monkeypatch.setattr(
+        "houndarr.services.instance_validation.check_connection", fake_check_connection
+    )
+
+    outcome = await run_connection_test(
+        master_key=b"",
+        type_value="radarr",
+        url="http://radarr:7878",
+        api_key="key",
+    )
+    assert outcome.ok is True
+    assert outcome.message == (
+        'Connected to Radarr v5.11.0 (instance "Radarr4K"). You can now add this instance.'
+    )
+
+
+@pytest.mark.asyncio()
+async def test_success_with_default_instance_name_suppresses_it(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The factory-default instanceName (equal to the app name) stays hidden.
+
+    Case differences do not count as customisation; upstream forks have
+    shipped both casings of the default.
+    """
+
+    async def fake_check_connection(instance_type: Any, url: str, api_key: str) -> ConnectionCheck:
+        return ConnectionCheck(
+            reachable=True, app_name="Radarr", version="5.11.0", instance_name="radarr"
+        )
+
+    monkeypatch.setattr(
+        "houndarr.services.instance_validation.check_connection", fake_check_connection
+    )
+
+    outcome = await run_connection_test(
+        master_key=b"",
+        type_value="radarr",
+        url="http://radarr:7878",
+        api_key="key",
+    )
+    assert outcome.ok is True
+    assert outcome.message == "Connected to Radarr v5.11.0. You can now add this instance."
+
+
+@pytest.mark.asyncio()
+async def test_success_with_instance_name_but_no_version(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The instance-name suffix also rides the no-version message shape."""
+
+    async def fake_check_connection(instance_type: Any, url: str, api_key: str) -> ConnectionCheck:
+        return ConnectionCheck(
+            reachable=True, app_name="Sonarr", version=None, instance_name="Sonarr Anime"
+        )
+
+    monkeypatch.setattr(
+        "houndarr.services.instance_validation.check_connection", fake_check_connection
+    )
+
+    outcome = await run_connection_test(
+        master_key=b"",
+        type_value="sonarr",
+        url="http://sonarr:8989",
+        api_key="key",
+    )
+    assert outcome.ok is True
+    assert outcome.message == (
+        'Connected to Sonarr (instance "Sonarr Anime"). You can now add this instance.'
+    )
+
+
 def test_connection_test_outcome_is_frozen_slotted() -> None:
     """ConnectionTestOutcome stays frozen + slotted for the slots audit."""
     import dataclasses

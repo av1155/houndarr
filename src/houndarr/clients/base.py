@@ -259,9 +259,9 @@ class ArrClient(ABC):
         Defaults to ``/api/v3/system/status`` (Radarr, Sonarr, Whisparr);
         Lidarr and Readarr override to ``/api/v1/system/status``.
 
-        The returned :class:`SystemStatus` exposes ``app_name`` and
-        ``version``; both are optional because *arr forks sometimes omit
-        them.  Network failures and malformed payloads both collapse to
+        The returned :class:`SystemStatus` exposes ``app_name``,
+        ``instance_name``, and ``version``; all are optional because *arr
+        forks sometimes omit them.  Network failures and malformed payloads both collapse to
         ``None`` so callers can treat unreachable and unparseable alike.
         Callers that need a typed escalation of the unreachable state
         (for example the supervisor's reconnect loop) wrap the ``None``

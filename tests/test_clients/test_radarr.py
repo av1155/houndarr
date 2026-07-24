@@ -39,6 +39,33 @@ async def test_ping_success(client: RadarrClient) -> None:
 
 @pytest.mark.asyncio()
 @respx.mock
+async def test_ping_parses_instance_name(client: RadarrClient) -> None:
+    """The camelCase instanceName field survives the wire-model boundary."""
+    respx.get(f"{BASE}/api/v3/system/status").mock(
+        return_value=httpx.Response(
+            200,
+            json={"appName": "Radarr", "instanceName": "Radarr4K", "version": "5.11.0"},
+        )
+    )
+    result = await client.ping()
+    assert result is not None
+    assert result.instance_name == "Radarr4K"
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_ping_without_instance_name_defaults_none(client: RadarrClient) -> None:
+    """Forks that omit instanceName still parse; the field stays None."""
+    respx.get(f"{BASE}/api/v3/system/status").mock(
+        return_value=httpx.Response(200, json={"appName": "Radarr", "version": "5.0.0"})
+    )
+    result = await client.ping()
+    assert result is not None
+    assert result.instance_name is None
+
+
+@pytest.mark.asyncio()
+@respx.mock
 async def test_ping_non_2xx_returns_none(client: RadarrClient) -> None:
     respx.get(f"{BASE}/api/v3/system/status").mock(return_value=httpx.Response(401))
     assert await client.ping() is None

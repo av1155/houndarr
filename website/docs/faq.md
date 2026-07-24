@@ -41,6 +41,16 @@ See
 [How Houndarr Works](/docs/concepts/how-scheduling-works#why-only-a-few-items-get-searched-each-cycle)
 for the full funnel.
 
+## I added an instance and it shows 0 wanted. Is it broken?
+
+Counts come from a snapshot taken shortly after the instance is
+added and refreshed every 10 minutes; until the first snapshot
+completes, the card shows `waiting for first sync` instead of
+numbers. A freshly reset \*arr also reports nothing until it has
+finished importing its library. `Run now` against an empty wanted
+list logs `Run now finished: no wanted items to evaluate` rather
+than staying silent.
+
 ## Why is Houndarr skipping so much?
 
 Each skipped row logs a reason string that tells you why. A high
@@ -103,6 +113,19 @@ format scores; Houndarr does not influence that decision.
 No. Houndarr only triggers searches within your *arr instances for
 items already tracked there. For request workflows, use Overseerr
 or Jellyseerr alongside your *arr stack.
+
+## Houndarr's history shows titles that aren't in my \*arr library. Where do they come from?
+
+Every title in the history was reported by the \*arr at the URL
+configured on that instance moments before the row was written, and
+a `searched` row only appears after that same server accepts the
+search command. Compare the instance URL in Houndarr's settings
+against the \*arr you are viewing; for missing items, the title
+will be under that server's `Wanted > Missing` page. A second
+container (a 4K instance, an old stack) or an import list quietly
+adding items is the usual cause.
+`Test connection` shows the server's custom instance name when it
+has one, which helps tell same-app servers apart.
 
 ## I deleted files to free up space. Will Houndarr re-download them?
 

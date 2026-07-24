@@ -101,6 +101,21 @@ class Supervisor:
         # `last_activity_at` in that case until the first post-restart cycle
         # completes.
         self._last_cycle_end: dict[int, datetime] = {}
+        # Instances with an unresolved run-now "Could not reach" error row.
+        # The dashboard marks a card offline while its newest row is an
+        # error, and healthy cycles on an empty backlog write no rows at
+        # all, so that row would pin the card offline forever (with the
+        # Run now button disabled) unless the next successful cycle pairs
+        # it with the same recovery info row the reconnect state machine
+        # writes for scheduled streaks.
+        self._manual_error_open: set[int] = set()
+        # Instances whose snapshot refresh is in a transport-failure streak.
+        # A failed refresh leaves the dashboard counters at their last-known
+        # values (0 forever on a never-synced instance), so the first failure
+        # in a streak must be visible at the default log level.  Repeats stay
+        # at debug, mirroring the reconnect state machine's one-row-per-streak
+        # rule; membership clears on the next successful refresh.
+        self._snapshot_fail_warned: set[int] = set()
 
     # Lifecycle
 
@@ -370,6 +385,23 @@ class Supervisor:
                     cycle_id=cycle_id,
                     cycle_trigger=cycle_trigger,
                 )
+                if instance.core.id in self._manual_error_open:
+                    # Write before clearing the flag (mirrors the reconnect
+                    # state machine): a failed write leaves the flag set so
+                    # the pairing row is retried on the next success instead
+                    # of silently never landing.
+                    await _write_log(
+                        instance_id=instance.core.id,
+                        item_id=None,
+                        item_type=None,
+                        action=SearchAction.info.value,
+                        cycle_id=cycle_id,
+                        cycle_trigger=cycle_trigger,
+                        message=(
+                            f"{instance.core.name!r} ({instance.core.url}) is reachable again"
+                        ),
+                    )
+                    self._manual_error_open.discard(instance.core.id)
                 return False
             except (httpx.TransportError, ClientTransportError):
                 # ``ClientTransportError`` is the typed wrapper the *arr
@@ -383,6 +415,25 @@ class Supervisor:
                     instance.core.url,
                     _CONNECT_RETRY_SECS,
                 )
+                # Manual runs bypass the reconnect state machine (it lives
+                # in the scheduled loop), so without this row an unreachable
+                # instance answers Run now with a success flash and an empty
+                # history.  Scheduled cycles leave the row to the state
+                # machine's one-per-streak transition instead.
+                if cycle_trigger == "run_now":
+                    await _write_log(
+                        instance_id=instance.core.id,
+                        item_id=None,
+                        item_type=None,
+                        action=SearchAction.error.value,
+                        cycle_id=cycle_id,
+                        cycle_trigger=cycle_trigger,
+                        message=f"Could not reach {instance.core.url}",
+                    )
+                    # Flag only after the row exists; a failed write must not
+                    # leave an orphan flag that pairs a recovery row with an
+                    # error row that never landed.
+                    self._manual_error_open.add(instance.core.id)
                 return True
             except (EngineError, ClientError) as exc:
                 # ``run_instance_search`` wraps any non-typed escape in
@@ -519,11 +570,39 @@ class Supervisor:
                     unreleased_count=snap.unreleased_count,
                 )
                 await reconcile_cooldowns(instance.core.id, reconcile_sets)
+                self._snapshot_fail_warned.discard(instance.core.id)
+                # A successful snapshot proves the *arr is reachable, so an
+                # open run-now error can be paired here too.  Without this,
+                # a transient blip caught only by a manual click would pin
+                # the card offline (Run now button disabled) until the next
+                # scheduled cycle, up to a full sleep interval away; the
+                # snapshot loop bounds that window at its 10-minute cadence.
+                if instance.core.id in self._manual_error_open:
+                    await _write_log(
+                        instance_id=instance.core.id,
+                        item_id=None,
+                        item_type=None,
+                        action=SearchAction.info.value,
+                        cycle_trigger="system",
+                        message=(
+                            f"{instance.core.name!r} ({instance.core.url}) is reachable again"
+                        ),
+                    )
+                    self._manual_error_open.discard(instance.core.id)
             except (httpx.TransportError, ClientTransportError):
-                logger.debug(
-                    "Supervisor: snapshot refresh skipped for %r; instance unreachable",
-                    instance.core.name,
-                )
+                if instance.core.id not in self._snapshot_fail_warned:
+                    self._snapshot_fail_warned.add(instance.core.id)
+                    logger.warning(
+                        "Supervisor: snapshot refresh failed for %r (%s); dashboard "
+                        "counts keep their last-known values until a refresh succeeds",
+                        instance.core.name,
+                        instance.core.url,
+                    )
+                else:
+                    logger.debug(
+                        "Supervisor: snapshot refresh skipped for %r; instance unreachable",
+                        instance.core.name,
+                    )
             except Exception:
                 logger.exception("Supervisor: snapshot refresh failed for %r", instance.core.name)
 

@@ -542,13 +542,13 @@ async def test_refresh_all_snapshots_handles_transport_error(
     caplog: pytest.LogCaptureFixture,
     transport_exc: BaseException,
 ) -> None:
-    """Transport errors are logged at DEBUG and suppressed; no traceback escapes.
+    """The first transport failure warns once; no traceback escapes.
 
     Pinned for both ``httpx.TransportError`` (the raw transport failure) and
     ``ClientTransportError`` (the typed wrapper *arr clients raise after the
-    typed-error refactor). Both must take the silent-skip branch; the typed
-    wrapper used to fall through to the broad ``except Exception`` and emit a
-    full traceback every refresh interval.
+    typed-error refactor). Both must land in the same streak-aware branch:
+    one WARNING on the first failure (a silently-stuck dashboard counter is
+    otherwise invisible at the default log level), never ERROR.
     """
     inst = _make_instance(enabled=True)
 
@@ -578,10 +578,244 @@ async def test_refresh_all_snapshots_handles_transport_error(
     assert error_records == [], (
         f"transport error should not log at ERROR; got {[r.getMessage() for r in error_records]}"
     )
-    debug_msgs = [r.getMessage() for r in caplog.records if r.levelname == "DEBUG"]
-    assert any("snapshot refresh skipped" in msg for msg in debug_msgs), (
-        f"expected DEBUG skip log, got: {debug_msgs}"
+    warning_msgs = [r.getMessage() for r in caplog.records if r.levelname == "WARNING"]
+    assert any("snapshot refresh failed" in msg for msg in warning_msgs), (
+        f"expected WARNING on first snapshot failure, got: {warning_msgs}"
     )
+
+
+@pytest.mark.asyncio()
+async def test_snapshot_transport_failure_warns_once_per_streak(
+    seeded_instances: None,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Repeat failures stay at DEBUG; a successful refresh re-arms the warning."""
+    from houndarr.clients.base import InstanceSnapshot, ReconcileSets
+
+    inst = _make_instance(enabled=True)
+
+    class _BrokenCtx:
+        async def __aenter__(self) -> Any:
+            raise httpx.TransportError("unreachable")
+
+        async def __aexit__(self, exc_type: object, exc: object, tb: object) -> None:
+            return None
+
+    broken_adapter = type(
+        "FakeAdapter",
+        (),
+        {"make_client": staticmethod(lambda _inst: _BrokenCtx())},
+    )()
+
+    fake_client = AsyncMock()
+
+    class _CtxClient:
+        async def __aenter__(self) -> Any:
+            return fake_client
+
+        async def __aexit__(self, exc_type: object, exc: object, tb: object) -> None:
+            return None
+
+    working_adapter = type(
+        "FakeAdapter",
+        (),
+        {
+            "make_client": staticmethod(lambda _inst: _CtxClient()),
+            "fetch_instance_snapshot": staticmethod(
+                AsyncMock(return_value=InstanceSnapshot(monitored_total=1, unreleased_count=0))
+            ),
+            "fetch_reconcile_sets": staticmethod(AsyncMock(return_value=ReconcileSets.empty())),
+        },
+    )()
+
+    supervisor = Supervisor(master_key=MASTER_KEY)
+
+    with caplog.at_level("DEBUG", logger="houndarr.engine.supervisor"):
+        with patch("houndarr.engine.supervisor.get_adapter", return_value=broken_adapter):
+            await supervisor._refresh_one_snapshot(inst)
+            await supervisor._refresh_one_snapshot(inst)
+        with patch("houndarr.engine.supervisor.get_adapter", return_value=working_adapter):
+            await supervisor._refresh_one_snapshot(inst)
+        with patch("houndarr.engine.supervisor.get_adapter", return_value=broken_adapter):
+            await supervisor._refresh_one_snapshot(inst)
+
+    warnings = [
+        r.getMessage()
+        for r in caplog.records
+        if r.levelname == "WARNING" and "snapshot refresh failed" in r.getMessage()
+    ]
+    debugs = [
+        r.getMessage()
+        for r in caplog.records
+        if r.levelname == "DEBUG" and "snapshot refresh skipped" in r.getMessage()
+    ]
+    assert len(warnings) == 2, f"one warning per streak expected, got: {warnings}"
+    assert len(debugs) == 1, f"repeat failures should stay at DEBUG, got: {debugs}"
+
+
+@pytest.mark.asyncio()
+async def test_run_now_transport_error_writes_error_row(seeded_instances: None) -> None:
+    """A manual cycle against an unreachable instance leaves a visible error row.
+
+    Manual runs bypass the scheduled loop's reconnect state machine, so the
+    cycle itself must write the row; without it, Run now answers with a
+    success flash and an empty history (issue #678).
+    """
+    inst = _make_instance(enabled=True)
+
+    with patch(
+        "houndarr.engine.supervisor.run_instance_search",
+        AsyncMock(side_effect=httpx.ConnectError("refused")),
+    ):
+        supervisor = Supervisor(master_key=MASTER_KEY)
+        got_error = await supervisor._run_search_cycle(inst, cycle_trigger="run_now")
+
+    assert got_error is True
+    async with get_db() as conn:
+        async with conn.execute("SELECT action, cycle_trigger, message FROM search_log") as cur:
+            rows = [dict(r) for r in await cur.fetchall()]
+    assert len(rows) == 1
+    assert rows[0]["action"] == "error"
+    assert rows[0]["cycle_trigger"] == "run_now"
+    assert rows[0]["message"] == f"Could not reach {inst.core.url}"
+
+
+@pytest.mark.asyncio()
+async def test_run_now_recovery_writes_reachable_again_row(seeded_instances: None) -> None:
+    """The next successful cycle pairs an open run-now error with a recovery row.
+
+    Without the pairing, the error row stays the newest row forever on an
+    empty backlog (healthy cycles write nothing there) and pins the card
+    offline with the Run now button disabled.
+    """
+    inst = _make_instance(enabled=True)
+    supervisor = Supervisor(master_key=MASTER_KEY)
+
+    with patch(
+        "houndarr.engine.supervisor.run_instance_search",
+        AsyncMock(side_effect=httpx.ConnectError("refused")),
+    ):
+        await supervisor._run_search_cycle(inst, cycle_trigger="run_now")
+
+    with patch(
+        "houndarr.engine.supervisor.run_instance_search",
+        AsyncMock(return_value=0),
+    ):
+        await supervisor._run_search_cycle(inst, cycle_trigger="scheduled")
+        # A second success must not repeat the recovery row.
+        await supervisor._run_search_cycle(inst, cycle_trigger="scheduled")
+
+    async with get_db() as conn:
+        async with conn.execute("SELECT action, message FROM search_log ORDER BY id") as cur:
+            rows = [dict(r) for r in await cur.fetchall()]
+    assert [r["action"] for r in rows] == ["error", "info"]
+    assert rows[1]["message"] == f"{inst.core.name!r} ({inst.core.url}) is reachable again"
+
+
+@pytest.mark.asyncio()
+async def test_recovery_flag_survives_failed_write(seeded_instances: None) -> None:
+    """A failed recovery write keeps the flag so the pairing row is retried."""
+    inst = _make_instance(enabled=True)
+    supervisor = Supervisor(master_key=MASTER_KEY)
+
+    with patch(
+        "houndarr.engine.supervisor.run_instance_search",
+        AsyncMock(side_effect=httpx.ConnectError("refused")),
+    ):
+        await supervisor._run_search_cycle(inst, cycle_trigger="run_now")
+
+    with (
+        patch("houndarr.engine.supervisor.run_instance_search", AsyncMock(return_value=0)),
+        patch(
+            "houndarr.engine.supervisor._write_log",
+            AsyncMock(side_effect=RuntimeError("db locked")),
+        ),
+        pytest.raises(RuntimeError),
+    ):
+        await supervisor._run_search_cycle(inst, cycle_trigger="scheduled")
+
+    assert inst.core.id in supervisor._manual_error_open
+
+    with patch("houndarr.engine.supervisor.run_instance_search", AsyncMock(return_value=0)):
+        await supervisor._run_search_cycle(inst, cycle_trigger="scheduled")
+
+    rows = await _get_log_rows()
+    assert [r["action"] for r in rows] == ["error", "info"]
+    assert inst.core.id not in supervisor._manual_error_open
+
+
+@pytest.mark.asyncio()
+async def test_snapshot_success_pairs_open_manual_error(seeded_instances: None) -> None:
+    """A successful snapshot refresh pairs an open run-now error too.
+
+    Bounds the pinned-offline window (Run now button disabled) at the
+    snapshot cadence when the *arr recovers before the next search cycle.
+    """
+    from houndarr.clients.base import InstanceSnapshot, ReconcileSets
+
+    inst = _make_instance(enabled=True)
+    supervisor = Supervisor(master_key=MASTER_KEY)
+
+    with patch(
+        "houndarr.engine.supervisor.run_instance_search",
+        AsyncMock(side_effect=httpx.ConnectError("refused")),
+    ):
+        await supervisor._run_search_cycle(inst, cycle_trigger="run_now")
+
+    fake_client = AsyncMock()
+
+    class _CtxClient:
+        async def __aenter__(self) -> Any:
+            return fake_client
+
+        async def __aexit__(self, exc_type: object, exc: object, tb: object) -> None:
+            return None
+
+    working_adapter = type(
+        "FakeAdapter",
+        (),
+        {
+            "make_client": staticmethod(lambda _inst: _CtxClient()),
+            "fetch_instance_snapshot": staticmethod(
+                AsyncMock(return_value=InstanceSnapshot(monitored_total=1, unreleased_count=0))
+            ),
+            "fetch_reconcile_sets": staticmethod(AsyncMock(return_value=ReconcileSets.empty())),
+        },
+    )()
+
+    with patch("houndarr.engine.supervisor.get_adapter", return_value=working_adapter):
+        await supervisor._refresh_one_snapshot(inst)
+        # A second success must not repeat the recovery row.
+        await supervisor._refresh_one_snapshot(inst)
+
+    rows = await _get_log_rows()
+    infos = [r for r in rows if r["action"] == "info"]
+    assert len(infos) == 1
+    assert infos[0]["cycle_trigger"] == "system"
+    assert infos[0]["message"] == f"{inst.core.name!r} ({inst.core.url}) is reachable again"
+    assert inst.core.id not in supervisor._manual_error_open
+
+
+@pytest.mark.asyncio()
+async def test_scheduled_transport_error_leaves_row_to_state_machine(
+    seeded_instances: None,
+) -> None:
+    """Scheduled cycles do not write the transport row themselves; the
+    reconnect state machine owns the one-per-streak transition rows."""
+    inst = _make_instance(enabled=True)
+
+    with patch(
+        "houndarr.engine.supervisor.run_instance_search",
+        AsyncMock(side_effect=httpx.ConnectError("refused")),
+    ):
+        supervisor = Supervisor(master_key=MASTER_KEY)
+        got_error = await supervisor._run_search_cycle(inst, cycle_trigger="scheduled")
+
+    assert got_error is True
+    async with get_db() as conn:
+        async with conn.execute("SELECT COUNT(*) AS n FROM search_log") as cur:
+            row = await cur.fetchone()
+    assert row is not None and row["n"] == 0
 
 
 @pytest.mark.parametrize(

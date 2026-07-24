@@ -386,7 +386,10 @@ class Supervisor:
                     cycle_trigger=cycle_trigger,
                 )
                 if instance.core.id in self._manual_error_open:
-                    self._manual_error_open.discard(instance.core.id)
+                    # Write before clearing the flag (mirrors the reconnect
+                    # state machine): a failed write leaves the flag set so
+                    # the pairing row is retried on the next success instead
+                    # of silently never landing.
                     await _write_log(
                         instance_id=instance.core.id,
                         item_id=None,
@@ -398,6 +401,7 @@ class Supervisor:
                             f"{instance.core.name!r} ({instance.core.url}) is reachable again"
                         ),
                     )
+                    self._manual_error_open.discard(instance.core.id)
                 return False
             except (httpx.TransportError, ClientTransportError):
                 # ``ClientTransportError`` is the typed wrapper the *arr
@@ -417,7 +421,6 @@ class Supervisor:
                 # history.  Scheduled cycles leave the row to the state
                 # machine's one-per-streak transition instead.
                 if cycle_trigger == "run_now":
-                    self._manual_error_open.add(instance.core.id)
                     await _write_log(
                         instance_id=instance.core.id,
                         item_id=None,
@@ -427,6 +430,10 @@ class Supervisor:
                         cycle_trigger=cycle_trigger,
                         message=f"Could not reach {instance.core.url}",
                     )
+                    # Flag only after the row exists; a failed write must not
+                    # leave an orphan flag that pairs a recovery row with an
+                    # error row that never landed.
+                    self._manual_error_open.add(instance.core.id)
                 return True
             except (EngineError, ClientError) as exc:
                 # ``run_instance_search`` wraps any non-typed escape in
@@ -564,6 +571,24 @@ class Supervisor:
                 )
                 await reconcile_cooldowns(instance.core.id, reconcile_sets)
                 self._snapshot_fail_warned.discard(instance.core.id)
+                # A successful snapshot proves the *arr is reachable, so an
+                # open run-now error can be paired here too.  Without this,
+                # a transient blip caught only by a manual click would pin
+                # the card offline (Run now button disabled) until the next
+                # scheduled cycle, up to a full sleep interval away; the
+                # snapshot loop bounds that window at its 10-minute cadence.
+                if instance.core.id in self._manual_error_open:
+                    await _write_log(
+                        instance_id=instance.core.id,
+                        item_id=None,
+                        item_type=None,
+                        action=SearchAction.info.value,
+                        cycle_trigger="system",
+                        message=(
+                            f"{instance.core.name!r} ({instance.core.url}) is reachable again"
+                        ),
+                    )
+                    self._manual_error_open.discard(instance.core.id)
             except (httpx.TransportError, ClientTransportError):
                 if instance.core.id not in self._snapshot_fail_warned:
                     self._snapshot_fail_warned.add(instance.core.id)

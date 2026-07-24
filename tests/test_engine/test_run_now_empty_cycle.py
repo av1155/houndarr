@@ -63,7 +63,9 @@ async def test_run_now_empty_cycle_writes_info_row(seeded_instances: None) -> No
     assert rows[0]["instance_id"] == 1
     assert rows[0]["item_id"] is None
     assert rows[0]["cycle_trigger"] == "run_now"
-    assert rows[0]["reason"] == "nothing to evaluate"
+    # Message-only: a reason would shadow the message in the logs page,
+    # which renders `reason or message`.
+    assert rows[0]["reason"] is None
     assert rows[0]["message"] == "Run now finished: no wanted items to evaluate"
 
 
@@ -116,7 +118,7 @@ async def test_run_now_all_passes_disabled_names_the_cause(seeded_instances: Non
     rows = await get_log_rows()
     assert len(rows) == 1
     assert rows[0]["action"] == "info"
-    assert rows[0]["reason"] == "nothing to evaluate"
+    assert rows[0]["reason"] is None
     assert rows[0]["message"] == "Run now finished: every search pass is disabled for this instance"
 
 

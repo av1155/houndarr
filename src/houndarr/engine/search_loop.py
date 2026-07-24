@@ -1659,6 +1659,9 @@ async def _run_instance_search_impl(
                 if any_pass_enabled
                 else "Run now finished: every search pass is disabled for this instance"
             )
+            # Message-only, like the reconnect rows: the logs page renders
+            # ``reason or message``, so setting a reason here would shadow
+            # the full sentence and both variants would display alike.
             await _write_log(
                 instance.core.id,
                 None,
@@ -1666,7 +1669,6 @@ async def _run_instance_search_impl(
                 SearchAction.info.value,
                 cycle_id=cycle_id_value,
                 cycle_trigger=cycle_trigger,
-                reason="nothing to evaluate",
                 message=message,
             )
 

@@ -713,6 +713,90 @@ async def test_run_now_recovery_writes_reachable_again_row(seeded_instances: Non
 
 
 @pytest.mark.asyncio()
+async def test_recovery_flag_survives_failed_write(seeded_instances: None) -> None:
+    """A failed recovery write keeps the flag so the pairing row is retried."""
+    inst = _make_instance(enabled=True)
+    supervisor = Supervisor(master_key=MASTER_KEY)
+
+    with patch(
+        "houndarr.engine.supervisor.run_instance_search",
+        AsyncMock(side_effect=httpx.ConnectError("refused")),
+    ):
+        await supervisor._run_search_cycle(inst, cycle_trigger="run_now")
+
+    with (
+        patch("houndarr.engine.supervisor.run_instance_search", AsyncMock(return_value=0)),
+        patch(
+            "houndarr.engine.supervisor._write_log",
+            AsyncMock(side_effect=RuntimeError("db locked")),
+        ),
+        pytest.raises(RuntimeError),
+    ):
+        await supervisor._run_search_cycle(inst, cycle_trigger="scheduled")
+
+    assert inst.core.id in supervisor._manual_error_open
+
+    with patch("houndarr.engine.supervisor.run_instance_search", AsyncMock(return_value=0)):
+        await supervisor._run_search_cycle(inst, cycle_trigger="scheduled")
+
+    rows = await _get_log_rows()
+    assert [r["action"] for r in rows] == ["error", "info"]
+    assert inst.core.id not in supervisor._manual_error_open
+
+
+@pytest.mark.asyncio()
+async def test_snapshot_success_pairs_open_manual_error(seeded_instances: None) -> None:
+    """A successful snapshot refresh pairs an open run-now error too.
+
+    Bounds the pinned-offline window (Run now button disabled) at the
+    snapshot cadence when the *arr recovers before the next search cycle.
+    """
+    from houndarr.clients.base import InstanceSnapshot, ReconcileSets
+
+    inst = _make_instance(enabled=True)
+    supervisor = Supervisor(master_key=MASTER_KEY)
+
+    with patch(
+        "houndarr.engine.supervisor.run_instance_search",
+        AsyncMock(side_effect=httpx.ConnectError("refused")),
+    ):
+        await supervisor._run_search_cycle(inst, cycle_trigger="run_now")
+
+    fake_client = AsyncMock()
+
+    class _CtxClient:
+        async def __aenter__(self) -> Any:
+            return fake_client
+
+        async def __aexit__(self, exc_type: object, exc: object, tb: object) -> None:
+            return None
+
+    working_adapter = type(
+        "FakeAdapter",
+        (),
+        {
+            "make_client": staticmethod(lambda _inst: _CtxClient()),
+            "fetch_instance_snapshot": staticmethod(
+                AsyncMock(return_value=InstanceSnapshot(monitored_total=1, unreleased_count=0))
+            ),
+            "fetch_reconcile_sets": staticmethod(AsyncMock(return_value=ReconcileSets.empty())),
+        },
+    )()
+
+    with patch("houndarr.engine.supervisor.get_adapter", return_value=working_adapter):
+        await supervisor._refresh_one_snapshot(inst)
+        # A second success must not repeat the recovery row.
+        await supervisor._refresh_one_snapshot(inst)
+
+    rows = await _get_log_rows()
+    infos = [r for r in rows if r["action"] == "info"]
+    assert len(infos) == 1
+    assert infos[0]["cycle_trigger"] == "system"
+    assert infos[0]["message"] == f"{inst.core.name!r} ({inst.core.url}) is reachable again"
+    assert inst.core.id not in supervisor._manual_error_open
+
+
+@pytest.mark.asyncio()
 async def test_scheduled_transport_error_leaves_row_to_state_machine(
     seeded_instances: None,
 ) -> None:

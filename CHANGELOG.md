@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Dashboard cards show a `waiting for first sync` pill with muted counts until an instance's first snapshot completes, instead of a bare `0 / 0 / 0`. (#678)
+- `Run now` on an instance with nothing to search writes a `Run now finished: no wanted items to evaluate` log row instead of finishing silently. (#678)
+- `Test connection` reports the \*arr's custom instance name (`Connected to Radarr v5.11.0 (instance "Radarr4K")`) when it differs from the app name. (#678)
+
+### Changed
+
+- The first failed dashboard snapshot refresh in a streak logs at WARNING with the instance URL; repeat failures stay at DEBUG. (#678)
+
 ---
 
 ## [1.12.1] - 2026-07-01

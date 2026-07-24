@@ -542,13 +542,13 @@ async def test_refresh_all_snapshots_handles_transport_error(
     caplog: pytest.LogCaptureFixture,
     transport_exc: BaseException,
 ) -> None:
-    """Transport errors are logged at DEBUG and suppressed; no traceback escapes.
+    """The first transport failure warns once; no traceback escapes.
 
     Pinned for both ``httpx.TransportError`` (the raw transport failure) and
     ``ClientTransportError`` (the typed wrapper *arr clients raise after the
-    typed-error refactor). Both must take the silent-skip branch; the typed
-    wrapper used to fall through to the broad ``except Exception`` and emit a
-    full traceback every refresh interval.
+    typed-error refactor). Both must land in the same streak-aware branch:
+    one WARNING on the first failure (a silently-stuck dashboard counter is
+    otherwise invisible at the default log level), never ERROR.
     """
     inst = _make_instance(enabled=True)
 
@@ -578,10 +578,79 @@ async def test_refresh_all_snapshots_handles_transport_error(
     assert error_records == [], (
         f"transport error should not log at ERROR; got {[r.getMessage() for r in error_records]}"
     )
-    debug_msgs = [r.getMessage() for r in caplog.records if r.levelname == "DEBUG"]
-    assert any("snapshot refresh skipped" in msg for msg in debug_msgs), (
-        f"expected DEBUG skip log, got: {debug_msgs}"
+    warning_msgs = [r.getMessage() for r in caplog.records if r.levelname == "WARNING"]
+    assert any("snapshot refresh failed" in msg for msg in warning_msgs), (
+        f"expected WARNING on first snapshot failure, got: {warning_msgs}"
     )
+
+
+@pytest.mark.asyncio()
+async def test_snapshot_transport_failure_warns_once_per_streak(
+    seeded_instances: None,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Repeat failures stay at DEBUG; a successful refresh re-arms the warning."""
+    from houndarr.clients.base import InstanceSnapshot, ReconcileSets
+
+    inst = _make_instance(enabled=True)
+
+    class _BrokenCtx:
+        async def __aenter__(self) -> Any:
+            raise httpx.TransportError("unreachable")
+
+        async def __aexit__(self, exc_type: object, exc: object, tb: object) -> None:
+            return None
+
+    broken_adapter = type(
+        "FakeAdapter",
+        (),
+        {"make_client": staticmethod(lambda _inst: _BrokenCtx())},
+    )()
+
+    fake_client = AsyncMock()
+
+    class _CtxClient:
+        async def __aenter__(self) -> Any:
+            return fake_client
+
+        async def __aexit__(self, exc_type: object, exc: object, tb: object) -> None:
+            return None
+
+    working_adapter = type(
+        "FakeAdapter",
+        (),
+        {
+            "make_client": staticmethod(lambda _inst: _CtxClient()),
+            "fetch_instance_snapshot": staticmethod(
+                AsyncMock(return_value=InstanceSnapshot(monitored_total=1, unreleased_count=0))
+            ),
+            "fetch_reconcile_sets": staticmethod(AsyncMock(return_value=ReconcileSets.empty())),
+        },
+    )()
+
+    supervisor = Supervisor(master_key=MASTER_KEY)
+
+    with caplog.at_level("DEBUG", logger="houndarr.engine.supervisor"):
+        with patch("houndarr.engine.supervisor.get_adapter", return_value=broken_adapter):
+            await supervisor._refresh_one_snapshot(inst)
+            await supervisor._refresh_one_snapshot(inst)
+        with patch("houndarr.engine.supervisor.get_adapter", return_value=working_adapter):
+            await supervisor._refresh_one_snapshot(inst)
+        with patch("houndarr.engine.supervisor.get_adapter", return_value=broken_adapter):
+            await supervisor._refresh_one_snapshot(inst)
+
+    warnings = [
+        r.getMessage()
+        for r in caplog.records
+        if r.levelname == "WARNING" and "snapshot refresh failed" in r.getMessage()
+    ]
+    debugs = [
+        r.getMessage()
+        for r in caplog.records
+        if r.levelname == "DEBUG" and "snapshot refresh skipped" in r.getMessage()
+    ]
+    assert len(warnings) == 2, f"one warning per streak expected, got: {warnings}"
+    assert len(debugs) == 1, f"repeat failures should stay at DEBUG, got: {debugs}"
 
 
 @pytest.mark.parametrize(

@@ -684,7 +684,23 @@ function initDashboardPage() {
     function renderStaleSnapshotPill(inst) {
       if (!inst.enabled || inst.active_error) return '';
       const ts = inst.snapshot_refreshed_at;
-      if (!ts) return '';
+      if (!ts) {
+        // Never-synced: no snapshot refresh has completed since the instance
+        // was added, so monitored_total still holds its column default and
+        // the card would otherwise show a bare 0/0/0 indistinguishable from
+        // a healthy empty instance (the failure mode users read as "broken"
+        // right after setup).  Reuses the stale-pill markup so the card only
+        // ever grows one pill shape.
+        return `
+  <span class="dash-card__stale" title="No snapshot has completed for this instance yet. Counts appear after the first refresh (usually within seconds of adding an instance; retried every 10 minutes). If this persists, check that the *arr is reachable.">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/>
+      <path d="M12 9v4"/>
+      <path d="M12 17h.01"/>
+    </svg>
+    <span>waiting for first sync</span>
+  </span>`;
+      }
       const refreshed = Date.parse(ts);
       if (Number.isNaN(refreshed)) return '';
       const age = Date.now() - refreshed;
@@ -783,14 +799,22 @@ function initDashboardPage() {
         ? ` data-tip="Lifetime: ${lifetimeVal} search${lifetimeVal === 1 ? '' : 'es'}"`
         : '';
 
+      // Never-synced instances render muted dashes instead of numbers: the
+      // snapshot columns still hold their defaults, so a numeric 0 would be
+      // asserting a count that was never actually measured.
+      const neverSynced = !disabled && !offline && !inst.snapshot_refreshed_at;
       const wantedText = offline || disabled
         ? `<dd class="dash-card__stat-value dash-card__stat-value--muted">${wantedVal || '-'}</dd>`
-        : `<dd class="dash-card__stat-value">${wantedVal}</dd>`;
+        : neverSynced
+          ? `<dd class="dash-card__stat-value dash-card__stat-value--muted">-</dd>`
+          : `<dd class="dash-card__stat-value">${wantedVal}</dd>`;
       const eligibleText = offline
         ? `<dd class="dash-card__stat-value dash-card__stat-value--muted">-</dd>`
         : disabled
           ? `<dd class="dash-card__stat-value dash-card__stat-value--muted">-</dd>`
-          : `<dd class="dash-card__stat-value dash-card__stat-value--eligible">${eligibleVal}</dd>`;
+          : neverSynced
+            ? `<dd class="dash-card__stat-value dash-card__stat-value--muted">-</dd>`
+            : `<dd class="dash-card__stat-value dash-card__stat-value--eligible">${eligibleVal}</dd>`;
       const searchedText = offline || disabled
         ? `<dd class="dash-card__stat-value dash-card__stat-value--muted">${searched24hVal}</dd>`
         : `<dd class="dash-card__stat-value dash-card__stat-value--searched">${searched24hVal}</dd>`;

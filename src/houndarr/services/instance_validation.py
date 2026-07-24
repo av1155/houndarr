@@ -69,13 +69,14 @@ class ConnectionCheck:
     """Result of a connection test against an *arr instance.
 
     ``reachable`` is the only field that is always populated; the
-    other two carry the remote's self-reported name + version when
-    the probe succeeded and stay ``None`` when it failed.
+    others carry the remote's self-reported identity when the probe
+    succeeded and stay ``None`` when it failed.
     """
 
     reachable: bool
     app_name: str | None = None
     version: str | None = None
+    instance_name: str | None = None
 
 
 _APP_NAME_TO_TYPE: dict[str, InstanceType] = {
@@ -512,10 +513,22 @@ async def run_connection_test(
     # (instance_id set); "add this instance" is shown when the form
     # is creating a new one.
     action = "save changes" if instance_id else "add this instance"
+    # The remote's self-reported instance name is only shown when the
+    # operator customised it: the factory default equals the app name, and
+    # echoing that back is noise.  A custom name is the one signal that
+    # tells apart same-app servers (a 4K container, an old stack) when the
+    # user is unsure which one they just probed.
+    named = ""
+    if (
+        check.instance_name
+        and check.app_name
+        and check.instance_name.strip().lower() != check.app_name.strip().lower()
+    ):
+        named = f' (instance "{check.instance_name}")'
     if check.app_name and check.version:
-        message = f"Connected to {check.app_name} v{check.version}. You can now {action}."
+        message = f"Connected to {check.app_name} v{check.version}{named}. You can now {action}."
     elif check.app_name:
-        message = f"Connected to {check.app_name}. You can now {action}."
+        message = f"Connected to {check.app_name}{named}. You can now {action}."
     else:
         message = f"Connection successful. You can now {action}."
     return ConnectionTestOutcome(ok=True, message=message, status_code=200)
@@ -557,4 +570,5 @@ async def check_connection(
         reachable=True,
         app_name=status.app_name,
         version=status.version,
+        instance_name=status.instance_name,
     )

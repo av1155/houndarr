@@ -101,6 +101,13 @@ class Supervisor:
         # `last_activity_at` in that case until the first post-restart cycle
         # completes.
         self._last_cycle_end: dict[int, datetime] = {}
+        # Instances whose snapshot refresh is in a transport-failure streak.
+        # A failed refresh leaves the dashboard counters at their last-known
+        # values (0 forever on a never-synced instance), so the first failure
+        # in a streak must be visible at the default log level.  Repeats stay
+        # at debug, mirroring the reconnect state machine's one-row-per-streak
+        # rule; membership clears on the next successful refresh.
+        self._snapshot_fail_warned: set[int] = set()
 
     # Lifecycle
 
@@ -519,11 +526,21 @@ class Supervisor:
                     unreleased_count=snap.unreleased_count,
                 )
                 await reconcile_cooldowns(instance.core.id, reconcile_sets)
+                self._snapshot_fail_warned.discard(instance.core.id)
             except (httpx.TransportError, ClientTransportError):
-                logger.debug(
-                    "Supervisor: snapshot refresh skipped for %r; instance unreachable",
-                    instance.core.name,
-                )
+                if instance.core.id not in self._snapshot_fail_warned:
+                    self._snapshot_fail_warned.add(instance.core.id)
+                    logger.warning(
+                        "Supervisor: snapshot refresh failed for %r (%s); dashboard "
+                        "counts keep their last-known values until a refresh succeeds",
+                        instance.core.name,
+                        instance.core.url,
+                    )
+                else:
+                    logger.debug(
+                        "Supervisor: snapshot refresh skipped for %r; instance unreachable",
+                        instance.core.name,
+                    )
             except Exception:
                 logger.exception("Supervisor: snapshot refresh failed for %r", instance.core.name)
 

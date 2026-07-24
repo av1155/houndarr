@@ -61,9 +61,12 @@ class SystemStatus(_ArrModel):
     """Result of ``/system/status``; used by :meth:`ArrClient.ping` and the
     Test Connection flow on the Settings page.
 
-    Both fields are optional because *arr forks (Bookshelf, Reading Glasses)
+    All fields are optional because *arr forks (Bookshelf, Reading Glasses)
     sometimes omit ``appName`` or ``version`` from their status payload and
     Houndarr must still report the instance as reachable.
+    ``instance_name`` is the operator-assigned display name from the *arr's
+    own settings; it defaults to the app name upstream, so a differing value
+    is the signal that identifies which of several same-app servers answered.
 
     The ``app_name`` field uses ``validation_alias=AliasChoices(...)``
     rather than ``alias=`` so the constructor parameter exposed to static
@@ -80,6 +83,11 @@ class SystemStatus(_ArrModel):
         default=None,
         validation_alias=AliasChoices("appName", "app_name"),
         serialization_alias="appName",
+    )
+    instance_name: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("instanceName", "instance_name"),
+        serialization_alias="instanceName",
     )
     version: str | None = None
 

@@ -276,6 +276,37 @@ async def test_fetch_recent_searches_scopes_to_instance_and_kind(
     assert await repo.fetch_recent_searches(2, search_kind="missing", within_seconds=3600) == 1
 
 
+@pytest.mark.asyncio()
+async def test_has_rows_for_cycle_true_when_row_exists(seeded_instances: None) -> None:
+    """A row stamped with the cycle_id makes the probe return True."""
+    await repo.insert_log_row(
+        instance_id=1,
+        item_id=1,
+        item_type="episode",
+        action="skipped",
+        search_kind="missing",
+        cycle_id="cycle-abc",
+    )
+    assert await repo.has_rows_for_cycle("cycle-abc") is True
+
+
+@pytest.mark.asyncio()
+async def test_has_rows_for_cycle_false_for_other_cycles(seeded_instances: None) -> None:
+    """Rows from other cycles (or NULL cycle_id) do not match."""
+    await repo.insert_log_row(
+        instance_id=1,
+        item_id=1,
+        item_type="episode",
+        action="searched",
+        search_kind="missing",
+        cycle_id="cycle-abc",
+    )
+    await repo.insert_log_row(
+        instance_id=1, item_id=2, item_type="episode", action="searched", search_kind="missing"
+    )
+    assert await repo.has_rows_for_cycle("cycle-other") is False
+
+
 @pytest.mark.pinning()
 @pytest.mark.asyncio()
 async def test_delete_logs_for_instance_returns_row_count(seeded_instances: None) -> None:

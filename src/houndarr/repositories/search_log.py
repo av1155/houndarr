@@ -226,45 +226,26 @@ async def fetch_recent_searches(
     return int(row[0]) if row else 0
 
 
-async def has_rows_for_cycle(cycle_id: str, *, within_seconds: int = 3600) -> bool:
+async def has_rows_for_cycle(cycle_id: str) -> bool:
     """Return whether any ``search_log`` row was written for *cycle_id*.
 
     Used by the engine's run-now epilogue: a manual cycle that wrote no
     rows at all (empty wanted list, or every pass disabled) would
     otherwise finish invisibly, so the engine probes this and writes a
-    single info row explaining there was nothing to evaluate.
-
-    The trailing-window bound keeps the probe on
-    ``idx_search_log_timestamp`` (``cycle_id`` itself is unindexed);
-    callers check a cycle that started seconds ago, so the default
-    window is generous.
+    single info row explaining there was nothing to evaluate.  The
+    equality lookup rides ``idx_search_log_cycle``.
 
     Args:
         cycle_id: Shared cycle identifier stamped on every row of one
             cycle.
-        within_seconds: Trailing window to search. Non-positive values
-            return ``False`` without touching the database.
 
     Returns:
-        ``True`` when at least one row carries *cycle_id* inside the
-        window.
+        ``True`` when at least one row carries *cycle_id*.
     """
-    if within_seconds <= 0:
-        return False
-
-    cutoff = datetime.now(UTC) - timedelta(seconds=within_seconds)
-    cutoff_iso = cutoff.strftime("%Y-%m-%dT%H:%M:%S.%f") + "Z"
-
     async with get_db() as db:
         async with db.execute(
-            """
-            SELECT 1
-            FROM search_log
-            WHERE timestamp > ?
-              AND cycle_id = ?
-            LIMIT 1
-            """,
-            (cutoff_iso, cycle_id),
+            "SELECT 1 FROM search_log WHERE cycle_id = ? LIMIT 1",
+            (cycle_id,),
         ) as cur:
             row = await cur.fetchone()
     return row is not None

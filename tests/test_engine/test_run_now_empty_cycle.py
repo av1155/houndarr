@@ -105,6 +105,22 @@ async def test_run_now_with_skip_row_writes_no_info_row(seeded_instances: None) 
 
 
 @pytest.mark.asyncio()
+async def test_run_now_all_passes_disabled_names_the_cause(seeded_instances: None) -> None:
+    """With every search pass off, the info row says so instead of claiming
+    an empty wanted list (no HTTP call is made at all in this state)."""
+    instance = _sonarr_instance(missing_enabled=False)
+
+    count = await run_instance_search(instance, MASTER_KEY, cycle_trigger="run_now")
+
+    assert count == 0
+    rows = await get_log_rows()
+    assert len(rows) == 1
+    assert rows[0]["action"] == "info"
+    assert rows[0]["reason"] == "nothing to evaluate"
+    assert rows[0]["message"] == "Run now finished: every search pass is disabled for this instance"
+
+
+@pytest.mark.asyncio()
 @respx.mock
 async def test_run_now_with_search_writes_no_info_row(seeded_instances: None) -> None:
     """A manual cycle that dispatched a search never appends the info row."""

@@ -390,6 +390,21 @@ class Supervisor:
                     instance.core.url,
                     _CONNECT_RETRY_SECS,
                 )
+                # Manual runs bypass the reconnect state machine (it lives
+                # in the scheduled loop), so without this row an unreachable
+                # instance answers Run now with a success flash and an empty
+                # history.  Scheduled cycles leave the row to the state
+                # machine's one-per-streak transition instead.
+                if cycle_trigger == "run_now":
+                    await _write_log(
+                        instance_id=instance.core.id,
+                        item_id=None,
+                        item_type=None,
+                        action=SearchAction.error.value,
+                        cycle_id=cycle_id,
+                        cycle_trigger=cycle_trigger,
+                        message=f"Could not reach {instance.core.url}",
+                    )
                 return True
             except (EngineError, ClientError) as exc:
                 # ``run_instance_search`` wraps any non-typed escape in

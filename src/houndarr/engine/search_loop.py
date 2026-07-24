@@ -1654,6 +1654,11 @@ async def _run_instance_search_impl(
         from houndarr.repositories.search_log import has_rows_for_cycle
 
         if not await has_rows_for_cycle(cycle_id_value):
+            message = (
+                "Run now finished: no wanted items to evaluate"
+                if any_pass_enabled
+                else "Run now finished: every search pass is disabled for this instance"
+            )
             await _write_log(
                 instance.core.id,
                 None,
@@ -1662,7 +1667,7 @@ async def _run_instance_search_impl(
                 cycle_id=cycle_id_value,
                 cycle_trigger=cycle_trigger,
                 reason="nothing to evaluate",
-                message="Run now finished: no wanted items to evaluate",
+                message=message,
             )
 
     return searched

@@ -519,12 +519,13 @@ async def run_connection_test(
     # tells apart same-app servers (a 4K container, an old stack) when the
     # user is unsure which one they just probed.
     named = ""
+    display_name = (check.instance_name or "").strip()
     if (
-        check.instance_name
+        display_name
         and check.app_name
-        and check.instance_name.strip().lower() != check.app_name.strip().lower()
+        and display_name.lower() != check.app_name.strip().lower()
     ):
-        named = f' (instance "{check.instance_name}")'
+        named = f' (instance "{display_name}")'
     if check.app_name and check.version:
         message = f"Connected to {check.app_name} v{check.version}{named}. You can now {action}."
     elif check.app_name:

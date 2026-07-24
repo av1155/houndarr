@@ -653,6 +653,57 @@ async def test_snapshot_transport_failure_warns_once_per_streak(
     assert len(debugs) == 1, f"repeat failures should stay at DEBUG, got: {debugs}"
 
 
+@pytest.mark.asyncio()
+async def test_run_now_transport_error_writes_error_row(seeded_instances: None) -> None:
+    """A manual cycle against an unreachable instance leaves a visible error row.
+
+    Manual runs bypass the scheduled loop's reconnect state machine, so the
+    cycle itself must write the row; without it, Run now answers with a
+    success flash and an empty history (issue #678).
+    """
+    inst = _make_instance(enabled=True)
+
+    with patch(
+        "houndarr.engine.supervisor.run_instance_search",
+        AsyncMock(side_effect=httpx.ConnectError("refused")),
+    ):
+        supervisor = Supervisor(master_key=MASTER_KEY)
+        got_error = await supervisor._run_search_cycle(inst, cycle_trigger="run_now")
+
+    assert got_error is True
+    async with get_db() as conn:
+        async with conn.execute(
+            "SELECT action, cycle_trigger, message FROM search_log"
+        ) as cur:
+            rows = [dict(r) for r in await cur.fetchall()]
+    assert len(rows) == 1
+    assert rows[0]["action"] == "error"
+    assert rows[0]["cycle_trigger"] == "run_now"
+    assert rows[0]["message"] == f"Could not reach {inst.core.url}"
+
+
+@pytest.mark.asyncio()
+async def test_scheduled_transport_error_leaves_row_to_state_machine(
+    seeded_instances: None,
+) -> None:
+    """Scheduled cycles do not write the transport row themselves; the
+    reconnect state machine owns the one-per-streak transition rows."""
+    inst = _make_instance(enabled=True)
+
+    with patch(
+        "houndarr.engine.supervisor.run_instance_search",
+        AsyncMock(side_effect=httpx.ConnectError("refused")),
+    ):
+        supervisor = Supervisor(master_key=MASTER_KEY)
+        got_error = await supervisor._run_search_cycle(inst, cycle_trigger="scheduled")
+
+    assert got_error is True
+    async with get_db() as conn:
+        async with conn.execute("SELECT COUNT(*) AS n FROM search_log") as cur:
+            row = await cur.fetchone()
+    assert row is not None and row["n"] == 0
+
+
 @pytest.mark.parametrize(
     "reconcile_exc",
     [

@@ -116,13 +116,14 @@ or Jellyseerr alongside your *arr stack.
 
 ## Houndarr's history shows titles that aren't in my \*arr library. Where do they come from?
 
-Every history row is copied from a live wanted list response of the
-URL configured on that instance, and a `searched` row only appears
-after that same server accepts the search command. Compare the
-instance URL in Houndarr's settings against the \*arr you are
-viewing, then look for one of the titles under that server's
-`Wanted > Missing` page. A second container (a 4K instance, an old
-stack) or an import list quietly adding items is the usual cause.
+Every title in the history was reported by the \*arr at the URL
+configured on that instance moments before the row was written, and
+a `searched` row only appears after that same server accepts the
+search command. Compare the instance URL in Houndarr's settings
+against the \*arr you are viewing; for missing items, the title
+will be under that server's `Wanted > Missing` page. A second
+container (a 4K instance, an old stack) or an import list quietly
+adding items is the usual cause.
 `Test connection` shows the server's custom instance name when it
 has one, which helps tell same-app servers apart.
 

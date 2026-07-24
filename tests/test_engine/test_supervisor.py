@@ -672,14 +672,44 @@ async def test_run_now_transport_error_writes_error_row(seeded_instances: None) 
 
     assert got_error is True
     async with get_db() as conn:
-        async with conn.execute(
-            "SELECT action, cycle_trigger, message FROM search_log"
-        ) as cur:
+        async with conn.execute("SELECT action, cycle_trigger, message FROM search_log") as cur:
             rows = [dict(r) for r in await cur.fetchall()]
     assert len(rows) == 1
     assert rows[0]["action"] == "error"
     assert rows[0]["cycle_trigger"] == "run_now"
     assert rows[0]["message"] == f"Could not reach {inst.core.url}"
+
+
+@pytest.mark.asyncio()
+async def test_run_now_recovery_writes_reachable_again_row(seeded_instances: None) -> None:
+    """The next successful cycle pairs an open run-now error with a recovery row.
+
+    Without the pairing, the error row stays the newest row forever on an
+    empty backlog (healthy cycles write nothing there) and pins the card
+    offline with the Run now button disabled.
+    """
+    inst = _make_instance(enabled=True)
+    supervisor = Supervisor(master_key=MASTER_KEY)
+
+    with patch(
+        "houndarr.engine.supervisor.run_instance_search",
+        AsyncMock(side_effect=httpx.ConnectError("refused")),
+    ):
+        await supervisor._run_search_cycle(inst, cycle_trigger="run_now")
+
+    with patch(
+        "houndarr.engine.supervisor.run_instance_search",
+        AsyncMock(return_value=0),
+    ):
+        await supervisor._run_search_cycle(inst, cycle_trigger="scheduled")
+        # A second success must not repeat the recovery row.
+        await supervisor._run_search_cycle(inst, cycle_trigger="scheduled")
+
+    async with get_db() as conn:
+        async with conn.execute("SELECT action, message FROM search_log ORDER BY id") as cur:
+            rows = [dict(r) for r in await cur.fetchall()]
+    assert [r["action"] for r in rows] == ["error", "info"]
+    assert rows[1]["message"] == f"{inst.core.name!r} ({inst.core.url}) is reachable again"
 
 
 @pytest.mark.asyncio()

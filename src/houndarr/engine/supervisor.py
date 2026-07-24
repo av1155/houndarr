@@ -101,6 +101,14 @@ class Supervisor:
         # `last_activity_at` in that case until the first post-restart cycle
         # completes.
         self._last_cycle_end: dict[int, datetime] = {}
+        # Instances with an unresolved run-now "Could not reach" error row.
+        # The dashboard marks a card offline while its newest row is an
+        # error, and healthy cycles on an empty backlog write no rows at
+        # all, so that row would pin the card offline forever (with the
+        # Run now button disabled) unless the next successful cycle pairs
+        # it with the same recovery info row the reconnect state machine
+        # writes for scheduled streaks.
+        self._manual_error_open: set[int] = set()
         # Instances whose snapshot refresh is in a transport-failure streak.
         # A failed refresh leaves the dashboard counters at their last-known
         # values (0 forever on a never-synced instance), so the first failure
@@ -377,6 +385,19 @@ class Supervisor:
                     cycle_id=cycle_id,
                     cycle_trigger=cycle_trigger,
                 )
+                if instance.core.id in self._manual_error_open:
+                    self._manual_error_open.discard(instance.core.id)
+                    await _write_log(
+                        instance_id=instance.core.id,
+                        item_id=None,
+                        item_type=None,
+                        action=SearchAction.info.value,
+                        cycle_id=cycle_id,
+                        cycle_trigger=cycle_trigger,
+                        message=(
+                            f"{instance.core.name!r} ({instance.core.url}) is reachable again"
+                        ),
+                    )
                 return False
             except (httpx.TransportError, ClientTransportError):
                 # ``ClientTransportError`` is the typed wrapper the *arr
@@ -396,6 +417,7 @@ class Supervisor:
                 # history.  Scheduled cycles leave the row to the state
                 # machine's one-per-streak transition instead.
                 if cycle_trigger == "run_now":
+                    self._manual_error_open.add(instance.core.id)
                     await _write_log(
                         instance_id=instance.core.id,
                         item_id=None,

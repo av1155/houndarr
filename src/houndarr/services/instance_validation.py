@@ -520,11 +520,7 @@ async def run_connection_test(
     # user is unsure which one they just probed.
     named = ""
     display_name = (check.instance_name or "").strip()
-    if (
-        display_name
-        and check.app_name
-        and display_name.lower() != check.app_name.strip().lower()
-    ):
+    if display_name and check.app_name and display_name.lower() != check.app_name.strip().lower():
         named = f' (instance "{display_name}")'
     if check.app_name and check.version:
         message = f"Connected to {check.app_name} v{check.version}{named}. You can now {action}."

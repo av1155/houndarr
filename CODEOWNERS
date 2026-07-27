@@ -1,2 +1,3 @@
-# Global code owner — all files require review from @av1155
+# Global code owner: @av1155 is requested for review on every file.
+# Code owner review is not a required merge gate on `main`.
 * @av1155

@@ -47,11 +47,16 @@ identical check names so branch protection is satisfied.
 ## Branch protection on `main`
 
 - 11 required status checks (strict; branch must be up to date)
-- Required PR reviews enabled (dismiss stale reviews, required conversation resolution)
+- PRs required, stale reviews dismissed, conversation resolution required
+- Required approving reviews is 0, so no approval blocks a merge
 - Linear history enforced (no merge commits)
 - No force pushes, no branch deletions
-- Enforce admins enabled
-- CODEOWNERS: `@av1155` owns all files
+- Admin enforcement is off. The rules above bind contributors; the
+  maintainer account can push to `main` and merge past a failing check.
+  The hooks in `.claude/settings.json` are the real block on direct
+  edits and pushes while on `main`.
+- CODEOWNERS assigns `@av1155` to every file, but code owner review is
+  not a required gate
 
 ## Don't break this
 

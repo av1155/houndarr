@@ -108,8 +108,12 @@ docs-only PRs satisfy branch protection. **Do not modify the 11 required
 check job names**: branch protection depends on exact name matches.
 
 Branch protection on `main`: 11 required status checks (strict; branch
-must be up to date), required PR reviews, linear history, no force
-pushes, no branch deletions, enforce admins, CODEOWNERS `@av1155`.
+must be up to date), PRs required, stale reviews dismissed,
+conversation resolution required, linear history, no force pushes, no
+branch deletions. Required approving reviews is 0 and CODEOWNERS
+`@av1155` is informational, so no approval blocks a merge. Admin
+enforcement is off, which means the rules above bind contributors while
+the maintainer account can bypass them.
 
 ---
 
@@ -277,7 +281,11 @@ Subject line max 50 characters (including the `type(scope): ` prefix); body line
 
 ### Restrictions on `main`
 
-- No direct pushes (branch protection + enforce admins)
+- No direct pushes. Admin enforcement is off, so the remote accepts a
+  push to `main` from the maintainer account; the hooks in
+  `.claude/settings.json` are what actually block editing repo files and
+  pushing while on `main`. Treat this as policy, not as a guarantee the
+  server will catch the mistake.
 - No force pushes
 - No branch deletion
 - All changes go through PRs with passing required checks

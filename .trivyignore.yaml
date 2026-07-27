@@ -1,0 +1,23 @@
+# Advisories the lockfiles cannot resolve away yet. Read by the Trivy
+# filesystem scan through the `trivyignores` input in
+# .github/workflows/security.yml.
+#
+# Every entry is scoped to the lockfile it applies to and carries an
+# `expired_at` date, so the scan turns red again if the upstream fix
+# never lands. Delete the entry once the floor can be raised instead.
+
+vulnerabilities:
+  - id: CVE-2026-14257
+    paths:
+      - "website/pnpm-lock.yaml"
+    expired_at: 2026-09-08
+    statement: >-
+      brace-expansion is patched only in 5.0.8; the advisory covers every
+      earlier release across all four majors, so no 1.x floor can satisfy
+      it. The docs-site tree reaches brace-expansion through minimatch 3,
+      which needs the CommonJS default export that 5.x replaced with a
+      named one, so the tree stays on 1.x until the upstream v1 backport
+      (juliangruber/brace-expansion#129) ships 1.1.17. minimatch 3 is
+      pulled in only by serve-handler behind `docusaurus serve`, which
+      passes no rewrite, redirect or header globs, so nothing in this
+      repo reaches the expansion code.

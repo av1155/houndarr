@@ -11,10 +11,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - The Docker image no longer ships `pip` or `uv` and is roughly 87MB smaller; `docker exec` sessions no longer have either available. (#693)
 
-### Security
-
-- Image scans stop reporting the `msgpack` and `setuptools` advisories, which came from pip's vendored manifest and no Houndarr code path reached. (#693)
-
 ---
 
 ## [1.13.0] - 2026-07-24

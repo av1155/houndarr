@@ -100,7 +100,10 @@ async def test_lifespan_fails_when_css_bundle_missing(
 
     messages = [record.getMessage() for record in caplog.records]
     assert any("pnpm run build-css" in m for m in messages)
-    assert any("from-source.md" in m for m in messages)
+    assert any("installation/from-source" in m for m in messages)
+    # The old message told operators to run `corepack enable` first, which
+    # Node 25 and newer no longer ship (#691).
+    assert not any("corepack" in m for m in messages)
 
 
 async def test_lifespan_succeeds_when_css_bundle_present(

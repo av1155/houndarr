@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- The missing-CSS-bundle startup error drops the `corepack enable` step, which fails on Node 25 and newer; `pnpm install` alone honours the `packageManager` pin. (#691)
+- The missing-CSS-bundle startup error no longer prefixes its fix command with `corepack enable`, which Node 25 and newer do not ship. (#691)
 
 ---
 

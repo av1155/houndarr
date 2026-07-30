@@ -14,10 +14,10 @@
 FROM node:22-alpine AS css-build
 WORKDIR /build
 
-# node:22-alpine still bundles corepack, which is the only route to pnpm in
-# this image. Node 25 dropped it from the distribution, so a base bump past
-# 24 has to install pnpm another way. The packageManager field in
-# package.json pins the exact pnpm version.
+# corepack ships with node:22-alpine, so enabling it is the cheapest way to
+# get pnpm here. Node 25 stopped distributing corepack, so a base bump past 24
+# needs `npm i -g pnpm` or the standalone installer instead. The packageManager
+# field in package.json pins the exact pnpm version either way.
 RUN corepack enable
 
 # Copy manifest + lockfile + workspace config first for better layer caching.

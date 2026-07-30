@@ -92,7 +92,7 @@ async def _lifespan(app: FastAPI) -> AsyncGenerator[None]:
             "pnpm run build-css` from the project root before starting "
             "Houndarr, or use the official Docker image which builds "
             "it automatically. See "
-            "docs/guides/installation/from-source.md.",
+            "https://av1155.github.io/houndarr/docs/guides/installation/from-source.",
             css_bundle,
         )
         msg = "Compiled CSS bundle missing; refusing to start"

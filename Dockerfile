@@ -65,11 +65,20 @@ RUN apt-get update \
 # reads the project version; copy them too so `uv export` can resolve the
 # build backend without the rest of the source tree.
 COPY pyproject.toml uv.lock VERSION hatch_build.py ./
+#
+# pip and uv are removed in the same layer once the install finishes.  Neither
+# is invoked at runtime, and pip's vendored dependency set (`pip/_vendor/
+# vendor.txt`, which pins msgpack and setuptools) is what image scanners report
+# against the published image even though no Houndarr code path can reach it.
+# Dropping them here keeps them out of the layer instead of whiting them out in
+# a later one, so the image shrinks as well.
 # hadolint ignore=DL3013
 RUN pip install --no-cache-dir --upgrade pip uv \
     && uv export --frozen --no-hashes --no-emit-project --no-dev -o /tmp/requirements.txt \
     && pip install --no-cache-dir -r /tmp/requirements.txt \
-    && rm /tmp/requirements.txt
+    && rm /tmp/requirements.txt \
+    && python -m pip uninstall --yes uv \
+    && python -m pip uninstall --yes pip
 
 # Copy application source
 COPY src/ ./src/

@@ -7,10 +7,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Fixed
-
-- The missing-CSS-bundle startup error no longer prefixes its fix command with `corepack enable`, which Node 25 and newer do not ship. (#691)
-
 ---
 
 ## [1.13.0] - 2026-07-24

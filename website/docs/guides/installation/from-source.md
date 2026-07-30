@@ -17,7 +17,7 @@ is for development.
 - Python 3.13 or later
 - [uv](https://docs.astral.sh/uv/) (preferred) or pip
 - Node.js 22 or later
-- pnpm 11 or later (via `corepack enable`)
+- pnpm 11 or later ([install](https://pnpm.io/installation))
 
 ## Setup
 
@@ -31,8 +31,8 @@ cd houndarr
 # by default.
 uv sync
 
-# Compile the Tailwind + daisyUI CSS bundle
-corepack enable
+# Compile the Tailwind + daisyUI CSS bundle. pnpm reads the packageManager
+# pin in package.json and fetches that exact version itself.
 pnpm install --frozen-lockfile
 pnpm run build-css
 

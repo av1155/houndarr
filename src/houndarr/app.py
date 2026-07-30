@@ -88,7 +88,7 @@ async def _lifespan(app: FastAPI) -> AsyncGenerator[None]:
     if not css_bundle.is_file():
         logger.critical(
             "Compiled CSS bundle not found at %s. Run "
-            "`corepack enable && pnpm install --frozen-lockfile && "
+            "`pnpm install --frozen-lockfile && "
             "pnpm run build-css` from the project root before starting "
             "Houndarr, or use the official Docker image which builds "
             "it automatically. See "

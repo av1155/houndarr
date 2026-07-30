@@ -9,11 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- The Docker image ships without `pip` and `uv`, which were only ever build-time tools, and is about 87MB smaller for it. `docker exec` sessions no longer have either on `PATH`. (#693)
+- The Docker image no longer ships `pip` or `uv` and is roughly 87MB smaller; `docker exec` sessions no longer have either available. (#693)
 
 ### Security
 
-- Image scans no longer report `msgpack` and `setuptools` advisories. Both were pins inside pip's vendored manifest rather than installed packages, and no Houndarr code path reached them. (#693)
+- Image scans stop reporting the `msgpack` and `setuptools` advisories, which came from pip's vendored manifest and no Houndarr code path reached. (#693)
 
 ---
 

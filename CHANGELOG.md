@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- `cryptography` bumped to 50.0.0, clearing GHSA-g6cj-pr64-35w5, a Bleichenbacher oracle in PKCS#7 decryption; Houndarr links it only through Fernet encryption of stored \*arr API keys. (#704)
+
 ---
 
 ## [1.13.0] - 2026-07-24

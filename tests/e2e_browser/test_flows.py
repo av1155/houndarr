@@ -778,6 +778,10 @@ def test_instance_toggle_and_delete_keeps_layout_stable(
     # Toggle back so the row is Active again, then delete.
     toggle_btn.click()
     expect(toggle_btn).to_have_text(re.compile(r"Disable", re.I), timeout=5_000)
+    # The label flips mid-swap, so match the first toggle above and wait for
+    # the swap to settle. Otherwise the delete click below can land on the
+    # row HTMX is still replacing.
+    _wait_for_htmx_idle(page)
 
     delete_btn = row.locator("button[hx-delete]")
     # settings.js intercepts htmx:confirm and routes delete through the

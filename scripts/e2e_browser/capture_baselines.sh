@@ -149,6 +149,35 @@ _wait_for_houndarr() {
     exit 1
 }
 
+# Create the admin account, mirroring the "Create test admin account" step
+# in .github/workflows/browser-e2e.yml.  Without it a local stack diverges
+# from CI: POST /setup is what seeds ``changelog_last_seen_version``, and
+# an unseeded marker makes the What's-new modal auto-open 800ms after
+# every page load, where showModal() renders the page inert and every
+# subsequent click in the suite is intercepted.
+#
+# A 302 means setup already ran against a database this stack inherited,
+# so the marker was never seeded and the modal will interfere.  That is
+# the only reliable way to detect the condition: on macOS the host copy
+# of DATA_DIR looks empty even when the container's /data is not.
+_seed_setup() {
+    local code
+    code=$(curl -s -o /dev/null -w '%{http_code}' \
+        -X POST "http://localhost:${HOUNDARR_HOST_PORT}/setup" \
+        -d 'username=admin&password=CITestPass1!&password_confirm=CITestPass1!')
+    case "${code}" in
+        303) _info "admin account created (admin / CITestPass1!)" ;;
+        302)
+            _warn "setup already complete: this stack inherited a database"
+            _warn "the What's-new modal will steal clicks; run 'just e2e-down' first"
+            ;;
+        *)
+            _fail "unexpected status ${code} from POST /setup"
+            exit 1
+            ;;
+    esac
+}
+
 _teardown() {
     _info "tearing down e2e stack"
     docker rm -f houndarr-e2e mock-sonarr mock-radarr >/dev/null 2>&1 || true
@@ -158,6 +187,13 @@ _teardown() {
     # specific dataset in their home dir) should not have that
     # directory wiped on teardown; leave it in place and warn instead.
     if [ "${DATA_DIR}" = "/tmp/houndarr-e2e-data" ]; then
+        # Docker Desktop on macOS keeps bind-mount contents inside its VM
+        # rather than on the host path, so a host-side rm leaves the
+        # container's /data untouched and the next ``up`` inherits a
+        # completed setup.  Clear it through a container first so
+        # teardown means the same thing on Linux and macOS.
+        docker run --rm -v "${DATA_DIR}:/data" --entrypoint sh "${IMAGE}" \
+            -c 'find /data -mindepth 1 -delete' >/dev/null 2>&1 || true
         rm -rf "${DATA_DIR}"
     else
         _warn "DATA_DIR override detected (${DATA_DIR}); leaving contents intact"
@@ -172,6 +208,7 @@ _up() {
     _wait_for_mocks
     _start_houndarr
     _wait_for_houndarr
+    _seed_setup
     _info "stack up.  docker ps | grep -E 'houndarr-e2e|mock-'"
     _info "when finished, tear down with: just e2e-down"
 }

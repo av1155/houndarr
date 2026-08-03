@@ -66,3 +66,11 @@ identical check names so branch protection is satisfied.
 - Keep `paths-ignore` patterns in sync across the six main workflows.
 - If mypy CI fails with "merge ref not found": push an empty commit to
   retrigger.
+- Keep every action pinned to a full 40-character commit SHA with the
+  release version as the last token of a trailing comment
+  (`uses: owner/repo@<sha> # vX.Y.Z`). Dependabot rewrites the SHA and
+  the comment together, but only while the version ends the comment.
+  A tag or branch ref can be repointed by the action owner; a SHA
+  cannot. When pinning by hand, dereference annotated tags to their
+  commit: for those actions `git/ref/tags/vN` returns a tag object
+  whose SHA the runner cannot resolve.

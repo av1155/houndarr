@@ -65,11 +65,16 @@ RUN apt-get update \
 # reads the project version; copy them too so `uv export` can resolve the
 # build backend without the rest of the source tree.
 COPY pyproject.toml uv.lock VERSION hatch_build.py ./
+# pip vendors its own copies of msgpack and setuptools (see
+# pip/_vendor/vendor.txt), which the image scanner reports as CVEs even though
+# no runtime code imports them. Neither pip nor uv is needed once the
+# dependencies are installed, so drop both in the same layer that used them.
 # hadolint ignore=DL3013
 RUN pip install --no-cache-dir --upgrade pip uv \
     && uv export --frozen --no-hashes --no-emit-project --no-dev -o /tmp/requirements.txt \
     && pip install --no-cache-dir -r /tmp/requirements.txt \
-    && rm /tmp/requirements.txt
+    && rm /tmp/requirements.txt \
+    && pip uninstall -y uv pip
 
 # Copy application source
 COPY src/ ./src/

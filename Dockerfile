@@ -65,11 +65,16 @@ RUN apt-get update \
 # reads the project version; copy them too so `uv export` can resolve the
 # build backend without the rest of the source tree.
 COPY pyproject.toml uv.lock VERSION hatch_build.py ./
+# pip vendors its own copies of msgpack and setuptools (see
+# pip/_vendor/vendor.txt), which the image scanner reports as CVEs even though
+# no runtime code imports them. Neither pip nor uv is needed once the
+# dependencies are installed, so drop both in the same layer that used them.
 # hadolint ignore=DL3013
 RUN pip install --no-cache-dir --upgrade pip uv \
     && uv export --frozen --no-hashes --no-emit-project --no-dev -o /tmp/requirements.txt \
     && pip install --no-cache-dir -r /tmp/requirements.txt \
-    && rm /tmp/requirements.txt
+    && rm /tmp/requirements.txt \
+    && pip uninstall -y uv pip
 
 # Copy application source
 COPY src/ ./src/
@@ -96,7 +101,11 @@ EXPOSE 8877
 # Data volume for persistent state
 VOLUME ["/data"]
 
-# Health check: poll the unauthenticated /api/health endpoint
+# Health check: poll the unauthenticated /api/health endpoint.
+# `|| exit 1` collapses curl's own exit codes (22 on HTTP error, 7 on
+# connection refused) into the single status Docker reads as unhealthy.
+# That needs shell form, so DL3025's JSON notation cannot express it.
+# hadolint ignore=DL3025
 HEALTHCHECK --interval=60s --timeout=10s --start-period=10s --retries=3 \
     CMD curl --fail --silent http://localhost:8877/api/health || exit 1
 

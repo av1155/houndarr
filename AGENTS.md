@@ -401,6 +401,14 @@ someone comments, so reporters get immediate feedback.
 - Do not change `ci-skip.yml` job names without updating branch protection
 - If mypy CI fails with "merge ref not found": push an empty commit to retrigger
 - Keep `paths-ignore` patterns in sync across the six main workflows
+- Keep every action pinned to a full 40-character commit SHA with the release
+  version as the last token of a trailing comment
+  (`uses: owner/repo@<sha> # vX.Y.Z`). Dependabot rewrites the SHA and the
+  comment together, but only while the version ends the comment, so
+  `# v7.0.1 (pinned)` silently stops the comment tracking the SHA. A tag or
+  branch ref can be repointed by the action owner; a SHA cannot. When pinning
+  by hand, dereference annotated tags to their commit: for those actions
+  `git/ref/tags/vN` returns a tag object whose SHA the runner cannot resolve
 
 ### Handling conflicts between docs and practice
 

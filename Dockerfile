@@ -96,7 +96,11 @@ EXPOSE 8877
 # Data volume for persistent state
 VOLUME ["/data"]
 
-# Health check: poll the unauthenticated /api/health endpoint
+# Health check: poll the unauthenticated /api/health endpoint.
+# `|| exit 1` collapses curl's own exit codes (22 on HTTP error, 7 on
+# connection refused) into the single status Docker reads as unhealthy.
+# That needs shell form, so DL3025's JSON notation cannot express it.
+# hadolint ignore=DL3025
 HEALTHCHECK --interval=60s --timeout=10s --start-period=10s --retries=3 \
     CMD curl --fail --silent http://localhost:8877/api/health || exit 1
 

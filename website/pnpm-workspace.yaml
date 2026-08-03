@@ -111,11 +111,17 @@ overrides:
   # faye-websocket; only active during `pnpm start`. Held to the 0.7
   # line because sockjs 0.3.24 declares ^0.7.4.
   websocket-driver: ">=0.7.5 <0.8"
-  # CVE-2026-13149: brace-expansion 1.x <1.1.16 has an exponential-
-  # time complexity DoS in pattern expansion. Transitive via the many
-  # minimatch 3.x consumers in the webpack toolchain. Held to the 1.x
-  # line because minimatch 3 declares ^1.1.7.
-  "brace-expansion@1": ">=1.1.16 <2"
+  # brace-expansion 1.x carries three DoS advisories, all fixed on the
+  # v1 maintenance line by 1.1.18: CVE-2026-13149 (exponential-time
+  # expansion of consecutive non-expanding {} groups, <1.1.16),
+  # CVE-2026-14257 (out-of-memory crash from unbounded expansion
+  # length, <1.1.17), and CVE-2026-69152 (unbounded intermediate
+  # arrays, which bypasses the CVE-2026-14257 mitigation, <1.1.18).
+  # Transitive via the many minimatch 3.x consumers in the webpack
+  # toolchain. Held to the 1.x line because minimatch 3 declares
+  # ^1.1.7 and 5.x replaced the CommonJS default export with a named
+  # one.
+  "brace-expansion@1": ">=1.1.18 <2"
   # GHSA-f88m-g3jw-g9cj: sharp <0.35.0 bundles libvips builds subject
   # to CVE-2026-33327, CVE-2026-33328, CVE-2026-35590, and
   # CVE-2026-35591. Transitive via @docusaurus/plugin-ideal-image >

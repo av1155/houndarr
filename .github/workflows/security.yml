@@ -110,10 +110,6 @@ jobs:
           severity: CRITICAL,HIGH
           ignore-unfixed: "true"
           exit-code: "1"
-          # Scoped, dated suppressions for advisories with no resolvable
-          # fix. Trivy only auto-detects the plain-text `.trivyignore`
-          # name, so the YAML form has to be passed explicitly.
-          trivyignores: .trivyignore.yaml
 
       # Upload SARIF to the GitHub Security tab for non-fork runs.
       # Fork PRs lack security-events: write so this step is skipped.
@@ -128,7 +124,6 @@ jobs:
           severity: CRITICAL,HIGH
           ignore-unfixed: "true"
           exit-code: "0"
-          trivyignores: .trivyignore.yaml
 
       - name: Upload Trivy SARIF to GitHub Security tab
         if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository

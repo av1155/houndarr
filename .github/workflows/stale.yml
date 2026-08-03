@@ -15,7 +15,7 @@ jobs:
     timeout-minutes: 5
 
     steps:
-      - uses: actions/stale@v10
+      - uses: actions/stale@v11
         with:
           # Only process issues where the maintainer asked for info.
           # General backlog issues are never auto-closed.

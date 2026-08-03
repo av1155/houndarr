@@ -22,11 +22,11 @@ jobs:
       && github.actor != 'dependabot[bot]'
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # continue-on-error so forks without GitHub Models access
       # do not see hard failures on every issue or comment.
-      - uses: github/ai-moderator@v1
+      - uses: github/ai-moderator@81159c370785e295c97461ade67d7c33576e9319 # v1.1.4
         continue-on-error: true
         with:
           token: ${{ secrets.GITHUB_TOKEN }}

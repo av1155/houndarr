@@ -93,18 +93,43 @@ def _submit_form(form: Locator) -> None:
 
 
 def _open_admin_dropdown(page: Page) -> None:
-    """Click the Admin toggle and wait for the body to finish animating open.
+    """Click the Admin toggle and wait for the panel to stop moving.
 
     Commit fdeeb74 made ``#admin-body`` start at ``height:0; opacity:0``
     on every page load, so any test that clicks into an element nested
     inside the dropdown needs to open it first. Playwright would
     otherwise wait 30s for a zero-height element to become actionable
     and fail with ``pointer events intercepted``.
+
+    ``data-open`` is not a settled signal on its own. ``setOpen`` in
+    static/js/settings.js flips it at the *start* of the 260ms expand,
+    then animates the height, so releasing on the attribute hands back
+    control while the controls at the bottom of the panel are still
+    travelling. Playwright decides a target is stable by comparing its
+    box across two frames, and late in an eased transition the per-frame
+    delta is small enough for that to pass, so the click dispatches
+    against coordinates that go stale before the event lands. It reports
+    success and the page handler never fires.
+
+    Both branches of ``setOpen`` finish by writing an inline
+    ``height: auto``: the animated one in its end-of-transition timer,
+    the prefers-reduced-motion one immediately. That makes the inline
+    height the one observable meaning "geometry is final" in either
+    mode. Read the CSSOM property rather than the computed style, which
+    resolves ``auto`` to pixels and so can never match.
     """
     panel = page.locator("#admin-grouped")
     if panel.get_attribute("data-open") != "true":
         page.locator("#admin-toggle").click()
+    # Keep asserting the attribute: it is what proves the toggle click
+    # registered at all rather than being swallowed by setOpen's
+    # re-entrancy guard, and it fails with a clearer message than the
+    # settle wait below would.
     expect(panel).to_have_attribute("data-open", "true")
+    page.wait_for_function(
+        "() => document.getElementById('admin-body')?.style.height === 'auto'",
+        timeout=5_000,
+    )
 
 
 @pytest.mark.integration
@@ -506,6 +531,11 @@ def test_admin_factory_reset_phrase_gates_submit(logged_in_page: Page, houndarr_
     page = logged_in_page
     page.goto(f"{houndarr_url}/settings")
     _open_admin_dropdown(page)
+    # Regression guard for the helper's contract. `setOpen` leaves the
+    # inline height at `auto` only once the panel has finished opening,
+    # so anything else here means the Factory reset button below is still
+    # travelling and the click that follows can miss it.
+    assert page.locator("#admin-body").evaluate("el => el.style.height") == "auto"
     page.locator('button[data-confirm-reset="factory"]').click()
     confirm_go = page.locator("#confirm-go")
     expect(confirm_go).to_be_disabled()
@@ -777,8 +807,9 @@ def test_changelog_preferences_switch_rolls_back_on_error(
     page.goto(f"{houndarr_url}/settings")
 
     # Make sure the Admin dropdown is open so #admin-updates is in layout.
-    if page.locator("#admin-grouped").get_attribute("data-open") != "true":
-        page.locator("#admin-toggle").click()
+    # `to_be_visible` alone is too weak a settle here: a child clipped by
+    # the still-collapsing overflow-hidden panel still reports a box.
+    _open_admin_dropdown(page)
     expect(page.locator("#admin-updates")).to_be_visible()
 
     # Commit 45e0fdd added a second input[name="enabled"] inside

@@ -30,3 +30,39 @@ jobs:
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           reporter: github-check
+
+  # Separate from the actionlint job on purpose: actionlint has no rule for
+  # pinning, so a failure reported under its name would send whoever hits
+  # this looking for an actionlint config that does not exist.
+  pin-check:
+    name: Actions pinned to commit SHAs
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Check action pins
+        run: |
+          set -euo pipefail
+          # actionlint's `uses:` checks validate format and flag outdated
+          # popular actions; both accept @v4 and @main, so this gap is ours
+          # to cover. Local composite actions (uses: ./path) live in this
+          # repo and have no SHA to pin, so they are exempt. Everything else
+          # must carry a full commit SHA plus a trailing version comment,
+          # and the version has to be the comment's last token or Dependabot
+          # stops updating it alongside the SHA.
+          #
+          # `|| true` because grep exits 1 when it matches nothing, which is
+          # the passing case and which `set -e` would otherwise treat as a
+          # failure.
+          offenders=$(grep -rnE '^[[:space:]]*-?[[:space:]]*uses:' .github/workflows/ \
+            | grep -vE 'uses:[[:space:]]*\./' \
+            | grep -vE 'uses:[[:space:]]*[A-Za-z0-9._/-]+@[0-9a-f]{40}[[:space:]]+#[[:space:]]+\S' \
+            || true)
+          if [ -n "$offenders" ]; then
+            echo "::error::Actions must be pinned as 'owner/repo@<40-char-sha> # vX.Y.Z'"
+            echo "$offenders"
+            exit 1
+          fi
+          echo "All action references are SHA-pinned"

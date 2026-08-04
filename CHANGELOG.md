@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Security
 
 - `cryptography` bumped to 50.0.0, clearing GHSA-g6cj-pr64-35w5, a Bleichenbacher oracle in PKCS#7 decryption; Houndarr links it only through Fernet encryption of stored \*arr API keys. (#704)
+- `pip` and `uv` are uninstalled from the runtime image after the dependency install, dropping the two HIGH findings pip's vendored copies added to image scans (GHSA-6v7p-g79w-8964, CVE-2025-47273). Neither was reachable at run time. (#697)
 
 ---
 

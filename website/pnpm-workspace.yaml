@@ -7,13 +7,15 @@ overrides:
   # crafted Object.prototype payloads. Pulled transitively through
   # the Docusaurus webpack plugins; not a direct dep.
   serialize-javascript: ">=7.0.5"
-  # postcss <=8.5.17 discloses arbitrary `.map` files through path
-  # traversal in the previous-source-map auto-loader
-  # (GHSA-r28c-9q8g-f849), fixed in 8.5.18; supersedes the earlier
-  # >=8.5.10 floor for CVE-2026-41305 (GHSA-qx2v-qp2m-jg93), the XSS
-  # via unescaped </style> in stringify output. Transitive via
+  # CVE-2026-69153 (GHSA-fxqj-rqcc-2cmp): postcss <8.5.23 still reads
+  # arbitrary `.map` files from an attacker-controlled
+  # sourceMappingURL when `from` is unset, an incomplete fix of
+  # GHSA-6g55-p6wh-862q. Supersedes the earlier >=8.5.18 floor for
+  # GHSA-r28c-9q8g-f849 (same auto-loader, path traversal) and the
+  # >=8.5.10 floor for CVE-2026-41305 (GHSA-qx2v-qp2m-jg93, XSS via
+  # unescaped </style> in stringify output). Transitive via
   # @docusaurus/core.
-  postcss: ">=8.5.18"
+  postcss: ">=8.5.23"
   # uuid <14.0.0 floor for a single resolved major across the tree;
   # multiple Docusaurus transitives still pin older 9.x/10.x lines.
   uuid: ">=14.0.0"
@@ -21,14 +23,15 @@ overrides:
   # 7.12.0..=7.29.3 can generate arbitrary code when compiling
   # malicious input. Transitive via @docusaurus/core > @babel.
   "@babel/plugin-transform-modules-systemjs": ">=7.29.4"
-  # fast-uri <3.1.4 carries three advisories on the 3.x line, all
-  # fixed by 3.1.4: GHSA-86c8-pmm6-93fp (host confusion via
-  # percent-encoded authority delimiters), CVE-2026-13676 (security
-  # policy bypass via improper Unicode hostname canonicalisation),
-  # and CVE-2026-16221; supersedes the earlier >=3.1.2 floor.
+  # CVE-2026-18446 (GHSA-7p8r-x3mc-p8w7): fast-uri <3.1.5 confuses the
+  # host when a backslash introduces the authority, fixed in 3.1.5;
+  # supersedes the earlier >=3.1.4 floor that cleared
+  # GHSA-86c8-pmm6-93fp (host confusion via percent-encoded authority
+  # delimiters), CVE-2026-13676 (policy bypass via improper Unicode
+  # hostname canonicalisation), and CVE-2026-16221.
   # Transitive via @docusaurus/core > webpack > schema-utils > ajv.
   # Held to the 3.x line expected by ajv.
-  fast-uri: ">=3.1.4 <4"
+  fast-uri: ">=3.1.5 <4"
   # mermaid <11.15.0 resolves four moderate alerts on classDef,
   # classDefs, configuration, and Gantt-chart sanitisation.
   # Transitive via @docusaurus/theme-mermaid.
@@ -50,14 +53,20 @@ overrides:
   # output is handed to a shell. Transitive via @docusaurus/core >
   # webpack-dev-server > launch-editor.
   shell-quote: ">=1.8.4"
-  # undici <7.28.0 carries three high-severity advisories, all fixed
-  # in 7.28.0: GHSA-vmh5-mc38-953g (TLS certificate validation
-  # bypass), GHSA-vxpw-j846-p89q (WebSocket client DoS), and
-  # GHSA-hm92-r4w5-c3mj (cross-origin request routing). Transitive via
+  # undici <7.29.0 carries five advisories, all fixed in 7.29.0:
+  # CVE-2026-13697 (GHSA-4cwx-7wf7-3272, cross-user disclosure and
+  # parse-time crash on degenerate private cache directives),
+  # CVE-2026-14643 (GHSA-jr45-8vmc-qm54, cross-user disclosure via
+  # whitespace around equals in Cache-Control), CVE-2026-15157
+  # (GHSA-m8rv-5g2x-5cg5, CRLF injection via a blob-like body type),
+  # CVE-2026-16728 (GHSA-8xcm-r25x-g524, response desynchronisation
+  # via the retry interceptor), and CVE-2026-16729
+  # (GHSA-v3r7-h72x-cjcm, cookie attribute injection). Supersedes the
+  # earlier >=7.28.0 floor that cleared GHSA-vmh5-mc38-953g,
+  # GHSA-vxpw-j846-p89q, and GHSA-hm92-r4w5-c3mj. Transitive via
   # @easyops-cn/docusaurus-search-local > cheerio. Held to the 7.x
-  # line since the fix landed in 7.28.0 and nothing in the tree needs
-  # undici 8.
-  undici: ">=7.28.0 <8"
+  # line since nothing in the tree needs undici 8.
+  undici: ">=7.29.0 <8"
   # dompurify <=3.4.11 lets an allowed custom element bypass
   # afterSanitizeElements via CUSTOM_ELEMENT_HANDLING
   # (GHSA-c2j3-45gr-mqc4), fixed in 3.4.12; supersedes the earlier

@@ -44,10 +44,6 @@ X_TICKS = 5
 # bytes, which matters because GitHub proxies README images through camo.
 MAX_POINTS = 320
 
-# Below this span, dated ticks stay unambiguous without a year; above it the
-# month alone starts repeating across years.
-DAY_TICK_LIMIT_DAYS = 730
-
 FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif"
 
 
@@ -86,6 +82,10 @@ def build_series(stamps: Sequence[datetime]) -> list[Point]:
 
 def downsample(series: Sequence[Point], limit: int = MAX_POINTS) -> list[Point]:
     """Thin the series to at most ``limit`` evenly spaced points."""
+    # Two points are the minimum a line needs, and the interpolation below
+    # divides by limit - 1.
+    if limit < 2:
+        return [series[-1]] if series else []
     if len(series) <= limit:
         return list(series)
 
@@ -97,16 +97,20 @@ def downsample(series: Sequence[Point], limit: int = MAX_POINTS) -> list[Point]:
 
 
 def nice_step(span: float, ticks: int) -> float:
-    """Round a raw axis interval up to a human-readable 1/2/2.5/5 x 10^n step."""
+    """Round a raw axis interval up to a human-readable 1/2/5 x 10^n step.
+
+    Floored at 1 and restricted to integer factors because this axis counts
+    stars: a gridline at 2.5 stars would be meaningless.
+    """
     if span <= 0:
         return 1.0
 
     raw = span / ticks
-    magnitude = 10 ** math.floor(math.log10(raw))
-    for factor in (1, 2, 2.5, 5):
+    magnitude: float = 10 ** math.floor(math.log10(raw))
+    for factor in (1, 2, 5):
         if raw <= factor * magnitude:
-            return factor * magnitude
-    return 10 * magnitude
+            return max(1.0, factor * magnitude)
+    return max(1.0, 10 * magnitude)
 
 
 def _scale_x(stamp: datetime, first: datetime, last: datetime) -> float:
@@ -150,8 +154,9 @@ def render(series: Sequence[Point], repo: str, theme: Theme) -> str:
 
     parts: list[str] = []
     label = html.escape(repo)
-    span_days = (last - first).days
-    tick_format = "%b %d" if span_days <= DAY_TICK_LIMIT_DAYS else "%b %Y"
+    # A day-and-month tick repeats once the window crosses a year boundary,
+    # which would print the same label twice on the axis.
+    tick_format = "%b %d" if first.year == last.year else "%b %Y"
     window = f"{first.strftime('%b %Y')} to {last.strftime('%b %Y')}"
 
     parts.append(
@@ -186,7 +191,7 @@ def render(series: Sequence[Point], repo: str, theme: Theme) -> str:
         )
         parts.append(
             f'<text x="{PAD_LEFT - 12}" y="{y + 4:.1f}" text-anchor="end" font-family="{FONT}" '
-            f'font-size="12" fill="{theme.text}">{tick:g}</text>'
+            f'font-size="12" fill="{theme.text}">{tick:,.0f}</text>'
         )
         tick += step
 

@@ -1,0 +1,102 @@
+name: Star History
+
+on:
+  schedule:
+    # Daily at 07:23 UTC. Off-the-hour on purpose: GitHub queues scheduled
+    # workflows hardest at the top of the hour, so an odd minute starts sooner.
+    - cron: "23 7 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    name: Refresh star history chart
+    # Forks have no `assets` branch, so a dispatched run there would fail on
+    # the checkout below.
+    if: github.repository == 'av1155/houndarr'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # The `assets` branch is orphaned from main: it carries only the rendered
+      # charts, so the README can point at raw.githubusercontent.com without
+      # this job needing to push to protected `main`.
+      - name: Checkout assets branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: assets
+          path: assets-branch
+
+      # GitHub restricted this endpoint to the repo's admins and collaborators
+      # in June 2026. The per-run Actions token clears that bar and expires with
+      # the job, which is why the chart is rendered here rather than embedded
+      # from a service that would need a long-lived token in the README.
+      - name: Fetch stargazer timestamps
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh api --paginate \
+            -H "Accept: application/vnd.github.star+json" \
+            "repos/${GITHUB_REPOSITORY}/stargazers?per_page=100" \
+            --jq '.[].starred_at' > stars.txt
+          COUNT=$(wc -l < stars.txt)
+          echo "Fetched ${COUNT} stargazer timestamps."
+
+          # A 200 carrying an empty or short array is a success as far as gh is
+          # concerned, so `set -e` will not catch it. Rendering one would
+          # publish a "No stars yet" placeholder over a good chart, on a public
+          # README, unattended. The already-published chart records its own
+          # count in the aria-label, which makes a usable floor: real unstarring
+          # is gradual, so losing half the stars in a day means the fetch was
+          # truncated rather than the stars being gone.
+          PREVIOUS=$(sed -n 's/.*: \([0-9]\{1,\}\) stars,.*/\1/p' \
+            assets-branch/star-history-dark.svg)
+          echo "Previously published: ${PREVIOUS:-unknown}"
+
+          if [ "${COUNT}" -eq 0 ]; then
+            echo "::error::Stargazer fetch returned no rows; refusing to publish."
+            exit 1
+          fi
+          if [ -n "${PREVIOUS}" ] && [ "${COUNT}" -lt $((PREVIOUS / 2)) ]; then
+            echo "::error::Fetched ${COUNT} rows against ${PREVIOUS} published; refusing to publish."
+            exit 1
+          fi
+
+      # Stock runner Python is enough: the renderer is stdlib-only, so
+      # provisioning the project virtualenv would be cost without benefit.
+      - name: Render charts
+        run: |
+          python3 scripts/star_history.py \
+            --repo "${GITHUB_REPOSITORY}" \
+            --out-dir chart < stars.txt
+
+      - name: Publish to assets branch
+        working-directory: assets-branch
+        run: |
+          set -euo pipefail
+          cp ../chart/star-history-light.svg ../chart/star-history-dark.svg .
+          git add star-history-light.svg star-history-dark.svg
+          # Identical input renders byte-identical SVGs, so a day with no chart
+          # movement is a no-op rather than an empty commit.
+          if git diff --staged --quiet; then
+            echo "Chart unchanged; nothing to publish."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # Amend rather than append: only the newest chart is ever read, so
+          # accumulating a commit per day would add megabytes of dead history
+          # to every clone. The force-push is scoped to this orphan branch and
+          # can never reach main.
+          git commit --amend -m "chore: refresh star history chart"
+          git push --force-with-lease origin HEAD:assets

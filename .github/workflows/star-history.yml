@@ -1,0 +1,72 @@
+name: Star History
+
+on:
+  schedule:
+    # Daily at 07:23 UTC. Off-the-hour on purpose: GitHub queues scheduled
+    # workflows hardest at the top of the hour, so an odd minute starts sooner.
+    - cron: "23 7 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    name: Refresh star history chart
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # The `assets` branch is orphaned from main: it carries only the rendered
+      # charts, so the README can point at raw.githubusercontent.com without
+      # this job needing to push to protected `main`.
+      - name: Checkout assets branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: assets
+          path: assets-branch
+
+      # GitHub restricted this endpoint to the repo's admins and collaborators
+      # in June 2026. The per-run Actions token clears that bar and expires with
+      # the job, which is why the chart is rendered here rather than embedded
+      # from a service that would need a long-lived token in the README.
+      - name: Fetch stargazer timestamps
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api --paginate \
+            -H "Accept: application/vnd.github.star+json" \
+            "repos/${GITHUB_REPOSITORY}/stargazers?per_page=100" \
+            --jq '.[].starred_at' > stars.txt
+          echo "Fetched $(wc -l < stars.txt) stargazer timestamps."
+
+      # Stock runner Python is enough: the renderer is stdlib-only, so
+      # provisioning the project virtualenv would be cost without benefit.
+      - name: Render charts
+        run: |
+          python3 scripts/star_history.py \
+            --repo "${GITHUB_REPOSITORY}" \
+            --out-dir chart < stars.txt
+
+      - name: Publish to assets branch
+        working-directory: assets-branch
+        run: |
+          cp ../chart/star-history-light.svg ../chart/star-history-dark.svg .
+          git add star-history-light.svg star-history-dark.svg
+          # Identical input renders byte-identical output, so an unchanged star
+          # count is a no-op rather than a daily empty commit.
+          if git diff --staged --quiet; then
+            echo "Chart unchanged; nothing to publish."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "chore: refresh star history chart"
+          git push

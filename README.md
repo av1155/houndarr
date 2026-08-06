@@ -172,12 +172,12 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for development workflow, coding standard
 
 <div align="center">
 
-<a href="https://www.star-history.com/?repos=av1155%2Fhoundarr&type=date&legend=top-left">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=av1155/houndarr&type=date&theme=dark&legend=top-left&sealed_token=K3eOjhjW2u-nB5sBsV3NFXcQiLyWa7ZjxAJ1Z3hteRW0T_sZugG2mrcvaflvj4IpWzWb6MSe-AZq8W9Icbvrp8EdhlTwosEbMLf9kyQ8SDELsOyH_A3q7EhwYgv6uRTUpBCs_SEIN_7GmGkE5LJhxCJ-6Xh-8DPUMUItk6iOn3VEyG0QCaTZo7GdTZXd" />
-    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=av1155/houndarr&type=date&legend=top-left&sealed_token=K3eOjhjW2u-nB5sBsV3NFXcQiLyWa7ZjxAJ1Z3hteRW0T_sZugG2mrcvaflvj4IpWzWb6MSe-AZq8W9Icbvrp8EdhlTwosEbMLf9kyQ8SDELsOyH_A3q7EhwYgv6uRTUpBCs_SEIN_7GmGkE5LJhxCJ-6Xh-8DPUMUItk6iOn3VEyG0QCaTZo7GdTZXd" />
-    <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=av1155/houndarr&type=date&legend=top-left&sealed_token=K3eOjhjW2u-nB5sBsV3NFXcQiLyWa7ZjxAJ1Z3hteRW0T_sZugG2mrcvaflvj4IpWzWb6MSe-AZq8W9Icbvrp8EdhlTwosEbMLf9kyQ8SDELsOyH_A3q7EhwYgv6uRTUpBCs_SEIN_7GmGkE5LJhxCJ-6Xh-8DPUMUItk6iOn3VEyG0QCaTZo7GdTZXd" width="600" />
-  </picture>
+<a href="https://star-history.dera.page/#av1155/houndarr&type=date&legend=top-left">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://star-history.dera.page/svg?repos=av1155/houndarr&type=date&theme=dark&legend=top-left" />
+   <source media="(prefers-color-scheme: light)" srcset="https://star-history.dera.page/svg?repos=av1155/houndarr&type=date&legend=top-left" />
+   <img alt="Star History Chart" src="https://star-history.dera.page/svg?repos=av1155/houndarr&type=date&legend=top-left" />
+ </picture>
 </a>
 
 <br><br>

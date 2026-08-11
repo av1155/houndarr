@@ -25,7 +25,7 @@ import math
 import sys
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 # Geometry in user units. The SVG scales to its container, so only the
@@ -113,6 +113,24 @@ def nice_step(span: float, ticks: int) -> float:
     return max(1.0, 10 * magnitude)
 
 
+def _x_tick_format(span: timedelta) -> str:
+    """Pick the coarsest date format that still tells adjacent x ticks apart.
+
+    Ticks are spread evenly across the window, so what governs collisions is
+    the gap between them rather than the window itself. The one exception is
+    the year: a day-and-month label repeats once the window reaches a year,
+    however wide the gaps are.
+    """
+    gap = span / (X_TICKS - 1)
+    if span >= timedelta(days=365):
+        return "%b %Y"
+    if gap >= timedelta(days=1):
+        return "%b %d"
+    if gap >= timedelta(minutes=1):
+        return "%b %d %H:%M"
+    return "%b %d %H:%M:%S"
+
+
 def _scale_x(stamp: datetime, first: datetime, last: datetime) -> float:
     span = (last - first).total_seconds()
     usable = WIDTH - PAD_LEFT - PAD_RIGHT
@@ -154,9 +172,10 @@ def render(series: Sequence[Point], repo: str, theme: Theme) -> str:
 
     parts: list[str] = []
     label = html.escape(repo)
-    # A day-and-month tick repeats once the window crosses a year boundary,
-    # which would print the same label twice on the axis.
-    tick_format = "%b %d" if first.year == last.year else "%b %Y"
+    tick_format = _x_tick_format(last - first)
+    # Below a second apart no format separates the ticks, and a window of zero
+    # stacks them all on one pixel anyway, so draw the single moment instead.
+    x_ticks = X_TICKS if (last - first) / (X_TICKS - 1) >= timedelta(seconds=1) else 1
     window = f"{first.strftime('%b %Y')} to {last.strftime('%b %Y')}"
 
     parts.append(
@@ -195,11 +214,13 @@ def render(series: Sequence[Point], repo: str, theme: Theme) -> str:
         )
         tick += step
 
-    for index in range(X_TICKS):
-        fraction = index / (X_TICKS - 1)
+    for index in range(x_ticks):
+        fraction = index / (x_ticks - 1) if x_ticks > 1 else 1.0
         stamp = first + (last - first) * fraction
         x = _scale_x(stamp, first, last)
-        anchor = "start" if index == 0 else "end" if index == X_TICKS - 1 else "middle"
+        # Last-index first so the lone tick, which sits at the right edge,
+        # anchors "end" rather than running off it.
+        anchor = "end" if index == x_ticks - 1 else "start" if index == 0 else "middle"
         parts.append(
             f'<text x="{x:.1f}" y="{HEIGHT - PAD_BOTTOM + 22}" text-anchor="{anchor}" '
             f'font-family="{FONT}" font-size="12" fill="{theme.text}">'

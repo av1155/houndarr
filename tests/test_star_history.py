@@ -142,6 +142,41 @@ class TestRender:
             assert len(labels) == star_history.X_TICKS
             assert len(labels) == len(set(labels)), f"span={span} duplicated labels: {labels}"
 
+    def test_date_labels_are_unique_on_short_windows(self):
+        # The format used to be chosen from `first.year == last.year`, which
+        # says nothing about how far apart the ticks are, so anything under
+        # five days printed the same day repeatedly. A two-hour window
+        # rendered one distinct label across all five ticks.
+        for hours in (1, 2, 6, 24, 72, 120):
+            svg = star_history.render(
+                _series_spanning(hours / 24), "av1155/houndarr", star_history.THEMES[0]
+            )
+            labels = _axis_labels(svg, "x")
+            assert len(labels) == star_history.X_TICKS
+            assert len(labels) == len(set(labels)), f"{hours}h duplicated labels: {labels}"
+
+    def test_short_windows_crossing_a_year_keep_day_resolution(self):
+        # The same year comparison forced a week that straddles 31 December
+        # all the way up to month resolution, which cannot separate ticks
+        # seven days apart.
+        start = datetime(2026, 12, 28, tzinfo=UTC)
+        for days in (7, 21, 62):
+            svg = star_history.render(
+                _series_spanning(days, start=start), "av1155/houndarr", star_history.THEMES[0]
+            )
+            labels = _axis_labels(svg, "x")
+            assert len(labels) == len(set(labels)), f"{days}d duplicated labels: {labels}"
+
+    def test_a_window_of_zero_renders_one_tick(self):
+        # Every tick resolves to the same instant on the same pixel, so no
+        # format tells them apart; five stacked copies is the wrong answer.
+        svg = star_history.render(
+            star_history.build_series([BASE, BASE, BASE]),
+            "av1155/houndarr",
+            star_history.THEMES[0],
+        )
+        assert _axis_labels(svg, "x") == [BASE.strftime("%b %d %H:%M:%S")]
+
     def test_both_themes_namespace_their_gradient(self):
         series = _series(50)
         ids = {

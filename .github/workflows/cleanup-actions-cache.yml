@@ -34,8 +34,7 @@ on:
           - "true"
 
 permissions:
-  # gh cache delete requires actions: write.
-  actions: write
+  contents: read
 
 concurrency:
   group: ${{ github.workflow }}
@@ -44,6 +43,9 @@ concurrency:
 jobs:
   cleanup:
     name: Prune stale caches
+    permissions:
+      # gh cache delete requires actions: write.
+      actions: write
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:

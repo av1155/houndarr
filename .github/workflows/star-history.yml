@@ -126,5 +126,8 @@ jobs:
           # accumulating a commit per day would add megabytes of dead history
           # to every clone. The force-push is scoped to this orphan branch and
           # can never reach main.
-          git commit --amend -m "chore: refresh star history chart"
+          # --reset-author because a plain amend keeps the seed commit's author
+          # and author date, so every refresh would read as authored by whoever
+          # seeded the branch, on the day they seeded it.
+          git commit --amend --reset-author -m "chore: refresh star history chart"
           git push --force-with-lease origin HEAD:assets

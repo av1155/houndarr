@@ -2,9 +2,14 @@ name: Star History
 
 on:
   schedule:
-    # Daily at 07:23 UTC. Off-the-hour on purpose: GitHub queues scheduled
+    # Daily at 07:41 UTC. Off-the-hour on purpose: GitHub queues scheduled
     # workflows hardest at the top of the hour, so an odd minute starts sooner.
-    - cron: "23 7 * * *"
+    - cron: "41 7 * * *"
+  # Stargazers are this chart's only input, so refresh on the star itself rather
+  # than waiting out the day. The cron stays as the backstop: `started` is the
+  # only activity type `watch` has, so unstarring never reaches here.
+  watch:
+    types: [started]
   workflow_dispatch:
 
 permissions:
@@ -12,7 +17,9 @@ permissions:
 
 concurrency:
   group: ${{ github.workflow }}
-  cancel-in-progress: false
+  # Every run rebuilds from the full stargazer list, so a newer run supersedes an
+  # older one outright. Without this a rush of stars queues one serial run each.
+  cancel-in-progress: true
 
 jobs:
   refresh:

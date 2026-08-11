@@ -32,10 +32,16 @@ overrides:
   # Transitive via @docusaurus/core > webpack > schema-utils > ajv.
   # Held to the 3.x line expected by ajv.
   fast-uri: ">=3.1.5 <4"
-  # mermaid <11.15.0 resolves four moderate alerts on classDef,
-  # classDefs, configuration, and Gantt-chart sanitisation.
+  # mermaid <11.16.1 carries five advisories, all fixed in 11.16.1:
+  # GHSA-3rrr-jr9j-h3q3 (prototype pollution through Architecture
+  # diagrams), GHSA-rhh3-jpg6-66xh (DoS via radar diagrams),
+  # GHSA-6x64-9x62-f2gx (CSS injection reaching siblings of the
+  # diagram), GHSA-2v8p-3f2j-5mp7 (infinite-loop DoS in XY charts),
+  # and GHSA-c4c3-pg64-4m4v (prototype pollution via the configuration
+  # APIs). Supersedes the earlier >=11.15.0 floor that cleared the
+  # classDef, classDefs, configuration, and Gantt sanitisation alerts.
   # Transitive via @docusaurus/theme-mermaid.
-  mermaid: ">=11.15.0"
+  mermaid: ">=11.16.1"
   # webpack-dev-server <=5.2.5 carries GHSA-m28w-2pqf-7qgj (DoS via a
   # malformed Host or Origin header) and GHSA-f5vj-f2hx-8m93 (CSRF
   # through internal developer endpoints), both fixed in 5.2.6;
@@ -67,15 +73,18 @@ overrides:
   # @easyops-cn/docusaurus-search-local > cheerio. Held to the 7.x
   # line since nothing in the tree needs undici 8.
   undici: ">=7.29.0 <8"
-  # dompurify <=3.4.11 lets an allowed custom element bypass
-  # afterSanitizeElements via CUSTOM_ELEMENT_HANDLING
-  # (GHSA-c2j3-45gr-mqc4), fixed in 3.4.12; supersedes the earlier
-  # >=3.4.11 floor that cleared the eight-advisory sanitizer-bypass
-  # cluster (GHSA-x4vx-rjvf-j5p4, GHSA-vxr8-fq34-vvx9,
-  # GHSA-gvmj-g25r-r7wr, GHSA-rp9w-3fw7-7cwq, GHSA-hpcv-96wg-7vj8,
-  # GHSA-r47g-fvhr-h676, GHSA-76mc-f452-cxcm, GHSA-cmwh-pvxp-8882).
+  # dompurify <=3.4.12 leaves a subtree executable after an IN_PLACE
+  # hook detaches it, which is an XSS path (GHSA-55q2-fjhq-7xh7),
+  # fixed in 3.4.13; supersedes the earlier >=3.4.12 floor for
+  # GHSA-c2j3-45gr-mqc4 (custom element bypassing
+  # afterSanitizeElements via CUSTOM_ELEMENT_HANDLING) and the
+  # >=3.4.11 floor before it that cleared the eight-advisory
+  # sanitizer-bypass cluster (GHSA-x4vx-rjvf-j5p4,
+  # GHSA-vxr8-fq34-vvx9, GHSA-gvmj-g25r-r7wr, GHSA-rp9w-3fw7-7cwq,
+  # GHSA-hpcv-96wg-7vj8, GHSA-r47g-fvhr-h676, GHSA-76mc-f452-cxcm,
+  # GHSA-cmwh-pvxp-8882).
   # Transitive via @docusaurus/theme-mermaid > mermaid.
-  dompurify: ">=3.4.12 <4"
+  dompurify: ">=3.4.13 <4"
   # GHSA-4x5r-pxfx-6jf8: @babel/core <7.29.1 can read arbitrary files
   # through a crafted sourceMappingURL comment during compilation.
   # Transitive via @docusaurus/core > @docusaurus/babel.

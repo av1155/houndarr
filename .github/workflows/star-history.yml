@@ -11,6 +11,11 @@ on:
   watch:
     types: [started]
   workflow_dispatch:
+    inputs:
+      force:
+        description: "Publish even if the star count fell below the floor"
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -50,6 +55,7 @@ jobs:
       - name: Fetch stargazer timestamps
         env:
           GH_TOKEN: ${{ github.token }}
+          FORCE: ${{ inputs.force }}
         run: |
           set -euo pipefail
           gh api --paginate \
@@ -66,16 +72,31 @@ jobs:
           # count in the aria-label, which makes a usable floor: real unstarring
           # is gradual, so losing half the stars in a day means the fetch was
           # truncated rather than the stars being gone.
-          PREVIOUS=$(sed -n 's/.*: \([0-9]\{1,\}\) stars,.*/\1/p' \
-            assets-branch/star-history-dark.svg)
+          PUBLISHED=assets-branch/star-history-dark.svg
+          if [ ! -f "${PUBLISHED}" ]; then
+            # Without this, `sed` exits non-zero under `set -e` and the step
+            # dies with a bare exit code that reads like an unrelated failure.
+            echo "::error::${PUBLISHED} is missing from the assets branch."
+            exit 1
+          fi
+          PREVIOUS=$(sed -n 's/.*: \([0-9]\{1,\}\) stars,.*/\1/p' "${PUBLISHED}")
           echo "Previously published: ${PREVIOUS:-unknown}"
 
+          # Unconditional even under force: publishing the "No stars yet"
+          # placeholder over a good chart is the exact accident the guard
+          # exists to prevent, and no legitimate force case wants it.
           if [ "${COUNT}" -eq 0 ]; then
             echo "::error::Stargazer fetch returned no rows; refusing to publish."
             exit 1
           fi
-          if [ -n "${PREVIOUS}" ] && [ "${COUNT}" -lt $((PREVIOUS / 2)) ]; then
+          # The floor reads back from the published chart, so a run that
+          # refuses never moves it: without an override a genuine halving
+          # (mass unstar, repo transfer) wedges every later run forever.
+          if [ "${FORCE}" = "true" ]; then
+            echo "Force requested; skipping the floor check."
+          elif [ -n "${PREVIOUS}" ] && [ "${COUNT}" -lt $((PREVIOUS / 2)) ]; then
             echo "::error::Fetched ${COUNT} rows against ${PREVIOUS} published; refusing to publish."
+            echo "::error::Re-run with the force input if the drop is real."
             exit 1
           fi
 

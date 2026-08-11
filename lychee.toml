@@ -1,9 +1,13 @@
 # Lychee link-checker configuration.
 # https://lychee.cli.rs/configuration/
 
-max_retries = 2
-retry_wait_time = 2
-timeout = 20
+# Generous because a timeout counts as a failure and fails the whole run, even
+# though lychee reports it separately from errors. www.authelia.com answers in
+# well under a second from an ordinary client but intermittently stalls when
+# asked from an Actions runner, which is what every red run so far has been.
+max_retries = 3
+retry_wait_time = 3
+timeout = 45
 no_progress = true
 
 # 2xx is fine; 403 and 429 usually mean the host rate-limited an

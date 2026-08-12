@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+---
+
+## [1.13.2] - 2026-08-11
+
 ### Security
 
 - Release images carry a signed build provenance attestation, and each GitHub release ships the matching `.sigstore.json` bundle for verification with `gh attestation verify`. (#737)

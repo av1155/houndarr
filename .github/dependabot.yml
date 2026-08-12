@@ -43,6 +43,12 @@ updates:
     open-pull-requests-limit: 5
     cooldown:
       default-days: 7
+    ignore:
+      # TypeScript 7 removed the `baseUrl` compiler option that
+      # `@docusaurus/tsconfig` still sets, and an extending config cannot
+      # unset an inherited option. Revisit when Docusaurus drops it.
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
     groups:
       production-deps:
         dependency-type: production
@@ -79,6 +85,12 @@ updates:
     open-pull-requests-limit: 5
     cooldown:
       default-days: 7
+    ignore:
+      # Odd-numbered Node majors are Current, not LTS, and Dependabot has
+      # no concept of the release line. Node 25 also dropped the bundled
+      # corepack the css-build stage relies on. Move the LTS line by hand.
+      - dependency-name: "node"
+        update-types: ["version-update:semver-major"]
     groups:
       docker-base-images:
         patterns:

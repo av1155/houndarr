@@ -11,11 +11,12 @@
 # Compile Tailwind v4 + Houndarr custom CSS into a single static file. Node
 # lives only in this stage; the final runtime image stays Python-only.
 # -----------------------------------------------------------------------------
-FROM node:22-alpine@sha256:c610fcdfb1d5b4740dd70c284ed3cb16bb857e0f7166196e36a5501df7a3aa32 AS css-build
+FROM node:24-alpine@sha256:d32cdf619f63fe0471182d08996dd516c6275bb5fd31ae06e55a570bd9e1ad43 AS css-build
 WORKDIR /build
 
-# Enable pnpm via corepack (bundled with Node 20+). The packageManager field
-# in package.json pins the exact pnpm version.
+# Enable pnpm via corepack, which the Node 24 LTS image still bundles.
+# Node 25 dropped it, so a major bump here needs pnpm installed another way.
+# The packageManager field in package.json pins the exact pnpm version.
 RUN corepack enable
 
 # Copy manifest + lockfile + workspace config first for better layer caching.

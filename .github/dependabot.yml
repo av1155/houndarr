@@ -7,6 +7,11 @@ updates:
       interval: "weekly"
       day: "monday"
     open-pull-requests-limit: 5
+    # Let a freshly published version sit before proposing it, so a
+    # compromised release is more likely to be pulled first. Security
+    # updates are exempt from cooldown, so patches are not delayed.
+    cooldown:
+      default-days: 7
     groups:
       production-deps:
         patterns:
@@ -36,6 +41,8 @@ updates:
       interval: "weekly"
       day: "monday"
     open-pull-requests-limit: 5
+    cooldown:
+      default-days: 7
     groups:
       production-deps:
         dependency-type: production
@@ -55,7 +62,24 @@ updates:
       interval: "weekly"
       day: "monday"
     open-pull-requests-limit: 5
+    cooldown:
+      default-days: 7
     groups:
       github-actions:
+        patterns:
+          - "*"
+
+  # Dockerfile base images. Required: the FROM lines are digest-pinned, so
+  # without this the bases never pick up upstream security patches.
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    cooldown:
+      default-days: 7
+    groups:
+      docker-base-images:
         patterns:
           - "*"

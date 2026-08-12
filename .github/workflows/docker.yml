@@ -33,8 +33,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     permissions:
-      contents: read
+      # contents: write attaches the provenance bundle to the release; the
+      # steps that use it are gated on a tag push, and a fork PR token is
+      # read-only regardless.
+      contents: write
       packages: write
+      id-token: write
+      attestations: write
     env:
       # Avoid the post-build summary upload that has caused workflow hangs.
       # See docker/build-push-action#1156.
@@ -80,6 +85,7 @@ jobs:
       # break is caught before the tag push (the actual release).
       # Tag pushes: same as bump PRs, plus push to GHCR.
       - name: Build (and push on tag)
+        id: build
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
         with:
           context: .
@@ -93,6 +99,44 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Attest build provenance
+        id: attest
+        if: github.event_name != 'pull_request' && startsWith(github.ref, 'refs/tags/v')
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ${{ env.GHCR_IMAGE }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
+
+      # BuildKit already attaches provenance and an SBOM to the image itself,
+      # but those live in the registry. Consumers verifying a release from
+      # GitHub, and Scorecard's Signed-Releases check, only ever look at
+      # release assets, so the same bundle is attached there too.
+      #
+      # release.yml creates the release from this same tag push and finishes
+      # long before a multi-arch build does, but the two workflows are
+      # independent, so wait for it rather than assume the ordering holds.
+      - name: Attach provenance to the GitHub release
+        if: github.event_name != 'pull_request' && startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+          BUNDLE: ${{ steps.attest.outputs.bundle-path }}
+        run: |
+          set -euo pipefail
+          asset="houndarr-${TAG}.sigstore.json"
+          cp "${BUNDLE}" "${asset}"
+          for _ in $(seq 1 30); do
+            if gh release view "${TAG}" >/dev/null 2>&1; then
+              gh release upload "${TAG}" "${asset}" --clobber
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "::error::Release ${TAG} never appeared; provenance not attached."
+          exit 1
 
   arm64-canary:
     name: arm64 canary build

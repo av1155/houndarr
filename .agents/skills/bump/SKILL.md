@@ -102,3 +102,15 @@ gh pr create --title "chore: bump version to X.Y.Z" --body "..."
 ```
 
 After merge, remind the user to run `git tag vX.Y.Z && git push origin vX.Y.Z` to trigger docker.yml, release.yml, and chart.yml.
+
+## 11. Verify the Tag Push
+
+The tag fires docker.yml and release.yml independently. docker.yml attaches the provenance bundle to the release that release.yml creates, so that upload can fail *after* the image is already on GHCR. The result is a release that looks complete sitting beside a red workflow run, which is easy to miss.
+
+```
+gh run list --workflow=docker.yml --limit 1
+gh release view vX.Y.Z --json assets --jq '.assets[].name'
+gh attestation verify oci://ghcr.io/av1155/houndarr:vX.Y.Z --repo av1155/houndarr
+```
+
+Expect a green run, a `houndarr-vX.Y.Z.sigstore.json` asset on the release, and a verify that reports a matching provenance attestation. If the asset is missing, re-run the failed docker.yml job rather than re-tagging.

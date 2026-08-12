@@ -4,6 +4,9 @@ on:
   pull_request:
     paths:
       - "website/**"
+      # Self-triggering, so a change to this workflow is exercised by the
+      # PR that makes it rather than by the next unrelated docs change.
+      - ".github/workflows/test-deploy.yml"
 
 permissions:
   contents: read
@@ -35,6 +38,13 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+        working-directory: website
+
+      # The Docusaurus build transpiles TypeScript without checking it, so a
+      # type error builds clean. Runs before the build because it is the
+      # cheaper of the two.
+      - name: Type check
+        run: pnpm run typecheck
         working-directory: website
 
       - name: Build site

@@ -18,7 +18,7 @@ on:
         default: false
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: ${{ github.workflow }}
@@ -32,6 +32,9 @@ jobs:
     # Forks have no `assets` branch, so a dispatched run there would fail on
     # the checkout below.
     if: github.repository == 'av1155/houndarr'
+    permissions:
+      # Force-pushing the rendered chart to the orphan `assets` branch.
+      contents: write
     runs-on: ubuntu-latest
     timeout-minutes: 10
 

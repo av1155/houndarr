@@ -84,7 +84,10 @@ Caddy, and other self-hosted tools targeting the same audience.
   Changelog explicitly excludes these; they live in PR bodies).
 - Test-only changes.
 - Docs-only changes (the docs site has its own deploy log).
-- CI / workflow changes that do not affect deployers.
+- CI / workflow changes that do not affect deployers. Note the
+  qualifier: a workflow change that alters what a release *ships*
+  (signatures, attestations, published assets, image contents) does
+  reach deployers and is bulleted.
 - Dependency bumps with no security or behaviour impact.
 
 ## Schema version bumps
@@ -164,7 +167,7 @@ section that has no entries.
 - **Every bullet must be justified by a PR-body sentence, a diff fragment,
   or a source `file:line`.** Do not draft from PR titles, commit messages,
   or memory alone. The verification protocol lives in
-  `.claude/commands/bump.md` §3b; skipping it is what shipped the
+  `.agents/skills/bump/SKILL.md` §3b; skipping it is what shipped the
   inaccurate v1.9.0 bullets that had to be corrected in #420.
 - Adopt the PR author's vocabulary for nuance. If the PR body says
   "new default for fresh installs; existing instances keep their prior

@@ -16,7 +16,7 @@ on:
       - "scripts/marketing/**"
 
 permissions:
-  checks: write
+  contents: read
 
 concurrency:
   group: ci-skip-${{ github.event.pull_request.number || github.ref }}
@@ -25,6 +25,9 @@ concurrency:
 jobs:
   skip-checks:
     name: CI Skip (docs-only)
+    permissions:
+      # Publishing the no-op check runs that satisfy branch protection.
+      checks: write
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:

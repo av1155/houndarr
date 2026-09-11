@@ -112,7 +112,7 @@ Seven reasons are deduplicated in the log: `on cooldown`, `on cutoff
 cooldown`, `on upgrade cooldown`, `in hot retry window`, `already in
 download queue`, and the two `tag filter` skip reasons. Each
 `(instance, item, reason)` triple writes at most one `search_log` row
-per 24 hours. The engine still
+per search pass every 24 hours. The engine still
 evaluates every candidate every cycle; only the log write is
 suppressed. This keeps the logs scannable when hundreds of items
 share the same cooldown, the same hot-retry interval throttle, or the

@@ -11,7 +11,7 @@
 # Compile Tailwind v4 + Houndarr custom CSS into a single static file. Node
 # lives only in this stage; the final runtime image stays Python-only.
 # -----------------------------------------------------------------------------
-FROM node:24-alpine@sha256:e67514e5d0f6c46656005e1b693b2ec9d52e80b641307de684d4a015ba7a4eaf AS css-build
+FROM node:24-alpine@sha256:50c8e8ca1d27439048670df5883f32d57cf81cff6233222c893fd0d9884cbd81 AS css-build
 WORKDIR /build
 
 # Enable pnpm via corepack, which the Node 24 LTS image still bundles.
@@ -33,7 +33,7 @@ RUN pnpm run build-css
 # -----------------------------------------------------------------------------
 # Stage 2: runtime
 # -----------------------------------------------------------------------------
-FROM python:3.13-slim@sha256:ffb752e139c0a19692a43af8d8523b274222dd68eebad5d583b45c2201c6e30a
+FROM python:3.14-slim@sha256:cad9a2c871761c413caa6fdd6441c783451e740a48aaeba60ae62a8b53525ef6
 
 ARG HOUNDARR_VERSION=dev
 

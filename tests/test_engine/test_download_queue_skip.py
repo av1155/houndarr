@@ -465,6 +465,45 @@ async def test_season_context_skips_a_season_whose_episodes_are_all_queued(
     assert rows[1]["item_label"] == "My Show - S01 (season-context)"
 
 
+@pytest.mark.asyncio()
+@respx.mock
+async def test_season_context_sibling_left_for_the_next_cycle_still_gets_searched(
+    seeded_instances: None,
+) -> None:
+    """A full batch can end the pass before a non-queued sibling is reached.
+
+    The skip row reflects the episodes that cycle saw; the next cycle reaches
+    the sibling and searches the season.
+    """
+    respx.get(f"{SONARR_URL}/api/v3/wanted/missing").mock(
+        side_effect=_wanted_pages(
+            [
+                _episode(101, season=1, number=1),
+                _episode(201, season=2, number=1),
+                _episode(102, season=1, number=2),
+            ]
+        ),
+    )
+    command_route = _mock_command(SONARR_URL)
+    serve_download_queue([{"episodeId": 101}])
+    instance = _sonarr(batch_size=1, sonarr_search_mode=SonarrSearchMode.season_context)
+
+    assert await run_instance_search(instance, MASTER_KEY) == 1
+    assert await run_instance_search(instance, MASTER_KEY) == 1
+
+    assert _commands(command_route) == [
+        {"name": "SeasonSearch", "seriesId": 55, "seasonNumber": 2},
+        {"name": "SeasonSearch", "seriesId": 55, "seasonNumber": 1},
+    ]
+    rows = await get_log_rows()
+    assert [(r["action"], r["item_id"], r["reason"]) for r in rows] == [
+        ("searched", _season_item_id(55, 2), None),
+        ("skipped", _season_item_id(55, 1), _QUEUED_REASON),
+        ("skipped", _season_item_id(55, 2), "on cooldown (7d)"),
+        ("searched", _season_item_id(55, 1), None),
+    ]
+
+
 @pytest.mark.parametrize(
     ("queued_albums", "expected_commands", "expected_rows"),
     [

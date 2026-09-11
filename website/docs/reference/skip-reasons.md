@@ -60,10 +60,11 @@ profile entirely. No cooldown is recorded, so if the download fails
 and leaves the queue, the item is searched again on a later cycle.
 
 The queue is read at most once per cycle, and only when the cycle is
-about to search something. In season, artist, or author search mode,
-the parent search still runs while any of its wanted items is not in
-the queue. If the queue can't be read, the cycle searches as usual and
-logs a warning.
+about to search something. In season, artist, or author search mode, a
+queued item doesn't hold back the rest: the parent is skipped only when
+every one of its wanted items the cycle reaches is already queued. If
+the queue can't be read, the cycle searches as usual and logs a
+warning.
 
 ## Queue backpressure
 

@@ -29,7 +29,7 @@
 {%- set ns.unreleased = ns.unreleased + 1 -%}
 {%- elif 'limit reached' in r -%}
 {%- set ns.capped = ns.capped + 1 -%}
-{%- elif r == 'already in download queue' -%}
+{%- elif r.startswith('already in download queue') -%}
 {%- set ns.queued = ns.queued + 1 -%}
 {%- else -%}
 {%- set ns.other = ns.other + 1 -%}

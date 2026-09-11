@@ -52,19 +52,22 @@ wait for their full cooldown.
 
 Right before sending a search, Houndarr checks the \*arr's download
 queue and skips any item that already has an entry there: downloading,
-waiting to import, stuck on an import problem, or held back by a delay
-profile. Searching again would only spend indexer hits, since the
-\*arr turns down another grab for a queued item unless it finds a
+waiting to import, stuck on an import problem, waiting for a download
+client, or held back by a delay profile. Searching again mostly spends
+indexer hits, since the \*arr turns down another grab for a queued item
+unless the quality profile allows upgrades and the search finds a
 better release, and a search sent by Houndarr would skip the delay
-profile entirely. No cooldown is recorded, so if the download fails
-and leaves the queue, the item is searched again on a later cycle.
+profile entirely. No cooldown is recorded, so the item is searched
+again on a later cycle once its entry leaves the queue. An entry that
+never leaves, such as a stalled download, holds the item until you
+clear it in the \*arr.
 
 The queue is read at most once per cycle, and only when the cycle is
 about to search something. In season, artist, or author search mode, a
 queued item doesn't hold back the rest: the parent is skipped only when
 every one of its wanted items the cycle reaches is already queued. If
-the queue can't be read, the cycle searches as usual and logs a
-warning.
+the queue can't be read, the cycle searches as usual and writes a
+warning to the container log.
 
 ## Queue backpressure
 
@@ -112,11 +115,12 @@ Seven reasons are deduplicated in the log: `on cooldown`, `on cutoff
 cooldown`, `on upgrade cooldown`, `in hot retry window`, `already in
 download queue`, and the two `tag filter` skip reasons. Each
 `(instance, item, reason)` triple writes at most one `search_log` row
-per search pass every 24 hours. The engine still
-evaluates every candidate every cycle; only the log write is
-suppressed. This keeps the logs scannable when hundreds of items
-share the same cooldown, the same hot-retry interval throttle, or the
-same tag-filter outcome.
+per search pass every 24 hours on scheduled cycles. `Run now` always
+writes its rows, and the window is held in memory, so a restart starts
+it over. The engine still evaluates every candidate every cycle; only
+the log write is suppressed. This keeps the logs scannable when
+hundreds of items share the same cooldown, the same hot-retry interval
+throttle, or the same tag-filter outcome.
 
 The other reasons in the table above write a row every cycle they
 apply.

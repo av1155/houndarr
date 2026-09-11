@@ -541,8 +541,9 @@ async def _latest_missing_reason_ref(ref: ItemRef) -> str | None:
     :func:`houndarr.repositories.search_log.fetch_latest_missing_reason`
     since D.27.  Used by the release-timing retry branch in
     :func:`_run_search_pass` to decide whether an item on cooldown
-    should be retried (because the last logged reason was a
-    pre-release or post-release-grace skip that has since elapsed).
+    should be retried (because the last logged reason other than a
+    queue skip was a pre-release or post-release-grace skip that has
+    since elapsed).
     """
     from houndarr.repositories.search_log import fetch_latest_missing_reason
 

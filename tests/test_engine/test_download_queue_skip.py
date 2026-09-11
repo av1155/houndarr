@@ -353,6 +353,24 @@ async def test_release_timing_retry_skips_queued_item(seeded_instances: None) ->
     ]
 
 
+@pytest.mark.asyncio()
+@respx.mock
+async def test_queued_retry_items_do_not_consume_the_scan_budget(
+    seeded_instances: None,
+) -> None:
+    """batch_size=1 gives a missing scan budget of 24; 25 queued retries come first."""
+    queued = [_movie(1000 + i) for i in range(25)]
+    movies = [*queued, _movie(2000)]
+    for movie in movies:
+        await seed_release_timing_retry(instance_id=2, item_id=movie["id"], item_type="movie")
+    _mock_radarr_missing(movies)
+    command_route = _mock_command(RADARR_URL)
+    serve_download_queue([{"movieId": m["id"]} for m in queued])
+
+    assert await run_instance_search(_radarr(batch_size=1), MASTER_KEY) == 1
+    assert _commands(command_route) == [{"name": "MoviesSearch", "movieIds": [2000]}]
+
+
 # ---------------------------------------------------------------------------
 # Cutoff and upgrade passes
 # ---------------------------------------------------------------------------
@@ -401,6 +419,54 @@ async def test_upgrade_pass_skips_queued_item(
     assert [(r["action"], r["item_id"], r["search_kind"], r["reason"]) for r in rows] == [
         ("skipped", 401, "upgrade", _QUEUED_REASON),
         ("searched", 402, "upgrade", None),
+    ]
+
+
+@pytest.mark.asyncio()
+@respx.mock
+@patch("houndarr.engine.search_loop.update_instance", new_callable=AsyncMock)
+async def test_queued_upgrade_items_do_not_consume_the_scan_budget(
+    mock_update: AsyncMock,
+    seeded_instances: None,
+) -> None:
+    """upgrade_batch_size=1 gives an upgrade scan budget of 8; ten queued items come first."""
+    queued = [_library_movie(400 + i) for i in range(10)]
+    _mock_radarr_missing([])
+    respx.get(f"{RADARR_URL}/api/v3/movie").mock(
+        return_value=httpx.Response(200, json=[*queued, _library_movie(500)]),
+    )
+    command_route = _mock_command(RADARR_URL)
+    serve_download_queue([{"movieId": m["id"]} for m in queued])
+
+    instance = _radarr(batch_size=0, upgrade_enabled=True, upgrade_batch_size=1)
+    assert await run_instance_search(instance, MASTER_KEY) == 1
+    assert _commands(command_route) == [{"name": "MoviesSearch", "movieIds": [500]}]
+
+
+@pytest.mark.asyncio()
+@respx.mock
+@patch("houndarr.engine.search_loop.update_instance", new_callable=AsyncMock)
+async def test_upgrade_cooldown_is_checked_before_the_queue(
+    mock_update: AsyncMock,
+    seeded_instances: None,
+) -> None:
+    """A queued item on upgrade cooldown keeps its cooldown reason and costs no queue read."""
+    await record_search(2, 401, "movie", "upgrade")
+    _mock_radarr_missing([])
+    respx.get(f"{RADARR_URL}/api/v3/movie").mock(
+        return_value=httpx.Response(200, json=[_library_movie(401)]),
+    )
+    command_route = _mock_command(RADARR_URL)
+    serve_download_queue([{"movieId": 401}])
+
+    instance = _radarr(batch_size=0, upgrade_enabled=True)
+    assert await run_instance_search(instance, MASTER_KEY) == 0
+
+    assert command_route.call_count == 0
+    assert _queue_route().call_count == 0
+    rows = await get_log_rows()
+    assert [(r["action"], r["reason"]) for r in rows] == [
+        ("skipped", "on upgrade cooldown (90d)"),
     ]
 
 
@@ -773,4 +839,56 @@ async def test_run_now_always_logs_the_queued_skip(seeded_instances: None) -> No
     assert [(r["action"], r["reason"], r["cycle_trigger"]) for r in rows] == [
         ("skipped", _QUEUED_REASON, "run_now"),
         ("skipped", _QUEUED_REASON, "run_now"),
+    ]
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_queue_skip_row_is_not_hidden_by_an_earlier_cooldown_row(
+    seeded_instances: None,
+) -> None:
+    """The queue reason throttles in its own bucket, apart from the cooldown one."""
+    await record_search(2, 201, "movie")
+    _mock_radarr_missing([_movie(201)])
+    _mock_command(RADARR_URL)
+    serve_download_queue([{"movieId": 201}])
+
+    await run_instance_search(_radarr(), MASTER_KEY)
+    async with get_db() as conn:
+        await conn.execute("DELETE FROM cooldowns")
+        await conn.commit()
+    await run_instance_search(_radarr(), MASTER_KEY)
+
+    rows = await get_log_rows()
+    assert [(r["action"], r["reason"]) for r in rows] == [
+        ("skipped", "on cooldown (7d)"),
+        ("skipped", _QUEUED_REASON),
+    ]
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_queue_skip_rows_are_throttled_per_search_kind(
+    seeded_instances: None,
+) -> None:
+    """A movie queued while missing, then queued again as cutoff-unmet, logs both skips."""
+    missing_route = respx.get(f"{RADARR_URL}/api/v3/wanted/missing").mock(
+        side_effect=_wanted_pages([_movie(201)]),
+    )
+    cutoff_route = respx.get(f"{RADARR_URL}/api/v3/wanted/cutoff").mock(
+        side_effect=_wanted_pages([]),
+    )
+    _mock_command(RADARR_URL)
+    serve_download_queue([{"movieId": 201}])
+    instance = _radarr(cutoff_enabled=True, cutoff_hourly_cap=5)
+
+    await run_instance_search(instance, MASTER_KEY)
+    missing_route.mock(side_effect=_wanted_pages([]))
+    cutoff_route.mock(side_effect=_wanted_pages([_movie(201)]))
+    await run_instance_search(instance, MASTER_KEY)
+
+    rows = await get_log_rows()
+    assert [(r["action"], r["search_kind"], r["reason"]) for r in rows] == [
+        ("skipped", "missing", _QUEUED_REASON),
+        ("skipped", "cutoff", _QUEUED_REASON),
     ]

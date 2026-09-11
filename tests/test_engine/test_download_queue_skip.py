@@ -371,6 +371,62 @@ async def test_queued_retry_items_do_not_consume_the_scan_budget(
     assert _commands(command_route) == [{"name": "MoviesSearch", "movieIds": [2000]}]
 
 
+@pytest.mark.asyncio()
+@respx.mock
+async def test_release_timing_retry_survives_a_queue_skip_once_the_item_leaves_the_queue(
+    seeded_instances: None,
+) -> None:
+    """A download that fails and leaves the queue still gets the early retry."""
+    await seed_release_timing_retry(instance_id=2, item_id=201, item_type="movie")
+    _mock_radarr_missing([_movie(201)])
+    command_route = _mock_command(RADARR_URL)
+    serve_download_queue([{"movieId": 201}])
+
+    assert await run_instance_search(_radarr(), MASTER_KEY) == 0
+    serve_download_queue([])
+    assert await run_instance_search(_radarr(), MASTER_KEY) == 1
+
+    assert _commands(command_route) == [{"name": "MoviesSearch", "movieIds": [201]}]
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_queued_sibling_does_not_cancel_the_season_release_timing_retry(
+    seeded_instances: None,
+) -> None:
+    """A season's queue skip row must not hide the grace reason its next episode needs.
+
+    Cycle one fills its batch with season 2 before reaching episode 102, so
+    season 1 gets a queue skip row; cycle two must still retry season 1.
+    """
+    await seed_release_timing_retry(
+        instance_id=1,
+        item_id=_season_item_id(55, 1),
+        item_type="episode",
+        reason="post-release grace (6h)",
+    )
+    respx.get(f"{SONARR_URL}/api/v3/wanted/missing").mock(
+        side_effect=_wanted_pages(
+            [
+                _episode(101, season=1, number=1),
+                _episode(201, season=2, number=1),
+                _episode(102, season=1, number=2),
+            ]
+        ),
+    )
+    command_route = _mock_command(SONARR_URL)
+    serve_download_queue([{"episodeId": 101}])
+    instance = _sonarr(batch_size=1, sonarr_search_mode=SonarrSearchMode.season_context)
+
+    assert await run_instance_search(instance, MASTER_KEY) == 1
+    assert await run_instance_search(instance, MASTER_KEY) == 1
+
+    assert _commands(command_route) == [
+        {"name": "SeasonSearch", "seriesId": 55, "seasonNumber": 2},
+        {"name": "SeasonSearch", "seriesId": 55, "seasonNumber": 1},
+    ]
+
+
 # ---------------------------------------------------------------------------
 # Cutoff and upgrade passes
 # ---------------------------------------------------------------------------

@@ -386,6 +386,30 @@ async def test_fetch_latest_missing_reason_ignores_non_missing_rows(
     assert await repo.fetch_latest_missing_reason(1, 5, "episode") is None
 
 
+@pytest.mark.asyncio()
+async def test_fetch_latest_missing_reason_ignores_queue_skips(
+    seeded_instances: None,
+) -> None:
+    """A newer 'already in download queue' row does not hide the release-timing reason."""
+    await repo.insert_log_row(
+        instance_id=1,
+        item_id=7,
+        item_type="episode",
+        action="skipped",
+        search_kind="missing",
+        reason="post-release grace (6h)",
+    )
+    await repo.insert_log_row(
+        instance_id=1,
+        item_id=7,
+        item_type="episode",
+        action="skipped",
+        search_kind="missing",
+        reason="already in download queue",
+    )
+    assert await repo.fetch_latest_missing_reason(1, 7, "episode") == "post-release grace (6h)"
+
+
 @pytest.mark.pinning()
 @pytest.mark.asyncio()
 async def test_fetch_latest_missing_grace_skip_returns_newest_match(

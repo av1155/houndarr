@@ -23,15 +23,18 @@ overrides:
   # 7.12.0..=7.29.3 can generate arbitrary code when compiling
   # malicious input. Transitive via @docusaurus/core > @babel.
   "@babel/plugin-transform-modules-systemjs": ">=7.29.4"
-  # CVE-2026-18446 (GHSA-7p8r-x3mc-p8w7): fast-uri <3.1.5 confuses the
-  # host when a backslash introduces the authority, fixed in 3.1.5;
-  # supersedes the earlier >=3.1.4 floor that cleared
-  # GHSA-86c8-pmm6-93fp (host confusion via percent-encoded authority
-  # delimiters), CVE-2026-13676 (policy bypass via improper Unicode
-  # hostname canonicalisation), and CVE-2026-16221.
+  # fast-uri <3.1.6 carries four advisories, all fixed in 3.1.6:
+  # CVE-2026-75899 (SSRF via repeated hostname percent-decoding),
+  # CVE-2026-75931 (host confusion via skipped IDN canonicalisation),
+  # CVE-2026-75975 (SSRF via malformed IPv6 normalisation), and
+  # CVE-2026-76172 (URI parsing flaw enabling SSRF and redirects).
+  # Supersedes the earlier >=3.1.5 floor for CVE-2026-18446
+  # (GHSA-7p8r-x3mc-p8w7, host confusion when a backslash introduces
+  # the authority) and the >=3.1.4 floor before it that cleared
+  # GHSA-86c8-pmm6-93fp, CVE-2026-13676, and CVE-2026-16221.
   # Transitive via @docusaurus/core > webpack > schema-utils > ajv.
   # Held to the 3.x line expected by ajv.
-  fast-uri: ">=3.1.5 <4"
+  fast-uri: ">=3.1.6 <4"
   # mermaid <11.16.1 carries five advisories, all fixed in 11.16.1:
   # GHSA-3rrr-jr9j-h3q3 (prototype pollution through Architecture
   # diagrams), GHSA-rhh3-jpg6-66xh (DoS via radar diagrams),
@@ -98,15 +101,16 @@ overrides:
   # deeply nested input through recursive link() schemas. Transitive
   # via @docusaurus/core > @docusaurus/utils > @docusaurus/types.
   joi: ">=17.13.4 <18"
-  # CVE-2026-59870 (GHSA-5p4m-2wfm-xmqj): js-yaml quadratic CPU
-  # consumption resolving !!omap, fixed in 3.15.1 and 4.3.1;
-  # supersedes the earlier >=3.15.0 and >=4.1.2 floors that cleared
-  # GHSA-h67p-54hq-rp68 (quadratic-complexity DoS in merge-key
-  # handling via repeated aliases). Two lines resolve in the tree:
-  # gray-matter pins js-yaml 3 (kept on the 3.x fix so its safeLoad
-  # API survives) and Docusaurus build tooling pulls js-yaml 4.
-  "js-yaml@3": ">=3.15.1 <4"
-  "js-yaml@4": ">=4.3.1 <5"
+  # CVE-2026-84375: js-yaml denial of service in YAML parsing, fixed in
+  # 3.15.2 and 4.3.2; supersedes the earlier >=3.15.1 and >=4.3.1
+  # floors for CVE-2026-59870 (GHSA-5p4m-2wfm-xmqj, quadratic CPU
+  # consumption resolving !!omap) and the >=3.15.0 and >=4.1.2 floors
+  # before them that cleared GHSA-h67p-54hq-rp68 (quadratic-complexity
+  # DoS in merge-key handling via repeated aliases). Two lines resolve
+  # in the tree: gray-matter pins js-yaml 3 (kept on the 3.x fix so its
+  # safeLoad API survives) and Docusaurus build tooling pulls js-yaml 4.
+  "js-yaml@3": ">=3.15.2 <4"
+  "js-yaml@4": ">=4.3.2 <5"
   # GHSA-v6wh-96g9-6wx3: launch-editor <2.14.1 leaks an NTLMv2 hash
   # through UNC path handling on Windows. Transitive via
   # @docusaurus/core > webpack-dev-server; only active during
@@ -147,16 +151,22 @@ overrides:
   # ^1.1.7 and 5.x replaced the CommonJS default export with a named
   # one.
   "brace-expansion@1": ">=1.1.18 <2"
-  # GHSA-f88m-g3jw-g9cj: sharp <0.35.0 bundles libvips builds subject
-  # to CVE-2026-33327, CVE-2026-33328, CVE-2026-35590, and
-  # CVE-2026-35591. Transitive via @docusaurus/plugin-ideal-image >
-  # responsive-loader; only used at build time to resize doc images.
-  sharp: ">=0.35.0 <0.36"
-  # GHSA-2p49-hgcm-8545: svgo <3.3.4 leaves some executable scripts
-  # intact despite the removeScripts plugin. Transitive via
-  # @docusaurus/core > @svgr/webpack and cssnano > postcss-svgo. Held
-  # to the 3.x line declared by both consumers.
-  svgo: ">=3.3.4 <4"
+  # GHSA-rgj7-g3m4-5g8c: sharp <0.35.4 bundles libheif builds subject
+  # to GHSA-g89c-p67h-r497 and GHSA-2jg2-4ch7-h545, fixed in 0.35.4;
+  # supersedes the earlier >=0.35.0 floor for GHSA-f88m-g3jw-g9cj
+  # (libvips builds subject to CVE-2026-33327, CVE-2026-33328,
+  # CVE-2026-35590, and CVE-2026-35591). Transitive via
+  # @docusaurus/plugin-ideal-image > responsive-loader; only used at
+  # build time to resize doc images.
+  sharp: ">=0.35.4 <0.36"
+  # CVE-2026-84370: svgo <3.3.5 lets executable links through
+  # removeScripts via namespace and control-character bypasses, fixed
+  # in 3.3.5; supersedes the earlier >=3.3.4 floor for
+  # GHSA-2p49-hgcm-8545 (executable scripts left intact despite the
+  # removeScripts plugin). Transitive via @docusaurus/core >
+  # @svgr/webpack and cssnano > postcss-svgo. Held to the 3.x line
+  # declared by both consumers.
+  svgo: ">=3.3.5 <4"
 
 # pnpm 11 replaces `onlyBuiltDependencies` with an explicit allow-map.
 # Each entry permits the named package's install scripts to run;

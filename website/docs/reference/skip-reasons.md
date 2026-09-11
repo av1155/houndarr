@@ -25,6 +25,7 @@ reasons are normal scheduling behavior, not errors.
 | `upgrade hourly limit reached (N/hr)` | per-item    | Upgrade pass hit `Upgrade Cap` of `N`.                                                               |
 | `tag filter (no included tag)`        | per-item    | `Tag Filter · Include` is set and the item does not carry any matching tag.                          |
 | `tag filter (excluded tag)`           | per-item    | `Tag Filter · Exclude` is set and the item carries one of those tags.                                |
+| `already in download queue`           | per-item    | The \*arr already has this item in its download queue (downloading, importing, or delayed).          |
 | `queue backpressure (N/M)`            | cycle-level | Download queue has `N` items, at or above `Queue Limit` of `M`. Entire cycle is skipped.             |
 | `outside allowed time window`         | cycle-level | Current time falls outside every window defined in `Allowed Search Window`. Entire cycle is skipped. |
 
@@ -46,6 +47,27 @@ hourly cap. When the window closes, normal missing cooldown applies.
 
 Cutoff and upgrade passes do not use this early retry. They always
 wait for their full cooldown.
+
+## Already in download queue
+
+Right before sending a search, Houndarr checks the \*arr's download
+queue and skips any item that already has an entry there: downloading,
+waiting to import, stuck on an import problem, waiting for a download
+client, or held back by a delay profile. Searching again mostly spends
+indexer hits, since the \*arr turns down another grab for a queued item
+unless the quality profile allows upgrades and the search finds a
+better release, and a search sent by Houndarr would skip the delay
+profile entirely. No cooldown is recorded, so the item is searched
+again on a later cycle once its entry leaves the queue. An entry that
+never leaves, such as a stalled download, holds the item until you
+clear it in the \*arr.
+
+The queue is read at most once per cycle, and only when the cycle is
+about to search something. In season, artist, or author search mode, a
+queued item doesn't hold back the rest: the parent is skipped only when
+every one of its wanted items the cycle reaches is already queued. If
+the queue can't be read, the cycle searches as usual and writes a
+warning to the container log.
 
 ## Queue backpressure
 
@@ -89,14 +111,16 @@ for the field reference and the per-app tag-source mapping.
 
 ## Log deduplication
 
-Six reasons are deduplicated in the log: `on cooldown`, `on cutoff
-cooldown`, `on upgrade cooldown`, `in hot retry window`, and the two
-`tag filter` skip reasons. Each `(instance, item, reason)` triple
-writes at most one `search_log` row per 24 hours. The engine still
-evaluates every candidate every cycle; only the log write is
-suppressed. This keeps the logs scannable when hundreds of items
-share the same cooldown, the same hot-retry interval throttle, or the
-same tag-filter outcome.
+Seven reasons are deduplicated in the log: `on cooldown`, `on cutoff
+cooldown`, `on upgrade cooldown`, `in hot retry window`, `already in
+download queue`, and the two `tag filter` skip reasons. Each
+`(instance, item, reason)` triple writes at most one `search_log` row
+per search pass every 24 hours on scheduled cycles. `Run now` always
+writes its rows, and the window is held in memory, so a restart starts
+it over. The engine still evaluates every candidate every cycle; only
+the log write is suppressed. This keeps the logs scannable when
+hundreds of items share the same cooldown, the same hot-retry interval
+throttle, or the same tag-filter outcome.
 
 The other reasons in the table above write a row every cycle they
 apply.

@@ -3,7 +3,7 @@
 :func:`houndarr.engine.search_loop._run_search_pass` takes a value object
 whose fields fall naturally into four groups: pass identity
 (``search_kind``), adapter bindings (``adapt_fn``, ``dispatch_fn``,
-``fetch_fn``, ``total_fn``), behaviour knobs (``batch_size``,
+``fetch_fn``, ``total_fn``, ``in_queue_fn``), behaviour knobs (``batch_size``,
 ``hourly_cap``, ``cooldown_days``, hot retry controls,
 ``page_size``, ``scan_budget``), and cycle metadata (``cycle_id``, ``cycle_trigger``,
 ``start_page``).  :class:`SearchPassConfig` collapses them into a
@@ -77,6 +77,10 @@ class SearchPassConfig:
             skip.  ``None`` disables the exclude direction.  Empty
             frozenset behaves like ``None`` (no items match an empty
             set, so no exclusion fires).
+        in_queue_fn: Optional predicate reporting whether a candidate's
+            wanted record already has a download in the *arr queue.
+            Checked just before dispatch; ``None`` disables the check.
+            Issue #765.
     """
 
     search_kind: SearchKind | str
@@ -96,6 +100,7 @@ class SearchPassConfig:
     tag_filter_exclude_ids: frozenset[int] | None = None
     missing_hot_retry_window_hrs: int = 0
     missing_hot_retry_interval_hrs: int = 2
+    in_queue_fn: Callable[[SearchCandidate], Awaitable[bool]] | None = None
 
 
 __all__ = ["SearchPassConfig"]

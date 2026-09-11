@@ -5,6 +5,9 @@ from __future__ import annotations
 import hashlib
 import json
 from pathlib import Path
+from typing import Any
+
+import pytest
 
 SONARR_SNAPSHOT_SHA256 = "03108f7f6b20300b84af879392ac44947cd3d3c19c073184e5fbf94e127165f9"
 RADARR_SNAPSHOT_SHA256 = "95ea9062485118d6a8abed8250b9bfbf94e4de0f55e9c5611da6805864f9a26e"
@@ -108,3 +111,45 @@ def test_readarr_snapshot_contains_expected_endpoints() -> None:
     assert "/api/v1/system/status" in paths
     assert "/api/v1/wanted/missing" in paths
     assert "/api/v1/command" in paths
+
+
+_QUEUE_LEAF_FIELDS = frozenset({"episodeId", "movieId", "albumId", "bookId"})
+
+
+@pytest.mark.parametrize(
+    ("snapshot", "details_path", "leaf_field", "embed_param"),
+    [
+        ("sonarr_openapi.json", "/api/v3/queue/details", "episodeId", None),
+        ("radarr_openapi.json", "/api/v3/queue/details", "movieId", None),
+        ("whisparr_v2_openapi.json", "/api/v3/queue/details", "episodeId", None),
+        ("whisparr_v3_openapi.json", "/api/v3/queue/details", "movieId", None),
+        ("lidarr_openapi.json", "/api/v1/queue/details", "albumId", "includeAlbum"),
+        ("readarr_openapi.json", "/api/v1/queue/details", "bookId", "includeBook"),
+    ],
+)
+def test_queue_details_contract(
+    snapshot: str,
+    details_path: str,
+    leaf_field: str,
+    embed_param: str | None,
+) -> None:
+    """Pin what the per-item download-queue check reads from ``/queue/details``.
+
+    ``QueueRecord.item_id`` takes whichever leaf id is present, which is only
+    safe while each app's ``QueueResource`` carries exactly one of them.  The
+    embed flag Houndarr sends as ``false`` must stay the only include
+    parameter that defaults to ``true``.
+    """
+    root = Path(__file__).resolve().parents[1]
+    spec: dict[str, Any] = _load_openapi(root / "docs" / "api" / snapshot)
+    details = spec["paths"][details_path]["get"]
+    response_schema = details["responses"]["200"]["content"]["application/json"]["schema"]
+    assert response_schema["type"] == "array"
+    queue_resource = spec["components"]["schemas"]["QueueResource"]["properties"]
+    assert set(queue_resource) & _QUEUE_LEAF_FIELDS == {leaf_field}
+    true_defaults = {
+        param["name"]
+        for param in details.get("parameters", [])
+        if param.get("schema", {}).get("default") is True
+    }
+    assert true_defaults == ({embed_param} if embed_param else set())

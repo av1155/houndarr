@@ -52,6 +52,10 @@ class SearchCandidate:
             engine's per-cycle tag filter (issue #637); empty tuple when
             the *arr did not return tags or the operator has not enabled
             the filter on this instance.
+        leaf_id: The wanted record's own episode, album, or book ID when
+            ``item_id`` is a synthetic season/artist/author ID; ``None`` in
+            item-level modes, where ``item_id`` already is that ID.  The
+            engine matches it against the *arr download queue (issue #765).
     """
 
     item_id: int
@@ -61,6 +65,7 @@ class SearchCandidate:
     group_key: tuple[int, int] | None
     search_payload: dict[str, Any]
     tags: tuple[int, ...] = ()
+    leaf_id: int | None = None
 
 
 def _parse_iso_utc(value: str | None) -> datetime | None:

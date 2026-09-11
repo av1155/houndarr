@@ -272,6 +272,21 @@ class TestLogRowsRender:
         assert "1 hit hourly limit" in html
         assert "No dispatches needed" in html
 
+    def test_skip_only_summary_all_already_downloading(self, render) -> None:
+        rows = self._skip_only_rows(["already in download queue", "already in download queue"])
+        html = render("partials/log_rows.html", rows=rows, limit=50)
+        assert 'all <span class="cycle__summary-reason">already in download queue</span>' in html
+        assert "<strong>2</strong> items" in html
+        assert "other" not in html
+
+    def test_skip_only_summary_mixed_with_already_downloading(self, render) -> None:
+        rows = self._skip_only_rows(
+            ["on cooldown (14d)", "on cooldown (14d)", "already in download queue"]
+        )
+        html = render("partials/log_rows.html", rows=rows, limit=50)
+        assert "2 on cooldown, 1 already in download queue" in html
+        assert "other" not in html
+
     def test_skip_only_summary_singular_item(self, render) -> None:
         """One skipped item uses the singular 'item' noun, not 'items'."""
         rows = self._skip_only_rows(["on cooldown (14d)"])

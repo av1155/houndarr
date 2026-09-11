@@ -29,6 +29,7 @@ from houndarr.services.instances import (
     UpgradePolicy,
     WhisparrV2SearchMode,
 )
+from tests.conftest import empty_download_queue
 
 
 @pytest.fixture(autouse=True)
@@ -42,6 +43,12 @@ def _reset_skip_log_sentinel() -> Iterator[None]:
     _reset_skip_log_cache()
     yield
     _reset_skip_log_cache()
+
+
+@pytest.fixture(autouse=True)
+def _empty_download_queue() -> Iterator[None]:
+    """Serve an empty *arr download queue to every engine test."""
+    yield from empty_download_queue()
 
 
 # ---------------------------------------------------------------------------

@@ -4,11 +4,14 @@ from __future__ import annotations
 
 import os
 import tempfile
-from collections.abc import AsyncGenerator, Generator
+from collections.abc import AsyncGenerator, Generator, Iterator
 from pathlib import Path
+from typing import Any
 
+import httpx
 import pytest
 import pytest_asyncio
+import respx
 from fastapi.testclient import TestClient
 from httpx import ASGITransport, AsyncClient
 
@@ -193,3 +196,36 @@ def csrf_headers(client: TestClient) -> dict[str, str]:
         Dict with the ``X-CSRF-Token`` header set to the current token.
     """
     return {"X-CSRF-Token": get_csrf_token(client)}
+
+
+# ---------------------------------------------------------------------------
+# *arr download-queue mock helpers (issue #765)
+# ---------------------------------------------------------------------------
+
+QUEUE_DETAILS_ROUTE = "queue_details"
+QUEUE_DETAILS_PATTERN = r"/api/v[13]/queue/details"
+
+
+def serve_download_queue(records: list[dict[str, Any]]) -> respx.Route:
+    """Point the shared ``/queue/details`` route at *records* for one test.
+
+    Reusing the route name replaces the autouse empty-queue route in place;
+    a new route with a different pattern would never match because respx
+    tries routes in registration order.
+    """
+    return respx.get(url__regex=QUEUE_DETAILS_PATTERN, name=QUEUE_DETAILS_ROUTE).mock(
+        return_value=httpx.Response(200, json=records),
+    )
+
+
+def empty_download_queue() -> Iterator[None]:
+    """Serve an empty *arr queue for the duration of one test.
+
+    Body of the autouse fixtures in the engine and e2e conftests.  Any
+    dispatching cycle fetches ``/queue/details``; without a route respx
+    raises ``AllMockedAssertionError`` (an ``AssertionError``, not an
+    ``httpx`` error), which the engine's fail-open catch does not cover.
+    """
+    serve_download_queue([])
+    yield
+    respx.routes.pop(QUEUE_DETAILS_ROUTE, None)

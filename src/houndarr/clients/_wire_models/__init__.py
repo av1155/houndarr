@@ -28,6 +28,7 @@ from houndarr.clients._wire_models.common import (
     ArrSeries,
     ArrTag,
     PaginatedResponse,
+    QueueRecord,
     QueueStatus,
     SystemStatus,
 )
@@ -52,6 +53,7 @@ __all__ = [
     "LidarrLibraryAlbum",
     "LidarrWantedAlbum",
     "PaginatedResponse",
+    "QueueRecord",
     "QueueStatus",
     "RadarrLibraryMovie",
     "RadarrWantedMovie",

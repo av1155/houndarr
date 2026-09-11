@@ -38,7 +38,9 @@ class AppData:
     ``parents`` holds the optional parent aggregate (series, artist, author).
     Radarr and Whisparr v3 leave it empty because their leaves are top-level.
     ``leaves`` is the searchable record set; the three id sets partition the
-    leaves into the three engine passes.
+    leaves into the three engine passes.  ``queued_ids`` are the leaves the
+    mock reports in its download queue; ``queue_detail_requests`` counts
+    ``/queue/details`` reads.
     """
 
     app_name: str
@@ -54,6 +56,8 @@ class AppData:
     upgrade_ids: set[int]
     command_log: CommandLog = field(default_factory=CommandLog)
     page_log: PageLog = field(default_factory=PageLog)
+    queued_ids: set[int] = field(default_factory=set)
+    queue_detail_requests: int = 0
 
 
 @dataclass(slots=True)

@@ -68,13 +68,25 @@ def partition_leaf_ids(
     return missing, cutoff, upgrade
 
 
-def attach_common_routes(router: APIRouter, data: AppData) -> None:
-    """Wire ``/system/status``, ``/queue/status``, and ``POST /command``.
+_QUEUE_LEAF_KEYS: dict[str, str] = {
+    "sonarr": "episodeId",
+    "whisparr_v2": "episodeId",
+    "radarr": "movieId",
+    "whisparr_v3": "movieId",
+    "lidarr": "albumId",
+    "readarr": "bookId",
+}
 
-    Every *arr app exposes these three endpoints with the same shape, so
-    each per-app router gets them via this helper rather than re-declaring.
-    The command handler stores every POST so tests can assert dispatch.
+
+def attach_common_routes(router: APIRouter, data: AppData) -> None:
+    """Wire ``/system/status``, the two queue reads, and ``POST /command``.
+
+    Every *arr app exposes these endpoints with the same shape, so each
+    per-app router gets them via this helper rather than re-declaring.
+    The command handler stores every POST so tests can assert dispatch;
+    ``/queue/details`` reports ``data.queued_ids`` under the app's leaf key.
     """
+    leaf_key = _QUEUE_LEAF_KEYS[data.api_prefix.split("/")[1]]
 
     @router.get("/system/status")
     async def system_status() -> dict[str, Any]:
@@ -83,12 +95,26 @@ def attach_common_routes(router: APIRouter, data: AppData) -> None:
     @router.get("/queue/status")
     async def queue_status() -> dict[str, Any]:
         return {
-            "totalCount": 0,
-            "count": 0,
+            "totalCount": len(data.queued_ids),
+            "count": len(data.queued_ids),
             "unknownCount": 0,
             "errors": False,
             "warnings": False,
         }
+
+    @router.get("/queue/details")
+    async def queue_details() -> list[dict[str, Any]]:
+        data.queue_detail_requests += 1
+        return [
+            {
+                "id": 900_000 + leaf_id,
+                leaf_key: leaf_id,
+                "status": "downloading",
+                "trackedDownloadStatus": "ok",
+                "trackedDownloadState": "downloading",
+            }
+            for leaf_id in sorted(data.queued_ids)
+        ]
 
     @router.post("/command")
     async def post_command(

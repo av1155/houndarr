@@ -1,9 +1,9 @@
 """Minimal *arr API mock for Houndarr's browser end-to-end tests.
 
 Serves the endpoints Houndarr actually calls: system status, queue
-status, wanted/missing, wanted/cutoff, command dispatch, and the
-library endpoints used by the upgrade pass.  One process per *arr flavor
-selected with ``--app Sonarr|Radarr``.
+status and details, wanted/missing, wanted/cutoff, command dispatch, and
+the library endpoints used by the upgrade pass.  One process per *arr
+flavor selected with ``--app Sonarr|Radarr``.
 
 Not a general-purpose mock; payload shapes only carry the fields
 Houndarr's clients parse.  Values are deterministic so the e2e suite
@@ -77,6 +77,10 @@ def make_app(app_name: str, version: str = "4.0.0") -> FastAPI:
             "unknownErrors": False,
             "unknownWarnings": False,
         }
+
+    @app.get("/api/v3/queue/details")
+    async def queue_details() -> list[dict[str, Any]]:
+        return []
 
     @app.get("/api/v3/wanted/missing")
     async def wanted_missing(page: int = 1, pageSize: int = 10) -> dict[str, Any]:  # noqa: N803

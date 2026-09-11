@@ -163,6 +163,7 @@ class TestSearchPassConfigDeclaration:
             "tag_filter_exclude_ids",
             "missing_hot_retry_window_hrs",
             "missing_hot_retry_interval_hrs",
+            "in_queue_fn",
         ]
 
     def test_optional_total_fn_accepts_bound_coroutine(self) -> None:

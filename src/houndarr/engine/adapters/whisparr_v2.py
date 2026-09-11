@@ -243,6 +243,7 @@ def adapt_upgrade(
         group_key=group_key,
         search_payload=search_payload,
         tags=item.tags,
+        leaf_id=item.episode_id if use_season_context else None,
     )
 
 

@@ -264,6 +264,11 @@ async def fetch_latest_missing_reason(
     post-release-grace, both of which can now have elapsed) or left
     alone.
 
+    ``already in download queue`` rows are passed over: a queue skip
+    leaves the release-timing state unchanged, and in season, artist,
+    or author mode it can come from a sibling of the item that needs
+    the retry.
+
     Args:
         instance_id: Owning instance primary key.
         item_id: *arr per-type item identifier.
@@ -272,9 +277,9 @@ async def fetch_latest_missing_reason(
             ``"author"``, ``"series"``, ``"artist"``).
 
     Returns:
-        The ``reason`` column value from the newest matching row, or
-        ``None`` when no missing-pass row exists or the row's reason
-        is NULL.
+        The ``reason`` column value from the newest matching row that
+        is not a queue skip, or ``None`` when no such missing-pass row
+        exists or the row's reason is NULL.
     """
     async with get_db() as db:
         async with db.execute(
@@ -285,6 +290,7 @@ async def fetch_latest_missing_reason(
               AND item_id = ?
               AND item_type = ?
               AND search_kind = 'missing'
+              AND (reason IS NULL OR reason != 'already in download queue')
             ORDER BY timestamp DESC, id DESC
             LIMIT 1
             """,

@@ -293,11 +293,12 @@ def _download_queue_lookup(
     """Return a predicate reporting whether a candidate is already downloading.
 
     The *arr queue is fetched on the first call and reused for the rest of
-    the cycle, so a cycle that dispatches nothing sends no queue request and
-    one that dispatches from several passes sends exactly one.  A failed
-    fetch turns the check off for the cycle: searching an item that is
-    already downloading (the behaviour before the check existed) beats
-    skipping searches because the *arr hiccuped.
+    the cycle.  Callers only ask once a candidate has cleared every other
+    gate, so a cycle where nothing gets that far sends no queue request,
+    and a cycle that reaches dispatch from several passes sends exactly
+    one.  A failed fetch turns the check off for the cycle: searching an
+    item that is already downloading (the behaviour before the check
+    existed) beats skipping searches because the *arr hiccuped.
     """
     queued_ids: frozenset[int] = frozenset()
     fetched = False

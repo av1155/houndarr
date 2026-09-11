@@ -22,6 +22,7 @@ __all__ = [
     "ArrSeries",
     "ArrTag",
     "PaginatedResponse",
+    "QueueRecord",
     "QueueStatus",
     "SystemStatus",
     "_ArrModel",
@@ -99,6 +100,26 @@ class QueueStatus(_ArrModel):
     """
 
     total_count: int = Field(alias="totalCount")
+
+
+class QueueRecord(_ArrModel):
+    """One entry of ``/queue/details``: tracked downloads and pending releases.
+
+    Each app fills exactly one of the leaf ids (``episodeId`` for Sonarr and
+    Whisparr v2, ``movieId`` for Radarr and Whisparr v3, ``albumId`` for
+    Lidarr, ``bookId`` for Readarr).  Downloads the *arr could not match to a
+    library item omit the key, so every id is optional.
+    """
+
+    episode_id: int | None = Field(default=None, alias="episodeId")
+    movie_id: int | None = Field(default=None, alias="movieId")
+    album_id: int | None = Field(default=None, alias="albumId")
+    book_id: int | None = Field(default=None, alias="bookId")
+
+    @property
+    def item_id(self) -> int | None:
+        """Return the leaf id this download belongs to, or ``None`` if unmatched."""
+        return self.episode_id or self.movie_id or self.album_id or self.book_id
 
 
 # ---------------------------------------------------------------------------

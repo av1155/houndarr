@@ -188,8 +188,10 @@ def build_missing_candidate(
         item_type: Per-adapter type string (``"movie"``, ``"episode"``,
             ``"album"``, ``"book"``, ``"whisparr_v2_episode"``,
             ``"whisparr_v3_movie"``).
-        item_id: The DB-stable per-item id used in primary mode.
-            Ignored when *context* is supplied.
+        item_id: The DB-stable per-item id used in primary mode.  When
+            *context* is supplied it becomes the candidate's ``leaf_id``
+            instead, so the engine can still match the record against
+            the download queue.
         label: Human-readable per-item log label.  Ignored when
             *context* is supplied.
         unreleased_reason: ``None`` when eligible; a skip-reason
@@ -212,6 +214,7 @@ def build_missing_candidate(
             group_key=context.group_key,
             search_payload=context.search_payload,
             tags=tags,
+            leaf_id=item_id,
         )
     return SearchCandidate(
         item_id=item_id,

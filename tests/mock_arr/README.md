@@ -47,6 +47,7 @@ Any `X-Api-Key` value (or none) is accepted.
 Every app:
 - `GET  /api/v{N}/system/status`
 - `GET  /api/v{N}/queue/status`
+- `GET  /api/v{N}/queue/details` (lists the ids seeded via `/__queue__/{app}`)
 - `POST /api/v{N}/command`
 
 Sonarr / Whisparr v2:
@@ -72,6 +73,10 @@ Debug:
 - `GET /__commands__/{sonarr|radarr|lidarr|readarr|whisparr_v2|whisparr_v3}` returns
   every command POSTed to that app since launch. Useful for asserting
   what the engine actually dispatched during a cycle.
+- `PUT /__queue__/{app}` with a JSON list of leaf ids (episode, movie,
+  album, or book) sets what `/queue/details` reports; `GET /__queue__/{app}`
+  returns those ids plus how many times `/queue/details` was read.
+  `POST /__reset__/{app}` clears both.
 
 ## Wiring it into Houndarr
 

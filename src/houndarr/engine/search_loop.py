@@ -13,7 +13,7 @@ import logging
 import math
 import random
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
 from uuid import uuid4
@@ -279,6 +279,116 @@ async def _resolve_tag_filter_ids(
         )
 
     return include_ids, exclude_ids
+
+
+# Download-queue check (issue #765)
+
+_QUEUED_REASON = "already in download queue"
+
+
+def _download_queue_lookup(
+    adapter: AppAdapterProto,
+    instance: Instance,
+) -> Callable[[SearchCandidate], Awaitable[bool]]:
+    """Return a predicate reporting whether a candidate is already downloading.
+
+    The *arr queue is fetched on the first call and reused for the rest of
+    the cycle, so a cycle that dispatches nothing sends no queue request and
+    one that dispatches from several passes sends exactly one.  A failed
+    fetch turns the check off for the cycle: searching an item that is
+    already downloading (the behaviour before the check existed) beats
+    skipping searches because the *arr hiccuped.
+    """
+    queued_ids: frozenset[int] = frozenset()
+    fetched = False
+
+    async def in_queue(candidate: SearchCandidate) -> bool:
+        nonlocal queued_ids, fetched
+        if not fetched:
+            fetched = True
+            try:
+                async with adapter.make_client(instance) as client:
+                    queued_ids = await client.get_queue_item_ids()
+            except (ClientError, httpx.InvalidURL) as exc:
+                logger.warning(
+                    "[%s] download queue check skipped this cycle: %s",
+                    instance.core.name,
+                    exc,
+                )
+            else:
+                logger.debug(
+                    "[%s] download queue holds %d item(s)",
+                    instance.core.name,
+                    len(queued_ids),
+                )
+        leaf_id = candidate.item_id if candidate.leaf_id is None else candidate.leaf_id
+        return leaf_id in queued_ids
+
+    return in_queue
+
+
+@dataclass(slots=True)
+class _QueuedSkips:
+    """Per-pass handling of candidates whose wanted record is already downloading.
+
+    Item-level candidates get their skip row immediately.  A
+    season/artist/author candidate hands its group slot back so a sibling
+    record that is not downloading can still drive the parent search; its
+    skip row waits for :meth:`flush` and is dropped when a sibling took
+    the slot.
+    """
+
+    instance: Instance
+    in_queue_fn: Callable[[SearchCandidate], Awaitable[bool]] | None
+    search_kind: SearchKind | str
+    cycle_id: str
+    cycle_trigger: CycleTrigger | str
+    deferred: dict[tuple[int, int], tuple[SearchCandidate, ItemRef]] = field(default_factory=dict)
+
+    async def skip(
+        self,
+        candidate: SearchCandidate,
+        ref: ItemRef,
+        seen_item_ids: set[int],
+        seen_group_keys: set[tuple[int, int]],
+    ) -> bool:
+        """Return ``True`` when *candidate* is in the queue and must not be dispatched."""
+        if self.in_queue_fn is None or not await self.in_queue_fn(candidate):
+            return False
+        if candidate.group_key is None:
+            await self._log(candidate, ref)
+        else:
+            seen_group_keys.discard(candidate.group_key)
+            seen_item_ids.discard(candidate.item_id)
+            self.deferred.setdefault(candidate.group_key, (candidate, ref))
+        return True
+
+    async def flush(self, seen_group_keys: set[tuple[int, int]]) -> None:
+        """Write the deferred rows for groups no sibling went on to search."""
+        for group_key, (candidate, ref) in self.deferred.items():
+            # A sibling that took the group slot put the key back.
+            if group_key not in seen_group_keys:
+                await self._log(candidate, ref)
+
+    async def _log(self, candidate: SearchCandidate, ref: ItemRef) -> None:
+        skip_key = (self.instance.core.id, candidate.item_id, self.search_kind, "queue")
+        if self.cycle_trigger == "run_now" or await should_log_skip(skip_key):
+            logger.debug(
+                "[%s] %s %s: %s",
+                self.instance.core.name,
+                self.search_kind,
+                candidate.item_id,
+                _QUEUED_REASON,
+            )
+            await _write_item_log(
+                ref,
+                SearchAction.skipped.value,
+                search_kind=self.search_kind,
+                cycle_id=self.cycle_id,
+                cycle_trigger=self.cycle_trigger,
+                item_label=candidate.label,
+                reason=_QUEUED_REASON,
+            )
 
 
 def _format_hourly_limit_reason(kind: SearchKind | str, cap: int) -> str:
@@ -673,7 +783,8 @@ async def _run_search_pass(
     function.  It pages through items, converts each to a
     :class:`SearchCandidate` via ``config.adapt_fn``, applies eligibility
     checks (unreleased delay, hourly cap, cooldown), and dispatches
-    searches via ``config.dispatch_fn``.
+    searches via ``config.dispatch_fn``, skipping any candidate that
+    ``config.in_queue_fn`` reports as already in the download queue.
 
     Args:
         instance: Fully-populated (decrypted) instance.
@@ -713,6 +824,13 @@ async def _run_search_pass(
     searches_this_hour = await _count_searches_last_hour(instance.core.id, search_kind)
     seen_item_ids: set[int] = set()
     seen_group_keys: set[tuple[int, int]] = set()
+    queued_skips = _QueuedSkips(
+        instance=instance,
+        in_queue_fn=config.in_queue_fn,
+        search_kind=search_kind,
+        cycle_id=cycle_id,
+        cycle_trigger=cycle_trigger,
+    )
     searched = 0
     scanned = 0
     page = max(1, start_page)
@@ -956,6 +1074,8 @@ async def _run_search_pass(
                             should_retry = _is_release_timing_reason(latest_reason)
 
                     if should_retry:
+                        if await queued_skips.skip(candidate, ref, seen_item_ids, seen_group_keys):
+                            continue
                         logger.info(
                             "[%s] allowing missing retry for %s after release-timing block",
                             instance.core.name,
@@ -1003,6 +1123,9 @@ async def _run_search_pass(
                     )
                 continue
 
+            if await queued_skips.skip(candidate, ref, seen_item_ids, seen_group_keys):
+                continue
+
             # Count only eligible (non-skipped) candidates against scan budget.
             scanned += 1
 
@@ -1033,6 +1156,7 @@ async def _run_search_pass(
             else:
                 page += 1
 
+    await queued_skips.flush(seen_group_keys)
     return searched, page
 
 
@@ -1048,6 +1172,7 @@ async def _run_upgrade_pass(
     cycle_trigger: CycleTrigger | str,
     tag_filter_include_ids: frozenset[int] | None = None,
     tag_filter_exclude_ids: frozenset[int] | None = None,
+    in_queue_fn: Callable[[SearchCandidate], Awaitable[bool]] | None = None,
 ) -> int:
     """Execute the upgrade search pass for *instance*.
 
@@ -1065,6 +1190,9 @@ async def _run_upgrade_pass(
             :func:`_resolve_tag_filter_ids`, or ``None`` when the
             operator has not enabled an include filter.  Issue #637.
         tag_filter_exclude_ids: Resolved exclude tag-IDs, or ``None``.
+        in_queue_fn: Predicate from :func:`_download_queue_lookup`;
+            candidates it reports as already downloading are skipped
+            instead of dispatched.  ``None`` disables the check.
 
     Returns:
         Count of items searched in this upgrade pass.
@@ -1178,6 +1306,13 @@ async def _run_upgrade_pass(
     scanned = 0
     seen_item_ids: set[int] = set()
     seen_group_keys: set[tuple[int, int]] = set()
+    queued_skips = _QueuedSkips(
+        instance=instance,
+        in_queue_fn=in_queue_fn,
+        search_kind="upgrade",
+        cycle_id=cycle_id,
+        cycle_trigger=cycle_trigger,
+    )
     new_offset = offset
 
     for item in rotated:
@@ -1260,6 +1395,9 @@ async def _run_upgrade_pass(
             scanned += 1
             continue
 
+        if await queued_skips.skip(candidate, ref, seen_item_ids, seen_group_keys):
+            continue
+
         scanned += 1
 
         # Dispatch search
@@ -1304,6 +1442,8 @@ async def _run_upgrade_pass(
             candidate.item_id,
         )
         await asyncio.sleep(_INTER_SEARCH_DELAY_SECONDS)
+
+    await queued_skips.flush(seen_group_keys)
 
     # Persist new offset.  In random mode the offset concept does not apply
     # (the pool was shuffled, not rotated), so skip the write entirely to
@@ -1507,6 +1647,11 @@ async def _run_instance_search_impl(
     else:
         tag_filter_include_ids, tag_filter_exclude_ids = None, None
 
+    # --- Download-queue check (issue #765) ---
+    # One lazy lookup shared by all three passes: the *arr queue is read at
+    # the first candidate about to be dispatched, at most once per cycle.
+    in_queue_fn = _download_queue_lookup(adapter, instance)
+
     # --- Missing pass ---
     # The outer gate is the per-instance master switch (issue #619).  It
     # mirrors ``instance.cutoff.cutoff_enabled`` / ``upgrade.upgrade_enabled``
@@ -1546,6 +1691,7 @@ async def _run_instance_search_impl(
                         missing_hot_retry_interval_hrs=(
                             instance.missing.missing_hot_retry_interval_hrs
                         ),
+                        in_queue_fn=in_queue_fn,
                     ),
                 )
             searched += missing_searched
@@ -1596,6 +1742,7 @@ async def _run_instance_search_impl(
                         total_fn=lambda: cutoff_client.get_wanted_total("cutoff"),
                         tag_filter_include_ids=tag_filter_include_ids,
                         tag_filter_exclude_ids=tag_filter_exclude_ids,
+                        in_queue_fn=in_queue_fn,
                     ),
                 )
             logger.info(
@@ -1634,6 +1781,7 @@ async def _run_instance_search_impl(
                 cycle_trigger=cycle_trigger,
                 tag_filter_include_ids=tag_filter_include_ids,
                 tag_filter_exclude_ids=tag_filter_exclude_ids,
+                in_queue_fn=in_queue_fn,
             )
             logger.info(
                 "[%s] upgrade pass complete: %d searched",

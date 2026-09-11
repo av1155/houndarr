@@ -49,6 +49,8 @@ class ReadarrClient(ArrClient):
 
     _SYSTEM_STATUS_PATH: str = "/api/v1/system/status"
     _QUEUE_STATUS_PATH: str = "/api/v1/queue/status"
+    _QUEUE_DETAILS_PATH: str = "/api/v1/queue/details"
+    _QUEUE_DETAILS_EMBED_PARAM: ClassVar[str | None] = "includeBook"
     _TAG_PATH: ClassVar[str] = "/api/v1/tag"
     # Readarr is a v1 API; the override routes the /wanted template at
     # /api/v1/wanted/{kind} (matches Lidarr's pattern).

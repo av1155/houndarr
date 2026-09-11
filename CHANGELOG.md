@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Missing, cutoff, and upgrade searches skip items that already have a download in the \*arr queue and log `already in download queue` instead. (#765)
+
 ---
 
 ## [1.13.2] - 2026-08-11

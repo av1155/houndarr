@@ -196,6 +196,7 @@ def adapt_upgrade(item: LibraryAlbum, instance: Instance) -> SearchCandidate:
         group_key=group_key,
         search_payload=search_payload,
         tags=item.tags,
+        leaf_id=item.album_id if use_artist_context else None,
     )
 
 

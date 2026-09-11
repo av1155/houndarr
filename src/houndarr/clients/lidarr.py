@@ -46,6 +46,8 @@ class LidarrClient(ArrClient):
 
     _SYSTEM_STATUS_PATH: str = "/api/v1/system/status"
     _QUEUE_STATUS_PATH: str = "/api/v1/queue/status"
+    _QUEUE_DETAILS_PATH: str = "/api/v1/queue/details"
+    _QUEUE_DETAILS_EMBED_PARAM: ClassVar[str | None] = "includeAlbum"
     _TAG_PATH: ClassVar[str] = "/api/v1/tag"
     # Lidarr is a v1 API (Sonarr / Radarr / Whisparr v2 are v3); the
     # override routes the /wanted template at /api/v1/wanted/{kind}.

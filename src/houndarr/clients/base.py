@@ -12,7 +12,13 @@ from urllib.parse import urlparse
 import httpx
 from pydantic import ValidationError
 
-from houndarr.clients._wire_models import ArrTag, PaginatedResponse, QueueStatus, SystemStatus
+from houndarr.clients._wire_models import (
+    ArrTag,
+    PaginatedResponse,
+    QueueRecord,
+    QueueStatus,
+    SystemStatus,
+)
 from houndarr.errors import (
     ClientError,
     ClientHTTPError,
@@ -188,6 +194,10 @@ class ArrClient(ABC):
 
     _SYSTEM_STATUS_PATH: str = "/api/v3/system/status"
     _QUEUE_STATUS_PATH: str = "/api/v3/queue/status"
+    _QUEUE_DETAILS_PATH: str = "/api/v3/queue/details"
+    # Lidarr and Readarr embed the full album / book in every queue record
+    # unless this flag is sent as false.
+    _QUEUE_DETAILS_EMBED_PARAM: ClassVar[str | None] = None
     _TAG_PATH: ClassVar[str] = "/api/v3/tag"
 
     # Class-level hooks for the /wanted template.  Subclasses with a /wanted
@@ -317,6 +327,55 @@ class ArrClient(ABC):
             raise ClientValidationError(
                 f"queue status: malformed payload from {self._QUEUE_STATUS_PATH}"
             ) from exc
+
+    async def get_queue_item_ids(self) -> frozenset[int]:
+        """Return the ids of library items that already have a queued download.
+
+        Reads :attr:`_QUEUE_DETAILS_PATH` (``/api/v3/queue/details``, or
+        ``/api/v1/...`` for Lidarr and Readarr), which lists tracked
+        downloads and pending releases in one unpaged response with one
+        record per episode, movie, album, or book.  Downloads the *arr could
+        not match to a library item carry no id and are left out.
+
+        Raises:
+            ClientHTTPError: The server returned a non-2xx status.
+            ClientTransportError: The request failed before a response
+                arrived (connection refused, DNS failure, timeout,
+                malformed URL, etc.).
+            ClientValidationError: The body was not JSON, not a list, or
+                held a record that did not match :class:`QueueRecord`.
+        """
+        params: dict[str, str] = {}
+        if self._QUEUE_DETAILS_EMBED_PARAM is not None:
+            params[self._QUEUE_DETAILS_EMBED_PARAM] = "false"
+        try:
+            result = await self._get(self._QUEUE_DETAILS_PATH, **params)
+        except httpx.HTTPStatusError as exc:
+            raise ClientHTTPError(
+                f"queue details: HTTP {exc.response.status_code} from {self._QUEUE_DETAILS_PATH}"
+            ) from exc
+        except (httpx.RequestError, httpx.InvalidURL) as exc:
+            raise ClientTransportError(
+                f"queue details: transport error reaching {self._QUEUE_DETAILS_PATH}: {exc}"
+            ) from exc
+        except ValueError as exc:
+            # A non-JSON body (e.g. a proxy login page) must reach the
+            # engine as a typed error so the cycle fails open.
+            raise ClientValidationError(
+                f"queue details: non-JSON body from {self._QUEUE_DETAILS_PATH}"
+            ) from exc
+
+        if not isinstance(result, list):
+            raise ClientValidationError(
+                f"queue details: expected a JSON list from {self._QUEUE_DETAILS_PATH}"
+            )
+        try:
+            records = [QueueRecord.model_validate(row) for row in result]
+        except ValidationError as exc:
+            raise ClientValidationError(
+                f"queue details: malformed payload from {self._QUEUE_DETAILS_PATH}"
+            ) from exc
+        return frozenset(item_id for record in records if (item_id := record.item_id))
 
     # /tag definitions (used by the engine's per-cycle tag filter, issue #637)
 

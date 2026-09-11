@@ -195,6 +195,7 @@ def adapt_upgrade(item: LibraryBook, instance: Instance) -> SearchCandidate:
         group_key=group_key,
         search_payload=search_payload,
         tags=item.tags,
+        leaf_id=item.book_id if use_author_context else None,
     )
 
 

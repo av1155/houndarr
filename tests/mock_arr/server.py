@@ -18,7 +18,7 @@ from typing import Any
 
 import click
 import uvicorn
-from fastapi import FastAPI
+from fastapi import Body, FastAPI
 
 from tests.mock_arr.routers.lidarr import make_lidarr_data, make_lidarr_router
 from tests.mock_arr.routers.radarr import make_radarr_data, make_radarr_router
@@ -171,14 +171,33 @@ def create_app(config: SeedConfig | None = None) -> FastAPI:
             return {"error": f"unknown app: {app_name}"}
         return {"entries": list(store.page_log.entries)}
 
+    @app.put("/__queue__/{app_name}")
+    async def set_queue(app_name: str, leaf_ids: list[int] = Body(default_factory=list)) -> Any:
+        """Replace the leaf ids the app reports in ``/queue/details``."""
+        store = getattr(state, app_name, None)
+        if store is None:
+            return {"error": f"unknown app: {app_name}"}
+        store.queued_ids = set(leaf_ids)
+        return {"queued": sorted(store.queued_ids)}
+
+    @app.get("/__queue__/{app_name}")
+    async def get_queue(app_name: str) -> dict[str, Any]:
+        """Return the queued leaf ids and how many ``/queue/details`` reads happened."""
+        store = getattr(state, app_name, None)
+        if store is None:
+            return {"error": f"unknown app: {app_name}"}
+        return {"queued": sorted(store.queued_ids), "requests": store.queue_detail_requests}
+
     @app.post("/__reset__/{app_name}")
     async def reset_app(app_name: str) -> dict[str, Any]:
-        """Wipe command and page logs for one app, leaving seed data intact."""
+        """Wipe command, page, and queue state for one app, leaving seed data intact."""
         store = getattr(state, app_name, None)
         if store is None:
             return {"error": f"unknown app: {app_name}"}
         store.command_log.entries.clear()
         store.page_log.entries.clear()
+        store.queued_ids.clear()
+        store.queue_detail_requests = 0
         return {"reset": app_name}
 
     app.state.mock_state = state

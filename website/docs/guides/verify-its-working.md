@@ -80,8 +80,8 @@ executed.
 
 If most of your log rows say `skipped`, read the reason string
 against the [Skip Reasons reference](/docs/reference/skip-reasons).
-Cooldown, post-release grace, hot retry windows, hourly caps, and queue backpressure
-are normal scheduling behavior. Errors are the signal that
+Cooldown, post-release grace, hot retry windows, hourly caps, queue backpressure,
+and items already in the download queue are normal scheduling behavior. Errors are the signal that
 something is wrong; skips are not.
 
 Cooldown-reason rows are deduplicated so the log stays scannable

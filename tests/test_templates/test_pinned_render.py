@@ -11,12 +11,15 @@ contexts each, markers only.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
 
 pytestmark = pytest.mark.pinning
+
+type RenderTemplate = Callable[..., str]
 
 
 # instance_row.html
@@ -82,7 +85,7 @@ class TestInstanceRowRender:
         "type_value",
         ["sonarr", "radarr", "lidarr", "readarr", "whisparr_v2", "whisparr_v3"],
     )
-    def test_each_app_type_emits_badge(self, render, type_value: str) -> None:
+    def test_each_app_type_emits_badge(self, render: RenderTemplate, type_value: str) -> None:
         inst = _instance_stub(type_value=type_value)
         html = render(
             "partials/instance_row.html",
@@ -93,7 +96,7 @@ class TestInstanceRowRender:
         assert 'class="' in html
         assert "rounded-chip" in html
 
-    def test_enabled_instance_shows_active_pill(self, render) -> None:
+    def test_enabled_instance_shows_active_pill(self, render: RenderTemplate) -> None:
         inst = _instance_stub(enabled=True)
         html = render(
             "partials/instance_row.html",
@@ -102,7 +105,7 @@ class TestInstanceRowRender:
         )
         assert "status-dot--active" in html
 
-    def test_disabled_instance_omits_pulse(self, render) -> None:
+    def test_disabled_instance_omits_pulse(self, render: RenderTemplate) -> None:
         inst = _instance_stub(enabled=False)
         html = render(
             "partials/instance_row.html",
@@ -112,7 +115,7 @@ class TestInstanceRowRender:
         # Disabled pill emits a .status-dot but none of the pulsing variants.
         assert "Disabled" in html or "disabled" in html.lower()
 
-    def test_active_error_shows_error_pill(self, render) -> None:
+    def test_active_error_shows_error_pill(self, render: RenderTemplate) -> None:
         inst = _instance_stub(instance_id=3, enabled=True)
         html = render(
             "partials/instance_row.html",
@@ -131,7 +134,7 @@ class TestLogRowsRender:
         "action",
         ["searched", "skipped", "error"],
     )
-    def test_action_chip_class(self, render, action: str) -> None:
+    def test_action_chip_class(self, render: RenderTemplate, action: str) -> None:
         rows = [
             {
                 "id": 1,
@@ -161,7 +164,7 @@ class TestLogRowsRender:
         )
         assert f"entry__action--{action}" in html
 
-    def test_empty_rows_branch_renders_quietly(self, render) -> None:
+    def test_empty_rows_branch_renders_quietly(self, render: RenderTemplate) -> None:
         html = render(
             "partials/log_rows.html",
             rows=[],
@@ -171,7 +174,7 @@ class TestLogRowsRender:
         assert html is not None
 
     @staticmethod
-    def _skip_only_rows(reasons: list[str], instance_name: str = "Sonarr") -> list[dict]:
+    def _skip_only_rows(reasons: list[str], instance_name: str = "Sonarr") -> list[dict[str, Any]]:
         """Build a cycle's worth of skip-only rows sharing one cycle_id."""
         cycle_id = "cyc-skip-only"
         rows = []
@@ -200,7 +203,113 @@ class TestLogRowsRender:
             )
         return rows
 
-    def test_skip_only_summary_all_cooldown(self, render) -> None:
+    @pytest.mark.parametrize(
+        ("reasons", "expected_label"),
+        [
+            pytest.param(
+                [
+                    "on cooldown (14d)",
+                    "on cutoff cooldown (21d)",
+                    "on upgrade cooldown (90d)",
+                ],
+                "on cooldown",
+                id="cooldown",
+            ),
+            pytest.param(
+                [
+                    "not yet released",
+                    "post-release grace (6h)",
+                    "radarr reports not available",
+                    "radarr status indicates unreleased",
+                    "future title not yet available",
+                ],
+                "not yet released",
+                id="unreleased",
+            ),
+            pytest.param(
+                ["in hot retry window (24h)", "in hot retry window (24h)"],
+                "inside hot retry window",
+                id="hot-retry",
+            ),
+            pytest.param(
+                [
+                    "hourly limit reached (20/hr)",
+                    "cutoff hourly limit reached (1/hr)",
+                    "upgrade hourly limit reached (1/hr)",
+                ],
+                "hourly limit",
+                id="hourly-limit",
+            ),
+            pytest.param(
+                ["already in download queue", "already in download queue"],
+                "already in download queue",
+                id="download-queue",
+            ),
+            pytest.param(
+                ["on cooldown (14d)", "already in download queue"],
+                "skipped",
+                id="mixed",
+            ),
+            pytest.param(
+                ["tag filter (excluded tag)", "tag filter (excluded tag)"],
+                "skipped",
+                id="unknown",
+            ),
+        ],
+    )
+    def test_skip_only_pill_label_matches_reason_family(
+        self,
+        render: RenderTemplate,
+        reasons: list[str],
+        expected_label: str,
+    ) -> None:
+        rows = self._skip_only_rows(reasons)
+        html = render("partials/log_rows.html", rows=rows, limit=50)
+        expected = f'outcome-pill__n">{len(reasons)}</span> {expected_label}</span>'
+        assert expected in html
+        assert '<span class="health-pill">Healthy</span>' in html
+
+    def test_skip_only_pill_uses_fallback_for_partial_cycle(self, render: RenderTemplate) -> None:
+        rows = self._skip_only_rows(["on cooldown (14d)"])
+        rows[0]["cycle_skipped_count"] = 2
+        html = render("partials/log_rows.html", rows=rows, limit=50)
+        assert 'outcome-pill__n">2</span> skipped</span>' in html
+
+    @pytest.mark.parametrize(
+        ("other_action", "searched_count", "error_count"),
+        [
+            pytest.param("searched", 1, 0, id="searched"),
+            pytest.param("error", 0, 1, id="error"),
+        ],
+    )
+    def test_non_skip_only_cycle_keeps_generic_skipped_pill(
+        self,
+        render: RenderTemplate,
+        other_action: str,
+        searched_count: int,
+        error_count: int,
+    ) -> None:
+        rows = self._skip_only_rows(["on cooldown (14d)"])
+        rows[0]["cycle_searched_count"] = searched_count
+        rows[0]["cycle_error_count"] = error_count
+        rows.append(
+            {
+                **rows[0],
+                "id": 2,
+                "timestamp": "2026-04-22T10:00:02.000Z",
+                "action": other_action,
+                "item_id": 102,
+                "item_label": "Show - S01E02",
+                "reason": None,
+                "message": "dispatch failed" if other_action == "error" else "dispatched",
+            }
+        )
+        html = render("partials/log_rows.html", rows=rows, limit=50)
+        assert f"outcome-pill--{other_action}" in html
+        assert 'outcome-pill__n">1</span> skipped</span>' in html
+        assert "health-pill" not in html
+
+    def test_skip_only_summary_all_cooldown(self, render: RenderTemplate) -> None:
         rows = self._skip_only_rows(
             [
                 "on cooldown (14d)",
@@ -214,7 +323,7 @@ class TestLogRowsRender:
         # Count renders correctly ("3 items").
         assert "<strong>3</strong> items" in html
 
-    def test_skip_only_summary_all_unreleased(self, render) -> None:
+    def test_skip_only_summary_all_unreleased(self, render: RenderTemplate) -> None:
         rows = self._skip_only_rows(
             [
                 "not yet released",
@@ -227,7 +336,7 @@ class TestLogRowsRender:
         assert 'all <span class="cycle__summary-reason">not yet released</span>' in html
         assert "<strong>4</strong> items" in html
 
-    def test_skip_only_summary_all_capped(self, render) -> None:
+    def test_skip_only_summary_all_capped(self, render: RenderTemplate) -> None:
         rows = self._skip_only_rows(
             [
                 "hourly limit reached (20/hr)",
@@ -241,7 +350,7 @@ class TestLogRowsRender:
         # "Cycle paused" message should not restate an item count.
         assert "<strong>3</strong>" not in html
 
-    def test_skip_only_summary_all_hot_retry(self, render) -> None:
+    def test_skip_only_summary_all_hot_retry(self, render: RenderTemplate) -> None:
         rows = self._skip_only_rows(
             [
                 "in hot retry window (24h)",
@@ -253,7 +362,7 @@ class TestLogRowsRender:
         assert "Waiting for the retry interval" in html
         assert "other" not in html
 
-    def test_skip_only_summary_mixed(self, render) -> None:
+    def test_skip_only_summary_mixed(self, render: RenderTemplate) -> None:
         rows = self._skip_only_rows(
             [
                 "on cooldown (14d)",
@@ -272,14 +381,14 @@ class TestLogRowsRender:
         assert "1 hit hourly limit" in html
         assert "No dispatches needed" in html
 
-    def test_skip_only_summary_all_already_downloading(self, render) -> None:
+    def test_skip_only_summary_all_already_downloading(self, render: RenderTemplate) -> None:
         rows = self._skip_only_rows(["already in download queue", "already in download queue"])
         html = render("partials/log_rows.html", rows=rows, limit=50)
         assert 'all <span class="cycle__summary-reason">already in download queue</span>' in html
         assert "<strong>2</strong> items" in html
         assert "other" not in html
 
-    def test_skip_only_summary_mixed_with_already_downloading(self, render) -> None:
+    def test_skip_only_summary_mixed_with_already_downloading(self, render: RenderTemplate) -> None:
         rows = self._skip_only_rows(
             ["on cooldown (14d)", "on cooldown (14d)", "already in download queue"]
         )
@@ -287,7 +396,7 @@ class TestLogRowsRender:
         assert "2 on cooldown, 1 already in download queue" in html
         assert "other" not in html
 
-    def test_skip_only_summary_singular_item(self, render) -> None:
+    def test_skip_only_summary_singular_item(self, render: RenderTemplate) -> None:
         """One skipped item uses the singular 'item' noun, not 'items'."""
         rows = self._skip_only_rows(["on cooldown (14d)"])
         html = render("partials/log_rows.html", rows=rows, limit=50)
@@ -306,7 +415,7 @@ class TestLogRowsRender:
         ],
     )
     def test_item_type_subtitle_strips_whisparr_namespace(
-        self, render, raw_type: str, expected_display: str
+        self, render: RenderTemplate, raw_type: str, expected_display: str
     ) -> None:
         """`entry__sub` shows a clean type word; `data-item-type` stays canonical."""
         rows = [
@@ -356,7 +465,7 @@ def _release(version: str, date: str) -> Any:
 
 
 class TestChangelogModalRender:
-    def test_manual_open_suppresses_subtitle(self, render) -> None:
+    def test_manual_open_suppresses_subtitle(self, render: RenderTemplate) -> None:
         newest = _release("1.2.0", "2026-04-20")
         html = render(
             "partials/changelog_modal.html",
@@ -370,7 +479,7 @@ class TestChangelogModalRender:
         # Manual: subtitle is empty, so no "Since v..." text.
         assert "Since v" not in html
 
-    def test_auto_open_with_range_label_shows_subtitle(self, render) -> None:
+    def test_auto_open_with_range_label_shows_subtitle(self, render: RenderTemplate) -> None:
         newest = _release("1.2.0", "2026-04-20")
         older = _release("1.1.0", "2026-03-15")
         html = render(
@@ -398,7 +507,7 @@ class TestAuthPagesRender:
     show-hide parity.
     """
 
-    def test_login_html_structural_markers(self, render) -> None:
+    def test_login_html_structural_markers(self, render: RenderTemplate) -> None:
         html = render(
             "login.html",
             version="9.9.9",
@@ -425,7 +534,7 @@ class TestAuthPagesRender:
         # The version chip in the card footer uses the passed version.
         assert "Houndarr v9.9.9" in html
 
-    def test_setup_html_structural_markers(self, render) -> None:
+    def test_setup_html_structural_markers(self, render: RenderTemplate) -> None:
         html = render(
             "setup.html",
             version="9.9.9",

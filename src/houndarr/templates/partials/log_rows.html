@@ -9,15 +9,10 @@
    recomputing, so the template stays O(n) with the row count. #}
 {%- set _accents = instance_accent_by_name | default({}) -%}
 
-{#- Bucket a skip-only cycle's rows by reason family and emit the
-    user-facing summary sentence.  One branch per reason family plus a
-    mixed fallback keep each variant honest about what actually
-    happened in the cycle (reasons in the same family collapse into one
-    number).  Reason strings are compared with startswith / membership,
-    not exact equality, so new `(Nd)` / `(N/hr)` / `(Nh)` parameter
-    shapes inside a family do not require a template change. -#}
-{%- macro _skip_only_summary(instance_name, group) -%}
-{%- set ns = namespace(cooldown=0, unreleased=0, hot_retry=0, capped=0, queued=0, other=0) -%}
+{#- Bucket a skip-only cycle's rows once so its header and summary
+    cannot classify the same reasons differently.  Prefix and membership
+    comparisons keep parameter suffixes inside their existing families. -#}
+{%- macro _bucket_skip_reasons(group, ns) -%}
 {%- for row in group -%}
 {%- if row.action == 'skipped' -%}
 {%- set r = row.reason or '' -%}
@@ -36,20 +31,25 @@
 {%- endif -%}
 {%- endif -%}
 {%- endfor -%}
-{%- set total = ns.cooldown + ns.unreleased + ns.hot_retry + ns.capped + ns.queued + ns.other -%}
-{%- set _item = 'item' if total == 1 else 'items' -%}
-{%- if total > 0 and ns.cooldown == total -%}
-<strong>{{ instance_name }}</strong> checked <strong>{{ total }}</strong> {{ _item }}: all <span class="cycle__summary-reason">on cooldown</span>. Healthy pacing.
-{%- elif total > 0 and ns.unreleased == total -%}
-<strong>{{ instance_name }}</strong> checked <strong>{{ total }}</strong> {{ _item }}: all <span class="cycle__summary-reason">not yet released</span>.
-{%- elif total > 0 and ns.hot_retry == total -%}
-<strong>{{ instance_name }}</strong> checked <strong>{{ total }}</strong> {{ _item }}: all <span class="cycle__summary-reason">inside hot retry window</span>. Waiting for the retry interval.
-{%- elif total > 0 and ns.capped == total -%}
+{%- set ns.total = ns.cooldown + ns.unreleased + ns.hot_retry + ns.capped + ns.queued + ns.other -%}
+{%- endmacro -%}
+
+{#- Emit the skip-only cycle's user-facing summary sentence from its
+    precomputed reason buckets. -#}
+{%- macro _skip_only_summary(instance_name, ns) -%}
+{%- set _item = 'item' if ns.total == 1 else 'items' -%}
+{%- if ns.total is gt(0) and ns.cooldown == ns.total -%}
+<strong>{{ instance_name }}</strong> checked <strong>{{ ns.total }}</strong> {{ _item }}: all <span class="cycle__summary-reason">on cooldown</span>. Healthy pacing.
+{%- elif ns.total is gt(0) and ns.unreleased == ns.total -%}
+<strong>{{ instance_name }}</strong> checked <strong>{{ ns.total }}</strong> {{ _item }}: all <span class="cycle__summary-reason">not yet released</span>.
+{%- elif ns.total is gt(0) and ns.hot_retry == ns.total -%}
+<strong>{{ instance_name }}</strong> checked <strong>{{ ns.total }}</strong> {{ _item }}: all <span class="cycle__summary-reason">inside hot retry window</span>. Waiting for the retry interval.
+{%- elif ns.total is gt(0) and ns.capped == ns.total -%}
 <strong>{{ instance_name }}</strong> hit the <span class="cycle__summary-reason">hourly limit</span>. Cycle paused; will resume next hour.
-{%- elif total > 0 and ns.queued == total -%}
-<strong>{{ instance_name }}</strong> checked <strong>{{ total }}</strong> {{ _item }}: all <span class="cycle__summary-reason">already in download queue</span>.
-{%- elif total > 0 -%}
-<strong>{{ instance_name }}</strong> checked <strong>{{ total }}</strong> {{ _item }}:
+{%- elif ns.total is gt(0) and ns.queued == ns.total -%}
+<strong>{{ instance_name }}</strong> checked <strong>{{ ns.total }}</strong> {{ _item }}: all <span class="cycle__summary-reason">already in download queue</span>.
+{%- elif ns.total is gt(0) -%}
+<strong>{{ instance_name }}</strong> checked <strong>{{ ns.total }}</strong> {{ _item }}:
 {%- set parts = [] -%}
 {%- if ns.cooldown -%}{%- set _ = parts.append(ns.cooldown ~ ' on cooldown') -%}{%- endif -%}
 {%- if ns.unreleased -%}{%- set _ = parts.append(ns.unreleased ~ ' not yet released') -%}{%- endif -%}
@@ -104,7 +104,7 @@
       <span class="cycle__instance"><span class="cycle__instance-dot" aria-hidden="true"></span>{{ type_label }}</span>
       <div class="cycle__meta">
         <span class="cycle__meta-ts" data-ts="{{ newest_ts or '' }}">{{ newest_ts[:19].replace('T', ' ') if newest_ts else '-' }}</span>
-        {%- if instance_names | length > 1 %}
+        {%- if instance_names | length is gt(1) %}
         <span class="cycle__meta-sep" aria-hidden="true">·</span>
         <span class="cycle__trigger">{{ instance_names | length }} instances</span>
         {%- endif %}
@@ -112,7 +112,7 @@
     </div>
     <span></span>
     <div class="cycle__outcome">
-      <span class="outcome-pill outcome-pill--error"><span class="outcome-pill__n">{{ rows | length }}</span> error{% if rows | length > 1 %}s{% endif %}</span>
+      <span class="outcome-pill outcome-pill--error"><span class="outcome-pill__n">{{ rows | length }}</span> error{% if rows | length is gt(1) %}s{% endif %}</span>
     </div>
   </header>
   <div class="cycle__body">
@@ -144,11 +144,11 @@
 {%- set searched_count = first.cycle_searched_count or 0 -%}
 {%- set skipped_count = first.cycle_skipped_count or 0 -%}
 {%- set error_count = first.cycle_error_count or 0 -%}
-{%- if error_count > 0 -%}
+{%- if error_count is gt(0) -%}
 {%- set outcome = 'error' -%}
-{%- elif searched_count > 0 -%}
+{%- elif searched_count is gt(0) -%}
 {%- set outcome = 'searched' -%}
-{%- elif skipped_count > 0 -%}
+{%- elif skipped_count is gt(0) -%}
 {%- set outcome = 'skip-only' -%}
 {%- else -%}
 {%- set outcome = 'info' -%}
@@ -157,6 +157,24 @@
 {%- set slug = accents.get(instance_name, '') -%}
 {%- set is_system = cycle_id is none -%}
 {%- set is_skip_only = outcome == 'skip-only' -%}
+{%- set skip_reasons = namespace(cooldown=0, unreleased=0, hot_retry=0, capped=0, queued=0, other=0, total=0) -%}
+{%- set skip_only_label = 'skipped' -%}
+{%- if is_skip_only -%}
+{%- set _ = _bucket_skip_reasons(group, skip_reasons) -%}
+{%- if skip_reasons.total == skipped_count -%}
+{%- if skip_reasons.cooldown == skipped_count -%}
+{%- set skip_only_label = 'on cooldown' -%}
+{%- elif skip_reasons.unreleased == skipped_count -%}
+{%- set skip_only_label = 'not yet released' -%}
+{%- elif skip_reasons.hot_retry == skipped_count -%}
+{%- set skip_only_label = 'inside hot retry window' -%}
+{%- elif skip_reasons.capped == skipped_count -%}
+{%- set skip_only_label = 'hourly limit' -%}
+{%- elif skip_reasons.queued == skipped_count -%}
+{%- set skip_only_label = 'already in download queue' -%}
+{%- endif -%}
+{%- endif -%}
+{%- endif -%}
 {%- set trigger_label = 'run now' if first.cycle_trigger == 'run_now' else (first.cycle_trigger or 'scheduled') -%}
 {%- set started_at = last.timestamp -%}
 {%- set default_expanded = not (is_skip_only or is_system) -%}
@@ -183,16 +201,16 @@
     </div>
     <span></span>
     <div class="cycle__outcome">
-      {%- if searched_count > 0 %}
+      {%- if searched_count is gt(0) %}
       <span class="outcome-pill outcome-pill--searched"><span class="outcome-pill__n">{{ searched_count }}</span> searched</span>
       {%- endif %}
-      {%- if error_count > 0 %}
-      <span class="outcome-pill outcome-pill--error"><span class="outcome-pill__n">{{ error_count }}</span> error{% if error_count > 1 %}s{% endif %}</span>
+      {%- if error_count is gt(0) %}
+      <span class="outcome-pill outcome-pill--error"><span class="outcome-pill__n">{{ error_count }}</span> error{% if error_count is gt(1) %}s{% endif %}</span>
       {%- endif %}
-      {%- if skipped_count > 0 and searched_count == 0 and error_count == 0 %}
-      <span class="outcome-pill outcome-pill--skipped"><span class="outcome-pill__n">{{ skipped_count }}</span> on cooldown</span>
+      {%- if skipped_count is gt(0) and searched_count == 0 and error_count == 0 %}
+      <span class="outcome-pill outcome-pill--skipped"><span class="outcome-pill__n">{{ skipped_count }}</span> {{ skip_only_label }}</span>
       <span class="health-pill">Healthy</span>
-      {%- elif skipped_count > 0 %}
+      {%- elif skipped_count is gt(0) %}
       <span class="outcome-pill outcome-pill--skipped"><span class="outcome-pill__n">{{ skipped_count }}</span> skipped</span>
       {%- endif %}
       {%- if is_system and searched_count == 0 and error_count == 0 and skipped_count == 0 %}
@@ -200,7 +218,7 @@
       {%- endif %}
     </div>
     {%- if is_skip_only %}
-    <div class="cycle__summary">{{ _skip_only_summary(instance_name, group) }}</div>
+    <div class="cycle__summary">{{ _skip_only_summary(instance_name, skip_reasons) }}</div>
     {%- endif %}
   </header>
   <div class="cycle__body">
@@ -278,7 +296,7 @@
 {%- for row in rows -%}
 {%- set row_slug = _accents.get(row.instance_name, '') if (row.cycle_id is none and row.action == 'error') else '' -%}
 {%- set row_bucket = err_groups.by_slug.get(row_slug, []) if row_slug else [] -%}
-{%- set in_group = row_slug and (row_bucket | length) >= 2 -%}
+{%- set in_group = row_slug and (row_bucket | length is ge(2)) -%}
 {%- if in_group and row_slug in ns.emitted -%}
   {#- Sibling of an already-rendered type-group anchor; skip. -#}
 {%- else -%}
@@ -306,7 +324,7 @@
      full enough that the service may still have older rows.  Swap
      target is the button itself so a single click replaces it with
      more cycle articles plus a new button if more remain. #}
-  {% if rows | length >= limit %}
+  {% if rows | length is ge(limit) %}
   {% set next_limit = load_more_limit if load_more_limit is defined else limit %}
   <div id="pagination-row" class="feed-foot">
     <button

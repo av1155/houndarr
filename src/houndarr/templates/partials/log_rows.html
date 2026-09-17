@@ -20,7 +20,7 @@
 {%- set ns.cooldown = ns.cooldown + 1 -%}
 {%- elif r.startswith('in hot retry window') -%}
 {%- set ns.hot_retry = ns.hot_retry + 1 -%}
-{%- elif r in ('not yet released', 'radarr reports not available', 'radarr status indicates unreleased', 'future title not yet available') or r.startswith('post-release grace') -%}
+{%- elif r in ('not yet released', 'radarr reports not available', 'radarr status indicates unreleased', 'whisparr v3 reports not available', 'whisparr v3 status indicates unreleased', 'future title not yet available') or r.startswith('post-release grace') -%}
 {%- set ns.unreleased = ns.unreleased + 1 -%}
 {%- elif 'limit reached' in r -%}
 {%- set ns.capped = ns.capped + 1 -%}

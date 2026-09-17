@@ -227,6 +227,14 @@ class TestLogRowsRender:
                 id="unreleased",
             ),
             pytest.param(
+                [
+                    "whisparr v3 reports not available",
+                    "whisparr v3 status indicates unreleased",
+                ],
+                "not yet released",
+                id="whisparr-v3-unreleased",
+            ),
+            pytest.param(
                 ["in hot retry window (24h)", "in hot retry window (24h)"],
                 "inside hot retry window",
                 id="hot-retry",
@@ -335,6 +343,14 @@ class TestLogRowsRender:
         html = render("partials/log_rows.html", rows=rows, limit=50)
         assert 'all <span class="cycle__summary-reason">not yet released</span>' in html
         assert "<strong>4</strong> items" in html
+
+    def test_skip_only_summary_all_whisparr_v3_unreleased(self, render: RenderTemplate) -> None:
+        rows = self._skip_only_rows(
+            ["whisparr v3 reports not available", "whisparr v3 status indicates unreleased"]
+        )
+        html = render("partials/log_rows.html", rows=rows, limit=50)
+        assert 'all <span class="cycle__summary-reason">not yet released</span>' in html
+        assert "other" not in html
 
     def test_skip_only_summary_all_capped(self, render: RenderTemplate) -> None:
         rows = self._skip_only_rows(

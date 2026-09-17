@@ -345,10 +345,11 @@ async def fetch_last_missing_grace_skip_since_dispatch(
     parent's synthetic id and a sibling still inside its grace window
     would otherwise re-arm the parent's retry on every cycle.
 
-    The bound stops moving once the rows stop landing.  A parent whose
-    records keep entering grace closer together than the window is
-    wide therefore never takes an early retry, and waits for its
-    ordinary cooldown instead.
+    The bound stops moving once the rows stop landing.  Rows land
+    every cycle a record is in its window, so the bound sits about one
+    window past the last record to clear: a parent whose records keep
+    entering grace less than two windows apart therefore never takes an
+    early retry, and waits for its ordinary cooldown instead.
 
     Args:
         instance_id: Owning instance primary key.
@@ -361,9 +362,8 @@ async def fetch_last_missing_grace_skip_since_dispatch(
         row exists.
     """
     async with get_db() as db:
-        # MAX with NOT EXISTS stops at the newest qualifying row.  When a
-        # dispatch outranks every grace row none qualify, and the walk is linear
-        # in the rows kept for this item by the log retention window.
+        # MAX stops at the newest qualifying row.  When a dispatch outranks
+        # every grace row none qualify, so the subquery re-runs per candidate.
         async with db.execute(
             """
             SELECT MAX(g.timestamp)

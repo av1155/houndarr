@@ -108,7 +108,7 @@ Release date evaluation varies by app type:
 | ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Radarr              | `digitalRelease` -> `physicalRelease` -> `releaseDate` -> `inCinemas`. Unavailable or pre-release titles may be skipped via `isAvailable` / `status`. |
 | Sonarr, Whisparr v2 | `airDateUtc` (Sonarr) or `releaseDate` (Whisparr v2)                                                                                                  |
-| Whisparr v3         | Same chain as Radarr: `digitalRelease` -> `physicalRelease` -> `inCinemas`                                                                            |
+| Whisparr v3         | Same chain as Radarr: `digitalRelease` -> `physicalRelease` -> `releaseDate` -> `inCinemas`                                                           |
 | Lidarr              | Album `releaseDate`                                                                                                                                   |
 | Readarr             | Book `releaseDate`                                                                                                                                    |
 

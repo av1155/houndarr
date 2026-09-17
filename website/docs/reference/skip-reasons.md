@@ -52,23 +52,27 @@ When `Hot Retry Window (hrs)` is enabled, the latest `post-release grace
 hourly cap. When the window closes, normal missing cooldown applies, except
 that an item the window never searched still takes its one retry.
 
-Only the item's own searches and the release gate's own skips decide
-this. A skip written by another gate, such as `hourly limit reached
-(N/hr)` or a cooldown row, leaves it pending.
+Only dispatches and the release gate's own skips decide this, and a
+dispatch counts whether it succeeded or errored. A skip written by any
+other gate, such as `hourly limit reached (N/hr)`, a cooldown row or a
+tag filter row, leaves the retry pending.
 
-In season, artist, and author search mode every wanted item is logged
-under its parent, so the parent holds its early retry until every
+In season, artist, and author search mode a wanted item that has a
+parent is logged under it, so the parent holds its early retry until
+every
 `post-release grace (Nh)` skip logged since its last search has
 certainly passed. That keeps a just-aired episode from putting its
 whole season back in the search queue on every cycle while it waits
 out its own grace. `Run Now` searches anyway.
 
-A parent whose items keep entering grace closer together than the
-grace window is wide never reaches the end of that wait, so it takes
-no early retry at all and waits for its ordinary cooldown. For the
-same reason, set `Hot Retry Window (hrs)` longer than `Post-Release
-Grace (hrs)` if you want hot retries in these modes: a shorter window
-closes before the wait ends.
+Each item in grace logs a row every cycle until it leaves the window,
+so the wait ends about one grace window after the last item cleared.
+A parent whose items keep entering grace less than two grace windows
+apart never reaches the end of it, and takes no early retry at all
+until that run stops. A daily show with `Post-Release Grace (hrs)` at
+`18` is already in that state. While a wait is running, a `Hot Retry
+Window (hrs)` shorter than `Post-Release Grace (hrs)` closes before
+the wait ends, so set it longer if you want hot retries to land.
 
 Cutoff and upgrade passes do not use this early retry. They always
 wait for their full cooldown.

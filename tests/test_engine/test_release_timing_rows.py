@@ -459,6 +459,36 @@ async def test_hot_retry_window_also_waits_for_a_sibling_in_grace(
     assert await run_instance_search(inst, MASTER_KEY) == 1
 
 
+@pytest.mark.asyncio()
+@respx.mock
+async def test_hot_retries_resume_once_the_sibling_leaves_grace(
+    seeded_instances: None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Grace rows older than the parent's own search no longer hold the window shut."""
+    _freeze_now(monkeypatch)
+    aired = _episode(101, _NOW - timedelta(days=30), 1)
+    in_grace = _episode(102, _NOW - timedelta(hours=1), 2)
+    search_route = _mock_season_pages([aired, in_grace])
+    inst = _sonarr(
+        sonarr_search_mode=SonarrSearchMode.season_context,
+        missing_hot_retry_window_hrs=48,
+        missing_hot_retry_interval_hrs=1,
+    )
+
+    await run_instance_search(inst, MASTER_KEY)
+    await run_instance_search(inst, MASTER_KEY)
+
+    # The sibling is out of grace from here on, so no new grace rows land and
+    # the parent's own search becomes the newest row for the key.
+    for hours in (7, 9, 11):
+        _freeze_now(monkeypatch, _NOW + timedelta(hours=hours))
+        _mock_season_pages([aired, _episode(102, _NOW - timedelta(hours=1), 2)])
+        assert await run_instance_search(inst, MASTER_KEY) == 1
+
+    assert search_route.call_count == 4
+
+
 @pytest.mark.parametrize(
     ("grace_hrs", "expected"),
     [pytest.param(2, 1, id="lowered"), pytest.param(48, 0, id="raised")],

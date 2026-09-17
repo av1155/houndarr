@@ -360,8 +360,8 @@ async def fetch_last_missing_grace_skip_since_dispatch(
         row exists.
     """
     async with get_db() as db:
-        # MAX plus NOT EXISTS lets SQLite walk the index down from the newest
-        # row and stop at the first match, which is the only case callers hit.
+        # MAX with NOT EXISTS stops at the newest qualifying row.  Only the hot
+        # retry window reaches the full walk, where a dispatch outranks them all.
         async with db.execute(
             """
             SELECT MAX(g.timestamp)

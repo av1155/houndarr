@@ -590,8 +590,8 @@ async def _is_group_grace_unresolved(ref: ItemRef, grace_hrs: int) -> bool:
     bounds every grace window logged since that dispatch.  In exchange
     the parent is not searched while a window it has logged could still
     be open: the retry lands up to one window after the grace expires,
-    and a parent whose records keep entering grace less than two
-    windows apart falls back to its ordinary cooldown.
+    and a parent whose records keep entering grace closer than about
+    two windows apart falls back to its ordinary cooldown.
 
     Args:
         ref: The parent the retry would search.

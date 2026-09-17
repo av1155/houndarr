@@ -374,14 +374,27 @@ async def test_fetch_latest_missing_reason_returns_none_when_no_match(
 async def test_fetch_latest_missing_reason_ignores_non_missing_rows(
     seeded_instances: None,
 ) -> None:
-    """fetch_latest_missing_reason only consults missing-pass rows."""
+    """fetch_latest_missing_reason only consults missing-pass rows.
+
+    The rows carry reasons and actions the missing pass does admit, so the
+    pass scoping is the only thing that can exclude them. Season-context
+    modes reuse one synthetic parent id across passes, so an upgrade
+    dispatch must not read as a search of the missing item.
+    """
+    await repo.insert_log_row(
+        instance_id=1,
+        item_id=5,
+        item_type="episode",
+        action="searched",
+        search_kind="upgrade",
+    )
     await repo.insert_log_row(
         instance_id=1,
         item_id=5,
         item_type="episode",
         action="skipped",
         search_kind="cutoff",
-        reason="cutoff-only reason",
+        reason="post-release grace (6h)",
     )
     assert await repo.fetch_latest_missing_reason(1, 5, "episode") is None
 

@@ -410,6 +410,183 @@ async def test_fetch_latest_missing_reason_ignores_queue_skips(
     assert await repo.fetch_latest_missing_reason(1, 7, "episode") == "post-release grace (6h)"
 
 
+@pytest.mark.parametrize(
+    "later_reason",
+    [
+        "on cooldown (7d)",
+        "hourly limit reached (20/hr)",
+        "in hot retry window (24h)",
+        "tag filter (excluded tag)",
+        "already in download queue",
+    ],
+)
+@pytest.mark.asyncio()
+async def test_fetch_latest_missing_reason_ignores_other_gate_rows(
+    seeded_instances: None,
+    later_reason: str,
+) -> None:
+    """Skips written by gates other than release timing neither arm nor cancel a retry."""
+    await repo.insert_log_row(
+        instance_id=1,
+        item_id=11,
+        item_type="episode",
+        action="skipped",
+        search_kind="missing",
+        reason="post-release grace (6h)",
+    )
+    await repo.insert_log_row(
+        instance_id=1,
+        item_id=11,
+        item_type="episode",
+        action="skipped",
+        search_kind="missing",
+        reason=later_reason,
+    )
+
+    assert await repo.fetch_latest_missing_reason(1, 11, "episode") == "post-release grace (6h)"
+
+
+@pytest.mark.parametrize("action", ["searched", "error"])
+@pytest.mark.asyncio()
+async def test_fetch_latest_missing_reason_returns_none_after_dispatch(
+    seeded_instances: None,
+    action: str,
+) -> None:
+    """A dispatch outcome after the release-timing skip still ends the retry."""
+    await repo.insert_log_row(
+        instance_id=1,
+        item_id=12,
+        item_type="episode",
+        action="skipped",
+        search_kind="missing",
+        reason="not yet released",
+    )
+    await repo.insert_log_row(
+        instance_id=1,
+        item_id=12,
+        item_type="episode",
+        action=action,
+        search_kind="missing",
+        message="dispatch failed" if action == "error" else None,
+    )
+
+    assert await repo.fetch_latest_missing_reason(1, 12, "episode") is None
+
+
+async def _seed_rows(rows: list[tuple[str, str | None, str]]) -> None:
+    """Insert ``(action, reason, timestamp)`` rows for item 21 of instance 1."""
+    async with get_db() as conn:
+        await conn.executemany(
+            """
+            INSERT INTO search_log (
+                instance_id, item_id, item_type, action, search_kind, reason, timestamp
+            ) VALUES (1, 21, 'episode', ?, 'missing', ?, ?)
+            """,
+            rows,
+        )
+        await conn.commit()
+
+
+@pytest.mark.asyncio()
+async def test_first_grace_skip_since_dispatch_returns_oldest_of_the_run(
+    seeded_instances: None,
+) -> None:
+    """The oldest grace skip written since the last dispatch bounds the wait."""
+    await _seed_rows(
+        [
+            ("skipped", "post-release grace (6h)", "2026-05-22T08:00:00.000Z"),
+            ("searched", None, "2026-05-22T09:00:00.000Z"),
+            ("skipped", "post-release grace (6h)", "2026-05-22T10:00:00.000Z"),
+            ("skipped", "post-release grace (6h)", "2026-05-22T11:00:00.000Z"),
+        ]
+    )
+
+    result = await repo.fetch_first_missing_grace_skip_since_dispatch(1, 21, "episode")
+
+    assert result == "2026-05-22T10:00:00.000Z"
+
+
+@pytest.mark.asyncio()
+async def test_first_grace_skip_since_dispatch_without_any_dispatch(
+    seeded_instances: None,
+) -> None:
+    """With no dispatch row at all, the oldest grace skip counts."""
+    await _seed_rows(
+        [
+            ("skipped", "post-release grace (6h)", "2026-05-22T08:00:00.000Z"),
+            ("skipped", "not yet released", "2026-05-22T07:00:00.000Z"),
+            ("skipped", "post-release grace (6h)", "2026-05-22T09:00:00.000Z"),
+        ]
+    )
+
+    result = await repo.fetch_first_missing_grace_skip_since_dispatch(1, 21, "episode")
+
+    assert result == "2026-05-22T08:00:00.000Z"
+
+
+@pytest.mark.parametrize(
+    "rows",
+    [
+        pytest.param([], id="no-rows"),
+        pytest.param(
+            [("skipped", "post-release grace (6h)", "2026-05-22T08:00:00.000Z")],
+            id="grace-before-dispatch",
+        ),
+        pytest.param(
+            [("skipped", "not yet released", "2026-05-22T10:00:00.000Z")],
+            id="unreleased-only",
+        ),
+    ],
+)
+@pytest.mark.asyncio()
+async def test_first_grace_skip_since_dispatch_returns_none(
+    seeded_instances: None,
+    rows: list[tuple[str, str | None, str]],
+) -> None:
+    """No grace skip since the last dispatch means nothing bounds the wait."""
+    await _seed_rows([*rows, ("searched", None, "2026-05-22T09:00:00.000Z")])
+
+    assert await repo.fetch_first_missing_grace_skip_since_dispatch(1, 21, "episode") is None
+
+
+@pytest.mark.asyncio()
+async def test_first_grace_skip_since_dispatch_breaks_timestamp_ties_by_id(
+    seeded_instances: None,
+) -> None:
+    """A dispatch sharing the grace skip's timestamp still counts as newer."""
+    await _seed_rows(
+        [
+            ("skipped", "post-release grace (6h)", "2026-05-22T09:00:00.000Z"),
+            ("searched", None, "2026-05-22T09:00:00.000Z"),
+        ]
+    )
+
+    assert await repo.fetch_first_missing_grace_skip_since_dispatch(1, 21, "episode") is None
+
+
+@pytest.mark.asyncio()
+async def test_first_grace_skip_since_dispatch_scopes_by_ref_and_kind(
+    seeded_instances: None,
+) -> None:
+    """Rows of another instance, item type, or pass do not bound this item."""
+    async with get_db() as conn:
+        await conn.executemany(
+            """
+            INSERT INTO search_log (
+                instance_id, item_id, item_type, action, search_kind, reason, timestamp
+            ) VALUES (?, 21, ?, 'skipped', ?, 'post-release grace (6h)', ?)
+            """,
+            [
+                (2, "episode", "missing", "2026-05-22T08:00:00.000Z"),
+                (1, "movie", "missing", "2026-05-22T08:00:00.000Z"),
+                (1, "episode", "cutoff", "2026-05-22T08:00:00.000Z"),
+            ],
+        )
+        await conn.commit()
+
+    assert await repo.fetch_first_missing_grace_skip_since_dispatch(1, 21, "episode") is None
+
+
 @pytest.mark.pinning()
 @pytest.mark.asyncio()
 async def test_fetch_latest_missing_grace_skip_returns_newest_match(

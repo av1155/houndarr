@@ -565,6 +565,43 @@ async def _latest_missing_grace_skip_ref(ref: ItemRef) -> tuple[str, str] | None
     )
 
 
+async def _is_group_grace_unresolved(ref: ItemRef, grace_hrs: int) -> bool:
+    """Return whether a grace window that armed *ref*'s retry can still be open.
+
+    Only meaningful in season, artist, and author modes.  There every
+    wanted record logs under its parent's synthetic id, and the release
+    gate writes its skip before group dedup, so a record still inside
+    its grace window re-arms the parent's retry on every cycle while a
+    released sibling drives the search.
+
+    A ``post-release grace`` row proves its record was already released
+    when the row landed, so that record leaves the window at the latest
+    *grace_hrs* after the oldest such row written since the parent was
+    last dispatched.  Waiting for that bound costs the retry the gap
+    between release and the first row (roughly the runtime plus one
+    cycle), and in exchange the parent is never searched while a record
+    it covers is still waiting.
+
+    Args:
+        ref: The parent the retry would search.
+        grace_hrs: The instance's current post-release grace window.
+
+    Returns:
+        ``True`` while the bound has not elapsed yet.
+    """
+    if grace_hrs <= 0:
+        return False
+
+    from houndarr.repositories.search_log import fetch_first_missing_grace_skip_since_dispatch
+
+    first_grace_at = await fetch_first_missing_grace_skip_since_dispatch(
+        ref.instance_id,
+        ref.item_id,
+        ref.item_type.value,
+    )
+    return first_grace_at is not None and _elapsed_hours_since(first_grace_at) < grace_hrs
+
+
 def _parse_log_timestamp(value: str) -> datetime:
     """Parse SQLite UTC timestamps written by cooldowns and search_log."""
     return datetime.fromisoformat(value.removesuffix("Z") + "+00:00")
@@ -1074,6 +1111,16 @@ async def _run_search_pass(
                         if not should_retry:
                             latest_reason = await _latest_missing_reason_ref(ref)
                             should_retry = _is_release_timing_reason(latest_reason)
+
+                    if (
+                        should_retry
+                        and candidate.group_key is not None
+                        and cycle_trigger != "run_now"
+                        and await _is_group_grace_unresolved(
+                            ref, instance.missing.post_release_grace_hrs
+                        )
+                    ):
+                        should_retry = False
 
                     if should_retry:
                         if await queued_skips.skip(candidate, ref, seen_item_ids, seen_group_keys):

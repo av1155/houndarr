@@ -45,6 +45,16 @@ When `Hot Retry Window (hrs)` is enabled, the latest `post-release grace
 `Hot Retry Interval (hrs)` elapses, still respecting batch size and the
 hourly cap. When the window closes, normal missing cooldown applies.
 
+Only the item's own searches and its release-timing skips decide this.
+A skip written by another gate, such as `hourly limit reached (N/hr)`
+or a cooldown row, leaves a pending retry pending.
+
+In season, artist, and author search mode every wanted item is logged
+under its parent, so the parent holds its early retry until the grace
+window of the item that armed it has certainly passed. That keeps a
+just-aired episode from putting its whole season back in the search
+queue on every cycle while it waits out its own grace.
+
 Cutoff and upgrade passes do not use this early retry. They always
 wait for their full cooldown.
 

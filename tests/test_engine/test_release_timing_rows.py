@@ -29,8 +29,10 @@ from houndarr.services.instances import InstanceType, LidarrSearchMode, SonarrSe
 from .conftest import (
     _COMMAND_RESP,
     _EPISODE_RECORD,
+    _MOVIE_RECORD,
     LIDARR_URL,
     MASTER_KEY,
+    RADARR_URL,
     SONARR_URL,
     get_log_rows,
     insert_search_log_row,
@@ -143,6 +145,51 @@ async def test_gate_skip_does_not_cancel_pending_retry(
 
     assert await run_instance_search(_sonarr(post_release_grace_hrs=0), MASTER_KEY) == 1
     assert search_route.called
+
+
+@pytest.mark.parametrize(
+    "later_reason",
+    ["radarr reports not available", "radarr status indicates unreleased"],
+)
+@pytest.mark.asyncio()
+@respx.mock
+async def test_availability_skip_still_cancels_a_pending_retry(
+    seeded_instances: None,
+    later_reason: str,
+) -> None:
+    """A movie Radarr called unavailable waits for its cooldown, not an early retry."""
+    await seed_release_timing_retry(
+        instance_id=2,
+        item_id=201,
+        item_type="movie",
+        reason="post-release grace (6h)",
+    )
+    await insert_search_log_row(
+        instance_id=2,
+        item_id=201,
+        item_type="movie",
+        search_kind="missing",
+        action="skipped",
+        reason=later_reason,
+    )
+
+    respx.get(f"{RADARR_URL}/api/v3/wanted/missing").mock(
+        return_value=httpx.Response(200, json=_page([_MOVIE_RECORD])),
+    )
+    search_route = respx.post(f"{RADARR_URL}/api/v3/command").mock(
+        return_value=httpx.Response(201, json=_COMMAND_RESP),
+    )
+    inst = make_instance(
+        instance_id=2,
+        itype=InstanceType.radarr,
+        batch_size=1,
+        hourly_cap=20,
+        cooldown_days=7,
+        post_release_grace_hrs=0,
+    )
+
+    assert await run_instance_search(inst, MASTER_KEY) == 0
+    assert not search_route.called
 
 
 @pytest.mark.asyncio()

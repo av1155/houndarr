@@ -446,6 +446,43 @@ async def test_fetch_latest_missing_reason_ignores_other_gate_rows(
     assert await repo.fetch_latest_missing_reason(1, 11, "episode") == "post-release grace (6h)"
 
 
+@pytest.mark.parametrize(
+    "later_reason",
+    [
+        "radarr reports not available",
+        "radarr status indicates unreleased",
+        "whisparr v3 reports not available",
+        "whisparr v3 status indicates unreleased",
+        "future title not yet available",
+        "no series linked",
+    ],
+)
+@pytest.mark.asyncio()
+async def test_fetch_latest_missing_reason_keeps_availability_rows(
+    seeded_instances: None,
+    later_reason: str,
+) -> None:
+    """A per-app availability skip still supersedes an older grace row and cancels the retry."""
+    await repo.insert_log_row(
+        instance_id=1,
+        item_id=13,
+        item_type="episode",
+        action="skipped",
+        search_kind="missing",
+        reason="post-release grace (6h)",
+    )
+    await repo.insert_log_row(
+        instance_id=1,
+        item_id=13,
+        item_type="episode",
+        action="skipped",
+        search_kind="missing",
+        reason=later_reason,
+    )
+
+    assert await repo.fetch_latest_missing_reason(1, 13, "episode") == later_reason
+
+
 @pytest.mark.parametrize("action", ["searched", "error"])
 @pytest.mark.asyncio()
 async def test_fetch_latest_missing_reason_returns_none_after_dispatch(

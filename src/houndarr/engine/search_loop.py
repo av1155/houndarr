@@ -578,9 +578,11 @@ async def _is_group_grace_unresolved(ref: ItemRef, grace_hrs: int) -> bool:
     when the row landed, so that record leaves the window at the latest
     *grace_hrs* after the row.  The newest row written since the parent
     was last dispatched therefore bounds every grace window logged
-    since that dispatch.  Waiting for that bound delays the retry by up
-    to one grace window, and in exchange the parent is not searched
-    while a window it has logged could still be open.
+    since that dispatch.  In exchange the parent is not searched while
+    a window it has logged could still be open: the retry lands up to
+    one window later than the release, and a parent whose records keep
+    entering grace closer together than the window is wide falls back
+    to its ordinary cooldown.
 
     Args:
         ref: The parent the retry would search.
@@ -592,6 +594,7 @@ async def _is_group_grace_unresolved(ref: ItemRef, grace_hrs: int) -> bool:
     if grace_hrs <= 0:
         return False
 
+    # Unreleased siblings can't occur: context-mode apps filter them out of wanted/missing.
     from houndarr.repositories.search_log import fetch_last_missing_grace_skip_since_dispatch
 
     last_grace_at = await fetch_last_missing_grace_skip_since_dispatch(

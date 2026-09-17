@@ -17,7 +17,7 @@ reasons are normal scheduling behavior, not errors.
 | `on cooldown (Nd)`                    | per-item    | Missing item was searched less than `Cooldown (days)` ago.                                           |
 | `on cutoff cooldown (Nd)`             | per-item    | Cutoff item was searched less than `Cutoff Cooldown` ago.                                            |
 | `on upgrade cooldown (Nd)`            | per-item    | Upgrade item was searched less than `Upgrade Cooldown (days)` ago. Default 90 days.                  |
-| `not yet released`                    | per-item    | No release date, or the release date is in the future.                                               |
+| `not yet released`                    | per-item    | The release date is in the future. An item with no release date counts as released.                  |
 | `post-release grace (Nh)`             | per-item    | Release date passed but the grace window (default 6 hours) has not elapsed.                          |
 | `in hot retry window (Nh)`            | per-item    | Missing item is inside its hot retry window, but the retry interval has not elapsed.                 |
 | `hourly limit reached (N/hr)`         | per-item    | Missing pass hit `Hourly Cap` of `N` for the current hour.                                           |
@@ -45,7 +45,8 @@ When `Hot Retry Window (hrs)` is enabled, the latest `post-release grace
 `Hot Retry Interval (hrs)` elapses, still respecting batch size and the
 hourly cap. When the window closes, normal missing cooldown applies.
 
-Only the item's own searches and its release-timing skips decide this.
+Only the item's own searches and the release gate's own skips decide
+this.
 A skip written by another gate, such as `hourly limit reached (N/hr)`
 or a cooldown row, leaves a pending retry pending.
 
@@ -54,8 +55,12 @@ under its parent, so the parent holds its early retry until every
 `post-release grace (Nh)` skip logged since its last search has
 certainly passed. That keeps a just-aired episode from putting its
 whole season back in the search queue on every cycle while it waits
-out its own grace. The wait applies whether or not `Hot Retry Window
-(hrs)` is set, and `Run Now` skips it.
+out its own grace. `Run Now` skips the wait, and so does a parent
+whose items keep entering grace closer together than the grace
+window is wide: it falls back to its ordinary cooldown. To get hot
+retries in these modes, set `Hot Retry Window (hrs)` longer than
+`Post-Release Grace (hrs)`, because a shorter window closes before
+the wait ends.
 
 Cutoff and upgrade passes do not use this early retry. They always
 wait for their full cooldown.

@@ -264,14 +264,17 @@ async def fetch_latest_missing_reason(
     post-release-grace, both of which can now have elapsed) or left
     alone.
 
-    Only the rows that describe the item's release state inform the
-    decision: dispatch outcomes (``searched`` / ``error``) and
-    release-timing skips.  Skips written by the other
-    gates are passed over, because they say nothing about release
-    timing and would otherwise cancel or trigger a retry by accident:
-    the hourly-cap gate runs before the cooldown check, and in season,
-    artist, or author mode a queue or cooldown row can come from a
-    sibling of the item that needs the retry.
+    Only the rows the release gate itself wrote inform the decision,
+    plus dispatch outcomes (``searched`` / ``error``).  Skips from the
+    scheduling and filter gates are passed over, because they say
+    nothing about release state and would otherwise cancel or trigger
+    a retry by accident: the hourly-cap gate runs before the cooldown
+    check, and in season, artist, or author mode a queue or cooldown
+    row can come from a sibling of the item that needs the retry.
+
+    Of the release-gate reasons, only ``not yet released`` and
+    ``post-release grace`` arm a retry; the per-app availability ones
+    cancel it, as they did before the gate rows were filtered at all.
 
     Args:
         instance_id: Owning instance primary key.
@@ -299,7 +302,15 @@ async def fetch_latest_missing_reason(
                     OR (
                         action = 'skipped'
                         AND (
-                            reason = 'not yet released'
+                            reason IN (
+                                'not yet released',
+                                'radarr reports not available',
+                                'radarr status indicates unreleased',
+                                'whisparr v3 reports not available',
+                                'whisparr v3 status indicates unreleased',
+                                'future title not yet available',
+                                'no series linked'
+                            )
                             OR reason LIKE 'post-release grace%'
                         )
                     )
@@ -323,16 +334,19 @@ async def fetch_last_missing_grace_skip_since_dispatch(
     A grace skip proves the record it was written for had already been
     released when the row landed, so that record leaves its grace
     window at the latest ``post_release_grace_hrs`` after this
-    timestamp.  Taking the newest row bounds every record that logged
-    one, which the oldest row would not: records reaching their
-    release at different times enter the window one after another, and
-    each new row pushes the bound out again.  The engine uses that
-    bound in season, artist, and author modes, where the rows carry
-    the parent's synthetic id and a sibling still inside its grace
-    window would otherwise re-arm the parent's retry on every cycle.
+    timestamp, as long as the operator has not raised the setting
+    since.  Taking the newest row bounds every record that logged one,
+    which the oldest row would not: records reaching their release at
+    different times enter the window one after another, and each new
+    row pushes the bound out again.  The engine uses that bound in
+    season, artist, and author modes, where the rows carry the
+    parent's synthetic id and a sibling still inside its grace window
+    would otherwise re-arm the parent's retry on every cycle.
 
-    Rows stop landing once every record has left the window, so the
-    bound stops moving and the retry is released.
+    The bound stops moving once the rows stop landing.  A parent whose
+    records keep entering grace closer together than the window is
+    wide therefore never takes an early retry, and waits for its
+    ordinary cooldown instead.
 
     Args:
         instance_id: Owning instance primary key.

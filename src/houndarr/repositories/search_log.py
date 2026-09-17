@@ -334,8 +334,9 @@ async def fetch_last_missing_grace_skip_since_dispatch(
     A grace skip proves the record it was written for had already been
     released when the row landed, so that record leaves its grace
     window at the latest ``post_release_grace_hrs`` after this
-    timestamp, as long as the operator has not raised the setting
-    since.  Taking the newest row bounds every record that logged one,
+    timestamp.  The caller passes the current setting, so raising or
+    lowering it keeps the bound correct either way.  Taking the newest
+    row bounds every record that logged one,
     which the oldest row would not: records reaching their release at
     different times enter the window one after another, and each new
     row pushes the bound out again.  The engine uses that bound in
@@ -359,6 +360,8 @@ async def fetch_last_missing_grace_skip_since_dispatch(
         row exists.
     """
     async with get_db() as db:
+        # MAX plus NOT EXISTS lets SQLite walk the index down from the newest
+        # row and stop at the first match, which is the only case callers hit.
         async with db.execute(
             """
             SELECT MAX(g.timestamp)

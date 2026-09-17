@@ -602,6 +602,23 @@ async def test_last_grace_skip_since_dispatch_breaks_timestamp_ties_by_id(
 
 
 @pytest.mark.asyncio()
+async def test_last_grace_skip_since_dispatch_keeps_grace_written_after_a_tie(
+    seeded_instances: None,
+) -> None:
+    """A grace skip sharing the dispatch's timestamp but written after it still counts."""
+    await _seed_rows(
+        [
+            ("searched", None, "2026-05-22T09:00:00.000Z"),
+            ("skipped", "post-release grace (6h)", "2026-05-22T09:00:00.000Z"),
+        ]
+    )
+
+    result = await repo.fetch_last_missing_grace_skip_since_dispatch(1, 21, "episode")
+
+    assert result == "2026-05-22T09:00:00.000Z"
+
+
+@pytest.mark.asyncio()
 async def test_last_grace_skip_since_dispatch_scopes_by_ref_and_kind(
     seeded_instances: None,
 ) -> None:

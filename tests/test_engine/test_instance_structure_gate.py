@@ -274,6 +274,7 @@ def test_search_log_repository_public_api() -> None:
         "insert_admin_audit",
         "fetch_latest_missing_reason",
         "fetch_latest_missing_grace_skip",
+        "fetch_last_missing_grace_skip_since_dispatch",
         "fetch_active_error_instance_ids",
     }
     for name in expected:

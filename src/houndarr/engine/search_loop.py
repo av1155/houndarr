@@ -584,6 +584,13 @@ async def _is_group_grace_unresolved(ref: ItemRef, grace_hrs: int) -> bool:
     entering grace closer together than the window is wide falls back
     to its ordinary cooldown.
 
+    Only grace rows are bounded this way.  A ``not yet released`` row
+    carries no upper bound on the release date, so nothing could be
+    derived from one; it also cannot reach a parent, because Sonarr,
+    Whisparr v2, Lidarr, and Readarr each filter unreleased and
+    undated records out of ``wanted/missing`` before Houndarr sees
+    them.  Recheck that filter before relying on this in a new app.
+
     Args:
         ref: The parent the retry would search.
         grace_hrs: The instance's current post-release grace window.
@@ -594,7 +601,6 @@ async def _is_group_grace_unresolved(ref: ItemRef, grace_hrs: int) -> bool:
     if grace_hrs <= 0:
         return False
 
-    # Unreleased siblings can't occur: context-mode apps filter them out of wanted/missing.
     from houndarr.repositories.search_log import fetch_last_missing_grace_skip_since_dispatch
 
     last_grace_at = await fetch_last_missing_grace_skip_since_dispatch(
@@ -1124,6 +1130,13 @@ async def _run_search_pass(
                         )
                     ):
                         should_retry = False
+                        logger.debug(
+                            "[%s] %s%s: holding missing retry, a wanted item may still be "
+                            "inside post-release grace",
+                            instance.core.name,
+                            log_prefix,
+                            candidate.item_id,
+                        )
 
                     if should_retry:
                         if await queued_skips.skip(candidate, ref, seen_item_ids, seen_group_keys):

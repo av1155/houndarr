@@ -80,8 +80,9 @@ Hours to wait after an item's release date before searching.
 - Default: `6`
 - Items inside this window log as `post-release grace (Nh)` and
   skip.
-- Items not yet released (no date, or a future date) log as
-  `not yet released` regardless of this setting.
+- Items with a release date in the future log as `not yet released`
+  regardless of this setting. An item with no release date counts as
+  released.
 
 ### Hot Retry Window (hours)
 

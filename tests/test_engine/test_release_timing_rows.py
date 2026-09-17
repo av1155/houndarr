@@ -457,3 +457,53 @@ async def test_hot_retry_window_also_waits_for_a_sibling_in_grace(
 
     _freeze_now(monkeypatch, _NOW + timedelta(hours=7))
     assert await run_instance_search(inst, MASTER_KEY) == 1
+
+
+@pytest.mark.parametrize(
+    ("grace_hrs", "expected"),
+    [pytest.param(2, 1, id="lowered"), pytest.param(48, 0, id="raised")],
+)
+@pytest.mark.asyncio()
+@respx.mock
+async def test_the_wait_follows_the_current_grace_setting(
+    seeded_instances: None,
+    monkeypatch: pytest.MonkeyPatch,
+    grace_hrs: int,
+    expected: int,
+) -> None:
+    """Changing the setting re-reads the bound; rows keep only their timestamp."""
+    from houndarr.services.cooldown import record_search
+
+    parent = _season_item_id(55, 1)
+    _freeze_now(monkeypatch)
+    await record_search(1, parent, "episode")
+    await _insert_grace_row(parent, _NOW)
+
+    inst = _sonarr(
+        sonarr_search_mode=SonarrSearchMode.season_context,
+        post_release_grace_hrs=grace_hrs,
+    )
+    _mock_season_pages([_episode(101, _NOW - timedelta(days=30), 1)])
+
+    _freeze_now(monkeypatch, _NOW + timedelta(hours=6))
+    assert await run_instance_search(inst, MASTER_KEY) == expected
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_zero_grace_ignores_rows_written_while_it_was_enabled(
+    seeded_instances: None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Turning the grace window off releases parents held by older grace rows."""
+    from houndarr.services.cooldown import record_search
+
+    parent = _season_item_id(55, 1)
+    _freeze_now(monkeypatch)
+    await record_search(1, parent, "episode")
+    await _insert_grace_row(parent, _NOW)
+
+    inst = _sonarr(sonarr_search_mode=SonarrSearchMode.season_context, post_release_grace_hrs=0)
+    _mock_season_pages([_episode(101, _NOW - timedelta(days=30), 1)])
+
+    assert await run_instance_search(inst, MASTER_KEY) == 1

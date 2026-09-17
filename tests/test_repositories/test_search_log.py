@@ -635,6 +635,71 @@ async def test_last_grace_skip_since_dispatch_keeps_grace_written_after_a_tie(
     assert result == "2026-05-22T09:00:00.000Z"
 
 
+@pytest.mark.parametrize(
+    "grace_reason",
+    ["post-release grace (1h)", "post-release grace (24h)", "post-release grace (168h)"],
+)
+@pytest.mark.asyncio()
+async def test_last_grace_skip_since_dispatch_matches_any_window_label(
+    seeded_instances: None,
+    grace_reason: str,
+) -> None:
+    """The bound follows the reason prefix, not whichever window the default happens to be."""
+    await _seed_rows([("skipped", grace_reason, "2026-05-22T08:00:00.000Z")])
+
+    result = await repo.fetch_last_missing_grace_skip_since_dispatch(1, 21, "episode")
+
+    assert result == "2026-05-22T08:00:00.000Z"
+
+
+@pytest.mark.parametrize(
+    "later_reason",
+    ["not yet released", "on cooldown (7d)", "already in download queue"],
+)
+@pytest.mark.asyncio()
+async def test_last_grace_skip_since_dispatch_ignores_newer_skips(
+    seeded_instances: None,
+    later_reason: str,
+) -> None:
+    """Only a dispatch ends the wait; a newer skip of any other kind does not."""
+    await _seed_rows(
+        [
+            ("skipped", "post-release grace (6h)", "2026-05-22T08:00:00.000Z"),
+            ("skipped", later_reason, "2026-05-22T09:00:00.000Z"),
+        ]
+    )
+
+    result = await repo.fetch_last_missing_grace_skip_since_dispatch(1, 21, "episode")
+
+    assert result == "2026-05-22T08:00:00.000Z"
+
+
+@pytest.mark.asyncio()
+async def test_last_grace_skip_since_dispatch_ignores_foreign_dispatches(
+    seeded_instances: None,
+) -> None:
+    """A dispatch on another instance or pass must not clear this item's wait.
+
+    Two instances holding the same series derive the same synthetic season id,
+    so the dispatch side needs the same scoping the grace side has.
+    """
+    await _seed_rows([("skipped", "post-release grace (6h)", "2026-05-22T08:00:00.000Z")])
+    async with get_db() as conn:
+        await conn.executemany(
+            """
+            INSERT INTO search_log (
+                instance_id, item_id, item_type, action, search_kind, reason, timestamp
+            ) VALUES (?, 21, 'episode', 'searched', ?, NULL, '2026-05-22T09:00:00.000Z')
+            """,
+            [(2, "missing"), (1, "cutoff"), (1, "upgrade")],
+        )
+        await conn.commit()
+
+    result = await repo.fetch_last_missing_grace_skip_since_dispatch(1, 21, "episode")
+
+    assert result == "2026-05-22T08:00:00.000Z"
+
+
 @pytest.mark.asyncio()
 async def test_last_grace_skip_since_dispatch_scopes_by_ref_and_kind(
     seeded_instances: None,

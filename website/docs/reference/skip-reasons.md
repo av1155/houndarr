@@ -49,7 +49,8 @@ normal missing cooldown applies again.
 When `Hot Retry Window (hrs)` is enabled, the latest `post-release grace
 (Nh)` row opens a short retry window. Houndarr can retry the item after
 `Hot Retry Interval (hrs)` elapses, still respecting batch size and the
-hourly cap. When the window closes, normal missing cooldown applies.
+hourly cap. When the window closes, normal missing cooldown applies, except
+that an item the window never searched still takes its one retry.
 
 Only the item's own searches and the release gate's own skips decide
 this. A skip written by another gate, such as `hourly limit reached

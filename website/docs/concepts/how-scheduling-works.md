@@ -91,7 +91,9 @@ If a missing item was skipped because it was `not yet released` or still inside
 `post-release grace (Nh)`, Houndarr allows one retry as soon as that release-timing
 gate clears instead of waiting for the full missing cooldown. If Hot Retry Window
 is enabled, the latest `post-release grace (Nh)` skip can keep the item on a
-short retry interval until the window closes. Cutoff keeps its normal cooldown behavior.
+short retry interval until the window closes. An item that never got a search
+inside that window still takes its one retry afterwards. Cutoff keeps its normal
+cooldown behavior.
 
 ## What "skipped" means in the logs
 

@@ -361,8 +361,9 @@ async def fetch_last_missing_grace_skip_since_dispatch(
         row exists.
     """
     async with get_db() as db:
-        # MAX with NOT EXISTS stops at the newest qualifying row.  Only the hot
-        # retry window reaches the full walk, where a dispatch outranks them all.
+        # MAX with NOT EXISTS stops at the newest qualifying row.  When a
+        # dispatch outranks every grace row none qualify, and the walk is linear
+        # in the rows kept for this item by the log retention window.
         async with db.execute(
             """
             SELECT MAX(g.timestamp)

@@ -65,6 +65,20 @@ def _iso(at: datetime) -> str:
     return at.strftime("%Y-%m-%dT%H:%M:%S.%f") + "Z"
 
 
+async def _insert_item_row(action: str, reason: str | None, at: datetime) -> None:
+    """Write a row for episode 101 at an explicit time, which the engine cannot do."""
+    async with get_db() as conn:
+        await conn.execute(
+            """
+            INSERT INTO search_log
+                (instance_id, item_id, item_type, search_kind, action, reason, timestamp)
+            VALUES (1, 101, 'episode', 'missing', ?, ?, ?)
+            """,
+            (action, reason, _iso(at)),
+        )
+        await conn.commit()
+
+
 async def _insert_grace_row(item_id: int, at: datetime) -> None:
     """Write a parent grace skip at an explicit time, which the engine cannot do."""
     async with get_db() as conn:
@@ -190,6 +204,38 @@ async def test_availability_skip_still_cancels_a_pending_retry(
 
     assert await run_instance_search(inst, MASTER_KEY) == 0
     assert not search_route.called
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_retry_survives_a_hot_retry_window_that_never_searched(
+    seeded_instances: None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An interval longer than the window leaves the one retry pending, not cancelled."""
+    _freeze_now(monkeypatch)
+    from houndarr.services.cooldown import record_search
+
+    await record_search(1, 101, "episode")
+    await _insert_item_row("searched", None, _NOW - timedelta(hours=6))
+    await _insert_item_row("skipped", "post-release grace (1h)", _NOW - timedelta(hours=5))
+    await _insert_item_row("skipped", "in hot retry window (2h)", _NOW - timedelta(hours=4))
+
+    respx.get(f"{SONARR_URL}/api/v3/wanted/missing").mock(
+        return_value=httpx.Response(200, json=_page([_EPISODE_RECORD])),
+    )
+    search_route = respx.post(f"{SONARR_URL}/api/v3/command").mock(
+        return_value=httpx.Response(201, json=_COMMAND_RESP),
+    )
+    inst = _sonarr(
+        post_release_grace_hrs=1,
+        missing_hot_retry_window_hrs=2,
+        missing_hot_retry_interval_hrs=6,
+    )
+
+    assert await run_instance_search(inst, MASTER_KEY) == 1
+    assert await run_instance_search(inst, MASTER_KEY) == 0
+    assert search_route.call_count == 1
 
 
 @pytest.mark.asyncio()

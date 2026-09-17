@@ -273,8 +273,9 @@ async def fetch_latest_missing_reason(
     row can come from a sibling of the item that needs the retry.
 
     Of the release-gate reasons, only ``not yet released`` and
-    ``post-release grace`` arm a retry; the per-app availability ones
-    cancel it, as they did before the gate rows were filtered at all.
+    ``post-release grace`` arm a retry.  The per-app availability ones,
+    and Whisparr v2's ``no series linked`` orphan guard, cancel it, as
+    they did before the gate rows were filtered at all.
 
     Args:
         instance_id: Owning instance primary key.

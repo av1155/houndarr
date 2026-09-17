@@ -601,6 +601,23 @@ async def test_last_grace_skip_since_dispatch_breaks_timestamp_ties_by_id(
     assert await repo.fetch_last_missing_grace_skip_since_dispatch(1, 21, "episode") is None
 
 
+@pytest.mark.parametrize("action", ["searched", "error"])
+@pytest.mark.asyncio()
+async def test_last_grace_skip_since_dispatch_clears_on_either_dispatch(
+    seeded_instances: None,
+    action: str,
+) -> None:
+    """A failed search ends the wait the same way a successful one does."""
+    await _seed_rows(
+        [
+            ("skipped", "post-release grace (6h)", "2026-05-22T08:00:00.000Z"),
+            (action, None, "2026-05-22T09:00:00.000Z"),
+        ]
+    )
+
+    assert await repo.fetch_last_missing_grace_skip_since_dispatch(1, 21, "episode") is None
+
+
 @pytest.mark.asyncio()
 async def test_last_grace_skip_since_dispatch_keeps_grace_written_after_a_tie(
     seeded_instances: None,

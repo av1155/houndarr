@@ -351,7 +351,9 @@ async def test_item_mode_retry_is_not_delayed_by_its_own_grace_rows(
     )
     assert await run_instance_search(inst, MASTER_KEY) == 0
 
-    _freeze_now(monkeypatch, _NOW + timedelta(hours=7))
+    # The episode leaves its own grace 5h from now, an hour before the group
+    # wait would end. Item mode must not serve that wait.
+    _freeze_now(monkeypatch, _NOW + timedelta(hours=5, minutes=30))
     respx.get(f"{SONARR_URL}/api/v3/wanted/missing").mock(
         return_value=httpx.Response(200, json=_page([_episode(101, _NOW - timedelta(hours=1), 1)])),
     )

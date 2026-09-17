@@ -570,33 +570,35 @@ async def _is_group_grace_unresolved(ref: ItemRef, grace_hrs: int) -> bool:
 
     Only meaningful in season, artist, and author modes.  There every
     wanted record logs under its parent's synthetic id, and the release
-    gate writes its skip before group dedup, so a record still inside
-    its grace window re-arms the parent's retry on every cycle while a
+    gate writes its skip before group dedup, so a record the gate is
+    still blocking re-arms the parent's retry on every cycle while a
     released sibling drives the search.
 
-    A ``post-release grace`` row proves its record was already released
-    when the row landed, so that record leaves the window at the latest
-    *grace_hrs* after the row.  The newest row written since the parent
-    was last dispatched therefore bounds every grace window logged
-    since that dispatch.  In exchange the parent is not searched while
-    a window it has logged could still be open: the retry lands up to
-    one window later than the release, and a parent whose records keep
-    entering grace closer together than the window is wide falls back
-    to its ordinary cooldown.
+    Only grace rows are bounded here.  A ``not yet released`` row says
+    nothing about when its record becomes searchable, so no bound can
+    be derived from one and such a sibling can still re-arm a parent
+    every cycle.  That needs each app's own filter to stay honest:
+    Sonarr, Whisparr v2, Lidarr, and Readarr all keep unreleased
+    records out of ``wanted/missing``, but each judges that on its own
+    clock, so a record the *arr counts as released still reads as
+    unreleased here while Houndarr's clock trails it.
 
-    Only grace rows are bounded this way.  A ``not yet released`` row
-    carries no upper bound on the release date, so nothing could be
-    derived from one; it also cannot reach a parent, because Sonarr,
-    Whisparr v2, Lidarr, and Readarr each filter unreleased and
-    undated records out of ``wanted/missing`` before Houndarr sees
-    them.  Recheck that filter before relying on this in a new app.
+    A ``post-release grace`` row does carry a bound: it proves its
+    record was already released when the row landed, so that record
+    leaves the window at the latest *grace_hrs* after the row.  The
+    newest row written since the parent was last dispatched therefore
+    bounds every grace window logged since that dispatch.  In exchange
+    the parent is not searched while a window it has logged could still
+    be open: the retry lands up to one window after the grace expires,
+    and a parent whose records keep entering grace closer together than
+    the window is wide falls back to its ordinary cooldown.
 
     Args:
         ref: The parent the retry would search.
         grace_hrs: The instance's current post-release grace window.
 
     Returns:
-        ``True`` while the bound has not elapsed yet.
+        ``True`` while a logged block could still be holding.
     """
     if grace_hrs <= 0:
         return False

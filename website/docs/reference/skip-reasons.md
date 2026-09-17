@@ -22,7 +22,7 @@ reasons are normal scheduling behavior, not errors.
 | `radarr status indicates unreleased`  | per-item    | Radarr's movie status is `tba` or `announced` and it is not flagged available.                       |
 | `whisparr v3 reports not available`   | per-item    | Whisparr v3's availability flag says the scene is not available yet.                                 |
 | `whisparr v3 status indicates unreleased` | per-item | Whisparr v3's status is `tba` or `announced` and it is not flagged available.                        |
-| `future title not yet available`      | per-item    | The Radarr or Whisparr v3 release year is still ahead and the title is not flagged available.        |
+| `future title not yet available`      | per-item    | The Radarr or Whisparr v3 release year is still ahead, the status is not released, and it is not flagged available. |
 | `no series linked`                    | per-item    | Whisparr v2 returned an episode with no series attached, so it cannot be searched.                   |
 | `post-release grace (Nh)`             | per-item    | Release date passed but the grace window (default 6 hours) has not elapsed.                          |
 | `in hot retry window (Nh)`            | per-item    | Missing item is inside its hot retry window, but the retry interval has not elapsed.                 |

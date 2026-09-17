@@ -488,10 +488,10 @@ async def _seed_rows(rows: list[tuple[str, str | None, str]]) -> None:
 
 
 @pytest.mark.asyncio()
-async def test_first_grace_skip_since_dispatch_returns_oldest_of_the_run(
+async def test_last_grace_skip_since_dispatch_returns_newest_of_the_run(
     seeded_instances: None,
 ) -> None:
-    """The oldest grace skip written since the last dispatch bounds the wait."""
+    """The newest grace skip written since the last dispatch bounds the wait."""
     await _seed_rows(
         [
             ("skipped", "post-release grace (6h)", "2026-05-22T08:00:00.000Z"),
@@ -501,16 +501,16 @@ async def test_first_grace_skip_since_dispatch_returns_oldest_of_the_run(
         ]
     )
 
-    result = await repo.fetch_first_missing_grace_skip_since_dispatch(1, 21, "episode")
+    result = await repo.fetch_last_missing_grace_skip_since_dispatch(1, 21, "episode")
 
-    assert result == "2026-05-22T10:00:00.000Z"
+    assert result == "2026-05-22T11:00:00.000Z"
 
 
 @pytest.mark.asyncio()
-async def test_first_grace_skip_since_dispatch_without_any_dispatch(
+async def test_last_grace_skip_since_dispatch_without_any_dispatch(
     seeded_instances: None,
 ) -> None:
-    """With no dispatch row at all, the oldest grace skip counts."""
+    """With no dispatch row at all, the newest grace skip counts."""
     await _seed_rows(
         [
             ("skipped", "post-release grace (6h)", "2026-05-22T08:00:00.000Z"),
@@ -519,9 +519,9 @@ async def test_first_grace_skip_since_dispatch_without_any_dispatch(
         ]
     )
 
-    result = await repo.fetch_first_missing_grace_skip_since_dispatch(1, 21, "episode")
+    result = await repo.fetch_last_missing_grace_skip_since_dispatch(1, 21, "episode")
 
-    assert result == "2026-05-22T08:00:00.000Z"
+    assert result == "2026-05-22T09:00:00.000Z"
 
 
 @pytest.mark.parametrize(
@@ -539,18 +539,18 @@ async def test_first_grace_skip_since_dispatch_without_any_dispatch(
     ],
 )
 @pytest.mark.asyncio()
-async def test_first_grace_skip_since_dispatch_returns_none(
+async def test_last_grace_skip_since_dispatch_returns_none(
     seeded_instances: None,
     rows: list[tuple[str, str | None, str]],
 ) -> None:
     """No grace skip since the last dispatch means nothing bounds the wait."""
     await _seed_rows([*rows, ("searched", None, "2026-05-22T09:00:00.000Z")])
 
-    assert await repo.fetch_first_missing_grace_skip_since_dispatch(1, 21, "episode") is None
+    assert await repo.fetch_last_missing_grace_skip_since_dispatch(1, 21, "episode") is None
 
 
 @pytest.mark.asyncio()
-async def test_first_grace_skip_since_dispatch_breaks_timestamp_ties_by_id(
+async def test_last_grace_skip_since_dispatch_breaks_timestamp_ties_by_id(
     seeded_instances: None,
 ) -> None:
     """A dispatch sharing the grace skip's timestamp still counts as newer."""
@@ -561,11 +561,11 @@ async def test_first_grace_skip_since_dispatch_breaks_timestamp_ties_by_id(
         ]
     )
 
-    assert await repo.fetch_first_missing_grace_skip_since_dispatch(1, 21, "episode") is None
+    assert await repo.fetch_last_missing_grace_skip_since_dispatch(1, 21, "episode") is None
 
 
 @pytest.mark.asyncio()
-async def test_first_grace_skip_since_dispatch_scopes_by_ref_and_kind(
+async def test_last_grace_skip_since_dispatch_scopes_by_ref_and_kind(
     seeded_instances: None,
 ) -> None:
     """Rows of another instance, item type, or pass do not bound this item."""
@@ -584,7 +584,7 @@ async def test_first_grace_skip_since_dispatch_scopes_by_ref_and_kind(
         )
         await conn.commit()
 
-    assert await repo.fetch_first_missing_grace_skip_since_dispatch(1, 21, "episode") is None
+    assert await repo.fetch_last_missing_grace_skip_since_dispatch(1, 21, "episode") is None
 
 
 @pytest.mark.pinning()

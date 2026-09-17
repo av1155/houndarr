@@ -50,10 +50,12 @@ A skip written by another gate, such as `hourly limit reached (N/hr)`
 or a cooldown row, leaves a pending retry pending.
 
 In season, artist, and author search mode every wanted item is logged
-under its parent, so the parent holds its early retry until the grace
-window of the item that armed it has certainly passed. That keeps a
-just-aired episode from putting its whole season back in the search
-queue on every cycle while it waits out its own grace.
+under its parent, so the parent holds its early retry until every
+`post-release grace (Nh)` skip logged since its last search has
+certainly passed. That keeps a just-aired episode from putting its
+whole season back in the search queue on every cycle while it waits
+out its own grace. The wait applies whether or not `Hot Retry Window
+(hrs)` is set, and `Run Now` skips it.
 
 Cutoff and upgrade passes do not use this early retry. They always
 wait for their full cooldown.

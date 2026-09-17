@@ -265,8 +265,8 @@ async def fetch_latest_missing_reason(
     alone.
 
     Only the rows that describe the item's release state inform the
-    decision: dispatch outcomes (``searched`` / ``error``, whose reason
-    is NULL) and release-timing skips.  Skips written by the other
+    decision: dispatch outcomes (``searched`` / ``error``) and
+    release-timing skips.  Skips written by the other
     gates are passed over, because they say nothing about release
     timing and would otherwise cancel or trigger a retry by accident:
     the hourly-cap gate runs before the cooldown check, and in season,
@@ -313,20 +313,26 @@ async def fetch_latest_missing_reason(
     return str(row[0]) if row and row[0] is not None else None
 
 
-async def fetch_first_missing_grace_skip_since_dispatch(
+async def fetch_last_missing_grace_skip_since_dispatch(
     instance_id: int,
     item_id: int,
     item_type: str,
 ) -> str | None:
-    """Return the oldest post-release-grace skip timestamp since the last dispatch.
+    """Return the newest post-release-grace skip timestamp since the last dispatch.
 
     A grace skip proves the record it was written for had already been
     released when the row landed, so that record leaves its grace
     window at the latest ``post_release_grace_hrs`` after this
-    timestamp.  The engine uses that bound in season, artist, and
-    author modes, where the rows carry the parent's synthetic id and a
-    sibling still inside its grace window would otherwise re-arm the
-    parent's retry on every cycle.
+    timestamp.  Taking the newest row bounds every record that logged
+    one, which the oldest row would not: records reaching their
+    release at different times enter the window one after another, and
+    each new row pushes the bound out again.  The engine uses that
+    bound in season, artist, and author modes, where the rows carry
+    the parent's synthetic id and a sibling still inside its grace
+    window would otherwise re-arm the parent's retry on every cycle.
+
+    Rows stop landing once every record has left the window, so the
+    bound stops moving and the retry is released.
 
     Args:
         instance_id: Owning instance primary key.
@@ -334,14 +340,14 @@ async def fetch_first_missing_grace_skip_since_dispatch(
         item_type: ``ItemType`` string value.
 
     Returns:
-        The ``timestamp`` of the oldest grace skip newer than the
+        The ``timestamp`` of the newest grace skip newer than the
         newest ``searched`` / ``error`` row, or ``None`` when no such
         row exists.
     """
     async with get_db() as db:
         async with db.execute(
             """
-            SELECT MIN(g.timestamp)
+            SELECT MAX(g.timestamp)
             FROM search_log AS g
             WHERE g.instance_id = ?
               AND g.item_id = ?

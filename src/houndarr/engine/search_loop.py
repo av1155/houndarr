@@ -566,7 +566,7 @@ async def _latest_missing_grace_skip_ref(ref: ItemRef) -> tuple[str, str] | None
 
 
 async def _is_group_grace_unresolved(ref: ItemRef, grace_hrs: int) -> bool:
-    """Return whether a grace window that armed *ref*'s retry can still be open.
+    """Return whether a grace window logged under *ref* can still be open.
 
     Only meaningful in season, artist, and author modes.  There every
     wanted record logs under its parent's synthetic id, and the release
@@ -576,11 +576,11 @@ async def _is_group_grace_unresolved(ref: ItemRef, grace_hrs: int) -> bool:
 
     A ``post-release grace`` row proves its record was already released
     when the row landed, so that record leaves the window at the latest
-    *grace_hrs* after the oldest such row written since the parent was
-    last dispatched.  Waiting for that bound costs the retry the gap
-    between release and the first row (roughly the runtime plus one
-    cycle), and in exchange the parent is never searched while a record
-    it covers is still waiting.
+    *grace_hrs* after the row.  The newest row written since the parent
+    was last dispatched therefore bounds every grace window logged
+    since that dispatch.  Waiting for that bound delays the retry by up
+    to one grace window, and in exchange the parent is not searched
+    while a window it has logged could still be open.
 
     Args:
         ref: The parent the retry would search.
@@ -592,14 +592,14 @@ async def _is_group_grace_unresolved(ref: ItemRef, grace_hrs: int) -> bool:
     if grace_hrs <= 0:
         return False
 
-    from houndarr.repositories.search_log import fetch_first_missing_grace_skip_since_dispatch
+    from houndarr.repositories.search_log import fetch_last_missing_grace_skip_since_dispatch
 
-    first_grace_at = await fetch_first_missing_grace_skip_since_dispatch(
+    last_grace_at = await fetch_last_missing_grace_skip_since_dispatch(
         ref.instance_id,
         ref.item_id,
         ref.item_type.value,
     )
-    return first_grace_at is not None and _elapsed_hours_since(first_grace_at) < grace_hrs
+    return last_grace_at is not None and _elapsed_hours_since(last_grace_at) < grace_hrs
 
 
 def _parse_log_timestamp(value: str) -> datetime:

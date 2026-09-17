@@ -16,6 +16,7 @@ import httpx
 import pytest
 import respx
 
+from houndarr.database import get_db
 from houndarr.engine import candidates as candidates_mod
 from houndarr.engine import search_loop
 from houndarr.engine.adapters.sonarr import _season_item_id
@@ -60,6 +61,20 @@ def _freeze_now(monkeypatch: pytest.MonkeyPatch, now: datetime = _NOW) -> None:
 
 def _iso(at: datetime) -> str:
     return at.strftime("%Y-%m-%dT%H:%M:%S.%f") + "Z"
+
+
+async def _insert_grace_row(item_id: int, at: datetime) -> None:
+    """Write a parent grace skip at an explicit time, which the engine cannot do."""
+    async with get_db() as conn:
+        await conn.execute(
+            """
+            INSERT INTO search_log
+                (instance_id, item_id, item_type, search_kind, action, reason, timestamp)
+            VALUES (1, ?, 'episode', 'missing', 'skipped', 'post-release grace (6h)', ?)
+            """,
+            (item_id, _iso(at)),
+        )
+        await conn.commit()
 
 
 def _page(records: list[dict[str, Any]]) -> dict[str, Any]:
@@ -339,3 +354,59 @@ async def test_artist_mode_sibling_in_grace_holds_the_parent(
         await run_instance_search(inst, MASTER_KEY)
 
     assert search_route.call_count == 1
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_a_later_sibling_grace_holds_the_parent_past_the_first_one(
+    seeded_instances: None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Records entering grace one after another each push the wait out."""
+    from houndarr.services.cooldown import record_search
+
+    parent = _season_item_id(55, 1)
+    _freeze_now(monkeypatch)
+    await record_search(1, parent, "episode")
+    await _insert_grace_row(parent, _NOW + timedelta(hours=1))
+    await _insert_grace_row(parent, _NOW + timedelta(hours=5))
+
+    inst = _sonarr(sonarr_search_mode=SonarrSearchMode.season_context)
+    search_route = _mock_season_pages([_episode(101, _NOW - timedelta(days=30), 1)])
+
+    # The first row's window has closed by this point; the second one's has not.
+    _freeze_now(monkeypatch, _NOW + timedelta(hours=7, minutes=30))
+    assert await run_instance_search(inst, MASTER_KEY) == 0
+    assert search_route.call_count == 0
+
+    _freeze_now(monkeypatch, _NOW + timedelta(hours=11, minutes=30))
+    assert await run_instance_search(inst, MASTER_KEY) == 1
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_hot_retry_window_also_waits_for_a_sibling_in_grace(
+    seeded_instances: None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An enabled hot retry window does not re-search the parent every interval."""
+    _freeze_now(monkeypatch)
+    aired = _episode(101, _NOW - timedelta(days=30), 1)
+    in_grace = _episode(102, _NOW - timedelta(hours=1), 2)
+    search_route = _mock_season_pages([aired, in_grace])
+    inst = _sonarr(
+        sonarr_search_mode=SonarrSearchMode.season_context,
+        missing_hot_retry_window_hrs=24,
+        missing_hot_retry_interval_hrs=1,
+    )
+
+    await run_instance_search(inst, MASTER_KEY)
+    await run_instance_search(inst, MASTER_KEY)
+    assert search_route.call_count == 1
+
+    # The retry interval has elapsed, but the sibling's grace window may not have.
+    _freeze_now(monkeypatch, _NOW + timedelta(hours=2))
+    assert await run_instance_search(inst, MASTER_KEY) == 0
+
+    _freeze_now(monkeypatch, _NOW + timedelta(hours=7))
+    assert await run_instance_search(inst, MASTER_KEY) == 1

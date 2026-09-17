@@ -200,6 +200,147 @@ class TestLogRowsRender:
             )
         return rows
 
+    @pytest.mark.parametrize(
+        ("reasons", "expected_label"),
+        [
+            pytest.param(
+                [
+                    "on cooldown (14d)",
+                    "on cutoff cooldown (21d)",
+                    "on upgrade cooldown (90d)",
+                ],
+                "on cooldown",
+                id="cooldown",
+            ),
+            pytest.param(
+                [
+                    "not yet released",
+                    "post-release grace (6h)",
+                    "radarr reports not available",
+                    "radarr status indicates unreleased",
+                    "future title not yet available",
+                ],
+                "not yet released",
+                id="unreleased",
+            ),
+            pytest.param(
+                [
+                    "whisparr v3 reports not available",
+                    "whisparr v3 status indicates unreleased",
+                ],
+                "not yet released",
+                id="whisparr-v3-unreleased",
+            ),
+            pytest.param(
+                ["in hot retry window (24h)", "in hot retry window (24h)"],
+                "inside hot retry window",
+                id="hot-retry",
+            ),
+            pytest.param(
+                [
+                    "hourly limit reached (20/hr)",
+                    "cutoff hourly limit reached (1/hr)",
+                    "upgrade hourly limit reached (1/hr)",
+                ],
+                "hit hourly limit",
+                id="hourly-limit",
+            ),
+            pytest.param(
+                ["already in download queue", "already in download queue"],
+                "already in download queue",
+                id="download-queue",
+            ),
+            pytest.param(
+                ["on cooldown (14d)", "already in download queue"],
+                "skipped",
+                id="mixed",
+            ),
+            pytest.param(
+                ["tag filter (excluded tag)", "tag filter (excluded tag)"],
+                "skipped",
+                id="unknown",
+            ),
+        ],
+    )
+    def test_skip_only_pill_label_matches_reason_family(
+        self,
+        render,
+        reasons: list[str],
+        expected_label: str,
+    ) -> None:
+        rows = self._skip_only_rows(reasons)
+        html = render("partials/log_rows.html", rows=rows, limit=50)
+        expected = f'outcome-pill__n">{len(reasons)}</span> {expected_label}</span>'
+        assert expected in html
+        assert '<span class="health-pill">Healthy</span>' in html
+
+    def test_skip_only_pill_ignores_info_rows_in_the_cycle(self, render) -> None:
+        """A cycle-level info row shares the cycle but must not count as a skip."""
+        rows = self._skip_only_rows(["on cooldown (14d)", "on cooldown (14d)"])
+        rows.insert(
+            0,
+            {
+                **rows[0],
+                "id": 99,
+                "action": "info",
+                "item_id": None,
+                "item_type": None,
+                "item_label": None,
+                "reason": "tag filter (fetch failed)",
+                "message": "tag filter disabled this cycle",
+            },
+        )
+        html = render("partials/log_rows.html", rows=rows, limit=50)
+        assert 'outcome-pill__n">2</span> on cooldown</span>' in html
+        assert 'all <span class="cycle__summary-reason">on cooldown</span>' in html
+
+    def test_skip_only_summary_counts_unknown_reasons(self, render) -> None:
+        """Unrecognised reasons still reach the summary total as 'other'."""
+        rows = self._skip_only_rows(["tag filter (excluded tag)"])
+        html = render("partials/log_rows.html", rows=rows, limit=50)
+        assert "<strong>1</strong> item" in html
+        assert "1 other" in html
+
+    def test_skip_only_pill_uses_fallback_for_partial_cycle(self, render) -> None:
+        rows = self._skip_only_rows(["on cooldown (14d)"])
+        rows[0]["cycle_skipped_count"] = 2
+        html = render("partials/log_rows.html", rows=rows, limit=50)
+        assert 'outcome-pill__n">2</span> skipped</span>' in html
+
+    @pytest.mark.parametrize(
+        ("other_action", "searched_count", "error_count"),
+        [
+            pytest.param("searched", 1, 0, id="searched"),
+            pytest.param("error", 0, 1, id="error"),
+        ],
+    )
+    def test_non_skip_only_cycle_keeps_generic_skipped_pill(
+        self,
+        render,
+        other_action: str,
+        searched_count: int,
+        error_count: int,
+    ) -> None:
+        rows = self._skip_only_rows(["on cooldown (14d)"])
+        rows[0]["cycle_searched_count"] = searched_count
+        rows[0]["cycle_error_count"] = error_count
+        rows.append(
+            {
+                **rows[0],
+                "id": 2,
+                "timestamp": "2026-04-22T10:00:02.000Z",
+                "action": other_action,
+                "item_id": 102,
+                "item_label": "Show - S01E02",
+                "reason": None,
+                "message": "dispatch failed" if other_action == "error" else "dispatched",
+            }
+        )
+        html = render("partials/log_rows.html", rows=rows, limit=50)
+        assert f"outcome-pill--{other_action}" in html
+        assert 'outcome-pill__n">1</span> skipped</span>' in html
+        assert "health-pill" not in html
+
     def test_skip_only_summary_all_cooldown(self, render) -> None:
         rows = self._skip_only_rows(
             [
@@ -226,6 +367,14 @@ class TestLogRowsRender:
         html = render("partials/log_rows.html", rows=rows, limit=50)
         assert 'all <span class="cycle__summary-reason">not yet released</span>' in html
         assert "<strong>4</strong> items" in html
+
+    def test_skip_only_summary_all_whisparr_v3_unreleased(self, render) -> None:
+        rows = self._skip_only_rows(
+            ["whisparr v3 reports not available", "whisparr v3 status indicates unreleased"]
+        )
+        html = render("partials/log_rows.html", rows=rows, limit=50)
+        assert 'all <span class="cycle__summary-reason">not yet released</span>' in html
+        assert "other" not in html
 
     def test_skip_only_summary_all_capped(self, render) -> None:
         rows = self._skip_only_rows(

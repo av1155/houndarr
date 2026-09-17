@@ -9,7 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- Logs page skip-only cycle pills name the shared cooldown, release-timing, hot-retry, hourly-limit, or download-queue reason, and read `N skipped` otherwise; Whisparr v3 availability skips count as not yet released. (#768)
+- Logs page skip-only cycle pills name the shared cooldown, release-timing, hot-retry, hourly-limit, or download-queue reason, and read `N skipped` otherwise. (#768)
+- Whisparr v3 availability skips count as not yet released on the Logs page instead of falling into `other`. (#768)
 - Missing, cutoff, and upgrade searches skip items that are already in the \*arr's download queue and log `already in download queue` instead. (#765)
 
 ---

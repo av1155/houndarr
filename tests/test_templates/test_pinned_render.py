@@ -274,6 +274,33 @@ class TestLogRowsRender:
         assert expected in html
         assert '<span class="health-pill">Healthy</span>' in html
 
+    def test_skip_only_pill_ignores_info_rows_in_the_cycle(self, render) -> None:
+        """A cycle-level info row shares the cycle but must not count as a skip."""
+        rows = self._skip_only_rows(["on cooldown (14d)", "on cooldown (14d)"])
+        rows.insert(
+            0,
+            {
+                **rows[0],
+                "id": 99,
+                "action": "info",
+                "item_id": None,
+                "item_type": None,
+                "item_label": None,
+                "reason": "tag filter (fetch failed)",
+                "message": "tag filter disabled this cycle",
+            },
+        )
+        html = render("partials/log_rows.html", rows=rows, limit=50)
+        assert 'outcome-pill__n">2</span> on cooldown</span>' in html
+        assert 'all <span class="cycle__summary-reason">on cooldown</span>' in html
+
+    def test_skip_only_summary_counts_unknown_reasons(self, render) -> None:
+        """Unrecognised reasons still reach the summary total as 'other'."""
+        rows = self._skip_only_rows(["tag filter (excluded tag)"])
+        html = render("partials/log_rows.html", rows=rows, limit=50)
+        assert "<strong>1</strong> item" in html
+        assert "1 other" in html
+
     def test_skip_only_pill_uses_fallback_for_partial_cycle(self, render) -> None:
         rows = self._skip_only_rows(["on cooldown (14d)"])
         rows[0]["cycle_skipped_count"] = 2

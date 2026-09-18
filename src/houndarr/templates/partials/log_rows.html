@@ -20,6 +20,8 @@
 {%- set ns.cooldown = ns.cooldown + 1 -%}
 {%- elif r.startswith('in hot retry window') -%}
 {%- set ns.hot_retry = ns.hot_retry + 1 -%}
+{%- elif r.startswith('waiting on post-release grace') -%}
+{%- set ns.grace_hold = ns.grace_hold + 1 -%}
 {%- elif r in ('not yet released', 'radarr reports not available', 'radarr status indicates unreleased', 'whisparr v3 reports not available', 'whisparr v3 status indicates unreleased', 'future title not yet available') or r.startswith('post-release grace') -%}
 {%- set ns.unreleased = ns.unreleased + 1 -%}
 {%- elif 'limit reached' in r -%}
@@ -31,7 +33,7 @@
 {%- endif -%}
 {%- endif -%}
 {%- endfor -%}
-{%- set ns.total = ns.cooldown + ns.unreleased + ns.hot_retry + ns.capped + ns.queued + ns.other -%}
+{%- set ns.total = ns.cooldown + ns.unreleased + ns.hot_retry + ns.grace_hold + ns.capped + ns.queued + ns.other -%}
 {%- endmacro -%}
 
 {%- macro _skip_only_summary(instance_name, ns) -%}
@@ -42,6 +44,8 @@
 <strong>{{ instance_name }}</strong> checked <strong>{{ ns.total }}</strong> {{ _item }}: all <span class="cycle__summary-reason">not yet released</span>.
 {%- elif ns.total > 0 and ns.hot_retry == ns.total -%}
 <strong>{{ instance_name }}</strong> checked <strong>{{ ns.total }}</strong> {{ _item }}: all <span class="cycle__summary-reason">inside hot retry window</span>. Waiting for the retry interval.
+{%- elif ns.total > 0 and ns.grace_hold == ns.total -%}
+<strong>{{ instance_name }}</strong> checked <strong>{{ ns.total }}</strong> {{ _item }}: all <span class="cycle__summary-reason">waiting on post-release grace</span>. A wanted item may still be inside its grace window.
 {%- elif ns.total > 0 and ns.capped == ns.total -%}
 <strong>{{ instance_name }}</strong> hit the <span class="cycle__summary-reason">hourly limit</span>. Cycle paused; will resume next hour.
 {%- elif ns.total > 0 and ns.queued == ns.total -%}
@@ -52,6 +56,7 @@
 {%- if ns.cooldown -%}{%- set _ = parts.append(ns.cooldown ~ ' on cooldown') -%}{%- endif -%}
 {%- if ns.unreleased -%}{%- set _ = parts.append(ns.unreleased ~ ' not yet released') -%}{%- endif -%}
 {%- if ns.hot_retry -%}{%- set _ = parts.append(ns.hot_retry ~ ' in hot retry window') -%}{%- endif -%}
+{%- if ns.grace_hold -%}{%- set _ = parts.append(ns.grace_hold ~ ' waiting on post-release grace') -%}{%- endif -%}
 {%- if ns.capped -%}{%- set _ = parts.append(ns.capped ~ ' hit hourly limit') -%}{%- endif -%}
 {%- if ns.queued -%}{%- set _ = parts.append(ns.queued ~ ' already in download queue') -%}{%- endif -%}
 {%- if ns.other -%}{%- set _ = parts.append(ns.other ~ ' other') -%}{%- endif %}
@@ -155,7 +160,7 @@
 {%- set slug = accents.get(instance_name, '') -%}
 {%- set is_system = cycle_id is none -%}
 {%- set is_skip_only = outcome == 'skip-only' -%}
-{%- set skip_reasons = namespace(cooldown=0, unreleased=0, hot_retry=0, capped=0, queued=0, other=0, total=0) -%}
+{%- set skip_reasons = namespace(cooldown=0, unreleased=0, hot_retry=0, grace_hold=0, capped=0, queued=0, other=0, total=0) -%}
 {%- set skip_only_label = 'skipped' -%}
 {%- if is_skip_only -%}
 {%- set _ = _bucket_skip_reasons(group, skip_reasons) -%}
@@ -167,6 +172,8 @@
 {%- set skip_only_label = 'not yet released' -%}
 {%- elif skip_reasons.hot_retry == skipped_count -%}
 {%- set skip_only_label = 'inside hot retry window' -%}
+{%- elif skip_reasons.grace_hold == skipped_count -%}
+{%- set skip_only_label = 'waiting on post-release grace' -%}
 {%- elif skip_reasons.capped == skipped_count -%}
 {%- set skip_only_label = 'hit hourly limit' -%}
 {%- elif skip_reasons.queued == skipped_count -%}

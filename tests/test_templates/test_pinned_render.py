@@ -240,6 +240,14 @@ class TestLogRowsRender:
             ),
             pytest.param(
                 [
+                    "waiting on post-release grace (6h)",
+                    "waiting on post-release grace (48h)",
+                ],
+                "waiting on post-release grace",
+                id="grace-hold",
+            ),
+            pytest.param(
+                [
                     "hourly limit reached (20/hr)",
                     "cutoff hourly limit reached (1/hr)",
                     "upgrade hourly limit reached (1/hr)",
@@ -438,17 +446,33 @@ class TestLogRowsRender:
                 "on cooldown (14d)",
                 "not yet released",
                 "in hot retry window (24h)",
+                "waiting on post-release grace (6h)",
                 "hourly limit reached (20/hr)",
             ]
         )
         html = render("partials/log_rows.html", rows=rows, limit=50)
         # Mixed variant renders both counts and the separator.
-        assert "<strong>5</strong> items:" in html
+        assert "<strong>6</strong> items:" in html
         assert "2 on cooldown" in html
         assert "1 not yet released" in html
         assert "1 in hot retry window" in html
+        assert "1 waiting on post-release grace" in html
         assert "1 hit hourly limit" in html
         assert "No dispatches needed" in html
+
+    def test_skip_only_summary_all_grace_hold(self, render) -> None:
+        rows = self._skip_only_rows(
+            [
+                "waiting on post-release grace (6h)",
+                "waiting on post-release grace (6h)",
+            ]
+        )
+        html = render("partials/log_rows.html", rows=rows, limit=50)
+        assert (
+            'all <span class="cycle__summary-reason">waiting on post-release grace</span>' in html
+        )
+        assert "may still be inside its grace window" in html
+        assert "other" not in html
 
     def test_skip_only_summary_all_already_downloading(self, render) -> None:
         rows = self._skip_only_rows([_QUEUED_REASON, _QUEUED_REASON])

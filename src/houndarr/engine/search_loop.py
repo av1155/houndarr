@@ -726,6 +726,22 @@ def _format_hot_retry_reason(window_hrs: int) -> str:
     return f"in hot retry window ({window_hrs}h)"
 
 
+def _format_group_hold_reason(grace_hrs: int) -> str:
+    """Return the search-log reason for a parent waiting on a record's grace.
+
+    Deliberately not prefixed ``post-release grace``: three queries match
+    that prefix anchored (``repositories/search_log.py``), one of them the
+    lookup :func:`_is_group_grace_unresolved` derives the wait from, and
+    another the allowlist that decides whether a retry is armed at all.
+
+    A row this reason matched would push that bound out again each time
+    one landed.  The log throttle holds that to one a day, which is
+    enough to sustain the wait for good once the grace window is longer
+    than the throttle, and a restart clears the throttle either way.
+    """
+    return f"waiting on post-release grace ({grace_hrs}h)"
+
+
 def _is_release_timing_reason(reason: str | None) -> bool:
     """Return ``True`` when *reason* indicates a release-timing block."""
     return reason == "not yet released" or (
@@ -1228,14 +1244,39 @@ async def _run_search_pass(
                             ref, instance.missing.post_release_grace_hrs
                         )
                     ):
-                        should_retry = False
+                        reason = _format_group_hold_reason(instance.missing.post_release_grace_hrs)
+                        skip_key = (
+                            instance.core.id,
+                            candidate.item_id,
+                            search_kind,
+                            "grace_hold",
+                        )
+                        # Its own bucket, not the cooldown's: the cycle before
+                        # the wait begins writes the cooldown row and would
+                        # otherwise mute the first held cycle for a day.  No
+                        # run_now arm here, unlike the gates around it, since
+                        # the wait above never applies to a manual run.
+                        # Debug stays outside the throttle: it is what an
+                        # operator turns up to ask why a season is not
+                        # searching, and the answer is wanted every cycle.
                         logger.debug(
-                            "[%s] %s%s: holding missing retry, a wanted item may still be "
-                            "inside post-release grace",
+                            "[%s] %s%s: %s",
                             instance.core.name,
                             log_prefix,
                             candidate.item_id,
+                            reason,
                         )
+                        if await should_log_skip(skip_key):
+                            await _write_item_log(
+                                ref,
+                                SearchAction.skipped.value,
+                                search_kind=search_kind,
+                                cycle_id=cycle_id,
+                                cycle_trigger=cycle_trigger,
+                                item_label=candidate.label,
+                                reason=reason,
+                            )
+                        continue
 
                     if should_retry:
                         if await queued_skips.skip(candidate, ref, seen_item_ids, seen_group_keys):

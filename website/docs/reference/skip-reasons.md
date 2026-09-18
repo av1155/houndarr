@@ -25,6 +25,7 @@ reasons are normal scheduling behavior, not errors.
 | `future title not yet available`      | per-item    | The Radarr or Whisparr v3 release year is still ahead, the status is not released, and it is not flagged available. |
 | `no series linked`                    | per-item    | Whisparr v2 returned an episode with no series attached, so it cannot be searched.                   |
 | `post-release grace (Nh)`             | per-item    | Release date passed but the grace window (default 6 hours) has not elapsed.                          |
+| `waiting on post-release grace (Nh)`  | per-item    | Season, artist, or author parent holding its early retry until a wanted item's grace window has certainly passed. |
 | `in hot retry window (Nh)`            | per-item    | Missing item is inside its hot retry window, but the retry interval has not elapsed.                 |
 | `hourly limit reached (N/hr)`         | per-item    | Missing pass hit `Hourly Cap` of `N` for the current hour.                                           |
 | `cutoff hourly limit reached (N/hr)`  | per-item    | Cutoff pass hit `Cutoff Cap` of `N`.                                                                 |
@@ -60,9 +61,10 @@ tag filter row, leaves the retry pending.
 In season, artist, and author search mode these rows are logged under
 the parent, so the parent holds its early retry until every
 `post-release grace (Nh)` skip logged since its last search has
-certainly passed. That keeps a just-aired episode from putting its
-whole season back in the search queue on every cycle while it waits
-out its own grace. `Run Now` searches anyway. Season 0 specials, and
+certainly passed, and logs `waiting on post-release grace (Nh)` while
+it does. That keeps a just-aired episode from putting its whole season
+back in the search queue on every cycle while it waits out its own
+grace. `Run Now` searches anyway. Season 0 specials, and
 items whose parent the \*arr did not report, are searched on their own
 id and never wait on a parent.
 
@@ -158,9 +160,10 @@ for the field reference and the per-app tag-source mapping.
 
 ## Log deduplication
 
-Seven reasons are deduplicated in the log: `on cooldown`, `on cutoff
-cooldown`, `on upgrade cooldown`, `in hot retry window`, `already in
-download queue`, and the two `tag filter` skip reasons. Each
+Eight reasons are deduplicated in the log: `on cooldown`, `on cutoff
+cooldown`, `on upgrade cooldown`, `in hot retry window`, `waiting on
+post-release grace`, `already in download queue`, and the two
+`tag filter` skip reasons. Each
 `(instance, item, reason)` triple writes at most one `search_log` row
 per search pass every 24 hours on scheduled cycles. `Run now` always
 writes its rows, and the window is held in memory, so a restart starts

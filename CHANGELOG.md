@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- anyio moves to 4.15.1, past an advisory where a TLS certificate could be accepted for a host name it was not issued for. (#795)
+
 ### Fixed
 
 - Season, artist, and author modes no longer re-search a parent every cycle when a clock difference leaves a wanted item reading as `not yet released`. (#782)

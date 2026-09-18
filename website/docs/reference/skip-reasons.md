@@ -179,9 +179,7 @@ hundreds of items share the same cooldown, the same hot-retry interval
 throttle, or the same tag-filter outcome.
 
 The other reasons in the table above write a row every cycle they
-apply, except that in season, artist, and author mode a release-timing
-row is left out when another item of the same parent got past the same
-check on that cycle.
+apply.
 
 ## Why skips are normal
 

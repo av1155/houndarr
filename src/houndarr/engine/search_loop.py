@@ -420,6 +420,56 @@ class _QueuedSkips:
             )
 
 
+@dataclass(slots=True)
+class _ReleaseGateSkips:
+    """Per-pass handling of the rows the release gate writes.
+
+    An item-level candidate gets its skip row immediately.  A
+    season/artist/author candidate's row carries the parent's synthetic
+    id, so it reads as the parent's own release state; it waits for
+    :meth:`flush` and is dropped when a sibling went on to represent
+    that parent.
+
+    ``post-release grace`` rows are written either way.  One proves its
+    record was already released, which is what arms the parent's
+    release-timing retry once the window elapses, and the bound in
+    :func:`_is_group_grace_unresolved` keeps that from repeating.  A
+    ``not yet released`` row carries no such proof: in a context mode
+    it only appears while this host's clock trails the *arr's, since
+    the apps that have those modes keep unreleased records out of
+    ``wanted/missing``.
+    """
+
+    search_kind: SearchKind | str
+    cycle_id: str
+    cycle_trigger: CycleTrigger | str
+    deferred: list[tuple[tuple[int, int], SearchCandidate, ItemRef]] = field(default_factory=list)
+
+    async def skip(self, candidate: SearchCandidate, ref: ItemRef, *, is_grace: bool) -> None:
+        """Log the gate's skip, or hold it back for a sibling to settle."""
+        if candidate.group_key is None or is_grace:
+            await self._log(candidate, ref)
+            return
+        self.deferred.append((candidate.group_key, candidate, ref))
+
+    async def flush(self, seen_group_keys: set[tuple[int, int]]) -> None:
+        """Write the held rows for the parents no sibling represented."""
+        for group_key, candidate, ref in self.deferred:
+            if group_key not in seen_group_keys:
+                await self._log(candidate, ref)
+
+    async def _log(self, candidate: SearchCandidate, ref: ItemRef) -> None:
+        await _write_item_log(
+            ref,
+            SearchAction.skipped.value,
+            search_kind=self.search_kind,
+            cycle_id=self.cycle_id,
+            cycle_trigger=self.cycle_trigger,
+            item_label=candidate.label,
+            reason=candidate.unreleased_reason,
+        )
+
+
 def _format_hourly_limit_reason(kind: SearchKind | str, cap: int) -> str:
     """Return the skip-reason string for a cap-exhausted pass.
 
@@ -913,6 +963,11 @@ async def _run_search_pass(
         cycle_id=cycle_id,
         cycle_trigger=cycle_trigger,
     )
+    release_skips = _ReleaseGateSkips(
+        search_kind=search_kind,
+        cycle_id=cycle_id,
+        cycle_trigger=cycle_trigger,
+    )
     searched = 0
     scanned = 0
     page = max(1, start_page)
@@ -1031,15 +1086,7 @@ async def _run_search_pass(
             if candidate.unreleased_reason is not None:
                 is_grace = candidate.unreleased_reason.startswith("post-release grace")
                 if not (is_grace and cycle_trigger == "run_now"):
-                    await _write_item_log(
-                        ref,
-                        SearchAction.skipped.value,
-                        search_kind=search_kind,
-                        cycle_id=cycle_id,
-                        cycle_trigger=cycle_trigger,
-                        item_label=candidate.label,
-                        reason=candidate.unreleased_reason,
-                    )
+                    await release_skips.skip(candidate, ref, is_grace=is_grace)
                     continue
 
             # Context-mode dedup happens after release-timing checks so a later
@@ -1256,6 +1303,7 @@ async def _run_search_pass(
                 page += 1
 
     await queued_skips.flush(seen_group_keys)
+    await release_skips.flush(seen_group_keys)
     return searched, page
 
 

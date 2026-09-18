@@ -35,6 +35,12 @@ overrides:
   # Transitive via @docusaurus/core > webpack > schema-utils > ajv.
   # Held to the 3.x line expected by ajv.
   fast-uri: ">=3.1.6 <4"
+  # image-size <=2.0.2 carries two infinite-loop DoS advisories, both
+  # fixed in 2.0.3: GHSA-w3rx-r6r6-pgpr (ICNS parser) and
+  # GHSA-5p2g-fcmc-qvqq (JXL and HEIF parsers). Transitive via
+  # @docusaurus/core > @docusaurus/mdx-loader; runs only while the
+  # docs site builds.
+  image-size: ">=2.0.3"
   # mermaid <11.16.1 carries five advisories, all fixed in 11.16.1:
   # GHSA-3rrr-jr9j-h3q3 (prototype pollution through Architecture
   # diagrams), GHSA-rhh3-jpg6-66xh (DoS via radar diagrams),

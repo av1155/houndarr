@@ -471,7 +471,7 @@ class TestLogRowsRender:
         assert (
             'all <span class="cycle__summary-reason">waiting on post-release grace</span>' in html
         )
-        assert "has not left its grace window" in html
+        assert "may still be inside its grace window" in html
         assert "other" not in html
 
     def test_skip_only_summary_all_already_downloading(self, render) -> None:

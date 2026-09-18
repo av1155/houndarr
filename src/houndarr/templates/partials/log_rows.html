@@ -45,7 +45,7 @@
 {%- elif ns.total > 0 and ns.hot_retry == ns.total -%}
 <strong>{{ instance_name }}</strong> checked <strong>{{ ns.total }}</strong> {{ _item }}: all <span class="cycle__summary-reason">inside hot retry window</span>. Waiting for the retry interval.
 {%- elif ns.total > 0 and ns.grace_hold == ns.total -%}
-<strong>{{ instance_name }}</strong> checked <strong>{{ ns.total }}</strong> {{ _item }}: all <span class="cycle__summary-reason">waiting on post-release grace</span>. A wanted item has not left its grace window.
+<strong>{{ instance_name }}</strong> checked <strong>{{ ns.total }}</strong> {{ _item }}: all <span class="cycle__summary-reason">waiting on post-release grace</span>. A wanted item may still be inside its grace window.
 {%- elif ns.total > 0 and ns.capped == ns.total -%}
 <strong>{{ instance_name }}</strong> hit the <span class="cycle__summary-reason">hourly limit</span>. Cycle paused; will resume next hour.
 {%- elif ns.total > 0 and ns.queued == ns.total -%}

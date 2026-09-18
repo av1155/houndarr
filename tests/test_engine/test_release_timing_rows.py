@@ -866,6 +866,40 @@ async def test_a_held_parent_names_the_wait_instead_of_its_cooldown(
 
 @pytest.mark.asyncio()
 @respx.mock
+async def test_the_wait_is_not_muted_by_the_parents_own_cooldown_row(
+    seeded_instances: None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The wait needs a log throttle of its own, not the cooldown's.
+
+    Driven the way a real instance reaches the wait.  The cycle after
+    the search has nothing to hold yet, because the sibling's grace row
+    lands later in that same pass, so it writes the ordinary cooldown
+    row and claims that throttle key.  Sharing the key would suppress
+    the first genuinely held cycle for a day and leave the parent
+    sitting on a stale cooldown row, which is the whole of #783.
+    """
+    _freeze_now(monkeypatch)
+    aired = _episode(101, _NOW - timedelta(days=30), 1)
+    in_grace = _episode(102, _NOW - timedelta(hours=1), 2)
+    _mock_season_pages([aired, in_grace])
+    inst = _sonarr(sonarr_search_mode=SonarrSearchMode.season_context)
+
+    for _ in range(3):
+        await run_instance_search(inst, MASTER_KEY)
+
+    parent = _season_item_id(55, 1)
+    reasons = [
+        r["reason"]
+        for r in await get_log_rows()
+        if r["action"] == "skipped" and r["item_id"] == parent
+    ]
+    assert "on cooldown (7d)" in reasons
+    assert "waiting on post-release grace (6h)" in reasons
+
+
+@pytest.mark.asyncio()
+@respx.mock
 async def test_the_wait_names_the_current_grace_setting(
     seeded_instances: None,
     monkeypatch: pytest.MonkeyPatch,
@@ -923,10 +957,17 @@ async def test_the_wait_still_ends_once_the_window_has_passed(
     seeded_instances: None,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Held cycles do not postpone the search the wait is pacing.
+    """A hold row must not outrank the grace row that arms the retry.
 
-    That the hold rows themselves stay outside the lookup the wait is
-    derived from is pinned directly against the query, in
+    ``fetch_latest_missing_reason`` returns the newest row it accepts,
+    and the hold reason is not one it accepts.  Were it, it would
+    outrank the grace row and read as "not a release-timing block", so
+    the parent would lose the retry entirely rather than wait for it.
+
+    The other half of the trap, that a hold row must not feed the wait's
+    own bound, cannot be driven from here: the log throttle reads an
+    unpatched clock, so only one hold row lands however far the frozen
+    clock moves.  It is pinned against the query instead, in
     ``test_search_log.test_the_group_hold_row_does_not_feed_the_wait_it_records``.
     """
     from houndarr.services.cooldown import record_search

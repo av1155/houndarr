@@ -1247,7 +1247,12 @@ async def _run_search_pass(
                             search_kind,
                             "grace_hold",
                         )
-                        if cycle_trigger == "run_now" or await should_log_skip(skip_key):
+                        # Its own bucket, not the cooldown's: the cycle before
+                        # the wait begins writes the cooldown row and would
+                        # otherwise mute the first held cycle for a day.  No
+                        # run_now arm here, unlike the gates around it, since
+                        # the wait above never applies to a manual run.
+                        if await should_log_skip(skip_key):
                             logger.debug(
                                 "[%s] %s%s: %s",
                                 instance.core.name,

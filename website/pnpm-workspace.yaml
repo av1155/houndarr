@@ -97,10 +97,16 @@ overrides:
   # an unintended backend. Transitive via @docusaurus/core >
   # webpack-dev-server; only active during `pnpm start`.
   http-proxy-middleware: ">=2.0.10 <3"
-  # GHSA-q7cg-457f-vx79: joi <17.13.4 throws an uncaught RangeError on
-  # deeply nested input through recursive link() schemas. Transitive
-  # via @docusaurus/core > @docusaurus/utils > @docusaurus/types.
-  joi: ">=17.13.4 <18"
+  # joi <17.13.6 carries two prototype-pollution advisories:
+  # GHSA-gg4h-3hg2-grpc (CVE-2026-84367, object().rename() with a
+  # template target setting the validated object's prototype, fixed in
+  # 17.13.5) and GHSA-6w3j-5fw6-r9vr (CVE-2026-84368, a __proto__
+  # language key in custom messages, fixed in 17.13.6). Supersedes the
+  # earlier >=17.13.4 floor for GHSA-q7cg-457f-vx79 (uncaught
+  # RangeError on deeply nested input through recursive link()
+  # schemas). Transitive via @docusaurus/core > @docusaurus/utils >
+  # @docusaurus/types.
+  joi: ">=17.13.6 <18"
   # CVE-2026-84375: js-yaml denial of service in YAML parsing, fixed in
   # 3.15.2 and 4.3.2; supersedes the earlier >=3.15.1 and >=4.3.1
   # floors for CVE-2026-59870 (GHSA-5p4m-2wfm-xmqj, quadratic CPU
@@ -121,11 +127,16 @@ overrides:
   # the 3.x line that postcss 8 declares; the other fix, 5.1.6, is
   # ESM-only. Transitive via @docusaurus/core > postcss.
   nanoid: ">=3.3.17 <4"
-  # GHSA-q8mj-m7cp-5q26: qs 6.11.1..=6.15.1 crashes with a TypeError
-  # (DoS) on null/undefined entries in comma-format arrays when
-  # encodeValuesOnly is set. Transitive via @docusaurus/core >
-  # webpack-dev-server > express > body-parser.
-  qs: ">=6.15.2 <7"
+  # qs <6.16.0 carries two advisories, both fixed in 6.16.0:
+  # GHSA-4mjr-xmp4-gh2g (CVE-2026-82417, DoS through an
+  # attacker-controlled isBuffer reached from stringify) and
+  # GHSA-x5fp-wj9c-mxmx (CVE-2026-82562, the array limit bypassed by
+  # comma parsing of bracket keys). Supersedes the earlier >=6.15.2
+  # floor for GHSA-q8mj-m7cp-5q26 (TypeError DoS on null/undefined
+  # entries in comma-format arrays when encodeValuesOnly is set).
+  # Transitive via @docusaurus/core > webpack-dev-server > express >
+  # body-parser; only active during `pnpm start`.
+  qs: ">=6.16.0 <7"
   # GHSA-v422-hmwv-36x6: body-parser <1.20.6 silently disables size
   # enforcement when the `limit` option parses to an invalid value,
   # allowing an unbounded-body DoS. Transitive via @docusaurus/core >
@@ -167,6 +178,11 @@ overrides:
   # @svgr/webpack and cssnano > postcss-svgo. Held to the 3.x line
   # declared by both consumers.
   svgo: ">=3.3.5 <4"
+  # GHSA-2wm5-q62r-hmrv (CVE-2026-85062): colord <2.9.4 rejects
+  # oversized malformed colour strings slowly enough to be a DoS.
+  # Transitive via @docusaurus/core > cssnano > postcss-colormin and
+  # postcss-minify-gradients; only used at build time to minify CSS.
+  colord: ">=2.9.4"
 
 # pnpm 11 replaces `onlyBuiltDependencies` with an explicit allow-map.
 # Each entry permits the named package's install scripts to run;

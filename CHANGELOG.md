@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Radarr missing and cutoff searches walk the wanted list oldest-first again; Radarr discarded the sort key Houndarr sent and ordered by title instead. (#785)
+- Radarr search cycles no longer abort with a 500 on 5.6.0 through 5.10.3, where that sort key was a SQL error on both wanted endpoints. (#785)
 - Whisparr v2 search cycles no longer abort with a 500 on versions below 2.2.0, where the wanted request sorted by a column the episode table lacks. (#780)
 - Dashboard counts for a Whisparr v2 instance below 2.2.0 refresh again instead of holding their last-known values. (#780)
 - Season, artist, and author modes no longer re-search a parent every cycle while one of its wanted items sits inside `post-release grace (Nh)`. (#770)

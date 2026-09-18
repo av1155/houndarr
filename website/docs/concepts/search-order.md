@@ -34,8 +34,8 @@ resumes from a sane position.
 Walks the wanted list oldest-first, paged against the persisted
 offset (`missing_page_offset`, `cutoff_page_offset`). Deterministic
 and easy to reason about: you can predict which items come up next.
-The trade-off is that same-day releases cluster visibly because the
-*arr API falls back to title order within equal dates.
+The trade-off is that same-day releases cluster together, in no
+particular order within the day.
 
 Pick Chronological when you want predictable coverage for
 debugging, or when you rotate through a relatively small wanted

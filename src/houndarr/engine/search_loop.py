@@ -427,10 +427,12 @@ class _ReleaseGateSkips:
     An item-level candidate gets its skip row immediately.  A
     season/artist/author candidate's row carries the parent's synthetic
     id, so it reads as the parent's own release state; it waits for
-    :meth:`flush` and is dropped when another record of that parent
-    cleared the same gate on this pass, whatever became of that record
-    afterwards.  A parent no record cleared the gate for still gets its
-    row, which is the one that arms its retry once a record releases.
+    :meth:`flush` and is dropped when another record of that parent got
+    past the same gate on this pass, whatever became of that record
+    afterwards, and including a record ``run_now`` waved through its
+    grace window.  A parent no record got past the gate for still gets
+    its row, which is the one that arms its retry once a record
+    releases.
 
     ``post-release grace`` rows are written either way.  One proves its
     record was already released, which is what arms the parent's

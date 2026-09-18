@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- Season, artist, and author modes no longer re-search a parent every cycle when a wanted item reads as `not yet released` because this host's clock trails the \*arr's. (#782)
+- Season, artist, and author modes no longer re-search a parent every cycle when a clock difference leaves a wanted item reading as `not yet released`. (#782)
 - A failed download queue check logs a `download queue check (fetch failed)` row on the Logs page instead of only a container warning. (#769)
 - A timed-out \*arr request names the timeout in the log instead of stopping at the colon, so a hung instance reads differently from a refused one. (#771)
 - The update check names the timeout when github.com does not answer, instead of logging an empty pair of brackets. (#771)

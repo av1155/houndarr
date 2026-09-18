@@ -778,17 +778,18 @@ async def test_episode_mode_logs_a_blocked_record_straight_away(
 
 @pytest.mark.asyncio()
 @respx.mock
-async def test_run_now_still_gates_a_record_this_host_reads_as_unreleased(
+async def test_run_now_drops_a_held_row_for_a_season_it_searched(
     seeded_instances: None,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A manual run searches the season on its released record and nothing else.
+    """A manual run holds and drops the row the same way a scheduled one does.
 
-    Run now bypasses grace at the gate but never the pre-release check,
-    so the blocked record is still held back; its row is dropped because
-    another record of the season cleared the gate on this cycle.  The
-    blocked record comes first so the gate reaches it before the batch
-    fills on the released one.
+    The blocked record comes first so the gate reaches it before the
+    batch fills on the released one.  That the pre-release check still
+    applies under run now is pinned by
+    ``test_release_timing.test_run_now_does_not_bypass_unreleased``; in
+    season mode both records would dispatch the same season search, so
+    this case cannot see that on its own.
     """
     _freeze_now(monkeypatch)
     still_future_here = _episode(101, _NOW + timedelta(minutes=5), 1)

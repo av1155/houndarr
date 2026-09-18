@@ -789,18 +789,20 @@ async def test_run_now_drops_a_held_row_for_a_season_it_searched(
 ) -> None:
     """A manual run holds and drops the row the same way a scheduled one does.
 
-    The blocked record comes first so the gate reaches it before the
-    batch fills on the released one.  That the pre-release check still
-    applies under run now is pinned by
+    The records sit in the order a wanted page really returns them:
+    ``sortDirection=ascending`` puts the future-dated one last.  A batch
+    of two is what carries the pass past the dispatch so the gate still
+    reaches the blocked record and defers its row.  That the pre-release
+    check still applies under run now is pinned by
     ``test_release_timing.test_run_now_does_not_bypass_unreleased``; in
     season mode both records would dispatch the same season search, so
     this case cannot see that on its own.
     """
     _freeze_now(monkeypatch)
-    still_future_here = _episode(101, _NOW + timedelta(minutes=5), 1)
     aired = _episode(102, _NOW - timedelta(days=30), 2)
-    search_route = _mock_season_pages([still_future_here, aired])
-    inst = _sonarr(sonarr_search_mode=SonarrSearchMode.season_context)
+    still_future_here = _episode(101, _NOW + timedelta(minutes=5), 1)
+    search_route = _mock_season_pages([aired, still_future_here])
+    inst = _sonarr(sonarr_search_mode=SonarrSearchMode.season_context, batch_size=2)
 
     await run_instance_search(inst, MASTER_KEY, cycle_trigger=CycleTrigger.run_now)
 
@@ -819,14 +821,16 @@ async def test_a_downloading_record_still_counts_as_clearing_the_gate(
 
     The released record clears the release gate and then hands the group
     slot back because it is already downloading, so a held row keyed on
-    that slot would land again and re-arm the season.
+    that slot would land again and re-arm the season.  It comes first
+    because ``sortDirection=ascending`` puts the future-dated record
+    last on any real wanted page.
     """
     from tests.conftest import serve_download_queue
 
     _freeze_now(monkeypatch)
-    still_future_here = _episode(101, _NOW + timedelta(minutes=5), 1)
     downloading = _episode(102, _NOW - timedelta(days=30), 2)
-    search_route = _mock_season_pages([still_future_here, downloading])
+    still_future_here = _episode(101, _NOW + timedelta(minutes=5), 1)
+    search_route = _mock_season_pages([downloading, still_future_here])
     serve_download_queue([{"id": 900102, "episodeId": 102}])
     inst = _sonarr(sonarr_search_mode=SonarrSearchMode.season_context)
 

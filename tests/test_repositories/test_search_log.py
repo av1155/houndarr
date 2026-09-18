@@ -18,6 +18,18 @@ import pytest
 import pytest_asyncio
 
 from houndarr.database import get_db
+
+# Module level rather than this file's usual function-local engine import:
+# the parametrised sweep below builds its reasons at collection time.
+from houndarr.engine.search_loop import (
+    _QUEUE_FETCH_FAILED_REASON,
+    _QUEUED_REASON,
+    _TAG_FILTER_EXCLUDE_REASON,
+    _TAG_FILTER_INCLUDE_REASON,
+    _format_group_hold_reason,
+    _format_hot_retry_reason,
+    _format_hourly_limit_reason,
+)
 from houndarr.repositories import search_log as repo
 
 
@@ -1140,8 +1152,6 @@ async def test_the_group_hold_row_does_not_feed_the_wait_it_records(
     were caught, every held cycle would push the wait's bound out and
     the parent would never take its retry (#783).
     """
-    from houndarr.engine.search_loop import _format_group_hold_reason
-
     # Built the way the engine builds it, so renaming the reason into the
     # pattern's reach fails here rather than silently reviving the loop.
     hold = _format_group_hold_reason(6)
@@ -1155,3 +1165,52 @@ async def test_the_group_hold_row_does_not_feed_the_wait_it_records(
     assert await repo.fetch_last_missing_grace_skip_since_dispatch(1, 21, "episode") is None
     assert await repo.fetch_latest_missing_grace_skip(1, 21, "episode") is None
     assert await repo.fetch_latest_missing_reason(1, 21, "episode") is None
+
+
+@pytest.mark.parametrize(
+    ("reason", "anchors_the_wait"),
+    [
+        pytest.param(_QUEUED_REASON, False, id="download-queue"),
+        pytest.param(_QUEUE_FETCH_FAILED_REASON, False, id="queue-fetch-failed"),
+        pytest.param(_TAG_FILTER_INCLUDE_REASON, False, id="tag-filter-include"),
+        pytest.param(_TAG_FILTER_EXCLUDE_REASON, False, id="tag-filter-exclude"),
+        pytest.param(_format_group_hold_reason(6), False, id="group-hold"),
+        pytest.param(_format_hot_retry_reason(24), False, id="hot-retry"),
+        pytest.param(_format_hourly_limit_reason("missing", 5), False, id="missing-cap"),
+        pytest.param(_format_hourly_limit_reason("cutoff", 5), False, id="cutoff-cap"),
+        pytest.param(_format_hourly_limit_reason("upgrade", 5), False, id="upgrade-cap"),
+        pytest.param("on cooldown (7d)", False, id="missing-cooldown"),
+        pytest.param("on cutoff cooldown (21d)", False, id="cutoff-cooldown"),
+        pytest.param("on upgrade cooldown (90d)", False, id="upgrade-cooldown"),
+        pytest.param("outside allowed time window", False, id="time-window"),
+        pytest.param("post-release grace (6h)", True, id="release-grace-control"),
+    ],
+)
+@pytest.mark.asyncio()
+async def test_only_the_release_grace_reason_reaches_the_three_anchored_grace_queries(
+    seeded_instances: None,
+    reason: str,
+    anchors_the_wait: bool,
+) -> None:
+    """Only the adapters' own grace reason matches ``post-release grace%`` anchored.
+
+    Every other reason the engine writes is swept here, built the way the
+    engine builds it, so renaming one into the pattern's reach fails on
+    behaviour rather than silently re-arming a retry (#783).
+    """
+    await _seed_rows([("skipped", reason, "2026-05-22T09:00:00.000Z")])
+    # Without this the thirteen None expectations would also hold on an empty table.
+    assert await _count_logs() == 1
+
+    since = await repo.fetch_last_missing_grace_skip_since_dispatch(1, 21, "episode")
+    latest = await repo.fetch_latest_missing_grace_skip(1, 21, "episode")
+    retry = await repo.fetch_latest_missing_reason(1, 21, "episode")
+
+    if anchors_the_wait:
+        assert since == "2026-05-22T09:00:00.000Z"
+        assert latest == (reason, "2026-05-22T09:00:00.000Z")
+        assert retry == reason
+    else:
+        assert since is None
+        assert latest is None
+        assert retry is None

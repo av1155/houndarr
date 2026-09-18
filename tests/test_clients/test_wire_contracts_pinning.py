@@ -92,7 +92,9 @@ class TestRadarrWireContract:
         async with RadarrClient(url="http://radarr:7878", api_key="k") as client:
             await client.get_missing(page=1, page_size=10)
         params = route.calls[0].request.url.params
-        assert params["sortKey"] == "inCinemas"
+        # Not bare "inCinemas": that column lives on the joined MovieMetadata
+        # table, so Radarr answers 500 before 5.10.4 and sorts by title after.
+        assert params["sortKey"] == "movieMetadata.inCinemas"
         assert params["sortDirection"] == "ascending"
         assert params["monitored"] == "true"
         assert "includeSeries" not in params  # Radarr has no series concept
@@ -107,6 +109,9 @@ class TestRadarrWireContract:
             await client.get_cutoff_unmet(page=1, page_size=10)
         params = route.calls[0].request.url.params
         assert params["monitored"] == "true"
+        # Radarr is the only client that sorts on the cutoff pass, so this
+        # endpoint carries the same 500 risk the missing one does.
+        assert params["sortKey"] == "movieMetadata.inCinemas"
 
     @pytest.mark.asyncio()
     @respx.mock
@@ -118,6 +123,7 @@ class TestRadarrWireContract:
             total = await client.get_wanted_total("cutoff")
         params = route.calls[0].request.url.params
         assert params["pageSize"] == "1"
+        assert params["sortKey"] == "movieMetadata.inCinemas"
         assert total == 42
 
 

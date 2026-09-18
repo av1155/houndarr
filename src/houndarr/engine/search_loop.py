@@ -568,8 +568,10 @@ async def _latest_missing_grace_skip_ref(ref: ItemRef) -> tuple[str, str] | None
 async def _is_group_grace_unresolved(ref: ItemRef, grace_hrs: int) -> bool:
     """Return whether a grace window logged under *ref* can still be open.
 
-    Only meaningful in season, artist, and author modes.  There every
-    wanted record logs under its parent's synthetic id, and the release
+    Only meaningful in season, artist, and author modes.  There a
+    wanted record that has a parent logs under the parent's synthetic
+    id (season 0, and records the *arr gave no parent, keep their own),
+    and the release
     gate writes its skip before group dedup, so a record the gate is
     still blocking re-arms the parent's retry on every cycle while a
     released sibling drives the search.
@@ -591,7 +593,7 @@ async def _is_group_grace_unresolved(ref: ItemRef, grace_hrs: int) -> bool:
     the parent is not searched while a window it has logged could still
     be open: the retry lands up to one window after the grace expires,
     and a parent whose records keep entering grace closer than about
-    two windows apart falls back to its ordinary cooldown.
+    two windows apart can fall back to its ordinary cooldown.
 
     Args:
         ref: The parent the retry would search.

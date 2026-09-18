@@ -66,14 +66,16 @@ out its own grace. `Run Now` searches anyway. Season 0 specials, and
 items whose parent the \*arr did not report, are searched on their own
 id and never wait on a parent.
 
-Each item in grace logs a row every cycle until it leaves the window,
-so the wait ends about one grace window after the last item cleared.
-A parent whose items keep entering grace closer than about two grace
-windows apart never reaches the end of it, and takes no early retry at all
-until that run stops. A daily show with `Post-Release Grace (hrs)` at
-`18` is already in that state. While a wait is running, a `Hot Retry
-Window (hrs)` shorter than `Post-Release Grace (hrs)` closes before
-the wait ends, so set it longer if you want hot retries to land.
+Each item in grace logs a row on every cycle that reaches it, so the
+wait ends about one grace window after the last such row. A parent
+whose items keep entering grace closer than about two grace windows
+apart can stop taking the early retry altogether and fall back to its
+ordinary cooldown; a daily show with `Post-Release Grace (hrs)` at
+`18` sits in that range. A cycle reaches any one item less often on a
+large library, which shortens the wait. While a wait is running, a
+`Hot Retry Window (hrs)` shorter than `Post-Release Grace (hrs)`
+closes before the wait ends, so set it longer if you want hot retries
+to land.
 
 Cutoff and upgrade passes do not use this early retry. They always
 wait for their full cooldown.

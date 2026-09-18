@@ -345,11 +345,11 @@ async def fetch_last_missing_grace_skip_since_dispatch(
     parent's synthetic id and a sibling still inside its grace window
     would otherwise re-arm the parent's retry on every cycle.
 
-    The bound stops moving once the rows stop landing.  Rows land
-    every cycle a record is in its window, so the bound sits about one
-    window past the last record to clear: a parent whose records keep
-    entering grace closer than about two windows apart therefore never
-    takes an early retry, and waits for its ordinary cooldown instead.
+    The bound stops moving once the rows stop landing.  Rows land on
+    the cycles that reach the record, so the bound sits about one
+    window past the last such row: a parent whose records keep entering
+    grace closer than about two windows apart can stop taking an early
+    retry altogether, and wait for its ordinary cooldown instead.
 
     Args:
         instance_id: Owning instance primary key.

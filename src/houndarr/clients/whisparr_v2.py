@@ -55,10 +55,12 @@ class MissingWhisparrV2Episode:
 class WhisparrV2Client(ArrClient):
     """Async client for the Whisparr v2 REST API."""
 
-    # Whisparr v2 is Sonarr-shaped on the v3 API surface; sortKey is
-    # ``releaseDate`` (Sonarr uses ``airDateUtc``) and episodes embed a
-    # ``series`` parent like Sonarr does.
-    _WANTED_SORT_KEY: ClassVar[str] = "releaseDate"
+    # Whisparr v2 is Sonarr-shaped on the v3 API surface, down to the sort
+    # column: records carry a ``releaseDate`` field, but the episode table
+    # has no such column, so sorting by it is a SQL error before 2.2.0 and
+    # ignored from 2.2.0 on.  Episodes embed a ``series`` parent like
+    # Sonarr does.
+    _WANTED_SORT_KEY: ClassVar[str] = "airDateUtc"
     _WANTED_INCLUDE_PARAM: ClassVar[str | None] = "includeSeries"
     # See SonarrClient for the rationale on dropping the per-subclass
     # ``ClassVar`` re-annotation.

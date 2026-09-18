@@ -96,7 +96,9 @@ async def test_get_missing_returns_episodes(client: WhisparrV2Client) -> None:
     request = route.calls[0].request
     assert request.url.params["monitored"] == "true"
     assert request.url.params["includeSeries"] == "true"
-    assert request.url.params["sortKey"] == "releaseDate"
+    # Not "releaseDate": the episode table has no such column, so Whisparr v2
+    # answers 500 with a SQL error before 2.2.0.
+    assert request.url.params["sortKey"] == "airDateUtc"
     assert request.url.params["sortDirection"] == "ascending"
 
 

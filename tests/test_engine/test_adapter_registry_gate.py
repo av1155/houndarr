@@ -128,7 +128,7 @@ class TestPaginatedClientHooks:
             (RadarrClient, "/api/v3/wanted", "inCinemas", None),
             (LidarrClient, "/api/v1/wanted", "releaseDate", "includeArtist"),
             (ReadarrClient, "/api/v1/wanted", "releaseDate", "includeAuthor"),
-            (WhisparrV2Client, "/api/v3/wanted", "releaseDate", "includeSeries"),
+            (WhisparrV2Client, "/api/v3/wanted", "airDateUtc", "includeSeries"),
         ],
     )
     def test_wanted_template_hooks(

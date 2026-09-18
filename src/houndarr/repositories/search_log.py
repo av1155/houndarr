@@ -25,6 +25,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from houndarr.database import get_db
+from houndarr.errors import redact_url_credentials
 
 # Columns the fetch query is allowed to filter on.  Declared once so the
 # dynamic WHERE builder in :func:`fetch_log_rows` stays table-driven and
@@ -78,8 +79,13 @@ async def insert_log_row(
         item_label: Human-readable label for the item, or ``None``.
         reason: Structured skip reason for ``action='skipped'`` rows.
         message: Free-form detail for ``action='error'`` / ``'info'``
-            rows.
+            rows.  A ``//user:password@`` credential is masked here
+            rather than at each call site, so a future writer cannot
+            reintroduce the leak; the reconnect rows interpolate
+            ``instance.core.url`` straight into this field.
     """
+    if message is not None:
+        message = redact_url_credentials(message)
     async with get_db() as db:
         await db.execute(
             """

@@ -12,11 +12,23 @@ from __future__ import annotations
 
 import re
 
-# ``httpx`` builds its HTTPStatusError message from ``str(request.url)``,
-# which keeps userinfo verbatim where the URL's ``repr`` redacts it.  An
-# operator fronting an \*arr with basic auth puts that credential in the
-# instance URL, so the password reaches the log unless it is stripped here.
 _URL_CREDENTIAL = re.compile(r"//([^/\s:@]+):[^/\s@]*@")
+
+
+def redact_url_credentials(text: str) -> str:
+    """Return *text* with any ``//user:password@`` password replaced.
+
+    An operator fronting an \\*arr with basic auth puts the credential in
+    the instance URL, and two things then carry it into a log: ``httpx``
+    builds its ``HTTPStatusError`` message from ``str(request.url)``,
+    which keeps userinfo where the URL's ``repr`` redacts it, and the
+    reconnect rows interpolate ``instance.core.url`` directly.
+
+    The username is left alone; only the secret is masked, following
+    httpx's own ``repr`` convention.  Text carrying no such credential
+    is returned byte-identical.
+    """
+    return _URL_CREDENTIAL.sub(r"//\1:[secure]@", text)
 
 
 class HoundarrError(Exception):
@@ -197,9 +209,8 @@ def describe_exception(exc: BaseException) -> str:
     colon, exactly when an operator needs to know whether the \\*arr timed
     out, refused the connection, or answered with something unparseable.
 
-    A credential embedded in a URL is redacted the way httpx's own URL
-    ``repr`` does it, since the message is stored in ``search_log`` and
-    rendered on the Logs page.  Messages carrying no such credential are
-    returned byte-identical.
+    A credential embedded in a URL is redacted, since the message is
+    stored in ``search_log`` and rendered on the Logs page.  Messages
+    carrying no such credential are returned byte-identical.
     """
-    return _URL_CREDENTIAL.sub(r"//\1:[secure]@", str(exc)) or type(exc).__name__
+    return redact_url_credentials(str(exc)) or type(exc).__name__

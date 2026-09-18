@@ -86,6 +86,41 @@ async def test_insert_log_row_full_row_round_trip(seeded_instances: None) -> Non
     assert row["message"] is None
 
 
+@pytest.mark.asyncio()
+async def test_insert_log_row_masks_a_credential_in_the_message(
+    seeded_instances: None,
+) -> None:
+    """The reconnect rows interpolate the instance URL, so the sink has to mask it."""
+    await repo.insert_log_row(
+        instance_id=1,
+        item_id=None,
+        item_type=None,
+        action="error",
+        message="Could not reach http://admin:hunter2@sonarr.lan:8989",
+    )
+
+    stored = (await repo.fetch_log_rows(instance_id=1))[0]["message"]
+    assert "hunter2" not in stored
+    assert stored == "Could not reach http://admin:[secure]@sonarr.lan:8989"
+
+
+@pytest.mark.asyncio()
+async def test_insert_log_row_leaves_a_message_without_a_credential_alone(
+    seeded_instances: None,
+) -> None:
+    """Masking must not rewrite the messages the golden-log test pins."""
+    plain = "Could not reach http://sonarr.lan:8989"
+    await repo.insert_log_row(
+        instance_id=1,
+        item_id=None,
+        item_type=None,
+        action="error",
+        message=plain,
+    )
+
+    assert (await repo.fetch_log_rows(instance_id=1))[0]["message"] == plain
+
+
 @pytest.mark.pinning()
 @pytest.mark.asyncio()
 async def test_insert_log_row_accepts_null_instance(seeded_instances: None) -> None:

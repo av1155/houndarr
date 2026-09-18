@@ -25,6 +25,7 @@ from houndarr.errors import (
     ClientRedirectError,
     ClientTransportError,
     ClientValidationError,
+    describe_exception,
 )
 from houndarr.services.url_validation import is_blocked_address
 
@@ -318,7 +319,8 @@ class ArrClient(ABC):
             ) from exc
         except (httpx.RequestError, httpx.InvalidURL) as exc:
             raise ClientTransportError(
-                f"queue status: transport error reaching {self._QUEUE_STATUS_PATH}: {exc}"
+                f"queue status: transport error reaching {self._QUEUE_STATUS_PATH}: "
+                f"{describe_exception(exc)}"
             ) from exc
 
         try:
@@ -356,7 +358,8 @@ class ArrClient(ABC):
             ) from exc
         except (httpx.RequestError, httpx.InvalidURL) as exc:
             raise ClientTransportError(
-                f"queue details: transport error reaching {self._QUEUE_DETAILS_PATH}: {exc}"
+                f"queue details: transport error reaching {self._QUEUE_DETAILS_PATH}: "
+                f"{describe_exception(exc)}"
             ) from exc
         except ValueError as exc:
             # A non-JSON body (e.g. a proxy login page) must reach the
@@ -408,7 +411,7 @@ class ArrClient(ABC):
             ) from exc
         except (httpx.RequestError, httpx.InvalidURL) as exc:
             raise ClientTransportError(
-                f"get_tags: transport error reaching {self._TAG_PATH}: {exc}"
+                f"get_tags: transport error reaching {self._TAG_PATH}: {describe_exception(exc)}"
             ) from exc
 
         if not isinstance(result, list):
@@ -560,7 +563,7 @@ class ArrClient(ABC):
             ) from exc
         except (httpx.RequestError, httpx.InvalidURL) as exc:
             raise ClientTransportError(
-                f"wanted total: transport error reaching {path}: {exc}"
+                f"wanted total: transport error reaching {path}: {describe_exception(exc)}"
             ) from exc
         except ValidationError as exc:
             raise ClientValidationError(f"wanted total: malformed payload from {path}") from exc

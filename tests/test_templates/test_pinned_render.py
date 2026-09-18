@@ -16,6 +16,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from houndarr.engine.search_loop import _QUEUED_REASON
+
 pytestmark = pytest.mark.pinning
 
 
@@ -246,12 +248,12 @@ class TestLogRowsRender:
                 id="hourly-limit",
             ),
             pytest.param(
-                ["already in download queue", "already in download queue"],
-                "already in download queue",
+                [_QUEUED_REASON, _QUEUED_REASON],
+                _QUEUED_REASON,
                 id="download-queue",
             ),
             pytest.param(
-                ["on cooldown (14d)", "already in download queue"],
+                ["on cooldown (14d)", _QUEUED_REASON],
                 "skipped",
                 id="mixed",
             ),
@@ -422,18 +424,16 @@ class TestLogRowsRender:
         assert "No dispatches needed" in html
 
     def test_skip_only_summary_all_already_downloading(self, render) -> None:
-        rows = self._skip_only_rows(["already in download queue", "already in download queue"])
+        rows = self._skip_only_rows([_QUEUED_REASON, _QUEUED_REASON])
         html = render("partials/log_rows.html", rows=rows, limit=50)
-        assert 'all <span class="cycle__summary-reason">already in download queue</span>' in html
+        assert f'all <span class="cycle__summary-reason">{_QUEUED_REASON}</span>' in html
         assert "<strong>2</strong> items" in html
         assert "other" not in html
 
     def test_skip_only_summary_mixed_with_already_downloading(self, render) -> None:
-        rows = self._skip_only_rows(
-            ["on cooldown (14d)", "on cooldown (14d)", "already in download queue"]
-        )
+        rows = self._skip_only_rows(["on cooldown (14d)", "on cooldown (14d)", _QUEUED_REASON])
         html = render("partials/log_rows.html", rows=rows, limit=50)
-        assert "2 on cooldown, 1 already in download queue" in html
+        assert f"2 on cooldown, 1 {_QUEUED_REASON}" in html
         assert "other" not in html
 
     def test_skip_only_summary_singular_item(self, render) -> None:

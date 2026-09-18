@@ -43,6 +43,7 @@ from houndarr.errors import (
     ClientHTTPError,
     ClientTransportError,
     ClientValidationError,
+    describe_exception,
 )
 
 __all__ = ["LibraryWhisparrV3Movie", "MissingWhisparrV3Movie", "WhisparrV3Client"]
@@ -221,7 +222,7 @@ class WhisparrV3Client(ArrClient):
             ) from exc
         except (httpx.RequestError, httpx.InvalidURL) as exc:
             raise ClientTransportError(
-                f"wanted total: transport error reaching {path}: {exc}"
+                f"wanted total: transport error reaching {path}: {describe_exception(exc)}"
             ) from exc
         except ValidationError as exc:
             raise ClientValidationError(f"wanted total: malformed payload from {path}") from exc

@@ -731,9 +731,13 @@ def _format_group_hold_reason(grace_hrs: int) -> str:
 
     Deliberately not prefixed ``post-release grace``: three queries match
     that prefix anchored (``repositories/search_log.py``), one of them the
-    lookup :func:`_is_group_grace_unresolved` derives the wait from.  A
-    row this reason matched would push that bound out every cycle and the
-    wait would sustain itself.
+    lookup :func:`_is_group_grace_unresolved` derives the wait from, and
+    another the allowlist that decides whether a retry is armed at all.
+
+    A row this reason matched would push that bound out again each time
+    one landed.  The log throttle holds that to one a day, which is
+    enough to sustain the wait for good once the grace window is longer
+    than the throttle, and a restart clears the throttle either way.
     """
     return f"waiting on post-release grace ({grace_hrs}h)"
 
@@ -1252,14 +1256,17 @@ async def _run_search_pass(
                         # otherwise mute the first held cycle for a day.  No
                         # run_now arm here, unlike the gates around it, since
                         # the wait above never applies to a manual run.
+                        # Debug stays outside the throttle: it is what an
+                        # operator turns up to ask why a season is not
+                        # searching, and the answer is wanted every cycle.
+                        logger.debug(
+                            "[%s] %s%s: %s",
+                            instance.core.name,
+                            log_prefix,
+                            candidate.item_id,
+                            reason,
+                        )
                         if await should_log_skip(skip_key):
-                            logger.debug(
-                                "[%s] %s%s: %s",
-                                instance.core.name,
-                                log_prefix,
-                                candidate.item_id,
-                                reason,
-                            )
                             await _write_item_log(
                                 ref,
                                 SearchAction.skipped.value,

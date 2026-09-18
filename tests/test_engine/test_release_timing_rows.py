@@ -859,9 +859,19 @@ async def test_a_held_parent_names_the_wait_instead_of_its_cooldown(
 
     assert await run_instance_search(inst, MASTER_KEY) == 0
 
-    reasons = [r["reason"] for r in await get_log_rows() if r["action"] == "skipped"]
+    rows = await get_log_rows()
+    reasons = [r["reason"] for r in rows if r["action"] == "skipped"]
     assert "waiting on post-release grace (6h)" in reasons
     assert not any(r is not None and r.startswith("on cooldown") for r in reasons)
+
+    # The row has to reach the operator the way every other skip does: inside
+    # the cycle's card, and not behind the Logs page's Hide system switch.
+    held = next(r for r in rows if r["reason"] == "waiting on post-release grace (6h)")
+    assert held["cycle_trigger"] == "scheduled"
+    assert held["cycle_id"]
+    assert held["search_kind"] == "missing"
+    assert held["item_id"] == parent
+    assert held["item_label"]
 
 
 @pytest.mark.asyncio()
@@ -895,6 +905,54 @@ async def test_the_wait_is_not_muted_by_the_parents_own_cooldown_row(
         if r["action"] == "skipped" and r["item_id"] == parent
     ]
     assert "on cooldown (7d)" in reasons
+    assert "waiting on post-release grace (6h)" in reasons
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_the_wait_is_not_muted_by_the_parents_own_hot_retry_row(
+    seeded_instances: None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The other row a held parent can write first must not mute it either.
+
+    With the hot retry window on, the parent writes
+    ``in hot retry window (Nh)`` while its interval is unelapsed, and is
+    held once the interval passes but the sibling's grace has not.  Both
+    land for the same parent inside one throttle window, so the wait
+    needs a key of its own against that row too, not only the cooldown's.
+    """
+    _freeze_now(monkeypatch)
+    aired = _episode(101, _NOW - timedelta(days=30), 1)
+    in_grace = _episode(102, _NOW - timedelta(hours=1), 2)
+    _mock_season_pages([aired, in_grace])
+    inst = _sonarr(
+        sonarr_search_mode=SonarrSearchMode.season_context,
+        missing_hot_retry_window_hrs=24,
+        missing_hot_retry_interval_hrs=2,
+    )
+
+    # Search, then the cycle that first logs the sibling's grace row.
+    await run_instance_search(inst, MASTER_KEY)
+    await run_instance_search(inst, MASTER_KEY)
+
+    # Anchored on that row now, but inside the retry interval.
+    _freeze_now(monkeypatch, _NOW + timedelta(hours=1))
+    _mock_season_pages([aired, in_grace])
+    assert await run_instance_search(inst, MASTER_KEY) == 0
+
+    # Interval elapsed, so the wait is what holds it back.
+    _freeze_now(monkeypatch, _NOW + timedelta(hours=3))
+    _mock_season_pages([aired, in_grace])
+    assert await run_instance_search(inst, MASTER_KEY) == 0
+
+    parent = _season_item_id(55, 1)
+    reasons = [
+        r["reason"]
+        for r in await get_log_rows()
+        if r["action"] == "skipped" and r["item_id"] == parent
+    ]
+    assert "in hot retry window (24h)" in reasons
     assert "waiting on post-release grace (6h)" in reasons
 
 

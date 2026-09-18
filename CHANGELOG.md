@@ -7,10 +7,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Security
-
-- anyio moves to 4.15.1, past an advisory where a TLS certificate could be accepted for a host name it was not issued for. (#795)
-
 ### Fixed
 
 - Season, artist, and author modes no longer re-search a parent every cycle when a clock difference leaves a wanted item reading as `not yet released`. (#782)
@@ -29,6 +25,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Logs page skip-only cycle pills name the cooldown, release-timing, hot-retry, hourly-limit, or download-queue reason, and read `N skipped` otherwise. (#768)
 - Whisparr v3 availability skips count as not yet released on the Logs page instead of falling into `other`. (#768)
 - Missing, cutoff, and upgrade searches skip items that are already in the \*arr's download queue and log `already in download queue` instead. (#765)
+
+### Security
+
+- anyio moves to 4.15.1, past an advisory where a TLS certificate could be accepted for a host name it was not issued for. (#795)
 
 ---
 

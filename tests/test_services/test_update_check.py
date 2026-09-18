@@ -8,6 +8,7 @@ was made even when the cache window is expired.
 
 from __future__ import annotations
 
+import logging
 from datetime import UTC, datetime, timedelta
 
 import httpx
@@ -219,6 +220,22 @@ async def test_network_error_preserves_cache(db: None) -> None:
 
     assert status.latest_version == "1.9.0"
     assert status.last_error_at is not None
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_a_timeout_is_named_in_the_log(db: None, caplog: pytest.LogCaptureFixture) -> None:
+    """httpx timeouts carry no message, so the warning used to end in '()'."""
+    await uc.set_enabled(True)
+    stale = (datetime.now(tz=UTC) - timedelta(hours=25)).isoformat()
+    await set_setting(uc.KEY_LAST_AT, stale)
+
+    respx.get(_url()).mock(side_effect=httpx.ReadTimeout(""))
+
+    with caplog.at_level(logging.WARNING, logger="houndarr.services.update_check"):
+        await uc.get_update_status(force=False)
+
+    assert "network error reaching github.com (ReadTimeout)" in caplog.text
 
 
 @pytest.mark.asyncio()

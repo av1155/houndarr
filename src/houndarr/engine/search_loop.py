@@ -32,6 +32,7 @@ from houndarr.errors import (
     EngineError,
     EngineOffsetPersistError,
     EnginePoolFetchError,
+    describe_exception,
 )
 from houndarr.services.cooldown import (
     active_cooldown_searched_at_ref,
@@ -47,7 +48,7 @@ from houndarr.services.time_window import (
 )
 from houndarr.value_objects import ItemRef
 
-__all__ = ["_reset_random_deck", "run_instance_search"]
+__all__ = ["_QUEUED_REASON", "_reset_random_deck", "run_instance_search"]
 
 logger = logging.getLogger(__name__)
 
@@ -725,9 +726,11 @@ async def _dispatch_with_typed_wrap(
     subclasses propagate unchanged so richer context from the client
     layer is not flattened.
 
-    The typed error message is ``str(exc)`` verbatim, which keeps
-    the ``search_log.message`` field stable against the golden-log
-    characterisation test.
+    The typed error message is the exception's own text, falling back
+    to its type name when that text is empty (an httpx timeout has
+    none).  Non-empty messages pass through byte-identical, which
+    keeps the ``search_log.message`` field stable against the
+    typed-error pinning tests.
 
     Args:
         adapter: :class:`AppAdapterProto` for the instance.
@@ -746,7 +749,7 @@ async def _dispatch_with_typed_wrap(
     except (EngineError, ClientError):
         raise
     except Exception as exc:
-        raise EngineDispatchError(str(exc)) from exc
+        raise EngineDispatchError(describe_exception(exc)) from exc
 
 
 async def _persist_offset_with_typed_wrap(
@@ -817,7 +820,7 @@ async def _fetch_pool_with_typed_wrap(
     except (EngineError, ClientError):
         raise
     except Exception as exc:
-        raise EnginePoolFetchError(str(exc)) from exc
+        raise EnginePoolFetchError(describe_exception(exc)) from exc
 
 
 # Unified search pass

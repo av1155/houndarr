@@ -16,7 +16,11 @@ from houndarr.database import get_db
 from houndarr.engine.adapters.lidarr import _artist_item_id
 from houndarr.engine.adapters.sonarr import _season_item_id
 from houndarr.engine.candidates import SearchCandidate
-from houndarr.engine.search_loop import _download_queue_lookup, run_instance_search
+from houndarr.engine.search_loop import (
+    _QUEUED_REASON,
+    _download_queue_lookup,
+    run_instance_search,
+)
 from houndarr.services.cooldown import record_search
 from houndarr.services.instances import (
     InstanceType,
@@ -46,7 +50,6 @@ from .conftest import (
     seed_release_timing_retry,
 )
 
-_QUEUED_REASON = "already in download queue"
 _EMPTY_PAGE: dict[str, Any] = {"page": 1, "pageSize": 10, "totalRecords": 0, "records": []}
 
 

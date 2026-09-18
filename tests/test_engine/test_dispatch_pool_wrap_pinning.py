@@ -168,6 +168,19 @@ class TestDispatchTypedWrap:
         assert result is None
         dispatch_fn.assert_awaited_once()
 
+    @pytest.mark.asyncio()
+    async def test_a_timeout_names_itself(self) -> None:
+        """httpx timeouts carry no message, so the error row would be blank."""
+        adapter = _adapter_with_fake_client()
+        dispatch_fn = AsyncMock(side_effect=httpx.ReadTimeout(""))
+
+        with pytest.raises(EngineDispatchError) as exc_info:
+            await _dispatch_with_typed_wrap(
+                adapter, make_instance(), dispatch_fn, _fake_candidate()
+            )
+
+        assert str(exc_info.value) == "ReadTimeout"
+
 
 # _fetch_pool_with_typed_wrap
 
@@ -199,6 +212,16 @@ class TestFetchPoolTypedWrap:
             await _fetch_pool_with_typed_wrap(adapter, make_instance())
 
         assert exc_info.value.__cause__ is original
+
+    @pytest.mark.asyncio()
+    async def test_a_timeout_names_itself(self) -> None:
+        """The pool-fetch warning needs the same fallback the dispatch row has."""
+        adapter = _adapter_with_fake_client(side_effect=httpx.ConnectTimeout(""))
+
+        with pytest.raises(EnginePoolFetchError) as exc_info:
+            await _fetch_pool_with_typed_wrap(adapter, make_instance())
+
+        assert str(exc_info.value) == "ConnectTimeout"
 
     @pytest.mark.asyncio()
     @pytest.mark.parametrize(

@@ -54,6 +54,7 @@ import httpx
 
 from houndarr import __version__
 from houndarr.config import get_settings
+from houndarr.errors import describe_exception
 from houndarr.repositories.settings import get_setting, set_setting
 
 logger = logging.getLogger(__name__)
@@ -283,7 +284,9 @@ async def _run_check() -> UpdateStatus:
     try:
         status, payload, etag = await _fetch(repo, prior_etag)
     except (httpx.TimeoutException, httpx.TransportError) as exc:
-        logger.warning("update_check: network error reaching github.com (%s)", exc)
+        logger.warning(
+            "update_check: network error reaching github.com (%s)", describe_exception(exc)
+        )
         await set_setting(KEY_LAST_ERROR_AT, _now().isoformat())
         return await _load_status()
 

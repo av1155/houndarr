@@ -178,3 +178,17 @@ class CsrfValidationError(RouteError):
 
 class AuthRejectedError(RouteError):
     """Authentication check rejected the current request."""
+
+
+def describe_exception(exc: BaseException) -> str:
+    """Return an exception's message, or its type name when it has none.
+
+    ``httpx`` maps transport timeouts from a bare ``TimeoutError()``, so
+    ``httpx.ReadTimeout`` and ``httpx.ConnectTimeout`` stringify to the
+    empty string.  Interpolating one leaves a log line that stops at the
+    colon, exactly when an operator needs to know whether the \\*arr timed
+    out, refused the connection, or answered with something unparseable.
+
+    Messages that are already non-empty are returned byte-identical.
+    """
+    return str(exc) or type(exc).__name__

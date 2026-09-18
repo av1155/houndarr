@@ -264,10 +264,18 @@ async def fetch_latest_missing_reason(
     post-release-grace, both of which can now have elapsed) or left
     alone.
 
-    ``already in download queue`` rows are passed over: a queue skip
-    leaves the release-timing state unchanged, and in season, artist,
-    or author mode it can come from a sibling of the item that needs
-    the retry.
+    Only the rows the release gate itself wrote inform the decision,
+    plus dispatch outcomes (``searched`` / ``error``).  Skips from the
+    scheduling and filter gates are passed over, because they say
+    nothing about release state and would otherwise cancel or trigger
+    a retry by accident: the hourly-cap gate runs before the cooldown
+    check, and in season, artist, or author mode a queue or cooldown
+    row can come from a sibling of the item that needs the retry.
+
+    Of the release-gate reasons, only ``not yet released`` and
+    ``post-release grace`` arm a retry.  The per-app availability ones,
+    and Whisparr v2's ``no series linked`` orphan guard, cancel it, as
+    they did before the gate rows were filtered at all.
 
     Args:
         instance_id: Owning instance primary key.
@@ -277,9 +285,9 @@ async def fetch_latest_missing_reason(
             ``"author"``, ``"series"``, ``"artist"``).
 
     Returns:
-        The ``reason`` column value from the newest matching row that
-        is not a queue skip, or ``None`` when no such missing-pass row
-        exists or the row's reason is NULL.
+        The ``reason`` column value from the newest row that informs
+        the retry, or ``None`` when no such missing-pass row exists or
+        the row's reason is NULL.
     """
     async with get_db() as db:
         async with db.execute(
@@ -290,9 +298,93 @@ async def fetch_latest_missing_reason(
               AND item_id = ?
               AND item_type = ?
               AND search_kind = 'missing'
-              AND (reason IS NULL OR reason != 'already in download queue')
+              AND (
+                    action IN ('searched', 'error')
+                    OR (
+                        action = 'skipped'
+                        AND (
+                            reason IN (
+                                'not yet released',
+                                'radarr reports not available',
+                                'radarr status indicates unreleased',
+                                'whisparr v3 reports not available',
+                                'whisparr v3 status indicates unreleased',
+                                'future title not yet available',
+                                'no series linked'
+                            )
+                            OR reason LIKE 'post-release grace%'
+                        )
+                    )
+              )
             ORDER BY timestamp DESC, id DESC
             LIMIT 1
+            """,
+            (instance_id, item_id, item_type),
+        ) as cur:
+            row = await cur.fetchone()
+    return str(row[0]) if row and row[0] is not None else None
+
+
+async def fetch_last_missing_grace_skip_since_dispatch(
+    instance_id: int,
+    item_id: int,
+    item_type: str,
+) -> str | None:
+    """Return the newest post-release-grace skip timestamp since the last dispatch.
+
+    A grace skip proves the record it was written for had already been
+    released when the row landed, so that record leaves its grace
+    window at the latest ``post_release_grace_hrs`` after this
+    timestamp.  The caller passes the current setting, so raising or
+    lowering it keeps the bound correct either way.  Taking the newest
+    row bounds every record that logged one,
+    which the oldest row would not: records reaching their release at
+    different times enter the window one after another, and each new
+    row pushes the bound out again.  The engine uses that bound in
+    season, artist, and author modes, where the rows carry the
+    parent's synthetic id and a sibling still inside its grace window
+    would otherwise re-arm the parent's retry on every cycle.
+
+    The bound stops moving once the rows stop landing.  Rows land on
+    the cycles that reach the record, so the bound sits about one
+    window past the last such row: a parent whose records keep entering
+    grace closer than about two windows apart can stop taking an early
+    retry altogether, and wait for its ordinary cooldown instead.
+
+    Args:
+        instance_id: Owning instance primary key.
+        item_id: *arr per-type item identifier.
+        item_type: ``ItemType`` string value.
+
+    Returns:
+        The ``timestamp`` of the newest grace skip newer than the
+        newest ``searched`` / ``error`` row, or ``None`` when no such
+        row exists.
+    """
+    async with get_db() as db:
+        # MAX stops at the newest qualifying row.  When a dispatch outranks
+        # every grace row none qualify, so the subquery re-runs per candidate.
+        async with db.execute(
+            """
+            SELECT MAX(g.timestamp)
+            FROM search_log AS g
+            WHERE g.instance_id = ?
+              AND g.item_id = ?
+              AND g.item_type = ?
+              AND g.search_kind = 'missing'
+              AND g.action = 'skipped'
+              AND g.reason LIKE 'post-release grace%'
+              AND NOT EXISTS (
+                    SELECT 1
+                    FROM search_log AS d
+                    WHERE d.instance_id = g.instance_id
+                      AND d.item_id = g.item_id
+                      AND d.item_type = g.item_type
+                      AND d.search_kind = 'missing'
+                      AND d.action IN ('searched', 'error')
+                      AND (d.timestamp > g.timestamp
+                           OR (d.timestamp = g.timestamp AND d.id > g.id))
+              )
             """,
             (instance_id, item_id, item_type),
         ) as cur:

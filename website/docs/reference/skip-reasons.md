@@ -17,7 +17,13 @@ reasons are normal scheduling behavior, not errors.
 | `on cooldown (Nd)`                    | per-item    | Missing item was searched less than `Cooldown (days)` ago.                                           |
 | `on cutoff cooldown (Nd)`             | per-item    | Cutoff item was searched less than `Cutoff Cooldown` ago.                                            |
 | `on upgrade cooldown (Nd)`            | per-item    | Upgrade item was searched less than `Upgrade Cooldown (days)` ago. Default 90 days.                  |
-| `not yet released`                    | per-item    | No release date, or the release date is in the future.                                               |
+| `not yet released`                    | per-item    | The release date is in the future. An item with no release date counts as released.                  |
+| `radarr reports not available`        | per-item    | Radarr's own availability flag says the movie is not available yet.                                  |
+| `radarr status indicates unreleased`  | per-item    | Radarr's movie status is `tba` or `announced` and it is not flagged available.                       |
+| `whisparr v3 reports not available`   | per-item    | Whisparr v3's availability flag says the scene is not available yet.                                 |
+| `whisparr v3 status indicates unreleased` | per-item | Whisparr v3's status is `tba` or `announced` and it is not flagged available.                        |
+| `future title not yet available`      | per-item    | The Radarr or Whisparr v3 release year is still ahead, the status is not released, and it is not flagged available. |
+| `no series linked`                    | per-item    | Whisparr v2 returned an episode with no series attached, so it cannot be searched.                   |
 | `post-release grace (Nh)`             | per-item    | Release date passed but the grace window (default 6 hours) has not elapsed.                          |
 | `in hot retry window (Nh)`            | per-item    | Missing item is inside its hot retry window, but the retry interval has not elapsed.                 |
 | `hourly limit reached (N/hr)`         | per-item    | Missing pass hit `Hourly Cap` of `N` for the current hour.                                           |
@@ -43,7 +49,33 @@ normal missing cooldown applies again.
 When `Hot Retry Window (hrs)` is enabled, the latest `post-release grace
 (Nh)` row opens a short retry window. Houndarr can retry the item after
 `Hot Retry Interval (hrs)` elapses, still respecting batch size and the
-hourly cap. When the window closes, normal missing cooldown applies.
+hourly cap. When the window closes, normal missing cooldown applies, except
+that an item the window never searched still takes its one retry.
+
+Only dispatches and the release gate's own skips decide this, and a
+dispatch counts whether it succeeded or errored. A skip written by any
+other gate, such as `hourly limit reached (N/hr)`, a cooldown row or a
+tag filter row, leaves the retry pending.
+
+In season, artist, and author search mode these rows are logged under
+the parent, so the parent holds its early retry until every
+`post-release grace (Nh)` skip logged since its last search has
+certainly passed. That keeps a just-aired episode from putting its
+whole season back in the search queue on every cycle while it waits
+out its own grace. `Run Now` searches anyway. Season 0 specials, and
+items whose parent the \*arr did not report, are searched on their own
+id and never wait on a parent.
+
+Each item in grace logs a row on every cycle that reaches it, so the
+wait ends about one grace window after the last such row. A parent
+whose items keep entering grace closer than about two grace windows
+apart can stop taking the early retry altogether and fall back to its
+ordinary cooldown; a daily show with `Post-Release Grace (hrs)` at
+`18` sits in that range. A cycle reaches any one item less often on a
+large library, which shortens the wait. While a wait is running, a
+`Hot Retry Window (hrs)` shorter than `Post-Release Grace (hrs)`
+closes before the wait ends, so set it longer if you want hot retries
+to land.
 
 Cutoff and upgrade passes do not use this early retry. They always
 wait for their full cooldown.

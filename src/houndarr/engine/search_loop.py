@@ -541,9 +541,9 @@ async def _latest_missing_reason_ref(ref: ItemRef) -> str | None:
     :func:`houndarr.repositories.search_log.fetch_latest_missing_reason`
     since D.27.  Used by the release-timing retry branch in
     :func:`_run_search_pass` to decide whether an item on cooldown
-    should be retried (because the last logged reason other than a
-    queue skip was a pre-release or post-release-grace skip that has
-    since elapsed).
+    should be retried (because the newest dispatch or release-gate row
+    was a pre-release or post-release-grace skip that has since
+    elapsed).  The repository function owns which rows count.
     """
     from houndarr.repositories.search_log import fetch_latest_missing_reason
 
@@ -563,6 +563,56 @@ async def _latest_missing_grace_skip_ref(ref: ItemRef) -> tuple[str, str] | None
         ref.item_id,
         ref.item_type.value,
     )
+
+
+async def _is_group_grace_unresolved(ref: ItemRef, grace_hrs: int) -> bool:
+    """Return whether a grace window logged under *ref* can still be open.
+
+    Only meaningful in season, artist, and author modes.  There a
+    wanted record that has a parent logs under the parent's synthetic
+    id (season 0, and records the *arr gave no parent, keep their own),
+    and the release
+    gate writes its skip before group dedup, so a record the gate is
+    still blocking re-arms the parent's retry on every cycle while a
+    released sibling drives the search.
+
+    Only grace rows are bounded here.  A ``not yet released`` row says
+    nothing about when its record becomes searchable, so no bound can
+    be derived from one and such a sibling can still re-arm a parent
+    every cycle.  That needs each app's own filter to stay honest:
+    Sonarr, Whisparr v2, Lidarr, and Readarr all keep unreleased
+    records out of ``wanted/missing``, but each judges that on its own
+    clock, so a record the *arr counts as released still reads as
+    unreleased here while Houndarr's clock trails it.
+
+    A ``post-release grace`` row does carry a bound: it proves its
+    record was already released when the row landed, so that record
+    leaves the window at the latest *grace_hrs* after the row.  The
+    newest row written since the parent was last dispatched therefore
+    bounds every grace window logged since that dispatch.  In exchange
+    the parent is not searched while a window it has logged could still
+    be open: the retry lands up to one window after the grace expires,
+    and a parent whose records keep entering grace closer than about
+    two windows apart can fall back to its ordinary cooldown.
+
+    Args:
+        ref: The parent the retry would search.
+        grace_hrs: The instance's current post-release grace window.
+
+    Returns:
+        ``True`` while a logged block could still be holding.
+    """
+    if grace_hrs <= 0:
+        return False
+
+    from houndarr.repositories.search_log import fetch_last_missing_grace_skip_since_dispatch
+
+    last_grace_at = await fetch_last_missing_grace_skip_since_dispatch(
+        ref.instance_id,
+        ref.item_id,
+        ref.item_type.value,
+    )
+    return last_grace_at is not None and _elapsed_hours_since(last_grace_at) < grace_hrs
 
 
 def _parse_log_timestamp(value: str) -> datetime:
@@ -1074,6 +1124,23 @@ async def _run_search_pass(
                         if not should_retry:
                             latest_reason = await _latest_missing_reason_ref(ref)
                             should_retry = _is_release_timing_reason(latest_reason)
+
+                    if (
+                        should_retry
+                        and candidate.group_key is not None
+                        and cycle_trigger != "run_now"
+                        and await _is_group_grace_unresolved(
+                            ref, instance.missing.post_release_grace_hrs
+                        )
+                    ):
+                        should_retry = False
+                        logger.debug(
+                            "[%s] %s%s: holding missing retry, a wanted item may still be "
+                            "inside post-release grace",
+                            instance.core.name,
+                            log_prefix,
+                            candidate.item_id,
+                        )
 
                     if should_retry:
                         if await queued_skips.skip(candidate, ref, seen_item_ids, seen_group_keys):

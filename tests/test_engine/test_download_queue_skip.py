@@ -405,6 +405,18 @@ async def test_queued_sibling_does_not_cancel_the_season_release_timing_retry(
         item_type="episode",
         reason="post-release grace (6h)",
     )
+    # Age the grace row past the instance's grace window: while that window
+    # could still be open, the season waits for it instead of retrying (#770).
+    async with get_db() as conn:
+        await conn.execute(
+            """
+            UPDATE search_log
+            SET timestamp = strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-2 days')
+            WHERE instance_id = 1 AND item_id = ? AND reason LIKE ?
+            """,
+            (_season_item_id(55, 1), "post-release grace%"),
+        )
+        await conn.commit()
     respx.get(f"{SONARR_URL}/api/v3/wanted/missing").mock(
         side_effect=_wanted_pages(
             [

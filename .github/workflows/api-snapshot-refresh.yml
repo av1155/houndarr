@@ -36,8 +36,11 @@ jobs:
           curl --fail --silent --show-error --location \
             "https://raw.githubusercontent.com/Radarr/Radarr/develop/src/Radarr.Api.V3/openapi.json" \
             --output docs/api/radarr_openapi.json.new
+          # Pinned to a release tag: upstream stopped checking this file into
+          # v2-develop and now ships it as a release asset, but only on the
+          # develop prereleases, so there is no stable moving ref to follow.
           curl --fail --silent --show-error --location \
-            "https://raw.githubusercontent.com/Whisparr/Whisparr/v2-develop/src/Whisparr.Api.V3/openapi.json" \
+            "https://raw.githubusercontent.com/Whisparr/Whisparr/v2.2.0-release.231/src/Whisparr.Api.V3/openapi.json" \
             --output docs/api/whisparr_v2_openapi.json.new
           curl --fail --silent --show-error --location \
             "https://raw.githubusercontent.com/Whisparr/Whisparr/movies/src/Whisparr.Api.V3/openapi.json" \

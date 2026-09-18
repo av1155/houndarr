@@ -18,6 +18,7 @@ from tests.mock_arr._common import (
     attach_common_routes,
     paginate,
     partition_leaf_ids,
+    resolve_sort_key,
 )
 from tests.mock_arr.store import AppData
 
@@ -87,6 +88,8 @@ def make_whisparr_v2_data(
         api_version="v3",
         sort_key_default="episodes.airDateUtc",
         sort_direction_default="ascending",
+        sort_keys=frozenset({"airDateUtc", "episodes.airDateUtc", "series.sortTitle"}),
+        sort_key_table="Episodes",
         parents=parents,
         leaves=leaves,
         missing_ids=missing_ids,
@@ -118,7 +121,7 @@ def make_whisparr_v2_router(data: AppData) -> APIRouter:
     async def wanted_missing(
         page: int = Query(1, ge=1),
         page_size: int = Query(10, ge=1, le=2000, alias="pageSize"),
-        sort_key: str = Query("airDateUtc", alias="sortKey"),
+        sort_key: str = Query("episodes.airDateUtc", alias="sortKey"),
         sort_direction: str = Query("ascending", alias="sortDirection"),
         monitored: bool = Query(True),
         include_series: bool = Query(False, alias="includeSeries"),
@@ -129,7 +132,7 @@ def make_whisparr_v2_router(data: AppData) -> APIRouter:
             records,
             page=page,
             page_size=page_size,
-            sort_key=sort_key,
+            sort_key=resolve_sort_key(sort_key, data),
             sort_direction=sort_direction,
         )
 
@@ -137,7 +140,7 @@ def make_whisparr_v2_router(data: AppData) -> APIRouter:
     async def wanted_cutoff(
         page: int = Query(1, ge=1),
         page_size: int = Query(10, ge=1, le=2000, alias="pageSize"),
-        sort_key: str = Query("airDateUtc", alias="sortKey"),
+        sort_key: str = Query("episodes.airDateUtc", alias="sortKey"),
         sort_direction: str = Query("ascending", alias="sortDirection"),
         monitored: bool = Query(True),
         include_series: bool = Query(False, alias="includeSeries"),
@@ -148,7 +151,7 @@ def make_whisparr_v2_router(data: AppData) -> APIRouter:
             records,
             page=page,
             page_size=page_size,
-            sort_key=sort_key,
+            sort_key=resolve_sort_key(sort_key, data),
             sort_direction=sort_direction,
         )
 

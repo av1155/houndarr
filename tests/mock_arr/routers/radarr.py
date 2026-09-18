@@ -17,6 +17,7 @@ from tests.mock_arr._common import (
     attach_common_routes,
     paginate,
     partition_leaf_ids,
+    resolve_sort_key,
 )
 from tests.mock_arr.store import AppData
 
@@ -75,6 +76,17 @@ def make_radarr_data(
         api_version="v3",
         sort_key_default="movieMetadata.sortTitle",
         sort_direction_default="ascending",
+        sort_keys=frozenset(
+            {
+                "movieMetadata.digitalRelease",
+                "movieMetadata.inCinemas",
+                "movieMetadata.physicalRelease",
+                "movieMetadata.sortTitle",
+                "movieMetadata.year",
+                "movies.lastSearchTime",
+            }
+        ),
+        sort_key_table="Movies",
         parents=[],
         leaves=leaves,
         missing_ids=missing_ids,
@@ -107,7 +119,7 @@ def make_radarr_router(data: AppData) -> APIRouter:
     async def wanted_missing(
         page: int = Query(1, ge=1),
         page_size: int = Query(10, ge=1, le=2000, alias="pageSize"),
-        sort_key: str = Query("movieMetadata.inCinemas", alias="sortKey"),
+        sort_key: str = Query("movieMetadata.sortTitle", alias="sortKey"),
         sort_direction: str = Query("ascending", alias="sortDirection"),
         monitored: bool = Query(True),
     ) -> dict[str, Any]:
@@ -117,7 +129,7 @@ def make_radarr_router(data: AppData) -> APIRouter:
             records,
             page=page,
             page_size=page_size,
-            sort_key=sort_key,
+            sort_key=resolve_sort_key(sort_key, data),
             sort_direction=sort_direction,
         )
 
@@ -125,7 +137,7 @@ def make_radarr_router(data: AppData) -> APIRouter:
     async def wanted_cutoff(
         page: int = Query(1, ge=1),
         page_size: int = Query(10, ge=1, le=2000, alias="pageSize"),
-        sort_key: str = Query("movieMetadata.inCinemas", alias="sortKey"),
+        sort_key: str = Query("movieMetadata.sortTitle", alias="sortKey"),
         sort_direction: str = Query("ascending", alias="sortDirection"),
         monitored: bool = Query(True),
     ) -> dict[str, Any]:
@@ -135,7 +147,7 @@ def make_radarr_router(data: AppData) -> APIRouter:
             records,
             page=page,
             page_size=page_size,
-            sort_key=sort_key,
+            sort_key=resolve_sort_key(sort_key, data),
             sort_direction=sort_direction,
         )
 

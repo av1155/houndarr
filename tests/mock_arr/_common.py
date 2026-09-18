@@ -10,9 +10,34 @@ from __future__ import annotations
 import random
 from typing import Any
 
-from fastapi import APIRouter, Body, Query
+from fastapi import APIRouter, Body, HTTPException, Query
 
 from tests.mock_arr.store import AppData
+
+
+def resolve_sort_key(sort_key: str, data: AppData) -> str:
+    """Return the sortKey, or raise the way the strictest supported build would.
+
+    Real behaviour splits by version.  Builds from late 2024 on carry an
+    API-layer allowlist and quietly swap an unlisted key for their own
+    default, so a wrong key reads as a healthy 200 that sorts by the wrong
+    column.  Older builds hand the key to SQLite and answer 500.
+
+    The mock models the strict half on purpose: a key is only safe if every
+    supported build accepts it, so anything outside ``sort_keys`` fails here
+    even when the newest build would have forgiven it.
+    """
+    if not data.sort_keys:
+        return sort_key
+    if sort_key.lower() in {key.lower() for key in data.sort_keys}:
+        return sort_key
+    column = sort_key
+    if data.sort_key_error_capitalises:
+        column = column[:1].upper() + column[1:]
+    raise HTTPException(
+        status_code=500,
+        detail=f"SQL logic error\nno such column: {data.sort_key_table}.{column}",
+    )
 
 
 def paginate(

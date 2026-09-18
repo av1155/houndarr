@@ -18,6 +18,7 @@ from tests.mock_arr._common import (
     attach_common_routes,
     paginate,
     partition_leaf_ids,
+    resolve_sort_key,
 )
 from tests.mock_arr.store import AppData
 
@@ -88,6 +89,9 @@ def make_lidarr_data(
         api_version="v1",
         sort_key_default="releaseDate",
         sort_direction_default="ascending",
+        sort_keys=frozenset({"releaseDate", "albumType", "title", "id"}),
+        sort_key_table="Albums",
+        sort_key_error_capitalises=True,
         parents=parents,
         leaves=leaves,
         missing_ids=missing_ids,
@@ -130,7 +134,7 @@ def make_lidarr_router(data: AppData) -> APIRouter:
             records,
             page=page,
             page_size=page_size,
-            sort_key=sort_key,
+            sort_key=resolve_sort_key(sort_key, data),
             sort_direction=sort_direction,
         )
 
@@ -149,7 +153,7 @@ def make_lidarr_router(data: AppData) -> APIRouter:
             records,
             page=page,
             page_size=page_size,
-            sort_key=sort_key,
+            sort_key=resolve_sort_key(sort_key, data),
             sort_direction=sort_direction,
         )
 

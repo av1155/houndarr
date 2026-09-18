@@ -58,6 +58,21 @@ class AppData:
     page_log: PageLog = field(default_factory=PageLog)
     queued_ids: set[int] = field(default_factory=set)
     queue_detail_requests: int = 0
+    # Sort keys that work on every build this repo supports.  The apps
+    # disagree by version: Sonarr 3.0.10.1567 answers 500 for
+    # ``episodes.airDateUtc`` while 4.x requires that form to be honoured
+    # rather than clamped, and Whisparr v2 2.0.0.2151 answers 500 for
+    # ``releaseDate`` while 2.2.0 silently accepts it.  Each set is the
+    # intersection, so the mock refuses anything not safe everywhere.
+    # Lidarr and Readarr have no allowlist upstream at all, so their sets
+    # are the columns this repo needs plus a few real ones; widen them
+    # when a client legitimately needs another column.
+    sort_keys: frozenset[str] = frozenset()
+    sort_key_table: str = ""
+    # Lidarr upper-cases the first letter of the column in its error text;
+    # Readarr does not.  Measured: Lidarr 3.1.0.4875 answers
+    # ``no such column: Albums.TotalGarbageXyz`` for ``totalGarbageXyz``.
+    sort_key_error_capitalises: bool = False
 
 
 @dataclass(slots=True)

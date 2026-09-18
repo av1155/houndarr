@@ -4,11 +4,11 @@ Sonarr, Radarr, Lidarr, Readarr, and Whisparr v2 all route through
 the shared ``_fetch_wanted_page`` template method on ``ArrClient``;
 Whisparr v3 stays a documented outlier (no ``/wanted`` endpoint).
 
-These tests capture the exact HTTP request each concrete client
-issues today for ``get_missing``, ``get_cutoff_unmet``, and
-``get_wanted_total`` so a future template edit cannot silently
-drop
-or reorder a query param or change the sort key.
+Every client has a ``get_missing`` case pinning its full query string,
+including the sort key.  Coverage of ``get_cutoff_unmet`` and
+``get_wanted_total`` is per-client rather than uniform; the sort key
+itself is pinned for all of them in
+``tests/test_engine/test_adapter_registry_gate.py``.
 """
 
 from __future__ import annotations
@@ -142,6 +142,8 @@ class TestLidarrWireContract:
         params = route.calls[0].request.url.params
         assert params["includeArtist"] == "true"
         assert params["monitored"] == "true"
+        # Lidarr has no sort-key allowlist, so a non-column is a 500.
+        assert params["sortKey"] == "releaseDate"
 
     @pytest.mark.asyncio()
     @respx.mock
@@ -169,6 +171,8 @@ class TestReadarrWireContract:
         params = route.calls[0].request.url.params
         assert params["includeAuthor"] == "true"
         assert params["monitored"] == "true"
+        # Readarr has no sort-key allowlist either.
+        assert params["sortKey"] == "releaseDate"
 
     @pytest.mark.asyncio()
     @respx.mock
@@ -196,6 +200,9 @@ class TestWhisparrV2WireContract:
         params = route.calls[0].request.url.params
         assert params["includeSeries"] == "true"
         assert params["monitored"] == "true"
+        # Qualified: below 2.2.0 the bare form is a SQL error, above it the
+        # app discards an unlisted key and sorts by its own default.
+        assert params["sortKey"] == "episodes.airDateUtc"
 
     @pytest.mark.asyncio()
     @respx.mock

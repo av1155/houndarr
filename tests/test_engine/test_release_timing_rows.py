@@ -599,3 +599,32 @@ async def test_the_shortest_grace_windows(
     _mock_season_pages([_episode(101, _NOW - timedelta(days=30), 1)])
 
     assert await run_instance_search(inst, MASTER_KEY) == expected
+
+
+@pytest.mark.parametrize(
+    ("row_age_hrs", "expected"),
+    [pytest.param(11, 0, id="just-inside"), pytest.param(13, 1, id="just-outside")],
+)
+@pytest.mark.asyncio()
+@respx.mock
+async def test_the_wait_is_one_grace_window_long(
+    seeded_instances: None,
+    monkeypatch: pytest.MonkeyPatch,
+    row_age_hrs: int,
+    expected: int,
+) -> None:
+    """Brackets the wait at one window, the length the skip-reasons page documents."""
+    from houndarr.services.cooldown import record_search
+
+    parent = _season_item_id(55, 1)
+    _freeze_now(monkeypatch)
+    await record_search(1, parent, "episode")
+    await _insert_grace_row(parent, _NOW - timedelta(hours=row_age_hrs))
+
+    inst = _sonarr(
+        sonarr_search_mode=SonarrSearchMode.season_context,
+        post_release_grace_hrs=12,
+    )
+    _mock_season_pages([_episode(101, _NOW - timedelta(days=30), 1)])
+
+    assert await run_instance_search(inst, MASTER_KEY) == expected

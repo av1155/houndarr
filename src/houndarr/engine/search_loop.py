@@ -730,7 +730,7 @@ async def _dispatch_with_typed_wrap(
     to its type name when that text is empty (an httpx timeout has
     none).  Non-empty messages pass through byte-identical, which
     keeps the ``search_log.message`` field stable against the
-    golden-log characterisation test.
+    typed-error pinning tests.
 
     Args:
         adapter: :class:`AppAdapterProto` for the instance.

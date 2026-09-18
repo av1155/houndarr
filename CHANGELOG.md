@@ -9,7 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- A timed-out \*arr request logs `ReadTimeout` instead of a line that stops at the colon, so a hung instance reads differently from a refused one. (#771)
+- A timed-out \*arr request names the timeout in the log instead of stopping at the colon, so a hung instance reads differently from a refused one. (#771)
+- The update check names the timeout when github.com does not answer, instead of logging an empty pair of brackets. (#771)
 - Radarr missing and cutoff searches walk the wanted list oldest-first; Radarr discarded the sort key Houndarr sent and ordered by title instead. (#785)
 - Radarr search cycles no longer abort with a 500 on 5.6.0 through 5.10.3, where that sort key was a SQL error on both wanted endpoints. (#785)
 - Dashboard counts for a Radarr instance on 5.6.0 through 5.10.3 refresh again instead of holding their last-known values. (#785)

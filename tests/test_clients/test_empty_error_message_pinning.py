@@ -8,8 +8,9 @@ whether the *arr timed out, refused the connection, or answered with
 something unparseable.
 
 The other half of the contract matters just as much: an exception that
-already carries a message must pass through byte-identical, because the
-golden search-log test pins that text.
+already carries a message must pass through byte-identical, because
+``tests/test_engine/test_typed_errors_pinning.py`` pins that text onto
+``search_log.message``.
 """
 
 from __future__ import annotations
@@ -39,7 +40,7 @@ def test_empty_message_falls_back_to_the_type_name() -> None:
 
 
 def test_a_real_message_is_returned_unchanged() -> None:
-    """Non-empty text passes through byte-identical; the golden log pins it."""
+    """Non-empty text passes through byte-identical; the typed-error tests pin it."""
     assert describe_exception(httpx.ConnectError("All connection attempts failed")) == (
         "All connection attempts failed"
     )

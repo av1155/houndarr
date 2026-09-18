@@ -19,7 +19,7 @@ evaluation. Over many cycles the search distribution spreads evenly
 across the catalogue instead of moving one shelf at a time.
 
 Recommended for most users, especially anyone whose library has
-long alphabetical runs of similarly-dated items: a full series
+long runs of similarly-dated items: a full series
 binge-added the same day, or a back catalogue imported in one go.
 Without shuffling, those items appear as a clustered wall in the
 logs.
@@ -59,7 +59,7 @@ entirely on cooldown, items further down the list never got
 evaluated.
 
 Concretely: a 500-item missing list with a 5-page scan cap and
-page-size-40 would stall on the same alphabetical first 200 items
+page-size-40 would stall on the same first 200 items
 cycle after cycle while later items languished. Users reported this
 as "Houndarr keeps searching the same 80 movies and ignores the
 rest" (discussion #292).

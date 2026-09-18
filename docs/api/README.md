@@ -20,10 +20,13 @@ Guidelines:
 
 https://raw.githubusercontent.com/Sonarr/Sonarr/develop/src/Sonarr.Api.V3/openapi.json
 https://raw.githubusercontent.com/Radarr/Radarr/develop/src/Radarr.Api.V3/openapi.json
-https://raw.githubusercontent.com/Whisparr/Whisparr/v2-develop/src/Whisparr.Api.V3/openapi.json
+https://raw.githubusercontent.com/Whisparr/Whisparr/v2.2.0-release.231/src/Whisparr.Api.V3/openapi.json
 https://raw.githubusercontent.com/Whisparr/Whisparr/movies/src/Whisparr.Api.V3/openapi.json
 https://raw.githubusercontent.com/lidarr/Lidarr/develop/src/Lidarr.Api.V1/openapi.json
 https://raw.githubusercontent.com/Readarr/Readarr/develop/src/Readarr.Api.V1/openapi.json
+
+Whisparr v2 points at a release tag rather than `v2-develop` because upstream stopped
+checking the file in and now serves it from a running instance at `/docs`.
 
 See also: [arr-search-commands.md](arr-search-commands.md) for the confirmed upstream command
 classes and POST body formats used by Houndarr's search engine.

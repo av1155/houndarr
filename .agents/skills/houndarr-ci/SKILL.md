@@ -42,7 +42,7 @@ identical check names so branch protection is satisfied.
 | `pages.yml` | Pushes to `main` touching `website/**` | Deploys docs site to GitHub Pages |
 | `test-deploy.yml` | PRs touching `website/**` | Tests Docusaurus build without deploying |
 | `link-check.yml` | PRs touching `**/*.md`, `**/*.mdx`, `lychee.toml` + weekly (Monday 08:00 UTC) + manual | Runs `lychee` against every Markdown file to catch broken external links; rules live in `lychee.toml` |
-| `cleanup-actions-cache.yml` | Daily (05:00 UTC) + manual | Prunes stale GitHub Actions caches |
+| `cleanup-actions-cache.yml` | Weekly (Monday 05:00 UTC) + manual | Prunes stale GitHub Actions caches |
 
 ## Branch protection on `main`
 

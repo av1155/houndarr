@@ -53,7 +53,7 @@ dev = [
     "pytest-xdist>=3.8.0",
     "httpx>=0.28.1",
     "respx>=0.23.1",
-    "anyio>=4.13.0",
+    "anyio>=4.14.2",
 ]
 # Optional browser-e2e group: playwright is heavy (~80 MB of browser
 # binaries) and only the dedicated CI job and the marketing screenshot

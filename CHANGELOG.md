@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- A failed download queue check logs a `download queue check (fetch failed)` row on the Logs page instead of only a container warning. (#769)
 - A timed-out \*arr request names the timeout in the log instead of stopping at the colon, so a hung instance reads differently from a refused one. (#771)
 - The update check names the timeout when github.com does not answer, instead of logging an empty pair of brackets. (#771)
 - Radarr missing and cutoff searches walk the wanted list oldest-first; Radarr discarded the sort key Houndarr sent and ordered by title instead. (#785)

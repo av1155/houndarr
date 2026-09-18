@@ -17,11 +17,12 @@ from houndarr.engine.adapters.lidarr import _artist_item_id
 from houndarr.engine.adapters.sonarr import _season_item_id
 from houndarr.engine.candidates import SearchCandidate
 from houndarr.engine.search_loop import (
+    _QUEUE_FETCH_FAILED_REASON,
     _QUEUED_REASON,
     _download_queue_lookup,
     run_instance_search,
 )
-from houndarr.services.cooldown import record_search
+from houndarr.services.cooldown import _reset_info_log_cache, record_search
 from houndarr.services.instances import (
     InstanceType,
     LidarrSearchMode,
@@ -813,13 +814,16 @@ async def test_failed_queue_fetch_searches_as_before(
     assert command_route.call_count == 2
     assert _queue_route().call_count == 1
     rows = await get_log_rows()
-    assert [r["action"] for r in rows] == ["searched", "searched"]
+    assert [r["action"] for r in rows] == ["info", "searched", "searched"]
+    assert rows[0]["reason"] == _QUEUE_FETCH_FAILED_REASON
+    assert rows[0]["item_id"] is None
     warnings = [r for r in caplog.records if "download queue check skipped" in r.getMessage()]
     assert len(warnings) == 1
 
 
 @pytest.mark.asyncio()
 async def test_lookup_fails_open_when_the_client_cannot_be_built(
+    seeded_instances: None,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     """A malformed URL raised at client construction is treated like any fetch failure."""
@@ -963,3 +967,79 @@ async def test_queue_skip_rows_are_throttled_per_search_kind(
         ("skipped", "missing", _QUEUED_REASON),
         ("skipped", "cutoff", _QUEUED_REASON),
     ]
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_repeated_failures_write_one_row_per_window(
+    seeded_instances: None,
+) -> None:
+    """The condition persists across cycles, so the row is throttled like the empty pool."""
+    _mock_radarr_missing([_movie(201), _movie(202)])
+    _mock_command(RADARR_URL)
+    _queue_route().mock(return_value=httpx.Response(500))
+
+    instance = _radarr(cooldown_days=0)
+    await run_instance_search(instance, MASTER_KEY)
+    await run_instance_search(instance, MASTER_KEY)
+
+    rows = await get_log_rows()
+    info_rows = [r for r in rows if r["action"] == "info"]
+    assert len(info_rows) == 1
+    assert _queue_route().call_count == 2
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_a_second_window_writes_again(
+    seeded_instances: None,
+) -> None:
+    """Once the window lapses the operator gets a fresh row, not silence forever."""
+    _mock_radarr_missing([_movie(201), _movie(202)])
+    _mock_command(RADARR_URL)
+    _queue_route().mock(return_value=httpx.Response(500))
+
+    instance = _radarr(cooldown_days=0)
+    await run_instance_search(instance, MASTER_KEY)
+    _reset_info_log_cache()
+    await run_instance_search(instance, MASTER_KEY)
+
+    rows = await get_log_rows()
+    assert len([r for r in rows if r["action"] == "info"]) == 2
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_a_readable_queue_writes_no_info_row(
+    seeded_instances: None,
+) -> None:
+    """The row marks a degraded check, so a working one must stay quiet."""
+    _mock_radarr_missing([_movie(201), _movie(202)])
+    _mock_command(RADARR_URL)
+    serve_download_queue([{"movieId": 201}])
+
+    await run_instance_search(_radarr(), MASTER_KEY)
+
+    rows = await get_log_rows()
+    assert [r["action"] for r in rows] == ["skipped", "searched"]
+    assert not [r for r in rows if r["action"] == "info"]
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_the_row_carries_the_cycle_it_belongs_to(
+    seeded_instances: None,
+) -> None:
+    """Without the cycle fields the row cannot be grouped into its cycle card."""
+    _mock_radarr_missing([_movie(201)])
+    _mock_command(RADARR_URL)
+    _queue_route().mock(return_value=httpx.Response(500))
+
+    await run_instance_search(_radarr(), MASTER_KEY, cycle_trigger="run_now")
+
+    rows = await get_log_rows()
+    info_row = next(r for r in rows if r["action"] == "info")
+    searched = next(r for r in rows if r["action"] == "searched")
+    assert info_row["cycle_id"] == searched["cycle_id"]
+    assert info_row["cycle_trigger"] == "run_now"
+    assert info_row["search_kind"] is None

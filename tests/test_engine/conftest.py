@@ -11,7 +11,10 @@ from cryptography.fernet import Fernet
 
 from houndarr.database import get_db
 from houndarr.engine.candidates import ItemType
-from houndarr.services.cooldown import _reset_skip_log_cache
+from houndarr.services.cooldown import (
+    _reset_info_log_cache,
+    _reset_skip_log_cache,
+)
 from houndarr.services.instances import (
     CutoffPolicy,
     Instance,
@@ -41,8 +44,10 @@ def _reset_skip_log_sentinel() -> Iterator[None]:
     order-dependent test failures.
     """
     _reset_skip_log_cache()
+    _reset_info_log_cache()
     yield
     _reset_skip_log_cache()
+    _reset_info_log_cache()
 
 
 @pytest.fixture(autouse=True)

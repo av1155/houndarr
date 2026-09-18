@@ -98,8 +98,12 @@ The queue is read at most once per cycle, and only when the cycle is
 about to search something. In season, artist, or author search mode, a
 queued item doesn't hold back the rest: the parent is skipped only when
 every one of its wanted items the cycle reaches is already queued. If
-the queue can't be read, the cycle searches as usual and writes a
-warning to the container log.
+the queue can't be read, the cycle searches as usual, writes a warning
+to the container log, and logs a `download queue check (fetch failed)`
+info row. A reverse proxy rule, an ACL, or a narrow API key can block
+that one endpoint while everything else works, in which case the check
+stays off and the row is the only sign of it. The row is throttled to
+one per instance every six hours.
 
 ## Queue backpressure
 

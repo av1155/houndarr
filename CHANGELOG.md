@@ -12,7 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Season, artist, and author modes no longer re-search a parent every cycle while one of its wanted items sits inside `post-release grace (Nh)`. (#770)
 - A cooldown, hourly limit, hot retry, or tag filter skip no longer cancels a missing item's pending release-timing retry. (#770)
 - A missing item the hot retry window never got to search now takes its one release-timing retry once that window closes. (#770)
-- Season, artist, and author parents take their early retry up to one grace window later, and skip it while wanted items keep entering grace. (#770)
+- Season, artist, and author parents take their early retry a grace window later, and skip it while wanted items enter grace under two windows apart. (#770)
 - Logs page skip-only cycle pills name the cooldown, release-timing, hot-retry, hourly-limit, or download-queue reason, and read `N skipped` otherwise. (#768)
 - Whisparr v3 availability skips count as not yet released on the Logs page instead of falling into `other`. (#768)
 - Missing, cutoff, and upgrade searches skip items that are already in the \*arr's download queue and log `already in download queue` instead. (#765)

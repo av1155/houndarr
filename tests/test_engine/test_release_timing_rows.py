@@ -567,21 +567,35 @@ async def test_the_wait_follows_the_current_grace_setting(
     assert await run_instance_search(inst, MASTER_KEY) == expected
 
 
+@pytest.mark.parametrize(
+    ("grace_hrs", "row_age_hrs", "expected"),
+    [
+        pytest.param(0, 0, 1, id="disabled"),
+        pytest.param(1, 0, 0, id="one-hour-holds"),
+        pytest.param(1, 2, 1, id="one-hour-elapsed"),
+    ],
+)
 @pytest.mark.asyncio()
 @respx.mock
-async def test_zero_grace_ignores_rows_written_while_it_was_enabled(
+async def test_the_shortest_grace_windows(
     seeded_instances: None,
     monkeypatch: pytest.MonkeyPatch,
+    grace_hrs: int,
+    row_age_hrs: int,
+    expected: int,
 ) -> None:
-    """Turning the grace window off releases parents held by older grace rows."""
+    """Zero turns the wait off; one hour is a real window, not a rounding of zero."""
     from houndarr.services.cooldown import record_search
 
     parent = _season_item_id(55, 1)
     _freeze_now(monkeypatch)
     await record_search(1, parent, "episode")
-    await _insert_grace_row(parent, _NOW)
+    await _insert_grace_row(parent, _NOW - timedelta(hours=row_age_hrs))
 
-    inst = _sonarr(sonarr_search_mode=SonarrSearchMode.season_context, post_release_grace_hrs=0)
+    inst = _sonarr(
+        sonarr_search_mode=SonarrSearchMode.season_context,
+        post_release_grace_hrs=grace_hrs,
+    )
     _mock_season_pages([_episode(101, _NOW - timedelta(days=30), 1)])
 
-    assert await run_instance_search(inst, MASTER_KEY) == 1
+    assert await run_instance_search(inst, MASTER_KEY) == expected

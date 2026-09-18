@@ -48,7 +48,12 @@ from houndarr.services.time_window import (
 )
 from houndarr.value_objects import ItemRef
 
-__all__ = ["_QUEUED_REASON", "_reset_random_deck", "run_instance_search"]
+__all__ = [
+    "_QUEUED_REASON",
+    "_QUEUE_FETCH_FAILED_REASON",
+    "_reset_random_deck",
+    "run_instance_search",
+]
 
 logger = logging.getLogger(__name__)
 
@@ -285,11 +290,15 @@ async def _resolve_tag_filter_ids(
 # Download-queue check (issue #765)
 
 _QUEUED_REASON = "already in download queue"
+_QUEUE_FETCH_FAILED_REASON = "download queue check (fetch failed)"
 
 
 def _download_queue_lookup(
     adapter: AppAdapterProto,
     instance: Instance,
+    *,
+    cycle_id: str,
+    cycle_trigger: CycleTrigger | str,
 ) -> Callable[[SearchCandidate], Awaitable[bool]]:
     """Return a predicate reporting whether a candidate is already downloading.
 
@@ -300,6 +309,12 @@ def _download_queue_lookup(
     one.  A failed fetch turns the check off for the cycle: searching an
     item that is already downloading (the behaviour before the check
     existed) beats skipping searches because the *arr hiccuped.
+
+    A failure that only affects this one endpoint (a reverse proxy rule,
+    an ACL, a narrow API key) leaves every other request working, so the
+    check stays off indefinitely while the cycle looks ordinary.  The
+    ``info`` row is what makes that visible; it is throttled the way the
+    empty upgrade pool is, because the condition persists across cycles.
     """
     queued_ids: frozenset[int] = frozenset()
     fetched = False
@@ -312,11 +327,23 @@ def _download_queue_lookup(
                 async with adapter.make_client(instance) as client:
                     queued_ids = await client.get_queue_item_ids()
             except (ClientError, httpx.InvalidURL) as exc:
-                logger.warning(
-                    "[%s] download queue check skipped this cycle: %s",
-                    instance.core.name,
-                    exc,
-                )
+                message = f"download queue check skipped this cycle: {describe_exception(exc)}"
+                logger.warning("[%s] %s", instance.core.name, message)
+                from houndarr.services.cooldown import should_log_info
+
+                if await should_log_info(
+                    (instance.core.id, "download_queue_fetch_failed"), 6 * 3600
+                ):
+                    await _write_log(
+                        instance.core.id,
+                        None,
+                        None,
+                        SearchAction.info.value,
+                        cycle_id=cycle_id,
+                        cycle_trigger=cycle_trigger,
+                        reason=_QUEUE_FETCH_FAILED_REASON,
+                        message=message,
+                    )
             else:
                 logger.debug(
                     "[%s] download queue holds %d item(s)",
@@ -1722,7 +1749,9 @@ async def _run_instance_search_impl(
     # --- Download-queue check (issue #765) ---
     # One lazy lookup shared by all three passes: the *arr queue is read at
     # the first candidate about to be dispatched, at most once per cycle.
-    in_queue_fn = _download_queue_lookup(adapter, instance)
+    in_queue_fn = _download_queue_lookup(
+        adapter, instance, cycle_id=cycle_id_value, cycle_trigger=cycle_trigger
+    )
 
     # --- Missing pass ---
     # The outer gate is the per-instance master switch (issue #619).  It

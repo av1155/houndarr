@@ -16,7 +16,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from houndarr.engine.search_loop import _QUEUED_REASON
+from houndarr.engine.search_loop import _QUEUE_FETCH_FAILED_REASON, _QUEUED_REASON
 
 pytestmark = pytest.mark.pinning
 
@@ -295,6 +295,33 @@ class TestLogRowsRender:
         html = render("partials/log_rows.html", rows=rows, limit=50)
         assert 'outcome-pill__n">2</span> on cooldown</span>' in html
         assert 'all <span class="cycle__summary-reason">on cooldown</span>' in html
+
+    def test_the_queue_fetch_failure_row_renders_in_a_searched_cycle(self, render) -> None:
+        """The row exists to be read, so it has to survive into the cycle card."""
+        rows = self._skip_only_rows(["on cooldown (14d)"])
+        searched = {
+            **rows[0],
+            "id": 1,
+            "action": "searched",
+            "reason": None,
+            "cycle_searched_count": 1,
+            "cycle_skipped_count": 0,
+        }
+        info = {
+            **searched,
+            "id": 2,
+            "action": "info",
+            "item_id": None,
+            "item_type": None,
+            "item_label": None,
+            "search_kind": None,
+            "reason": _QUEUE_FETCH_FAILED_REASON,
+            "message": "download queue check skipped this cycle: ReadTimeout",
+        }
+        html = render("partials/log_rows.html", rows=[info, searched], limit=50)
+        assert _QUEUE_FETCH_FAILED_REASON in html
+        assert "entry--info" in html
+        assert 'outcome-pill__n">1</span> searched' in html
 
     def test_skip_only_summary_counts_unknown_reasons(self, render) -> None:
         """Unrecognised reasons still reach the summary total as 'other'."""

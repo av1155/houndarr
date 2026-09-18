@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 from collections.abc import Callable
+from datetime import UTC, datetime, timedelta
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -17,10 +18,12 @@ from houndarr.engine.adapters.lidarr import _artist_item_id
 from houndarr.engine.adapters.sonarr import _season_item_id
 from houndarr.engine.candidates import SearchCandidate
 from houndarr.engine.search_loop import (
+    _QUEUE_FETCH_FAILED_REASON,
     _QUEUED_REASON,
     _download_queue_lookup,
     run_instance_search,
 )
+from houndarr.services import cooldown as cooldown_module
 from houndarr.services.cooldown import record_search
 from houndarr.services.instances import (
     InstanceType,
@@ -813,19 +816,24 @@ async def test_failed_queue_fetch_searches_as_before(
     assert command_route.call_count == 2
     assert _queue_route().call_count == 1
     rows = await get_log_rows()
-    assert [r["action"] for r in rows] == ["searched", "searched"]
+    assert [r["action"] for r in rows] == ["info", "searched", "searched"]
+    assert rows[0]["reason"] == _QUEUE_FETCH_FAILED_REASON
+    assert rows[0]["item_id"] is None
     warnings = [r for r in caplog.records if "download queue check skipped" in r.getMessage()]
     assert len(warnings) == 1
 
 
 @pytest.mark.asyncio()
 async def test_lookup_fails_open_when_the_client_cannot_be_built(
+    seeded_instances: None,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     """A malformed URL raised at client construction is treated like any fetch failure."""
     adapter = MagicMock()
     adapter.make_client.side_effect = httpx.InvalidURL("bad url")
-    lookup = _download_queue_lookup(adapter, _radarr())
+    lookup = _download_queue_lookup(
+        adapter, _radarr(), cycle_id="cyc-test", cycle_trigger="scheduled"
+    )
     candidate = SearchCandidate(
         item_id=201,
         item_type="movie",
@@ -857,7 +865,9 @@ async def test_lookup_matches_context_candidates_on_leaf_id() -> None:
 
     adapter = MagicMock()
     adapter.make_client.return_value = _Client()
-    lookup = _download_queue_lookup(adapter, _sonarr())
+    lookup = _download_queue_lookup(
+        adapter, _sonarr(), cycle_id="cyc-test", cycle_trigger="scheduled"
+    )
 
     def season_candidate(leaf_id: int | None) -> SearchCandidate:
         return SearchCandidate(
@@ -963,3 +973,111 @@ async def test_queue_skip_rows_are_throttled_per_search_kind(
         ("skipped", "missing", _QUEUED_REASON),
         ("skipped", "cutoff", _QUEUED_REASON),
     ]
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_repeated_failures_write_one_row_per_window(
+    seeded_instances: None,
+) -> None:
+    """The condition persists across cycles, so the row is throttled like the empty pool."""
+    _mock_radarr_missing([_movie(201), _movie(202)])
+    _mock_command(RADARR_URL)
+    _queue_route().mock(return_value=httpx.Response(500))
+
+    instance = _radarr(cooldown_days=0)
+    await run_instance_search(instance, MASTER_KEY)
+    await run_instance_search(instance, MASTER_KEY)
+
+    rows = await get_log_rows()
+    info_rows = [r for r in rows if r["action"] == "info"]
+    assert len(info_rows) == 1
+    assert _queue_route().call_count == 2
+
+
+@pytest.mark.asyncio()
+@respx.mock
+@pytest.mark.parametrize(
+    ("elapsed_seconds", "expected_rows"),
+    [
+        pytest.param(6 * 3600 - 60, 1, id="inside-the-window"),
+        pytest.param(6 * 3600 + 60, 2, id="window-lapsed"),
+    ],
+)
+@pytest.mark.asyncio()
+@respx.mock
+async def test_the_window_is_six_hours_long(
+    seeded_instances: None,
+    elapsed_seconds: int,
+    expected_rows: int,
+) -> None:
+    """Brackets the throttle at six hours, the window the skip-reasons page documents."""
+    _mock_radarr_missing([_movie(201), _movie(202)])
+    _mock_command(RADARR_URL)
+    _queue_route().mock(return_value=httpx.Response(500))
+
+    instance = _radarr(cooldown_days=0)
+    await run_instance_search(instance, MASTER_KEY)
+
+    # Rewind the cached stamp rather than clearing it: clearing would pass
+    # against any window, including one that never lapses.
+    key = (instance.core.id, "download_queue_fetch_failed")
+    cooldown_module._INFO_LOG_CACHE[key] = datetime.now(UTC) - timedelta(seconds=elapsed_seconds)
+    await run_instance_search(instance, MASTER_KEY)
+
+    rows = await get_log_rows()
+    assert len([r for r in rows if r["action"] == "info"]) == expected_rows
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_the_reason_string_operators_filter_on(
+    seeded_instances: None,
+) -> None:
+    """The docs and operators' saved filters carry this literal, so pin the value."""
+    _mock_radarr_missing([_movie(201)])
+    _mock_command(RADARR_URL)
+    _queue_route().mock(return_value=httpx.Response(500))
+
+    await run_instance_search(_radarr(), MASTER_KEY)
+
+    rows = await get_log_rows()
+    info_row = next(r for r in rows if r["action"] == "info")
+    assert info_row["reason"] == "download queue check (fetch failed)"
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_a_readable_queue_writes_no_info_row(
+    seeded_instances: None,
+) -> None:
+    """The row marks a degraded check, so a working one must stay quiet."""
+    _mock_radarr_missing([_movie(201), _movie(202)])
+    _mock_command(RADARR_URL)
+    serve_download_queue([{"movieId": 201}])
+
+    await run_instance_search(_radarr(), MASTER_KEY)
+
+    rows = await get_log_rows()
+    assert [r["action"] for r in rows] == ["skipped", "searched"]
+    assert not [r for r in rows if r["action"] == "info"]
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_the_row_carries_the_cycle_it_belongs_to(
+    seeded_instances: None,
+) -> None:
+    """Without the cycle fields the row cannot be grouped into its cycle card."""
+    _mock_radarr_missing([_movie(201)])
+    _mock_command(RADARR_URL)
+    _queue_route().mock(return_value=httpx.Response(500))
+
+    await run_instance_search(_radarr(), MASTER_KEY, cycle_trigger="run_now")
+
+    rows = await get_log_rows()
+    info_row = next(r for r in rows if r["action"] == "info")
+    searched = next(r for r in rows if r["action"] == "searched")
+    assert info_row["cycle_id"] == searched["cycle_id"]
+    assert info_row["cycle_trigger"] == "run_now"
+    assert info_row["search_kind"] is None

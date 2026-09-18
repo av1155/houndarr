@@ -36,12 +36,12 @@ from tests.conftest import empty_download_queue
 
 
 @pytest.fixture(autouse=True)
-def _reset_skip_log_sentinel() -> Iterator[None]:
-    """Clear the in-memory cooldown-skip sentinel between engine tests.
+def _reset_log_sentinels() -> Iterator[None]:
+    """Clear the in-memory skip and info sentinels between engine tests.
 
-    Without this, a test that triggers ``should_log_skip`` leaves cache
-    entries that suppress skip writes in the next test, producing
-    order-dependent test failures.
+    Without this, a test that triggers ``should_log_skip`` or
+    ``should_log_info`` leaves cache entries that suppress writes in the
+    next test, producing order-dependent test failures.
     """
     _reset_skip_log_cache()
     _reset_info_log_cache()

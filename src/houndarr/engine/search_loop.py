@@ -297,8 +297,8 @@ def _download_queue_lookup(
     adapter: AppAdapterProto,
     instance: Instance,
     *,
-    cycle_id: str | None = None,
-    cycle_trigger: CycleTrigger | str = CycleTrigger.scheduled,
+    cycle_id: str,
+    cycle_trigger: CycleTrigger | str,
 ) -> Callable[[SearchCandidate], Awaitable[bool]]:
     """Return a predicate reporting whether a candidate is already downloading.
 

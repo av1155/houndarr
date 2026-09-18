@@ -100,10 +100,11 @@ queued item doesn't hold back the rest: the parent is skipped only when
 every one of its wanted items the cycle reaches is already queued. If
 the queue can't be read, the cycle searches as usual, writes a warning
 to the container log, and logs a `download queue check (fetch failed)`
-info row. A reverse proxy rule, an ACL, or a narrow API key can block
-that one endpoint while everything else works, in which case the check
-stays off and the row is the only sign of it. The row is throttled to
-one per instance every six hours.
+info row. A reverse proxy rule or an ACL can block that one endpoint
+while every other request keeps working, so the check stays off cycle
+after cycle and the row is what shows it on the Logs page. The row is
+throttled to one per instance every six hours, and the window is held
+in memory, so a restart starts it over.
 
 ## Queue backpressure
 

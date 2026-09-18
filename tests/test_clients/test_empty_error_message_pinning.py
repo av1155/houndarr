@@ -47,6 +47,36 @@ def test_a_real_message_is_returned_unchanged() -> None:
     assert describe_exception(ValueError("boom")) == "boom"
 
 
+def _status_error(url: str) -> httpx.HTTPStatusError:
+    """Build the error httpx itself raises, whose message carries the URL."""
+    request = httpx.Request("GET", url)
+    try:
+        httpx.Response(401, request=request).raise_for_status()
+    except httpx.HTTPStatusError as exc:
+        return exc
+    raise AssertionError("raise_for_status did not raise")
+
+
+def test_a_credential_in_the_url_is_redacted() -> None:
+    """The message reaches search_log and the Logs page, so the password cannot ride along."""
+    described = describe_exception(_status_error("http://admin:hunter2@radarr:7878/api/v3/command"))
+
+    assert "hunter2" not in described
+    assert "admin:[secure]@radarr:7878" in described
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "http://radarr:7878/api/v3/command",
+        "http://admin@radarr:7878/api/v3/command",
+    ],
+)
+def test_a_url_with_no_password_is_untouched(url: str) -> None:
+    """Redaction only fires on userinfo that carries a secret."""
+    assert url in describe_exception(_status_error(url))
+
+
 # Each entry drives one of the interpolating call sites.
 _CALLS: list[tuple[str, str, Callable[[ArrClient], Awaitable[Any]]]] = [
     ("queue-status", SonarrClient._QUEUE_STATUS_PATH, lambda c: c.get_queue_status()),

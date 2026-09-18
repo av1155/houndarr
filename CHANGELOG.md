@@ -30,6 +30,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Security
 
 - anyio moves to 4.15.1, past an advisory where a TLS certificate could be accepted for a host name it was not issued for. (#795)
+- A password embedded in an instance URL is redacted from error rows instead of being stored in the log and shown on the Logs page. (#803)
 
 ---
 

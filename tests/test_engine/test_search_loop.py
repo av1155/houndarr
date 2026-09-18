@@ -938,9 +938,10 @@ async def test_sonarr_season_context_skips_unreleased_record_and_searches_later_
     assert count == 1
     assert search_route.called
     rows = await _get_log_rows()
-    assert rows[0]["action"] == "skipped"
-    assert rows[0]["reason"] == "not yet released"
-    assert rows[-1]["action"] == "searched"
+    assert [r["action"] for r in rows] == ["searched"]
+    # The blocked record logs under the season's id, so a row here would
+    # read as the season's own release state and re-arm its retry (#782).
+    assert not any(r["reason"] == "not yet released" for r in rows)
 
 
 @pytest.mark.asyncio()

@@ -420,6 +420,73 @@ class _QueuedSkips:
             )
 
 
+@dataclass(slots=True)
+class _ReleaseGateSkips:
+    """Per-pass handling of the rows the release gate writes.
+
+    An item-level candidate gets its skip row immediately.  A
+    season/artist/author candidate's row carries the parent's synthetic
+    id, so it reads as the parent's own release state; it waits for
+    :meth:`flush` and is dropped when another record of that parent got
+    past the same gate on this pass, whatever became of that record
+    afterwards, and including a record ``run_now`` waved through its
+    grace window.  A parent no record got past the gate for still gets
+    its row, which is the one that arms its retry once a record
+    releases.
+
+    ``post-release grace`` rows are written either way.  One proves its
+    record was already released, which is what arms the parent's
+    release-timing retry once the window elapses, and the bound in
+    :func:`_is_group_grace_unresolved` keeps that from repeating.  A
+    ``not yet released`` row carries no such proof: in a context mode
+    it only appears while this host's clock trails the *arr's, since
+    the apps that have those modes keep unreleased records out of
+    ``wanted/missing``.
+
+    One row is held per blocked record rather than per parent, which is
+    what the gate wrote before it deferred: several records of one
+    parent each mean something, where the queue gate's one row per
+    parent does not.
+    """
+
+    search_kind: SearchKind | str
+    cycle_id: str
+    cycle_trigger: CycleTrigger | str
+    deferred: list[tuple[tuple[int, int], SearchCandidate, ItemRef]] = field(default_factory=list)
+
+    async def skip(self, candidate: SearchCandidate, ref: ItemRef, *, is_grace: bool) -> None:
+        """Log the gate's skip, or hold it back for a sibling to settle."""
+        if candidate.group_key is None or is_grace:
+            await self._log(candidate, ref)
+            return
+        self.deferred.append((candidate.group_key, candidate, ref))
+
+    async def flush(self, cleared_group_keys: set[tuple[int, int]]) -> None:
+        """Write the held rows for the parents no record cleared the gate for.
+
+        This reads its own set, not the pass's ``seen_group_keys``.  That
+        one doubles as "the group slot is taken", which
+        :meth:`_QueuedSkips.skip` hands back so a sibling can search in
+        place of a downloading record.  Sharing it would make a held row
+        land again whenever the only record that cleared the gate turned
+        out to be downloading.
+        """
+        for group_key, candidate, ref in self.deferred:
+            if group_key not in cleared_group_keys:
+                await self._log(candidate, ref)
+
+    async def _log(self, candidate: SearchCandidate, ref: ItemRef) -> None:
+        await _write_item_log(
+            ref,
+            SearchAction.skipped.value,
+            search_kind=self.search_kind,
+            cycle_id=self.cycle_id,
+            cycle_trigger=self.cycle_trigger,
+            item_label=candidate.label,
+            reason=candidate.unreleased_reason,
+        )
+
+
 def _format_hourly_limit_reason(kind: SearchKind | str, cap: int) -> str:
     """Return the skip-reason string for a cap-exhausted pass.
 
@@ -599,29 +666,25 @@ async def _is_group_grace_unresolved(ref: ItemRef, grace_hrs: int) -> bool:
     Only meaningful in season, artist, and author modes.  There a
     wanted record that has a parent logs under the parent's synthetic
     id (season 0, and records the *arr gave no parent, keep their own),
-    and the release
-    gate writes its skip before group dedup, so a record the gate is
-    still blocking re-arms the parent's retry on every cycle while a
-    released sibling drives the search.
+    and the release gate writes its skip before group dedup, so a
+    record the gate is still blocking would re-arm the parent's retry
+    on every cycle while a released sibling drives the search.
 
-    Only grace rows are bounded here.  A ``not yet released`` row says
-    nothing about when its record becomes searchable, so no bound can
-    be derived from one and such a sibling can still re-arm a parent
-    every cycle.  That needs each app's own filter to stay honest:
-    Sonarr, Whisparr v2, Lidarr, and Readarr all keep unreleased
-    records out of ``wanted/missing``, but each judges that on its own
-    clock, so a record the *arr counts as released still reads as
-    unreleased here while Houndarr's clock trails it.
+    This bounds the ``post-release grace`` half of that.  Such a row
+    carries a bound: it proves its record was already released when the
+    row landed, so that record leaves the window at the latest
+    *grace_hrs* after the row.  The newest row written since the parent
+    was last dispatched therefore bounds every grace window logged
+    since that dispatch.  In exchange the parent is not searched while
+    a window it has logged could still be open: the retry lands up to
+    one window after the grace expires, and a parent whose records keep
+    entering grace closer than about two windows apart can fall back to
+    its ordinary cooldown.
 
-    A ``post-release grace`` row does carry a bound: it proves its
-    record was already released when the row landed, so that record
-    leaves the window at the latest *grace_hrs* after the row.  The
-    newest row written since the parent was last dispatched therefore
-    bounds every grace window logged since that dispatch.  In exchange
-    the parent is not searched while a window it has logged could still
-    be open: the retry lands up to one window after the grace expires,
-    and a parent whose records keep entering grace closer than about
-    two windows apart can fall back to its ordinary cooldown.
+    A ``not yet released`` row says nothing about when its record
+    becomes searchable, so no bound can be derived from one.  Those
+    rows are handled by :class:`_ReleaseGateSkips` instead, which never
+    writes one against a parent another record cleared the gate for.
 
     Args:
         ref: The parent the retry would search.
@@ -913,6 +976,12 @@ async def _run_search_pass(
         cycle_id=cycle_id,
         cycle_trigger=cycle_trigger,
     )
+    cleared_group_keys: set[tuple[int, int]] = set()
+    release_skips = _ReleaseGateSkips(
+        search_kind=search_kind,
+        cycle_id=cycle_id,
+        cycle_trigger=cycle_trigger,
+    )
     searched = 0
     scanned = 0
     page = max(1, start_page)
@@ -1031,21 +1100,17 @@ async def _run_search_pass(
             if candidate.unreleased_reason is not None:
                 is_grace = candidate.unreleased_reason.startswith("post-release grace")
                 if not (is_grace and cycle_trigger == "run_now"):
-                    await _write_item_log(
-                        ref,
-                        SearchAction.skipped.value,
-                        search_kind=search_kind,
-                        cycle_id=cycle_id,
-                        cycle_trigger=cycle_trigger,
-                        item_label=candidate.label,
-                        reason=candidate.unreleased_reason,
-                    )
+                    await release_skips.skip(candidate, ref, is_grace=is_grace)
                     continue
 
             # Context-mode dedup happens after release-timing checks so a later
             # eligible record in the same season/artist/author can still drive
             # the group search when an earlier record was temporarily blocked.
             if candidate.group_key is not None:
+                # Records the gate let through, whatever a later gate does
+                # with them.  Held release-gate rows read this, not the
+                # slot below, which the queue gate hands back.
+                cleared_group_keys.add(candidate.group_key)
                 if candidate.group_key in seen_group_keys:
                     continue
                 seen_group_keys.add(candidate.group_key)
@@ -1256,6 +1321,7 @@ async def _run_search_pass(
                 page += 1
 
     await queued_skips.flush(seen_group_keys)
+    await release_skips.flush(cleared_group_keys)
     return searched, page
 
 

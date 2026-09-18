@@ -1,10 +1,12 @@
-"""Which search_log rows may arm or cancel the release-timing retry (issue #770).
+"""Which search_log rows may arm or cancel the release-timing retry.
 
-Two shapes are covered.  A skip written by a gate other than release
-timing, such as the hourly cap, must leave a pending retry alone.  And in
-season, artist, or author mode, where every row carries the parent's
-synthetic id, a wanted item still inside its post-release grace window
-must not re-arm the parent's retry on every cycle.
+Three shapes are covered.  A skip written by a gate other than release
+timing, such as the hourly cap, must leave a pending retry alone (#770).
+And in season, artist, or author mode, where every row carries the
+parent's synthetic id, a wanted record must not re-arm the parent's
+retry on every cycle: one inside its post-release grace window is held
+for a bounded wait (#770), and one this host still reads as unreleased
+is dropped when another record of that parent cleared the gate (#782).
 """
 
 from __future__ import annotations
@@ -628,3 +630,202 @@ async def test_the_wait_is_one_grace_window_long(
     _mock_season_pages([_episode(101, _NOW - timedelta(days=30), 1)])
 
     assert await run_instance_search(inst, MASTER_KEY) == expected
+
+
+# ---------------------------------------------------------------------------
+# A record this host still reads as unreleased must not speak for its parent
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_a_record_the_arr_calls_released_does_not_re_search_the_parent(
+    seeded_instances: None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The season is searched once, the same as when the two clocks agree.
+
+    Sonarr keeps unreleased episodes out of the wanted list, so one
+    appears here only while this host's clock trails Sonarr's.  The
+    skip lands under the season's id, which used to read as the
+    season's own release state and re-arm its retry every cycle.
+    """
+    _freeze_now(monkeypatch)
+    aired = _episode(101, _NOW - timedelta(days=30), 1)
+    still_future_here = _episode(102, _NOW + timedelta(minutes=5), 2)
+    search_route = _mock_season_pages([aired, still_future_here])
+    inst = _sonarr(sonarr_search_mode=SonarrSearchMode.season_context)
+
+    for _ in range(6):
+        await run_instance_search(inst, MASTER_KEY)
+
+    assert search_route.call_count == 1
+    rows = await get_log_rows()
+    assert not any(r["reason"] == "not yet released" for r in rows)
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_artist_mode_shares_the_trailing_clock_behaviour(
+    seeded_instances: None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Lidarr artist mode behaves the same as Sonarr season mode."""
+    _freeze_now(monkeypatch)
+
+    def _album(album_id: int, release_at: datetime) -> dict[str, Any]:
+        return {
+            "id": album_id,
+            "artistId": 50,
+            "title": f"Album {album_id}",
+            "releaseDate": _iso(release_at),
+            "artist": {"id": 50, "artistName": "Test Artist"},
+        }
+
+    respx.get(f"{LIDARR_URL}/api/v1/wanted/missing").mock(
+        return_value=httpx.Response(
+            200,
+            json=_page(
+                [_album(301, _NOW - timedelta(days=30)), _album(302, _NOW + timedelta(minutes=5))]
+            ),
+        ),
+    )
+    search_route = respx.post(f"{LIDARR_URL}/api/v1/command").mock(
+        return_value=httpx.Response(201, json={"id": 3}),
+    )
+    inst = make_instance(
+        instance_id=3,
+        itype=InstanceType.lidarr,
+        batch_size=1,
+        hourly_cap=20,
+        cooldown_days=7,
+        post_release_grace_hrs=6,
+        lidarr_search_mode=LidarrSearchMode.artist_context,
+    )
+
+    for _ in range(6):
+        await run_instance_search(inst, MASTER_KEY)
+
+    assert search_route.call_count == 1
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_a_season_no_record_represented_still_logs_the_block(
+    seeded_instances: None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """With nothing else to search, the season's own block is still recorded."""
+    _freeze_now(monkeypatch)
+    _mock_season_pages([_episode(101, _NOW + timedelta(minutes=5), 1)])
+    inst = _sonarr(sonarr_search_mode=SonarrSearchMode.season_context)
+
+    assert await run_instance_search(inst, MASTER_KEY) == 0
+
+    rows = await get_log_rows()
+    assert rows
+    assert {r["reason"] for r in rows} == {"not yet released"}
+    assert {r["item_id"] for r in rows} == {_season_item_id(55, 1)}
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_a_season_takes_its_retry_once_its_blocked_record_releases(
+    seeded_instances: None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The row a season did write still arms the one retry it is there for."""
+    from houndarr.services.cooldown import record_search
+
+    parent = _season_item_id(55, 1)
+    _freeze_now(monkeypatch)
+    await record_search(1, parent, "episode")
+    _mock_season_pages([_episode(101, _NOW + timedelta(minutes=5), 1)])
+    inst = _sonarr(
+        sonarr_search_mode=SonarrSearchMode.season_context,
+        post_release_grace_hrs=0,
+    )
+
+    assert await run_instance_search(inst, MASTER_KEY) == 0
+
+    released = _NOW + timedelta(minutes=10)
+    _freeze_now(monkeypatch, released)
+    _mock_season_pages([_episode(101, _NOW + timedelta(minutes=5), 1)])
+
+    assert await run_instance_search(inst, MASTER_KEY) == 1
+    assert await run_instance_search(inst, MASTER_KEY) == 0
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_episode_mode_logs_a_blocked_record_straight_away(
+    seeded_instances: None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Item-level modes keep writing the row as they are reached."""
+    _freeze_now(monkeypatch)
+    _mock_season_pages(
+        [_episode(101, _NOW + timedelta(minutes=5), 1), _episode(102, _NOW - timedelta(days=30), 2)]
+    )
+    inst = _sonarr(sonarr_search_mode=SonarrSearchMode.episode)
+
+    assert await run_instance_search(inst, MASTER_KEY) == 1
+
+    rows = await get_log_rows()
+    assert rows[0]["reason"] == "not yet released"
+    assert rows[0]["item_id"] == 101
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_run_now_drops_a_held_row_for_a_season_it_searched(
+    seeded_instances: None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A manual run holds and drops the row the same way a scheduled one does.
+
+    The blocked record comes first so the gate reaches it before the
+    batch fills on the released one.  That the pre-release check still
+    applies under run now is pinned by
+    ``test_release_timing.test_run_now_does_not_bypass_unreleased``; in
+    season mode both records would dispatch the same season search, so
+    this case cannot see that on its own.
+    """
+    _freeze_now(monkeypatch)
+    still_future_here = _episode(101, _NOW + timedelta(minutes=5), 1)
+    aired = _episode(102, _NOW - timedelta(days=30), 2)
+    search_route = _mock_season_pages([still_future_here, aired])
+    inst = _sonarr(sonarr_search_mode=SonarrSearchMode.season_context)
+
+    await run_instance_search(inst, MASTER_KEY, cycle_trigger=CycleTrigger.run_now)
+
+    assert search_route.call_count == 1
+    rows = await get_log_rows()
+    assert [r["action"] for r in rows] == ["searched"]
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_a_downloading_record_still_counts_as_clearing_the_gate(
+    seeded_instances: None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The season's cycle reads as the download it is waiting on, nothing else.
+
+    The released record clears the release gate and then hands the group
+    slot back because it is already downloading, so a held row keyed on
+    that slot would land again and re-arm the season.
+    """
+    from tests.conftest import serve_download_queue
+
+    _freeze_now(monkeypatch)
+    still_future_here = _episode(101, _NOW + timedelta(minutes=5), 1)
+    downloading = _episode(102, _NOW - timedelta(days=30), 2)
+    search_route = _mock_season_pages([still_future_here, downloading])
+    serve_download_queue([{"id": 900102, "episodeId": 102}])
+    inst = _sonarr(sonarr_search_mode=SonarrSearchMode.season_context)
+
+    assert await run_instance_search(inst, MASTER_KEY) == 0
+
+    assert not search_route.called
+    assert {r["reason"] for r in await get_log_rows()} == {"already in download queue"}

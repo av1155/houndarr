@@ -66,6 +66,16 @@ out its own grace. `Run Now` searches anyway. Season 0 specials, and
 items whose parent the \*arr did not report, are searched on their own
 id and never wait on a parent.
 
+A `not yet released` row in these modes is handled differently. Sonarr,
+Whisparr v2, Lidarr and Readarr keep unreleased items out of their
+wanted lists, so one reaches Houndarr only while this host's clock
+trails the \*arr's, and it says nothing about the parent. When another
+item of that parent passed the same release check on the cycle, the row
+is dropped rather than logged against the parent, whether or not that
+item went on to be searched. A parent with no item past the check on
+that cycle still logs the row, and still takes its early retry once one
+of them is released.
+
 Each item in grace logs a row on every cycle that reaches it, so the
 wait ends about one grace window after the last such row. A parent
 whose items keep entering grace closer than about two grace windows

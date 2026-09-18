@@ -98,9 +98,10 @@ cooldown behavior.
 ## What "skipped" means in the logs
 
 An item Houndarr considers but does not search generally gets an
-`action=skipped` log row with a reason string. Some reasons are written
-once per window rather than once per item, and in season, artist and
-author mode a row another item already accounted for is left out. The
+`action=skipped` log row with a reason string. Some reasons write at
+most one row per item per day rather than one per cycle, and in season,
+artist and author mode a row another item already accounted for is
+left out. The
 canonical list of reasons and their meanings lives in
 [Skip Reasons](/docs/reference/skip-reasons).
 

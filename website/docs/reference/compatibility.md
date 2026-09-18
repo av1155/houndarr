@@ -28,7 +28,12 @@ Docker: `hotio/whisparr:v3`). Select the matching instance type in
 Houndarr.
 
 Any version that exposes the same API (v3 or v1 depending on the
-app) should work. When you test a connection, Houndarr reads the
+app) should work, with one floor. Houndarr reads Radarr's
+`/api/v3/wanted/missing` and `/api/v3/wanted/cutoff`, and Radarr only
+added those two endpoints in 5.6.0. An older Radarr connects
+successfully and then returns nothing for the missing and cutoff
+passes, so treat 5.6.0 as the practical minimum for that app. When you
+test a connection, Houndarr reads the
 `appName` and `version` from the instance's system/status endpoint
 and verifies it matches the type you selected. For Whisparr, it
 also detects v2 / v3 version mismatches.

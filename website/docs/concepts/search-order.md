@@ -32,10 +32,10 @@ resumes from a sane position.
 ## Chronological
 
 Walks the wanted list oldest-first, paged against the persisted
-offset (`missing_page_offset`, `cutoff_page_offset`). Deterministic
-and easy to reason about: you can predict which items come up next.
-The trade-off is that same-day releases cluster together, in no
-particular order within the day.
+offset (`missing_page_offset`, `cutoff_page_offset`). Easy to reason
+about: it walks the list oldest-first from a remembered page, so
+coverage is predictable. The trade-off is that same-day releases
+cluster together, in no particular order within the day.
 
 Pick Chronological when you want predictable coverage for
 debugging, or when you rotate through a relatively small wanted

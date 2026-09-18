@@ -6,9 +6,12 @@ description: What each skip reason means in the Houndarr search log, and when sk
 
 # Skip Reasons
 
-Every item Houndarr evaluates but does not search gets an
-`action=skipped` row in the log with a reason string attached. Most
-reasons are normal scheduling behavior, not errors.
+An item Houndarr evaluates but does not search usually gets an
+`action=skipped` row in the log with a reason string attached. Some
+reasons write at most one row per item per day, and season, artist, and
+author mode leave out a row another item of the same parent already
+accounted for; both are covered below. Most reasons are normal
+scheduling behavior, not errors.
 
 ## Reasons
 
@@ -33,11 +36,13 @@ reasons are normal scheduling behavior, not errors.
 | `tag filter (no included tag)`        | per-item    | `Tag Filter · Include` is set and the item does not carry any matching tag.                          |
 | `tag filter (excluded tag)`           | per-item    | `Tag Filter · Exclude` is set and the item carries one of those tags.                                |
 | `already in download queue`           | per-item    | The \*arr already has this item in its download queue (downloading, importing, or delayed).          |
-| `queue backpressure (N/M)`            | cycle-level | Download queue has `N` items, at or above `Queue Limit` of `M`. Entire cycle is skipped.             |
-| `outside allowed time window`         | cycle-level | Current time falls outside every window defined in `Allowed Search Window`. Entire cycle is skipped. |
+| `queue backpressure (N/M)`            | cycle-level (info) | Download queue has `N` items, at or above `Queue Limit` of `M`. Entire cycle is skipped.      |
+| `outside allowed time window`         | cycle-level (info) | Current time falls outside every window defined in `Allowed Search Window`. Entire cycle is skipped. |
 
-Cycle-level skips write one log row and the supervisor sleeps until
-the next cycle. Per-item skips write one row per candidate evaluated.
+Cycle-level gates write one `info` row rather than a `skipped` one, and
+the supervisor sleeps until the next cycle; filter by `Action = info`
+to find them. Per-item gates write one row per candidate evaluated,
+except where the deduplication and context-mode rules below apply.
 
 ## Release-aware retry
 
@@ -164,16 +169,19 @@ Eight reasons are deduplicated in the log: `on cooldown`, `on cutoff
 cooldown`, `on upgrade cooldown`, `in hot retry window`, `waiting on
 post-release grace`, `already in download queue`, and the two
 `tag filter` skip reasons. Each
-`(instance, item, reason)` triple writes at most one `search_log` row
-per search pass every 24 hours on scheduled cycles. `Run now` always
-writes its rows, and the window is held in memory, so a restart starts
-it over. The engine still evaluates every candidate every cycle; only
+`(instance, item, pass, reason)` combination writes at most one
+`search_log` row every 24 hours on scheduled cycles, except that the
+two `tag filter` reasons share one entry and so suppress each other.
+`Run now` always writes its rows, and the window is held in memory, so
+a restart starts it over. The engine still evaluates every candidate every cycle; only
 the log write is suppressed. This keeps the logs scannable when
 hundreds of items share the same cooldown, the same hot-retry interval
 throttle, or the same tag-filter outcome.
 
 The other reasons in the table above write a row every cycle they
-apply.
+apply, except that in season, artist, and author mode a release-timing
+row is left out when another item of the same parent got past the same
+check on that cycle.
 
 ## Why skips are normal
 

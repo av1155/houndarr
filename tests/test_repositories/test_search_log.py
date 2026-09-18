@@ -667,7 +667,12 @@ async def test_last_grace_skip_since_dispatch_matches_any_window_label(
 
 @pytest.mark.parametrize(
     "later_reason",
-    ["not yet released", "on cooldown (7d)", "already in download queue"],
+    [
+        "not yet released",
+        "on cooldown (7d)",
+        "already in download queue",
+        "waiting on post-release grace (6h)",
+    ],
 )
 @pytest.mark.asyncio()
 async def test_last_grace_skip_since_dispatch_ignores_newer_skips(
@@ -1123,3 +1128,30 @@ async def test_purge_old_logs_lives_on_repository(db: None) -> None:
     assert await purge_old_logs(-5) == 0
     assert await purge_old_logs(30) == 0
     assert not hasattr(_database_mod, "purge_old_logs")
+
+
+@pytest.mark.asyncio()
+async def test_the_group_hold_row_does_not_feed_the_wait_it_records(
+    seeded_instances: None,
+) -> None:
+    """A parent's own hold row must stay outside both grace lookups.
+
+    Each matches ``post-release grace%`` anchored.  If the hold reason
+    were caught, every held cycle would push the wait's bound out and
+    the parent would never take its retry (#783).
+    """
+    from houndarr.engine.search_loop import _format_group_hold_reason
+
+    # Built the way the engine builds it, so renaming the reason into the
+    # pattern's reach fails here rather than silently reviving the loop.
+    hold = _format_group_hold_reason(6)
+    await _seed_rows(
+        [
+            ("skipped", hold, "2026-05-22T09:00:00.000Z"),
+            ("skipped", hold, "2026-05-22T10:00:00.000Z"),
+        ]
+    )
+
+    assert await repo.fetch_last_missing_grace_skip_since_dispatch(1, 21, "episode") is None
+    assert await repo.fetch_latest_missing_grace_skip(1, 21, "episode") is None
+    assert await repo.fetch_latest_missing_reason(1, 21, "episode") is None

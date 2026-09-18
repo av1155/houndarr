@@ -217,7 +217,7 @@ async def should_log_skip(key: SkipLogKey) -> bool:
         key: ``(instance_id, item_id, search_kind, reason_bucket)``.
             ``reason_bucket`` is a coarse category string, e.g.
             ``"cooldown"``, ``"cutoff_cd"``, ``"upgrade_cd"``,
-            ``"hot_retry"``.
+            ``"hot_retry"``, ``"grace_hold"``.
 
     Returns:
         ``True`` if the caller should write the skip row (cache miss or

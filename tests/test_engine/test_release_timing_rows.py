@@ -128,7 +128,12 @@ def _episode(episode_id: int, air_at: datetime, number: int) -> dict[str, Any]:
 
 @pytest.mark.parametrize(
     "later_reason",
-    ["hourly limit reached (20/hr)", "tag filter (excluded tag)", "on cooldown (7d)"],
+    [
+        "hourly limit reached (20/hr)",
+        "tag filter (excluded tag)",
+        "on cooldown (7d)",
+        "waiting on post-release grace (6h)",
+    ],
 )
 @pytest.mark.asyncio()
 @respx.mock
@@ -829,3 +834,116 @@ async def test_a_downloading_record_still_counts_as_clearing_the_gate(
 
     assert not search_route.called
     assert {r["reason"] for r in await get_log_rows()} == {"already in download queue"}
+
+
+# ---------------------------------------------------------------------------
+# The wait says so in the log instead of reading as an ordinary cooldown (#783)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_a_held_parent_names_the_wait_instead_of_its_cooldown(
+    seeded_instances: None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The row says the parent is waiting, not that it is merely pacing."""
+    from houndarr.services.cooldown import record_search
+
+    parent = _season_item_id(55, 1)
+    _freeze_now(monkeypatch)
+    await record_search(1, parent, "episode")
+    await _insert_grace_row(parent, _NOW - timedelta(hours=1))
+    _mock_season_pages([_episode(101, _NOW - timedelta(days=30), 1)])
+    inst = _sonarr(sonarr_search_mode=SonarrSearchMode.season_context)
+
+    assert await run_instance_search(inst, MASTER_KEY) == 0
+
+    reasons = [r["reason"] for r in await get_log_rows() if r["action"] == "skipped"]
+    assert "waiting on post-release grace (6h)" in reasons
+    assert not any(r is not None and r.startswith("on cooldown") for r in reasons)
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_the_wait_names_the_current_grace_setting(
+    seeded_instances: None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The window in the reason is the instance's, the way the other rows read."""
+    from houndarr.services.cooldown import record_search
+
+    parent = _season_item_id(55, 1)
+    _freeze_now(monkeypatch)
+    await record_search(1, parent, "episode")
+    await _insert_grace_row(parent, _NOW - timedelta(hours=1))
+    _mock_season_pages([_episode(101, _NOW - timedelta(days=30), 1)])
+    inst = _sonarr(sonarr_search_mode=SonarrSearchMode.season_context, post_release_grace_hrs=48)
+
+    assert await run_instance_search(inst, MASTER_KEY) == 0
+
+    reasons = [r["reason"] for r in await get_log_rows() if r["action"] == "skipped"]
+    assert "waiting on post-release grace (48h)" in reasons
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_the_wait_writes_one_row_not_one_per_cycle(
+    seeded_instances: None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Throttled under its own bucket, the way the other per-cycle rows are."""
+    from houndarr.services.cooldown import _reset_skip_log_cache, record_search
+
+    parent = _season_item_id(55, 1)
+    _freeze_now(monkeypatch)
+    await record_search(1, parent, "episode")
+    await _insert_grace_row(parent, _NOW - timedelta(hours=1))
+    _mock_season_pages([_episode(101, _NOW - timedelta(days=30), 1)])
+    inst = _sonarr(sonarr_search_mode=SonarrSearchMode.season_context)
+
+    for _ in range(4):
+        await run_instance_search(inst, MASTER_KEY)
+
+    def _held() -> int:
+        return sum(1 for r in rows if r["reason"] == "waiting on post-release grace (6h)")
+
+    rows = await get_log_rows()
+    assert _held() == 1
+
+    _reset_skip_log_cache()
+    await run_instance_search(inst, MASTER_KEY)
+    rows = await get_log_rows()
+    assert _held() == 2
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_the_wait_still_ends_once_the_window_has_passed(
+    seeded_instances: None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Held cycles do not postpone the search the wait is pacing.
+
+    That the hold rows themselves stay outside the lookup the wait is
+    derived from is pinned directly against the query, in
+    ``test_search_log.test_the_group_hold_row_does_not_feed_the_wait_it_records``.
+    """
+    from houndarr.services.cooldown import record_search
+
+    parent = _season_item_id(55, 1)
+    _freeze_now(monkeypatch)
+    await record_search(1, parent, "episode")
+    await _insert_grace_row(parent, _NOW - timedelta(hours=1))
+    aired = _episode(101, _NOW - timedelta(days=30), 1)
+    inst = _sonarr(sonarr_search_mode=SonarrSearchMode.season_context, post_release_grace_hrs=48)
+
+    for hours in (0, 25):
+        _freeze_now(monkeypatch, _NOW + timedelta(hours=hours))
+        _mock_season_pages([aired])
+        assert await run_instance_search(inst, MASTER_KEY) == 0
+
+    _freeze_now(monkeypatch, _NOW + timedelta(hours=49))
+    _mock_season_pages([aired])
+
+    assert await run_instance_search(inst, MASTER_KEY) == 1

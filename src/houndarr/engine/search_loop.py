@@ -726,6 +726,18 @@ def _format_hot_retry_reason(window_hrs: int) -> str:
     return f"in hot retry window ({window_hrs}h)"
 
 
+def _format_group_hold_reason(grace_hrs: int) -> str:
+    """Return the search-log reason for a parent waiting on a record's grace.
+
+    Deliberately not prefixed ``post-release grace``: three queries match
+    that prefix anchored (``repositories/search_log.py``), one of them the
+    lookup :func:`_is_group_grace_unresolved` derives the wait from.  A
+    row this reason matched would push that bound out every cycle and the
+    wait would sustain itself.
+    """
+    return f"waiting on post-release grace ({grace_hrs}h)"
+
+
 def _is_release_timing_reason(reason: str | None) -> bool:
     """Return ``True`` when *reason* indicates a release-timing block."""
     return reason == "not yet released" or (
@@ -1228,14 +1240,31 @@ async def _run_search_pass(
                             ref, instance.missing.post_release_grace_hrs
                         )
                     ):
-                        should_retry = False
-                        logger.debug(
-                            "[%s] %s%s: holding missing retry, a wanted item may still be "
-                            "inside post-release grace",
-                            instance.core.name,
-                            log_prefix,
+                        reason = _format_group_hold_reason(instance.missing.post_release_grace_hrs)
+                        skip_key = (
+                            instance.core.id,
                             candidate.item_id,
+                            search_kind,
+                            "grace_hold",
                         )
+                        if cycle_trigger == "run_now" or await should_log_skip(skip_key):
+                            logger.debug(
+                                "[%s] %s%s: %s",
+                                instance.core.name,
+                                log_prefix,
+                                candidate.item_id,
+                                reason,
+                            )
+                            await _write_item_log(
+                                ref,
+                                SearchAction.skipped.value,
+                                search_kind=search_kind,
+                                cycle_id=cycle_id,
+                                cycle_trigger=cycle_trigger,
+                                item_label=candidate.label,
+                                reason=reason,
+                            )
+                        continue
 
                     if should_retry:
                         if await queued_skips.skip(candidate, ref, seen_item_ids, seen_group_keys):

@@ -9,7 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- Whisparr v2 missing searches no longer fail with a 500 on versions below 2.2.0, where the wanted request sorted by a column the episode table lacks. (#780)
+- Whisparr v2 search cycles no longer abort with a 500 on versions below 2.2.0, where the wanted request sorted by a column the episode table lacks. (#780)
+- Dashboard counts for a Whisparr v2 instance below 2.2.0 refresh again instead of holding their last-known values. (#780)
 - Season, artist, and author modes no longer re-search a parent every cycle while one of its wanted items sits inside `post-release grace (Nh)`. (#770)
 - A cooldown, hourly limit, hot retry, or tag filter skip no longer cancels a missing item's pending release-timing retry. (#770)
 - A missing item the hot retry window never got to search now takes its one release-timing retry once that window closes. (#770)

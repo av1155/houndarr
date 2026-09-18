@@ -49,7 +49,7 @@ class MissingEpisode:
 class SonarrClient(ArrClient):
     """Async client for the Sonarr v3 REST API."""
 
-    _WANTED_SORT_KEY: ClassVar[str] = "episodes.airDateUtc"
+    _WANTED_SORT_KEY: ClassVar[str] = "airDateUtc"
     _WANTED_INCLUDE_PARAM: ClassVar[str | None] = "includeSeries"
     # Annotation is inherited from ``ArrClient._WANTED_ENVELOPE``
     # (``ClassVar[type[PaginatedResponse[Any]] | None]``).  Redeclaring with

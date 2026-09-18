@@ -88,8 +88,7 @@ def make_whisparr_v2_data(
         api_version="v3",
         sort_key_default="episodes.airDateUtc",
         sort_direction_default="ascending",
-        sort_keys=frozenset({"episodes.airDateUtc", "episodes.lastSearchTime", "series.sortTitle"}),
-        sort_key_unknown="clamp",
+        sort_keys=frozenset({"airDateUtc", "episodes.airDateUtc", "series.sortTitle"}),
         sort_key_table="Episodes",
         parents=parents,
         leaves=leaves,
@@ -122,7 +121,7 @@ def make_whisparr_v2_router(data: AppData) -> APIRouter:
     async def wanted_missing(
         page: int = Query(1, ge=1),
         page_size: int = Query(10, ge=1, le=2000, alias="pageSize"),
-        sort_key: str = Query("airDateUtc", alias="sortKey"),
+        sort_key: str = Query("episodes.airDateUtc", alias="sortKey"),
         sort_direction: str = Query("ascending", alias="sortDirection"),
         monitored: bool = Query(True),
         include_series: bool = Query(False, alias="includeSeries"),
@@ -141,7 +140,7 @@ def make_whisparr_v2_router(data: AppData) -> APIRouter:
     async def wanted_cutoff(
         page: int = Query(1, ge=1),
         page_size: int = Query(10, ge=1, le=2000, alias="pageSize"),
-        sort_key: str = Query("airDateUtc", alias="sortKey"),
+        sort_key: str = Query("episodes.airDateUtc", alias="sortKey"),
         sort_direction: str = Query("ascending", alias="sortDirection"),
         monitored: bool = Query(True),
         include_series: bool = Query(False, alias="includeSeries"),

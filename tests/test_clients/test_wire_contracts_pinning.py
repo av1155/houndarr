@@ -4,11 +4,11 @@ Sonarr, Radarr, Lidarr, Readarr, and Whisparr v2 all route through
 the shared ``_fetch_wanted_page`` template method on ``ArrClient``;
 Whisparr v3 stays a documented outlier (no ``/wanted`` endpoint).
 
-These tests capture the exact HTTP request each concrete client
-issues today for ``get_missing``, ``get_cutoff_unmet``, and
-``get_wanted_total`` so a future template edit cannot silently
-drop
-or reorder a query param or change the sort key.
+Every client has a ``get_missing`` case pinning its full query string,
+including the sort key.  Coverage of ``get_cutoff_unmet`` and
+``get_wanted_total`` is per-client rather than uniform; the sort key
+itself is pinned for all of them in
+``tests/test_engine/test_adapter_registry_gate.py``.
 """
 
 from __future__ import annotations
@@ -44,7 +44,7 @@ class TestSonarrWireContract:
         params = route.calls[0].request.url.params
         assert params["page"] == "3"
         assert params["pageSize"] == "25"
-        assert params["sortKey"] == "episodes.airDateUtc"
+        assert params["sortKey"] == "airDateUtc"
         assert params["sortDirection"] == "ascending"
         assert params["includeSeries"] == "true"
         assert params["monitored"] == "true"
@@ -74,7 +74,7 @@ class TestSonarrWireContract:
             total = await client.get_wanted_total("missing")
         params = route.calls[0].request.url.params
         assert params["pageSize"] == "1"
-        assert params["sortKey"] == "episodes.airDateUtc"
+        assert params["sortKey"] == "airDateUtc"
         assert params["monitored"] == "true"
         assert total == 99
 

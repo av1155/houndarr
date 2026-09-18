@@ -89,7 +89,6 @@ def make_readarr_data(
         sort_key_default="releaseDate",
         sort_direction_default="ascending",
         sort_keys=frozenset({"releaseDate", "title", "id"}),
-        sort_key_unknown="error",
         sort_key_table="Books",
         parents=parents,
         leaves=leaves,

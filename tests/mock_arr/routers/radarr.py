@@ -86,7 +86,6 @@ def make_radarr_data(
                 "movies.lastSearchTime",
             }
         ),
-        sort_key_unknown="clamp",
         sort_key_table="Movies",
         parents=[],
         leaves=leaves,
@@ -120,7 +119,7 @@ def make_radarr_router(data: AppData) -> APIRouter:
     async def wanted_missing(
         page: int = Query(1, ge=1),
         page_size: int = Query(10, ge=1, le=2000, alias="pageSize"),
-        sort_key: str = Query("movieMetadata.inCinemas", alias="sortKey"),
+        sort_key: str = Query("movieMetadata.sortTitle", alias="sortKey"),
         sort_direction: str = Query("ascending", alias="sortDirection"),
         monitored: bool = Query(True),
     ) -> dict[str, Any]:
@@ -138,7 +137,7 @@ def make_radarr_router(data: AppData) -> APIRouter:
     async def wanted_cutoff(
         page: int = Query(1, ge=1),
         page_size: int = Query(10, ge=1, le=2000, alias="pageSize"),
-        sort_key: str = Query("movieMetadata.inCinemas", alias="sortKey"),
+        sort_key: str = Query("movieMetadata.sortTitle", alias="sortKey"),
         sort_direction: str = Query("ascending", alias="sortDirection"),
         monitored: bool = Query(True),
     ) -> dict[str, Any]:

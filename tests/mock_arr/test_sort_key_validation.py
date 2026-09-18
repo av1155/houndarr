@@ -27,13 +27,10 @@ from houndarr.clients.sonarr import SonarrClient
 from houndarr.clients.whisparr_v2 import WhisparrV2Client
 from tests.mock_arr.server import create_app
 
-_APPS: list[tuple[str, str, str]] = [
-    ("sonarr", "/sonarr/api/v3", "episodes.airDateUtc"),
-    ("radarr", "/radarr/api/v3", "movieMetadata.sortTitle"),
-    ("whisparr_v2", "/whisparr_v2/api/v3", "episodes.airDateUtc"),
-]
-
-_STRICT_APPS: list[tuple[str, str, str]] = [
+_ALL_APPS: list[tuple[str, str, str]] = [
+    ("sonarr", "/sonarr/api/v3", "Episodes"),
+    ("radarr", "/radarr/api/v3", "Movies"),
+    ("whisparr_v2", "/whisparr_v2/api/v3", "Episodes"),
     ("lidarr", "/lidarr/api/v1", "Albums"),
     ("readarr", "/readarr/api/v1", "Books"),
 ]
@@ -45,52 +42,55 @@ def client() -> TestClient:
 
 
 @pytest.mark.parametrize(
-    ("name", "prefix", "expected_default"),
-    _APPS,
-    ids=[name for name, *_ in _APPS],
-)
-def test_an_allowlist_app_swaps_an_unknown_key_for_its_default(
-    client: TestClient, name: str, prefix: str, expected_default: str
-) -> None:
-    """The failure that hid the Radarr bug: a 200 that sorted by the wrong column."""
-    resp = client.get(f"{prefix}/wanted/missing", params={"sortKey": "totalGarbageXyz"})
-    assert resp.status_code == 200
-    assert resp.json()["sortKey"] == expected_default
-
-
-@pytest.mark.parametrize(
     ("name", "prefix", "table"),
-    _STRICT_APPS,
-    ids=[name for name, *_ in _STRICT_APPS],
+    _ALL_APPS,
+    ids=[name for name, *_ in _ALL_APPS],
 )
-def test_an_app_without_an_allowlist_answers_500(
+def test_a_key_the_app_would_not_accept_is_refused(
     client: TestClient, name: str, prefix: str, table: str
 ) -> None:
-    """The failure that broke Whisparr v2 and old Radarr outright."""
+    """Older builds answer 500 for a key that is not a real column."""
     resp = client.get(f"{prefix}/wanted/missing", params={"sortKey": "totalGarbageXyz"})
     assert resp.status_code == 500
-    assert f"no such column: {table}.totalGarbageXyz" in resp.text
+    # Lidarr upper-cases the column in its message; the others do not.
+    expected = "TotalGarbageXyz" if name == "lidarr" else "totalGarbageXyz"
+    assert f"no such column: {table}.{expected}" in resp.text
 
 
 @pytest.mark.parametrize(
-    ("name", "prefix", "sort_key"),
+    ("name", "prefix", "sort_key", "expected_column"),
     [
-        ("sonarr", "/sonarr/api/v3", SonarrClient._WANTED_SORT_KEY),
-        ("radarr", "/radarr/api/v3", RadarrClient._WANTED_SORT_KEY),
-        ("whisparr_v2", "/whisparr_v2/api/v3", WhisparrV2Client._WANTED_SORT_KEY),
-        ("lidarr", "/lidarr/api/v1", LidarrClient._WANTED_SORT_KEY),
-        ("readarr", "/readarr/api/v1", ReadarrClient._WANTED_SORT_KEY),
+        # Sonarr keeps the bare form: 3.0.10.1567 answers 500 for
+        # "episodes.airDateUtc" because `episodes` is not a property of its
+        # Episode model, while 4.x clamps the bare form to that same column.
+        ("sonarr", "/sonarr/api/v3", SonarrClient._WANTED_SORT_KEY, "airDateUtc"),
+        ("radarr", "/radarr/api/v3", RadarrClient._WANTED_SORT_KEY, "movieMetadata.inCinemas"),
+        # Whisparr v2 takes the qualified form: 2.0.0.2151 resolves both to the
+        # same column and 2.2.0 honours only this one.
+        (
+            "whisparr_v2",
+            "/whisparr_v2/api/v3",
+            WhisparrV2Client._WANTED_SORT_KEY,
+            "episodes.airDateUtc",
+        ),
+        ("lidarr", "/lidarr/api/v1", LidarrClient._WANTED_SORT_KEY, "releaseDate"),
+        ("readarr", "/readarr/api/v1", ReadarrClient._WANTED_SORT_KEY, "releaseDate"),
     ],
     ids=["sonarr", "radarr", "whisparr_v2", "lidarr", "readarr"],
 )
-def test_every_client_sends_a_key_its_app_accepts(
-    client: TestClient, name: str, prefix: str, sort_key: str
+def test_every_client_sorts_by_its_release_date_column(
+    client: TestClient, name: str, prefix: str, sort_key: str, expected_column: str
 ) -> None:
-    """Radarr's `inCinemas` failed this for 18 months; nothing caught it."""
+    """Radarr's `inCinemas` failed this for eighteen months; nothing caught it.
+
+    The contract is the column the app ends up sorting by, not the string it
+    echoes.  A key the app discards still fails here, because the column it
+    falls back to is not the one the pass wants.
+    """
     for kind in ("missing", "cutoff"):
         resp = client.get(f"{prefix}/wanted/{kind}", params={"sortKey": sort_key})
         assert resp.status_code == 200, f"{name} {kind}: {resp.text[:120]}"
-        assert resp.json()["sortKey"] == sort_key, (
-            f"{name} {kind}: the app discarded {sort_key!r} and sorted by "
-            f"{resp.json()['sortKey']!r} instead"
+        assert resp.json()["sortKey"] == expected_column, (
+            f"{name} {kind}: sent {sort_key!r} and the app sorted by "
+            f"{resp.json()['sortKey']!r} instead of {expected_column!r}"
         )

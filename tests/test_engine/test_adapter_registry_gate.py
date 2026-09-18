@@ -124,11 +124,11 @@ class TestPaginatedClientHooks:
     @pytest.mark.parametrize(
         ("client_cls", "expected_base", "expected_sort", "expected_include"),
         [
-            (SonarrClient, "/api/v3/wanted", "airDateUtc", "includeSeries"),
+            (SonarrClient, "/api/v3/wanted", "episodes.airDateUtc", "includeSeries"),
             (RadarrClient, "/api/v3/wanted", "movieMetadata.inCinemas", None),
             (LidarrClient, "/api/v1/wanted", "releaseDate", "includeArtist"),
             (ReadarrClient, "/api/v1/wanted", "releaseDate", "includeAuthor"),
-            (WhisparrV2Client, "/api/v3/wanted", "airDateUtc", "includeSeries"),
+            (WhisparrV2Client, "/api/v3/wanted", "episodes.airDateUtc", "includeSeries"),
         ],
     )
     def test_wanted_template_hooks(

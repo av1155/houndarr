@@ -58,6 +58,16 @@ class AppData:
     page_log: PageLog = field(default_factory=PageLog)
     queued_ids: set[int] = field(default_factory=set)
     queue_detail_requests: int = 0
+    # What the app does with a sortKey it does not recognise.  Sonarr,
+    # Radarr and Whisparr v2 gained an API-layer allowlist in Sept 2024
+    # and silently swap an unlisted key for their own default; Lidarr and
+    # Readarr never did, so the key reaches SQLite and a non-column is a
+    # 500.  Both were measured against live instances: Sonarr 4.0.20.3014
+    # answers 200 for a made-up key, Lidarr 3.1.0.4875 answers 500 with
+    # ``no such column: Albums.<key>``.
+    sort_keys: frozenset[str] = frozenset()
+    sort_key_unknown: str = "clamp"
+    sort_key_table: str = ""
 
 
 @dataclass(slots=True)

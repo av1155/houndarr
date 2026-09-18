@@ -97,8 +97,9 @@ async def test_get_missing_returns_episodes(client: WhisparrV2Client) -> None:
     assert request.url.params["monitored"] == "true"
     assert request.url.params["includeSeries"] == "true"
     # Not "releaseDate": the episode table has no such column, so Whisparr v2
-    # answers 500 with a SQL error before 2.2.0.
-    assert request.url.params["sortKey"] == "airDateUtc"
+    # answers 500 with a SQL error before 2.2.0.  Qualified, because 2.2.0 on
+    # discards an unqualified key and sorts by its own default instead.
+    assert request.url.params["sortKey"] == "episodes.airDateUtc"
     assert request.url.params["sortDirection"] == "ascending"
 
 

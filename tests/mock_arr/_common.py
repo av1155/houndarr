@@ -10,9 +10,29 @@ from __future__ import annotations
 import random
 from typing import Any
 
-from fastapi import APIRouter, Body, Query
+from fastapi import APIRouter, Body, HTTPException, Query
 
 from tests.mock_arr.store import AppData
+
+
+def resolve_sort_key(sort_key: str, data: AppData) -> str:
+    """Return the sortKey the app would really use, or raise as it would.
+
+    A wrong sort key is invisible twice over in production: the apps with
+    an allowlist swap it for their own default rather than erroring, and
+    the ones without hand it to SQLite.  Modelling both here is what lets
+    a test catch a client sending a key its app does not accept.
+    """
+    if not data.sort_keys:
+        return sort_key
+    if sort_key.lower() in {key.lower() for key in data.sort_keys}:
+        return sort_key
+    if data.sort_key_unknown == "error":
+        raise HTTPException(
+            status_code=500,
+            detail=f"SQL logic error\nno such column: {data.sort_key_table}.{sort_key}",
+        )
+    return data.sort_key_default
 
 
 def paginate(

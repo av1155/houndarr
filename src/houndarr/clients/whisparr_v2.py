@@ -60,7 +60,7 @@ class WhisparrV2Client(ArrClient):
     # has no such column, so sorting by it is a SQL error before 2.2.0 and
     # ignored from 2.2.0 on.  Episodes embed a ``series`` parent like
     # Sonarr does.
-    _WANTED_SORT_KEY: ClassVar[str] = "airDateUtc"
+    _WANTED_SORT_KEY: ClassVar[str] = "episodes.airDateUtc"
     _WANTED_INCLUDE_PARAM: ClassVar[str | None] = "includeSeries"
     # See SonarrClient for the rationale on dropping the per-subclass
     # ``ClassVar`` re-annotation.

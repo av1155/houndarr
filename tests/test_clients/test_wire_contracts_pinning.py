@@ -44,7 +44,7 @@ class TestSonarrWireContract:
         params = route.calls[0].request.url.params
         assert params["page"] == "3"
         assert params["pageSize"] == "25"
-        assert params["sortKey"] == "airDateUtc"
+        assert params["sortKey"] == "episodes.airDateUtc"
         assert params["sortDirection"] == "ascending"
         assert params["includeSeries"] == "true"
         assert params["monitored"] == "true"
@@ -74,7 +74,7 @@ class TestSonarrWireContract:
             total = await client.get_wanted_total("missing")
         params = route.calls[0].request.url.params
         assert params["pageSize"] == "1"
-        assert params["sortKey"] == "airDateUtc"
+        assert params["sortKey"] == "episodes.airDateUtc"
         assert params["monitored"] == "true"
         assert total == 99
 
@@ -142,6 +142,8 @@ class TestLidarrWireContract:
         params = route.calls[0].request.url.params
         assert params["includeArtist"] == "true"
         assert params["monitored"] == "true"
+        # Lidarr has no sort-key allowlist, so a non-column is a 500.
+        assert params["sortKey"] == "releaseDate"
 
     @pytest.mark.asyncio()
     @respx.mock
@@ -169,6 +171,8 @@ class TestReadarrWireContract:
         params = route.calls[0].request.url.params
         assert params["includeAuthor"] == "true"
         assert params["monitored"] == "true"
+        # Readarr has no sort-key allowlist either.
+        assert params["sortKey"] == "releaseDate"
 
     @pytest.mark.asyncio()
     @respx.mock
@@ -196,6 +200,9 @@ class TestWhisparrV2WireContract:
         params = route.calls[0].request.url.params
         assert params["includeSeries"] == "true"
         assert params["monitored"] == "true"
+        # Qualified: below 2.2.0 the bare form is a SQL error, above it the
+        # app discards an unlisted key and sorts by its own default.
+        assert params["sortKey"] == "episodes.airDateUtc"
 
     @pytest.mark.asyncio()
     @respx.mock

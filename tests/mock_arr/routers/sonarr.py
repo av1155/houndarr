@@ -18,6 +18,7 @@ from tests.mock_arr._common import (
     attach_common_routes,
     paginate,
     partition_leaf_ids,
+    resolve_sort_key,
 )
 from tests.mock_arr.store import AppData
 
@@ -93,6 +94,9 @@ def make_sonarr_data(
         api_version="v3",
         sort_key_default="episodes.airDateUtc",
         sort_direction_default="ascending",
+        sort_keys=frozenset({"episodes.airDateUtc", "episodes.lastSearchTime", "series.sortTitle"}),
+        sort_key_unknown="clamp",
+        sort_key_table="Episodes",
         parents=parents,
         leaves=leaves,
         missing_ids=missing_ids,
@@ -141,7 +145,7 @@ def make_sonarr_router(data: AppData) -> APIRouter:
             records,
             page=page,
             page_size=page_size,
-            sort_key=sort_key,
+            sort_key=resolve_sort_key(sort_key, data),
             sort_direction=sort_direction,
         )
 
@@ -160,7 +164,7 @@ def make_sonarr_router(data: AppData) -> APIRouter:
             records,
             page=page,
             page_size=page_size,
-            sort_key=sort_key,
+            sort_key=resolve_sort_key(sort_key, data),
             sort_direction=sort_direction,
         )
 

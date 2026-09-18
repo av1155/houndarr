@@ -6,7 +6,7 @@ And in season, artist, or author mode, where every row carries the
 parent's synthetic id, a wanted record must not re-arm the parent's
 retry on every cycle: one inside its post-release grace window is held
 for a bounded wait (#770), and one this host still reads as unreleased
-is dropped when a sibling went on to represent the parent (#782).
+is dropped when another record of that parent cleared the gate (#782).
 """
 
 from __future__ import annotations
@@ -786,12 +786,14 @@ async def test_run_now_still_gates_a_record_this_host_reads_as_unreleased(
 
     Run now bypasses grace at the gate but never the pre-release check,
     so the blocked record is still held back; its row is dropped because
-    the season it names was searched on this cycle.
+    another record of the season cleared the gate on this cycle.  The
+    blocked record comes first so the gate reaches it before the batch
+    fills on the released one.
     """
     _freeze_now(monkeypatch)
-    aired = _episode(101, _NOW - timedelta(days=30), 1)
-    still_future_here = _episode(102, _NOW + timedelta(minutes=5), 2)
-    search_route = _mock_season_pages([aired, still_future_here])
+    still_future_here = _episode(101, _NOW + timedelta(minutes=5), 1)
+    aired = _episode(102, _NOW - timedelta(days=30), 2)
+    search_route = _mock_season_pages([still_future_here, aired])
     inst = _sonarr(sonarr_search_mode=SonarrSearchMode.season_context)
 
     await run_instance_search(inst, MASTER_KEY, cycle_trigger=CycleTrigger.run_now)
@@ -799,3 +801,30 @@ async def test_run_now_still_gates_a_record_this_host_reads_as_unreleased(
     assert search_route.call_count == 1
     rows = await get_log_rows()
     assert [r["action"] for r in rows] == ["searched"]
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_a_downloading_record_still_counts_as_clearing_the_gate(
+    seeded_instances: None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The season's cycle reads as the download it is waiting on, nothing else.
+
+    The released record clears the release gate and then hands the group
+    slot back because it is already downloading, so a held row keyed on
+    that slot would land again and re-arm the season.
+    """
+    from tests.conftest import serve_download_queue
+
+    _freeze_now(monkeypatch)
+    still_future_here = _episode(101, _NOW + timedelta(minutes=5), 1)
+    downloading = _episode(102, _NOW - timedelta(days=30), 2)
+    search_route = _mock_season_pages([still_future_here, downloading])
+    serve_download_queue([{"id": 900102, "episodeId": 102}])
+    inst = _sonarr(sonarr_search_mode=SonarrSearchMode.season_context)
+
+    assert await run_instance_search(inst, MASTER_KEY) == 0
+
+    assert not search_route.called
+    assert {r["reason"] for r in await get_log_rows()} == {"already in download queue"}

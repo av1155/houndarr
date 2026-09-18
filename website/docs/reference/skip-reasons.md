@@ -70,9 +70,11 @@ A `not yet released` row in these modes is handled differently. Sonarr,
 Whisparr v2, Lidarr and Readarr keep unreleased items out of their
 wanted lists, so one reaches Houndarr only while this host's clock
 trails the \*arr's, and it says nothing about the parent. When another
-item went on to search the parent on that cycle, the row is dropped
-rather than logged against it. A parent no item searched still logs the
-row, and still takes its early retry once that item's date passes.
+item of that parent passed the same release check on the cycle, the row
+is dropped rather than logged against the parent, whether or not that
+item went on to be searched. A parent whose items were all blocked still
+logs the row, and still takes its early retry once one of them is
+released.
 
 Each item in grace logs a row on every cycle that reaches it, so the
 wait ends about one grace window after the last such row. A parent

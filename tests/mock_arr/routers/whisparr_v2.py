@@ -1,9 +1,9 @@
 """Whisparr v2 mock router.
 
 Whisparr v2 is Sonarr-derived: same series + episode shape, same v3 API
-path, but defaults to ``releaseDate`` sort instead of ``airDateUtc``. The
-seeded data uses the same parent/leaf scheme as Sonarr with adjusted
-titles to keep the two apps distinguishable in the search log.
+path, same ``airDateUtc`` sort column. The seeded data uses the same
+parent/leaf scheme as Sonarr with adjusted titles to keep the two apps
+distinguishable in the search log.
 """
 
 from __future__ import annotations
@@ -85,7 +85,7 @@ def make_whisparr_v2_data(
         app_version="2.2.0.108",
         api_prefix="/whisparr_v2/api/v3",
         api_version="v3",
-        sort_key_default="releaseDate",
+        sort_key_default="episodes.airDateUtc",
         sort_direction_default="ascending",
         parents=parents,
         leaves=leaves,
@@ -118,7 +118,7 @@ def make_whisparr_v2_router(data: AppData) -> APIRouter:
     async def wanted_missing(
         page: int = Query(1, ge=1),
         page_size: int = Query(10, ge=1, le=2000, alias="pageSize"),
-        sort_key: str = Query("releaseDate", alias="sortKey"),
+        sort_key: str = Query("airDateUtc", alias="sortKey"),
         sort_direction: str = Query("ascending", alias="sortDirection"),
         monitored: bool = Query(True),
         include_series: bool = Query(False, alias="includeSeries"),
@@ -137,7 +137,7 @@ def make_whisparr_v2_router(data: AppData) -> APIRouter:
     async def wanted_cutoff(
         page: int = Query(1, ge=1),
         page_size: int = Query(10, ge=1, le=2000, alias="pageSize"),
-        sort_key: str = Query("releaseDate", alias="sortKey"),
+        sort_key: str = Query("airDateUtc", alias="sortKey"),
         sort_direction: str = Query("ascending", alias="sortDirection"),
         monitored: bool = Query(True),
         include_series: bool = Query(False, alias="includeSeries"),

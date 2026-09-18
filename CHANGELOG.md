@@ -27,6 +27,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Whisparr v3 availability skips count as not yet released on the Logs page instead of falling into `other`. (#768)
 - Missing, cutoff, and upgrade searches skip items that are already in the \*arr's download queue and log `already in download queue` instead. (#765)
 
+### Security
+
+- anyio moves to 4.15.1, past an advisory where a TLS certificate could be accepted for a host name it was not issued for. (#795)
+
 ---
 
 ## [1.13.2] - 2026-08-11

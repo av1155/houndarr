@@ -159,8 +159,11 @@ def _parse_bool_env(name: str, default: bool = False) -> bool:
 
 # A POSIX TZ spec is "<abbr><offset>[...]": three or more letters, or a
 # <...>-quoted abbreviation, followed by an optional sign and a digit.  IANA
-# keys never have that shape.  The C library parses a value like this itself
-# when no zone file exists, so a match means local time is correct anyway.
+# keys never have that shape, so a match is left alone rather than reported.
+# This is deliberately looser than the C library, which also wants any DST
+# abbreviation to be three characters: a value like "Nope9X" matches here and
+# is still rejected there, so it goes unreported.  Tightening it would start
+# reporting working specs, which is the worse trade for a diagnostic.
 _POSIX_TZ_RE = re.compile(r"(?:<[A-Za-z0-9+-]{3,}>|[A-Za-z]{3,})[+-]?\d")
 
 # Malformed zone data surfaces as struct.error, which subclasses neither

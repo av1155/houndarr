@@ -22,16 +22,24 @@ import pytest
 
 _DOCKERFILE = Path(__file__).resolve().parents[2] / "Dockerfile"
 
-# The apt invocation in the runtime stage, captured across its line
-# continuations so a reformatted RUN block still matches.
-_APT_INSTALL = re.compile(r"apt-get install[^\n]*(?:\\\n[^\n]*)*")
+# Each continuation is consumed before the final line, so a package moved onto
+# its own backslash-continued line still counts.  Putting the greedy [^\n]*
+# first instead would swallow the backslash and stop at line one.
+_APT_INSTALL = re.compile(r"apt-get install(?:[^\n]*\\\n)*[^\n]*")
 
 
 @pytest.fixture(scope="module")
 def apt_install_line() -> str:
-    """Return the runtime stage's apt-get install invocation."""
-    match = _APT_INSTALL.search(_DOCKERFILE.read_text())
-    assert match is not None, "no apt-get install found in the Dockerfile"
+    """Return the apt-get install invocation from the final build stage.
+
+    Anchored to the last FROM: an earlier stage installing this package would
+    not put it in the shipped filesystem, so matching one there would pass the
+    gate while the image stayed broken.
+    """
+    text = _DOCKERFILE.read_text()
+    runtime_stage = text[text.rindex("\nFROM ") :]
+    match = _APT_INSTALL.search(runtime_stage)
+    assert match is not None, "no apt-get install found in the final build stage"
     return match.group(0)
 
 

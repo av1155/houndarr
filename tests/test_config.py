@@ -475,22 +475,32 @@ def test_unresolved_timezone_reports_a_truncated_zone_file(tmp_path: Path) -> No
     assert unresolved_timezone(str(truncated)) == str(truncated)
 
 
+class _AlarmFired(BaseException):
+    """Raised by the FIFO alarm below, deliberately outside ``Exception``.
+
+    ``TimeoutError`` would be the obvious choice and is exactly wrong: it
+    subclasses ``OSError``, which ``unresolved_timezone`` catches, so the
+    alarm would be swallowed by the very handler the guard exists to keep
+    the code away from, and the test would pass ten seconds late instead of
+    failing.
+    """
+
+
 def test_unresolved_timezone_reports_a_fifo_without_blocking(tmp_path: Path) -> None:
     """A FIFO is not a zone file, and opening one would hang startup forever.
 
-    The alarm is what makes this test able to go red.  Without the guard it
-    protects, the open never returns, so the failure mode is a wedged xdist
-    worker and a CI job that runs to its own timeout rather than a red test.
+    The alarm is what lets this test fail rather than hang.  Without the
+    regular-file guard the open never returns, and an unbounded hang wedges an
+    xdist worker until the whole CI job times out.
     """
     fifo = tmp_path / "fifo"
     os.mkfifo(fifo)
 
     def _give_up(*_: object) -> None:
-        msg = "unresolved_timezone blocked opening a FIFO"
-        raise TimeoutError(msg)
+        raise _AlarmFired
 
     previous = signal.signal(signal.SIGALRM, _give_up)
-    signal.alarm(10)
+    signal.alarm(5)
     try:
         assert unresolved_timezone(str(fifo)) == str(fifo)
     finally:

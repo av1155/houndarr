@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- Legacy timezone names such as `US/Eastern`, `GB`, and `Japan` resolve in `TZ`, so the Allowed Search Window follows the configured zone instead of falling back to UTC. An instance using one of these names and a search window starts searching at the hours it was set to, which moves the window by the zone's offset. (#822)
+- Legacy timezone names such as `US/Eastern`, `GB`, and `Japan` resolve in `TZ`, moving an Allowed Search Window off UTC and onto the configured zone. (#822)
 - A `TZ` value Houndarr cannot load is named in the startup log instead of falling back to UTC without a word. (#822)
 - A season, artist, or author parent held by a wanted item's grace window logs `waiting on post-release grace (Nh)` instead of an ordinary cooldown. (#783)
 - Season, artist, and author modes no longer re-search a parent every cycle when a clock difference leaves a wanted item reading as `not yet released`. (#782)

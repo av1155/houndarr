@@ -11,6 +11,7 @@ from fastapi.testclient import TestClient
 
 from houndarr.app import create_app
 from houndarr.engine.supervisor import Supervisor
+from tests.conftest import libc_timezone
 
 
 def test_startup_warns_when_no_instances(
@@ -37,41 +38,34 @@ def _startup_messages(caplog: pytest.LogCaptureFixture) -> list[str]:
 
 
 def test_startup_warns_when_tz_has_no_zone_file(
-    test_settings: object,
-    caplog: pytest.LogCaptureFixture,
-    monkeypatch: pytest.MonkeyPatch,
+    test_settings: object, caplog: pytest.LogCaptureFixture
 ) -> None:
-    """A TZ the container cannot load is named rather than silently becoming UTC."""
+    """A TZ Houndarr cannot load is named rather than silently becoming UTC."""
     assert test_settings is not None
-    monkeypatch.setenv("TZ", "Not/AZone")
 
-    assert any("TZ=Not/AZone" in message for message in _startup_messages(caplog))
+    with libc_timezone("Not/AZone"):
+        messages = _startup_messages(caplog)
+
+    assert any("TZ=Not/AZone" in message for message in messages)
 
 
-@pytest.mark.parametrize("tz", ["UTC", "Etc/UTC"])
+@pytest.mark.parametrize("tz", ["UTC", "Etc/UTC", None])
 def test_startup_is_quiet_for_a_resolvable_tz(
-    test_settings: object,
-    caplog: pytest.LogCaptureFixture,
-    monkeypatch: pytest.MonkeyPatch,
-    tz: str,
+    test_settings: object, caplog: pytest.LogCaptureFixture, tz: str | None
 ) -> None:
-    """A working TZ must not warn, or the message becomes noise on every boot."""
+    """A working TZ, or none at all, must not warn on every boot.
+
+    libc_timezone rather than monkeypatch.setenv: glibc keeps the zone it
+    parsed at first use until tzset runs, so setting the variable alone
+    compares zoneinfo against the host's real offset and warns about UTC on
+    any Linux box that is not already on UTC.
+    """
     assert test_settings is not None
-    monkeypatch.setenv("TZ", tz)
 
-    assert not any("is not a timezone" in message for message in _startup_messages(caplog))
+    with libc_timezone(tz):
+        messages = _startup_messages(caplog)
 
-
-def test_startup_is_quiet_when_tz_is_unset(
-    test_settings: object,
-    caplog: pytest.LogCaptureFixture,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """No TZ at all is the documented default and is not worth a warning."""
-    assert test_settings is not None
-    monkeypatch.delenv("TZ", raising=False)
-
-    assert not any("is not a timezone" in message for message in _startup_messages(caplog))
+    assert not any("is not a timezone" in message for message in messages)
 
 
 def test_periodic_retention_runs_during_uptime(

@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-import contextlib
+import importlib.util
 import os
-import time
 import zoneinfo
 from collections.abc import Generator
 from datetime import timedelta, timezone
@@ -15,6 +14,7 @@ import pytest
 
 from houndarr import config
 from houndarr.config import AppSettings, bootstrap_settings, get_settings, unresolved_timezone
+from tests.conftest import libc_timezone
 
 # ---------------------------------------------------------------------------
 # validate_auth_config - builtin mode (default, always valid)
@@ -271,32 +271,6 @@ _REAL_ZONE_FILE = next(
 )
 
 
-def _apply_libc_tz(value: str | None) -> None:
-    """Point the C library at *value*, or at its default when ``None``."""
-    if value is None:
-        os.environ.pop("TZ", None)
-    else:
-        os.environ["TZ"] = value
-    if hasattr(time, "tzset"):
-        time.tzset()
-
-
-@contextlib.contextmanager
-def _libc_timezone(value: str | None) -> Generator[None]:
-    """Set TZ for the duration of the block, restoring the C library after.
-
-    monkeypatch.setenv is not sufficient here.  The C library caches the
-    parsed zone until tzset() runs, so the undo needs one too; without it the
-    zone leaks into every later test sharing the worker process.
-    """
-    previous = os.environ.get("TZ")
-    _apply_libc_tz(value)
-    try:
-        yield
-    finally:
-        _apply_libc_tz(previous)
-
-
 @pytest.fixture()
 def _no_zone_files(tmp_path: Path) -> Generator[None]:
     """Point zoneinfo at an empty directory so no IANA key resolves.
@@ -305,6 +279,13 @@ def _no_zone_files(tmp_path: Path) -> Generator[None]:
     on Debian with tzdata-legacy installed, so the assertions below would pass
     for the wrong reason on some machines and fail on others.
     """
+    # zoneinfo falls back to the PyPI tzdata package, which carries the very
+    # aliases these tests expect to be missing.  Adding it to the lock file
+    # would quietly turn every case below into a no-op, so say so loudly.
+    assert importlib.util.find_spec("tzdata") is None, (
+        "the PyPI tzdata package shadows the system zone database; "
+        "these tests would silently stop asserting anything"
+    )
     zoneinfo.reset_tzpath(to=[str(tmp_path)])
     ZoneInfo.clear_cache()
     yield
@@ -367,7 +348,7 @@ def test_unresolved_timezone_ignores_an_unset_value(tz: str | None) -> None:
 @pytest.mark.parametrize("tz", ["UTC", "Etc/UTC", ":UTC"])
 def test_unresolved_timezone_accepts_a_zone_both_resolvers_agree_on(tz: str) -> None:
     """A real zone the C library also loads is reported as trustworthy."""
-    with _libc_timezone(tz):
+    with libc_timezone(tz):
         assert unresolved_timezone(tz) is None
 
 
@@ -375,7 +356,7 @@ def test_unresolved_timezone_accepts_a_zone_both_resolvers_agree_on(tz: str) -> 
 def test_unresolved_timezone_accepts_an_absolute_path_to_a_zone_file() -> None:
     """TZ may name a zone file directly, and the C library opens it."""
     assert _REAL_ZONE_FILE is not None
-    with _libc_timezone(str(_REAL_ZONE_FILE)):
+    with libc_timezone(str(_REAL_ZONE_FILE)):
         assert unresolved_timezone(str(_REAL_ZONE_FILE)) is None
 
 
@@ -404,6 +385,52 @@ def test_unresolved_timezone_reports_an_absolute_path_that_is_a_directory(
     assert unresolved_timezone(str(tmp_path)) == str(tmp_path)
 
 
+def test_unresolved_timezone_reports_a_split_resolver_for_a_winter_utc_zone(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A zone that sits at UTC+0 half the year must not hide a split resolver.
+
+    Europe/London is indistinguishable from a silent UTC fallback every
+    January, so comparing a single instant would let a container booted in
+    winter run its whole summer an hour off.
+    """
+    london = ZoneInfo("Europe/London")
+    monkeypatch.setattr(config, "ZoneInfo", lambda _key: london)
+    with libc_timezone("UTC"):
+        assert unresolved_timezone("GB") == "GB"
+
+
+def test_unresolved_timezone_reports_a_truncated_zone_file(tmp_path: Path) -> None:
+    """Damaged zone data is reported, not raised.
+
+    Parsing a truncated TZif raises struct.error, which subclasses neither
+    OSError nor ValueError.  This runs before the app has started, so an
+    escape would turn a clock reading UTC into a process that never boots.
+    """
+    truncated = tmp_path / "truncated"
+    truncated.write_bytes(b"TZif" + b"2" + b"\x00" * 15 + b"\x00\x00\x00\x01")
+    assert unresolved_timezone(str(truncated)) == str(truncated)
+
+
+def test_unresolved_timezone_reports_a_fifo_without_blocking(tmp_path: Path) -> None:
+    """A FIFO is not a zone file, and opening one would hang startup forever."""
+    fifo = tmp_path / "fifo"
+    os.mkfifo(fifo)
+    assert unresolved_timezone(str(fifo)) == str(fifo)
+
+
+def test_unresolved_timezone_stays_quiet_when_tzdir_redirects_the_search(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """TZDIR moves the C library's search path but not zoneinfo's.
+
+    The two then describe different databases, so a mismatch says nothing
+    about the operator's clock and a warning would be pure noise.
+    """
+    monkeypatch.setenv("TZDIR", "/somewhere/else")
+    assert unresolved_timezone("Not/AZone") is None
+
+
 def test_unresolved_timezone_reports_a_zone_the_c_library_disagrees_about(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -414,5 +441,5 @@ def test_unresolved_timezone_reports_a_zone_the_c_library_disagrees_about(
     trusting either resolver alone.
     """
     monkeypatch.setattr(config, "ZoneInfo", lambda _key: timezone(timedelta(hours=5, minutes=30)))
-    with _libc_timezone("UTC"):
+    with libc_timezone("UTC"):
         assert unresolved_timezone("Asia/Calcutta") == "Asia/Calcutta"

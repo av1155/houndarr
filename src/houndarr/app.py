@@ -76,9 +76,9 @@ async def _lifespan(app: FastAPI) -> AsyncGenerator[None]:
     bad_tz = unresolved_timezone(os.environ.get("TZ"))
     if bad_tz is not None:
         logger.warning(
-            "TZ=%s is not a timezone this container can load; using UTC "
-            "instead. Allowed Search Window times will be UTC until TZ is "
-            "set to a full IANA name such as America/New_York.",
+            "TZ=%s is not a timezone Houndarr can load; using UTC instead. "
+            "Allowed Search Window times will be UTC until TZ is set to a "
+            "full IANA name such as America/New_York.",
             bad_tz,
         )
 

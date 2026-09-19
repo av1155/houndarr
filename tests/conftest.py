@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import contextlib
 import os
 import tempfile
+import time
 from collections.abc import AsyncGenerator, Generator, Iterator
 from pathlib import Path
 from typing import Any
@@ -160,6 +162,39 @@ async def async_client(
         transport=ASGITransport(app=application), base_url="http://test"
     ) as client:
         yield client
+
+
+# ---------------------------------------------------------------------------
+# Timezone helper
+# ---------------------------------------------------------------------------
+
+
+def _apply_libc_tz(value: str | None) -> None:
+    """Point the C library at *value*, or at its default when ``None``."""
+    if value is None:
+        os.environ.pop("TZ", None)
+    else:
+        os.environ["TZ"] = value
+    if hasattr(time, "tzset"):
+        time.tzset()
+
+
+@contextlib.contextmanager
+def libc_timezone(value: str | None) -> Generator[None]:
+    """Set TZ for the duration of the block, restoring the C library after.
+
+    monkeypatch.setenv is not enough on glibc, whose ``localtime_r`` keeps
+    using the zone it parsed at first use until ``tzset`` runs.  A test that
+    only sets the variable reads the host's real zone instead of the one it
+    asked for, and passes on macOS and on UTC runners while failing anywhere
+    else.  The restore needs the second ``tzset`` for the same reason.
+    """
+    previous = os.environ.get("TZ")
+    _apply_libc_tz(value)
+    try:
+        yield
+    finally:
+        _apply_libc_tz(previous)
 
 
 # ---------------------------------------------------------------------------

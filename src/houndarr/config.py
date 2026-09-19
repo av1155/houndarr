@@ -41,6 +41,7 @@ import ipaddress
 import logging
 import os
 import re
+import struct
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from ipaddress import IPv4Address, IPv4Network, IPv6Address, IPv6Network
@@ -161,6 +162,12 @@ def _parse_bool_env(name: str, default: bool = False) -> bool:
 # when no zone file exists, so a match means local time is correct anyway.
 _POSIX_TZ_RE = re.compile(r"(?:<[A-Za-z0-9+-]{3,}>|[A-Za-z]{3,})[+-]?\d")
 
+# Malformed zone data surfaces as struct.error, which subclasses neither
+# OSError nor ValueError.  This check runs before the app has started, so
+# letting one escape would turn a clock that reads UTC into a container that
+# never boots: strictly worse than the condition being reported.
+_UNREADABLE_ZONE = (OSError, ValueError, ZoneInfoNotFoundError, struct.error)
+
 
 def unresolved_timezone(tz: str | None) -> str | None:
     """Return *tz* when the C library could not load it and fell back to UTC.
@@ -176,28 +183,37 @@ def unresolved_timezone(tz: str | None) -> str | None:
     """
     if not tz:
         return None  # unset means UTC per POSIX: a choice, not a failure
+    if os.environ.get("TZDIR"):
+        # TZDIR moves the C library's search path but not zoneinfo's, so the
+        # two stop describing the same database and any answer is a guess.
+        return None
 
     key = tz.removeprefix(":")  # the C library ignores one leading colon
     try:
         if key.startswith("/"):
             # An explicit zone-file path.  Parsing it rather than stat-ing it
             # matters: a readable non-TZif file passes an existence check but
-            # still leaves the C library on UTC.
+            # still leaves the C library on UTC.  The regular-file guard keeps
+            # a FIFO from blocking the open, and startup with it.
+            if not Path(key).is_file():
+                return tz
             with Path(key).open("rb") as handle:
                 zone = ZoneInfo.from_file(handle)
         else:
             zone = ZoneInfo(key)
-    except (OSError, ValueError, ZoneInfoNotFoundError):
+    except _UNREADABLE_ZONE:
         return None if _POSIX_TZ_RE.match(key) else tz
 
     # The zone loaded here, but zoneinfo and the C library search different
-    # paths.  Comparing their offsets catches the case where one finds a zone
-    # the other cannot, which is what installing the PyPI tzdata package
-    # without the system legacy zones would produce.
-    now = datetime.now(UTC)
-    if now.astimezone().utcoffset() == now.astimezone(zone).utcoffset():
-        return None
-    return tz
+    # paths, so one can find a zone the other cannot.  Two instants six months
+    # apart are compared because a single reading cannot separate a working
+    # zone from a silent UTC fallback while that zone sits at UTC+0 anyway,
+    # which every winter does to Europe/London and its neighbours.
+    year = datetime.now(UTC).year
+    for instant in (datetime(year, 1, 15, tzinfo=UTC), datetime(year, 7, 15, tzinfo=UTC)):
+        if instant.astimezone().utcoffset() != instant.astimezone(zone).utcoffset():
+            return tz
+    return None
 
 
 _DEFAULT_UPDATE_CHECK_REPO = "av1155/houndarr"

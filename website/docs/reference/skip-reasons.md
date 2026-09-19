@@ -172,11 +172,17 @@ post-release grace`, `already in download queue`, and the two
 `(instance, item, pass, reason)` combination writes at most one
 `search_log` row every 24 hours on scheduled cycles, except that the
 two `tag filter` reasons share one entry and so suppress each other.
-`Run now` always writes its rows, and the window is held in memory, so
-a restart starts it over. The engine still evaluates every candidate every cycle; only
-the log write is suppressed. This keeps the logs scannable when
-hundreds of items share the same cooldown, the same hot-retry interval
-throttle, or the same tag-filter outcome.
+`Run now` always writes its rows. The engine still evaluates every
+candidate every cycle; only the log write is suppressed. This keeps the
+logs readable when many items share the same cooldown, the same
+hot-retry interval throttle, or the same tag-filter outcome.
+
+The window lives in memory, in a single cache of 1024 entries shared by
+every instance, so a restart starts it over. Past 1024 combinations the
+oldest entries drop out and the suppression stops, which works out to
+roughly 1024 wanted items with only the missing pass enabled, 341 with
+all three, or 170 per instance across six. Above that, expect a row per
+skip per cycle.
 
 The other reasons in the table above write a row every cycle they
 apply.

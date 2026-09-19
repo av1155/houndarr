@@ -199,8 +199,6 @@ def unresolved_timezone(tz: str | None) -> str | None:
     """
     if not tz:
         return None  # unset means UTC per POSIX: a choice, not a failure
-    if _tzdir_redirects_off_tzpath():
-        return None
 
     key = tz.removeprefix(":")  # the C library ignores one leading colon
     try:
@@ -213,6 +211,11 @@ def unresolved_timezone(tz: str | None) -> str | None:
                 return tz
             with Path(key).open("rb") as handle:
                 zone = ZoneInfo.from_file(handle)
+        elif _tzdir_redirects_off_tzpath():
+            # Only a bare key is looked up by name, so only a bare key can be
+            # thrown off by TZDIR.  The C library opens an absolute path
+            # directly and ignores TZDIR entirely.
+            return None
         else:
             zone = ZoneInfo(key)
     except _UNREADABLE_ZONE:

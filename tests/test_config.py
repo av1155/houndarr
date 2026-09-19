@@ -271,14 +271,31 @@ _REAL_ZONE_FILE = next(
 )
 
 
+@pytest.fixture(autouse=True)
+def _ignore_ambient_tzdir(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Hide any TZDIR the developer's own machine exports.
+
+    NixOS and some base images set one. Every case below is about how the two
+    resolvers compare, which the TZDIR bail-out short-circuits, so an inherited
+    value would silently turn those assertions into no-ops. The two tests that
+    are about TZDIR set it themselves afterwards, which still wins.
+    """
+    monkeypatch.delenv("TZDIR", raising=False)
+
+
 @pytest.fixture()
-def _no_zone_files(tmp_path: Path) -> Generator[None]:
+def _no_zone_files(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Generator[None]:
     """Point zoneinfo at an empty directory so no IANA key resolves.
 
     Without this the host decides the outcome: US/Eastern loads on macOS and
     on Debian with tzdata-legacy installed, so the assertions below would pass
     for the wrong reason on some machines and fail on others.
+
+    TZDIR goes with it.  Narrowing TZPATH would otherwise make any exported
+    TZDIR look like a redirect, and a NixOS dev box would see these cases bail
+    out early instead of running.
     """
+    monkeypatch.delenv("TZDIR", raising=False)
     # zoneinfo falls back to the PyPI tzdata package, which carries the very
     # aliases these tests expect to be missing.  Adding it to the lock file
     # would quietly turn every case below into a no-op, so say so loudly.
@@ -416,19 +433,33 @@ def test_unresolved_timezone_reports_a_split_resolver_for_a_summer_utc_zone(
 
 
 @pytest.mark.skipif(_REAL_ZONE_FILE is None, reason="host has no zoneinfo database")
-def test_unresolved_timezone_still_checks_when_tzdir_names_a_searched_path() -> None:
+def test_unresolved_timezone_still_checks_when_tzdir_names_a_searched_path(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """A TZDIR naming a directory zoneinfo already reads is not a redirect.
 
     NixOS and some base images export one as a matter of course, and dropping
     the check for them would be a blind spot bought for nothing.
     """
     assert _REAL_ZONE_FILE is not None
+    monkeypatch.setenv("TZDIR", str(_REAL_ZONE_FILE.parent))
     with libc_timezone(None):
-        os.environ["TZDIR"] = str(_REAL_ZONE_FILE.parent)
-        try:
-            assert unresolved_timezone("Not/AZone") == "Not/AZone"
-        finally:
-            os.environ.pop("TZDIR", None)
+        assert unresolved_timezone("Not/AZone") == "Not/AZone"
+
+
+@pytest.mark.skipif(_REAL_ZONE_FILE is None, reason="host has no zoneinfo database")
+def test_unresolved_timezone_still_checks_an_absolute_path_under_a_redirected_tzdir(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """TZDIR cannot excuse an absolute path, because the C library ignores it.
+
+    Given TZ=/some/file the zone is opened directly, so a redirected TZDIR
+    changes nothing about whether that file is readable zone data.
+    """
+    monkeypatch.setenv("TZDIR", str(tmp_path / "nowhere"))
+    decoy = tmp_path / "passwd"
+    decoy.write_text("root:x:0:0:root:/root:/bin/sh\n")
+    assert unresolved_timezone(str(decoy)) == str(decoy)
 
 
 def test_unresolved_timezone_reports_a_truncated_zone_file(tmp_path: Path) -> None:

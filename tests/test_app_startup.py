@@ -29,6 +29,16 @@ def test_startup_warns_when_no_instances(
     assert any("No instances configured" in message for message in messages)
 
 
+@pytest.fixture(autouse=True)
+def _ignore_ambient_tzdir(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Hide any TZDIR the developer's own machine exports.
+
+    A redirected TZDIR makes the timezone check bail out early, so an
+    inherited value would turn the warning assertions below into no-ops.
+    """
+    monkeypatch.delenv("TZDIR", raising=False)
+
+
 def _startup_messages(caplog: pytest.LogCaptureFixture) -> list[str]:
     """Boot the app once and return every warning it logged."""
     caplog.set_level(logging.WARNING)

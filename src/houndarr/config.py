@@ -215,6 +215,11 @@ def unresolved_timezone(tz: str | None) -> str | None:
             # Only a bare key is looked up by name, so only a bare key can be
             # thrown off by TZDIR.  The C library opens an absolute path
             # directly and ignores TZDIR entirely.
+            logger.debug(
+                "TZDIR=%s is outside the paths zoneinfo reads, so TZ=%s was not checked",
+                os.environ.get("TZDIR"),
+                tz,
+            )
             return None
         else:
             zone = ZoneInfo(key)

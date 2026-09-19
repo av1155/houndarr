@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib.util
 import os
+import signal
 import zoneinfo
 from collections.abc import Generator
 from datetime import timedelta, timezone
@@ -475,10 +476,26 @@ def test_unresolved_timezone_reports_a_truncated_zone_file(tmp_path: Path) -> No
 
 
 def test_unresolved_timezone_reports_a_fifo_without_blocking(tmp_path: Path) -> None:
-    """A FIFO is not a zone file, and opening one would hang startup forever."""
+    """A FIFO is not a zone file, and opening one would hang startup forever.
+
+    The alarm is what makes this test able to go red.  Without the guard it
+    protects, the open never returns, so the failure mode is a wedged xdist
+    worker and a CI job that runs to its own timeout rather than a red test.
+    """
     fifo = tmp_path / "fifo"
     os.mkfifo(fifo)
-    assert unresolved_timezone(str(fifo)) == str(fifo)
+
+    def _give_up(*_: object) -> None:
+        msg = "unresolved_timezone blocked opening a FIFO"
+        raise TimeoutError(msg)
+
+    previous = signal.signal(signal.SIGALRM, _give_up)
+    signal.alarm(10)
+    try:
+        assert unresolved_timezone(str(fifo)) == str(fifo)
+    finally:
+        signal.alarm(0)
+        signal.signal(signal.SIGALRM, previous)
 
 
 def test_unresolved_timezone_stays_quiet_when_tzdir_redirects_the_search(

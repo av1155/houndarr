@@ -74,9 +74,10 @@ already use for appdata (CA Backup, rsync, Duplicati).
 ### Timezone (TZ)
 
 Default: `UTC`. Set this to your local timezone (for example
-`America/New_York`, `Europe/London`). Houndarr reads it for the
-Allowed Search Window on each instance; times on the Logs page follow
-your browser instead. The [IANA tz list](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones)
+`America/New_York`, `Europe/London`). It is read by
+[Allowed search window](/docs/reference/instance-settings#allowed-search-window);
+times on the Logs page follow your browser instead. The
+[IANA tz list](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones)
 has every valid value.
 
 ### PUID / PGID

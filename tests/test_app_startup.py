@@ -39,12 +39,22 @@ def _ignore_ambient_tzdir(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("TZDIR", raising=False)
 
 
-def _startup_messages(caplog: pytest.LogCaptureFixture) -> list[str]:
-    """Boot the app once and return every warning it logged."""
+def _timezone_warnings(caplog: pytest.LogCaptureFixture, tz: str | None) -> list[str]:
+    """Boot the app under *tz* and return the warnings about the timezone.
+
+    Both tests below select rows the same way.  Keying the positive case on
+    the message text and the negative one on a different fragment would let a
+    reword quietly turn the negative assertion into a tautology, so the
+    ``TZ=`` prefix the warning is built from is the single anchor.
+    """
     caplog.set_level(logging.WARNING)
-    with TestClient(create_app(), raise_server_exceptions=True):
+    with libc_timezone(tz), TestClient(create_app(), raise_server_exceptions=True):
         pass
-    return [record.getMessage() for record in caplog.records]
+    return [
+        record.getMessage()
+        for record in caplog.records
+        if record.levelno >= logging.WARNING and record.getMessage().startswith("TZ=")
+    ]
 
 
 def test_startup_warns_when_tz_has_no_zone_file(
@@ -53,10 +63,12 @@ def test_startup_warns_when_tz_has_no_zone_file(
     """A TZ Houndarr cannot load is named rather than silently becoming UTC."""
     assert test_settings is not None
 
-    with libc_timezone("Not/AZone"):
-        messages = _startup_messages(caplog)
+    warnings = _timezone_warnings(caplog, "Not/AZone")
 
-    assert any("TZ=Not/AZone" in message for message in messages)
+    assert len(warnings) == 1
+    assert "Not/AZone" in warnings[0]
+    # The operator needs to know what to do about it, not only that it happened.
+    assert "America/New_York" in warnings[0]
 
 
 @pytest.mark.parametrize("tz", ["UTC", "Etc/UTC", None])
@@ -72,10 +84,7 @@ def test_startup_is_quiet_for_a_resolvable_tz(
     """
     assert test_settings is not None
 
-    with libc_timezone(tz):
-        messages = _startup_messages(caplog)
-
-    assert not any("is not a timezone" in message for message in messages)
+    assert _timezone_warnings(caplog, tz) == []
 
 
 def test_periodic_retention_runs_during_uptime(

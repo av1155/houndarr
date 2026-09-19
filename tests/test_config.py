@@ -400,6 +400,37 @@ def test_unresolved_timezone_reports_a_split_resolver_for_a_winter_utc_zone(
         assert unresolved_timezone("GB") == "GB"
 
 
+def test_unresolved_timezone_reports_a_split_resolver_for_a_summer_utc_zone(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Mirror of the case above, because that one only bites half the year.
+
+    With the C library on Europe/London and zoneinfo pinned to a fixed +01:00
+    the two agree all summer and diverge all winter, which is the opposite
+    season to the case above.  Collapsing the comparison back to a single
+    instant therefore fails one of the pair whatever the date.
+    """
+    monkeypatch.setattr(config, "ZoneInfo", lambda _key: timezone(timedelta(hours=1)))
+    with libc_timezone("Europe/London"):
+        assert unresolved_timezone("GB") == "GB"
+
+
+@pytest.mark.skipif(_REAL_ZONE_FILE is None, reason="host has no zoneinfo database")
+def test_unresolved_timezone_still_checks_when_tzdir_names_a_searched_path() -> None:
+    """A TZDIR naming a directory zoneinfo already reads is not a redirect.
+
+    NixOS and some base images export one as a matter of course, and dropping
+    the check for them would be a blind spot bought for nothing.
+    """
+    assert _REAL_ZONE_FILE is not None
+    with libc_timezone(None):
+        os.environ["TZDIR"] = str(_REAL_ZONE_FILE.parent)
+        try:
+            assert unresolved_timezone("Not/AZone") == "Not/AZone"
+        finally:
+            os.environ.pop("TZDIR", None)
+
+
 def test_unresolved_timezone_reports_a_truncated_zone_file(tmp_path: Path) -> None:
     """Damaged zone data is reported, not raised.
 

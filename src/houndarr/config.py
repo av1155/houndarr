@@ -42,6 +42,7 @@ import logging
 import os
 import re
 import struct
+import zoneinfo
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from ipaddress import IPv4Address, IPv4Network, IPv6Address, IPv6Network
@@ -169,6 +170,21 @@ _POSIX_TZ_RE = re.compile(r"(?:<[A-Za-z0-9+-]{3,}>|[A-Za-z]{3,})[+-]?\d")
 _UNREADABLE_ZONE = (OSError, ValueError, ZoneInfoNotFoundError, struct.error)
 
 
+def _tzdir_redirects_off_tzpath() -> bool:
+    """Whether TZDIR sends the C library somewhere zoneinfo does not read.
+
+    Only a genuine redirect makes the two resolvers describe different
+    databases.  NixOS and some base images export a TZDIR that names a
+    directory zoneinfo already reads, and silently dropping the check there
+    would cost those installs the diagnostic for nothing.
+    """
+    tzdir = os.environ.get("TZDIR")
+    if not tzdir:
+        return False
+    searched = {os.path.realpath(path) for path in zoneinfo.TZPATH}
+    return os.path.realpath(tzdir) not in searched
+
+
 def unresolved_timezone(tz: str | None) -> str | None:
     """Return *tz* when the C library could not load it and fell back to UTC.
 
@@ -183,9 +199,7 @@ def unresolved_timezone(tz: str | None) -> str | None:
     """
     if not tz:
         return None  # unset means UTC per POSIX: a choice, not a failure
-    if os.environ.get("TZDIR"):
-        # TZDIR moves the C library's search path but not zoneinfo's, so the
-        # two stop describing the same database and any answer is a guess.
+    if _tzdir_redirects_off_tzpath():
         return None
 
     key = tz.removeprefix(":")  # the C library ignores one leading colon

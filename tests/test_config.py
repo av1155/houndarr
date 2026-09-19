@@ -2,11 +2,19 @@
 
 from __future__ import annotations
 
+import contextlib
+import os
+import time
+import zoneinfo
 from collections.abc import Generator
+from datetime import timedelta, timezone
+from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import pytest
 
-from houndarr.config import AppSettings, bootstrap_settings, get_settings
+from houndarr import config
+from houndarr.config import AppSettings, bootstrap_settings, get_settings, unresolved_timezone
 
 # ---------------------------------------------------------------------------
 # validate_auth_config - builtin mode (default, always valid)
@@ -249,3 +257,162 @@ def test_bootstrap_settings_returns_pinned_instance(_isolate_pin: None) -> None:
     """The returned AppSettings is the same object get_settings hands back."""
     pinned = bootstrap_settings(data_dir="/tmp/test", port=9000)
     assert get_settings() is pinned
+
+
+# ---------------------------------------------------------------------------
+# unresolved_timezone
+# ---------------------------------------------------------------------------
+
+# Captured before any test narrows TZPATH, so the absolute-path case can find a
+# genuine TZif file on whichever host the suite runs on.
+_REAL_ZONE_FILE = next(
+    (p for base in zoneinfo.TZPATH if (p := Path(base) / "UTC").is_file()),
+    None,
+)
+
+
+def _apply_libc_tz(value: str | None) -> None:
+    """Point the C library at *value*, or at its default when ``None``."""
+    if value is None:
+        os.environ.pop("TZ", None)
+    else:
+        os.environ["TZ"] = value
+    if hasattr(time, "tzset"):
+        time.tzset()
+
+
+@contextlib.contextmanager
+def _libc_timezone(value: str | None) -> Generator[None]:
+    """Set TZ for the duration of the block, restoring the C library after.
+
+    monkeypatch.setenv is not sufficient here.  The C library caches the
+    parsed zone until tzset() runs, so the undo needs one too; without it the
+    zone leaks into every later test sharing the worker process.
+    """
+    previous = os.environ.get("TZ")
+    _apply_libc_tz(value)
+    try:
+        yield
+    finally:
+        _apply_libc_tz(previous)
+
+
+@pytest.fixture()
+def _no_zone_files(tmp_path: Path) -> Generator[None]:
+    """Point zoneinfo at an empty directory so no IANA key resolves.
+
+    Without this the host decides the outcome: US/Eastern loads on macOS and
+    on Debian with tzdata-legacy installed, so the assertions below would pass
+    for the wrong reason on some machines and fail on others.
+    """
+    zoneinfo.reset_tzpath(to=[str(tmp_path)])
+    ZoneInfo.clear_cache()
+    yield
+    zoneinfo.reset_tzpath()
+    ZoneInfo.clear_cache()
+
+
+@pytest.mark.parametrize(
+    "tz",
+    [
+        "US/Eastern",
+        "Japan",
+        "GB",
+        "Asia/Calcutta",
+        "America/New_Yrok",
+        "america/new_york",
+        "America/New_York ",
+        "   ",
+        "America",
+        "Etc",
+        "localtime",
+        "EST",
+        "MST",
+        "../../etc/passwd",
+    ],
+)
+def test_unresolved_timezone_reports_a_zone_with_no_file(_no_zone_files: None, tz: str) -> None:
+    """A name with no zone file and no POSIX offset leaves local time on UTC."""
+    assert unresolved_timezone(tz) == tz
+
+
+@pytest.mark.parametrize(
+    "tz",
+    [
+        "EST5EDT",
+        "CST6CDT",
+        "PST8PDT",
+        "UTC0",
+        "GMT0",
+        "GMT0BST,M3.5.0/1,M10.5.0",
+        "<+0530>5:30",
+    ],
+)
+def test_unresolved_timezone_accepts_a_posix_spec(_no_zone_files: None, tz: str) -> None:
+    """The C library parses these itself, so a missing zone file is irrelevant.
+
+    Matching on the spec's shape rather than on the resulting offset matters:
+    GMT0BST sits at UTC+0 every winter, so an offset test would report a
+    working configuration for half the year.
+    """
+    assert unresolved_timezone(tz) is None
+
+
+@pytest.mark.parametrize("tz", [None, ""])
+def test_unresolved_timezone_ignores_an_unset_value(tz: str | None) -> None:
+    """No TZ at all means UTC by choice, which is not a misconfiguration."""
+    assert unresolved_timezone(tz) is None
+
+
+@pytest.mark.parametrize("tz", ["UTC", "Etc/UTC", ":UTC"])
+def test_unresolved_timezone_accepts_a_zone_both_resolvers_agree_on(tz: str) -> None:
+    """A real zone the C library also loads is reported as trustworthy."""
+    with _libc_timezone(tz):
+        assert unresolved_timezone(tz) is None
+
+
+@pytest.mark.skipif(_REAL_ZONE_FILE is None, reason="host has no zoneinfo database")
+def test_unresolved_timezone_accepts_an_absolute_path_to_a_zone_file() -> None:
+    """TZ may name a zone file directly, and the C library opens it."""
+    assert _REAL_ZONE_FILE is not None
+    with _libc_timezone(str(_REAL_ZONE_FILE)):
+        assert unresolved_timezone(str(_REAL_ZONE_FILE)) is None
+
+
+def test_unresolved_timezone_reports_an_absolute_path_that_is_not_a_zone(
+    tmp_path: Path,
+) -> None:
+    """A readable file that is not zone data still leaves the C library on UTC.
+
+    An existence check passes here, which is why the file is parsed instead.
+    """
+    decoy = tmp_path / "passwd"
+    decoy.write_text("root:x:0:0:root:/root:/bin/sh\n")
+    assert unresolved_timezone(str(decoy)) == str(decoy)
+
+
+def test_unresolved_timezone_reports_an_absolute_path_that_is_missing(tmp_path: Path) -> None:
+    """A mistyped zone-file path is reported rather than silently ignored."""
+    missing = str(tmp_path / "no-such-zone")
+    assert unresolved_timezone(missing) == missing
+
+
+def test_unresolved_timezone_reports_an_absolute_path_that_is_a_directory(
+    tmp_path: Path,
+) -> None:
+    """A directory is not zone data, and opening it raises rather than parses."""
+    assert unresolved_timezone(str(tmp_path)) == str(tmp_path)
+
+
+def test_unresolved_timezone_reports_a_zone_the_c_library_disagrees_about(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """zoneinfo finding a zone the C library cannot is still a broken clock.
+
+    Installing the PyPI tzdata package without the system legacy zones would
+    produce exactly this split, so the offsets are compared rather than
+    trusting either resolver alone.
+    """
+    monkeypatch.setattr(config, "ZoneInfo", lambda _key: timezone(timedelta(hours=5, minutes=30)))
+    with _libc_timezone("UTC"):
+        assert unresolved_timezone("Asia/Calcutta") == "Asia/Calcutta"

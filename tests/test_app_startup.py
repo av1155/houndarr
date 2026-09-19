@@ -28,6 +28,52 @@ def test_startup_warns_when_no_instances(
     assert any("No instances configured" in message for message in messages)
 
 
+def _startup_messages(caplog: pytest.LogCaptureFixture) -> list[str]:
+    """Boot the app once and return every warning it logged."""
+    caplog.set_level(logging.WARNING)
+    with TestClient(create_app(), raise_server_exceptions=True):
+        pass
+    return [record.getMessage() for record in caplog.records]
+
+
+def test_startup_warns_when_tz_has_no_zone_file(
+    test_settings: object,
+    caplog: pytest.LogCaptureFixture,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A TZ the container cannot load is named rather than silently becoming UTC."""
+    assert test_settings is not None
+    monkeypatch.setenv("TZ", "Not/AZone")
+
+    assert any("TZ=Not/AZone" in message for message in _startup_messages(caplog))
+
+
+@pytest.mark.parametrize("tz", ["UTC", "Etc/UTC"])
+def test_startup_is_quiet_for_a_resolvable_tz(
+    test_settings: object,
+    caplog: pytest.LogCaptureFixture,
+    monkeypatch: pytest.MonkeyPatch,
+    tz: str,
+) -> None:
+    """A working TZ must not warn, or the message becomes noise on every boot."""
+    assert test_settings is not None
+    monkeypatch.setenv("TZ", tz)
+
+    assert not any("is not a timezone" in message for message in _startup_messages(caplog))
+
+
+def test_startup_is_quiet_when_tz_is_unset(
+    test_settings: object,
+    caplog: pytest.LogCaptureFixture,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """No TZ at all is the documented default and is not worth a warning."""
+    assert test_settings is not None
+    monkeypatch.delenv("TZ", raising=False)
+
+    assert not any("is not a timezone" in message for message in _startup_messages(caplog))
+
+
 def test_periodic_retention_runs_during_uptime(
     test_settings: object, monkeypatch: pytest.MonkeyPatch
 ) -> None:

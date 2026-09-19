@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager, suppress
 from pathlib import Path
@@ -16,7 +17,7 @@ from fastapi.staticfiles import StaticFiles
 from houndarr import __version__
 from houndarr.auth import AuthMiddleware, periodic_rate_limit_sweep
 from houndarr.cache_headers import CacheControlMiddleware
-from houndarr.config import get_settings
+from houndarr.config import get_settings, unresolved_timezone
 from houndarr.crypto import ensure_master_key
 from houndarr.database import (
     close_all_pools,
@@ -68,6 +69,18 @@ async def _periodic_log_retention(retention_days: int) -> None:
 async def _lifespan(app: FastAPI) -> AsyncGenerator[None]:
     """Application lifespan: initialize DB on startup, clean up on shutdown."""
     settings = get_settings()
+
+    # Runs before the fatal checks below so the operator still sees it on a
+    # failed boot.  A TZ the C library cannot load leaves local time on UTC,
+    # which only the allowed search window reads, and it does so silently.
+    bad_tz = unresolved_timezone(os.environ.get("TZ"))
+    if bad_tz is not None:
+        logger.warning(
+            "TZ=%s is not a timezone this container can load; using UTC "
+            "instead. Allowed Search Window times will be UTC until TZ is "
+            "set to a full IANA name such as America/New_York.",
+            bad_tz,
+        )
 
     # Defense-in-depth: validate auth config even if __main__ already did.
     # Covers cases where create_app() is called directly (tests, ASGI server).

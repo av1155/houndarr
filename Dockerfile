@@ -52,11 +52,14 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-# Apply base-image security patches and install gosu for privilege dropping
+# Apply base-image security patches and install gosu for privilege dropping.
+# tzdata-legacy carries the backward-compatible zone names (US/Eastern, Japan,
+# GB); without it glibc cannot open those files and silently uses UTC, which
+# shifts the allowed search window by the operator's real offset.
 # hadolint ignore=DL3008,DL3009
 RUN apt-get update \
     && apt-get upgrade -y \
-    && apt-get install -y --no-install-recommends gosu curl \
+    && apt-get install -y --no-install-recommends gosu curl tzdata-legacy \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Python dependencies before copying source (better layer caching).

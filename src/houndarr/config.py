@@ -42,9 +42,11 @@ import logging
 import os
 import re
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from ipaddress import IPv4Address, IPv4Network, IPv6Address, IPv6Network
 from pathlib import Path
 from typing import Literal, TypedDict, Unpack
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 logger = logging.getLogger(__name__)
 
@@ -151,6 +153,51 @@ def _parse_bool_env(name: str, default: bool = False) -> bool:
     if raw in ("0", "false", "no"):
         return False
     return default
+
+
+# A POSIX TZ spec is "<abbr><offset>[...]": three or more letters, or a
+# <...>-quoted abbreviation, followed by an optional sign and a digit.  IANA
+# keys never have that shape.  The C library parses a value like this itself
+# when no zone file exists, so a match means local time is correct anyway.
+_POSIX_TZ_RE = re.compile(r"(?:<[A-Za-z0-9+-]{3,}>|[A-Za-z]{3,})[+-]?\d")
+
+
+def unresolved_timezone(tz: str | None) -> str | None:
+    """Return *tz* when the C library could not load it and fell back to UTC.
+
+    Debian ships the backward-compatible zone names (``US/Eastern``, ``Japan``,
+    ``GB``, ``Asia/Calcutta``) in a separate ``tzdata-legacy`` package.  Where
+    that package is absent the C library opens no zone file and silently uses
+    UTC, which shifts every allowed-search-window decision by the operator's
+    real offset without emitting a single diagnostic.
+
+    Returns ``None`` when local time is trustworthy, otherwise the offending
+    value for the caller to name in a startup warning.
+    """
+    if not tz:
+        return None  # unset means UTC per POSIX: a choice, not a failure
+
+    key = tz.removeprefix(":")  # the C library ignores one leading colon
+    try:
+        if key.startswith("/"):
+            # An explicit zone-file path.  Parsing it rather than stat-ing it
+            # matters: a readable non-TZif file passes an existence check but
+            # still leaves the C library on UTC.
+            with Path(key).open("rb") as handle:
+                zone = ZoneInfo.from_file(handle)
+        else:
+            zone = ZoneInfo(key)
+    except (OSError, ValueError, ZoneInfoNotFoundError):
+        return None if _POSIX_TZ_RE.match(key) else tz
+
+    # The zone loaded here, but zoneinfo and the C library search different
+    # paths.  Comparing their offsets catches the case where one finds a zone
+    # the other cannot, which is what installing the PyPI tzdata package
+    # without the system legacy zones would produce.
+    now = datetime.now(UTC)
+    if now.astimezone().utcoffset() == now.astimezone(zone).utcoffset():
+        return None
+    return tz
 
 
 _DEFAULT_UPDATE_CHECK_REPO = "av1155/houndarr"

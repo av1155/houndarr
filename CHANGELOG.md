@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+---
+
+## [1.13.3] - 2026-09-19
+
 ### Fixed
 
 - Legacy timezone names such as `US/Eastern`, `GB`, and `Japan` resolve in `TZ`, moving an Allowed Search Window off UTC and onto the configured zone. (#822)
@@ -15,8 +19,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Season, artist, and author modes no longer re-search a parent every cycle when a clock difference leaves a wanted item reading as `not yet released`. (#782)
 - A failed download queue check logs a `download queue check (fetch failed)` row on the Logs page instead of only a container warning. (#769)
 - A timed-out \*arr request names the timeout in the log instead of stopping at the colon, so a hung instance reads differently from a refused one. (#771)
-- The update check names the timeout when github.com does not answer, instead of logging an empty pair of brackets. (#771)
-- Radarr missing and cutoff searches walk the wanted list oldest-first; Radarr discarded the sort key Houndarr sent and ordered by title instead. (#785)
+- The update check names the timeout when github.com does not answer, instead of logging an empty pair of parentheses. (#771)
+- Radarr missing and cutoff searches in Chronological order walk the wanted list oldest-first; 5.10.4 and newer swapped the sort key Houndarr sent for a title sort. (#785)
 - Radarr search cycles no longer abort with a 500 on 5.6.0 through 5.10.3, where that sort key was a SQL error on both wanted endpoints. (#785)
 - Dashboard counts for a Radarr instance on 5.6.0 through 5.10.3 refresh again instead of holding their last-known values. (#785)
 - Whisparr v2 search cycles no longer abort with a 500 on versions below 2.2.0, where the wanted request sorted by a column the episode table lacks. (#780)
@@ -24,15 +28,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Season, artist, and author modes no longer re-search a parent every cycle while one of its wanted items sits inside `post-release grace (Nh)`. (#770)
 - A cooldown, hourly limit, hot retry, or tag filter skip no longer cancels a missing item's pending release-timing retry. (#770)
 - A missing item the hot retry window never got to search now takes its one release-timing retry once that window closes. (#770)
-- Season, artist, and author parents take their early retry a grace window later, and can skip it while wanted items enter grace under two windows apart. (#770)
-- Logs page skip-only cycle pills name the cooldown, release-timing, hot-retry, hourly-limit, or download-queue reason, and read `N skipped` otherwise. (#768)
+- Season, artist, and author parents take their early retry up to a grace window later, and can skip it while wanted items enter grace under two windows apart. (#770)
+- Logs page skip-only cycle pills name the cooldown, release-timing, hot-retry, post-release-grace, hourly-limit, or download-queue reason, and read `N skipped` otherwise. (#768)
 - Whisparr v3 availability skips count as not yet released on the Logs page instead of falling into `other`. (#768)
 - Missing, cutoff, and upgrade searches skip items that are already in the \*arr's download queue and log `already in download queue` instead. (#765)
 
 ### Security
 
 - anyio moves to 4.15.1, past an advisory where a TLS certificate could be accepted for a host name it was not issued for. (#795)
-- A password embedded in an instance URL is redacted from error rows instead of being stored in the log and shown on the Logs page. (#803)
+- A password embedded in an instance URL is masked in every log row instead of being stored in the log and shown on the Logs page. (#803)
 
 ---
 

@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Legacy timezone names such as `US/Eastern`, `GB`, and `Japan` resolve in `TZ`, moving an Allowed Search Window off UTC and onto the configured zone. (#822)
+- A `TZ` value Houndarr cannot load is named in the startup log instead of falling back to UTC without a word. (#822)
 - A season, artist, or author parent held by a wanted item's grace window logs `waiting on post-release grace (Nh)` instead of an ordinary cooldown. (#783)
 - Season, artist, and author modes no longer re-search a parent every cycle when a clock difference leaves a wanted item reading as `not yet released`. (#782)
 - A failed download queue check logs a `download queue check (fetch failed)` row on the Logs page instead of only a container warning. (#769)

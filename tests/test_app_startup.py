@@ -11,6 +11,7 @@ from fastapi.testclient import TestClient
 
 from houndarr.app import create_app
 from houndarr.engine.supervisor import Supervisor
+from tests.conftest import libc_timezone
 
 
 def test_startup_warns_when_no_instances(
@@ -26,6 +27,64 @@ def test_startup_warns_when_no_instances(
 
     messages = [record.getMessage() for record in caplog.records]
     assert any("No instances configured" in message for message in messages)
+
+
+@pytest.fixture(autouse=True)
+def _ignore_ambient_tzdir(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Hide any TZDIR the developer's own machine exports.
+
+    A redirected TZDIR makes the timezone check bail out early, so an
+    inherited value would turn the warning assertions below into no-ops.
+    """
+    monkeypatch.delenv("TZDIR", raising=False)
+
+
+def _timezone_warnings(caplog: pytest.LogCaptureFixture, tz: str | None) -> list[str]:
+    """Boot the app under *tz* and return the warnings about the timezone.
+
+    Both tests below select rows the same way.  Keying the positive case on
+    the message text and the negative one on a different fragment would let a
+    reword quietly turn the negative assertion into a tautology, so the
+    ``TZ=`` prefix the warning is built from is the single anchor.
+    """
+    caplog.set_level(logging.WARNING)
+    with libc_timezone(tz), TestClient(create_app(), raise_server_exceptions=True):
+        pass
+    return [
+        record.getMessage()
+        for record in caplog.records
+        if record.levelno >= logging.WARNING and record.getMessage().startswith("TZ=")
+    ]
+
+
+def test_startup_warns_when_tz_has_no_zone_file(
+    test_settings: object, caplog: pytest.LogCaptureFixture
+) -> None:
+    """A TZ Houndarr cannot load is named rather than silently becoming UTC."""
+    assert test_settings is not None
+
+    warnings = _timezone_warnings(caplog, "Not/AZone")
+
+    assert len(warnings) == 1
+    assert "Not/AZone" in warnings[0]
+    # The operator needs to know what to do about it, not only that it happened.
+    assert "America/New_York" in warnings[0]
+
+
+@pytest.mark.parametrize("tz", ["UTC", "Etc/UTC", None])
+def test_startup_is_quiet_for_a_resolvable_tz(
+    test_settings: object, caplog: pytest.LogCaptureFixture, tz: str | None
+) -> None:
+    """A working TZ, or none at all, must not warn on every boot.
+
+    libc_timezone rather than monkeypatch.setenv: glibc keeps the zone it
+    parsed at first use until tzset runs, so setting the variable alone
+    compares zoneinfo against the host's real offset and warns about UTC on
+    any Linux box that is not already on UTC.
+    """
+    assert test_settings is not None
+
+    assert _timezone_warnings(caplog, tz) == []
 
 
 def test_periodic_retention_runs_during_uptime(

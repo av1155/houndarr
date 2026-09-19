@@ -41,10 +41,14 @@ import ipaddress
 import logging
 import os
 import re
+import struct
+import zoneinfo
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from ipaddress import IPv4Address, IPv4Network, IPv6Address, IPv6Network
 from pathlib import Path
 from typing import Literal, TypedDict, Unpack
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 logger = logging.getLogger(__name__)
 
@@ -151,6 +155,90 @@ def _parse_bool_env(name: str, default: bool = False) -> bool:
     if raw in ("0", "false", "no"):
         return False
     return default
+
+
+# A POSIX TZ spec is "<abbr><offset>[...]": three or more letters, or a
+# <...>-quoted abbreviation, followed by an optional sign and a digit.  IANA
+# keys never have that shape, so a match is left alone rather than reported.
+# This is deliberately looser than the C library, which also wants any DST
+# abbreviation to be three characters: a value like "Nope9X" matches here and
+# is still rejected there, so it goes unreported.  Tightening it would start
+# reporting working specs, which is the worse trade for a diagnostic.
+_POSIX_TZ_RE = re.compile(r"(?:<[A-Za-z0-9+-]{3,}>|[A-Za-z]{3,})[+-]?\d")
+
+# Malformed zone data surfaces as struct.error, which subclasses neither
+# OSError nor ValueError.  This check runs before the app has started, so
+# letting one escape would turn a clock that reads UTC into a container that
+# never boots: strictly worse than the condition being reported.
+_UNREADABLE_ZONE = (OSError, ValueError, ZoneInfoNotFoundError, struct.error)
+
+
+def _tzdir_redirects_off_tzpath() -> bool:
+    """Whether TZDIR sends the C library somewhere zoneinfo does not read.
+
+    Only a genuine redirect makes the two resolvers describe different
+    databases.  NixOS and some base images export a TZDIR that names a
+    directory zoneinfo already reads, and silently dropping the check there
+    would cost those installs the diagnostic for nothing.
+    """
+    tzdir = os.environ.get("TZDIR")
+    if not tzdir:
+        return False
+    searched = {os.path.realpath(path) for path in zoneinfo.TZPATH}
+    return os.path.realpath(tzdir) not in searched
+
+
+def unresolved_timezone(tz: str | None) -> str | None:
+    """Return *tz* when the C library could not load it and fell back to UTC.
+
+    Debian ships the backward-compatible zone names (``US/Eastern``, ``Japan``,
+    ``GB``, ``Asia/Calcutta``) in a separate ``tzdata-legacy`` package.  Where
+    that package is absent the C library opens no zone file and silently uses
+    UTC, which shifts every allowed-search-window decision by the operator's
+    real offset without emitting a single diagnostic.
+
+    Returns ``None`` when local time is trustworthy, otherwise the offending
+    value for the caller to name in a startup warning.
+    """
+    if not tz:
+        return None  # unset means UTC per POSIX: a choice, not a failure
+
+    key = tz.removeprefix(":")  # the C library ignores one leading colon
+    try:
+        if key.startswith("/"):
+            # An explicit zone-file path.  Parsing it rather than stat-ing it
+            # matters: a readable non-TZif file passes an existence check but
+            # still leaves the C library on UTC.  The regular-file guard keeps
+            # a FIFO from blocking the open, and startup with it.
+            if not Path(key).is_file():
+                return tz
+            with Path(key).open("rb") as handle:
+                zone = ZoneInfo.from_file(handle)
+        elif _tzdir_redirects_off_tzpath():
+            # Only a bare key is looked up by name, so only a bare key can be
+            # thrown off by TZDIR.  The C library opens an absolute path
+            # directly and ignores TZDIR entirely.
+            logger.debug(
+                "TZDIR=%s is outside the paths zoneinfo reads, so TZ=%s was not checked",
+                os.environ.get("TZDIR"),
+                tz,
+            )
+            return None
+        else:
+            zone = ZoneInfo(key)
+    except _UNREADABLE_ZONE:
+        return None if _POSIX_TZ_RE.match(key) else tz
+
+    # The zone loaded here, but zoneinfo and the C library search different
+    # paths, so one can find a zone the other cannot.  Two instants six months
+    # apart are compared because a single reading cannot separate a working
+    # zone from a silent UTC fallback while that zone sits at UTC+0 anyway,
+    # which every winter does to Europe/London and its neighbours.
+    year = datetime.now(UTC).year
+    for instant in (datetime(year, 1, 15, tzinfo=UTC), datetime(year, 7, 15, tzinfo=UTC)):
+        if instant.astimezone().utcoffset() != instant.astimezone(zone).utcoffset():
+            return tz
+    return None
 
 
 _DEFAULT_UPDATE_CHECK_REPO = "av1155/houndarr"

@@ -37,7 +37,7 @@ manifests, or the Unraid CA template.
 |----------|---------|-------------|
 | `PUID` | `1000` | User ID for file ownership inside the container |
 | `PGID` | `1000` | Group ID for file ownership inside the container |
-| `TZ` | `UTC` | Container timezone (e.g. `America/New_York`) |
+| `TZ` | `UTC` | Container timezone (e.g. `America/New_York`). Read only by [Allowed search window](/docs/reference/instance-settings#allowed-search-window); a value Houndarr cannot load is named in the startup log and falls back to UTC |
 
 ## Notes
 

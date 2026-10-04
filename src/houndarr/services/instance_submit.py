@@ -106,6 +106,12 @@ class _FormCanonical:
     allowed_time_window: str
     tag_filter_include: str
     tag_filter_exclude: str
+    tag_filter_missing_include: str
+    tag_filter_missing_exclude: str
+    tag_filter_cutoff_include: str
+    tag_filter_cutoff_exclude: str
+    tag_filter_upgrade_include: str
+    tag_filter_upgrade_exclude: str
 
 
 def _validate_form(
@@ -122,6 +128,12 @@ def _validate_form(
     upgrade_hourly_cap: int,
     tag_filter_include: str,
     tag_filter_exclude: str,
+    tag_filter_missing_include: str,
+    tag_filter_missing_exclude: str,
+    tag_filter_cutoff_include: str,
+    tag_filter_cutoff_exclude: str,
+    tag_filter_upgrade_include: str,
+    tag_filter_upgrade_exclude: str,
 ) -> _FormCanonical:
     """Run every static validator and return canonical form values.
 
@@ -156,18 +168,25 @@ def _validate_form(
     if upgrade_error is not None:
         raise InstanceValidationError(upgrade_error)
 
-    include_error, canonical_include = validate_tag_filter(tag_filter_include, direction="include")
-    if include_error is not None:
-        raise InstanceValidationError(include_error)
-
-    exclude_error, canonical_exclude = validate_tag_filter(tag_filter_exclude, direction="exclude")
-    if exclude_error is not None:
-        raise InstanceValidationError(exclude_error)
+    canonical_tags: dict[str, str] = {}
+    for field_name, raw, direction in (
+        ("tag_filter_include", tag_filter_include, "include"),
+        ("tag_filter_exclude", tag_filter_exclude, "exclude"),
+        ("tag_filter_missing_include", tag_filter_missing_include, "missing include"),
+        ("tag_filter_missing_exclude", tag_filter_missing_exclude, "missing exclude"),
+        ("tag_filter_cutoff_include", tag_filter_cutoff_include, "cutoff include"),
+        ("tag_filter_cutoff_exclude", tag_filter_cutoff_exclude, "cutoff exclude"),
+        ("tag_filter_upgrade_include", tag_filter_upgrade_include, "upgrade include"),
+        ("tag_filter_upgrade_exclude", tag_filter_upgrade_exclude, "upgrade exclude"),
+    ):
+        tag_error, canonical_value = validate_tag_filter(raw, direction=direction)
+        if tag_error is not None:
+            raise InstanceValidationError(tag_error)
+        canonical_tags[field_name] = canonical_value
 
     return _FormCanonical(
         allowed_time_window=format_ranges(parse_time_window(allowed_time_window)),
-        tag_filter_include=canonical_include,
-        tag_filter_exclude=canonical_exclude,
+        **canonical_tags,
     )
 
 
@@ -247,6 +266,12 @@ async def submit_create(
     search_order: str,
     tag_filter_include: str,
     tag_filter_exclude: str,
+    tag_filter_missing_include: str,
+    tag_filter_missing_exclude: str,
+    tag_filter_cutoff_include: str,
+    tag_filter_cutoff_exclude: str,
+    tag_filter_upgrade_include: str,
+    tag_filter_upgrade_exclude: str,
     connection_verified: bool,
 ) -> Instance:
     """Validate + persist a new instance, returning the populated row.
@@ -267,6 +292,10 @@ async def submit_create(
             tag-label strings from the per-instance filter form.  The
             service canonicalises and persists; the engine resolves
             labels to numeric IDs at cycle time (issue #637).
+        tag_filter_missing_* / tag_filter_cutoff_* / tag_filter_upgrade_*:
+            Raw per-pass overrides of the two lists above, handled the
+            same way.  Empty falls back to the instance-wide list
+            (issue #833).
         connection_verified: Whether the UI's test-connection step
             previously succeeded.  Required ``True`` to proceed.
 
@@ -292,6 +321,12 @@ async def submit_create(
         upgrade_hourly_cap=upgrade_hourly_cap,
         tag_filter_include=tag_filter_include,
         tag_filter_exclude=tag_filter_exclude,
+        tag_filter_missing_include=tag_filter_missing_include,
+        tag_filter_missing_exclude=tag_filter_missing_exclude,
+        tag_filter_cutoff_include=tag_filter_cutoff_include,
+        tag_filter_cutoff_exclude=tag_filter_cutoff_exclude,
+        tag_filter_upgrade_include=tag_filter_upgrade_include,
+        tag_filter_upgrade_exclude=tag_filter_upgrade_exclude,
     )
 
     if not connection_verified:
@@ -359,6 +394,12 @@ async def submit_create(
         search_order=parsed_search_order,
         tag_filter_include=canonical.tag_filter_include,
         tag_filter_exclude=canonical.tag_filter_exclude,
+        tag_filter_missing_include=canonical.tag_filter_missing_include,
+        tag_filter_missing_exclude=canonical.tag_filter_missing_exclude,
+        tag_filter_cutoff_include=canonical.tag_filter_cutoff_include,
+        tag_filter_cutoff_exclude=canonical.tag_filter_cutoff_exclude,
+        tag_filter_upgrade_include=canonical.tag_filter_upgrade_include,
+        tag_filter_upgrade_exclude=canonical.tag_filter_upgrade_exclude,
     )
 
 
@@ -400,6 +441,12 @@ async def submit_update(
     search_order: str,
     tag_filter_include: str,
     tag_filter_exclude: str,
+    tag_filter_missing_include: str,
+    tag_filter_missing_exclude: str,
+    tag_filter_cutoff_include: str,
+    tag_filter_cutoff_exclude: str,
+    tag_filter_upgrade_include: str,
+    tag_filter_upgrade_exclude: str,
     connection_verified: bool,
 ) -> Instance:
     """Validate + persist an instance update, returning the refreshed row.
@@ -447,6 +494,12 @@ async def submit_update(
         upgrade_hourly_cap=upgrade_hourly_cap,
         tag_filter_include=tag_filter_include,
         tag_filter_exclude=tag_filter_exclude,
+        tag_filter_missing_include=tag_filter_missing_include,
+        tag_filter_missing_exclude=tag_filter_missing_exclude,
+        tag_filter_cutoff_include=tag_filter_cutoff_include,
+        tag_filter_cutoff_exclude=tag_filter_cutoff_exclude,
+        tag_filter_upgrade_include=tag_filter_upgrade_include,
+        tag_filter_upgrade_exclude=tag_filter_upgrade_exclude,
     )
 
     resolved_api_key = current.core.api_key if api_key == API_KEY_UNCHANGED else api_key
@@ -517,6 +570,12 @@ async def submit_update(
         "search_order": parsed_search_order,
         "tag_filter_include": canonical.tag_filter_include,
         "tag_filter_exclude": canonical.tag_filter_exclude,
+        "tag_filter_missing_include": canonical.tag_filter_missing_include,
+        "tag_filter_missing_exclude": canonical.tag_filter_missing_exclude,
+        "tag_filter_cutoff_include": canonical.tag_filter_cutoff_include,
+        "tag_filter_cutoff_exclude": canonical.tag_filter_cutoff_exclude,
+        "tag_filter_upgrade_include": canonical.tag_filter_upgrade_include,
+        "tag_filter_upgrade_exclude": canonical.tag_filter_upgrade_exclude,
     }
     # Reset offsets when upgrade is toggled off so a future re-enable
     # starts from a clean position rather than picking up halfway

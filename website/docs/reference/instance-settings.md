@@ -153,7 +153,8 @@ movie level.
 ## Tag filter
 
 Scope a per-instance search to (or away from) items carrying specific
-*arr tags. Applies to missing, cutoff, and upgrade passes uniformly.
+*arr tags. Applies to the missing, cutoff, and upgrade passes, except
+where a pass sets its own [per-pass override](#per-pass-overrides).
 Two fields, both empty by default:
 
 ### Tag Filter · Include
@@ -190,6 +191,25 @@ Item-to-tag mapping by app:
 | Sonarr, Whisparr v2 | The series row that owns the episode |
 | Lidarr | The artist row that owns the album |
 | Readarr | The author row that owns the book |
+
+### Per-pass overrides
+
+Each pass section has its own pair of tag fields: `Missing Tag
+Include` / `Missing Tag Exclude` under missing search, `Cutoff Tag
+Include` / `Cutoff Tag Exclude` under cutoff upgrades, and `Upgrade Tag
+Include` / `Upgrade Tag Exclude` under library upgrades. A non-empty
+override replaces the instance-wide list of the same direction for that
+pass only. A blank override falls back to `Tag Filter · Include` or
+`Tag Filter · Exclude`, one direction at a time.
+
+- Default: empty (use the instance-wide list)
+- A blank override cannot clear an instance-wide list for one pass. To
+  filter only some passes, leave the instance-wide field empty and set
+  the overrides on those passes.
+
+Setting `Cutoff Tag Exclude` and `Upgrade Tag Exclude` to the same tag
+keeps the tagged series or movies out of quality upgrades while
+Houndarr still searches for their missing items.
 
 For the skip-row format see
 [Skip Reasons](/docs/reference/skip-reasons#tag-filter).

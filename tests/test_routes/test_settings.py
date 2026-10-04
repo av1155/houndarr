@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -766,6 +768,77 @@ def test_create_and_update_hot_retry_controls_round_trip(app: TestClient) -> Non
     assert refreshed.status_code == 200
     assert b'value="12"' in refreshed.content
     assert b'value="3"' in refreshed.content
+
+
+def _input_value(html: bytes, name: str) -> str | None:
+    """Return the rendered ``value`` of the input named *name*, if any."""
+    # ``\s`` keeps the trailing ``data-default-value`` attribute from matching.
+    match = re.search(rb'<input[^>]*name="' + name.encode() + rb'"[^>]*\svalue="([^"]*)"', html)
+    return match.group(1).decode() if match else None
+
+
+def test_create_and_update_tag_filter_overrides_round_trip(app: TestClient) -> None:
+    """Each per-pass field lands in its own column, canonicalised (#833)."""
+    _login(app)
+    form = {
+        **_VALID_FORM,
+        "tag_filter_include": "all-in",
+        "tag_filter_exclude": "all-out",
+        "tag_filter_missing_include": "m-in",
+        "tag_filter_missing_exclude": "m-out",
+        "tag_filter_cutoff_include": "c-in",
+        "tag_filter_cutoff_exclude": " No-Upgrade , sd-keep,no-upgrade",
+        "tag_filter_upgrade_include": "u-in",
+        "tag_filter_upgrade_exclude": "u-out",
+    }
+    create_resp = app.post("/settings/instances", data=form, headers=csrf_headers(app))
+    assert create_resp.status_code == 200
+
+    edit = app.get("/settings/instances/1/edit").content
+    assert _input_value(edit, "tag_filter_include") == "all-in"
+    assert _input_value(edit, "tag_filter_exclude") == "all-out"
+    assert _input_value(edit, "tag_filter_missing_include") == "m-in"
+    assert _input_value(edit, "tag_filter_missing_exclude") == "m-out"
+    assert _input_value(edit, "tag_filter_cutoff_include") == "c-in"
+    assert _input_value(edit, "tag_filter_cutoff_exclude") == "no-upgrade,sd-keep"
+    assert _input_value(edit, "tag_filter_upgrade_include") == "u-in"
+    assert _input_value(edit, "tag_filter_upgrade_exclude") == "u-out"
+
+    updated = {
+        **form,
+        "api_key": "__UNCHANGED__",
+        "tag_filter_cutoff_exclude": "",
+        "tag_filter_upgrade_exclude": "no-upgrade",
+    }
+    update_resp = app.post("/settings/instances/1", data=updated, headers=csrf_headers(app))
+    assert update_resp.status_code == 200
+
+    refreshed = app.get("/settings/instances/1/edit").content
+    assert _input_value(refreshed, "tag_filter_cutoff_exclude") == ""
+    assert _input_value(refreshed, "tag_filter_upgrade_exclude") == "no-upgrade"
+    assert _input_value(refreshed, "tag_filter_exclude") == "all-out"
+
+
+@pytest.mark.parametrize(
+    ("field", "message"),
+    [
+        ("tag_filter_missing_include", b"Tag filter missing include"),
+        ("tag_filter_missing_exclude", b"Tag filter missing exclude"),
+        ("tag_filter_cutoff_include", b"Tag filter cutoff include"),
+        ("tag_filter_cutoff_exclude", b"Tag filter cutoff exclude"),
+        ("tag_filter_upgrade_include", b"Tag filter upgrade include"),
+        ("tag_filter_upgrade_exclude", b"Tag filter upgrade exclude"),
+    ],
+)
+def test_create_rejects_oversized_tag_filter_override(
+    app: TestClient, field: str, message: bytes
+) -> None:
+    """The error names the field that tripped the bound."""
+    _login(app)
+    form = {**_VALID_FORM, field: "a" * 65}
+    resp = app.post("/settings/instances", data=form, headers=csrf_headers(app))
+    assert resp.status_code == 422
+    assert message in resp.content
 
 
 def test_password_change_success(app: TestClient) -> None:

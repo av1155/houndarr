@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Schema version: bump when adding new migrations
 # ---------------------------------------------------------------------------
-SCHEMA_VERSION = 21
+SCHEMA_VERSION = 22
 
 # v20: per-instance tag-based include / exclude filter for *arr items.
 # Column names are baked in here as constants so a future rename never
@@ -30,6 +30,17 @@ _V20_TAG_FILTER_EXCLUDE_COLUMN = "tag_filter_exclude"
 # so a future rename cannot retroactively break the rebuild ladder.
 _V21_HOT_RETRY_WINDOW_COLUMN = "missing_hot_retry_window_hrs"
 _V21_HOT_RETRY_INTERVAL_COLUMN = "missing_hot_retry_interval_hrs"
+
+# v22: per-pass tag-filter overrides on top of the v20 instance-wide pair.
+# Same version-locking discipline as v20 / v21.
+_V22_TAG_FILTER_OVERRIDE_COLUMNS = (
+    "tag_filter_missing_include",
+    "tag_filter_missing_exclude",
+    "tag_filter_cutoff_include",
+    "tag_filter_cutoff_exclude",
+    "tag_filter_upgrade_include",
+    "tag_filter_upgrade_exclude",
+)
 
 # ---------------------------------------------------------------------------
 # DDL
@@ -125,6 +136,12 @@ CREATE TABLE IF NOT EXISTS instances (
     snapshot_refreshed_at TEXT   NOT NULL DEFAULT '',
     tag_filter_include   TEXT    NOT NULL DEFAULT '',
     tag_filter_exclude   TEXT    NOT NULL DEFAULT '',
+    tag_filter_missing_include TEXT NOT NULL DEFAULT '',
+    tag_filter_missing_exclude TEXT NOT NULL DEFAULT '',
+    tag_filter_cutoff_include  TEXT NOT NULL DEFAULT '',
+    tag_filter_cutoff_exclude  TEXT NOT NULL DEFAULT '',
+    tag_filter_upgrade_include TEXT NOT NULL DEFAULT '',
+    tag_filter_upgrade_exclude TEXT NOT NULL DEFAULT '',
     enabled              INTEGER NOT NULL DEFAULT 1,
     created_at           TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     updated_at           TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
@@ -364,6 +381,7 @@ async def init_db_migrations() -> None:
         await _migrate_to_v19(db)
         await _migrate_to_v20(db)
         await _migrate_to_v21(db)
+        await _migrate_to_v22(db)
         await _ensure_v3_indexes(db)
         # PRAGMA optimize keeps the planner's sqlite_stat1 entries fresh as
         # search_log grows.  Cheap on healthy DBs, prevents silent index
@@ -427,6 +445,8 @@ async def _run_migrations(db: aiosqlite.Connection, from_version: int) -> None:
         await _migrate_to_v20(db)
     if from_version < 21:
         await _migrate_to_v21(db)
+    if from_version < 22:
+        await _migrate_to_v22(db)
 
     logger.info("Migrated database from schema version %d to %d", from_version, SCHEMA_VERSION)
     await db.execute(
@@ -1495,6 +1515,19 @@ async def _migrate_to_v21(db: aiosqlite.Connection) -> None:
             f"ALTER TABLE instances ADD COLUMN {_V21_HOT_RETRY_INTERVAL_COLUMN} "
             "INTEGER NOT NULL DEFAULT 2"
         )
+
+
+async def _migrate_to_v22(db: aiosqlite.Connection) -> None:
+    """Add per-pass tag-filter override columns on the instances table.
+
+    Issue #833.  Each column holds comma-separated tag labels for one
+    pass and direction.  An empty override falls back to the v20
+    instance-wide column, so the empty defaults keep existing instances
+    filtering every pass exactly as before.
+    """
+    for column in _V22_TAG_FILTER_OVERRIDE_COLUMNS:
+        if not await _column_exists(db, "instances", column):
+            await db.execute(f"ALTER TABLE instances ADD COLUMN {column} TEXT NOT NULL DEFAULT ''")
 
 
 async def _column_exists(db: aiosqlite.Connection, table_name: str, column_name: str) -> bool:

@@ -21,6 +21,7 @@ from houndarr.engine.search_loop import (
     _resolve_tag_filter_ids,
     _tag_filter_skip_reason,
 )
+from houndarr.enums import SearchKind
 from houndarr.errors import ClientTransportError
 from houndarr.services.instances import TagFilterPolicy
 
@@ -36,6 +37,50 @@ def _make_candidate(tags: tuple[int, ...] = ()) -> SearchCandidate:
         search_payload={"command": "MoviesSearch", "movie_id": 1},
         tags=tags,
     )
+
+
+class TestTagFilterPolicyForPass:
+    """``TagFilterPolicy.for_pass`` picks the labels each pass filters on.
+
+    Issue #833.  A per-pass field overrides the instance-wide field of
+    the same direction; a blank per-pass field falls back to it.  The
+    two directions fall back independently.
+    """
+
+    _POLICY = TagFilterPolicy(
+        include=("all-in",),
+        exclude=("all-out",),
+        missing_include=("m-in",),
+        cutoff_exclude=("c-out",),
+        upgrade_include=("u-in",),
+        upgrade_exclude=("u-out",),
+    )
+
+    @pytest.mark.parametrize(
+        ("kind", "want"),
+        [
+            (SearchKind.missing, (("m-in",), ("all-out",))),
+            (SearchKind.cutoff, (("all-in",), ("c-out",))),
+            (SearchKind.upgrade, (("u-in",), ("u-out",))),
+        ],
+    )
+    def test_override_replaces_instance_wide_per_direction(
+        self, kind: SearchKind, want: tuple[tuple[str, ...], tuple[str, ...]]
+    ) -> None:
+        assert self._POLICY.for_pass(kind) == want
+
+    @pytest.mark.parametrize("kind", list(SearchKind))
+    def test_no_overrides_uses_instance_wide_on_every_pass(self, kind: SearchKind) -> None:
+        """Rows migrated to v22 carry blank overrides and must filter as before."""
+        policy = TagFilterPolicy(include=("1080p",), exclude=("uncut",))
+        assert policy.for_pass(kind) == (("1080p",), ("uncut",))
+
+    def test_override_with_blank_instance_wide(self) -> None:
+        """Filtering one pass only: instance-wide blank, override on that pass."""
+        policy = TagFilterPolicy(cutoff_exclude=("no-upgrade",))
+        assert policy.for_pass(SearchKind.missing) == ((), ())
+        assert policy.for_pass(SearchKind.cutoff) == ((), ("no-upgrade",))
+        assert policy.for_pass(SearchKind.upgrade) == ((), ())
 
 
 class TestTagFilterSkipReason:
@@ -128,7 +173,7 @@ class TestResolveTagFilterIds:
     """``_resolve_tag_filter_ids`` runs once per cycle.
 
     The function takes the instance's labels, calls the adapter's client
-    ``get_tags()`` once, and returns the resolved sets.  These tests use
+    ``get_tags()`` once, and returns the resolved sets for each pass.  These tests use
     a minimal stub adapter plus a real :class:`TagFilterPolicy` so the
     label normalisation + degradation behaviour is locked.
     """
@@ -164,21 +209,102 @@ class TestResolveTagFilterIds:
         adapter.make_client = MagicMock(return_value=ctx)
         return adapter
 
+    @pytest.fixture()
+    def all_passes_instance(self) -> Any:
+        from tests.test_engine.conftest import make_instance  # noqa: PLC0415
+
+        return make_instance(cutoff_enabled=True, upgrade_enabled=True)
+
+    _ALL_OFF = {
+        SearchKind.missing: (None, None),
+        SearchKind.cutoff: (None, None),
+        SearchKind.upgrade: (None, None),
+    }
+
     @pytest.mark.asyncio()
     async def test_empty_filter_short_circuits(self, instance: Any, seeded_instances: None) -> None:
-        """When both directions are empty the resolver returns ``(None, None)``
+        """With no labels on any pass every pass gets ``(None, None)``
         without opening a client (and therefore without firing the /tag GET)."""
         adapter = self._stub_adapter()
-        include_ids, exclude_ids = await _resolve_tag_filter_ids(
+        tag_ids = await _resolve_tag_filter_ids(
             instance, adapter, cycle_id="c1", cycle_trigger="scheduled"
         )
-        assert include_ids is None
-        assert exclude_ids is None
+        assert tag_ids == self._ALL_OFF
         adapter.make_client.assert_not_called()
 
     @pytest.mark.asyncio()
+    async def test_filter_only_on_disabled_pass_skips_get(
+        self, instance: Any, seeded_instances: None
+    ) -> None:
+        """An override on a pass that will not run must not cost a /tag GET."""
+        import dataclasses  # noqa: PLC0415
+
+        scoped = dataclasses.replace(
+            instance,
+            tag_filter=TagFilterPolicy(upgrade_exclude=("no-upgrade",)),
+        )
+        adapter = self._stub_adapter(get_tags_result={"no-upgrade": 5})
+        tag_ids = await _resolve_tag_filter_ids(
+            scoped, adapter, cycle_id="c1", cycle_trigger="scheduled"
+        )
+        assert tag_ids == self._ALL_OFF
+        adapter.make_client.assert_not_called()
+
+    @pytest.mark.asyncio()
+    async def test_per_pass_overrides_share_one_get(
+        self, all_passes_instance: Any, seeded_instances: None
+    ) -> None:
+        """Issue #833.  Each pass resolves its own effective labels from a
+        single /tag GET per cycle."""
+        import dataclasses  # noqa: PLC0415
+
+        scoped = dataclasses.replace(
+            all_passes_instance,
+            tag_filter=TagFilterPolicy(
+                exclude=("all-out",),
+                cutoff_exclude=("no-upgrade",),
+                upgrade_include=("4k",),
+                upgrade_exclude=("no-upgrade",),
+            ),
+        )
+        adapter = self._stub_adapter(get_tags_result={"all-out": 3, "no-upgrade": 5, "4k": 2})
+        tag_ids = await _resolve_tag_filter_ids(
+            scoped, adapter, cycle_id="c1", cycle_trigger="scheduled"
+        )
+        assert tag_ids == {
+            SearchKind.missing: (None, frozenset({3})),
+            SearchKind.cutoff: (None, frozenset({5})),
+            SearchKind.upgrade: (frozenset({2}), frozenset({5})),
+        }
+        client = adapter.make_client.return_value.__aenter__.return_value
+        client.get_tags.assert_awaited_once()
+
+    @pytest.mark.asyncio()
+    async def test_unknown_label_logged_once_across_passes(
+        self, all_passes_instance: Any, seeded_instances: None
+    ) -> None:
+        """An instance-wide typo reaches every pass but is reported once."""
+        import dataclasses  # noqa: PLC0415
+
+        from houndarr.database import get_db  # noqa: PLC0415
+
+        scoped = dataclasses.replace(
+            all_passes_instance,
+            tag_filter=TagFilterPolicy(include=("nope",), cutoff_exclude=("nope",)),
+        )
+        adapter = self._stub_adapter(get_tags_result={"1080p": 1})
+        await _resolve_tag_filter_ids(scoped, adapter, cycle_id="c1", cycle_trigger="scheduled")
+
+        async with get_db() as conn:
+            async with conn.execute(
+                "SELECT message FROM search_log WHERE reason = 'tag filter (unknown label)'"
+            ) as cur:
+                rows = await cur.fetchall()
+        assert [row[0] for row in rows] == ["tag filter: unknown label(s) on Test Instance: nope"]
+
+    @pytest.mark.asyncio()
     async def test_resolves_labels_to_ids(self, instance: Any, seeded_instances: None) -> None:
-        """Known labels are mapped to their IDs.
+        """Known labels are mapped to their IDs on every enabled pass.
 
         Both sides of the lookup are normalised to lowercase before the
         dict.get fires: the *arr's labels are lowercased in
@@ -190,16 +316,20 @@ class TestResolveTagFilterIds:
 
         scoped = dataclasses.replace(
             instance,
+            cutoff=dataclasses.replace(instance.cutoff, cutoff_enabled=True),
             tag_filter=TagFilterPolicy(include=("1080p",), exclude=("uncut",)),
         )
         adapter = self._stub_adapter(
             get_tags_result={"1080p": 1, "4k": 2, "uncut": 7},
         )
-        include_ids, exclude_ids = await _resolve_tag_filter_ids(
+        tag_ids = await _resolve_tag_filter_ids(
             scoped, adapter, cycle_id="c1", cycle_trigger="scheduled"
         )
-        assert include_ids == frozenset({1})
-        assert exclude_ids == frozenset({7})
+        assert tag_ids == {
+            SearchKind.missing: (frozenset({1}), frozenset({7})),
+            SearchKind.cutoff: (frozenset({1}), frozenset({7})),
+            SearchKind.upgrade: (None, None),
+        }
 
     @pytest.mark.asyncio()
     async def test_unknown_labels_become_empty_set(
@@ -218,17 +348,16 @@ class TestResolveTagFilterIds:
             tag_filter=TagFilterPolicy(include=("nope",), exclude=()),
         )
         adapter = self._stub_adapter(get_tags_result={"1080p": 1})
-        include_ids, exclude_ids = await _resolve_tag_filter_ids(
+        tag_ids = await _resolve_tag_filter_ids(
             scoped, adapter, cycle_id="c1", cycle_trigger="scheduled"
         )
-        assert include_ids == frozenset()
-        assert exclude_ids is None
+        assert tag_ids[SearchKind.missing] == (frozenset(), None)
 
     @pytest.mark.asyncio()
     async def test_get_tags_failure_disables_filter(
         self, instance: Any, seeded_instances: None
     ) -> None:
-        """A transport error on /tag returns ``(None, None)`` and logs once.
+        """A transport error on /tag disables every pass's filter and logs once.
 
         The cycle must keep running; failing closed would block every
         search whenever an *arr is briefly unreachable.
@@ -240,8 +369,7 @@ class TestResolveTagFilterIds:
             tag_filter=TagFilterPolicy(include=("1080p",), exclude=()),
         )
         adapter = self._stub_adapter(raises=ClientTransportError("network down"))
-        include_ids, exclude_ids = await _resolve_tag_filter_ids(
+        tag_ids = await _resolve_tag_filter_ids(
             scoped, adapter, cycle_id="c1", cycle_trigger="scheduled"
         )
-        assert include_ids is None
-        assert exclude_ids is None
+        assert tag_ids == self._ALL_OFF

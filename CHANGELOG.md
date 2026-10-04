@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Missing, cutoff, and upgrade settings gain `Tag Include` / `Tag Exclude` overrides; a blank one falls back to `Tag Filter · Include` / `Tag Filter · Exclude`. Schema v22 adds six columns with empty defaults. (#833)
+
 ---
 
 ## [1.13.3] - 2026-09-19

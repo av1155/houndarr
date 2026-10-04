@@ -198,19 +198,24 @@ def _tag_filter_skip_reason(
     return None
 
 
+_TagFilterIds = tuple[frozenset[int] | None, frozenset[int] | None]
+
+
 async def _resolve_tag_filter_ids(
     instance: Instance,
     adapter: AppAdapterProto,
     *,
     cycle_id: str,
     cycle_trigger: CycleTrigger | str,
-) -> tuple[frozenset[int] | None, frozenset[int] | None]:
-    """Resolve the per-instance tag-label filter to numeric tag IDs.
+) -> dict[SearchKind, _TagFilterIds]:
+    """Resolve each pass's tag-label filter to numeric tag IDs.
 
-    Returns ``(include_ids, exclude_ids)`` where each side is:
+    Returns ``(include_ids, exclude_ids)`` for every
+    :class:`SearchKind`, where each side is:
 
-    - ``None`` when the operator has not enabled that direction
-      (empty list in settings), so the filter is a no-op for the pass.
+    - ``None`` when the pass has no labels for that direction (empty
+      per-pass override and empty instance-wide list), or when the pass
+      is disabled, so the filter is a no-op for the pass.
     - ``None`` when the upstream ``/tag`` fetch fails: we log one info
       row to ``search_log`` and degrade gracefully rather than blocking
       the whole cycle on a transient *arr error.
@@ -218,15 +223,30 @@ async def _resolve_tag_filter_ids(
       empty set for *include* means every operator-typed label was
       unknown to the *arr; in that case no candidate can match.
 
+    The labels for each pass come from :meth:`TagFilterPolicy.for_pass`
+    (issue #833).  All passes share one ``/tag`` GET, and the GET is
+    skipped entirely when no enabled pass has labels: a paused pass that
+    still carries a filter would otherwise burn one request per cycle
+    (and one info row on failure) for no behavioural benefit.
+
     Labels that do not resolve against the *arr's current /tag list
-    are dropped silently for the cycle but recorded as an info row so
+    are dropped silently for the cycle but recorded as one info row so
     the operator can see the typo without the loop failing on every
     candidate.
     """
-    include = instance.tag_filter.include
-    exclude = instance.tag_filter.exclude
-    if not include and not exclude:
-        return None, None
+    pass_enabled = {
+        SearchKind.missing: instance.missing.missing_enabled,
+        SearchKind.cutoff: instance.cutoff.cutoff_enabled,
+        SearchKind.upgrade: instance.upgrade.upgrade_enabled,
+    }
+    pass_labels = {
+        kind: instance.tag_filter.for_pass(kind)
+        for kind, enabled in pass_enabled.items()
+        if enabled
+    }
+    resolved: dict[SearchKind, _TagFilterIds] = dict.fromkeys(SearchKind, (None, None))
+    if not any(include or exclude for include, exclude in pass_labels.values()):
+        return resolved
 
     try:
         async with adapter.make_client(instance) as client:
@@ -244,7 +264,7 @@ async def _resolve_tag_filter_ids(
             reason="tag filter (fetch failed)",
             message=message,
         )
-        return None, None
+        return resolved
 
     def _resolve(labels: tuple[str, ...]) -> tuple[frozenset[int], list[str]]:
         ids: set[int] = set()
@@ -257,20 +277,22 @@ async def _resolve_tag_filter_ids(
                 ids.add(tag_id)
         return frozenset(ids), unknown
 
-    include_ids: frozenset[int] | None = None
-    exclude_ids: frozenset[int] | None = None
-    all_unknown: list[str] = []
-    if include:
-        include_ids, unknown = _resolve(include)
-        all_unknown.extend(unknown)
-    if exclude:
-        exclude_ids, unknown = _resolve(exclude)
-        all_unknown.extend(unknown)
+    all_unknown: set[str] = set()
+    for kind, (include, exclude) in pass_labels.items():
+        include_ids: frozenset[int] | None = None
+        exclude_ids: frozenset[int] | None = None
+        if include:
+            include_ids, unknown = _resolve(include)
+            all_unknown.update(unknown)
+        if exclude:
+            exclude_ids, unknown = _resolve(exclude)
+            all_unknown.update(unknown)
+        resolved[kind] = (include_ids, exclude_ids)
 
     if all_unknown:
         message = (
             f"tag filter: unknown label(s) on {instance.core.name}: "
-            f"{', '.join(sorted(set(all_unknown)))}"
+            f"{', '.join(sorted(all_unknown))}"
         )
         logger.info("[%s] %s", instance.core.name, message)
         await _write_log(
@@ -284,7 +306,7 @@ async def _resolve_tag_filter_ids(
             message=message,
         )
 
-    return include_ids, exclude_ids
+    return resolved
 
 
 # Download-queue check (issue #765)
@@ -1827,31 +1849,22 @@ async def _run_instance_search_impl(
                 exc_info=True,
             )
 
-    # --- Tag-filter resolution (issue #637) ---
-    # Resolve the operator-typed labels to numeric tag IDs once at the top
-    # of the cycle so all three passes share one ``/tag`` GET.  Falls back
-    # to ``(None, None)`` (filter disabled for this cycle) when the
-    # endpoint is unreachable; an info row in ``search_log`` records the
-    # fall-back so operators can debug.
-    #
-    # Skip the GET entirely when every search pass is disabled for this
-    # instance: a paused instance that still carries a tag-filter config
-    # would otherwise burn one ``/tag`` request per cycle (and one info
-    # row on failure) for no behavioural benefit.
-    any_pass_enabled = (
-        instance.missing.missing_enabled
-        or instance.cutoff.cutoff_enabled
-        or instance.upgrade.upgrade_enabled
+    # --- Tag-filter resolution (issues #637, #833) ---
+    # Resolve each pass's operator-typed labels to numeric tag IDs once at
+    # the top of the cycle so all three passes share one ``/tag`` GET.
+    # Falls back to ``(None, None)`` (filter disabled for this cycle) when
+    # the endpoint is unreachable; an info row in ``search_log`` records
+    # the fall-back so operators can debug.  The resolver skips the GET
+    # when no enabled pass carries labels.
+    tag_filter_ids = await _resolve_tag_filter_ids(
+        instance,
+        adapter,
+        cycle_id=cycle_id_value,
+        cycle_trigger=cycle_trigger,
     )
-    if any_pass_enabled:
-        tag_filter_include_ids, tag_filter_exclude_ids = await _resolve_tag_filter_ids(
-            instance,
-            adapter,
-            cycle_id=cycle_id_value,
-            cycle_trigger=cycle_trigger,
-        )
-    else:
-        tag_filter_include_ids, tag_filter_exclude_ids = None, None
+    missing_include_ids, missing_exclude_ids = tag_filter_ids[SearchKind.missing]
+    cutoff_include_ids, cutoff_exclude_ids = tag_filter_ids[SearchKind.cutoff]
+    upgrade_include_ids, upgrade_exclude_ids = tag_filter_ids[SearchKind.upgrade]
 
     # --- Download-queue check (issue #765) ---
     # One lazy lookup shared by all three passes: the *arr queue is read at
@@ -1891,8 +1904,8 @@ async def _run_instance_search_impl(
                         cycle_trigger=cycle_trigger,
                         start_page=instance.schedule.missing_page_offset,
                         total_fn=lambda: client.get_wanted_total("missing"),
-                        tag_filter_include_ids=tag_filter_include_ids,
-                        tag_filter_exclude_ids=tag_filter_exclude_ids,
+                        tag_filter_include_ids=missing_include_ids,
+                        tag_filter_exclude_ids=missing_exclude_ids,
                         missing_hot_retry_window_hrs=(
                             instance.missing.missing_hot_retry_window_hrs
                         ),
@@ -1948,8 +1961,8 @@ async def _run_instance_search_impl(
                         cycle_trigger=cycle_trigger,
                         start_page=instance.schedule.cutoff_page_offset,
                         total_fn=lambda: cutoff_client.get_wanted_total("cutoff"),
-                        tag_filter_include_ids=tag_filter_include_ids,
-                        tag_filter_exclude_ids=tag_filter_exclude_ids,
+                        tag_filter_include_ids=cutoff_include_ids,
+                        tag_filter_exclude_ids=cutoff_exclude_ids,
                         in_queue_fn=in_queue_fn,
                     ),
                 )
@@ -1987,8 +2000,8 @@ async def _run_instance_search_impl(
                 master_key,
                 cycle_id=cycle_id_value,
                 cycle_trigger=cycle_trigger,
-                tag_filter_include_ids=tag_filter_include_ids,
-                tag_filter_exclude_ids=tag_filter_exclude_ids,
+                tag_filter_include_ids=upgrade_include_ids,
+                tag_filter_exclude_ids=upgrade_exclude_ids,
                 in_queue_fn=in_queue_fn,
             )
             logger.info(
@@ -2010,6 +2023,11 @@ async def _run_instance_search_impl(
         from houndarr.repositories.search_log import has_rows_for_cycle
 
         if not await has_rows_for_cycle(cycle_id_value):
+            any_pass_enabled = (
+                instance.missing.missing_enabled
+                or instance.cutoff.cutoff_enabled
+                or instance.upgrade.upgrade_enabled
+            )
             message = (
                 "Run now finished: no wanted items to evaluate"
                 if any_pass_enabled

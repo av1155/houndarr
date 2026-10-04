@@ -90,6 +90,16 @@
   <p>Never search items that carry any of these tags. Comma-separated, case-insensitive labels. Items with no tags are always allowed past the exclude list.</p>
   <p class="tip__hint">Blank = exclude nothing. Tag labels are resolved against the *arr's <code>/tag</code> endpoint at cycle time.</p>
 </template>
+<template id="tip-tag_filter_pass_include">
+  <p class="tip__eyebrow">Tag filter · this pass · include</p>
+  <p>Replaces Tag Filter · Include for this pass only. Same comma-separated, case-insensitive labels.</p>
+  <p class="tip__hint">Blank = use Tag Filter · Include.</p>
+</template>
+<template id="tip-tag_filter_pass_exclude">
+  <p class="tip__eyebrow">Tag filter · this pass · exclude</p>
+  <p>Replaces Tag Filter · Exclude for this pass only. Tag a series here on the cutoff and upgrade passes to stop it being upgraded while its missing episodes are still searched.</p>
+  <p class="tip__hint">Blank = use Tag Filter · Exclude.</p>
+</template>
 <template id="tip-search_order">
   <p class="tip__eyebrow">Search order</p>
   <p>Chronological walks the wanted list oldest-first with a persistent page offset so items further down do not starve. Random picks a different slice each cycle so searches feel spread across the catalogue rather than clustered by release date.</p>
@@ -420,7 +430,7 @@
               label="Tag Filter · Include",
               tip_ref="tag_filter_include",
           ) }}
-          <p class="mt-1.5 text-xs text-slate-600">Comma-separated tag labels. Only search items carrying at least one of these. Blank = no include filter.</p>
+          <p class="mt-1.5 text-xs text-slate-600">Comma-separated tag labels. Only search items carrying at least one of these, on every pass without its own include list. Blank = no include filter.</p>
         </div>
         <div class="sm:col-span-2">
           {{ forms.form_field(
@@ -434,7 +444,35 @@
               label="Tag Filter · Exclude",
               tip_ref="tag_filter_exclude",
           ) }}
-          <p class="mt-1.5 text-xs text-slate-600">Comma-separated tag labels. Skip items carrying any of these. Blank = no exclude filter.</p>
+          <p class="mt-1.5 text-xs text-slate-600">Comma-separated tag labels. Skip items carrying any of these, on every pass without its own exclude list. Blank = no exclude filter.</p>
+        </div>
+        {# Per-pass overrides (issue #833): blank falls back to the
+           instance-wide field above, one direction at a time. #}
+        <div>
+          {{ forms.form_field(
+              id=form_id ~ "-mtag-include",
+              name="tag_filter_missing_include",
+              type="text",
+              value=instance.tag_filter.missing_include | join(","),
+              data_default_value="",
+              placeholder="Blank = Tag Filter · Include",
+              input_class=mono_input_cls,
+              label="Missing Tag Include",
+              tip_ref="tag_filter_pass_include",
+          ) }}
+        </div>
+        <div>
+          {{ forms.form_field(
+              id=form_id ~ "-mtag-exclude",
+              name="tag_filter_missing_exclude",
+              type="text",
+              value=instance.tag_filter.missing_exclude | join(","),
+              data_default_value="",
+              placeholder="Blank = Tag Filter · Exclude",
+              input_class=mono_input_cls,
+              label="Missing Tag Exclude",
+              tip_ref="tag_filter_pass_exclude",
+          ) }}
         </div>
         <div class="sm:col-span-2">
           {{ forms.select_field(
@@ -568,6 +606,34 @@
           ) }}
         </div>
       </div>
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div>
+          {{ forms.form_field(
+              id=form_id ~ "-ctag-include",
+              name="tag_filter_cutoff_include",
+              type="text",
+              value=instance.tag_filter.cutoff_include | join(","),
+              data_default_value="",
+              placeholder="Blank = Tag Filter · Include",
+              input_class=mono_input_cls,
+              label="Cutoff Tag Include",
+              tip_ref="tag_filter_pass_include",
+          ) }}
+        </div>
+        <div>
+          {{ forms.form_field(
+              id=form_id ~ "-ctag-exclude",
+              name="tag_filter_cutoff_exclude",
+              type="text",
+              value=instance.tag_filter.cutoff_exclude | join(","),
+              data_default_value="",
+              placeholder="Blank = Tag Filter · Exclude",
+              input_class=mono_input_cls,
+              label="Cutoff Tag Exclude",
+              tip_ref="tag_filter_pass_exclude",
+          ) }}
+        </div>
+      </div>
     </section>
 
     <!-- Library Upgrades section -->
@@ -627,6 +693,34 @@
               input_class=mono_input_cls,
               label="Upgrade Hourly Cap",
               tip_ref="upgrade_hourly_cap",
+          ) }}
+        </div>
+      </div>
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div>
+          {{ forms.form_field(
+              id=form_id ~ "-utag-include",
+              name="tag_filter_upgrade_include",
+              type="text",
+              value=instance.tag_filter.upgrade_include | join(","),
+              data_default_value="",
+              placeholder="Blank = Tag Filter · Include",
+              input_class=mono_input_cls,
+              label="Upgrade Tag Include",
+              tip_ref="tag_filter_pass_include",
+          ) }}
+        </div>
+        <div>
+          {{ forms.form_field(
+              id=form_id ~ "-utag-exclude",
+              name="tag_filter_upgrade_exclude",
+              type="text",
+              value=instance.tag_filter.upgrade_exclude | join(","),
+              data_default_value="",
+              placeholder="Blank = Tag Filter · Exclude",
+              input_class=mono_input_cls,
+              label="Upgrade Tag Exclude",
+              tip_ref="tag_filter_pass_exclude",
           ) }}
         </div>
       </div>

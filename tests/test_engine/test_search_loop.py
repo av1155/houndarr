@@ -3224,3 +3224,99 @@ async def test_tag_filter_blocks_upgrade_pass_too(seeded_instances: None) -> Non
     skipped = [r for r in rows if r["action"] == "skipped" and r["search_kind"] == "upgrade"]
     assert len(skipped) == 1
     assert skipped[0]["reason"] == "tag filter (no included tag)"
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_cutoff_tag_override_keeps_missing_pass_searching(seeded_instances: None) -> None:
+    """Issue #833.  A series excluded from the cutoff pass only still has
+    its missing episodes searched."""
+    tagged_series = {"title": "My Show", "tags": [7]}
+    respx.get(f"{SONARR_URL}/api/v3/tag").mock(
+        return_value=httpx.Response(200, json=[{"id": 7, "label": "no-upgrade"}])
+    )
+    respx.get(f"{SONARR_URL}/api/v3/wanted/missing").mock(
+        return_value=httpx.Response(
+            200,
+            json={**_MISSING_SONARR, "records": [{**_EPISODE_RECORD, "series": tagged_series}]},
+        )
+    )
+    respx.get(f"{SONARR_URL}/api/v3/wanted/cutoff").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                **_CUTOFF_SONARR,
+                "records": [{**_EPISODE_RECORD, "id": 102, "series": tagged_series}],
+            },
+        )
+    )
+    search_route = respx.post(f"{SONARR_URL}/api/v3/command").mock(
+        return_value=httpx.Response(201, json=_COMMAND_RESP)
+    )
+
+    instance = dataclasses.replace(
+        _make_cutoff_instance(cutoff_enabled=True),
+        tag_filter=TagFilterPolicy(cutoff_exclude=("no-upgrade",)),
+    )
+    count = await run_instance_search(instance, MASTER_KEY)
+
+    assert count == 1
+    assert search_route.call_count == 1
+    assert json.loads(search_route.calls[0].request.content)["episodeIds"] == [101]
+    rows = await _get_log_rows()
+    searched = [r for r in rows if r["action"] == "searched"]
+    assert [(r["search_kind"], r["item_id"]) for r in searched] == [("missing", 101)]
+    skipped = [r for r in rows if r["action"] == "skipped" and r["search_kind"] == "cutoff"]
+    assert len(skipped) == 1
+    assert skipped[0]["item_id"] == 102
+    assert skipped[0]["reason"] == "tag filter (excluded tag)"
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_upgrade_tag_override_keeps_missing_pass_searching(seeded_instances: None) -> None:
+    """Issue #833.  The upgrade override applies to the upgrade pass alone."""
+    library_movie = {
+        "id": 202,
+        "title": "Other Movie",
+        "year": 2023,
+        "monitored": True,
+        "hasFile": True,
+        "movieFile": {"qualityCutoffNotMet": False},
+        "tags": [7],
+    }
+    respx.get(f"{RADARR_URL}/api/v3/tag").mock(
+        return_value=httpx.Response(200, json=[{"id": 7, "label": "no-upgrade"}])
+    )
+    respx.get(f"{RADARR_URL}/api/v3/wanted/missing").mock(
+        return_value=httpx.Response(
+            200, json={**_MISSING_RADARR, "records": [{**_MOVIE_RECORD, "tags": [7]}]}
+        )
+    )
+    respx.get(f"{RADARR_URL}/api/v3/movie").mock(
+        return_value=httpx.Response(200, json=[library_movie])
+    )
+    search_route = respx.post(f"{RADARR_URL}/api/v3/command").mock(
+        return_value=httpx.Response(201, json={"id": 1, "name": "MoviesSearch"})
+    )
+
+    instance = dataclasses.replace(
+        _make_instance(itype=InstanceType.radarr, url=RADARR_URL, instance_id=2),
+        upgrade=UpgradePolicy(
+            upgrade_enabled=True,
+            upgrade_batch_size=1,
+            upgrade_cooldown_days=7,
+            upgrade_hourly_cap=5,
+        ),
+        tag_filter=TagFilterPolicy(upgrade_exclude=("no-upgrade",)),
+    )
+    count = await run_instance_search(instance, MASTER_KEY)
+
+    assert count == 1
+    assert search_route.call_count == 1
+    assert json.loads(search_route.calls[0].request.content)["movieIds"] == [201]
+    rows = await _get_log_rows()
+    skipped = [r for r in rows if r["action"] == "skipped" and r["search_kind"] == "upgrade"]
+    assert len(skipped) == 1
+    assert skipped[0]["item_id"] == 202
+    assert skipped[0]["reason"] == "tag filter (excluded tag)"

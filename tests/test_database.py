@@ -11,6 +11,15 @@ from houndarr.database import get_db, init_db, set_db_path
 from houndarr.repositories.search_log import purge_old_logs
 from houndarr.repositories.settings import get_setting, set_setting
 
+_V22_TAG_FILTER_OVERRIDE_COLUMNS = (
+    "tag_filter_missing_include",
+    "tag_filter_missing_exclude",
+    "tag_filter_cutoff_include",
+    "tag_filter_cutoff_exclude",
+    "tag_filter_upgrade_include",
+    "tag_filter_upgrade_exclude",
+)
+
 
 @pytest.mark.asyncio()
 async def test_schema_created(db: None) -> None:
@@ -32,7 +41,7 @@ async def test_schema_created(db: None) -> None:
 async def test_schema_version_set(db: None) -> None:
     """Schema version should be set after init."""
     version = await get_setting("schema_version")
-    assert version == "21"
+    assert version == "22"
 
 
 @pytest.mark.asyncio()
@@ -90,6 +99,9 @@ async def test_search_log_and_instance_v3_columns_exist(db: None) -> None:
     # v21 (issue #630): per-instance missing-pass hot retry columns
     assert "missing_hot_retry_window_hrs" in instance_columns
     assert "missing_hot_retry_interval_hrs" in instance_columns
+    # v22 (issue #833): per-pass tag-filter override columns
+    for column in _V22_TAG_FILTER_OVERRIDE_COLUMNS:
+        assert column in instance_columns
 
 
 @pytest.mark.asyncio()
@@ -164,7 +176,7 @@ async def test_init_db_migrates_v20_to_v21_hot_retry_columns(tmp_path: Path) -> 
 
     await init_db()
 
-    assert await get_setting("schema_version") == "21"
+    assert await get_setting("schema_version") == "22"
     async with get_db() as conn:
         async with conn.execute("PRAGMA table_info(instances)") as cur:
             columns = {row[1]: row async for row in cur}
@@ -173,6 +185,73 @@ async def test_init_db_migrates_v20_to_v21_hot_retry_columns(tmp_path: Path) -> 
     assert columns["missing_hot_retry_window_hrs"][4] == "0"
     assert "missing_hot_retry_interval_hrs" in columns
     assert columns["missing_hot_retry_interval_hrs"][4] == "2"
+
+
+@pytest.mark.asyncio()
+async def test_v22_tag_filter_override_columns_default_to_empty_string(db: None) -> None:
+    """Issue #833.  Blank overrides fall back to the instance-wide filter,
+    so a row inserted without them must filter exactly as before."""
+    async with get_db() as conn:
+        async with conn.execute("PRAGMA table_info(instances)") as cur:
+            columns = {row[1]: row async for row in cur}
+
+    for column in _V22_TAG_FILTER_OVERRIDE_COLUMNS:
+        assert columns[column][2] == "TEXT"
+        assert columns[column][3] == 1
+        assert columns[column][4] == "''"
+
+
+@pytest.mark.asyncio()
+async def test_init_db_migrates_v21_to_v22_tag_filter_overrides(tmp_path: Path) -> None:
+    """Schema v21 databases gain the v22 override columns and keep their
+    instance-wide tag filter untouched."""
+    db_path = tmp_path / "migrate-v21.db"
+
+    set_db_path(str(db_path))
+    await init_db()
+    async with get_db() as conn:
+        await conn.execute(
+            "INSERT INTO instances (name, type, url, tag_filter_exclude)"
+            " VALUES ('pre-v22', 'sonarr', 'http://s', 'no-upgrade')"
+        )
+        for column in _V22_TAG_FILTER_OVERRIDE_COLUMNS:
+            await conn.execute(f"ALTER TABLE instances DROP COLUMN {column}")
+        await conn.execute("UPDATE settings SET value = '21' WHERE key = 'schema_version'")
+        await conn.commit()
+
+    await init_db()
+
+    assert await get_setting("schema_version") == "22"
+    async with get_db() as conn:
+        async with conn.execute(
+            "SELECT tag_filter_exclude, "
+            + ", ".join(_V22_TAG_FILTER_OVERRIDE_COLUMNS)
+            + " FROM instances WHERE name = 'pre-v22'"
+        ) as cur:
+            row = await cur.fetchone()
+
+    assert row is not None
+    assert tuple(row) == ("no-upgrade", "", "", "", "", "", "")
+
+
+@pytest.mark.asyncio()
+async def test_init_db_self_heals_v22_tag_filter_override_columns(tmp_path: Path) -> None:
+    """Current-version databases missing a v22 override column are repaired."""
+    db_path = tmp_path / "corrupt-v22.db"
+
+    set_db_path(str(db_path))
+    await init_db()
+    async with get_db() as conn:
+        await conn.execute("ALTER TABLE instances DROP COLUMN tag_filter_upgrade_exclude")
+        await conn.commit()
+
+    await init_db()
+
+    async with get_db() as conn:
+        async with conn.execute("PRAGMA table_info(instances)") as cur:
+            columns = {row[1] async for row in cur}
+
+    assert "tag_filter_upgrade_exclude" in columns
 
 
 @pytest.mark.asyncio()
@@ -231,7 +310,7 @@ async def test_init_db_migrates_v1_schema_to_v3(tmp_path: Path) -> None:
         instance_columns = {row[1] async for row in instances_cur}
         widget_table = await widget_cur.fetchone()
 
-    assert await get_setting("schema_version") == "21"
+    assert await get_setting("schema_version") == "22"
     assert widget_table is not None
     assert "item_label" in search_log_columns
     assert "search_kind" in search_log_columns
@@ -301,7 +380,7 @@ async def test_init_db_migrates_v2_schema_to_v4(tmp_path: Path) -> None:
         async with conn.execute("PRAGMA table_info(search_log)") as cur:
             search_log_columns = {row[1] async for row in cur}
 
-    assert await get_setting("schema_version") == "21"
+    assert await get_setting("schema_version") == "22"
     assert "cycle_id" in search_log_columns
     assert "cycle_trigger" in search_log_columns
 
@@ -368,7 +447,7 @@ async def test_init_db_migrates_v3_schema_to_v4(tmp_path: Path) -> None:
     set_db_path(str(db_path))
     await init_db()
 
-    assert await get_setting("schema_version") == "21"
+    assert await get_setting("schema_version") == "22"
     async with get_db() as conn:
         async with conn.execute("PRAGMA table_info(instances)") as cur:
             instance_columns = {row[1] async for row in cur}
@@ -451,7 +530,7 @@ async def test_init_db_migrates_v4_schema_to_v6(tmp_path: Path) -> None:
     set_db_path(str(db_path))
     await init_db()
 
-    assert await get_setting("schema_version") == "21"
+    assert await get_setting("schema_version") == "22"
 
     async with get_db() as conn:
         # Verify new columns exist
@@ -585,7 +664,7 @@ async def test_init_db_migrates_v5_schema_to_v6(tmp_path: Path) -> None:
     set_db_path(str(db_path))
     await init_db()
 
-    assert await get_setting("schema_version") == "21"
+    assert await get_setting("schema_version") == "22"
 
     async with get_db() as conn:
         async with conn.execute("PRAGMA table_info(instances)") as cur:
@@ -682,7 +761,7 @@ async def test_init_db_migrates_v6_schema_to_v7(tmp_path: Path) -> None:
     set_db_path(str(db_path))
     await init_db()
 
-    assert await get_setting("schema_version") == "21"
+    assert await get_setting("schema_version") == "22"
 
     async with get_db() as conn:
         async with conn.execute("PRAGMA table_info(instances)") as cur:
@@ -795,7 +874,7 @@ async def test_init_db_self_heals_v9_and_v10_when_version_already_current(
     set_db_path(str(db_path))
     await init_db()
 
-    assert await get_setting("schema_version") == "21"
+    assert await get_setting("schema_version") == "22"
 
     async with get_db() as conn:
         async with conn.execute("PRAGMA table_info(instances)") as cur:
@@ -938,7 +1017,7 @@ async def test_init_db_is_idempotent_on_healthy_v12(tmp_path: Path) -> None:
 
     # Second call: should be a no-op through the self-heal branch.
     await init_db()
-    assert await get_setting("schema_version") == first_version == "21"
+    assert await get_setting("schema_version") == first_version == "22"
 
     async with get_db() as conn:
         async with conn.execute("PRAGMA table_info(instances)") as cur:
@@ -1033,7 +1112,7 @@ async def test_migrate_to_v12_adds_search_order_column(tmp_path: Path) -> None:
     set_db_path(str(db_path))
     await init_db()
 
-    assert await get_setting("schema_version") == "21"
+    assert await get_setting("schema_version") == "22"
 
     async with get_db() as conn:
         async with conn.execute("PRAGMA table_info(instances)") as cur:
@@ -1176,7 +1255,7 @@ async def test_migrate_to_v15_coerces_invalid_search_kind(tmp_path: Path) -> Non
     set_db_path(str(db_path))
     await init_db()
 
-    assert await get_setting("schema_version") == "21"
+    assert await get_setting("schema_version") == "22"
 
     async with get_db() as conn:
         await conn.execute("PRAGMA foreign_keys=ON")
@@ -1680,7 +1759,7 @@ async def test_init_db_migrates_whisparr_episode_rows_through_to_current(
         async with conn.execute("SELECT value FROM settings WHERE key = 'schema_version'") as cur:
             row = await cur.fetchone()
         assert row is not None
-        assert row[0] == "21"
+        assert row[0] == "22"
 
         # 2. The Whisparr v2 cooldown rows survived and were renamed.
         async with conn.execute(
@@ -1798,7 +1877,7 @@ async def test_init_db_migrates_v4_preserves_cooldowns_through_v10_rebuild(
         async with conn.execute("SELECT value FROM settings WHERE key = 'schema_version'") as cur:
             row = await cur.fetchone()
         assert row is not None
-        assert row[0] == "21"
+        assert row[0] == "22"
 
         # All four cooldown rows must survive the v10 instances rebuild.
         async with conn.execute(

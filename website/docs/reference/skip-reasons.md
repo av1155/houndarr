@@ -33,8 +33,8 @@ scheduling behavior, not errors.
 | `hourly limit reached (N/hr)`         | per-item    | Missing pass hit `Hourly Cap` of `N` for the current hour.                                           |
 | `cutoff hourly limit reached (N/hr)`  | per-item    | Cutoff pass hit `Cutoff Cap` of `N`.                                                                 |
 | `upgrade hourly limit reached (N/hr)` | per-item    | Upgrade pass hit `Upgrade Cap` of `N`.                                                               |
-| `tag filter (no included tag)`        | per-item    | `Tag Filter · Include` is set and the item does not carry any matching tag.                          |
-| `tag filter (excluded tag)`           | per-item    | `Tag Filter · Exclude` is set and the item carries one of those tags.                                |
+| `tag filter (no included tag)`        | per-item    | The pass's include list (`Tag Filter · Include` or its per-pass override) is set and the item does not carry any matching tag. |
+| `tag filter (excluded tag)`           | per-item    | The pass's exclude list (`Tag Filter · Exclude` or its per-pass override) is set and the item carries one of those tags. |
 | `already in download queue`           | per-item    | The \*arr already has this item in its download queue (downloading, importing, or delayed).          |
 | `queue backpressure (N/M)`            | cycle-level (info) | Download queue has `N` items, at or above `Queue Limit` of `M`. Entire cycle is skipped.      |
 | `outside allowed time window`         | cycle-level (info) | Current time falls outside every window defined in `Allowed Search Window`. Entire cycle is skipped. |
@@ -146,7 +146,10 @@ gate.
 settings scope the missing, cutoff, and upgrade passes to (or away
 from) items carrying specific *arr tags. Both fields take
 comma-separated tag labels and default to empty. With both empty the
-filter is a no-op and behavior matches earlier versions.
+filter is a no-op and behavior matches earlier versions. Each pass can
+replace either list with its own
+[per-pass override](/docs/reference/instance-settings#per-pass-overrides);
+the skip row's `search_kind` shows which pass skipped the item.
 
 The engine resolves labels to numeric tag IDs once per cycle by
 GET-ing each instance's `/tag` endpoint, so renaming a tag in Radarr

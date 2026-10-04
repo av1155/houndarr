@@ -216,9 +216,10 @@ def validate_tag_filter(raw: str, *, direction: str) -> tuple[str | None, str]:
     Args:
         raw: The raw form value (empty string when the operator left
             the field blank).
-        direction: ``"include"`` or ``"exclude"``; appears verbatim in
-            error messages so the operator can spot which field
-            tripped the bound.
+        direction: ``"include"`` or ``"exclude"``, prefixed with the
+            pass for a per-pass override (``"cutoff exclude"``); appears
+            verbatim in error messages so the operator can spot which
+            field tripped the bound.
 
     Returns:
         ``(None, canonical)`` on success.  ``(error, "")`` on failure

@@ -7,11 +7,13 @@ from datetime import time
 import pytest
 
 from houndarr.services.time_window import (
+    describe_outside_window,
     format_ranges,
     is_within_window,
     parse_time_window,
     validate_allowed_time_window,
 )
+from tests.conftest import libc_timezone
 
 # ---------------------------------------------------------------------------
 # parse_time_window
@@ -330,3 +332,28 @@ def test_validator_agrees_with_parser(spec: str) -> None:
     except ValueError:
         parser_ok = False
     assert validator_ok is parser_ok
+
+
+# ---------------------------------------------------------------------------
+# describe_outside_window
+# ---------------------------------------------------------------------------
+
+_OVERNIGHT = [(time(22, 0), time(6, 0))]
+
+
+@pytest.mark.parametrize("tz", [None, "UTC", "America/New_York"])
+def test_outside_window_message_calls_a_loaded_zone_local(tz: str | None) -> None:
+    with libc_timezone(tz):
+        message = describe_outside_window(time(3, 15), _OVERNIGHT)
+
+    assert message == "Local time 03:15 is outside configured window 22:00-06:00"
+
+
+def test_outside_window_message_names_a_tz_that_did_not_load() -> None:
+    with libc_timezone("Nowhere/Nope"):
+        message = describe_outside_window(time(3, 15), _OVERNIGHT)
+
+    assert message == (
+        "UTC time 03:15 is outside configured window 22:00-06:00 "
+        "(TZ=Nowhere/Nope could not be loaded)"
+    )

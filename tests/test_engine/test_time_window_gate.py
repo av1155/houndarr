@@ -12,6 +12,7 @@ import respx
 from houndarr.engine import search_loop
 from houndarr.engine.search_loop import run_instance_search
 from houndarr.services.instances import InstanceType
+from tests.conftest import libc_timezone
 
 from .conftest import (
     _COMMAND_RESP,
@@ -136,6 +137,28 @@ async def test_outside_window_skips_cycle_with_info_row(
     assert rows[0]["reason"] == "outside allowed time window"
     assert "14:00" in rows[0]["message"]
     assert "09:00-12:00" in rows[0]["message"]
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_outside_window_row_names_a_tz_that_did_not_load(
+    seeded_instances: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An unloadable TZ leaves the clock on UTC, and the row says so."""
+    _freeze_now(monkeypatch, at_utc_hour=14)
+    _mock_missing_and_command()
+
+    inst = _sonarr_instance(allowed_time_window="09:00-12:00")
+    with libc_timezone("Nowhere/Nope"):
+        count = await run_instance_search(inst, MASTER_KEY)
+
+    assert count == 0
+    rows = await get_log_rows()
+    assert len(rows) == 1
+    assert rows[0]["message"] == (
+        "UTC time 14:00 is outside configured window 09:00-12:00 "
+        "(TZ=Nowhere/Nope could not be loaded)"
+    )
 
 
 @pytest.mark.asyncio()

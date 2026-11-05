@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Allowed Search Window skip rows read `UTC time` and name the `TZ` value when `TZ` could not be loaded, instead of calling UTC `Local time`. (#824)
+
 ---
 
 ## [1.13.3] - 2026-09-19

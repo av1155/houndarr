@@ -140,6 +140,10 @@ falls outside every configured window, the cycle writes one
 configured windows, then sleeps. Manual `Run Now` clicks bypass this
 gate.
 
+If `TZ` names a zone the container can't load, the clock runs on UTC.
+The row then reads `UTC time` instead of `Local time` and names the
+`TZ` value that failed.
+
 ## Tag filter
 
 `Tag Filter · Include` and `Tag Filter · Exclude` in instance

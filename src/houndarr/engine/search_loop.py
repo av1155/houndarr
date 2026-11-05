@@ -42,7 +42,7 @@ from houndarr.services.cooldown import (
 )
 from houndarr.services.instances import Instance, InstanceType, SearchOrder, update_instance
 from houndarr.services.time_window import (
-    format_ranges,
+    describe_outside_window,
     is_within_window,
     parse_time_window,
 )
@@ -1765,11 +1765,7 @@ async def _run_instance_search_impl(
             now_local = datetime.now(UTC).astimezone().time()
             if not is_within_window(now_local, ranges):
                 reason = "outside allowed time window"
-                configured = format_ranges(ranges)
-                message = (
-                    f"Local time {now_local.strftime('%H:%M')} is outside "
-                    f"configured window {configured}"
-                )
+                message = describe_outside_window(now_local, ranges)
                 logger.info("[%s] skipping cycle: %s (%s)", instance.core.name, reason, message)
                 await _write_log(
                     instance.core.id,

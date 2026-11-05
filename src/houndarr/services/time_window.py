@@ -17,8 +17,11 @@ Semantics
 
 from __future__ import annotations
 
+import os
 import re
 from datetime import time
+
+from houndarr.config import unresolved_timezone
 
 # Maximum number of ranges a single spec may contain.  Protects against
 # pathological inputs and keeps the DB column well under 300 chars.
@@ -152,3 +155,17 @@ def format_ranges(ranges: list[tuple[time, time]]) -> str:
     Used to include the configured window in operator-facing log messages.
     """
     return ",".join(f"{s.strftime('%H:%M')}-{e.strftime('%H:%M')}" for s, e in ranges)
+
+
+def describe_outside_window(now_local: time, ranges: list[tuple[time, time]]) -> str:
+    """Return the info-row message for a cycle the window gate skipped.
+
+    A ``TZ`` the C library could not load leaves local time on UTC, so the
+    row calls the clock UTC and names the value rather than passing UTC off
+    as local time.
+    """
+    detail = f"{now_local.strftime('%H:%M')} is outside configured window {format_ranges(ranges)}"
+    bad_tz = unresolved_timezone(os.environ.get("TZ"))
+    if bad_tz is None:
+        return f"Local time {detail}"
+    return f"UTC time {detail} (TZ={bad_tz} could not be loaded)"

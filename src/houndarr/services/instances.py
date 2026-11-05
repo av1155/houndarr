@@ -38,6 +38,7 @@ from houndarr.config import (
     DEFAULT_UPGRADE_WHISPARR_V2_SEARCH_MODE,
     DEFAULT_WHISPARR_V2_SEARCH_MODE,
 )
+from houndarr.enums import SearchKind
 
 
 class InstanceType(StrEnum):
@@ -277,10 +278,37 @@ class TagFilterPolicy:
 
     Both lists default to empty: with neither set the filter is a no-op
     and the engine processes items exactly as before.  Issue #637.
+
+    The ``missing_*`` / ``cutoff_*`` / ``upgrade_*`` fields are optional
+    per-pass overrides (issue #833).  A non-empty override replaces the
+    instance-wide list of the same direction for that pass only; an
+    empty one falls back to it, so instances without overrides filter
+    every pass exactly as before.
     """
 
     include: tuple[str, ...] = ()
     exclude: tuple[str, ...] = ()
+    missing_include: tuple[str, ...] = ()
+    missing_exclude: tuple[str, ...] = ()
+    cutoff_include: tuple[str, ...] = ()
+    cutoff_exclude: tuple[str, ...] = ()
+    upgrade_include: tuple[str, ...] = ()
+    upgrade_exclude: tuple[str, ...] = ()
+
+    def for_pass(self, kind: SearchKind) -> tuple[tuple[str, ...], tuple[str, ...]]:
+        """Return the effective ``(include, exclude)`` labels for one pass.
+
+        Each direction falls back to the instance-wide list on its own,
+        so a pass can override only its exclude list and keep filtering
+        on the instance-wide include list.
+        """
+        overrides = {
+            SearchKind.missing: (self.missing_include, self.missing_exclude),
+            SearchKind.cutoff: (self.cutoff_include, self.cutoff_exclude),
+            SearchKind.upgrade: (self.upgrade_include, self.upgrade_exclude),
+        }
+        include, exclude = overrides[kind]
+        return include or self.include, exclude or self.exclude
 
 
 @dataclass(frozen=True, slots=True)
@@ -377,6 +405,12 @@ async def create_instance(
     search_order: SearchOrder = SearchOrder(DEFAULT_SEARCH_ORDER),
     tag_filter_include: str = "",
     tag_filter_exclude: str = "",
+    tag_filter_missing_include: str = "",
+    tag_filter_missing_exclude: str = "",
+    tag_filter_cutoff_include: str = "",
+    tag_filter_cutoff_exclude: str = "",
+    tag_filter_upgrade_include: str = "",
+    tag_filter_upgrade_exclude: str = "",
 ) -> Instance:
     """Insert a new instance row and return the populated :class:`Instance`.
 
@@ -425,6 +459,15 @@ async def create_instance(
             first behaviour; ``random`` picks a random start page and
             shuffles items within each fetched page, and replaces the
             upgrade-pool offset rotation with a shuffle.
+        tag_filter_include: Canonical comma-separated include labels
+            applied to every pass.
+        tag_filter_exclude: Canonical comma-separated exclude labels
+            applied to every pass.
+        tag_filter_missing_include / tag_filter_missing_exclude /
+        tag_filter_cutoff_include / tag_filter_cutoff_exclude /
+        tag_filter_upgrade_include / tag_filter_upgrade_exclude:
+            Per-pass overrides of the two lists above.  Empty falls back
+            to the instance-wide list of the same direction.
 
     Returns:
         The newly created :class:`Instance` with its database-assigned *id*.
@@ -468,6 +511,12 @@ async def create_instance(
         search_order=search_order,
         tag_filter_include=tag_filter_include,
         tag_filter_exclude=tag_filter_exclude,
+        tag_filter_missing_include=tag_filter_missing_include,
+        tag_filter_missing_exclude=tag_filter_missing_exclude,
+        tag_filter_cutoff_include=tag_filter_cutoff_include,
+        tag_filter_cutoff_exclude=tag_filter_cutoff_exclude,
+        tag_filter_upgrade_include=tag_filter_upgrade_include,
+        tag_filter_upgrade_exclude=tag_filter_upgrade_exclude,
     )
     row_id = await _repo_insert_instance(payload, master_key=master_key)
 

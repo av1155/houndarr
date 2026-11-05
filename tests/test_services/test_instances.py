@@ -335,6 +335,54 @@ async def test_update_allowed_time_window(db: None, master_key: bytes) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Per-pass tag-filter overrides (#833)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio()
+async def test_create_persists_tag_filter_overrides(db: None, master_key: bytes) -> None:
+    from houndarr.services.instances import TagFilterPolicy
+
+    inst = await _make(
+        master_key,
+        tag_filter_exclude="uncut",
+        tag_filter_missing_include="kids,4k",
+        tag_filter_missing_exclude="m-out",
+        tag_filter_cutoff_include="c-in",
+        tag_filter_cutoff_exclude="no-upgrade",
+        tag_filter_upgrade_include="u-in",
+        tag_filter_upgrade_exclude="no-upgrade,sd-keep",
+    )
+    fetched = await get_instance(inst.core.id, master_key=master_key)
+    assert fetched is not None
+    assert fetched.tag_filter == TagFilterPolicy(
+        include=(),
+        exclude=("uncut",),
+        missing_include=("kids", "4k"),
+        missing_exclude=("m-out",),
+        cutoff_include=("c-in",),
+        cutoff_exclude=("no-upgrade",),
+        upgrade_include=("u-in",),
+        upgrade_exclude=("no-upgrade", "sd-keep"),
+    )
+
+
+@pytest.mark.asyncio()
+async def test_update_tag_filter_overrides(db: None, master_key: bytes) -> None:
+    inst = await _make(master_key, tag_filter_cutoff_exclude="no-upgrade")
+
+    updated = await update_instance(
+        inst.core.id,
+        master_key=master_key,
+        tag_filter_cutoff_exclude="",
+        tag_filter_upgrade_exclude="no-upgrade",
+    )
+    assert updated is not None
+    assert updated.tag_filter.cutoff_exclude == ()
+    assert updated.tag_filter.upgrade_exclude == ("no-upgrade",)
+
+
+# ---------------------------------------------------------------------------
 # search_order (#394)
 # ---------------------------------------------------------------------------
 

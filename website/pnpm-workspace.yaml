@@ -3,10 +3,13 @@
 # blocks in package.json are silently ignored after pnpm v11.
 
 overrides:
-  # GHSA-76p7-773f-r4q5: serialize-javascript <6.0.2 leaks XSS via
-  # crafted Object.prototype payloads. Pulled transitively through
-  # the Docusaurus webpack plugins; not a direct dep.
-  serialize-javascript: ">=7.0.5"
+  # GHSA-m5mm-p8h7-m29v (CVE-2026-115897): serialize-javascript <7.1.3
+  # leaves `</script` unescaped at the end of a serialized function
+  # body, an XSS wherever the output is inlined into a page; fixed in
+  # 7.1.3. Supersedes the earlier >=7.0.5 floor for GHSA-76p7-773f-r4q5
+  # (XSS via crafted Object.prototype payloads). Pulled transitively
+  # through the Docusaurus webpack plugins; not a direct dep.
+  serialize-javascript: ">=7.1.3"
   # CVE-2026-69153 (GHSA-fxqj-rqcc-2cmp): postcss <8.5.23 still reads
   # arbitrary `.map` files from an attacker-controlled
   # sourceMappingURL when `from` is unset, an incomplete fix of
@@ -148,16 +151,19 @@ overrides:
   # the 3.x line that postcss 8 declares; the other fix, 5.1.6, is
   # ESM-only. Transitive via @docusaurus/core > postcss.
   nanoid: ">=3.3.17 <4"
-  # qs <6.16.0 carries two advisories, both fixed in 6.16.0:
+  # GHSA-6pq8-jhm2-2vcw (CVE-2026-110816): qs <=6.16.0 throws an
+  # uncaught TypeError from stringify with arrayFormat 'comma' when an
+  # array element carries a non-callable own toString, a DoS; fixed in
+  # 6.16.1. Supersedes the earlier >=6.16.0 floor for
   # GHSA-4mjr-xmp4-gh2g (CVE-2026-82417, DoS through an
   # attacker-controlled isBuffer reached from stringify) and
   # GHSA-x5fp-wj9c-mxmx (CVE-2026-82562, the array limit bypassed by
-  # comma parsing of bracket keys). Supersedes the earlier >=6.15.2
-  # floor for GHSA-q8mj-m7cp-5q26 (TypeError DoS on null/undefined
-  # entries in comma-format arrays when encodeValuesOnly is set).
-  # Transitive via @docusaurus/core > webpack-dev-server > express >
-  # body-parser; only active during `pnpm start`.
-  qs: ">=6.16.0 <7"
+  # comma parsing of bracket keys), and the >=6.15.2 floor before it
+  # for GHSA-q8mj-m7cp-5q26 (TypeError DoS on null/undefined entries in
+  # comma-format arrays when encodeValuesOnly is set). Transitive via
+  # @docusaurus/core > webpack-dev-server > express > body-parser;
+  # only active during `pnpm start`.
+  qs: ">=6.16.1 <7"
   # GHSA-27r3-jxmh-p828 (CVE-2026-111181): body-parser <1.20.9 can be
   # driven into a DoS by trailing bytes after a compressed request
   # body, fixed in 1.20.9. Supersedes the earlier >=1.20.6 floor for

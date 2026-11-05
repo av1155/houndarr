@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- Allowed Search Window skip rows read `UTC time` and name the `TZ` value when `TZ` could not be loaded, instead of calling UTC `Local time`. (#824)
+- Allowed Search Window skip rows read `outside allowed time window (TZ=<value> not loaded, using UTC)` on the Logs page when `TZ` could not be loaded. (#824)
 
 ---
 

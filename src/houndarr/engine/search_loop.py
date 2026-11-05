@@ -1764,8 +1764,7 @@ async def _run_instance_search_impl(
         if ranges:
             now_local = datetime.now(UTC).astimezone().time()
             if not is_within_window(now_local, ranges):
-                reason = "outside allowed time window"
-                message = describe_outside_window(now_local, ranges)
+                reason, message = describe_outside_window(now_local, ranges)
                 logger.info("[%s] skipping cycle: %s (%s)", instance.core.name, reason, message)
                 await _write_log(
                     instance.core.id,

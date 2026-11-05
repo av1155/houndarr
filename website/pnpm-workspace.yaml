@@ -23,18 +23,23 @@ overrides:
   # 7.12.0..=7.29.3 can generate arbitrary code when compiling
   # malicious input. Transitive via @docusaurus/core > @babel.
   "@babel/plugin-transform-modules-systemjs": ">=7.29.4"
-  # fast-uri <3.1.6 carries four advisories, all fixed in 3.1.6:
-  # CVE-2026-75899 (SSRF via repeated hostname percent-decoding),
-  # CVE-2026-75931 (host confusion via skipped IDN canonicalisation),
-  # CVE-2026-75975 (SSRF via malformed IPv6 normalisation), and
-  # CVE-2026-76172 (URI parsing flaw enabling SSRF and redirects).
-  # Supersedes the earlier >=3.1.5 floor for CVE-2026-18446
-  # (GHSA-7p8r-x3mc-p8w7, host confusion when a backslash introduces
-  # the authority) and the >=3.1.4 floor before it that cleared
+  # fast-uri <3.1.9 carries five advisories: GHSA-hrr3-gc8f-f4qj
+  # (CVE-2026-86472, inconsistent host case normalisation via
+  # percent-encoded octets, fixed in 3.1.8) and four fixed in 3.1.9,
+  # GHSA-w74x-v6f9-j3xg (CVE-2026-110306, scheme spoofing via
+  # percent-encoded scheme decoding), GHSA-wjr9-j795-jxcr
+  # (CVE-2026-110180, host confusion via unchecked WHATWG host
+  # canonicalisation), GHSA-xhq7-xmqj-769h (CVE-2026-110095, path
+  # equivalence in relative reference normalisation), and
+  # GHSA-333x-w4r6-6crp (CVE-2026-110725, scheme injection via an
+  # unescaped first-segment colon). Supersedes the earlier >=3.1.6
+  # floor for CVE-2026-75899, CVE-2026-75931, CVE-2026-75975, and
+  # CVE-2026-76172, the >=3.1.5 floor for CVE-2026-18446
+  # (GHSA-7p8r-x3mc-p8w7), and the >=3.1.4 floor before it that cleared
   # GHSA-86c8-pmm6-93fp, CVE-2026-13676, and CVE-2026-16221.
   # Transitive via @docusaurus/core > webpack > schema-utils > ajv.
   # Held to the 3.x line expected by ajv.
-  fast-uri: ">=3.1.6 <4"
+  fast-uri: ">=3.1.9 <4"
   # image-size <=2.0.2 carries two infinite-loop DoS advisories, both
   # fixed in 2.0.3: GHSA-w3rx-r6r6-pgpr (ICNS parser) and
   # GHSA-5p2g-fcmc-qvqq (JXL and HEIF parsers). Transitive via
@@ -63,37 +68,43 @@ overrides:
   # via @docusaurus/core > webpack-dev-server and
   # webpack-bundle-analyzer.
   ws: ">=8.21.0"
-  # CVE-2026-9277 (GHSA-w7jw-789q-3m8p): shell-quote <=1.8.3 fails to
-  # escape newlines in quote(), enabling command injection when the
-  # output is handed to a shell. Transitive via @docusaurus/core >
-  # webpack-dev-server > launch-editor.
-  shell-quote: ">=1.8.4"
-  # undici <7.29.0 carries five advisories, all fixed in 7.29.0:
-  # CVE-2026-13697 (GHSA-4cwx-7wf7-3272, cross-user disclosure and
-  # parse-time crash on degenerate private cache directives),
-  # CVE-2026-14643 (GHSA-jr45-8vmc-qm54, cross-user disclosure via
-  # whitespace around equals in Cache-Control), CVE-2026-15157
-  # (GHSA-m8rv-5g2x-5cg5, CRLF injection via a blob-like body type),
-  # CVE-2026-16728 (GHSA-8xcm-r25x-g524, response desynchronisation
-  # via the retry interceptor), and CVE-2026-16729
-  # (GHSA-v3r7-h72x-cjcm, cookie attribute injection). Supersedes the
-  # earlier >=7.28.0 floor that cleared GHSA-vmh5-mc38-953g,
-  # GHSA-vxpw-j846-p89q, and GHSA-hm92-r4w5-c3mj. Transitive via
-  # @easyops-cn/docusaurus-search-local > cheerio. Held to the 7.x
-  # line since nothing in the tree needs undici 8.
-  undici: ">=7.29.0 <8"
-  # dompurify <=3.4.12 leaves a subtree executable after an IN_PLACE
-  # hook detaches it, which is an XSS path (GHSA-55q2-fjhq-7xh7),
-  # fixed in 3.4.13; supersedes the earlier >=3.4.12 floor for
-  # GHSA-c2j3-45gr-mqc4 (custom element bypassing
-  # afterSanitizeElements via CUSTOM_ELEMENT_HANDLING) and the
-  # >=3.4.11 floor before it that cleared the eight-advisory
-  # sanitizer-bypass cluster (GHSA-x4vx-rjvf-j5p4,
-  # GHSA-vxr8-fq34-vvx9, GHSA-gvmj-g25r-r7wr, GHSA-rp9w-3fw7-7cwq,
-  # GHSA-hpcv-96wg-7vj8, GHSA-r47g-fvhr-h676, GHSA-76mc-f452-cxcm,
-  # GHSA-cmwh-pvxp-8882).
+  # GHSA-pqg4-j6r4-53mv (CVE-2026-102422): shell-quote <1.11.0 lets a
+  # line terminator inside a token through quote(), enabling command
+  # injection when the output is handed to a shell; fixed in 1.11.0.
+  # Supersedes the earlier >=1.8.4 floor for CVE-2026-9277
+  # (GHSA-w7jw-789q-3m8p, newlines left unescaped by quote()).
+  # Transitive via @docusaurus/core > webpack-dev-server >
+  # launch-editor. Held to the 1.x line launch-editor declares.
+  shell-quote: ">=1.11.0 <2"
+  # undici <7.30.1 carries the advisories fixed across 7.29.1 and
+  # 7.30.1, among them two TLS certificate-validation bypasses
+  # (GHSA-2m5v-pch6-74hx, CVE-2026-109383; GHSA-w293-vg96-wgc3,
+  # CVE-2026-84961), cache poisoning across origins on redirects
+  # (GHSA-4w7w-5xrc-9h26, CVE-2026-109829), DoS via TLS 1.2
+  # renegotiation (GHSA-qrxm-fqhp-jwvm) and via excessive
+  # content-encodings (GHSA-xjj6-f33q-929c), and a WebSocket
+  # subprotocol DoS (GHSA-rfgv-xxqx-mfg5), plus medium and low issues
+  # fixed in the same releases. Supersedes the earlier >=7.29.0 floor
+  # for CVE-2026-13697, CVE-2026-14643, CVE-2026-15157, CVE-2026-16728,
+  # and CVE-2026-16729, and the >=7.28.0 floor before it that cleared
+  # GHSA-vmh5-mc38-953g, GHSA-vxpw-j846-p89q, and GHSA-hm92-r4w5-c3mj.
+  # Transitive via @easyops-cn/docusaurus-search-local > cheerio. Held
+  # to the 7.x line since nothing in the tree needs undici 8.
+  undici: ">=7.30.1 <8"
+  # dompurify <3.4.17 carries GHSA-cg2g-xh64-v4q7 (critical: split
+  # template expressions survive SAFE_FOR_TEMPLATES in an attached
+  # shadow root) and GHSA-mrv2-3pqr-j5jr (an IN_PLACE hook that removes
+  # a parent or sibling leaves the detached subtree's event handlers),
+  # plus the low-severity GHSA-c6gr-qvv4-5v3f, GHSA-6688-9rhm-gjv2, and
+  # GHSA-p98j-92pf-mc4p, all fixed by 3.4.17. Supersedes the earlier
+  # >=3.4.13 floor for GHSA-55q2-fjhq-7xh7, the >=3.4.12 floor for
+  # GHSA-c2j3-45gr-mqc4, and the >=3.4.11 floor before them that
+  # cleared the eight-advisory sanitizer-bypass cluster
+  # (GHSA-x4vx-rjvf-j5p4, GHSA-vxr8-fq34-vvx9, GHSA-gvmj-g25r-r7wr,
+  # GHSA-rp9w-3fw7-7cwq, GHSA-hpcv-96wg-7vj8, GHSA-r47g-fvhr-h676,
+  # GHSA-76mc-f452-cxcm, GHSA-cmwh-pvxp-8882).
   # Transitive via @docusaurus/theme-mermaid > mermaid.
-  dompurify: ">=3.4.13 <4"
+  dompurify: ">=3.4.17 <4"
   # GHSA-4x5r-pxfx-6jf8: @babel/core <7.29.1 can read arbitrary files
   # through a crafted sourceMappingURL comment during compilation.
   # Transitive via @docusaurus/core > @docusaurus/babel.
@@ -103,16 +114,15 @@ overrides:
   # an unintended backend. Transitive via @docusaurus/core >
   # webpack-dev-server; only active during `pnpm start`.
   http-proxy-middleware: ">=2.0.10 <3"
-  # joi <17.13.6 carries two prototype-pollution advisories:
-  # GHSA-gg4h-3hg2-grpc (CVE-2026-84367, object().rename() with a
-  # template target setting the validated object's prototype, fixed in
-  # 17.13.5) and GHSA-6w3j-5fw6-r9vr (CVE-2026-84368, a __proto__
-  # language key in custom messages, fixed in 17.13.6). Supersedes the
-  # earlier >=17.13.4 floor for GHSA-q7cg-457f-vx79 (uncaught
-  # RangeError on deeply nested input through recursive link()
-  # schemas). Transitive via @docusaurus/core > @docusaurus/utils >
-  # @docusaurus/types.
-  joi: ">=17.13.6 <18"
+  # GHSA-4528-x5fx-h6hg (CVE-2026-118772): joi <17.13.9 splits
+  # string().email({ multiple: true }) input in quadratic time, a DoS,
+  # fixed in 17.13.9. Supersedes the earlier >=17.13.6 floor for the
+  # prototype-pollution pair GHSA-gg4h-3hg2-grpc (CVE-2026-84367) and
+  # GHSA-6w3j-5fw6-r9vr (CVE-2026-84368), and the >=17.13.4 floor
+  # before it for GHSA-q7cg-457f-vx79 (uncaught RangeError on deeply
+  # nested input through recursive link() schemas). Transitive via
+  # @docusaurus/core > @docusaurus/utils > @docusaurus/types.
+  joi: ">=17.13.9 <18"
   # CVE-2026-84375: js-yaml denial of service in YAML parsing, fixed in
   # 3.15.2 and 4.3.2; supersedes the earlier >=3.15.1 and >=4.3.1
   # floors for CVE-2026-59870 (GHSA-5p4m-2wfm-xmqj, quadratic CPU
@@ -123,11 +133,16 @@ overrides:
   # safeLoad API survives) and Docusaurus build tooling pulls js-yaml 4.
   "js-yaml@3": ">=3.15.2 <4"
   "js-yaml@4": ">=4.3.2 <5"
-  # GHSA-v6wh-96g9-6wx3: launch-editor <2.14.1 leaks an NTLMv2 hash
-  # through UNC path handling on Windows. Transitive via
-  # @docusaurus/core > webpack-dev-server; only active during
-  # `pnpm start`.
-  launch-editor: ">=2.14.1 <3"
+  # launch-editor <2.14.2 carries three advisories, all fixed in
+  # 2.14.2: GHSA-587h-7wmj-h5pm (CVE-2026-112942, existence check
+  # bypassable on Windows), GHSA-r825-w8mm-5pxw (CVE-2026-112944, an
+  # editor CLI flag misread as an argument, allowing command
+  # execution), and GHSA-698v-4r3x-3vcv (CVE-2026-112943,
+  # escapeCmdArgs() leaves `%` unescaped on Windows). Supersedes the
+  # earlier >=2.14.1 floor for GHSA-v6wh-96g9-6wx3 (NTLMv2 hash leak
+  # through UNC paths). Transitive via @docusaurus/core >
+  # webpack-dev-server; only active during `pnpm start`.
+  launch-editor: ">=2.14.2 <3"
   # CVE-2026-67213: nanoid <3.3.17 spins in an infinite loop generating
   # random IDs, a DoS reachable from whatever feeds it a size. Held to
   # the 3.x line that postcss 8 declares; the other fix, 5.1.6, is
@@ -143,12 +158,14 @@ overrides:
   # Transitive via @docusaurus/core > webpack-dev-server > express >
   # body-parser; only active during `pnpm start`.
   qs: ">=6.16.0 <7"
-  # GHSA-v422-hmwv-36x6: body-parser <1.20.6 silently disables size
-  # enforcement when the `limit` option parses to an invalid value,
-  # allowing an unbounded-body DoS. Transitive via @docusaurus/core >
+  # GHSA-27r3-jxmh-p828 (CVE-2026-111181): body-parser <1.20.9 can be
+  # driven into a DoS by trailing bytes after a compressed request
+  # body, fixed in 1.20.9. Supersedes the earlier >=1.20.6 floor for
+  # GHSA-v422-hmwv-36x6 (size enforcement silently disabled by an
+  # invalid `limit`). Transitive via @docusaurus/core >
   # webpack-dev-server > express; only active during `pnpm start`.
   # Held to the 1.x line that express 4 declares.
-  body-parser: ">=1.20.6 <2"
+  body-parser: ">=1.20.9 <2"
   # websocket-driver <0.7.5 carries two advisories, both fixed in
   # 0.7.5: GHSA-xv26-6w52-cph6 (CVE-2026-54466, message corruption by
   # abusing protocol length headers) and GHSA-mp7j-qc5w-4988
@@ -158,24 +175,26 @@ overrides:
   # line because sockjs 0.3.24 declares ^0.7.4.
   websocket-driver: ">=0.7.5 <0.8"
   # brace-expansion 1.x carries three DoS advisories, all fixed on the
-  # v1 maintenance line by 1.1.18: CVE-2026-13149 (exponential-time
-  # expansion of consecutive non-expanding {} groups, <1.1.16),
-  # CVE-2026-14257 (out-of-memory crash from unbounded expansion
-  # length, <1.1.17), and CVE-2026-69152 (unbounded intermediate
-  # arrays, which bypasses the CVE-2026-14257 mitigation, <1.1.18).
-  # Transitive via the many minimatch 3.x consumers in the webpack
-  # toolchain. Held to the 1.x line because minimatch 3 declares
-  # ^1.1.7 and 5.x replaced the CommonJS default export with a named
-  # one.
-  "brace-expansion@1": ">=1.1.18 <2"
-  # GHSA-rgj7-g3m4-5g8c: sharp <0.35.4 bundles libheif builds subject
-  # to GHSA-g89c-p67h-r497 and GHSA-2jg2-4ch7-h545, fixed in 0.35.4;
-  # supersedes the earlier >=0.35.0 floor for GHSA-f88m-g3jw-g9cj
-  # (libvips builds subject to CVE-2026-33327, CVE-2026-33328,
-  # CVE-2026-35590, and CVE-2026-35591). Transitive via
-  # @docusaurus/plugin-ideal-image > responsive-loader; only used at
-  # build time to resize doc images.
-  sharp: ">=0.35.4 <0.36"
+  # v1 maintenance line by 1.1.21: GHSA-6j4f-fj2g-mc7p
+  # (CVE-2026-102276, uncontrolled recursion in parseCommaParts,
+  # <1.1.19), GHSA-qhr7-859c-m2p7 (CVE-2026-102278, uncontrolled
+  # recursion on nested brace groups, <1.1.20), and GHSA-q2hr-2g5m-vwhr
+  # (CVE-2026-102277, quadratic-time `{a},b}` rewrite, <1.1.21).
+  # Supersedes the earlier >=1.1.18 floor for CVE-2026-13149,
+  # CVE-2026-14257, and CVE-2026-69152. Transitive via the many
+  # minimatch 3.x consumers in the webpack toolchain. Held to the 1.x
+  # line because minimatch 3 declares ^1.1.7 and 5.x replaced the
+  # CommonJS default export with a named one.
+  "brace-expansion@1": ">=1.1.21 <2"
+  # GHSA-wq5f-xc86-pv6w: sharp <0.35.5 bundles a librsvg build subject
+  # to CVE-2026-96889, fixed in 0.35.5. Supersedes the earlier >=0.35.4
+  # floor for GHSA-rgj7-g3m4-5g8c (libheif builds subject to
+  # GHSA-g89c-p67h-r497 and GHSA-2jg2-4ch7-h545) and the >=0.35.0 floor
+  # before it for GHSA-f88m-g3jw-g9cj (libvips builds subject to
+  # CVE-2026-33327, CVE-2026-33328, CVE-2026-35590, and
+  # CVE-2026-35591). Transitive via @docusaurus/plugin-ideal-image >
+  # responsive-loader; only used at build time to resize doc images.
+  sharp: ">=0.35.5 <0.36"
   # CVE-2026-84370: svgo <3.3.5 lets executable links through
   # removeScripts via namespace and control-character bypasses, fixed
   # in 3.3.5; supersedes the earlier >=3.3.4 floor for
@@ -189,6 +208,49 @@ overrides:
   # Transitive via @docusaurus/core > cssnano > postcss-colormin and
   # postcss-minify-gradients; only used at build time to minify CSS.
   colord: ">=2.9.4"
+  # GHSA-vc2v-76pw-4v95 (CVE-2026-87776): compression <1.8.2 leaks
+  # memory when a response closes early, a DoS, fixed in 1.8.2.
+  # Transitive via @docusaurus/core > webpack-dev-server; only active
+  # during `pnpm start`.
+  compression: ">=1.8.2 <2"
+  # follow-redirects <1.16.2 can carry credential headers across
+  # redirects: GHSA-8r9p-f939-6h3c (CVE-2026-111755, sensitiveHeaders
+  # regex escaping) and GHSA-q3jh-wrc6-jgq8 (CVE-2026-111756,
+  # array-form headers bypassing cross-origin stripping), fixed in
+  # 1.16.1, and GHSA-mrwp-f3q8-3g9p (CVE-2026-116689, cross-realm
+  # sensitiveHeaders arrays discarded), fixed in 1.16.2. Transitive via
+  # webpack-dev-server > http-proxy-middleware > http-proxy; only
+  # active during `pnpm start`.
+  follow-redirects: ">=1.16.2 <2"
+  # GHSA-jqcg-44mw-7w3h (CVE-2026-90711): proxy-addr <2.0.8 can be
+  # spoofed through an IPv4-mapped IPv6 trust subnet, fixed in 2.0.8.
+  # Transitive via @docusaurus/core > webpack-dev-server > express;
+  # only active during `pnpm start`.
+  proxy-addr: ">=2.0.8 <3"
+  # GHSA-68fv-2mgg-jv7q (CVE-2026-93749): source-map-js <1.2.2 can
+  # stall the event loop through indexed source-map section offsets,
+  # fixed in 1.2.2. Transitive via postcss, and via svgo > csso and
+  # css-tree.
+  source-map-js: ">=1.2.2 <2"
+  # GHSA-g84c-rxfj-3j2c (CVE-2026-76844): webpack-dev-middleware path
+  # traversal through a public path without a trailing slash, fixed in
+  # 7.4.6 on the 7.x line. Transitive via @docusaurus/core >
+  # webpack-dev-server; only active during `pnpm start`.
+  webpack-dev-middleware: ">=7.4.6 <8"
+  # GHSA-rj75-hqrm-r3gf (CVE-2026-104844): postcss-selector-parser
+  # parses flat selectors in quadratic time, a CPU-exhaustion DoS,
+  # fixed in 6.1.5 and 7.1.6. Both lines resolve in the tree: the
+  # cssnano 6 plugins declare ^6.0.x and the newer postcss plugins
+  # declare ^7.0.0.
+  "postcss-selector-parser@6": ">=6.1.5 <7"
+  "postcss-selector-parser@7": ">=7.1.6 <8"
+  # tinypool <2.1.2 lets prototype pollution in worker or run() options
+  # reach code execution: GHSA-5gmw-xhrv-c9v3 (CVE-2026-104848, fixed
+  # in 2.1.1) and GHSA-85c8-ppgw-ccpr (CVE-2026-104849, fixed in
+  # 2.1.2). No 1.x release carries the fix, so this lifts
+  # @docusaurus/core past its ^1.0.2 range; 2.0 only dropped Node 18,
+  # and Docusaurus loads it through import() for its SSG worker pool.
+  tinypool: ">=2.1.2 <3"
 
 # pnpm 11 replaces `onlyBuiltDependencies` with an explicit allow-map.
 # Each entry permits the named package's install scripts to run;
@@ -197,6 +259,3 @@ allowBuilds:
   "@swc/core": true
   core-js: true
   sharp: true
-
-minimumReleaseAgeExclude:
-  - lucide-react@1.23.0

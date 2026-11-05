@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- certifi bumped to 2026.10.23, clearing GHSA-6q48-6c7w-9gw2 (emSign root CAs bundled with compromised intermediate keys); the bundle verifies HTTPS \*arr URLs and the update check. (#843)
+- Base image moves to Python 3.14.10, whose `ssl` module distrusts the compromised eMudhra intermediate CA keys (CVE-2026-115557) as a second line behind the certifi fix. (#843)
+
 ---
 
 ## [1.13.3] - 2026-09-19

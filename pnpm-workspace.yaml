@@ -13,3 +13,10 @@ trustLockfile: true
 # build for the optional watch path.
 allowBuilds:
   "@parcel/watcher": true
+
+overrides:
+  # GHSA-68fv-2mgg-jv7q (CVE-2026-93749): source-map-js <1.2.2 can
+  # stall the event loop through indexed source-map section offsets,
+  # fixed in 1.2.2. Transitive via @tailwindcss/cli > @tailwindcss/node,
+  # which declares ^1.2.1.
+  source-map-js: ">=1.2.2 <2"

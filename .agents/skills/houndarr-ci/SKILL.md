@@ -20,7 +20,7 @@ paths:
 | SAST (bandit) | `security.yml` | `bandit -r src/ -c pyproject.toml` |
 | Trivy filesystem scan | `security.yml` | `trivy fs .` (CRITICAL/HIGH with known fix) |
 | Dependency review | `dependency-review.yml` | PR dependency diff vs GitHub Advisory Database |
-| Build (no push) | `docker.yml` | Multi-arch Docker build (amd64/arm64), no push |
+| Build (no push) | `docker.yml` | Docker build, no push: amd64 on PRs, amd64 + arm64 on `chore/bump-*` PRs |
 | Trivy image scan | `docker.yml` | Trivy scan of built Docker image (CRITICAL/HIGH with known fix) |
 | Security smoke test | `security-smoke-test.yml` | Live container: unauthenticated sweep, CSRF, XFF, rate limiting, API key exposure, container security |
 
@@ -28,7 +28,9 @@ The six main workflows (`quality`, `tests`, `security`, `dependency-review`,
 `docker`, `security-smoke-test`) use
 `paths-ignore: ["docs/**", "**/*.md", "website/**", ".claude/**", "scripts/marketing/**"]`. When a PR
 touches only those paths, `ci-skip.yml` provides passing no-op jobs with
-identical check names so branch protection is satisfied.
+identical check names so branch protection is satisfied. Fork PRs get a
+read-only token, so the stubs can't be created there and a docs-only fork
+PR stays blocked.
 
 ## Additional workflows (not required checks)
 

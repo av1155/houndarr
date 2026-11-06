@@ -77,7 +77,7 @@ just test-browser chromium      # Playwright e2e (serial, shared stack)
 ```
 
 Markers: `@pytest.mark.integration` (12 async engine-cycle cases in
-`tests/test_e2e/` + 15 Playwright flows in `tests/e2e_browser/`; browser
+`tests/test_e2e/` + 18 Playwright flows in `tests/e2e_browser/`; browser
 tree excluded from default collection via `norecursedirs`),
 `@pytest.mark.pinning` (characterisation tests, runs in default suite).
 Fixture graph, FK-seeding pattern, and route-test helpers live in the
@@ -104,8 +104,9 @@ ci-skip pattern live in the `houndarr-ci` skill (loads on
 The six main workflows use
 `paths-ignore: ["docs/**", "**/*.md", "website/**", ".claude/**", "scripts/marketing/**"]`;
 `ci-skip.yml` provides passing no-op jobs with identical check names so
-docs-only PRs satisfy branch protection. **Do not modify the 12 required
-check job names**: branch protection depends on exact name matches.
+docs-only PRs satisfy branch protection (except fork PRs, whose token
+cannot create check runs). **Do not modify the 12 required check job
+names**: branch protection depends on exact name matches.
 
 Branch protection on `main`: 12 required status checks (strict; branch
 must be up to date), PRs required, stale reviews dismissed,

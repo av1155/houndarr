@@ -200,6 +200,7 @@ jobs:
           cache-from: type=gha
 
       - name: Run Trivy vulnerability scanner
+        id: trivy-gate
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           image-ref: houndarr:scan
@@ -208,10 +209,16 @@ jobs:
           ignore-unfixed: "true"
           exit-code: "1"
 
-      # Upload SARIF to the GitHub Security tab for non-fork runs.
-      # Fork PRs lack security-events: write so this step is skipped.
+      # Upload SARIF to the GitHub Security tab for non-fork runs, whether the
+      # gate above passed or failed, so failing findings still reach the tab.
+      # Fork PRs lack security-events: write so these steps are skipped.
       - name: Run Trivy (SARIF for GitHub Security tab)
-        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+        id: trivy-sarif
+        if: >-
+          ${{ !cancelled()
+          && (steps.trivy-gate.outcome == 'success' || steps.trivy-gate.outcome == 'failure')
+          && (github.event_name != 'pull_request'
+          || github.event.pull_request.head.repo.full_name == github.repository) }}
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           image-ref: houndarr:scan
@@ -222,7 +229,7 @@ jobs:
           exit-code: "0"
 
       - name: Upload Trivy SARIF to GitHub Security tab
-        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+        if: ${{ !cancelled() && steps.trivy-sarif.outcome == 'success' }}
         uses: github/codeql-action/upload-sarif@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9
         with:
           sarif_file: trivy-results.sarif

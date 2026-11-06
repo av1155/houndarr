@@ -1,7 +1,7 @@
 version: 2
 updates:
   # Python dependencies
-  - package-ecosystem: "pip"
+  - package-ecosystem: "uv"
     directory: "/"
     schedule:
       interval: "weekly"
@@ -16,8 +16,10 @@ updates:
       production-deps:
         patterns:
           - "fastapi"
+          - "starlette"
           - "uvicorn"
           - "jinja2"
+          - "markupsafe"
           - "aiosqlite"
           - "httpx"
           - "bcrypt"
@@ -25,6 +27,7 @@ updates:
           - "itsdangerous"
           - "python-multipart"
           - "click"
+          - "pydantic"
       dev-deps:
         patterns:
           - "ruff"
@@ -83,8 +86,12 @@ updates:
       interval: "weekly"
       day: "monday"
     open-pull-requests-limit: 5
+    # No cooldown: floating tags like python:3.14-slim are re-pushed at least
+    # weekly, so a week-long cooldown never lets their newest digest through.
+    # Exclude every image; omitting the block falls back to a 3-day default.
     cooldown:
-      default-days: 7
+      exclude:
+        - "*"
     ignore:
       # Odd-numbered Node majors are Current, not LTS, and Dependabot has
       # no concept of the release line. Node 25 also dropped the bundled

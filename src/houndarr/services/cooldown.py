@@ -27,6 +27,7 @@ import asyncio
 import logging
 from collections import OrderedDict
 from datetime import UTC, datetime, timedelta
+from time import monotonic
 
 from houndarr.engine.candidates import ItemType
 from houndarr.value_objects import ItemRef
@@ -52,11 +53,12 @@ __all__ = [
 
 SkipLogKey = tuple[int, int, str, str]
 
-_SKIP_LOG_CACHE: OrderedDict[SkipLogKey, datetime] = OrderedDict()
+# Monotonic stamps: a wall-clock step back must not stall the front purge.
+_SKIP_LOG_CACHE: OrderedDict[SkipLogKey, float] = OrderedDict()
 _SKIP_LOG_MAX_ENTRIES = 16384
-_SKIP_LOG_TTL = timedelta(hours=24)
+_SKIP_LOG_TTL_SECONDS = 24 * 60 * 60
 _SKIP_LOG_LOCK = asyncio.Lock()
-_skip_log_full_warned_at: datetime | None = None
+_skip_log_full_warned_at: float | None = None
 
 
 async def is_on_cooldown_ref(ref: ItemRef, cooldown_days: int) -> bool:
@@ -235,17 +237,22 @@ async def should_log_skip(key: SkipLogKey) -> bool:
     """
     global _skip_log_full_warned_at
     async with _SKIP_LOG_LOCK:
-        now = datetime.now(UTC)
+        now = monotonic()
         entry = _SKIP_LOG_CACHE.get(key)
         if entry is not None:
-            if now - entry < _SKIP_LOG_TTL:
+            if now - entry < _SKIP_LOG_TTL_SECONDS:
                 return False
             del _SKIP_LOG_CACHE[key]
-        while _SKIP_LOG_CACHE and now - next(iter(_SKIP_LOG_CACHE.values())) >= _SKIP_LOG_TTL:
+        while (
+            _SKIP_LOG_CACHE and now - next(iter(_SKIP_LOG_CACHE.values())) >= _SKIP_LOG_TTL_SECONDS
+        ):
             _SKIP_LOG_CACHE.popitem(last=False)
         if len(_SKIP_LOG_CACHE) < _SKIP_LOG_MAX_ENTRIES:
             _SKIP_LOG_CACHE[key] = now
-        elif _skip_log_full_warned_at is None or now - _skip_log_full_warned_at >= _SKIP_LOG_TTL:
+        elif (
+            _skip_log_full_warned_at is None
+            or now - _skip_log_full_warned_at >= _SKIP_LOG_TTL_SECONDS
+        ):
             _skip_log_full_warned_at = now
             logger.warning(
                 "Skip-log throttle is full (%d keys); skips it cannot hold are logged"

@@ -180,13 +180,16 @@ hot-retry interval throttle, or the same tag-filter outcome.
 The window lives in memory, in a single cache of 16,384 entries shared
 by every instance, so a restart starts it over. That is roughly 16,384
 wanted items with only the missing pass enabled, 5,461 with all three,
-or 2,730 per instance across six. An entry is kept for its full 24
-hours, so past that size the combinations already cached stay quiet and
-the ones that did not fit write a row each time they are skipped, for
-as long as more combinations than that come up within a day. Slots go
-to whichever combinations are skipped first, so one instance with a
-large backlog can fill the cache and leave a smaller one writing a row
-every cycle. While the cache is full the container log shows
+or 2,730 per instance across six. With the upgrade pass on, a tag
+filter also takes an entry for each item that already meets cutoff and
+is filtered out, so on a large library the filter alone can fill the
+cache. An entry is kept for its full 24 hours, so past that size the
+combinations already cached stay quiet and the ones that did not fit
+write a row each time they are skipped, for as long as more
+combinations than that come up within a day. Slots go to whichever
+combinations are skipped first, so one instance with a large backlog
+can fill the cache and leave a smaller one writing a row every cycle.
+While the cache is full the container log shows
 `Skip-log throttle is full (16384 keys)` at most once a day.
 
 The other reasons in the table above write a row every cycle they

@@ -7,8 +7,9 @@ remaining boundary behaviour that a refactor could silently drift:
 
 * ``_reset_skip_log_cache`` empties the cache and restores first-call
   semantics to any previously-seen key.
-* The TTL comparison is strict (``now - entry < _SKIP_LOG_TTL``), so an
-  entry at exactly the TTL age is treated as expired.
+* The TTL comparison is strict (``now - entry < _SKIP_LOG_TTL_SECONDS``),
+  so an entry at exactly the TTL age is treated as expired, and the front
+  purge drops it.
 * A cache hit changes neither the entry's position nor its timestamp,
   so the cache stays in write order and the TTL runs from the logged row.
 * Rewriting an expired key moves it to the end, behind every live entry.
@@ -19,7 +20,6 @@ remaining boundary behaviour that a refactor could silently drift:
 from __future__ import annotations
 
 from collections.abc import Iterator
-from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -74,29 +74,42 @@ class TestResetSkipLogCache:
 # TTL boundary
 
 
+@pytest.fixture()
+def frozen_clock(monkeypatch: pytest.MonkeyPatch) -> float:
+    """Freeze the sentinel's clock so an entry's age can equal the TTL exactly."""
+    now = 1_000_000.0
+    monkeypatch.setattr(cooldown_module, "monotonic", lambda: now)
+    return now
+
+
 class TestSkipLogTtlBoundary:
     """Pin the strict less-than comparison used for TTL expiry."""
 
     @pytest.mark.asyncio()
-    async def test_entry_exactly_at_ttl_is_expired(self) -> None:
+    async def test_entry_exactly_at_ttl_is_expired(self, frozen_clock: float) -> None:
         """``now - entry < TTL`` is strict; an entry aged exactly TTL is expired."""
         key = (1, 101, "missing", "cooldown")
-        # Seed with a timestamp that is *exactly* TTL in the past.
-        cooldown_module._SKIP_LOG_CACHE[key] = datetime.now(UTC) - cooldown_module._SKIP_LOG_TTL
+        ttl = cooldown_module._SKIP_LOG_TTL_SECONDS
+        cooldown_module._SKIP_LOG_CACHE[key] = frozen_clock - ttl
 
-        # Strict less-than means the entry is NOT fresh; should_log_skip writes a new one.
         assert await should_log_skip(key) is True
 
     @pytest.mark.asyncio()
-    async def test_entry_well_inside_ttl_is_fresh(self) -> None:
-        """An entry comfortably inside the TTL window suppresses further writes.
+    async def test_front_entry_exactly_at_ttl_is_purged(self, frozen_clock: float) -> None:
+        """Another key's arrival purges a front entry aged exactly TTL."""
+        stale = (1, 101, "missing", "cooldown")
+        ttl = cooldown_module._SKIP_LOG_TTL_SECONDS
+        cooldown_module._SKIP_LOG_CACHE[stale] = frozen_clock - ttl
 
-        One second of headroom avoids a race with the subsequent call's
-        clock advance; exact-microsecond tests are unstable against wall time.
-        """
+        assert await should_log_skip((1, 102, "missing", "cooldown")) is True
+        assert stale not in cooldown_module._SKIP_LOG_CACHE
+
+    @pytest.mark.asyncio()
+    async def test_entry_well_inside_ttl_is_fresh(self, frozen_clock: float) -> None:
+        """An entry one second short of the TTL still suppresses the repeat."""
         key = (1, 101, "missing", "cooldown")
-        almost_ttl = cooldown_module._SKIP_LOG_TTL - timedelta(seconds=1)
-        cooldown_module._SKIP_LOG_CACHE[key] = datetime.now(UTC) - almost_ttl
+        ttl = cooldown_module._SKIP_LOG_TTL_SECONDS
+        cooldown_module._SKIP_LOG_CACHE[key] = frozen_clock - (ttl - 1)
 
         assert await should_log_skip(key) is False
 
@@ -126,7 +139,7 @@ class TestSkipLogWriteOrder:
         keys = [(1, i, "missing", "cooldown") for i in range(3)]
         for key in keys:
             assert await should_log_skip(key) is True
-        cooldown_module._SKIP_LOG_CACHE[keys[1]] = datetime.now(UTC) - timedelta(hours=25)
+        cooldown_module._SKIP_LOG_CACHE[keys[1]] = cooldown_module.monotonic() - 25 * 3600
 
         assert await should_log_skip(keys[1]) is True
 

@@ -1,11 +1,11 @@
 /* ─────────────────────────────────────────────────────────────────────────── */
-/* Houndarr — Station Design System Tokens                                    */
+/* Houndarr: Station Design System Tokens                                     */
 /* Shared with app (src/houndarr/static/css/tokens.css). Keep in sync.       */
 /* ─────────────────────────────────────────────────────────────────────────── */
 
 :root {
   /* ── Palette ─────────────────────────────────────────────────────────── */
-  --color-base:      #07080f;   /* body background — midnight navy */
+  --color-base:      #07080f;   /* body background: midnight navy */
   --color-surface-1: #0e1117;   /* card / nav background */
   --color-surface-2: #151b27;   /* secondary surface, input bg */
   --color-surface-3: #1e2638;   /* border color, tertiary surface */
@@ -15,7 +15,7 @@
   --color-border-default: #2a3448;
   --color-border-strong:  #3d4f6b;
 
-  /* ── Brand — refined Station cyan ────────────────────────────────────── */
+  /* ── Brand: refined Station cyan ─────────────────────────────────────── */
   --color-brand-50:  #ecfeff;
   --color-brand-100: #cffafe;
   --color-brand-200: #a5f3fc;

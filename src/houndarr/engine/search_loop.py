@@ -493,8 +493,8 @@ def _format_hourly_limit_reason(kind: SearchKind | str, cap: int) -> str:
     Centralises the phrasing used at the three hourly-cap gate sites
     (missing / cutoff / upgrade) so they cannot drift apart.  The
     parameter shape ``(N/hr)`` reads as "N per hour" to a user, where
-    the older ``(N)`` form read as an error code — a repeat finding
-    in post-Huntarr self-hoster research.
+    the older ``(N)`` form read as an error code (a repeat finding
+    in post-Huntarr self-hoster research).
     """
     prefix = "" if kind == "missing" else f"{kind} "
     return f"{prefix}hourly limit reached ({cap}/hr)"

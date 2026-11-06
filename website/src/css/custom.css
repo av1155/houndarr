@@ -1,6 +1,6 @@
 /**
  * Custom CSS for Houndarr documentation site.
- * Station design system — shared tokens imported below.
+ * Station design system: shared tokens imported below.
  */
 
 /* Google Fonts must come first */
@@ -8,7 +8,7 @@
 
 @import './tokens.css';
 
-/* ── Light mode — Technical Paper variables on :root ──────────────────── */
+/* ── Light mode: Technical Paper variables on :root ───────────────────── */
 /* Warm cream base with ink-dark text and cyan accents shifted darker for
    paper contrast. All concrete element styles are scoped under
    [data-theme='light'] below so they cannot leak into dark mode. */
@@ -30,7 +30,7 @@
   --paper-border-default: #d6cfbd;
   --paper-border-strong:  #b8ad93;
 
-  /* Accent — cyan shifted darker for paper */
+  /* Accent: cyan shifted darker for paper */
   --paper-accent:         #0e7490;
   --paper-accent-strong:  #155e75;
   --paper-accent-soft:    rgba(14, 116, 144, 0.10);
@@ -50,7 +50,7 @@
   --ifm-code-font-size:        90%;
   --ifm-border-radius:         var(--radius-md);
 
-  /* Highlighted code line (light default) — warm amber */
+  /* Highlighted code line (light default): warm amber */
   --docusaurus-highlighted-code-line-bg: rgba(180, 83, 9, 0.10);
 }
 
@@ -85,7 +85,7 @@
   --ifm-menu-color-active: var(--paper-accent);
 }
 
-/* ── Infima overrides — Dark mode (Station) ───────────────────────────────── */
+/* ── Infima overrides: Dark mode (Station) ────────────────────────────────── */
 [data-theme='dark'] {
   /* Brand */
   --ifm-color-primary: var(--color-brand-400);
@@ -128,7 +128,7 @@
   --docusaurus-highlighted-code-line-bg: rgba(34, 211, 238, 0.08);
 }
 
-/* ── Light body atmosphere — warm paper grain ───────────────────────────── */
+/* ── Light body atmosphere: warm paper grain ────────────────────────────── */
 [data-theme='light'] body {
   background-color: var(--paper-base);
   background-image:
@@ -143,7 +143,7 @@
     );
 }
 
-/* ── Dark body atmosphere — desktop ambient depth ──────────────────────── */
+/* ── Dark body atmosphere: desktop ambient depth ───────────────────────── */
 [data-theme='dark'] body {
   background-image:
     radial-gradient(ellipse 55% 40% at 0% 0%,    rgba(6, 182, 212, 0.055) 0%, transparent 60%),
@@ -157,7 +157,7 @@
     );
 }
 
-/* ── Navbar — light ──────────────────────────────────────────────────── */
+/* ── Navbar: light ───────────────────────────────────────────────────── */
 [data-theme='light'] .navbar {
   border-bottom: 1px solid var(--paper-border-subtle);
   box-shadow:
@@ -172,7 +172,7 @@
     0 2px 20px rgba(6, 182, 212, 0.060);
 }
 
-/* ── Color-mode toggle — padding + hover (shared geometry) ─────────────── */
+/* ── Color-mode toggle: padding + hover (shared geometry) ──────────────── */
 /* Docusaurus ships the toggle as an unpadded clean-btn with no margin. It
    ends up flush against the left neighbor while the search bar's own
    padding creates a visible gap on the right. Balance both sides. */
@@ -198,7 +198,7 @@
   color: var(--color-brand-300);
 }
 
-/* ── Hero — Station midnight + radial glow ────────────────────────────────── */
+/* ── Hero: Station midnight + radial glow ─────────────────────────────────── */
 .hero--primary {
   background: var(--color-base, #07080f);
   color: #f8fafc;
@@ -223,7 +223,7 @@
   display: none;
 }
 
-/* ── Inline code — light (paper tinted) ──────────────────────────────── */
+/* ── Inline code: light (paper tinted) ───────────────────────────────── */
 [data-theme='light'] :not(pre) > code {
   background-color: rgba(14, 116, 144, 0.055);
   border: 1px solid rgba(14, 116, 144, 0.16);
@@ -233,7 +233,7 @@
   font-weight: 500;
 }
 
-/* ── Inline code — Station tinted (dark) ─────────────────────────────── */
+/* ── Inline code: Station tinted (dark) ──────────────────────────────── */
 [data-theme='dark'] :not(pre) > code {
   background-color: rgba(34, 211, 238, 0.07);
   border: 1px solid rgba(34, 211, 238, 0.14);
@@ -242,34 +242,34 @@
   padding: 0.1em 0.4em;
 }
 
-/* ── Code blocks — light (paper) ─────────────────────────────────────── */
+/* ── Code blocks: light (paper) ──────────────────────────────────────── */
 [data-theme='light'] pre {
   background: var(--paper-surface-2);
   border: 1px solid var(--paper-border-subtle);
   border-radius: var(--radius-md);
 }
 
-/* ── Code blocks — dark ──────────────────────────────────────────────── */
+/* ── Code blocks: dark ───────────────────────────────────────────────── */
 [data-theme='dark'] pre {
   background: #0d0d14;
   border: 1px solid var(--color-border-subtle);
   border-radius: var(--radius-md);
 }
 
-/* ── Sidebar — left-border active indicator (light) ────────────────────── */
+/* ── Sidebar: left-border active indicator (light) ─────────────────────── */
 [data-theme='light'] .menu__link--active:not(.menu__link--sublist) {
   border-left: 2px solid var(--paper-accent);
   padding-left: calc(var(--ifm-menu-link-padding-horizontal) - 2px);
   color: var(--paper-accent-strong);
 }
 
-/* ── Sidebar — left-border active indicator (dark) ─────────────────────── */
+/* ── Sidebar: left-border active indicator (dark) ──────────────────────── */
 [data-theme='dark'] .menu__link--active:not(.menu__link--sublist) {
   border-left: 2px solid var(--color-brand-400);
   padding-left: calc(var(--ifm-menu-link-padding-horizontal) - 2px);
 }
 
-/* ── Admonitions — light paper style ──────────────────────────────────── */
+/* ── Admonitions: light paper style ───────────────────────────────────── */
 [data-theme='light'] .admonition {
   background-color: var(--paper-surface-1);
   border-left-width: 4px;
@@ -291,7 +291,7 @@
   font-weight: 600;
 }
 
-/* ── Admonitions — Station dark style ─────────────────────────────────── */
+/* ── Admonitions: Station dark style ──────────────────────────────────── */
 [data-theme='dark'] .admonition {
   background-color: var(--color-surface-1);
   border-left-width: 4px;
@@ -320,7 +320,7 @@
   border-left-color: var(--color-info);
 }
 
-/* ── Tables — light ─────────────────────────────────────────────────── */
+/* ── Tables: light ──────────────────────────────────────────────────── */
 [data-theme='light'] table { border-color: var(--paper-border-subtle); }
 [data-theme='light'] tr    { border-color: var(--paper-border-subtle); }
 
@@ -332,7 +332,7 @@
   background-color: var(--paper-surface-1);
 }
 
-/* ── Tables — dark ──────────────────────────────────────────────────── */
+/* ── Tables: dark ───────────────────────────────────────────────────── */
 [data-theme='dark'] table {
   border-color: var(--color-border-subtle);
 }
@@ -345,7 +345,7 @@
   background-color: rgba(255, 255, 255, 0.02);
 }
 
-/* ── Footer — light ─────────────────────────────────────────────────── */
+/* ── Footer: light ──────────────────────────────────────────────────── */
 [data-theme='light'] .footer {
   border-top: 1px solid var(--paper-border-subtle);
   background-color: var(--paper-surface-1);
@@ -370,7 +370,7 @@
   color: var(--ink-muted);
 }
 
-/* ── Footer — dark ──────────────────────────────────────────────────── */
+/* ── Footer: dark ───────────────────────────────────────────────────── */
 [data-theme='dark'] .footer {
   border-top: 1px solid var(--color-border-subtle);
 }
@@ -381,7 +381,7 @@
   color: #475569;
 }
 
-/* ── TOC — light ────────────────────────────────────────────────────── */
+/* ── TOC: light ─────────────────────────────────────────────────────── */
 [data-theme='light'] .table-of-contents__link {
   color: var(--ink-muted);
   font-size: 0.8125rem;
@@ -392,7 +392,7 @@
   color: var(--paper-accent);
 }
 
-/* ── TOC — dark ─────────────────────────────────────────────────────── */
+/* ── TOC: dark ──────────────────────────────────────────────────────── */
 [data-theme='dark'] .table-of-contents__link {
   color: #475569;
   font-size: 0.8125rem;
@@ -403,7 +403,7 @@
   color: var(--color-brand-400);
 }
 
-/* ── Pagination — light ─────────────────────────────────────────────── */
+/* ── Pagination: light ──────────────────────────────────────────────── */
 [data-theme='light'] .pagination-nav__link {
   border-color: var(--paper-border-subtle);
   background: var(--paper-surface-1);
@@ -424,7 +424,7 @@
   color: var(--ink-primary);
 }
 
-/* ── Pagination — dark ─────────────────────────────────────────────── */
+/* ── Pagination: dark ──────────────────────────────────────────────── */
 [data-theme='dark'] .pagination-nav__link {
   border-color: var(--color-border-subtle);
   background: var(--color-surface-1);
@@ -435,7 +435,7 @@
   background: var(--color-surface-2);
 }
 
-/* ── Breadcrumbs — light ────────────────────────────────────────────── */
+/* ── Breadcrumbs: light ─────────────────────────────────────────────── */
 [data-theme='light'] .breadcrumbs__link {
   color: var(--ink-muted);
 }
@@ -445,12 +445,12 @@
   background-color: var(--paper-surface-1);
 }
 
-/* ── Breadcrumbs — dark ────────────────────────────────────────────── */
+/* ── Breadcrumbs: dark ─────────────────────────────────────────────── */
 [data-theme='dark'] .breadcrumbs__item--active .breadcrumbs__link {
   color: #94a3b8;
 }
 
-/* ── Blockquote — light ──────────────────────────────────────────────── */
+/* ── Blockquote: light ───────────────────────────────────────────────── */
 [data-theme='light'] blockquote {
   border-left: 4px solid var(--paper-border-default);
   background: var(--paper-surface-1);
@@ -461,7 +461,7 @@
   border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
 }
 
-/* ── Headings — light (warm ink, tight tracking) ──────────────────────── */
+/* ── Headings: light (warm ink, tight tracking) ───────────────────────── */
 [data-theme='light'] h1,
 [data-theme='light'] h2,
 [data-theme='light'] h3,
@@ -485,7 +485,7 @@
   color: inherit;
 }
 
-/* ── Markdown body text — light ──────────────────────────────────────── */
+/* ── Markdown body text: light ───────────────────────────────────────── */
 [data-theme='light'] .markdown {
   color: var(--ink-primary);
 }
@@ -509,7 +509,7 @@
   text-decoration-color: var(--paper-accent-strong);
 }
 
-/* ── Content images — consistent rounded corners ─────────────────────────── */
+/* ── Content images: consistent rounded corners ──────────────────────────── */
 /* Docs images (rendered from markdown) pick up the same 10px rounding as
    the landing-page screenshots so nothing jumps to sharp corners when the
    cursor enters, when medium-zoom animates the click-to-zoom, or when a

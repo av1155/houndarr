@@ -244,7 +244,7 @@ async def fetch_instance_snapshot(
     cost is amortised to a single HTTP round trip per refresh cycle).
 
     ``monitored_total`` counts items that are monitored AND either
-    have no file OR have a file but the cutoff is unmet — matching
+    have no file OR have a file but the cutoff is unmet, matching
     the missing + cutoff sum the other adapters derive from
     ``totalRecords``.  ``unreleased_count`` counts monitored items
     whose first parseable release anchor (digital → physical →

@@ -1246,7 +1246,7 @@ async def _migrate_to_v16(db: aiosqlite.Connection) -> None:
         await db.execute("DROP TABLE IF EXISTS search_log_new")
 
         # cooldowns rebuild with the v16 item_type CHECK + UPDATE rows.
-        # Use the v16 snapshot — this migration is the rename, so it pins
+        # Use the v16 snapshot: this migration is the rename, so it pins
         # the post-rename list and is unaffected by future changes to the
         # current _ITEM_TYPES alias.
         await db.execute(  # nosem

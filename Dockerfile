@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: 2026 Andrea A. Venti Fuentes
 # syntax=docker/dockerfile:1
 # =============================================================================
-# Houndarr — production Docker image
+# Houndarr: production Docker image
 # Base: python:3.14-slim (Debian trixie slim)
 # =============================================================================
 

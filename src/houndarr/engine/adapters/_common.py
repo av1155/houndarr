@@ -86,7 +86,7 @@ _RECONCILE_PAGE_SIZE = 250
 """Page size used when paginating /wanted endpoints for reconciliation.
 
 250 is the maximum every /wanted endpoint accepts.  Picking the ceiling
-means a 5,000-item wanted list becomes 20 requests at refresh time — a
+means a 5,000-item wanted list becomes 20 requests at refresh time: a
 one-off cost per instance per snapshot cycle rather than a per-poll
 overhead."""
 

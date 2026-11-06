@@ -3,7 +3,7 @@
 The ``cooldowns`` table SQL lives in
 :mod:`houndarr.repositories.cooldowns`; this module is the
 service-layer facade over that boundary and retains exclusive
-ownership of the in-memory LRU throttle (:func:`should_log_skip`)
+ownership of the in-memory throttle (:func:`should_log_skip`)
 that gates duplicate cooldown-reason skip rows in ``search_log``.
 The throttle is single-process state, not SQL, so it does not
 belong in a repository.
@@ -18,17 +18,20 @@ Public surface:
   compat shims kept for test seeds and any caller that still uses
   the positional triple directly.
 * :func:`clear_cooldowns` delegates the admin reset to the repository.
-* :func:`should_log_skip` owns the LRU sentinel.
+* :func:`should_log_skip` owns the skip-log sentinel.
 """
 
 from __future__ import annotations
 
 import asyncio
+import logging
 from collections import OrderedDict
 from datetime import UTC, datetime, timedelta
 
 from houndarr.engine.candidates import ItemType
 from houndarr.value_objects import ItemRef
+
+logger = logging.getLogger(__name__)
 
 __all__ = [
     "InfoLogKey",
@@ -45,14 +48,15 @@ __all__ = [
     "should_log_skip",
 ]
 
-# Skip-log throttle sentinel (single-process LRU with TTL)
+# Skip-log throttle sentinel (single-process, bounded, TTL)
 
 SkipLogKey = tuple[int, int, str, str]
 
 _SKIP_LOG_CACHE: OrderedDict[SkipLogKey, datetime] = OrderedDict()
-_SKIP_LOG_MAX_ENTRIES = 1024
+_SKIP_LOG_MAX_ENTRIES = 16384
 _SKIP_LOG_TTL = timedelta(hours=24)
 _SKIP_LOG_LOCK = asyncio.Lock()
+_skip_log_full_warned_at: datetime | None = None
 
 
 async def is_on_cooldown_ref(ref: ItemRef, cooldown_days: int) -> bool:
@@ -206,12 +210,17 @@ async def should_log_skip(key: SkipLogKey) -> bool:
     Engine passes write a ``search_log`` row every time an item is skipped
     for the same reason on every cycle.  On a healthy install that produces
     hundreds of identical rows per item per cooldown window.  This sentinel
-    caps writes to at most one per key per 24 h.
+    lets through at most one per key per 24 h, for up to
+    ``_SKIP_LOG_MAX_ENTRIES`` keys.
 
     The check-and-write is serialized under an :class:`asyncio.Lock` so two
     concurrent passes racing on the same item cannot both bypass the cache.
-    The cache is bounded at ``_SKIP_LOG_MAX_ENTRIES`` entries with LRU
-    eviction, and TTL is enforced on read.
+    An entry is never evicted before its 24 h are up.  The cache stays in
+    write order (a hit does not reorder it, a rewrite moves the key to the
+    end), so expired entries are purged from the front.  When the cache is
+    full of live entries, a new key is logged without being cached: past
+    the cap only the keys that did not fit repeat each cycle, and the
+    container log gets one warning per 24 h while that lasts.
 
     Args:
         key: ``(instance_id, item_id, search_kind, reason_bucket)``.
@@ -220,26 +229,37 @@ async def should_log_skip(key: SkipLogKey) -> bool:
             ``"hot_retry"``, ``"grace_hold"``.
 
     Returns:
-        ``True`` if the caller should write the skip row (cache miss or
-        expired entry).  ``False`` if a row for the same key was recorded
-        within the last 24 h.
+        ``True`` if the caller should write the skip row (cache miss,
+        expired entry, or a key the full cache could not take).  ``False``
+        if a row for the same key was recorded within the last 24 h.
     """
-    now = datetime.now(UTC)
+    global _skip_log_full_warned_at
     async with _SKIP_LOG_LOCK:
+        now = datetime.now(UTC)
         entry = _SKIP_LOG_CACHE.get(key)
-        if entry is not None and now - entry < _SKIP_LOG_TTL:
-            _SKIP_LOG_CACHE.move_to_end(key)
-            return False
-        _SKIP_LOG_CACHE[key] = now
-        _SKIP_LOG_CACHE.move_to_end(key)
-        while len(_SKIP_LOG_CACHE) > _SKIP_LOG_MAX_ENTRIES:
+        if entry is not None:
+            if now - entry < _SKIP_LOG_TTL:
+                return False
+            del _SKIP_LOG_CACHE[key]
+        while _SKIP_LOG_CACHE and now - next(iter(_SKIP_LOG_CACHE.values())) >= _SKIP_LOG_TTL:
             _SKIP_LOG_CACHE.popitem(last=False)
+        if len(_SKIP_LOG_CACHE) < _SKIP_LOG_MAX_ENTRIES:
+            _SKIP_LOG_CACHE[key] = now
+        elif _skip_log_full_warned_at is None or now - _skip_log_full_warned_at >= _SKIP_LOG_TTL:
+            _skip_log_full_warned_at = now
+            logger.warning(
+                "Skip-log throttle is full (%d keys); repeat skip rows for further items"
+                " are written every cycle until entries expire",
+                _SKIP_LOG_MAX_ENTRIES,
+            )
         return True
 
 
 def _reset_skip_log_cache() -> None:
-    """Clear the sentinel cache.  Test-only helper."""
+    """Clear the sentinel cache and its warning stamp.  Test-only helper."""
+    global _skip_log_full_warned_at
     _SKIP_LOG_CACHE.clear()
+    _skip_log_full_warned_at = None
 
 
 # Info-row throttle (separate cache + caller-supplied TTL)

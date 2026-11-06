@@ -1,20 +1,19 @@
-"""Characterisation tests for the skip-log LRU sentinel in services.cooldown.
+"""Characterisation tests for the skip-log sentinel in services.cooldown.
 
 The existing ``tests/test_services/test_cooldown.py`` covers the
-first-call, within-TTL, after-TTL, distinct-keys, simple-eviction,
-and concurrent-serialisation cases.  This module pins the remaining
-boundary behaviour that a refactor could silently drift:
+first-call, within-TTL, after-TTL, distinct-keys, full-cache, expiry,
+warning, and concurrent-serialisation cases.  This module pins the
+remaining boundary behaviour that a refactor could silently drift:
 
 * ``_reset_skip_log_cache`` empties the cache and restores first-call
   semantics to any previously-seen key.
 * The TTL comparison is strict (``now - entry < _SKIP_LOG_TTL``), so an
   entry at exactly the TTL age is treated as expired.
-* ``move_to_end`` runs on both cache hits and cache misses, so an entry
-  that keeps getting touched within TTL is never evicted by LRU pressure.
-* A capped cache evicts the LEAST-RECENTLY-TOUCHED entry (not the
-  least-recently-inserted) when a new entry lands.
-* The LRU eviction only happens on insert; read-only hits never drop
-  entries below the cap.
+* A cache hit changes neither the entry's position nor its timestamp,
+  so the cache stays in write order and the TTL runs from the logged row.
+* Rewriting an expired key moves it to the end, behind every live entry.
+* A cache hit returns before anything is purged or turned away, so it
+  never drops entries, even above the cap.
 """
 
 from __future__ import annotations
@@ -102,65 +101,51 @@ class TestSkipLogTtlBoundary:
         assert await should_log_skip(key) is False
 
 
-# LRU ordering / move_to_end semantics
+# Write order
 
 
-class TestSkipLogLruOrdering:
-    """Pin LRU behaviour around move_to_end and eviction order."""
-
-    @pytest.mark.asyncio()
-    async def test_move_to_end_on_cache_hit_prevents_eviction(
-        self,
-        monkeypatch: pytest.MonkeyPatch,
-    ) -> None:
-        """A repeatedly-touched key survives pressure that evicts cold keys."""
-        monkeypatch.setattr(cooldown_module, "_SKIP_LOG_MAX_ENTRIES", 3)
-
-        keys = [(1, i, "missing", "cooldown") for i in range(4)]
-        # Seed keys 0..2
-        for key in keys[:3]:
-            assert await should_log_skip(key) is True
-
-        # Touch key[0] so it becomes the most-recently-used (its entry refreshes to 'now').
-        assert await should_log_skip(keys[0]) is False
-
-        # New insert pressure: keys[1] should be the cold victim, NOT keys[0].
-        assert await should_log_skip(keys[3]) is True
-        assert keys[0] in cooldown_module._SKIP_LOG_CACHE
-        assert keys[1] not in cooldown_module._SKIP_LOG_CACHE
-        assert keys[2] in cooldown_module._SKIP_LOG_CACHE
-        assert keys[3] in cooldown_module._SKIP_LOG_CACHE
+class TestSkipLogWriteOrder:
+    """Pin the write order that lets expired entries be purged from the front."""
 
     @pytest.mark.asyncio()
-    async def test_eviction_pops_from_front(
-        self,
-        monkeypatch: pytest.MonkeyPatch,
-    ) -> None:
-        """Without any touches, evictions strip from the oldest-inserted end."""
-        monkeypatch.setattr(cooldown_module, "_SKIP_LOG_MAX_ENTRIES", 2)
-
+    async def test_cache_hit_keeps_position_and_timestamp(self) -> None:
+        """A suppressed repeat leaves the entry where it was, with its original time."""
         keys = [(1, i, "missing", "cooldown") for i in range(3)]
         for key in keys:
-            await should_log_skip(key)
+            assert await should_log_skip(key) is True
+        written_at = cooldown_module._SKIP_LOG_CACHE[keys[0]]
 
-        # Size capped at 2, oldest dropped.
-        assert len(cooldown_module._SKIP_LOG_CACHE) == 2
-        assert list(cooldown_module._SKIP_LOG_CACHE.keys()) == [keys[1], keys[2]]
+        assert await should_log_skip(keys[0]) is False
+
+        assert list(cooldown_module._SKIP_LOG_CACHE) == keys
+        assert cooldown_module._SKIP_LOG_CACHE[keys[0]] == written_at
+
+    @pytest.mark.asyncio()
+    async def test_expired_rewrite_moves_to_end(self) -> None:
+        """Logging an expired key again files it behind every live entry."""
+        keys = [(1, i, "missing", "cooldown") for i in range(3)]
+        for key in keys:
+            assert await should_log_skip(key) is True
+        cooldown_module._SKIP_LOG_CACHE[keys[1]] = datetime.now(UTC) - timedelta(hours=25)
+
+        assert await should_log_skip(keys[1]) is True
+
+        assert list(cooldown_module._SKIP_LOG_CACHE) == [keys[0], keys[2], keys[1]]
 
     @pytest.mark.asyncio()
     async def test_read_only_hit_does_not_trigger_eviction(
         self,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """A cache hit touches move_to_end but does not re-check the cap."""
+        """A cache hit returns before the purge and the cap check."""
         monkeypatch.setattr(cooldown_module, "_SKIP_LOG_MAX_ENTRIES", 2)
 
         keys = [(1, i, "missing", "cooldown") for i in range(2)]
         for key in keys:
             await should_log_skip(key)
 
-        # Lower the cap below current size by rewriting; a pure cache-hit call
-        # must NOT trigger eviction (eviction only runs on the insert branch).
+        # Lower the cap below the current size; a pure cache-hit call must
+        # still leave both entries in place.
         monkeypatch.setattr(cooldown_module, "_SKIP_LOG_MAX_ENTRIES", 1)
 
         # Hit one of the existing keys.  Cache still holds both.

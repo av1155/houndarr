@@ -11,7 +11,7 @@ Four functions cover the full surface:
 - :func:`delete_cooldowns_for_instance`: the admin "reset cooldowns"
   cascade for a single instance.
 
-The in-memory LRU sentinel (``should_log_skip`` and
+The in-memory skip-log sentinel (``should_log_skip`` and
 ``_reset_skip_log_cache``) stays in the service module: it guards
 log writes, not the cooldowns table.  The repository is
 function-based with no class.

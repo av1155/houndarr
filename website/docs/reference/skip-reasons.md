@@ -177,12 +177,15 @@ candidate every cycle; only the log write is suppressed. This keeps the
 logs readable when many items share the same cooldown, the same
 hot-retry interval throttle, or the same tag-filter outcome.
 
-The window lives in memory, in a single cache of 1024 entries shared by
-every instance, so a restart starts it over. Past 1024 combinations the
-oldest entries drop out and the suppression stops, which works out to
-roughly 1024 wanted items with only the missing pass enabled, 341 with
-all three, or 170 per instance across six. Above that, expect a row per
-skip per cycle.
+The window lives in memory, in a single cache of 16,384 entries shared
+by every instance, so a restart starts it over. That is roughly 16,384
+wanted items with only the missing pass enabled, 5,461 with all three,
+or 2,730 per instance across six. An entry is kept for its full 24
+hours, so past that size the combinations already cached stay quiet and
+only the ones that did not fit write a row each time they are skipped,
+until older entries expire and free their slots. While that happens the
+container log shows `Skip-log throttle is full (16384 keys)` at most
+once a day.
 
 The other reasons in the table above write a row every cycle they
 apply.

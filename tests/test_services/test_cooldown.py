@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from collections.abc import AsyncGenerator, Iterator
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, timedelta, tzinfo
 
 import pytest
 import pytest_asyncio
@@ -249,24 +250,86 @@ async def test_should_log_skip_distinct_keys_independent() -> None:
 
 
 @pytest.mark.asyncio()
-async def test_should_log_skip_lru_evicts_oldest(
+async def test_should_log_skip_second_pass_over_1100_keys_logs_nothing() -> None:
+    """Every key fits under the production cap, so a revisit within 24 h is suppressed."""
+    keys = [(1, i, "missing", "cooldown") for i in range(1100)]
+    first = [await should_log_skip(key) for key in keys]
+    second = [await should_log_skip(key) for key in keys]
+
+    assert all(first)
+    assert not any(second)
+
+
+@pytest.mark.asyncio()
+async def test_should_log_skip_past_cap_only_extra_keys_repeat(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """When the cache hits its hard cap, the oldest entry is evicted."""
-    monkeypatch.setattr(cooldown_module, "_SKIP_LOG_MAX_ENTRIES", 3)
+    """A full cache keeps its live entries; only the keys it turned away log again."""
+    monkeypatch.setattr(cooldown_module, "_SKIP_LOG_MAX_ENTRIES", 4)
+    keys = [(1, i, "missing", "cooldown") for i in range(7)]
 
-    keys = [(1, i, "missing", "cooldown") for i in range(4)]
+    first = [await should_log_skip(key) for key in keys]
+    second = [await should_log_skip(key) for key in keys]
+
+    assert all(first)
+    assert second == [False] * 4 + [True] * 3
+    assert list(cooldown_module._SKIP_LOG_CACHE) == keys[:4]
+
+
+@pytest.mark.asyncio()
+async def test_should_log_skip_expired_entries_free_slots(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Every expired entry leaves the full cache at once, freeing slots for new keys."""
+    monkeypatch.setattr(cooldown_module, "_SKIP_LOG_MAX_ENTRIES", 3)
+    keys = [(1, i, "missing", "cooldown") for i in range(5)]
     for key in keys[:3]:
         assert await should_log_skip(key) is True
 
-    # Fourth insert evicts the oldest (first) entry.
+    stale = datetime.now(UTC) - timedelta(hours=25)
+    cooldown_module._SKIP_LOG_CACHE[keys[0]] = stale
+    cooldown_module._SKIP_LOG_CACHE[keys[1]] = stale
+
     assert await should_log_skip(keys[3]) is True
-    assert len(cooldown_module._SKIP_LOG_CACHE) == 3
-    assert keys[0] not in cooldown_module._SKIP_LOG_CACHE
-    # Remaining three stay cached, so should_log_skip returns False for them.
-    assert await should_log_skip(keys[1]) is False
-    assert await should_log_skip(keys[2]) is False
-    assert await should_log_skip(keys[3]) is False
+    assert list(cooldown_module._SKIP_LOG_CACHE) == [keys[2], keys[3]]
+    assert await should_log_skip(keys[4]) is True
+    assert await should_log_skip(keys[4]) is False
+
+
+@pytest.mark.asyncio()
+async def test_should_log_skip_full_cache_warns_once_per_day(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """The container log warns when a key is turned away, at most once per 24 h."""
+    clock = [datetime(2026, 11, 1, tzinfo=UTC)]
+
+    class _ClockDatetime(datetime):
+        @classmethod
+        def now(cls, tz: tzinfo | None = None) -> datetime:  # type: ignore[override]
+            return clock[0]
+
+    monkeypatch.setattr(cooldown_module, "datetime", _ClockDatetime)
+    monkeypatch.setattr(cooldown_module, "_SKIP_LOG_MAX_ENTRIES", 2)
+
+    def warnings() -> int:
+        return sum("Skip-log throttle is full (2 keys)" in r.getMessage() for r in caplog.records)
+
+    with caplog.at_level(logging.WARNING, logger="houndarr.services.cooldown"):
+        # Items 1 and 2 fill the cache; 3 and 4 are turned away.
+        for item_id in (1, 2, 3, 4):
+            assert await should_log_skip((1, item_id, "missing", "cooldown")) is True
+        assert warnings() == 1
+
+        clock[0] += timedelta(hours=23)
+        assert await should_log_skip((1, 5, "missing", "cooldown")) is True
+        assert warnings() == 1
+
+        # Items 1 and 2 have expired; 6 and 7 take their slots and 8 is turned away.
+        clock[0] += timedelta(hours=2)
+        for item_id in (6, 7, 8):
+            assert await should_log_skip((1, item_id, "missing", "cooldown")) is True
+        assert warnings() == 2
 
 
 @pytest.mark.asyncio()

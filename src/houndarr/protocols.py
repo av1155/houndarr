@@ -141,7 +141,7 @@ class InstanceRepository(Protocol):
 class CooldownRepository(Protocol):
     """Cooldown SQL boundary backing the ``cooldowns`` table.
 
-    The LRU skip-log sentinel (``should_log_skip``) stays in the
+    The skip-log sentinel (``should_log_skip``) stays in the
     service layer; this Protocol covers the three SQL methods the
     concrete repository exposes.
     """

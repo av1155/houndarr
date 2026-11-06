@@ -12,8 +12,8 @@ remaining boundary behaviour that a refactor could silently drift:
 * A cache hit changes neither the entry's position nor its timestamp,
   so the cache stays in write order and the TTL runs from the logged row.
 * Rewriting an expired key moves it to the end, behind every live entry.
-* A cache hit returns before anything is purged or turned away, so it
-  never drops entries, even above the cap.
+* A cache hit never drops a live entry, even when the cache holds more
+  than the cap.
 """
 
 from __future__ import annotations
@@ -137,7 +137,7 @@ class TestSkipLogWriteOrder:
         self,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """A cache hit returns before the purge and the cap check."""
+        """A cache hit never drops a live entry, even above the cap."""
         monkeypatch.setattr(cooldown_module, "_SKIP_LOG_MAX_ENTRIES", 2)
 
         keys = [(1, i, "missing", "cooldown") for i in range(2)]

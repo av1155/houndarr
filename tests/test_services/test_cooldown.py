@@ -316,8 +316,12 @@ async def test_should_log_skip_full_cache_warns_once_per_day(
         return sum("Skip-log throttle is full (2 keys)" in r.getMessage() for r in caplog.records)
 
     with caplog.at_level(logging.WARNING, logger="houndarr.services.cooldown"):
-        # Items 1 and 2 fill the cache; 3 and 4 are turned away.
-        for item_id in (1, 2, 3, 4):
+        for item_id in (1, 2):
+            assert await should_log_skip((1, item_id, "missing", "cooldown")) is True
+        assert warnings() == 0
+
+        # The full cache turns away 3 and 4; only the first of them warns.
+        for item_id in (3, 4):
             assert await should_log_skip((1, item_id, "missing", "cooldown")) is True
         assert warnings() == 1
 

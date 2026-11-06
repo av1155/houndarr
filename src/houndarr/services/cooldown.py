@@ -248,8 +248,8 @@ async def should_log_skip(key: SkipLogKey) -> bool:
         elif _skip_log_full_warned_at is None or now - _skip_log_full_warned_at >= _SKIP_LOG_TTL:
             _skip_log_full_warned_at = now
             logger.warning(
-                "Skip-log throttle is full (%d keys); repeat skip rows for further items"
-                " are written every cycle until entries expire",
+                "Skip-log throttle is full (%d keys); skips it cannot hold are logged"
+                " every cycle while it stays full",
                 _SKIP_LOG_MAX_ENTRIES,
             )
         return True

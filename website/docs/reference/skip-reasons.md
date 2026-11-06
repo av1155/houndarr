@@ -182,10 +182,12 @@ by every instance, so a restart starts it over. That is roughly 16,384
 wanted items with only the missing pass enabled, 5,461 with all three,
 or 2,730 per instance across six. An entry is kept for its full 24
 hours, so past that size the combinations already cached stay quiet and
-only the ones that did not fit write a row each time they are skipped,
-until older entries expire and free their slots. While that happens the
-container log shows `Skip-log throttle is full (16384 keys)` at most
-once a day.
+the ones that did not fit write a row each time they are skipped, for
+as long as more combinations than that come up within a day. Slots go
+to whichever combinations are skipped first, so one instance with a
+large backlog can fill the cache and leave a smaller one writing a row
+every cycle. While the cache is full the container log shows
+`Skip-log throttle is full (16384 keys)` at most once a day.
 
 The other reasons in the table above write a row every cycle they
 apply.

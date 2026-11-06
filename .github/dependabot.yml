@@ -29,12 +29,13 @@ updates:
           - "python-multipart"
           - "click"
           - "pydantic"
+          # pyproject lists it under dev, but the image ships it as a transitive dependency.
+          - "anyio"
       dev-deps:
         patterns:
           - "ruff"
           - "mypy"
           - "pytest*"
-          - "anyio"
           - "respx"
           - "setuptools"
 

@@ -17,7 +17,8 @@ updates:
         patterns:
           - "fastapi"
           - "starlette"
-          - "uvicorn"
+          # The uv parser names it uvicorn[standard]; patterns match whole names.
+          - "uvicorn*"
           - "jinja2"
           - "markupsafe"
           - "aiosqlite"
@@ -86,9 +87,10 @@ updates:
       interval: "weekly"
       day: "monday"
     open-pull-requests-limit: 5
-    # No cooldown: floating tags like python:3.14-slim are re-pushed at least
-    # weekly, so a week-long cooldown never lets their newest digest through.
-    # Exclude every image; omitting the block falls back to a 3-day default.
+    # No cooldown: on a floating tag like python:3.14-slim the cooldown runs
+    # from the tag's last push, so each re-push inside the window withdraws
+    # the open digest PR. Exclude every image; omitting the block falls back
+    # to a 3-day default.
     cooldown:
       exclude:
         - "*"
@@ -98,6 +100,10 @@ updates:
       # corepack the css-build stage relies on. Move the LTS line by hand.
       - dependency-name: "node"
         update-types: ["version-update:semver-major"]
+      # The Python line moves by hand together with the CI test matrix, so
+      # only digest refreshes of the current tag come through.
+      - dependency-name: "python"
+        update-types: ["version-update:semver-minor", "version-update:semver-major"]
     groups:
       docker-base-images:
         patterns:

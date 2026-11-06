@@ -63,7 +63,7 @@ If `just` is unavailable, read `justfile` for the underlying
 
 ## Running Tests
 
-~2580 tests. `just test`, `test-quick`, `test-integration`, and `pin`
+~3090 tests. `just test`, `test-quick`, `test-integration`, and `pin`
 run with `pytest -n auto` (pytest-xdist). Override with
 `PYTEST_WORKERS=0` for serial triage, or `PYTEST_WORKERS=4` to constrain.
 
@@ -87,7 +87,7 @@ Fixture graph, FK-seeding pattern, and route-test helpers live in the
 
 ## CI Checks
 
-11 required status checks (branch protection enforced). Full check
+12 required status checks (branch protection enforced). Full check
 table, additional non-required workflows, and the paths-ignore /
 ci-skip pattern live in the `houndarr-ci` skill (loads on
 `.github/workflows/**`):
@@ -95,19 +95,19 @@ ci-skip pattern live in the `houndarr-ci` skill (loads on
 | Check group | Workflow |
 |-------------|----------|
 | Lint / Format / Type check (ruff, mypy) | `quality.yml` |
-| Test (Python 3.13) | `tests.yml` |
+| Test (Python 3.13), Test (Python 3.14) | `tests.yml` |
 | Dependency audit (pip-audit), SAST (bandit), Trivy fs | `security.yml` |
 | Dependency review | `dependency-review.yml` |
 | Build (no push), Trivy image scan | `docker.yml` |
 | Security smoke test | `security-smoke-test.yml` |
 
 The six main workflows use
-`paths-ignore: ["docs/**", "**/*.md", "website/**", ".claude/**"]`;
+`paths-ignore: ["docs/**", "**/*.md", "website/**", ".claude/**", "scripts/marketing/**"]`;
 `ci-skip.yml` provides passing no-op jobs with identical check names so
-docs-only PRs satisfy branch protection. **Do not modify the 11 required
+docs-only PRs satisfy branch protection. **Do not modify the 12 required
 check job names**: branch protection depends on exact name matches.
 
-Branch protection on `main`: 11 required status checks (strict; branch
+Branch protection on `main`: 12 required status checks (strict; branch
 must be up to date), PRs required, stale reviews dismissed,
 conversation resolution required, linear history, no force pushes, no
 branch deletions. Required approving reviews is 0 and CODEOWNERS
@@ -165,7 +165,7 @@ skill (loads on `src/houndarr/engine/**`).
 
 ### Non-obvious patterns to know up front
 
-- **Database**: SQLite via aiosqlite, schema version 13. `get_db()`
+- **Database**: SQLite via aiosqlite, schema version 21. `get_db()`
   opens a fresh connection per call (FKs enabled per connection; WAL
   mode set once in `init_db()`).
 - **Config**: `AppSettings` is a plain dataclass, **not Pydantic**.
@@ -271,7 +271,7 @@ Subject line max 50 characters (including the `type(scope): ` prefix); body line
 - **Squash-merge only.** Linear history is enforced by branch protection.
   All three merge strategies are enabled in repo settings, but only squash-merge
   preserves the required linear history.
-- All 11 required CI checks must pass before merge.
+- All 12 required CI checks must pass before merge.
 - Use the PR template: fill in `Closes #N`, check the checklist.
 - Branches auto-delete on merge (`deleteBranchOnMerge: true`).
 
@@ -393,7 +393,7 @@ someone comments, so reporters get immediate feedback.
 
 ### Avoiding CI/release breakage
 
-- Do not modify the 11 required check job names; branch protection depends
+- Do not modify the 12 required check job names; branch protection depends
   on exact name matches
 - Do not delete the `## [Unreleased]` block at the top of CHANGELOG.md;
   `version-check.yml` requires it as the topmost `## [...]` block on every

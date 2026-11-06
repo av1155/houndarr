@@ -39,6 +39,7 @@ jobs:
               'Format (ruff)',
               'Type check (mypy)',
               'Test (Python 3.13)',
+              'Test (Python 3.14)',
               'Dependency audit (pip-audit)',
               'SAST (bandit)',
               'Trivy filesystem scan',

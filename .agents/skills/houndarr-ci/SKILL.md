@@ -1,13 +1,13 @@
 ---
 name: houndarr-ci
-description: Houndarr's CI workflow reference and branch protection. Loads when reading or editing .github/workflows/. Covers the 11 required status checks (exact names matter for branch protection), the additional non-required workflows, the paths-ignore + ci-skip pattern that keeps docs-only PRs green, and the rule against changing required check job names.
+description: Houndarr's CI workflow reference and branch protection. Loads when reading or editing .github/workflows/. Covers the 12 required status checks (exact names matter for branch protection), the additional non-required workflows, the paths-ignore + ci-skip pattern that keeps docs-only PRs green, and the rule against changing required check job names.
 paths:
   - ".github/workflows/**"
 ---
 
 # Houndarr CI conventions
 
-## Required checks (11; branch protection enforced)
+## Required checks (12; branch protection enforced)
 
 | Check name | Workflow file | What it runs |
 |------------|---------------|--------------|
@@ -15,6 +15,7 @@ paths:
 | Format (ruff) | `quality.yml` | `ruff format --check .` |
 | Type check (mypy) | `quality.yml` | `mypy src/` |
 | Test (Python 3.13) | `tests.yml` | `pytest -q --tb=short` + compile check + `--help` |
+| Test (Python 3.14) | `tests.yml` | The same job on 3.14, the interpreter the Docker image ships |
 | Dependency audit (pip-audit) | `security.yml` | `pip-audit` against `requirements.txt` + `requirements-dev.txt` generated on the fly via `uv export --frozen` from `pyproject.toml` + `uv.lock` |
 | SAST (bandit) | `security.yml` | `bandit -r src/ -c pyproject.toml` |
 | Trivy filesystem scan | `security.yml` | `trivy fs .` (CRITICAL/HIGH with known fix) |
@@ -25,7 +26,7 @@ paths:
 
 The six main workflows (`quality`, `tests`, `security`, `dependency-review`,
 `docker`, `security-smoke-test`) use
-`paths-ignore: ["docs/**", "**/*.md", "website/**", ".claude/**"]`. When a PR
+`paths-ignore: ["docs/**", "**/*.md", "website/**", ".claude/**", "scripts/marketing/**"]`. When a PR
 touches only those paths, `ci-skip.yml` provides passing no-op jobs with
 identical check names so branch protection is satisfied.
 
@@ -46,7 +47,7 @@ identical check names so branch protection is satisfied.
 
 ## Branch protection on `main`
 
-- 11 required status checks (strict; branch must be up to date)
+- 12 required status checks (strict; branch must be up to date)
 - PRs required, stale reviews dismissed, conversation resolution required
 - Required approving reviews is 0, so no approval blocks a merge
 - Linear history enforced (no merge commits)
@@ -60,7 +61,7 @@ identical check names so branch protection is satisfied.
 
 ## Don't break this
 
-- Do not modify the 11 required check job names; branch protection
+- Do not modify the 12 required check job names; branch protection
   depends on exact name matches.
 - Do not change `ci-skip.yml` job names without updating branch protection.
 - Keep `paths-ignore` patterns in sync across the six main workflows.

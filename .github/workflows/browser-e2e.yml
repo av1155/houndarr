@@ -19,7 +19,8 @@ concurrency:
 jobs:
   browser-e2e:
     name: Browser E2E (${{ matrix.browser }})
-    runs-on: ubuntu-latest
+    # playwright in tests/e2e_browser/requirements.txt must support this Ubuntu release.
+    runs-on: ubuntu-24.04
     timeout-minutes: 25
     strategy:
       fail-fast: false

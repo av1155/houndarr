@@ -94,7 +94,7 @@ class Supervisor:
         # In-memory "last cycle ended at" timestamp per instance.  Populated
         # at the end of every _run_search_cycle invocation so the dashboard
         # countdown can anchor on a signal that always advances, even on
-        # instances where every item is on cooldown and the LRU skip-log
+        # instances where every item is on cooldown and the skip-log
         # throttle silences all skip rows (which would otherwise freeze
         # `last_activity_at` for hours and pin the countdown on "running...").
         # Lost on process restart; the dashboard falls back to
@@ -373,7 +373,7 @@ class Supervisor:
         Records the cycle-end wallclock in ``_last_cycle_end`` regardless
         of cycle outcome (success / transport error / engine error) so
         the dashboard countdown anchors on a signal that advances once
-        per cycle even when every item is LRU-throttled.
+        per cycle even when every skip is throttled.
         """
         lock = self._run_locks.setdefault(instance.core.id, asyncio.Lock())
         async with lock:
@@ -465,7 +465,7 @@ class Supervisor:
         Populated in memory by ``_run_search_cycle`` (see its finally
         block).  Consumed by the ``/api/status`` route so the dashboard
         countdown can anchor on a signal that advances once per cycle,
-        including for instances whose every skip is LRU-throttled.
+        including for instances whose every skip is throttled.
 
         Returns an empty dict if no cycle has completed since the
         supervisor started, so the caller can treat "missing" as the

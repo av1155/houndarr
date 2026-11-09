@@ -2,7 +2,7 @@
 
 <!-- What does this PR do? Be concise. -->
 
-Closes #<!-- ISSUE NUMBER — every PR must link a pre-existing issue -->
+Closes #<!-- ISSUE NUMBER: every PR must link a pre-existing issue -->
 
 ## Changes
 

@@ -120,7 +120,7 @@ ignore = [
     "S101",   # use of assert (needed in tests)
     "S104",   # binding to all interfaces is intentional for a server application
     "B008",   # do not perform function calls in default arguments (FastAPI Depends pattern)
-    "SIM117", # nested with — aiosqlite async context managers cannot be combined
+    "SIM117", # nested with: aiosqlite async context managers cannot be combined
 ]
 
 [tool.ruff.lint.per-file-ignores]
@@ -172,8 +172,8 @@ typeCheckingMode = "standard"
 [tool.bandit]
 exclude_dirs = ["tests", ".venv"]
 skips = [
-    "B101",  # assert_used — needed in tests (excluded above)
-    "B104",  # hardcoded_bind_all_interfaces — intentional for a self-hosted server
+    "B101",  # assert_used: needed in tests (excluded above)
+    "B104",  # hardcoded_bind_all_interfaces: intentional for a self-hosted server
 ]
 
 # ---------------------------------------------------------------------------

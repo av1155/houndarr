@@ -1,7 +1,7 @@
 version: 2
 updates:
   # Python dependencies
-  - package-ecosystem: "pip"
+  - package-ecosystem: "uv"
     directory: "/"
     schedule:
       interval: "weekly"
@@ -16,8 +16,11 @@ updates:
       production-deps:
         patterns:
           - "fastapi"
-          - "uvicorn"
+          - "starlette"
+          # The uv parser names it uvicorn[standard]; patterns match whole names.
+          - "uvicorn*"
           - "jinja2"
+          - "markupsafe"
           - "aiosqlite"
           - "httpx"
           - "bcrypt"
@@ -25,12 +28,14 @@ updates:
           - "itsdangerous"
           - "python-multipart"
           - "click"
+          - "pydantic"
+          # pyproject lists it under dev, but the image ships it as a transitive dependency.
+          - "anyio"
       dev-deps:
         patterns:
           - "ruff"
           - "mypy"
           - "pytest*"
-          - "anyio"
           - "respx"
           - "setuptools"
 
@@ -83,14 +88,23 @@ updates:
       interval: "weekly"
       day: "monday"
     open-pull-requests-limit: 5
+    # No cooldown: on a floating tag like python:3.14-slim the cooldown runs
+    # from the tag's last push, so each re-push inside the window withdraws
+    # the open digest PR. Exclude every image; omitting the block falls back
+    # to a 3-day default.
     cooldown:
-      default-days: 7
+      exclude:
+        - "*"
     ignore:
       # Odd-numbered Node majors are Current, not LTS, and Dependabot has
       # no concept of the release line. Node 25 also dropped the bundled
       # corepack the css-build stage relies on. Move the LTS line by hand.
       - dependency-name: "node"
         update-types: ["version-update:semver-major"]
+      # The Python line moves by hand together with the CI test matrix, so
+      # only digest refreshes of the current tag come through.
+      - dependency-name: "python"
+        update-types: ["version-update:semver-minor", "version-update:semver-major"]
     groups:
       docker-base-images:
         patterns:

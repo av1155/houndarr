@@ -58,8 +58,7 @@ jobs:
           # Space-separated CVE IDs with no upstream fix available yet.
           # Remove entries as fix versions are released.
           # Leave blank when no ignores are needed.
-          # CVE-2026-4539: pygments (transitive via pytest/rich), no fix version
-          PIP_AUDIT_IGNORE: "CVE-2026-4539"
+          PIP_AUDIT_IGNORE: ""
         shell: bash
         run: |
           args=(pip-audit -r requirements.txt -r requirements-dev.txt)
@@ -102,6 +101,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Run Trivy filesystem scanner
+        id: trivy-gate
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           scan-type: fs
@@ -111,10 +111,16 @@ jobs:
           ignore-unfixed: "true"
           exit-code: "1"
 
-      # Upload SARIF to the GitHub Security tab for non-fork runs.
-      # Fork PRs lack security-events: write so this step is skipped.
+      # Upload SARIF to the GitHub Security tab for non-fork runs, whether the
+      # gate above passed or failed, so failing findings still reach the tab.
+      # Fork PRs lack security-events: write so these steps are skipped.
       - name: Run Trivy (SARIF for GitHub Security tab)
-        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+        id: trivy-sarif
+        if: >-
+          ${{ !cancelled()
+          && (steps.trivy-gate.outcome == 'success' || steps.trivy-gate.outcome == 'failure')
+          && (github.event_name != 'pull_request'
+          || github.event.pull_request.head.repo.full_name == github.repository) }}
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           scan-type: fs
@@ -126,7 +132,7 @@ jobs:
           exit-code: "0"
 
       - name: Upload Trivy SARIF to GitHub Security tab
-        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+        if: ${{ !cancelled() && steps.trivy-sarif.outcome == 'success' }}
         uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
         with:
           sarif_file: trivy-fs-results.sarif

@@ -8,10 +8,12 @@ from typing import Any
 import httpx
 import pytest
 import respx
+from httpx import AsyncClient
 
 from houndarr.engine import search_loop
 from houndarr.engine.search_loop import run_instance_search
 from houndarr.services.instances import InstanceType
+from tests.conftest import libc_timezone
 
 from .conftest import (
     _COMMAND_RESP,
@@ -136,6 +138,53 @@ async def test_outside_window_skips_cycle_with_info_row(
     assert rows[0]["reason"] == "outside allowed time window"
     assert "14:00" in rows[0]["message"]
     assert "09:00-12:00" in rows[0]["message"]
+
+
+_UNLOADED_TZ_REASON = "outside allowed time window (TZ=Nowhere/Nope not loaded, using UTC)"
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_outside_window_row_names_a_tz_that_did_not_load(
+    seeded_instances: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An unloadable TZ leaves the clock on UTC, and the row says so."""
+    monkeypatch.delenv("TZDIR", raising=False)
+    _freeze_now(monkeypatch, at_utc_hour=14)
+    _mock_missing_and_command()
+
+    inst = _sonarr_instance(allowed_time_window="09:00-12:00")
+    with libc_timezone("Nowhere/Nope"):
+        count = await run_instance_search(inst, MASTER_KEY)
+
+    assert count == 0
+    rows = await get_log_rows()
+    assert len(rows) == 1
+    assert rows[0]["reason"] == _UNLOADED_TZ_REASON
+    assert rows[0]["message"] == "UTC time 14:00 is outside configured window 09:00-12:00"
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_logs_page_shows_a_tz_that_did_not_load(
+    seeded_instances: None, monkeypatch: pytest.MonkeyPatch, async_client: AsyncClient
+) -> None:
+    """The Logs page renders a row's reason, so the unloaded TZ must be visible there."""
+    monkeypatch.delenv("TZDIR", raising=False)
+    _freeze_now(monkeypatch, at_utc_hour=14)
+    _mock_missing_and_command()
+
+    inst = _sonarr_instance(allowed_time_window="09:00-12:00")
+    with libc_timezone("Nowhere/Nope"):
+        await run_instance_search(inst, MASTER_KEY)
+
+    credentials = {"username": "admin", "password": "ValidPass1!"}
+    await async_client.post("/setup", data={**credentials, "password_confirm": "ValidPass1!"})
+    await async_client.post("/login", data=credentials)
+    resp = await async_client.get("/api/logs/partial")
+
+    assert resp.status_code == 200
+    assert _UNLOADED_TZ_REASON in resp.text
 
 
 @pytest.mark.asyncio()

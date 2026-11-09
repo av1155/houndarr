@@ -5,13 +5,17 @@ The cache wraps the slow ``search_log`` aggregations
 ``gather_active_errors``, ``gather_recent_searches``, 7-day search count) with a 20-second
 TTL and single-flight semantics so tens of dashboard tabs polling the
 same envelope land on a single DB scan.  The tests below pin the
-contract: a hit avoids the DB entirely; ``cache_clear`` forces a fresh
-scan on the next call; live signals (cycle-end timestamps, cooldown
-rows) bypass the cache so the next-patrol countdown stays accurate.
+contract: a hit avoids the DB entirely; concurrent misses share one
+scan; a failed scan is not cached; entries expire after the TTL;
+``cache_clear`` forces a fresh scan on the next call; live signals
+(cycle-end timestamps, cooldown rows) bypass the cache so the
+next-patrol countdown stays accurate.
 """
 
 from __future__ import annotations
 
+import asyncio
+import sqlite3
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -111,6 +115,93 @@ async def test_cache_clear_forces_fresh_scan(monkeypatch: pytest.MonkeyPatch) ->
 
     await cache((1, 2))
     cache.cache_clear()
+    await cache((1, 2))
+
+    assert call_count["n"] == 2
+
+
+@pytest.mark.asyncio()
+async def test_concurrent_misses_share_one_gather(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Callers that miss while a gather is in flight await that gather.
+
+    Several dashboard tabs polling at the same moment must land on one
+    DB scan, not one scan each.
+    """
+    import houndarr.services.metrics as metrics_module
+
+    call_count = {"n": 0}
+    release = asyncio.Event()
+
+    async def _stub_gather(ids: tuple[int, ...]) -> DashboardAggregates:
+        call_count["n"] += 1
+        await release.wait()
+        return DashboardAggregates()
+
+    monkeypatch.setattr(metrics_module, "_gather_dashboard_aggregates", _stub_gather)
+
+    cache = build_aggregate_cache(ttl_seconds=5)
+    assert cache is not None
+
+    waiters = [asyncio.create_task(cache((1, 2))) for _ in range(5)]
+    await asyncio.sleep(0)
+    release.set()
+    await asyncio.gather(*waiters)
+
+    assert call_count["n"] == 1
+
+
+@pytest.mark.asyncio()
+async def test_failed_gather_is_not_cached(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A gather that raises leaves no entry, so the next call retries.
+
+    A transient ``database is locked`` must not be replayed to every
+    dashboard poll for the rest of the TTL.
+    """
+    import houndarr.services.metrics as metrics_module
+
+    call_count = {"n": 0}
+
+    async def _stub_gather(ids: tuple[int, ...]) -> DashboardAggregates:
+        call_count["n"] += 1
+        if call_count["n"] == 1:
+            raise sqlite3.OperationalError("database is locked")
+        return DashboardAggregates()
+
+    monkeypatch.setattr(metrics_module, "_gather_dashboard_aggregates", _stub_gather)
+
+    cache = build_aggregate_cache(ttl_seconds=5)
+    assert cache is not None
+
+    with pytest.raises(sqlite3.OperationalError):
+        await cache((1, 2))
+    result = await cache((1, 2))
+
+    assert isinstance(result, DashboardAggregates)
+    assert call_count["n"] == 2
+
+
+@pytest.mark.asyncio()
+async def test_entry_expires_after_ttl(monkeypatch: pytest.MonkeyPatch) -> None:
+    """An entry older than the TTL is dropped and the next call rescans.
+
+    Background search cycles write ``search_log`` without invalidating
+    the cache, so expiry is what brings their rows to the dashboard.
+    """
+    import houndarr.services.metrics as metrics_module
+
+    call_count = {"n": 0}
+
+    async def _stub_gather(ids: tuple[int, ...]) -> DashboardAggregates:
+        call_count["n"] += 1
+        return DashboardAggregates()
+
+    monkeypatch.setattr(metrics_module, "_gather_dashboard_aggregates", _stub_gather)
+
+    cache = build_aggregate_cache(ttl_seconds=1)
+    assert cache is not None
+
+    await cache((1, 2))
+    await asyncio.sleep(1.1)
     await cache((1, 2))
 
     assert call_count["n"] == 2

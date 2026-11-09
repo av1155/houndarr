@@ -1218,6 +1218,11 @@ async def test_the_group_hold_row_does_not_feed_the_wait_it_records(
         pytest.param("on cutoff cooldown (21d)", False, id="cutoff-cooldown"),
         pytest.param("on upgrade cooldown (90d)", False, id="upgrade-cooldown"),
         pytest.param("outside allowed time window", False, id="time-window"),
+        pytest.param(
+            "outside allowed time window (TZ=US/Eastern not loaded, using UTC)",
+            False,
+            id="time-window-unloaded-tz",
+        ),
         pytest.param("post-release grace (6h)", True, id="release-grace-control"),
     ],
 )

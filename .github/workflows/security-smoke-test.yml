@@ -39,6 +39,25 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      # Without tzdata-legacy, glibc cannot open US/Eastern and silently runs
+      # on UTC (#822). Read both names through the C library, as the
+      # allowed-time-window gate does, at a fixed instant.
+      - name: Check legacy timezone names resolve
+        run: |
+          docker run --rm --entrypoint python houndarr:smoke -c '
+          import os, time
+
+          def offset(zone):
+              os.environ["TZ"] = zone
+              time.tzset()
+              return time.strftime("%z", time.localtime(1700000000))
+
+          legacy, canonical = offset("US/Eastern"), offset("America/New_York")
+          print(f"US/Eastern {legacy}, America/New_York {canonical}")
+          if canonical == "+0000" or legacy != canonical:
+              raise SystemExit("legacy zone names do not resolve in the image")
+          '
+
       - name: Start container
         run: |
           mkdir -p /tmp/houndarr-smoke-data

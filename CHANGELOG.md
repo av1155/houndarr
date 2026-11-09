@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Allowed Search Window skip rows read `outside allowed time window (TZ=<value> not loaded, using UTC)` on the Logs page when `TZ` could not be loaded. (#824)
+
 ### Security
 
 - certifi bumped to 2026.10.23, clearing GHSA-6q48-6c7w-9gw2 (emSign root CAs bundled with compromised intermediate keys); the bundle verifies HTTPS \*arr URLs and the update check. (#843)

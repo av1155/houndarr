@@ -37,7 +37,7 @@ scheduling behavior, not errors.
 | `tag filter (excluded tag)`           | per-item    | `Tag Filter · Exclude` is set and the item carries one of those tags.                                |
 | `already in download queue`           | per-item    | The \*arr already has this item in its download queue (downloading, importing, or delayed).          |
 | `queue backpressure (N/M)`            | cycle-level (info) | Download queue has `N` items, at or above `Queue Limit` of `M`. Entire cycle is skipped.      |
-| `outside allowed time window`         | cycle-level (info) | Current time falls outside every window defined in `Allowed Search Window`. Entire cycle is skipped. |
+| `outside allowed time window`         | cycle-level (info) | Current time falls outside every window defined in `Allowed Search Window`. Entire cycle is skipped. Adds `(TZ=<value> not loaded, using UTC)` when `TZ` could not be loaded. |
 
 Cycle-level gates write one `info` row rather than a `skipped` one, and
 the supervisor sleeps until the next cycle; filter by `Action = info`
@@ -136,9 +136,14 @@ proceeds normally (fail-open).
 The `Allowed Search Window` field restricts scheduled cycles to one
 or more time-of-day windows. When the current container-local time
 falls outside every configured window, the cycle writes one
-`outside allowed time window` info row with the current time and the
-configured windows, then sleeps. Manual `Run Now` clicks bypass this
-gate.
+`outside allowed time window` info row, then sleeps. The row's
+message, returned by `/api/logs` and printed in the container log,
+carries the current time and the configured windows. Manual `Run Now`
+clicks bypass this gate.
+
+If `TZ` names a zone the container can't load, the clock runs on UTC
+and the row reads
+`outside allowed time window (TZ=<value> not loaded, using UTC)`.
 
 ## Tag filter
 

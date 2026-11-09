@@ -24,9 +24,10 @@ returns an ``alru_cache``-wrapped coroutine that batches the slow
 DB-aggregation gathers into a single :class:`DashboardAggregates`
 result and caches it for ~20 s.  The cache lives on ``app.state``
 because ``async-lru`` is event-loop-bound (a module-level decorator
-binds to the first test's loop and raises on every subsequent test);
-giving each FastAPI app its own cache makes the cross-loop case
-impossible.  Multi-replica deployments would have one cache per
+binds to the first test's loop, then clears itself whenever another
+test's loop calls it, warning on the first reset); giving each
+FastAPI app its own cache makes the cross-loop case impossible.
+Multi-replica deployments would have one cache per
 replica and rely on per-replica invalidation, so the dashboard would
 go stale (bounded to the TTL) on writes routed to a different
 replica; Houndarr's StatefulSet ships a PVC and ``replicaCount=1``
@@ -363,7 +364,7 @@ def build_aggregate_cache(
     Called once per FastAPI app instance from the lifespan startup so
     each app owns its own cache and there is no cross-event-loop
     sharing.  Tests that build many apps therefore get many caches and
-    no ``RuntimeError`` from async-lru's loop-affinity guard.
+    never trigger async-lru's loop-change reset.
 
     The default reads :data:`DASHBOARD_CACHE_TTL_SECONDS` at call
     time, not at function-definition time, so the conftest fixture

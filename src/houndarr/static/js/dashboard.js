@@ -734,7 +734,7 @@ function initDashboardPage() {
         //   1. last_cycle_end  - supervisor's in-memory cycle-end
         //      timestamp, advances once per cycle regardless of
         //      whether any rows were written.  Solves the
-        //      "everything LRU-throttled" case that froze the
+        //      "everything throttled" case that froze the
         //      previous last_activity_at anchor.
         //   2. last_activity_at - newest searched/skipped/error row.
         //      Used on supervisor restart before a cycle has

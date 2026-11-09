@@ -193,7 +193,7 @@ async def dashboard(request: Request) -> HTMLResponse:
     # inline SSR envelope renders the same `last_cycle_end` field the
     # 30-second /api/status poll surfaces.  Without this, the first
     # paint falls back to `last_activity_at`, which on an instance
-    # whose cycles are all LRU-throttled can be hours stale, pinning
+    # whose cycles are all throttled skips can be hours stale, pinning
     # the countdown on "running..." until the first poll lands ~30s
     # later and overwrites it with the fresh value.
     supervisor = getattr(request.app.state, "supervisor", None)

@@ -28,7 +28,7 @@ dependencies = [
     "markupsafe>=3.0.3",
     "aiosqlite>=0.22.1",
     "aiosqlitepool==1.0.0",
-    "async-lru==2.3.0",
+    "async-lru==2.4.0",
     "httpx>=0.28.1",
     "bcrypt>=5.0.0",
     "cryptography>=50.0.0",

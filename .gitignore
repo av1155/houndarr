@@ -60,7 +60,7 @@ Thumbs.db
 *.manifest
 *.spec
 
-# Data directories (runtime state — never commit)
+# Data directories (runtime state; never commit)
 data/
 data-*/
 *.db

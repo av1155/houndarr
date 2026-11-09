@@ -37,7 +37,7 @@ scheduling behavior, not errors.
 | `tag filter (excluded tag)`           | per-item    | `Tag Filter · Exclude` is set and the item carries one of those tags.                                |
 | `already in download queue`           | per-item    | The \*arr already has this item in its download queue (downloading, importing, or delayed).          |
 | `queue backpressure (N/M)`            | cycle-level (info) | Download queue has `N` items, at or above `Queue Limit` of `M`. Entire cycle is skipped.      |
-| `outside allowed time window`         | cycle-level (info) | Current time falls outside every window defined in `Allowed Search Window`. Entire cycle is skipped. |
+| `outside allowed time window`         | cycle-level (info) | Current time falls outside every window defined in `Allowed Search Window`. Entire cycle is skipped. Adds `(TZ=<value> not loaded, using UTC)` when `TZ` could not be loaded. |
 
 Cycle-level gates write one `info` row rather than a `skipped` one, and
 the supervisor sleeps until the next cycle; filter by `Action = info`
@@ -136,9 +136,14 @@ proceeds normally (fail-open).
 The `Allowed Search Window` field restricts scheduled cycles to one
 or more time-of-day windows. When the current container-local time
 falls outside every configured window, the cycle writes one
-`outside allowed time window` info row with the current time and the
-configured windows, then sleeps. Manual `Run Now` clicks bypass this
-gate.
+`outside allowed time window` info row, then sleeps. The row's
+message, returned by `/api/logs` and printed in the container log,
+carries the current time and the configured windows. Manual `Run Now`
+clicks bypass this gate.
+
+If `TZ` names a zone the container can't load, the clock runs on UTC
+and the row reads
+`outside allowed time window (TZ=<value> not loaded, using UTC)`.
 
 ## Tag filter
 
@@ -177,12 +182,20 @@ candidate every cycle; only the log write is suppressed. This keeps the
 logs readable when many items share the same cooldown, the same
 hot-retry interval throttle, or the same tag-filter outcome.
 
-The window lives in memory, in a single cache of 1024 entries shared by
-every instance, so a restart starts it over. Past 1024 combinations the
-oldest entries drop out and the suppression stops, which works out to
-roughly 1024 wanted items with only the missing pass enabled, 341 with
-all three, or 170 per instance across six. Above that, expect a row per
-skip per cycle.
+The window lives in memory, in a single cache of 16,384 entries shared
+by every instance, so a restart starts it over. That is roughly 16,384
+wanted items with only the missing pass enabled, 5,461 with all three,
+or 2,730 per instance across six. With the upgrade pass on, a tag
+filter also takes an entry for each item that already meets cutoff and
+is filtered out, so on a large library the filter alone can fill the
+cache. An entry is kept for its full 24 hours, so past that size the
+combinations already cached stay quiet and the ones that did not fit
+write a row each time they are skipped, for as long as more
+combinations than that come up within a day. Slots go to whichever
+combinations are skipped first, so one instance with a large backlog
+can fill the cache and leave a smaller one writing a row every cycle.
+While the cache is full the container log shows
+`Skip-log throttle is full (16384 keys)` at most once a day.
 
 The other reasons in the table above write a row every cycle they
 apply.

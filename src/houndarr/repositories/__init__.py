@@ -11,7 +11,7 @@ Every module here implements one of the Protocols declared in
   :class:`InstanceInsert` and :class:`InstanceUpdate` payload
   dataclasses.
 - ``cooldowns.py``: per-item cooldown upsert, existence check, and
-  per-instance delete.  The LRU skip-log sentinel stays in
+  per-instance delete.  The skip-log sentinel stays in
   :mod:`houndarr.services.cooldown`; it is an in-process cache, not
   a SQL boundary.
 - ``search_log.py``: insert, filtered page fetch, recent-searches

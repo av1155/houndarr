@@ -199,7 +199,7 @@ async def main() -> int:
 
         if args.without_indexes:
             await _drop_new_indexes()
-            print("DROPPED new indexes — simulating pre-PR codepath")
+            print("DROPPED new indexes; simulating pre-PR codepath")
 
         size_mb = os.path.getsize(db_path) / 1024 / 1024
         print(f"\nDatabase size: {size_mb:.1f} MB")

@@ -2,7 +2,7 @@ name: Dependency Review
 
 # Check PR dependency changes against the GitHub Advisory Database.
 # Catches newly introduced vulnerable packages at review time before
-# pip-audit runs post-install.  This is a required status check — a
+# pip-audit runs post-install.  This is a required status check; a
 # matching no-op job in ci-skip.yml satisfies docs-only PRs.
 
 on:

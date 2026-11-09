@@ -149,9 +149,10 @@ async def _lifespan(app: FastAPI) -> AsyncGenerator[None]:
     # the route's ``getattr(app.state, 'aggregate_cache', None)`` lookup
     # never sees ``None`` after lifespan completion, so the very first
     # post-startup request still benefits from caching.  async-lru
-    # rejects cross-loop reuse with RuntimeError, so the cache lives
-    # per-app instead of as a module global; one app per event loop in
-    # production, one app per test in pytest-asyncio function scope.
+    # clears a cache whenever a different event loop calls it, so the
+    # cache lives per-app instead of as a module global: one app per
+    # event loop in production, one app per test in pytest-asyncio
+    # function scope.
     app.state.aggregate_cache = build_aggregate_cache()
 
     # Start the background search supervisor

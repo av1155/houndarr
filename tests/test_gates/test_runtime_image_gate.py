@@ -2,15 +2,15 @@
 
 ``unresolved_timezone`` and the allowed-search-window tests cover the Python
 side of issue #822, but the thing that actually fixes it is one package name
-in the Dockerfile.  Nothing else in the suite can see it: the test job runs on
-the runner's own zoneinfo rather than inside the image, the browser suite pins
-``TZ=UTC``, and the smoke test sets no ``TZ`` at all.  Drop the package and
-every required check still passes while ``TZ=US/Eastern`` silently goes back
-to meaning UTC.
+in the Dockerfile.  Nothing else in the suite can see its effect: the test job
+runs on the runner's own zoneinfo rather than inside the image, and the
+browser suite pins ``TZ=UTC``.  The security smoke test's "Check legacy
+timezone names resolve" step is the behavioural check, run against the built
+image.
 
-This gate is a tripwire, not a substitute for the behavioural check: it reads
-the Dockerfile rather than the built image, so it catches the package being
-removed, not Debian withdrawing it.
+This gate is the quick tripwire ahead of that step: it reads the Dockerfile
+rather than the built image, so it fails locally before any image exists,
+but it only catches the package name being removed.
 """
 
 from __future__ import annotations

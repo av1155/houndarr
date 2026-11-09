@@ -5,15 +5,15 @@ name: Cleanup Actions Cache
 #
 # Strategy (conservative for main, aggressive everywhere else):
 #
-#   1. PR caches       — bulk-delete every refs/pull/*/merge ref.
-#   2. Tag caches      — bulk-delete every refs/heads/refs/tags/* and
-#                        refs/tags/* ref (immutable; layers never reused).
-#   3. Main duplicates — for refs/heads/main, delete older duplicates of
-#                        binfmt, Trivy DB, and Trivy binary caches (keep
-#                        only the newest of each pattern).
-#   4. Main BuildKit   — keep the 50 most recent BuildKit blob/index
-#                        entries (enough for a warm multi-arch layer
-#                        cache); delete older ones.
+#   1. PR caches:       bulk-delete every refs/pull/*/merge ref.
+#   2. Tag caches:      bulk-delete every refs/heads/refs/tags/* and
+#                       refs/tags/* ref (immutable; layers never reused).
+#   3. Main duplicates: for refs/heads/main, delete older duplicates of
+#                       binfmt, Trivy DB, and Trivy binary caches (keep
+#                       only the newest of each pattern).
+#   4. Main BuildKit:   keep the 50 most recent BuildKit blob/index
+#                       entries (enough for a warm multi-arch layer
+#                       cache); delete older ones.
 #
 # Dry-run mode: set the "dry_run" input to true to preview what would
 # be deleted without actually removing anything.
@@ -64,7 +64,7 @@ jobs:
           dry_label=""
           if [[ "$DRY_RUN" == "true" ]]; then
             dry_label=" [DRY RUN]"
-            echo "::notice::Dry-run mode enabled — no caches will be deleted."
+            echo "::notice::Dry-run mode enabled; no caches will be deleted."
           fi
 
           # -----------------------------------------------------------
@@ -148,7 +148,7 @@ jobs:
           fi
 
           # ===========================================================
-          #  PASS 1 — PR caches: bulk-delete each refs/pull/*/merge ref
+          #  PASS 1, PR caches: bulk-delete each refs/pull/*/merge ref
           # ===========================================================
           echo "=== Pass 1: PR-scoped caches ==="
           pr_refs=$(echo "$all_caches" | jq -r '[.[] | select(.ref | startswith("refs/pull/")) | .ref] | unique[]')
@@ -163,7 +163,7 @@ jobs:
           echo ""
 
           # ===========================================================
-          #  PASS 2 — Tag caches: bulk-delete refs containing "refs/tags/"
+          #  PASS 2, Tag caches: bulk-delete refs containing "refs/tags/"
           #  This covers both refs/tags/* and refs/heads/refs/tags/*
           #  (the latter is created by docker.yml concurrency groups).
           # ===========================================================
@@ -192,7 +192,7 @@ jobs:
           echo ""
 
           # -----------------------------------------------------------
-          #  PASS 3 — binfmt duplicates: keep only the newest
+          #  PASS 3, binfmt duplicates: keep only the newest
           # -----------------------------------------------------------
           echo "=== Pass 3: binfmt image duplicates ==="
           binfmt_ids=$(echo "$main_caches" | jq -r '
@@ -210,7 +210,7 @@ jobs:
           echo ""
 
           # -----------------------------------------------------------
-          #  PASS 4 — Trivy DB caches (cache-trivy-*): keep newest only
+          #  PASS 4, Trivy DB caches (cache-trivy-*): keep newest only
           #  These include a date suffix so old ones are never reused.
           # -----------------------------------------------------------
           echo "=== Pass 4: Trivy DB cache duplicates ==="
@@ -229,7 +229,7 @@ jobs:
           echo ""
 
           # -----------------------------------------------------------
-          #  PASS 5 — Trivy binary caches: keep newest only
+          #  PASS 5, Trivy binary caches: keep newest only
           # -----------------------------------------------------------
           echo "=== Pass 5: Trivy binary duplicates ==="
           trivy_bin_ids=$(echo "$main_caches" | jq -r '
@@ -247,7 +247,7 @@ jobs:
           echo ""
 
           # -----------------------------------------------------------
-          #  PASS 6 — BuildKit blobs + indexes on main: keep the 50
+          #  PASS 6, BuildKit blobs + indexes on main: keep the 50
           #  most recent entries (enough for a warm multi-arch build
           #  cache), delete the rest.
           # -----------------------------------------------------------

@@ -39,7 +39,7 @@ behavior, see [Security Overview](https://av1155.github.io/houndarr/docs/securit
   searched the moment their timestamp crosses zero.
 - Optional per-instance `allowed_time_window` gates scheduled cycles
   to one or more hour ranges.
-- Skip-log throttle (in-memory, 24-hour per-key LRU) suppresses
+- Skip-log throttle (in-memory, bounded, 24-hour per-key TTL) suppresses
   duplicate cooldown-reason rows so the audit trail stays scannable
   on installs with hundreds of items sharing one cooldown.
 

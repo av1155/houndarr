@@ -493,7 +493,7 @@ function initDashboardPage() {
     // Hourly search-budget bar.  Shows how many indexer hits the
     // instance has dispatched in the last rolling hour against the
     // dominant cap (missing + cutoff + upgrade, when enabled).  The
-    // "am I about to get banned by my indexer" signal — #1 research-
+    // "am I about to get banned by my indexer" signal: #1 research-
     // identified trust anxiety and Huntarr's single most-praised
     // widget pre-incident.  Suppressed when hourly_cap=0 (unlimited)
     // since the denominator is meaningless.
@@ -734,7 +734,7 @@ function initDashboardPage() {
         //   1. last_cycle_end  - supervisor's in-memory cycle-end
         //      timestamp, advances once per cycle regardless of
         //      whether any rows were written.  Solves the
-        //      "everything LRU-throttled" case that froze the
+        //      "everything throttled" case that froze the
         //      previous last_activity_at anchor.
         //   2. last_activity_at - newest searched/skipped/error row.
         //      Used on supervisor restart before a cycle has

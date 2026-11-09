@@ -450,7 +450,7 @@ async def fetch_instance_snapshot(
     Anchor for unreleased detection is :attr:`MissingEpisode.air_date_utc`
     (single ISO string).  Episodes without an air date fall through to
     the "already released" branch in :func:`_is_unreleased`, matching
-    the search-loop's classification — Sonarr-without-air-date is not
+    the search-loop's classification: Sonarr-without-air-date is not
     something Houndarr should flag as pre-release on the dashboard.
     """
 

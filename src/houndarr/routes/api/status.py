@@ -72,7 +72,7 @@ async def get_status(request: Request) -> JSONResponse:
     ``last_cycle_end`` is pulled from the live supervisor's in-memory
     map (populated at the end of every cycle) so the dashboard
     countdown anchors on a signal that advances once per cycle even
-    when the cycle is all-LRU-throttled skips.  Missing when the
+    when the cycle is all throttled skips.  Missing when the
     supervisor hasn't booted yet or has never completed a cycle for
     the instance; the client falls back to ``last_activity_at`` in
     those cases.

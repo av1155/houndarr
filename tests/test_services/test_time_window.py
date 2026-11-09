@@ -7,11 +7,13 @@ from datetime import time
 import pytest
 
 from houndarr.services.time_window import (
+    describe_outside_window,
     format_ranges,
     is_within_window,
     parse_time_window,
     validate_allowed_time_window,
 )
+from tests.conftest import libc_timezone
 
 # ---------------------------------------------------------------------------
 # parse_time_window
@@ -330,3 +332,35 @@ def test_validator_agrees_with_parser(spec: str) -> None:
     except ValueError:
         parser_ok = False
     assert validator_ok is parser_ok
+
+
+# ---------------------------------------------------------------------------
+# describe_outside_window
+# ---------------------------------------------------------------------------
+
+_OVERNIGHT = [(time(22, 0), time(6, 0))]
+
+
+@pytest.fixture()
+def _ignore_ambient_tzdir(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Hide any TZDIR the developer's machine exports; it silences the TZ check."""
+    monkeypatch.delenv("TZDIR", raising=False)
+
+
+@pytest.mark.usefixtures("_ignore_ambient_tzdir")
+@pytest.mark.parametrize("tz", [None, "UTC", "America/New_York"])
+def test_outside_window_row_calls_a_loaded_zone_local(tz: str | None) -> None:
+    with libc_timezone(tz):
+        reason, message = describe_outside_window(time(3, 15), _OVERNIGHT)
+
+    assert reason == "outside allowed time window"
+    assert message == "Local time 03:15 is outside configured window 22:00-06:00"
+
+
+@pytest.mark.usefixtures("_ignore_ambient_tzdir")
+def test_outside_window_row_names_a_tz_that_did_not_load() -> None:
+    with libc_timezone("Nowhere/Nope"):
+        reason, message = describe_outside_window(time(3, 15), _OVERNIGHT)
+
+    assert reason == "outside allowed time window (TZ=Nowhere/Nope not loaded, using UTC)"
+    assert message == "UTC time 03:15 is outside configured window 22:00-06:00"

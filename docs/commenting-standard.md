@@ -1,4 +1,4 @@
-# Code Commenting Standard — Houndarr Stack
+# Code Commenting Standard: Houndarr Stack
 
 ## Universal Principles (apply to every language below)
 
@@ -7,21 +7,21 @@ just restates the code, delete it and rename the variable/function instead.
 
 Write comments for:
 
-- **Intent / rationale** — why this approach, not the obvious alternative
-- **Non-obvious constraints** — rate limits, race conditions, API quirks
-- **Warnings** — "do not call without holding the lock", "mutates input"
-- **Links** — issue numbers, RFC/spec refs, upstream bug URLs
-- **TODO/FIXME/HACK/XXX** — tagged with author + issue, e.g.
+- **Intent / rationale**: why this approach, not the obvious alternative
+- **Non-obvious constraints**: rate limits, race conditions, API quirks
+- **Warnings**: "do not call without holding the lock", "mutates input"
+- **Links**: issue numbers, RFC/spec refs, upstream bug URLs
+- **TODO/FIXME/HACK/XXX**: tagged with author + issue, e.g.
   `# TODO(av1155, #123): switch to async pool once Sonarr v5 ships`
 
 Avoid:
 
 - Restating the code (`i += 1  # increment i`)
 - Commented-out code (use Git; delete it)
-- Changelog-style comments (`# 2026-01-15 av1155: fixed bug`) — that's Git's job
-- Decorative banners (`# ========== SECTION ==========`) — use headings/modules
-- Stale comments — if you change code, update or remove the comment
-- Comments apologizing for the code ("this is hacky but...") — fix it or file a ticket
+- Changelog-style comments (`# 2026-01-15 av1155: fixed bug`); that's Git's job
+- Decorative banners (`# ========== SECTION ==========`); use headings/modules
+- Stale comments: if you change code, update or remove the comment
+- Comments apologizing for the code ("this is hacky but..."); fix it or file a ticket
 - Obvious type/name duplication (`user_id: int  # the user ID`)
 
 ---
@@ -45,9 +45,9 @@ Napoleon; industry default for FastAPI projects in 2026).
 - Summary line in **imperative mood** ("Return the queue depth", not "Returns...")
 - Blank line, then details
 - Google style sections: `Args:`, `Returns:`, `Raises:`, `Yields:`, `Example:`
-- Don't repeat type hints in the docstring — hints are the source of truth;
+- Don't repeat type hints in the docstring: hints are the source of truth;
   the docstring explains meaning and edge cases
-- FastAPI routes: the docstring becomes the OpenAPI description — keep the
+- FastAPI routes: the docstring becomes the OpenAPI description; keep the
   first line short and user-facing
 
 ```python
@@ -64,7 +64,7 @@ async def search_missing(
     Args:
         instance_id: Primary key of the instance in the local DB.
         batch_size: Items to search this cycle. Kept small on purpose to
-            avoid indexer bans — see docs/rate-limiting.md.
+            avoid indexer bans (see docs/rate-limiting.md).
 
     Returns:
         SearchResult with items queued and items skipped by cooldown.
@@ -80,13 +80,13 @@ async def search_missing(
 ## HTML / Jinja Templates
 
 - Use `<!-- -->` for structural markers only (`<!-- main nav -->`,
-  `<!-- /main nav -->`) — helps when scanning deeply nested markup
-- Use Jinja's `{# ... #}` for developer notes — **never** use `<!-- -->` for
+  `<!-- /main nav -->`); they help when scanning deeply nested markup
+- Use Jinja's `{# ... #}` for developer notes; **never** use `<!-- -->` for
   anything secret or internal; HTML comments ship to the browser
 - Don't comment every `<div>`; semantic tags (`<nav>`, `<article>`, `<aside>`)
   are self-documenting
 - Mark template blocks: `{% block content %}{% endblock content %}` (name the
-  `endblock` — acts as a comment for long templates)
+  `endblock`; it acts as a comment for long templates)
 
 ---
 
@@ -94,7 +94,7 @@ async def search_missing(
 
 HTMX attributes are declarative and largely self-documenting. Only comment when:
 
-- The swap target is non-obvious (`hx-target="closest tr"` — explain why)
+- The swap target is non-obvious (`hx-target="closest tr"`: explain why)
 - There's an out-of-band swap chain
 - A trigger uses a custom event dispatched from server-sent HTML
 
@@ -112,7 +112,7 @@ HTMX attributes are declarative and largely self-documenting. Only comment when:
 
 ## Tailwind CSS (v4)
 
-- **Don't** comment individual utility classes — the class name _is_ the doc
+- **Don't** comment individual utility classes; the class name _is_ the doc
 - **Do** comment _why_ a non-obvious utility combo exists, above the element
 - Long class strings (>10–12 utilities): extract to a component or a
   `@utility`/`@apply` rule in your CSS layer rather than commenting
@@ -130,9 +130,9 @@ HTMX attributes are declarative and largely self-documenting. Only comment when:
 
 - `#` comments; one blank line between logical stages
 - Comment **rationale** for each `RUN` that pins versions, cleans caches, or
-  uses a workaround — future maintainers need to know if it's safe to touch
+  uses a workaround; future maintainers need to know if it's safe to touch
 - Don't comment what `COPY`, `WORKDIR`, `EXPOSE` obviously do
-- Add `# syntax=docker/dockerfile:1` at the very top (not a comment per se —
+- Add `# syntax=docker/dockerfile:1` at the very top (not a comment per se:
   it's a parser directive, but lives in comment syntax)
 
 ```dockerfile
@@ -148,10 +148,10 @@ USER houndarr
 
 ## docker-compose.yaml / YAML configs
 
-- `#` comments; YAML has no multi-line comment syntax — prefix each line
+- `#` comments; YAML has no multi-line comment syntax, so prefix each line
 - Comment **non-obvious** keys only: why a port/volume/env is required, what
   breaks if it's changed, links to docs
-- Don't comment `image:`, `restart:`, `ports:` — they're self-evident
+- Don't comment `image:`, `restart:`, `ports:`; they're self-evident
 - Group related settings and add a one-line section header above them
 - Keep example/reference values in comments, not code:
   `TZ: America/New_York  # IANA tz; see https://...`
@@ -173,7 +173,7 @@ services:
 - Every migration file starts with a header comment: purpose, ticket, author
 - Inline `--` comments for non-obvious indexes, cascade choices, or schema
   decisions (why a column is nullable, why a unique constraint exists)
-- Never comment out DDL "just in case" — use a new migration to revert
+- Never comment out DDL "just in case"; use a new migration to revert
 
 ---
 
@@ -181,14 +181,14 @@ services:
 
 - `#!/usr/bin/env bash` then `set -euo pipefail` then a **header comment**
   describing purpose, required env vars, and exit codes
-- Comment any `|| true`, `2>/dev/null`, trap, or subshell — these are where
+- Comment any `|| true`, `2>/dev/null`, trap, or subshell; these are where
   bugs hide
 
 ---
 
 ## Markdown (docs, READMEs)
 
-- Use `<!-- -->` sparingly — for TOC markers, editor hints, or
+- Use `<!-- -->` sparingly: for TOC markers, editor hints, or
   `<!-- markdownlint-disable rule -->` pragmas
 - Don't hide prose in HTML comments; if it's worth writing, put it on the page
 

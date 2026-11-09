@@ -10,7 +10,7 @@ Houndarr pins two single-maintainer dependencies at exact versions:
 | Package | Pin | Source | Role |
 |---|---|---|---|
 | `aiosqlitepool` | `==1.0.0` | github.com/slaily/aiosqlitepool | Pool wrapper around `aiosqlite.connect()` used by every `get_db()` borrow |
-| `async-lru` | `==2.3.0` | github.com/aio-libs/async-lru | Backs the `/api/status` aggregate cache |
+| `async-lru` | `==2.4.0` | github.com/aio-libs/async-lru | Backs the `/api/status` aggregate cache |
 
 Both are pure-Python packages; neither has compiled wheels. Both passed
 `pip-audit` at adoption time.

@@ -1211,7 +1211,7 @@ def _seed_v4_shaped_db() -> str:
     ``movie`` item_types.  Drives the longest possible migration chain
     (v5 → v17) and verifies that v10's rebuild preserves every cooldown
     row when no transaction-leak from v6 exists at v4 (since v6 has not
-    run yet at the start of this chain — but v6 will run mid-chain).
+    run yet at the start of this chain, but v6 will run mid-chain).
     """
     return """
     CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
@@ -1813,7 +1813,7 @@ async def test_init_db_migrates_v4_preserves_cooldowns_through_v10_rebuild(
         ]
 
         # search_log rows survive too (FK is ON DELETE SET NULL, so even
-        # without the commit fix the rows would survive — but instance_id
+        # without the commit fix the rows would survive, but instance_id
         # would have been NULLed).  With the fix, the FK reference is
         # preserved.
         async with conn.execute(

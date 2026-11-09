@@ -11,7 +11,7 @@ paths:
 
 SQLite via aiosqlite. `get_db()` is an async context manager that opens
 a fresh connection per call (FKs enabled per connection; WAL mode set
-once in `init_db()`). Schema version is currently 19. Bump
+once in `init_db()`). Schema version is currently 21. Bump
 `SCHEMA_VERSION` and add a `_migrate_to_vN` when changing schema.
 
 ## Schema reference

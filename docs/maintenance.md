@@ -47,6 +47,7 @@ When the time comes:
    ```python
    # before
    from aiosqlitepool import SQLiteConnectionPool
+
    # after
    from houndarr._vendor.aiosqlitepool import SQLiteConnectionPool
    ```

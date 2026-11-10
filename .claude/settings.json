@@ -91,7 +91,7 @@
                 "hooks": [
                     {
                         "type": "command",
-                        "command": "FILE_PATHS=\"$CLAUDE_FILE_PATHS\"; for f in $FILE_PATHS; do if [[ \"$f\" =~ \\.py$ ]]; then .venv/bin/python -m ruff format \"$f\" 2>/dev/null; .venv/bin/python -m ruff check --fix \"$f\" 2>/dev/null; fi; done; exit 0"
+                        "command": "F=$(cat | jq -r '.tool_input.file_path // empty'); R=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0; case \"$F\" in \"$R\"/*.py) \"$R\"/.venv/bin/python -m ruff check --fix --unfixable F401 --force-exclude \"$F\" >/dev/null 2>&1; \"$R\"/.venv/bin/python -m ruff format --force-exclude \"$F\" >/dev/null 2>&1 ;; esac; exit 0"
                     }
                 ]
             },
@@ -100,7 +100,7 @@
                 "hooks": [
                     {
                         "type": "command",
-                        "command": "FILE_PATHS=\"$CLAUDE_FILE_PATHS\"; HAS_SRC=false; for f in $FILE_PATHS; do if [[ \"$f\" =~ src/.*\\.py$ ]]; then HAS_SRC=true; break; fi; done; if [ \"$HAS_SRC\" = true ]; then .venv/bin/python -m mypy src/ --no-error-summary 2>&1 | tail -20 || true; fi; exit 0"
+                        "command": "F=$(cat | jq -r '.tool_input.file_path // empty'); R=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0; case \"$F\" in \"$R\"/src/*.py) OUT=$(cd \"$R\" && .venv/bin/python -m mypy src/ --no-error-summary 2>&1) || { printf '%s\\n' \"$OUT\" | tail -20 >&2; exit 2; } ;; esac; exit 0"
                     }
                 ]
             }
@@ -129,7 +129,7 @@
                 "hooks": [
                     {
                         "type": "command",
-                        "command": "[ \"$(git branch --show-current 2>/dev/null)\" != \"main\" ] && exit 0; REPO=\"$(git rev-parse --show-toplevel 2>/dev/null)\"; for f in $CLAUDE_FILE_PATHS; do case \"$f\" in \"$REPO\"/AGENTS.md|\"$REPO\"/CLAUDE.md) continue ;; \"$REPO\"/*) echo '❌ BLOCKED: Cannot edit repo files on main. Allowed: AGENTS.md, CLAUDE.md. Create a feature branch.' >&2; exit 2 ;; esac; done; exit 0",
+                        "command": "[ \"$(git branch --show-current 2>/dev/null)\" != \"main\" ] && exit 0; REPO=\"$(git rev-parse --show-toplevel 2>/dev/null)\"; F=$(cat | jq -r '.tool_input.file_path // empty'); case \"$F\" in \"$REPO\"/AGENTS.md|\"$REPO\"/CLAUDE.md) ;; \"$REPO\"/*) echo '❌ BLOCKED: Cannot edit repo files on main. Allowed: AGENTS.md, CLAUDE.md. Create a feature branch.' >&2; exit 2 ;; esac; exit 0",
                         "timeout": 5
                     }
                 ]
@@ -139,7 +139,7 @@
                 "hooks": [
                     {
                         "type": "command",
-                        "command": "CMD=$(cat | jq -r '.tool_input.command // empty'); if echo \"$CMD\" | grep -qE '^git commit'; then .venv/bin/python -m ruff format --check src/ tests/ >/dev/null 2>&1 || { echo '❌ BLOCKED: Unformatted files. Run ruff format first.' >&2; exit 2; }; fi; exit 0",
+                        "command": "CMD=$(cat | jq -r '.tool_input.command // empty'); if printf '%s\\n' \"$CMD\" | grep -qE '(^|[^[:alnum:]_./-])git([[:space:]]+-[^[:space:]]+([[:space:]]+[^-[:space:]][^[:space:]]*)?)*[[:space:]]+commit([[:space:]]|$)'; then R=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0; OUT=$(cd \"$R\" && .venv/bin/python -m ruff format --check src/ tests/ 2>&1) || { printf '%s\\n' \"$OUT\" | tail -20 >&2; echo '❌ BLOCKED: Unformatted files. Run just fix first.' >&2; exit 2; }; fi; exit 0",
                         "timeout": 30
                     }
                 ]
@@ -151,7 +151,7 @@
                 "hooks": [
                     {
                         "type": "command",
-                        "command": "STOP_ACTIVE=$(cat | jq -r '.stop_hook_active // false'); if [ \"$STOP_ACTIVE\" = \"true\" ]; then exit 0; fi; RESPONSE=$(cat | jq -r '.assistant_response // empty' | tail -200); if echo \"$RESPONSE\" | grep -qiE 'TODO|FIXME|will implement later|placeholder|stub'; then echo '⚠️ Response contains incomplete markers (TODO/FIXME/placeholder). Consider finishing before stopping.' >&2; exit 2; fi; exit 0"
+                        "command": "IN=$(cat); STOP_ACTIVE=$(printf '%s' \"$IN\" | jq -r '.stop_hook_active // false'); if [ \"$STOP_ACTIVE\" = \"true\" ]; then exit 0; fi; RESPONSE=$(printf '%s' \"$IN\" | jq -r '.last_assistant_message // empty' | tail -200); if printf '%s\\n' \"$RESPONSE\" | grep -qiE 'TODO|FIXME|will implement later|placeholder|stub'; then echo '⚠️ Response contains incomplete markers (TODO/FIXME/placeholder). Consider finishing before stopping.' >&2; exit 2; fi; exit 0"
                     }
                 ]
             }

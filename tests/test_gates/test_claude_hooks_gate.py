@@ -368,13 +368,43 @@ def test_commit_hook_passes_a_formatted_tree_from_a_subdirectory(repo: Path) -> 
         "cd /x && git push origin main",
         "(cd /x && git push origin main)",
         "git push origin main;",
+        'git push origin "main"',
+        "git push origin m''ain",
+        "git push origin 'HEAD:main'",
+        'git push "--force" origin feat',
+        "git \\\n  push --force origin feat",
     ],
 )
 def test_push_guard_blocks_force_pushes_and_pushes_to_main(repo: Path, command: str) -> None:
     result = _run(_PUSH_GUARD_HOOK, _bash(command), repo)
 
     assert result.returncode == 2
-    assert "BLOCKED" in result.stderr
+    assert "Direct push to main or force push" in result.stderr
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        'git push origin "$BRANCH"',
+        'git push -u origin "$(git branch --show-current)"',
+        "git push origin `git branch --show-current`",
+        "\\git push origin feat",
+        "git push origin ma\\in",
+        "git --git-dir=/x/.git push origin feat",
+        "git --work-tree /x push origin feat",
+        "GIT_DIR=/x/.git git push origin feat",
+        "env GIT_WORK_TREE=/x git push origin feat",
+        "git -C /nonexistent/dir push origin feat",
+        'git -c "user.name=A B" push origin feat',
+        "git -C '/tmp/a b' push origin feat",
+    ],
+)
+def test_push_guard_blocks_pushes_it_cannot_read(repo: Path, command: str) -> None:
+    """Expansions, escapes, quoted spaces, repo overrides and a missing -C dir hide the target."""
+    result = _run(_PUSH_GUARD_HOOK, _bash(command), repo)
+
+    assert result.returncode == 2
+    assert "Cannot read this git push" in result.stderr
 
 
 @pytest.mark.parametrize(
@@ -388,7 +418,13 @@ def test_push_guard_blocks_force_pushes_and_pushes_to_main(repo: Path, command: 
         "git push origin main-fix",
         "git push origin v1.2.3",
         "git push origin --delete feat",
+        'git push origin "feat"',
+        'git -c "user.name=AB" push origin feat',
+        "git push \\\n  origin feat",
+        'git push origin feat && echo "$?"',
         'grep "git push origin main" AGENTS.md',
+        "grep 'git push --force' AGENTS.md",
+        "git commit -F - <<'EOF'\nci: x\n\nThe guard's git push check reads quotes.\nEOF",
     ],
 )
 def test_push_guard_allows_feature_and_tag_pushes(repo: Path, command: str) -> None:
@@ -420,14 +456,24 @@ def test_push_guard_on_main_needs_a_named_target(
 def test_push_guard_reads_the_branch_of_the_checkout_named_by_dash_c(
     main_repo: Path, tmp_path: Path
 ) -> None:
-    worktree = tmp_path.resolve() / "worktree"
+    root = tmp_path.resolve()
+    worktree = root / "worktree"
     _git(main_repo, "worktree", "add", "-q", "-b", "feature", str(worktree))
+    # Cut at its space, this path would name the feature worktree.
+    on_main_with_space = root / "worktree two"
+    _git(root, "init", "-q", "-b", "main", str(on_main_with_space))
 
-    into_main = _run(_PUSH_GUARD_HOOK, _bash(f"git -C {main_repo} push"), worktree)
-    into_feature = _run(_PUSH_GUARD_HOOK, _bash(f"git -C {worktree} push"), main_repo)
+    def push(command: str, cwd: Path) -> int:
+        return _run(_PUSH_GUARD_HOOK, _bash(command), cwd, HOME=str(root)).returncode
 
-    assert into_main.returncode == 2
-    assert into_feature.returncode == 0
+    assert push(f"git -C {main_repo} push", worktree) == 2
+    assert push(f'git -C "{main_repo}" push', worktree) == 2
+    assert push(f"git -C {root} -C {main_repo.name} push", worktree) == 2
+    assert push(f"git -C ~/{main_repo.name} push", worktree) == 2
+    assert push(f'git -C "{on_main_with_space}" push', main_repo) == 2
+    assert push(f"git -C {worktree} push", main_repo) == 0
+    assert push(f"git -C {root} -C {worktree.name} push", main_repo) == 0
+    assert push(f"git -C ~/{worktree.name} push", main_repo) == 0
 
 
 def test_stop_hook_warns_once_about_unfinished_markers(tmp_path: Path) -> None:

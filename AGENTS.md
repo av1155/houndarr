@@ -459,7 +459,7 @@ Do not use Bash to write files as a workaround when a hook blocks an action. If 
 - Hook 5 blocks a file edit on main: create a feature branch (`git checkout -b type/slug`) and make the edit there. From a worktree, edit the worktree's copy of the file instead.
 - Hook 6 blocks a commit: run `just fix` (or `just fmt-check` to see the diff first), `git add` the fixed files that belong in the commit, then retry the commit.
 - Hook 3 blocks `rm -rf`: use a more specific path instead of a dangerous wildcard target.
-- Hook 4 blocks a git push: you are pushing to main, force-pushing, or pushing from `main` without naming a branch. Push to a feature branch and open a PR instead.
+- Hook 4 blocks a git push: you are pushing to main, force-pushing, pushing from `main` without naming a branch, or the hook cannot read where the push goes. Push to a feature branch, with its name written out (`git push -u origin <branch>`), and open a PR instead.
 
 In every case: fix the underlying issue, do not bypass the hook.
 
@@ -469,7 +469,7 @@ In every case: fix the underlying issue, do not bypass the hook.
 - Hook 1 (auto-format): only runs on `.py` and `.md` files inside the repo, and skips files that git ignores (`git check-ignore`) or that ruff excludes (`--force-exclude`). Other files (`.yml`, `.json`, `.html`) are silently skipped.
 - Hook 2 (mypy): only runs when `src/**/*.py` files are changed. Test file edits do not trigger mypy. This is intentional (tests are exempt from ANN rules).
 - Hook 6 (format check): if `.venv` does not exist, the hook blocks the commit. This is correct; set up the project before committing.
-- Hook 4 (push guard): matches `git push` after any global options (`git -C <dir> push`, `git -c k=v push`). It blocks `--force`, `-f`, `--force-with-lease`, `--mirror`, `--all` and `+` refspecs, any target named `main` or `master` (including `HEAD:main` and `:main`), and, while the current branch is `main`, a push that names no branch. Tag pushes such as `git push origin v1.2.3` go through.
+- Hook 4 (push guard): matches `git push` after any global options (`git -C <dir> push`, `git -c k=v push`), also across a backslash line break, and reads it with quotes removed, so `"main"` counts as `main`. It blocks `--force`, `-f`, `--force-with-lease`, `--mirror`, `--all` and `+` refspecs, any target named `main` or `master` (including `HEAD:main` and `:main`), and, while the current branch is `main`, a push that names no branch. It also blocks a push it cannot read: one containing `$`, a backtick, a backslash or quoted text with spaces, one using `--git-dir`, `--work-tree`, `GIT_DIR=` or `GIT_WORK_TREE=`, and one whose `-C` directory is not a repo. It reads the branch from Claude's current directory or the `-C` directory, so push another checkout with `git -C <dir> push`, not `cd <dir> && git push`. Text that starts right after a quote is not read as a push: `grep "git push"` goes through, and so does `bash -c "git push ..."`. Tag pushes such as `git push origin v1.2.3` go through.
 
 ---
 

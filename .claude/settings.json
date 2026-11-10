@@ -100,7 +100,7 @@
                 "hooks": [
                     {
                         "type": "command",
-                        "command": "F=$(cat | jq -r '.tool_input.file_path // empty'); R=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0; case \"$F\" in \"$R\"/src/*.py) OUT=$(cd \"$R\" && .venv/bin/python -m mypy src/ --no-error-summary 2>&1) || { printf '%s\\n' \"$OUT\" | tail -20 >&2; exit 2; } ;; esac; exit 0"
+                        "command": "F=$(cat | jq -r '.tool_input.file_path // empty'); R=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0; case \"$F\" in \"$R\"/src/*.py) OUT=$(cd \"$R\" && .venv/bin/python -m mypy src/ 2>&1) || { printf '%s\\n' \"$OUT\" | tail -20 >&2; exit 2; } ;; esac; exit 0"
                     }
                 ]
             }
@@ -129,7 +129,7 @@
                 "hooks": [
                     {
                         "type": "command",
-                        "command": "F=$(cat | jq -r '.tool_input.file_path // empty'); case \"$F\" in /*) ;; *) exit 0 ;; esac; D=${F%/*}; while [ -n \"$D\" ] && [ ! -d \"$D\" ]; do D=${D%/*}; done; [ \"$(git -C \"${D:-/}\" branch --show-current 2>/dev/null)\" = main ] || exit 0; REPO=$(git -C \"${D:-/}\" rev-parse --show-toplevel 2>/dev/null) || exit 0; [ \"$(git -C \"$REPO\" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)\" = \"$(git -C \"${CLAUDE_PROJECT_DIR:-.}\" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)\" ] || exit 0; git -C \"$REPO\" check-ignore -q \"$F\" 2>/dev/null && exit 0; case \"$F\" in \"$REPO\"/AGENTS.md|\"$REPO\"/CLAUDE.md) ;; \"$REPO\"/*) echo '❌ BLOCKED: Cannot edit repo files on main. Allowed: AGENTS.md, CLAUDE.md. Create a feature branch, or edit the copy in your worktree.' >&2; exit 2 ;; esac; exit 0",
+                        "command": "F=$(cat | jq -r '.tool_input.file_path // empty'); case \"$F\" in /*) ;; *) exit 0 ;; esac; D=${F%/*}; while [ -n \"$D\" ] && [ ! -d \"$D\" ]; do D=${D%/*}; done; D=${D:-/}; [ \"$(git -C \"$D\" branch --show-current 2>/dev/null)\" = main ] || exit 0; P=$(git -C \"${CLAUDE_PROJECT_DIR:-.}\" rev-parse --path-format=absolute --git-common-dir 2>/dev/null); [ -n \"$P\" ] && [ \"$(git -C \"$D\" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)\" != \"$P\" ] && exit 0; T=${F#\"$D\"/}; if [ \"$(git -C \"$D\" rev-parse --is-inside-work-tree 2>/dev/null)\" = true ]; then git -C \"$D\" check-ignore -q -- \"$T\" 2>/dev/null && exit 0; case \"$(git -C \"$D\" rev-parse --show-prefix 2>/dev/null)$T\" in AGENTS.md|CLAUDE.md) exit 0 ;; esac; fi; echo '❌ BLOCKED: Cannot edit repo files on main. Allowed: AGENTS.md, CLAUDE.md. Create a feature branch, or edit the copy in your worktree.' >&2; exit 2",
                         "timeout": 5
                     }
                 ]
@@ -139,7 +139,7 @@
                 "hooks": [
                     {
                         "type": "command",
-                        "command": "CMD=$(cat | jq -r '.tool_input.command // empty'); if printf '%s\\n' \"$CMD\" | grep -qE '(^|[^[:alnum:]_.-])git([[:space:]]+-[^[:space:]]+([[:space:]]+[^-[:space:]][^[:space:]]*)?)*[[:space:]]+commit([[:space:]]|$|[;&|)])'; then R=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0; OUT=$(cd \"$R\" && .venv/bin/python -m ruff format --check --output-format concise . 2>&1) || { printf '%s\\n' \"$OUT\" | tail -20 >&2; echo '❌ BLOCKED: Unformatted files. Run just fix, re-add the files you are committing, then retry.' >&2; exit 2; }; fi; exit 0",
+                        "command": "CMD=$(cat | jq -r '.tool_input.command // empty'); if printf '%s\\n' \"$CMD\" | grep -qE '(^|[^[:alnum:]_.-])git([[:space:]]+(-[Cc]|--git-dir|--work-tree|--namespace|--config-env)[[:space:]]+[^[:space:]]+|[[:space:]]+-[^[:space:]]+)*[[:space:]]+commit([[:space:]]|$|[;&|)<>])'; then R=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0; OUT=$(cd \"$R\" && .venv/bin/python -m ruff format --check --output-format concise . 2>&1) || { printf '%s\\n' \"$OUT\" | tail -20 >&2; echo '❌ BLOCKED: Unformatted files. Run just fix, re-add the files you are committing, then retry.' >&2; exit 2; }; fi; exit 0",
                         "timeout": 30
                     }
                 ]

@@ -6,7 +6,8 @@ environment variable.  The edit hooks in ``.claude/settings.json`` once looped
 over an unset ``$CLAUDE_FILE_PATHS`` and silently did nothing (#868), and
 nothing in the suite ran them.  These tests run each hook command under bash
 with that JSON, inside a throwaway git repo whose ``.venv`` links to the
-environment running pytest, and check the acceptance criteria of #867 and #868.
+environment running pytest, and check the hook acceptance criteria of #867 and
+#868.
 """
 
 from __future__ import annotations
@@ -23,9 +24,12 @@ import pytest
 
 _SETTINGS = Path(__file__).resolve().parents[2] / ".claude" / "settings.json"
 
+_MISSING_TOOLS = [tool for tool in ("bash", "git", "jq") if shutil.which(tool) is None]
+
+# In CI a missing tool fails the hook tests instead of skipping them.
 pytestmark = pytest.mark.skipif(
-    not all(shutil.which(tool) for tool in ("bash", "git", "jq")),
-    reason="the hook commands need bash, git and jq",
+    bool(_MISSING_TOOLS) and not os.environ.get("CI"),
+    reason=f"the hook commands need {', '.join(_MISSING_TOOLS)}",
 )
 
 # Inherited GIT_* variables (set when pytest runs under a git hook) would point
@@ -114,14 +118,14 @@ def main_repo(repo: Path) -> Path:
 
 @pytest.mark.parametrize("cwd", ["", "sub"])
 def test_format_hook_formats_python_and_keeps_unused_imports(repo: Path, cwd: str) -> None:
-    """An import added before the code that uses it must survive the edit."""
+    """Lint fixes and formatting apply, but an import added before its first use survives."""
     target = repo / "probe.py"
-    target.write_text("import os\nx=1\n")
+    target.write_text('import os\nx=f"a"\n')
 
     assert _run(_FORMAT_HOOK, _edit(target), repo / cwd).returncode == 0
     text = target.read_text()
     assert "import os" in text
-    assert "x = 1" in text
+    assert 'x = "a"' in text
 
 
 def test_format_hook_formats_python_blocks_in_markdown(repo: Path) -> None:
@@ -150,7 +154,7 @@ def test_format_hook_leaves_ignored_and_outside_files_alone(repo: Path, tmp_path
 
 
 def test_mypy_hook_reports_type_errors_to_claude(repo: Path) -> None:
-    """A PostToolUse hook's output only reaches Claude when it exits 2."""
+    """A PostToolUse hook's plain-text stderr only reaches Claude when it exits 2."""
     target = repo / "src" / "pkg" / "probe.py"
     target.parent.mkdir(parents=True)
     target.write_text('x: int = "a"\n')
@@ -162,14 +166,16 @@ def test_mypy_hook_reports_type_errors_to_claude(repo: Path) -> None:
 
 
 def test_mypy_hook_is_quiet_on_clean_code_and_outside_src(repo: Path) -> None:
+    """An edit outside src/ never runs mypy, even while src/ has a type error."""
     clean = repo / "src" / "pkg" / "probe.py"
     clean.parent.mkdir(parents=True)
     clean.write_text("x: int = 1\n")
+    assert _run(_MYPY_HOOK, _edit(clean), repo).returncode == 0
+
+    (repo / "src" / "pkg" / "broken.py").write_text('x: int = "a"\n')
     outside_src = repo / "tests" / "test_probe.py"
     outside_src.parent.mkdir()
-    outside_src.write_text('x: int = "a"\n')
-
-    assert _run(_MYPY_HOOK, _edit(clean), repo).returncode == 0
+    outside_src.write_text("x = 1\n")
     assert _run(_MYPY_HOOK, _edit(outside_src), repo).returncode == 0
 
 
@@ -219,6 +225,49 @@ def test_main_guard_follows_the_file_into_other_worktrees(main_repo: Path, tmp_p
     assert into_worktree.returncode == 0
 
 
+def test_main_guard_resolves_symlinked_paths(main_repo: Path, tmp_path: Path) -> None:
+    """A path through a symlink is matched by where git places it, not by its spelling."""
+    link = tmp_path.resolve() / "link"
+    link.symlink_to(main_repo, target_is_directory=True)
+
+    code = _run(
+        _MAIN_GUARD_HOOK, _edit(link / "src" / "app.py"), main_repo, CLAUDE_PROJECT_DIR=str(link)
+    )
+    agents = _run(
+        _MAIN_GUARD_HOOK, _edit(link / "AGENTS.md"), main_repo, CLAUDE_PROJECT_DIR=str(link)
+    )
+
+    assert code.returncode == 2
+    assert agents.returncode == 0
+
+
+def test_main_guard_fails_closed_when_it_cannot_place_the_edit(
+    main_repo: Path, tmp_path: Path
+) -> None:
+    """Git metadata, or a project directory git cannot read, blocks rather than passes."""
+    nowhere = tmp_path.resolve() / "not-a-repo"
+    nowhere.mkdir()
+
+    git_metadata = [
+        _run(
+            _MAIN_GUARD_HOOK,
+            _edit(main_repo / ".git" / name),
+            main_repo,
+            CLAUDE_PROJECT_DIR=str(main_repo),
+        )
+        for name in ("config", "AGENTS.md")
+    ]
+    unknown_project = _run(
+        _MAIN_GUARD_HOOK,
+        _edit(main_repo / "src" / "app.py"),
+        nowhere,
+        CLAUDE_PROJECT_DIR=str(nowhere),
+    )
+
+    assert [result.returncode for result in git_metadata] == [2, 2]
+    assert unknown_project.returncode == 2
+
+
 def test_main_guard_ignores_feature_branches_and_other_repos(repo: Path, tmp_path: Path) -> None:
     other = tmp_path.resolve() / "other"
     other.mkdir()
@@ -242,9 +291,11 @@ def test_main_guard_ignores_feature_branches_and_other_repos(repo: Path, tmp_pat
         "cd {repo} && git commit -m x",
         "git -C {repo} commit -m x",
         "git -c a=b commit -m x",
+        "git --no-pager commit -m x",
         "git add -A && git commit --amend --no-edit",
         "(cd {repo} && git commit)",
         "git commit;",
+        "git commit>/dev/null",
         "/usr/bin/git commit -m x",
     ],
 )
@@ -261,6 +312,7 @@ def test_commit_hook_blocks_commits_with_unformatted_files(repo: Path, command: 
     "command",
     [
         "git log --grep commit",
+        "git --no-pager log --grep commit",
         "git commit-tree HEAD^{tree} -m x",
         'git stash push -m "wip commit"',
         "ls .git/",

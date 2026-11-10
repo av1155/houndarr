@@ -29,7 +29,9 @@ review before being added.
 `just` is the canonical interface. Install it via `brew install just`
 (macOS) or `cargo install just`. The repo's `justfile` wires every
 gate, every test slice, and the dev server, so most agent work goes
-through `just <recipe>` rather than `.venv/bin/...`.
+through `just <recipe>` rather than `.venv/bin/...`. The Claude Code
+hooks in `.claude/settings.json` read their input with `jq`, so it
+has to be on PATH; without it they do nothing.
 
 ```bash
 # Create venv and install (one-time bootstrap; uv reads pyproject.toml +
@@ -427,7 +429,7 @@ Currently known minor discrepancies:
 
 The project's `.claude/settings.json` defines 7 hooks that enforce formatting, type checking, branch protection, and code quality. These hooks only fire on the tools they match. Using the wrong tool for a task can silently bypass safety checks.
 
-Claude Code passes each hook its input as JSON on stdin: `tool_input.file_path` for Write, Edit, and MultiEdit, `tool_input.command` for Bash, and `last_assistant_message` for Stop. No environment variable carries the edited file's path. Hooks run in Claude's current directory. Hooks 1, 2, and 6 act on the git repo that contains it (`git rev-parse --show-toplevel`), so they work from a subdirectory such as `website/` and do nothing outside a repo. Hook 5 checks the checkout the edited file belongs to instead, so it also covers edits made from another worktree.
+Claude Code passes each hook its input as JSON on stdin: `tool_input.file_path` for Write, Edit, and MultiEdit, `tool_input.command` for Bash, and `last_assistant_message` for Stop. No environment variable carries the edited file's path. Hooks run in Claude's current directory. Hooks 1, 2, and 6 act on the git repo that contains it (`git rev-parse --show-toplevel`), so they work from a subdirectory such as `website/` and do nothing outside a repo. Hook 5 checks the checkout the edited file belongs to instead, so it also covers edits made from another worktree. CI's path filters skip `.claude/**`, so a PR that only changes the hooks runs no tests in CI; run `just check` locally before pushing one.
 
 #### Bash file writes bypass Write/Edit/MultiEdit hooks
 

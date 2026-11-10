@@ -139,7 +139,7 @@
                 "hooks": [
                     {
                         "type": "command",
-                        "command": "CMD=$(cat | jq -r '.tool_input.command // empty'); if printf '%s\\n' \"$CMD\" | grep -qE '(^|[^[:alnum:]_.-])git([[:space:]]+(-[Cc]|--git-dir|--work-tree|--namespace|--config-env)[[:space:]]+[^[:space:]]+|[[:space:]]+-[^[:space:]]+)*[[:space:]]+commit([[:space:]]|$|[;&|)<>])'; then R=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0; OUT=$(cd \"$R\" && .venv/bin/python -m ruff format --check --output-format concise . 2>&1) || { printf '%s\\n' \"$OUT\" | tail -20 >&2; echo '❌ BLOCKED: Unformatted files. Run just fix, re-add the files you are committing, then retry.' >&2; exit 2; }; fi; exit 0",
+                        "command": "CMD=$(cat | jq -r '.tool_input.command // empty'); if printf '%s\\n' \"$CMD\" | grep -qE '(^|[^[:alnum:]_.-])git([[:space:]]+(-[Cc]|--git-dir|--work-tree|--namespace|--config-env|--attr-source)[[:space:]]+[^[:space:]]+|[[:space:]]+-[^[:space:]]+)*[[:space:]]+commit([[:space:]]|$|[;&|)<>])'; then R=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0; OUT=$(cd \"$R\" && .venv/bin/python -m ruff format --check --output-format concise . 2>&1) || { printf '%s\\n' \"$OUT\" | tail -20 >&2; echo '❌ BLOCKED: Unformatted files. Run just fix, re-add the files you are committing, then retry.' >&2; exit 2; }; fi; exit 0",
                         "timeout": 30
                     }
                 ]

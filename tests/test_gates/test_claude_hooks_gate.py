@@ -139,10 +139,12 @@ def test_format_hook_formats_python_blocks_in_markdown(repo: Path) -> None:
 def test_format_hook_leaves_ignored_and_outside_files_alone(repo: Path, tmp_path: Path) -> None:
     """ruff's --force-exclude still formats a gitignored file passed by path."""
     (repo / "ignored").mkdir()
+    (repo / "_build").mkdir()
     untouched = {
         repo / "ignored" / "probe.py": "x=1\n",
         repo / "ignored" / "notes.md": _UNFORMATTED_MD,
         repo / "config.yml": "a:    1\n",
+        repo / "_build" / "probe.py": "x=1\n",
         tmp_path.resolve() / "outside.py": "x=1\n",
     }
     for path, text in untouched.items():
@@ -179,10 +181,12 @@ def test_mypy_hook_is_quiet_on_clean_code_and_outside_src(repo: Path) -> None:
     assert _run(_MYPY_HOOK, _edit(outside_src), repo).returncode == 0
 
 
-def test_main_guard_blocks_repo_edits_on_main(main_repo: Path) -> None:
+@pytest.mark.parametrize("relative", ["src/app.py", "sub/AGENTS.md"])
+def test_main_guard_blocks_repo_edits_on_main(main_repo: Path, relative: str) -> None:
+    """Only the root AGENTS.md and CLAUDE.md are exempt."""
     result = _run(
         _MAIN_GUARD_HOOK,
-        _edit(main_repo / "src" / "app.py"),
+        _edit(main_repo / relative),
         main_repo / "sub",
         CLAUDE_PROJECT_DIR=str(main_repo),
     )
@@ -292,6 +296,7 @@ def test_main_guard_ignores_feature_branches_and_other_repos(repo: Path, tmp_pat
         "git -C {repo} commit -m x",
         "git -c a=b commit -m x",
         "git --no-pager commit -m x",
+        "git --attr-source HEAD commit -m x",
         "git add -A && git commit --amend --no-edit",
         "(cd {repo} && git commit)",
         "git commit;",

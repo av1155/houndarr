@@ -48,10 +48,11 @@ first via the `seeded_instances` fixture (defined locally in
 async def seeded_instances(db: None) -> AsyncGenerator[None, None]:
     async with get_db() as conn:
         await conn.executemany(
-            "INSERT INTO instances (id, name, type, url, encrypted_api_key)"
-            " VALUES (?, ?, ?, ?, ?)",
-            [(1, "Sonarr Test", "sonarr", "http://sonarr:8989", _ENC_KEY),
-             (2, "Radarr Test", "radarr", "http://radarr:7878", _ENC_KEY)],
+            "INSERT INTO instances (id, name, type, url, encrypted_api_key) VALUES (?, ?, ?, ?, ?)",
+            [
+                (1, "Sonarr Test", "sonarr", "http://sonarr:8989", _ENC_KEY),
+                (2, "Radarr Test", "radarr", "http://radarr:7878", _ENC_KEY),
+            ],
         )
         await conn.commit()
     yield

@@ -10,7 +10,7 @@ Run every quality check in sequence. Report results clearly. Stop and fix if any
 ## 1. Lint
 
 ```
-.venv/bin/python -m ruff check src/ tests/
+.venv/bin/python -m ruff check .
 ```
 
 Report: pass or fail with error count.
@@ -18,10 +18,10 @@ Report: pass or fail with error count.
 ## 2. Format Check
 
 ```
-.venv/bin/python -m ruff format --check src/ tests/
+.venv/bin/python -m ruff format --check .
 ```
 
-If files are unformatted, run `.venv/bin/python -m ruff format src/ tests/` to fix, then re-check.
+If files are unformatted, run `.venv/bin/python -m ruff format .` to fix, then re-check.
 
 ## 3. Type Check
 

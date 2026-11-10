@@ -91,7 +91,7 @@
                 "hooks": [
                     {
                         "type": "command",
-                        "command": "F=$(cat | jq -r '.tool_input.file_path // empty'); R=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0; case \"$F\" in \"$R\"/*.py) \"$R\"/.venv/bin/python -m ruff check --fix --unfixable F401 --force-exclude \"$F\" >/dev/null 2>&1; \"$R\"/.venv/bin/python -m ruff format --force-exclude \"$F\" >/dev/null 2>&1 ;; esac; exit 0"
+                        "command": "F=$(cat | jq -r '.tool_input.file_path // empty'); R=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0; git check-ignore -q \"$F\" 2>/dev/null && exit 0; case \"$F\" in \"$R\"/*.py) \"$R\"/.venv/bin/python -m ruff check --fix --unfixable F401 --force-exclude \"$F\" >/dev/null 2>&1; \"$R\"/.venv/bin/python -m ruff format --force-exclude \"$F\" >/dev/null 2>&1 ;; \"$R\"/*.md) \"$R\"/.venv/bin/python -m ruff format --force-exclude \"$F\" >/dev/null 2>&1 ;; esac; exit 0"
                     }
                 ]
             },
@@ -139,7 +139,7 @@
                 "hooks": [
                     {
                         "type": "command",
-                        "command": "CMD=$(cat | jq -r '.tool_input.command // empty'); if printf '%s\\n' \"$CMD\" | grep -qE '(^|[^[:alnum:]_./-])git([[:space:]]+-[^[:space:]]+([[:space:]]+[^-[:space:]][^[:space:]]*)?)*[[:space:]]+commit([[:space:]]|$)'; then R=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0; OUT=$(cd \"$R\" && .venv/bin/python -m ruff format --check src/ tests/ 2>&1) || { printf '%s\\n' \"$OUT\" | tail -20 >&2; echo '❌ BLOCKED: Unformatted files. Run just fix first.' >&2; exit 2; }; fi; exit 0",
+                        "command": "CMD=$(cat | jq -r '.tool_input.command // empty'); if printf '%s\\n' \"$CMD\" | grep -qE '(^|[^[:alnum:]_./-])git([[:space:]]+-[^[:space:]]+([[:space:]]+[^-[:space:]][^[:space:]]*)?)*[[:space:]]+commit([[:space:]]|$)'; then R=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0; OUT=$(cd \"$R\" && .venv/bin/python -m ruff format --check --output-format concise . 2>&1) || { printf '%s\\n' \"$OUT\" | tail -20 >&2; echo '❌ BLOCKED: Unformatted files. Run just fix first.' >&2; exit 2; }; fi; exit 0",
                         "timeout": 30
                     }
                 ]

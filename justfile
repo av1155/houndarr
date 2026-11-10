@@ -35,12 +35,12 @@ check: lint fmt-check type sec test
 # Fast feedback loop: skip format-check, bandit, and integration tests.
 quick: lint type test-quick
 
-# Individual gates
+# Individual gates. Ruff covers the whole repo, the same files quality.yml checks.
 lint:
-    {{python}} -m ruff check src/ tests/
+    {{python}} -m ruff check .
 
 fmt-check:
-    {{python}} -m ruff format --check src/ tests/
+    {{python}} -m ruff format --check .
 
 type:
     {{python}} -m mypy src/
@@ -82,8 +82,8 @@ test-parallel:
 
 # Apply ruff auto-fixes and reformat in place.
 fix:
-    {{python}} -m ruff check --fix src/ tests/
-    {{python}} -m ruff format src/ tests/
+    {{python}} -m ruff check --fix .
+    {{python}} -m ruff format .
 
 # Hydrate the dev venv (idempotent). Run before `just dev` on a fresh clone
 # or after dependency edits. Symphony's Stage D bring-up uses this as

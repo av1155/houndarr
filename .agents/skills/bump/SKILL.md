@@ -81,8 +81,8 @@ Rename `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD` and insert a fresh empty U
 ## 8. Run Quality Gates
 
 ```
-.venv/bin/python -m ruff check src/ tests/
-.venv/bin/python -m ruff format --check src/ tests/
+.venv/bin/python -m ruff check .
+.venv/bin/python -m ruff format --check .
 .venv/bin/python -m mypy src/
 .venv/bin/python -m bandit -r src/ -c pyproject.toml
 ```

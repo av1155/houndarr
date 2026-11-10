@@ -435,11 +435,11 @@ Hooks 1, 2, and 5 match `Write|Edit|MultiEdit` only. They do NOT fire when files
 
 Hooks defeated by Bash file writes:
 
-- Hook 1 (PostToolUse): runs `ruff check --fix` and then `ruff format` on an edited `.py` file. Unused imports are left for `just fix`, so an import added before the code that uses it survives. Skipping this means the file stays unformatted until the next explicit format run.
+- Hook 1 (PostToolUse): runs `ruff check --fix` and then `ruff format` on an edited `.py` file, and `ruff format` on an edited `.md` file, which formats its Python code blocks. Unused imports are left for `just fix`, so an import added before the code that uses it survives. Skipping this means the file stays unformatted until the next explicit format run.
 - Hook 2 (PostToolUse): runs `mypy src/` when a `src/**/*.py` file changes and reports any errors back to Claude. Skipping this means type errors go unreported until the next explicit mypy run.
 - Hook 5 (PreToolUse): blocks editing repo files on the `main` branch (only AGENTS.md and CLAUDE.md are allowed). Skipping this defeats branch protection entirely.
 
-Hook 6 (format check before `git commit`) fires on any Bash command that runs `git commit`, including `cd <dir> && git commit` and `git -C <dir> commit`, and checks from the repo root, so it still catches unformatted files at commit time regardless of how they were written. This is the backstop, not the primary defense.
+Hook 6 (format check before `git commit`) fires on Bash commands that run `git commit`, including `cd <dir> && git commit` and `git -C <dir> commit`, and runs `ruff format --check .` from the repo root, the same check CI runs, so it still catches unformatted files at commit time regardless of how they were written. This is the backstop, not the primary defense.
 
 #### When to use Write/Edit/MultiEdit vs Bash
 
@@ -461,7 +461,7 @@ In every case: fix the underlying issue, do not bypass the hook.
 #### Other edge cases
 
 - Hook 7 (Stop): warns when Claude's final reply contains TODO/FIXME/placeholder/stub, and lets the stop that follows the warning through (`stop_hook_active`), so it fires at most once per turn. This is a case-insensitive grep on the last 200 lines of the reply, including code blocks and file paths. A path like `src/todo_handler.py` or a quoted `# TODO` from existing code will trigger the warning. Low-severity false positive; acknowledge and continue if the marker is in quoted or referenced text.
-- Hook 1 (auto-format): only runs on `.py` files inside the repo, with `--force-exclude` so ruff's excludes and `.gitignore` apply. Other files (`.md`, `.yml`, `.json`, `.html`) are silently skipped.
+- Hook 1 (auto-format): only runs on `.py` and `.md` files inside the repo, and skips files that git ignores (`git check-ignore`) or that ruff excludes (`--force-exclude`). Other files (`.yml`, `.json`, `.html`) are silently skipped.
 - Hook 2 (mypy): only runs when `src/**/*.py` files are changed. Test file edits do not trigger mypy. This is intentional (tests are exempt from ANN rules).
 - Hook 6 (format check): if `.venv` does not exist, the hook blocks the commit. This is correct; set up the project before committing.
 

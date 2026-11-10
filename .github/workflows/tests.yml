@@ -1,13 +1,9 @@
 name: Tests
 
+# No paths-ignore: the tests read docs/api/, scripts/marketing/ and
+# .claude/settings.json, so ci-skip.yml must not stub these checks either.
 on:
   pull_request:
-    paths-ignore:
-      - "docs/**"
-      - "**/*.md"
-      - "website/**"
-      - ".claude/**"
-      - "scripts/marketing/**"
 
 permissions:
   contents: read

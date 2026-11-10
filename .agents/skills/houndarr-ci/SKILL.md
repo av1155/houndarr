@@ -24,11 +24,13 @@ paths:
 | Trivy image scan | `docker.yml` | Trivy scan of built Docker image (CRITICAL/HIGH with known fix) |
 | Security smoke test | `security-smoke-test.yml` | Live container: unauthenticated sweep, CSRF, XFF, rate limiting, API key exposure, container security |
 
-The six main workflows (`quality`, `tests`, `security`, `dependency-review`,
-`docker`, `security-smoke-test`) use
+`quality` and `tests` run on every PR: ruff checks every `.py` and `.md`
+file, and the tests read `docs/api/`, `scripts/marketing/` and
+`.claude/settings.json`. The other four main workflows (`security`,
+`dependency-review`, `docker`, `security-smoke-test`) use
 `paths-ignore: ["docs/**", "**/*.md", "website/**", ".claude/**", "scripts/marketing/**"]`. When a PR
 touches only those paths, `ci-skip.yml` provides passing no-op jobs with
-identical check names so branch protection is satisfied. Fork PRs get a
+their check names so branch protection is satisfied. Fork PRs get a
 read-only token, so the stubs can't be created there and a docs-only fork
 PR stays blocked.
 
@@ -66,7 +68,8 @@ PR stays blocked.
 - Do not modify the 12 required check job names; branch protection
   depends on exact name matches.
 - Do not change `ci-skip.yml` job names without updating branch protection.
-- Keep `paths-ignore` patterns in sync across the six main workflows.
+- Keep the `paths-ignore` patterns of the four filtered workflows in sync
+  with each other and with `ci-skip.yml`'s `paths`.
 - If mypy CI fails with "merge ref not found": push an empty commit to
   retrigger.
 - Keep every action pinned to a full 40-character commit SHA with the

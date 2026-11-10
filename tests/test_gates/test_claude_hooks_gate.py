@@ -58,7 +58,8 @@ def _hook(event: str, marker: str) -> str:
 
 _FORMAT_HOOK = _hook("PostToolUse", "ruff format")
 _MYPY_HOOK = _hook("PostToolUse", "mypy")
-_MAIN_GUARD_HOOK = _hook("PreToolUse", "branch --show-current")
+_PUSH_GUARD_HOOK = _hook("PreToolUse", "Direct push to main")
+_MAIN_GUARD_HOOK = _hook("PreToolUse", "Cannot edit repo files on main")
 _COMMIT_HOOK = _hook("PreToolUse", "ruff format --check")
 _STOP_HOOK = _hook("Stop", "last_assistant_message")
 
@@ -126,6 +127,15 @@ def test_format_hook_formats_python_and_keeps_unused_imports(repo: Path, cwd: st
     text = target.read_text()
     assert "import os" in text
     assert 'x = "a"' in text
+
+
+def test_format_hook_keeps_an_exception_binding_used_later(repo: Path) -> None:
+    """An ``except ... as e:`` written before the code that uses ``e`` survives too."""
+    target = repo / "probe.py"
+    target.write_text("try:\n    pass\nexcept ValueError as e:\n    pass\n")
+
+    assert _run(_FORMAT_HOOK, _edit(target), repo).returncode == 0
+    assert "except ValueError as e:" in target.read_text()
 
 
 def test_format_hook_formats_python_blocks_in_markdown(repo: Path) -> None:
@@ -334,6 +344,90 @@ def test_commit_hook_passes_a_formatted_tree_from_a_subdirectory(repo: Path) -> 
     (repo / "probe.py").write_text("x = 1\n")
 
     assert _run(_COMMIT_HOOK, _bash("git commit -m x"), repo / "sub").returncode == 0
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "git push --force",
+        "git push origin feat --force",
+        "git push -uf origin feat",
+        "git push --force-with-lease",
+        "git push origin +feat",
+        "git push --mirror",
+        "git push --all origin",
+        "git push origin main",
+        "git push -u origin main",
+        "git push origin HEAD:main",
+        "git push origin :main",
+        "git -C . push --force",
+        "git -c a=b push -f",
+        "git --no-pager push origin main",
+        "git --attr-source HEAD push -f",
+        "/usr/bin/git push --force",
+        "cd /x && git push origin main",
+        "(cd /x && git push origin main)",
+        "git push origin main;",
+    ],
+)
+def test_push_guard_blocks_force_pushes_and_pushes_to_main(repo: Path, command: str) -> None:
+    result = _run(_PUSH_GUARD_HOOK, _bash(command), repo)
+
+    assert result.returncode == 2
+    assert "BLOCKED" in result.stderr
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "git push",
+        "git push origin feat",
+        "git push -u origin feat",
+        "git push origin HEAD",
+        "git push origin feature/maintenance",
+        "git push origin main-fix",
+        "git push origin v1.2.3",
+        "git push origin --delete feat",
+        'grep "git push origin main" AGENTS.md',
+    ],
+)
+def test_push_guard_allows_feature_and_tag_pushes(repo: Path, command: str) -> None:
+    assert _run(_PUSH_GUARD_HOOK, _bash(command), repo).returncode == 0
+
+
+@pytest.mark.parametrize(
+    ("command", "expected"),
+    [
+        ("git push", 2),
+        ("git push -u origin", 2),
+        ("git push origin HEAD", 2),
+        ("git push origin @", 2),
+        ("git push origin heads/main", 2),
+        ("git push --tags origin HEAD", 2),
+        ("git push --follow-tags", 2),
+        ("git push origin v1.2.3", 0),
+        ("git push --tags", 0),
+        ("git push origin feat", 0),
+    ],
+)
+def test_push_guard_on_main_needs_a_named_target(
+    main_repo: Path, command: str, expected: int
+) -> None:
+    """On main, a push that names no branch, or names the current one, pushes main."""
+    assert _run(_PUSH_GUARD_HOOK, _bash(command), main_repo).returncode == expected
+
+
+def test_push_guard_reads_the_branch_of_the_checkout_named_by_dash_c(
+    main_repo: Path, tmp_path: Path
+) -> None:
+    worktree = tmp_path.resolve() / "worktree"
+    _git(main_repo, "worktree", "add", "-q", "-b", "feature", str(worktree))
+
+    into_main = _run(_PUSH_GUARD_HOOK, _bash(f"git -C {main_repo} push"), worktree)
+    into_feature = _run(_PUSH_GUARD_HOOK, _bash(f"git -C {worktree} push"), main_repo)
+
+    assert into_main.returncode == 2
+    assert into_feature.returncode == 0
 
 
 def test_stop_hook_warns_once_about_unfinished_markers(tmp_path: Path) -> None:

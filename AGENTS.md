@@ -103,9 +103,11 @@ ci-skip pattern live in the `houndarr-ci` skill (loads on
 | Build (no push), Trivy image scan | `docker.yml` |
 | Security smoke test | `security-smoke-test.yml` |
 
-The six main workflows use
+`quality.yml` and `tests.yml` run on every PR: ruff checks every `.py`
+and `.md` file, and the tests read `docs/api/`, `scripts/marketing/` and
+`.claude/settings.json`. The other four main workflows use
 `paths-ignore: ["docs/**", "**/*.md", "website/**", ".claude/**", "scripts/marketing/**"]`;
-`ci-skip.yml` provides passing no-op jobs with identical check names so
+`ci-skip.yml` provides passing no-op jobs with their check names so
 docs-only PRs satisfy branch protection (except fork PRs, whose token
 cannot create check runs). **Do not modify the 12 required check job
 names**: branch protection depends on exact name matches.
@@ -403,7 +405,8 @@ someone comments, so reporters get immediate feedback.
   PR, and `/bump` reseeds an empty one after each promotion
 - Do not change `ci-skip.yml` job names without updating branch protection
 - If mypy CI fails with "merge ref not found": push an empty commit to retrigger
-- Keep `paths-ignore` patterns in sync across the six main workflows
+- Keep the `paths-ignore` patterns of the four filtered workflows in sync
+  with each other and with `ci-skip.yml`'s `paths`
 - Keep every action pinned to a full 40-character commit SHA with the release
   version as the last token of a trailing comment
   (`uses: owner/repo@<sha> # vX.Y.Z`). Dependabot rewrites the SHA and the
@@ -429,7 +432,7 @@ Currently known minor discrepancies:
 
 The project's `.claude/settings.json` defines 7 hooks that enforce formatting, type checking, branch protection, and code quality. These hooks only fire on the tools they match. Using the wrong tool for a task can silently bypass safety checks.
 
-Claude Code passes each hook its input as JSON on stdin: `tool_input.file_path` for Write, Edit, and MultiEdit, `tool_input.command` for Bash, and `last_assistant_message` for Stop. No environment variable carries the edited file's path. Hooks run in Claude's current directory. Hooks 1, 2, and 6 act on the git repo that contains it (`git rev-parse --show-toplevel`), so they work from a subdirectory such as `website/` and do nothing outside a repo. Hook 5 checks the checkout the edited file belongs to instead, so it also covers edits made from another worktree. CI's `paths-ignore` list (see CI Checks) covers `.claude/**`, Markdown, and `scripts/marketing/**`, so a PR that only touches those gets no ruff check or test run in CI; run `just check` locally before pushing one.
+Claude Code passes each hook its input as JSON on stdin: `tool_input.file_path` for Write, Edit, and MultiEdit, `tool_input.command` for Bash, and `last_assistant_message` for Stop. No environment variable carries the edited file's path. Hooks run in Claude's current directory. Hooks 1, 2, and 6 act on the git repo that contains it (`git rev-parse --show-toplevel`), so they work from a subdirectory such as `website/` and do nothing outside a repo. Hook 5 checks the checkout the edited file belongs to instead, so it also covers edits made from another worktree.
 
 #### Bash file writes bypass Write/Edit/MultiEdit hooks
 
@@ -437,7 +440,7 @@ Hooks 1, 2, and 5 match `Write|Edit|MultiEdit` only. They do NOT fire when files
 
 Hooks defeated by Bash file writes:
 
-- Hook 1 (PostToolUse): runs `ruff check --fix` and then `ruff format` on an edited `.py` file, and `ruff format` on an edited `.md` file, which formats its Python code blocks. Unused imports are left for `just fix`, so an import added before the code that uses it survives. Skipping this means the file stays unformatted until the next explicit format run.
+- Hook 1 (PostToolUse): runs `ruff check --fix` and then `ruff format` on an edited `.py` file, and `ruff format` on an edited `.md` file, which formats its Python code blocks. Unused imports and unused `except ... as e` bindings are left for `just fix`, so code added before its first use survives the edit. Skipping this means the file stays unformatted until the next explicit format run.
 - Hook 2 (PostToolUse): runs `mypy src/` when a `src/**/*.py` file changes and reports any errors back to Claude. Skipping this means type errors go unreported until the next explicit mypy run.
 - Hook 5 (PreToolUse): blocks editing files in any checkout of this repo that is on the `main` branch, including from another worktree. AGENTS.md, CLAUDE.md, and gitignored files such as `.claude/settings.local.json` are allowed. Skipping this defeats branch protection entirely.
 
@@ -456,7 +459,7 @@ Do not use Bash to write files as a workaround when a hook blocks an action. If 
 - Hook 5 blocks a file edit on main: create a feature branch (`git checkout -b type/slug`) and make the edit there. From a worktree, edit the worktree's copy of the file instead.
 - Hook 6 blocks a commit: run `just fix` (or `just fmt-check` to see the diff first), `git add` the fixed files that belong in the commit, then retry the commit.
 - Hook 3 blocks `rm -rf`: use a more specific path instead of a dangerous wildcard target.
-- Hook 4 blocks a git push: you are pushing to main or force-pushing. Push to a feature branch and open a PR instead.
+- Hook 4 blocks a git push: you are pushing to main, force-pushing, or pushing from `main` without naming a branch. Push to a feature branch and open a PR instead.
 
 In every case: fix the underlying issue, do not bypass the hook.
 
@@ -466,6 +469,7 @@ In every case: fix the underlying issue, do not bypass the hook.
 - Hook 1 (auto-format): only runs on `.py` and `.md` files inside the repo, and skips files that git ignores (`git check-ignore`) or that ruff excludes (`--force-exclude`). Other files (`.yml`, `.json`, `.html`) are silently skipped.
 - Hook 2 (mypy): only runs when `src/**/*.py` files are changed. Test file edits do not trigger mypy. This is intentional (tests are exempt from ANN rules).
 - Hook 6 (format check): if `.venv` does not exist, the hook blocks the commit. This is correct; set up the project before committing.
+- Hook 4 (push guard): matches `git push` after any global options (`git -C <dir> push`, `git -c k=v push`). It blocks `--force`, `-f`, `--force-with-lease`, `--mirror`, `--all` and `+` refspecs, any target named `main` or `master` (including `HEAD:main` and `:main`), and, while the current branch is `main`, a push that names no branch. Tag pushes such as `git push origin v1.2.3` go through.
 
 ---
 

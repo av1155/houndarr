@@ -1,13 +1,9 @@
 name: Quality
 
+# No paths-ignore: ruff checks every .py and .md file in the repo, docs/ and
+# website/ included, so ci-skip.yml must not stub these checks either.
 on:
   pull_request:
-    paths-ignore:
-      - "docs/**"
-      - "**/*.md"
-      - "website/**"
-      - ".claude/**"
-      - "scripts/marketing/**"
 
 permissions:
   contents: read

@@ -427,7 +427,7 @@ Currently known minor discrepancies:
 
 The project's `.claude/settings.json` defines 7 hooks that enforce formatting, type checking, branch protection, and code quality. These hooks only fire on the tools they match. Using the wrong tool for a task can silently bypass safety checks.
 
-Claude Code passes each hook its input as JSON on stdin: `tool_input.file_path` for Write, Edit, and MultiEdit, `tool_input.command` for Bash, and `last_assistant_message` for Stop. No environment variable carries the edited file's path. Hooks run in Claude's current directory, and hooks 1, 2, 5, and 6 act on the git repo that contains it (`git rev-parse --show-toplevel`), so they work from a subdirectory such as `website/` and do nothing outside a repo.
+Claude Code passes each hook its input as JSON on stdin: `tool_input.file_path` for Write, Edit, and MultiEdit, `tool_input.command` for Bash, and `last_assistant_message` for Stop. No environment variable carries the edited file's path. Hooks run in Claude's current directory. Hooks 1, 2, and 6 act on the git repo that contains it (`git rev-parse --show-toplevel`), so they work from a subdirectory such as `website/` and do nothing outside a repo. Hook 5 checks the checkout the edited file belongs to instead, so it also covers edits made from another worktree.
 
 #### Bash file writes bypass Write/Edit/MultiEdit hooks
 
@@ -437,9 +437,9 @@ Hooks defeated by Bash file writes:
 
 - Hook 1 (PostToolUse): runs `ruff check --fix` and then `ruff format` on an edited `.py` file, and `ruff format` on an edited `.md` file, which formats its Python code blocks. Unused imports are left for `just fix`, so an import added before the code that uses it survives. Skipping this means the file stays unformatted until the next explicit format run.
 - Hook 2 (PostToolUse): runs `mypy src/` when a `src/**/*.py` file changes and reports any errors back to Claude. Skipping this means type errors go unreported until the next explicit mypy run.
-- Hook 5 (PreToolUse): blocks editing repo files on the `main` branch (only AGENTS.md and CLAUDE.md are allowed). Skipping this defeats branch protection entirely.
+- Hook 5 (PreToolUse): blocks editing files in any checkout of this repo that is on the `main` branch, including from another worktree. AGENTS.md, CLAUDE.md, and gitignored files such as `.claude/settings.local.json` are allowed. Skipping this defeats branch protection entirely.
 
-Hook 6 (format check before `git commit`) fires on Bash commands that run `git commit`, including `cd <dir> && git commit` and `git -C <dir> commit`, and runs `ruff format --check .` from the repo root, the same check CI runs, so it still catches unformatted files at commit time regardless of how they were written. This is the backstop, not the primary defense.
+Hook 6 (format check before `git commit`) fires on Bash commands that run `git commit`, including `cd <dir> && git commit` and `git -C <dir> commit`, and runs `ruff format --check .` from the root of the repo Claude is working in, the same check CI runs. It checks the working tree, so it catches unformatted files at commit time however they were written, and a file fixed after `git add` has to be added again. This is the backstop, not the primary defense.
 
 #### When to use Write/Edit/MultiEdit vs Bash
 
@@ -451,8 +451,8 @@ Do not use Bash to write files as a workaround when a hook blocks an action. If 
 
 #### What to do when a hook blocks an action
 
-- Hook 5 blocks a file edit on main: create a feature branch (`git checkout -b type/slug`) and make the edit there.
-- Hook 6 blocks a commit: run `just fix` (or `just fmt-check` to see the diff first) to fix formatting, then retry the commit.
+- Hook 5 blocks a file edit on main: create a feature branch (`git checkout -b type/slug`) and make the edit there. From a worktree, edit the worktree's copy of the file instead.
+- Hook 6 blocks a commit: run `just fix` (or `just fmt-check` to see the diff first), `git add` the fixed files that belong in the commit, then retry the commit.
 - Hook 3 blocks `rm -rf`: use a more specific path instead of a dangerous wildcard target.
 - Hook 4 blocks a git push: you are pushing to main or force-pushing. Push to a feature branch and open a PR instead.
 

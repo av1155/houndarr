@@ -1,0 +1,292 @@
+"""Consolidated invariant: the Claude Code hooks act on the input Claude Code sends.
+
+Claude Code passes hook input as JSON on stdin (``tool_input.file_path``,
+``tool_input.command``, ``last_assistant_message``) and sets no file-path
+environment variable.  The edit hooks in ``.claude/settings.json`` once looped
+over an unset ``$CLAUDE_FILE_PATHS`` and silently did nothing (#868), and
+nothing in the suite ran them.  These tests run each hook command under bash
+with that JSON, inside a throwaway git repo whose ``.venv`` links to the
+environment running pytest, and check the acceptance criteria of #867 and #868.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+from typing import Any
+
+import pytest
+
+_SETTINGS = Path(__file__).resolve().parents[2] / ".claude" / "settings.json"
+
+pytestmark = pytest.mark.skipif(
+    not all(shutil.which(tool) for tool in ("bash", "git", "jq")),
+    reason="the hook commands need bash, git and jq",
+)
+
+# Inherited GIT_* variables (set when pytest runs under a git hook) would point
+# every git call at the outer repo; CLAUDE_PROJECT_DIR is set per test.
+_ENV = {
+    key: value
+    for key, value in os.environ.items()
+    if not key.startswith("GIT_") and key != "CLAUDE_PROJECT_DIR"
+}
+_GIT_ENV = {
+    **_ENV,
+    "GIT_AUTHOR_NAME": "test",
+    "GIT_AUTHOR_EMAIL": "test@example.invalid",
+    "GIT_COMMITTER_NAME": "test",
+    "GIT_COMMITTER_EMAIL": "test@example.invalid",
+}
+
+
+def _hook(event: str, marker: str) -> str:
+    """Return the one ``event`` hook command that contains ``marker``."""
+    groups = json.loads(_SETTINGS.read_text())["hooks"][event]
+    commands = [h["command"] for g in groups for h in g["hooks"] if marker in h["command"]]
+    assert len(commands) == 1, f"expected one {event} hook containing {marker!r}"
+    return commands[0]
+
+
+_FORMAT_HOOK = _hook("PostToolUse", "ruff format")
+_MYPY_HOOK = _hook("PostToolUse", "mypy")
+_MAIN_GUARD_HOOK = _hook("PreToolUse", "branch --show-current")
+_COMMIT_HOOK = _hook("PreToolUse", "ruff format --check")
+_STOP_HOOK = _hook("Stop", "last_assistant_message")
+
+_UNFORMATTED_MD = "# Notes\n\n```python\nx=1\n```\n"
+
+
+def _run(
+    command: str, payload: dict[str, Any], cwd: Path, **env: str
+) -> subprocess.CompletedProcess[str]:
+    """Run a hook command the way Claude Code does: bash, JSON on stdin, Claude's directory."""
+    return subprocess.run(
+        ["bash", "-c", command],
+        input=json.dumps(payload),
+        capture_output=True,
+        text=True,
+        cwd=cwd,
+        env={**_ENV, **env},
+        timeout=120,
+        check=False,
+    )
+
+
+def _git(cwd: Path, *args: str) -> str:
+    result = subprocess.run(
+        ["git", *args], cwd=cwd, env=_GIT_ENV, capture_output=True, text=True, check=True
+    )
+    return result.stdout.strip()
+
+
+def _edit(path: Path) -> dict[str, Any]:
+    return {"tool_name": "Write", "tool_input": {"file_path": str(path), "content": ""}}
+
+
+def _bash(command: str) -> dict[str, Any]:
+    return {"tool_name": "Bash", "tool_input": {"command": command}}
+
+
+@pytest.fixture()
+def repo(tmp_path: Path) -> Path:
+    """A git repo on a feature branch whose ``.venv`` links to this test run's environment."""
+    root = tmp_path.resolve() / "repo"
+    (root / "sub").mkdir(parents=True)
+    _git(root, "init", "-q", "-b", "feat")
+    (root / ".venv").symlink_to(sys.prefix, target_is_directory=True)
+    (root / ".gitignore").write_text(".venv\nignored/\n")
+    return root
+
+
+@pytest.fixture()
+def main_repo(repo: Path) -> Path:
+    """The repo with one commit on main, so a worktree can branch from it."""
+    _git(repo, "symbolic-ref", "HEAD", "refs/heads/main")
+    commit = _git(repo, "commit-tree", _git(repo, "write-tree"), "-m", "init")
+    _git(repo, "update-ref", "HEAD", commit)
+    return repo
+
+
+@pytest.mark.parametrize("cwd", ["", "sub"])
+def test_format_hook_formats_python_and_keeps_unused_imports(repo: Path, cwd: str) -> None:
+    """An import added before the code that uses it must survive the edit."""
+    target = repo / "probe.py"
+    target.write_text("import os\nx=1\n")
+
+    assert _run(_FORMAT_HOOK, _edit(target), repo / cwd).returncode == 0
+    text = target.read_text()
+    assert "import os" in text
+    assert "x = 1" in text
+
+
+def test_format_hook_formats_python_blocks_in_markdown(repo: Path) -> None:
+    target = repo / "notes.md"
+    target.write_text(_UNFORMATTED_MD)
+
+    assert _run(_FORMAT_HOOK, _edit(target), repo).returncode == 0
+    assert target.read_text() == "# Notes\n\n```python\nx = 1\n```\n"
+
+
+def test_format_hook_leaves_ignored_and_outside_files_alone(repo: Path, tmp_path: Path) -> None:
+    """ruff's --force-exclude still formats a gitignored file passed by path."""
+    (repo / "ignored").mkdir()
+    untouched = {
+        repo / "ignored" / "probe.py": "x=1\n",
+        repo / "ignored" / "notes.md": _UNFORMATTED_MD,
+        repo / "config.yml": "a:    1\n",
+        tmp_path.resolve() / "outside.py": "x=1\n",
+    }
+    for path, text in untouched.items():
+        path.write_text(text)
+
+    for path, text in untouched.items():
+        assert _run(_FORMAT_HOOK, _edit(path), repo).returncode == 0
+        assert path.read_text() == text, path
+
+
+def test_mypy_hook_reports_type_errors_to_claude(repo: Path) -> None:
+    """A PostToolUse hook's output only reaches Claude when it exits 2."""
+    target = repo / "src" / "pkg" / "probe.py"
+    target.parent.mkdir(parents=True)
+    target.write_text('x: int = "a"\n')
+
+    result = _run(_MYPY_HOOK, _edit(target), repo / "sub")
+
+    assert result.returncode == 2
+    assert "probe.py:1: error" in result.stderr
+
+
+def test_mypy_hook_is_quiet_on_clean_code_and_outside_src(repo: Path) -> None:
+    clean = repo / "src" / "pkg" / "probe.py"
+    clean.parent.mkdir(parents=True)
+    clean.write_text("x: int = 1\n")
+    outside_src = repo / "tests" / "test_probe.py"
+    outside_src.parent.mkdir()
+    outside_src.write_text('x: int = "a"\n')
+
+    assert _run(_MYPY_HOOK, _edit(clean), repo).returncode == 0
+    assert _run(_MYPY_HOOK, _edit(outside_src), repo).returncode == 0
+
+
+def test_main_guard_blocks_repo_edits_on_main(main_repo: Path) -> None:
+    result = _run(
+        _MAIN_GUARD_HOOK,
+        _edit(main_repo / "src" / "app.py"),
+        main_repo / "sub",
+        CLAUDE_PROJECT_DIR=str(main_repo),
+    )
+
+    assert result.returncode == 2
+    assert "BLOCKED" in result.stderr
+
+
+@pytest.mark.parametrize("relative", ["AGENTS.md", "CLAUDE.md", "ignored/notes.txt"])
+def test_main_guard_allows_agent_and_ignored_files_on_main(main_repo: Path, relative: str) -> None:
+    result = _run(
+        _MAIN_GUARD_HOOK,
+        _edit(main_repo / relative),
+        main_repo,
+        CLAUDE_PROJECT_DIR=str(main_repo),
+    )
+
+    assert result.returncode == 0
+
+
+def test_main_guard_follows_the_file_into_other_worktrees(main_repo: Path, tmp_path: Path) -> None:
+    """The branch that counts is the edited file's checkout, not Claude's directory."""
+    worktree = tmp_path.resolve() / "worktree"
+    _git(main_repo, "worktree", "add", "-q", "-b", "feature", str(worktree))
+
+    from_worktree = _run(
+        _MAIN_GUARD_HOOK,
+        _edit(main_repo / "src" / "app.py"),
+        worktree,
+        CLAUDE_PROJECT_DIR=str(main_repo),
+    )
+    into_worktree = _run(
+        _MAIN_GUARD_HOOK,
+        _edit(worktree / "src" / "app.py"),
+        main_repo,
+        CLAUDE_PROJECT_DIR=str(main_repo),
+    )
+
+    assert from_worktree.returncode == 2
+    assert into_worktree.returncode == 0
+
+
+def test_main_guard_ignores_feature_branches_and_other_repos(repo: Path, tmp_path: Path) -> None:
+    other = tmp_path.resolve() / "other"
+    other.mkdir()
+    _git(other, "init", "-q", "-b", "main")
+
+    on_feature = _run(
+        _MAIN_GUARD_HOOK, _edit(repo / "src" / "app.py"), repo, CLAUDE_PROJECT_DIR=str(repo)
+    )
+    elsewhere = _run(
+        _MAIN_GUARD_HOOK, _edit(other / "notes.txt"), repo, CLAUDE_PROJECT_DIR=str(repo)
+    )
+
+    assert on_feature.returncode == 0
+    assert elsewhere.returncode == 0
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "git commit -m x",
+        "cd {repo} && git commit -m x",
+        "git -C {repo} commit -m x",
+        "git -c a=b commit -m x",
+        "git add -A && git commit --amend --no-edit",
+        "(cd {repo} && git commit)",
+        "git commit;",
+        "/usr/bin/git commit -m x",
+    ],
+)
+def test_commit_hook_blocks_commits_with_unformatted_files(repo: Path, command: str) -> None:
+    (repo / "notes.md").write_text(_UNFORMATTED_MD)
+
+    result = _run(_COMMIT_HOOK, _bash(command.format(repo=repo)), repo / "sub")
+
+    assert result.returncode == 2
+    assert "notes.md" in result.stderr
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "git log --grep commit",
+        "git commit-tree HEAD^{tree} -m x",
+        'git stash push -m "wip commit"',
+        "ls .git/",
+        "grep 'git commit' AGENTS.md",
+    ],
+)
+def test_commit_hook_ignores_commands_that_do_not_commit(repo: Path, command: str) -> None:
+    (repo / "notes.md").write_text(_UNFORMATTED_MD)
+
+    assert _run(_COMMIT_HOOK, _bash(command), repo).returncode == 0
+
+
+def test_commit_hook_passes_a_formatted_tree_from_a_subdirectory(repo: Path) -> None:
+    (repo / "probe.py").write_text("x = 1\n")
+
+    assert _run(_COMMIT_HOOK, _bash("git commit -m x"), repo / "sub").returncode == 0
+
+
+def test_stop_hook_warns_once_about_unfinished_markers(tmp_path: Path) -> None:
+    def stop(message: str, *, active: bool) -> subprocess.CompletedProcess[str]:
+        payload = {"stop_hook_active": active, "last_assistant_message": message}
+        return _run(_STOP_HOOK, payload, tmp_path)
+
+    warned = stop("Left a TODO in the parser.", active=False)
+
+    assert warned.returncode == 2
+    assert "incomplete markers" in warned.stderr
+    assert stop("Left a TODO in the parser.", active=True).returncode == 0
+    assert stop("All done.", active=False).returncode == 0

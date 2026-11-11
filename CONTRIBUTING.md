@@ -34,8 +34,8 @@ For releases, open a separate `chore: bump version to X.Y.Z` PR that changes onl
 ## Required local checks
 
 ```bash
-uv run ruff check src/ tests/
-uv run ruff format --check src/ tests/
+uv run ruff check .
+uv run ruff format --check .
 uv run mypy src/
 uv run bandit -r src/ -c pyproject.toml
 uv run pytest

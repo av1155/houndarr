@@ -81,8 +81,8 @@ Rename `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD` and insert a fresh empty U
 ## 8. Run Quality Gates
 
 ```
-.venv/bin/python -m ruff check src/ tests/
-.venv/bin/python -m ruff format --check src/ tests/
+.venv/bin/python -m ruff check .
+.venv/bin/python -m ruff format --check .
 .venv/bin/python -m mypy src/
 .venv/bin/python -m bandit -r src/ -c pyproject.toml
 ```
@@ -92,6 +92,11 @@ Rename `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD` and insert a fresh empty U
 ```
 git add VERSION CHANGELOG.md
 git commit -m "chore: bump version to X.Y.Z"
+```
+
+Then push, as a command of its own:
+
+```
 git push -u origin HEAD
 ```
 
@@ -101,7 +106,7 @@ git push -u origin HEAD
 gh pr create --title "chore: bump version to X.Y.Z" --body "..."
 ```
 
-After merge, remind the user to run `git tag vX.Y.Z && git push origin vX.Y.Z` to trigger docker.yml, release.yml, and chart.yml.
+After merge, remind the user to run `git tag vX.Y.Z` and then `git push origin vX.Y.Z` to trigger docker.yml, release.yml, and chart.yml.
 
 ## 11. Verify the Tag Push
 

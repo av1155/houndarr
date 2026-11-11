@@ -29,7 +29,9 @@ review before being added.
 `just` is the canonical interface. Install it via `brew install just`
 (macOS) or `cargo install just`. The repo's `justfile` wires every
 gate, every test slice, and the dev server, so most agent work goes
-through `just <recipe>` rather than `.venv/bin/...`.
+through `just <recipe>` rather than `.venv/bin/...`. The Claude Code
+hooks in `.claude/settings.json` read their input with `jq`, so it
+has to be on PATH; without it they do nothing.
 
 ```bash
 # Create venv and install (one-time bootstrap; uv reads pyproject.toml +
@@ -101,9 +103,11 @@ ci-skip pattern live in the `houndarr-ci` skill (loads on
 | Build (no push), Trivy image scan | `docker.yml` |
 | Security smoke test | `security-smoke-test.yml` |
 
-The six main workflows use
+`quality.yml` and `tests.yml` run on every PR: ruff checks every `.py`
+and `.md` file, and the tests read `docs/api/`, `scripts/marketing/` and
+`.claude/settings.json`. The other four main workflows use
 `paths-ignore: ["docs/**", "**/*.md", "website/**", ".claude/**", "scripts/marketing/**"]`;
-`ci-skip.yml` provides passing no-op jobs with identical check names so
+`ci-skip.yml` provides passing no-op jobs with their check names so
 docs-only PRs satisfy branch protection (except fork PRs, whose token
 cannot create check runs). **Do not modify the 12 required check job
 names**: branch protection depends on exact name matches.
@@ -320,7 +324,8 @@ Subject line max 50 characters (including the `type(scope): ` prefix); body line
      versioned block
    - Change only VERSION and CHANGELOG.md (no other files)
 3. Merge the version bump PR.
-4. Tag and push:  git tag vX.Y.Z && git push origin vX.Y.Z
+4. Tag and push:  git tag vX.Y.Z
+                  git push origin vX.Y.Z
    → docker.yml  builds + pushes to GHCR as vX.Y.Z + latest
    → release.yml extracts the X.Y.Z CHANGELOG block, creates GitHub Release
    → chart.yml   packages + pushes Helm chart to oci://ghcr.io/av1155/charts
@@ -401,7 +406,8 @@ someone comments, so reporters get immediate feedback.
   PR, and `/bump` reseeds an empty one after each promotion
 - Do not change `ci-skip.yml` job names without updating branch protection
 - If mypy CI fails with "merge ref not found": push an empty commit to retrigger
-- Keep `paths-ignore` patterns in sync across the six main workflows
+- Keep the `paths-ignore` patterns of the four filtered workflows in sync
+  with each other and with `ci-skip.yml`'s `paths`
 - Keep every action pinned to a full 40-character commit SHA with the release
   version as the last token of a trailing comment
   (`uses: owner/repo@<sha> # vX.Y.Z`). Dependabot rewrites the SHA and the
@@ -427,17 +433,19 @@ Currently known minor discrepancies:
 
 The project's `.claude/settings.json` defines 7 hooks that enforce formatting, type checking, branch protection, and code quality. These hooks only fire on the tools they match. Using the wrong tool for a task can silently bypass safety checks.
 
+Claude Code passes each hook its input as JSON on stdin: `tool_input.file_path` for Write, Edit, and MultiEdit, `tool_input.command` for Bash, and `last_assistant_message` for Stop. No environment variable carries the edited file's path. Hooks run in Claude's current directory. Hooks 1, 2, and 6 act on the git repo that contains it (`git rev-parse --show-toplevel`), so they work from a subdirectory such as `website/` and do nothing outside a repo. Hook 5 checks the checkout the edited file belongs to instead, so it also covers edits made from another worktree.
+
 #### Bash file writes bypass Write/Edit/MultiEdit hooks
 
 Hooks 1, 2, and 5 match `Write|Edit|MultiEdit` only. They do NOT fire when files are created or modified via Bash (`cat >`, `echo >`, `tee`, `sed -i`, `printf >`, heredocs, or any other shell redirection).
 
 Hooks defeated by Bash file writes:
 
-- Hook 1 (PostToolUse): auto-formats `.py` files with `ruff format` and `ruff check --fix`. Skipping this means the file stays unformatted until the next explicit format run.
-- Hook 2 (PostToolUse): runs `mypy src/` when `src/**/*.py` files change. Skipping this means type errors go unreported until the next explicit mypy run.
-- Hook 5 (PreToolUse): blocks editing repo files on the `main` branch (only AGENTS.md and CLAUDE.md are allowed). Skipping this defeats branch protection entirely.
+- Hook 1 (PostToolUse): runs `ruff check --fix` and then `ruff format` on an edited `.py` file, and `ruff format` on an edited `.md` file, which formats its Python code blocks. Unused imports and unused `except ... as e` bindings are left for `just fix`, so code added before its first use survives the edit. Skipping this means the file stays unformatted until the next explicit format run.
+- Hook 2 (PostToolUse): runs `mypy src/` when a `src/**/*.py` file changes and reports any errors back to Claude. Skipping this means type errors go unreported until the next explicit mypy run.
+- Hook 5 (PreToolUse): blocks editing files in any checkout of this repo that is on the `main` branch, including from another worktree. AGENTS.md, CLAUDE.md, and gitignored files such as `.claude/settings.local.json` are allowed. Skipping this defeats branch protection entirely.
 
-Hook 6 (format check before `git commit`) fires on `Bash` matching `^git commit`, so it still catches unformatted files at commit time regardless of how they were written. This is the backstop, not the primary defense.
+Hook 6 (format check before `git commit`) fires on Bash commands that run `git commit`, including `cd <dir> && git commit` and `git -C <dir> commit`, and runs `ruff format --check .` from the root of the repo Claude is working in, the same check CI runs. It checks the working tree, so it catches unformatted files at commit time however they were written, and a file fixed after `git add` has to be added again. This is the backstop, not the primary defense.
 
 #### When to use Write/Edit/MultiEdit vs Bash
 
@@ -445,23 +453,25 @@ Use Write, Edit, or MultiEdit for all file creation and modification. These are 
 
 Use Bash for running commands, not writing files. Acceptable Bash uses: shell commands, git operations, test runners, linters, build tools.
 
-Do not use Bash to write files as a workaround when a hook blocks an action. If hook 5 blocks an edit on main, create a feature branch first. If hook 6 blocks a commit, run `ruff format` first. The hooks exist to catch mistakes; working around them reintroduces the mistakes.
+Do not use Bash to write files as a workaround when a hook blocks an action. If hook 5 blocks an edit on main, create a feature branch first. If hook 6 blocks a commit, run `just fix` first. The hooks exist to catch mistakes; working around them reintroduces the mistakes.
 
 #### What to do when a hook blocks an action
 
-- Hook 5 blocks a file edit on main: create a feature branch (`git checkout -b type/slug`) and make the edit there.
-- Hook 6 blocks a commit: run `just fix` (or `just fmt-check` to see the diff first) to fix formatting, then retry the commit.
+- Hook 5 blocks a file edit on main: create a feature branch (`git checkout -b type/slug`) and make the edit there. From a worktree, edit the worktree's copy of the file instead.
+- Hook 6 blocks a commit: run `just fix` (or `just fmt-check` to see the diff first), `git add` the fixed files that belong in the commit, then retry the commit.
 - Hook 3 blocks `rm -rf`: use a more specific path instead of a dangerous wildcard target.
-- Hook 4 blocks a git push: you are pushing to main or force-pushing. Push to a feature branch and open a PR instead.
+- Hook 4 blocks a git push: you are pushing to main, force-pushing, pushing from `main` without naming a branch, or the command is not a plain push on its own. Run the push as its own one-line command with the branch written out (`git push -u origin <branch>`), and open a PR. If the refusal comes from text that has git and then push in it, such as a commit message, pass the text from a file (`git commit -F <file>`, `gh pr create --body-file <file>`), and search with `git log --grep=push` or a pattern such as `git.push`.
 
 In every case: fix the underlying issue, do not bypass the hook.
 
 #### Other edge cases
 
-- Hook 7 (Stop): warns on TODO/FIXME/placeholder/stub in responses. This is a case-insensitive grep on the full response text, including code blocks and file paths. A path like `src/todo_handler.py` or a quoted `# TODO` from existing code will trigger the warning. Low-severity false positive; acknowledge and continue if the marker is in quoted or referenced text.
-- Hook 1 (auto-format): only runs on `.py` files. Non-Python files (`.md`, `.yml`, `.json`, `.html`) are silently skipped.
+- Hook 7 (Stop): warns when Claude's final reply contains TODO/FIXME/placeholder/stub, and lets the stop that follows the warning through (`stop_hook_active`), so it fires at most once per turn. This is a case-insensitive grep on the last 200 lines of the reply, including code blocks and file paths. A path like `src/todo_handler.py` or a quoted `# TODO` from existing code will trigger the warning. Low-severity false positive; acknowledge and continue if the marker is in quoted or referenced text.
+- Hook 1 (auto-format): only runs on `.py` and `.md` files inside the repo, and skips files that git ignores (`git check-ignore`) or that ruff excludes (`--force-exclude`). Other files (`.yml`, `.json`, `.html`) are silently skipped.
 - Hook 2 (mypy): only runs when `src/**/*.py` files are changed. Test file edits do not trigger mypy. This is intentional (tests are exempt from ANN rules).
 - Hook 6 (format check): if `.venv` does not exist, the hook blocks the commit. This is correct; set up the project before committing.
+- Hook 4 (push guard): treats any Bash command with the word `git` followed, anywhere later, by the word `push` (or `git-push`) as a push, in any letter case. Unless the whole command is one plain `git push` line, with nothing chained, piped or redirected and no quotes, `$`, backticks, backslashes, braces, globs or comments, it refuses it, so a `git commit -m` message, a PR body or a `git log | grep push` that has git and then push is refused too. In a plain push it reads git's global options (`git -C <dir> push`, `git -c k=v push`) and blocks force pushes (`-f`, `--force`, `--force-with-lease`, `+` refspecs), `--all`, `--branches` and `--mirror` (abbreviations included), `:` refspecs, any target named `main` or `master` (including `HEAD:main`, `:main` and `heads/main`), and, while the current branch is `main` or `master`, a push that names no branch. It reads the branch from Claude's current directory or the `-C` directory. Tag pushes such as `git push origin v1.2.3` or `git push --tags` go through. It refuses a push using `-c`, `--config-env`, `--git-dir` or `--work-tree`, and one whose `-C` directory is not a repo.
+- Hook 4 limits: it catches mistakes, not deliberate evasion. A push can get past it through a git alias, a shell alias or function, a script, or a variable that holds the command (`eval "$cmd"`); when its `git` or `push` word, or the space between them, comes from a shell expansion (`$G push`, `gi${X}t push`, `pu$(:)sh`, `git$S"push"`); or when it runs without the word push (`git send-pack`). The hook does not check a plain line whose subcommand is not `push`, such as `git subtree push`, or push settings stored with `git config`, such as `remote.origin.mirror` or `push.default=matching`, which can change what a plain push does.
 
 ---
 

@@ -91,7 +91,7 @@
                 "hooks": [
                     {
                         "type": "command",
-                        "command": "FILE_PATHS=\"$CLAUDE_FILE_PATHS\"; for f in $FILE_PATHS; do if [[ \"$f\" =~ \\.py$ ]]; then .venv/bin/python -m ruff format \"$f\" 2>/dev/null; .venv/bin/python -m ruff check --fix \"$f\" 2>/dev/null; fi; done; exit 0"
+                        "command": "F=$(cat | jq -r '.tool_input.file_path // empty'); R=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0; D=$(cd \"${F%/*}\" 2>/dev/null && pwd -P) && F=$D/${F##*/}; git check-ignore -q \"$F\" 2>/dev/null && exit 0; case \"$F\" in \"$R\"/*.py) \"$R\"/.venv/bin/python -m ruff check --fix --unfixable F401,F841 --force-exclude \"$F\" >/dev/null 2>&1; \"$R\"/.venv/bin/python -m ruff format --force-exclude \"$F\" >/dev/null 2>&1 ;; \"$R\"/*.md) \"$R\"/.venv/bin/python -m ruff format --force-exclude \"$F\" >/dev/null 2>&1 ;; esac; exit 0"
                     }
                 ]
             },
@@ -100,7 +100,7 @@
                 "hooks": [
                     {
                         "type": "command",
-                        "command": "FILE_PATHS=\"$CLAUDE_FILE_PATHS\"; HAS_SRC=false; for f in $FILE_PATHS; do if [[ \"$f\" =~ src/.*\\.py$ ]]; then HAS_SRC=true; break; fi; done; if [ \"$HAS_SRC\" = true ]; then .venv/bin/python -m mypy src/ --no-error-summary 2>&1 | tail -20 || true; fi; exit 0"
+                        "command": "F=$(cat | jq -r '.tool_input.file_path // empty'); R=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0; D=$(cd \"${F%/*}\" 2>/dev/null && pwd -P) && F=$D/${F##*/}; case \"$F\" in \"$R\"/src/*.py) OUT=$(cd \"$R\" && .venv/bin/python -m mypy src/ 2>&1) || { printf '%s\\n' \"$OUT\" | tail -20 >&2; exit 2; } ;; esac; exit 0"
                     }
                 ]
             }
@@ -120,7 +120,7 @@
                 "hooks": [
                     {
                         "type": "command",
-                        "command": "CMD=$(cat | jq -r '.tool_input.command // empty'); if echo \"$CMD\" | grep -qE 'git\\s+push\\s+(--force|-f)|git\\s+push\\s+origin\\s+(main|master)'; then echo '❌ BLOCKED: Direct push to main or force push. Create a feature branch and PR.' >&2; exit 2; fi; exit 0"
+                        "command": "CMD=$(cat | jq -r '.tool_input.command // empty'); (GO='-[Cc]|--git-dir|--work-tree|--namespace|--config-env|--attr-source|--shallow-file'; norm() { sed 's/[$][{]*IFS[}]*/ /g' | tr -d '$\\\\\"'\"'\" | tr '\\n\\t;&|()<>{}`,' '             '; }; N1=$(printf '%s\\n' \"$CMD\" | norm); N3=$(printf '%s\\n' \"$CMD\" | awk '{ if (sub(/\\\\$/, \"\")) printf \"%s\", $0; else print }' | norm); printf '%s\\n%s\\n' \"$N1\" \"$N3\" | grep -qE '(^|[^[:alnum:]_.])[Gg][Ii][Tt]([[:space:]](.*[[:space:]])?|-)[Pp][Uu][Ss][Hh]([[:space:]]|$)' || exit 0; printf '%s\\n' \"$CMD\" | awk -v sq=\"'\" '/[];&|()<>{}`\"*?#$\\\\[]/ || index($0, sq) || $1 !~ /^([^[:space:]]*\\/)?[Gg][Ii][Tt]$/ { b = 1 } END { exit b || NR != 1 }' || exit 3; CD=$(printf '%s\\n' \"$CMD\" | awk -v go=\"$GO\" '{ d = \".\"; for (i = 2; i <= NF; i++) { if (tolower($i) == \"push\") { print d; exit 0 }; if ($i !~ /^-/) exit 1; if ($i ~ (\"^(\" go \")$\")) { if ($i == \"-C\") { v = $(i + 1); if (v ~ /^~(\\/|$)/) v = ENVIRON[\"HOME\"] substr(v, 2); d = (v ~ /^\\// || d == \".\") ? v : d \"/\" v }; i++ } }; exit 1 }') || exit 0; S=\" $CMD\"; printf '%s\\n' \"$S\" | grep -qE '[[:space:]]-[vqdnu46]*f|[[:space:]]\\+[^[:space:]]|([[:space:]]|:)((refs/)?heads/)?(main|master)([[:space:]]|$)' && exit 2; printf '%s\\n' \"$S\" | awk '{ for (i = 1; i <= NF; i++) { t = $i; sub(/=.*/, \"\", t); if (t ~ /^--[a-z]/ && (index(\"--all\", t) == 1 || index(\"--branches\", t) == 1 || index(\"--mirror\", t) == 1 || index(\"--force-with-lease\", t) == 1)) b = 1 } } END { exit !b }' && exit 2; printf '%s\\n' \"$S\" | grep -qE -e '--git-dir|--work-tree|[[:space:]](-c|--config-env)([[:space:]=]|$)' && exit 4; [ \"$CD\" = . ] || git -C \"$CD\" rev-parse --git-dir >/dev/null 2>&1 || exit 4; REFS=$(printf '%s\\n' \"$CMD\" | awk -v go=\"$GO\" '{ for (i = 2; i <= NF; i++) { if (tolower($i) == \"push\") break; if ($i ~ (\"^(\" go \")$\")) i++ }; r = 0; for (j = i + 1; j <= NF; j++) { if ($j ~ /^-[vqdnfu46]*o$/ || ($j ~ /^--[a-z][^=]*$/ && (index(\"--push-option\", $j) == 1 || index(\"--repo\", $j) == 1 || index(\"--receive-pack\", $j) == 1 || index(\"--exec\", $j) == 1 || index(\"--recurse-submodules\", $j) == 1))) { j++; continue }; if ($j == \"--tags\") print $j; if (substr($j, 1, 1) == \"-\") continue; r++; if (r > 1) print $j } }'); printf '%s\\n' \"$REFS\" | while IFS= read -r T; do case \"$T\" in \":\") exit 2 ;; \"\"|--tags|*:*) ;; *) case \"$(git -C \"$CD\" rev-parse --symbolic-full-name \"$T\" 2>/dev/null)\" in refs/heads/main|refs/heads/master) exit 2 ;; esac ;; esac; done || exit 2; case \"$(git -C \"$CD\" branch --show-current 2>/dev/null)\" in main|master) [ -z \"$REFS\" ] && exit 2 ;; esac; :); case $? in 0) exit 0 ;; 3) echo '❌ BLOCKED: This command has git followed by push, so it is read as a push. Run the push as a command of its own, on one line, with the branch written out (git push -u origin <branch>) and nothing before or after it: no &&, ;, pipes, redirects, quotes, $, backslashes, braces, globs or comments. Pass commit or PR text that has git and push in it from a file (git commit -F, gh pr create --body-file), and search with git log --grep=push or a pattern such as git.push.' >&2 ;; 4) echo '❌ BLOCKED: Cannot read this git push. Drop -c, --config-env, --git-dir and --work-tree, and point -C at a repo.' >&2 ;; *) echo '❌ BLOCKED: Direct push to main or force push. Create a feature branch and PR.' >&2 ;; esac; exit 2"
                     }
                 ]
             },
@@ -129,7 +129,7 @@
                 "hooks": [
                     {
                         "type": "command",
-                        "command": "[ \"$(git branch --show-current 2>/dev/null)\" != \"main\" ] && exit 0; REPO=\"$(git rev-parse --show-toplevel 2>/dev/null)\"; for f in $CLAUDE_FILE_PATHS; do case \"$f\" in \"$REPO\"/AGENTS.md|\"$REPO\"/CLAUDE.md) continue ;; \"$REPO\"/*) echo '❌ BLOCKED: Cannot edit repo files on main. Allowed: AGENTS.md, CLAUDE.md. Create a feature branch.' >&2; exit 2 ;; esac; done; exit 0",
+                        "command": "F=$(cat | jq -r '.tool_input.file_path // empty'); case \"$F\" in /*) ;; *) exit 0 ;; esac; F=$(printf '%s\\n' \"$F\" | awk -F/ '{ n = 0; for (i = 2; i <= NF; i++) { if ($i == \"\" || $i == \".\") continue; if ($i == \"..\") { if (n) n--; continue }; s[++n] = $i }; p = \"\"; for (i = 1; i <= n; i++) p = p \"/\" s[i]; print (p == \"\" ? \"/\" : p) }'); D=${F%/*}; while [ -n \"$D\" ] && [ ! -d \"$D\" ]; do D=${D%/*}; done; D=${D:-/}; [ \"$(git -C \"$D\" branch --show-current 2>/dev/null)\" = main ] || exit 0; P=$(git -C \"${CLAUDE_PROJECT_DIR:-.}\" rev-parse --path-format=absolute --git-common-dir 2>/dev/null); [ -n \"$P\" ] && [ \"$(git -C \"$D\" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)\" != \"$P\" ] && exit 0; T=${F#\"$D\"/}; if [ \"$(git -C \"$D\" rev-parse --is-inside-work-tree 2>/dev/null)\" = true ]; then git -C \"$D\" check-ignore -q -- \"$T\" 2>/dev/null && exit 0; case \"$(git -C \"$D\" rev-parse --show-prefix 2>/dev/null)$T\" in AGENTS.md|CLAUDE.md) exit 0 ;; esac; fi; echo '❌ BLOCKED: Cannot edit repo files on main. Allowed: AGENTS.md, CLAUDE.md. Create a feature branch, or edit the copy in your worktree.' >&2; exit 2",
                         "timeout": 5
                     }
                 ]
@@ -139,7 +139,7 @@
                 "hooks": [
                     {
                         "type": "command",
-                        "command": "CMD=$(cat | jq -r '.tool_input.command // empty'); if echo \"$CMD\" | grep -qE '^git commit'; then .venv/bin/python -m ruff format --check src/ tests/ >/dev/null 2>&1 || { echo '❌ BLOCKED: Unformatted files. Run ruff format first.' >&2; exit 2; }; fi; exit 0",
+                        "command": "CMD=$(cat | jq -r '.tool_input.command // empty'); if printf '%s\\n' \"$CMD\" | grep -qE '(^|[^[:alnum:]_.-])git([[:space:]]+(-[Cc]|--git-dir|--work-tree|--namespace|--config-env|--attr-source)[[:space:]]+[^[:space:]]+|[[:space:]]+-[^[:space:]]+)*[[:space:]]+commit([[:space:]]|$|[;&|)<>])'; then R=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0; OUT=$(cd \"$R\" && .venv/bin/python -m ruff format --check --output-format concise . 2>&1) || { printf '%s\\n' \"$OUT\" | tail -20 >&2; echo '❌ BLOCKED: Unformatted files. Run just fix, re-add the files you are committing, then retry.' >&2; exit 2; }; fi; exit 0",
                         "timeout": 30
                     }
                 ]
@@ -151,7 +151,7 @@
                 "hooks": [
                     {
                         "type": "command",
-                        "command": "STOP_ACTIVE=$(cat | jq -r '.stop_hook_active // false'); if [ \"$STOP_ACTIVE\" = \"true\" ]; then exit 0; fi; RESPONSE=$(cat | jq -r '.assistant_response // empty' | tail -200); if echo \"$RESPONSE\" | grep -qiE 'TODO|FIXME|will implement later|placeholder|stub'; then echo '⚠️ Response contains incomplete markers (TODO/FIXME/placeholder). Consider finishing before stopping.' >&2; exit 2; fi; exit 0"
+                        "command": "IN=$(cat); STOP_ACTIVE=$(printf '%s' \"$IN\" | jq -r '.stop_hook_active // false'); if [ \"$STOP_ACTIVE\" = \"true\" ]; then exit 0; fi; RESPONSE=$(printf '%s' \"$IN\" | jq -r '.last_assistant_message // empty' | tail -200); if printf '%s\\n' \"$RESPONSE\" | grep -qiE 'TODO|FIXME|will implement later|placeholder|stub'; then echo '⚠️ Response contains incomplete markers (TODO/FIXME/placeholder). Consider finishing before stopping.' >&2; exit 2; fi; exit 0"
                     }
                 ]
             }

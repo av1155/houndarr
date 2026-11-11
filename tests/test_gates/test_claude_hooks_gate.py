@@ -65,13 +65,16 @@ _STOP_HOOK = _hook("Stop", "last_assistant_message")
 
 _UNFORMATTED_MD = "# Notes\n\n```python\nx=1\n```\n"
 
+# Claude Code runs a hook command through bash or the user's $SHELL, and sh is dash on Linux.
+_SHELLS = [shell for shell in ("bash", "sh", "zsh") if shutil.which(shell)]
+
 
 def _run(
-    command: str, payload: dict[str, Any], cwd: Path, **env: str
+    command: str, payload: dict[str, Any], cwd: Path, shell: str = "bash", **env: str
 ) -> subprocess.CompletedProcess[str]:
-    """Run a hook command the way Claude Code does: bash, JSON on stdin, Claude's directory."""
+    """Run a hook command the way Claude Code does: a shell, JSON on stdin, Claude's directory."""
     return subprocess.run(
-        ["bash", "-c", command],
+        [shell, "-c", command],
         input=json.dumps(payload),
         capture_output=True,
         text=True,
@@ -106,6 +109,11 @@ def repo(tmp_path: Path) -> Path:
     (root / ".venv").symlink_to(sys.prefix, target_is_directory=True)
     (root / ".gitignore").write_text(".venv\nignored/\n")
     return root
+
+
+@pytest.fixture(params=_SHELLS)
+def shell(request: pytest.FixtureRequest) -> str:
+    return str(request.param)
 
 
 @pytest.fixture()
@@ -373,10 +381,27 @@ def test_commit_hook_passes_a_formatted_tree_from_a_subdirectory(repo: Path) -> 
         "git push origin 'HEAD:main'",
         'git push "--force" origin feat',
         "git \\\n  push --force origin feat",
+        "git push origin ma\\in",
+        "git push origin feat;git push origin main",
+        "git push origin feat&git push --force",
+        "git push --branches origin",
+        "git push --force-w origin feat",
+        "git push --mirro",
+        "git push --al origin",
+        "git push origin feat:heads/main",
+        "git push origin HEAD:refs/heads/main",
+        "git push origin :",
+        "git push origin 'refs/heads/*'",
+        "g''it push origin main",
+        'git "push" origin main',
+        "git p\\ush --force origin feat",
+        "git $'push' --force origin feat",
     ],
 )
-def test_push_guard_blocks_force_pushes_and_pushes_to_main(repo: Path, command: str) -> None:
-    result = _run(_PUSH_GUARD_HOOK, _bash(command), repo)
+def test_push_guard_blocks_force_pushes_and_pushes_to_main(
+    repo: Path, shell: str, command: str
+) -> None:
+    result = _run(_PUSH_GUARD_HOOK, _bash(command), repo, shell=shell)
 
     assert result.returncode == 2
     assert "Direct push to main or force push" in result.stderr
@@ -388,8 +413,6 @@ def test_push_guard_blocks_force_pushes_and_pushes_to_main(repo: Path, command: 
         'git push origin "$BRANCH"',
         'git push -u origin "$(git branch --show-current)"',
         "git push origin `git branch --show-current`",
-        "\\git push origin feat",
-        "git push origin ma\\in",
         "git --git-dir=/x/.git push origin feat",
         "git --work-tree /x push origin feat",
         "GIT_DIR=/x/.git git push origin feat",
@@ -397,11 +420,18 @@ def test_push_guard_blocks_force_pushes_and_pushes_to_main(repo: Path, command: 
         "git -C /nonexistent/dir push origin feat",
         'git -c "user.name=A B" push origin feat',
         "git -C '/tmp/a b' push origin feat",
+        'git -c "user.name=AB" push origin feat',
+        "git push origin {main,feat}",
+        "echo main | xargs git push origin",
+        "git -c push.default=matching push",
+        "X=matching git --config-env=push.default=X push",
+        "GIT_CONFIG_PARAMETERS=\"'push.default=matching'\" git push",
+        "git push origin $'\\x6dain'",
     ],
 )
-def test_push_guard_blocks_pushes_it_cannot_read(repo: Path, command: str) -> None:
-    """Expansions, escapes, quoted spaces, repo overrides and a missing -C dir hide the target."""
-    result = _run(_PUSH_GUARD_HOOK, _bash(command), repo)
+def test_push_guard_blocks_pushes_it_cannot_read(repo: Path, shell: str, command: str) -> None:
+    """Expansions, quoted spaces, overrides, xargs and a missing -C dir hide where it goes."""
+    result = _run(_PUSH_GUARD_HOOK, _bash(command), repo, shell=shell)
 
     assert result.returncode == 2
     assert "Cannot read this git push" in result.stderr
@@ -419,16 +449,20 @@ def test_push_guard_blocks_pushes_it_cannot_read(repo: Path, command: str) -> No
         "git push origin v1.2.3",
         "git push origin --delete feat",
         'git push origin "feat"',
-        'git -c "user.name=AB" push origin feat',
+        "\\git push origin feat",
+        "git push -o ci.skip origin feat",
+        "git push --follow-tags origin feat",
+        "git push --force-if-includes origin feat",
         "git push \\\n  origin feat",
         'git push origin feat && echo "$?"',
         'grep "git push origin main" AGENTS.md',
         "grep 'git push --force' AGENTS.md",
+        'git commit -m "docs: explain git push origin main"',
         "git commit -F - <<'EOF'\nci: x\n\nThe guard's git push check reads quotes.\nEOF",
     ],
 )
-def test_push_guard_allows_feature_and_tag_pushes(repo: Path, command: str) -> None:
-    assert _run(_PUSH_GUARD_HOOK, _bash(command), repo).returncode == 0
+def test_push_guard_allows_feature_and_tag_pushes(repo: Path, shell: str, command: str) -> None:
+    assert _run(_PUSH_GUARD_HOOK, _bash(command), repo, shell=shell).returncode == 0
 
 
 @pytest.mark.parametrize(
@@ -441,20 +475,30 @@ def test_push_guard_allows_feature_and_tag_pushes(repo: Path, command: str) -> N
         ("git push origin heads/main", 2),
         ("git push --tags origin HEAD", 2),
         ("git push --follow-tags", 2),
+        ("git push -o ci.skip origin", 2),
+        ("git push -uo ci.skip origin", 2),
+        ("git push -o note=--tags", 2),
+        ('git push -o "a b" origin', 2),
+        ("git push --push-o ci.skip origin", 2),
+        ("git push --recu check origin", 2),
+        ("git push --recurse-submodules check origin", 2),
+        ("git push origin :", 2),
         ("git push origin v1.2.3", 0),
         ("git push --tags", 0),
         ("git push origin feat", 0),
     ],
 )
 def test_push_guard_on_main_needs_a_named_target(
-    main_repo: Path, command: str, expected: int
+    main_repo: Path, shell: str, command: str, expected: int
 ) -> None:
     """On main, a push that names no branch, or names the current one, pushes main."""
-    assert _run(_PUSH_GUARD_HOOK, _bash(command), main_repo).returncode == expected
+    result = _run(_PUSH_GUARD_HOOK, _bash(command), main_repo, shell=shell)
+
+    assert result.returncode == expected
 
 
 def test_push_guard_reads_the_branch_of_the_checkout_named_by_dash_c(
-    main_repo: Path, tmp_path: Path
+    main_repo: Path, tmp_path: Path, shell: str
 ) -> None:
     root = tmp_path.resolve()
     worktree = root / "worktree"
@@ -464,7 +508,7 @@ def test_push_guard_reads_the_branch_of_the_checkout_named_by_dash_c(
     _git(root, "init", "-q", "-b", "main", str(on_main_with_space))
 
     def push(command: str, cwd: Path) -> int:
-        return _run(_PUSH_GUARD_HOOK, _bash(command), cwd, HOME=str(root)).returncode
+        return _run(_PUSH_GUARD_HOOK, _bash(command), cwd, shell=shell, HOME=str(root)).returncode
 
     assert push(f"git -C {main_repo} push", worktree) == 2
     assert push(f'git -C "{main_repo}" push', worktree) == 2

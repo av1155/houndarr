@@ -101,7 +101,7 @@ git push -u origin HEAD
 gh pr create --title "chore: bump version to X.Y.Z" --body "..."
 ```
 
-After merge, remind the user to run `git tag vX.Y.Z && git push origin vX.Y.Z` to trigger docker.yml, release.yml, and chart.yml.
+After merge, remind the user to run `git tag vX.Y.Z` and then `git push origin vX.Y.Z` to trigger docker.yml, release.yml, and chart.yml.
 
 ## 11. Verify the Tag Push
 

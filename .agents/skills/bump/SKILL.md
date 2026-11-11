@@ -92,6 +92,11 @@ Rename `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD` and insert a fresh empty U
 ```
 git add VERSION CHANGELOG.md
 git commit -m "chore: bump version to X.Y.Z"
+```
+
+Then push, as a command of its own:
+
+```
 git push -u origin HEAD
 ```
 

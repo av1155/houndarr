@@ -152,13 +152,23 @@ def shell(request: pytest.FixtureRequest) -> str:
     return str(request.param)
 
 
-@pytest.fixture()
-def main_repo(repo: Path) -> Path:
-    """The repo with one commit on main, so a worktree can branch from it."""
-    _git(repo, "symbolic-ref", "HEAD", "refs/heads/main")
+def _commit_on(repo: Path, branch: str) -> Path:
+    _git(repo, "symbolic-ref", "HEAD", f"refs/heads/{branch}")
     commit = _git(repo, "commit-tree", _git(repo, "write-tree"), "-m", "init")
     _git(repo, "update-ref", "HEAD", commit)
     return repo
+
+
+@pytest.fixture()
+def main_repo(repo: Path) -> Path:
+    """The repo with one commit on main, so a worktree can branch from it."""
+    return _commit_on(repo, "main")
+
+
+@pytest.fixture()
+def master_repo(repo: Path) -> Path:
+    """The repo with one commit on master."""
+    return _commit_on(repo, "master")
 
 
 @pytest.mark.parametrize("cwd", ["", "sub"])
@@ -235,6 +245,24 @@ def test_mypy_hook_is_quiet_on_clean_code_and_outside_src(repo: Path) -> None:
     assert _run(_MYPY_HOOK, _edit(outside_src), repo).returncode == 0
 
 
+def test_format_and_mypy_hooks_follow_an_edit_through_a_symlink(repo: Path, tmp_path: Path) -> None:
+    """git reports the physical repo root, so the edited path is resolved before it is matched."""
+    link = tmp_path.resolve() / "link"
+    link.symlink_to(repo, target_is_directory=True)
+    target = repo / "src" / "pkg" / "probe.py"
+    target.parent.mkdir(parents=True)
+    target.write_text('x: int ="a"\n')
+    edit = _edit(link / "src" / "pkg" / "probe.py")
+
+    formatted = _run(_FORMAT_HOOK, edit, link)
+    typed = _run(_MYPY_HOOK, edit, link)
+
+    assert formatted.returncode == 0
+    assert target.read_text() == 'x: int = "a"\n'
+    assert typed.returncode == 2
+    assert "probe.py:1: error" in typed.stderr
+
+
 @pytest.mark.parametrize("relative", ["src/app.py", "sub/AGENTS.md"])
 def test_main_guard_blocks_repo_edits_on_main(main_repo: Path, relative: str) -> None:
     """Only the root AGENTS.md and CLAUDE.md are exempt."""
@@ -297,6 +325,15 @@ def test_main_guard_resolves_symlinked_paths(main_repo: Path, tmp_path: Path) ->
 
     assert code.returncode == 2
     assert agents.returncode == 0
+
+
+def test_main_guard_reads_dot_dot_like_the_write_tool(main_repo: Path, tmp_path: Path) -> None:
+    """The Write tool resolves .. lexically, even through a directory that does not exist."""
+    edit = _edit(tmp_path.resolve() / "no-such-dir" / ".." / main_repo.name / "src" / "app.py")
+
+    result = _run(_MAIN_GUARD_HOOK, edit, main_repo, CLAUDE_PROJECT_DIR=str(main_repo))
+
+    assert result.returncode == 2
 
 
 def test_main_guard_fails_closed_when_it_cannot_place_the_edit(
@@ -420,6 +457,7 @@ def test_commit_hook_passes_a_formatted_tree_from_a_subdirectory(repo: Path) -> 
         "GIT push --force",
         "git PUSH origin main",
         "git --shallow-file /dev/null push origin main",
+        "git --namespace x push --force origin feat",
         "  git push origin main",
     ],
 )
@@ -463,6 +501,7 @@ def test_push_guard_blocks_force_pushes_and_pushes_to_main(
         'git -C "$(pwd)" push origin feat',
         "git push origin refs/heads/*",
         "git push origin ma?n",
+        "git push origin ma[i]n",
         "git push origin {main,feat}",
         "echo main | xargs git push origin",
         "GIT_CONFIG_PARAMETERS=\"'push.default=matching'\" git push",
@@ -482,6 +521,29 @@ def test_push_guard_blocks_force_pushes_and_pushes_to_main(
         'git commit -m "docs: explain git push origin main"',
         "git commit -F - <<'EOF'\nci: x\n\nRun git push from a branch.\nEOF",
         'gh pr create --title x --body "Blocks git push --force"',
+        "git -C ${D}/sub push origin main",
+        "git -C ${HOME}/repo push --force origin feat",
+        "git -C ~/${N} push origin main",
+        "git -c user.name=${N} push --force",
+        "git --git-dir=${D}/.git push origin main",
+        "git -C $(dirname $(pwd))/repo push origin main",
+        "git -C ${PWD}/../repo push",
+        "gi\\\nt push origin main",
+        "{git,push} origin main",
+        "git 2>&1 push --force",
+        "git >/dev/null push origin main",
+        "git${IFS}push${IFS}--force",
+        "git $OPTS push --force",
+        "git $X push origin main",
+        "git $(echo push) origin main",
+        "${GIT:-git} push origin main",
+        "git push$IFS origin main",
+        "$(git --exec-path)/git-push origin main",
+        "git-push origin main",
+        "git stash push -m 'wip: push guard'",
+        'git commit -m "ci: refuse pushes the push guard cannot read"',
+        "git commit -F - <<'EOF'\nci: x\n\nPush the branch first.\nEOF",
+        "git --no-pager log --oneline | grep -i push",
     ],
 )
 def test_push_guard_refuses_anything_but_a_plain_push(repo: Path, shell: str, command: str) -> None:
@@ -489,7 +551,7 @@ def test_push_guard_refuses_anything_but_a_plain_push(repo: Path, shell: str, co
     result = _run(_PUSH_GUARD_HOOK, _bash(command), repo, shell=shell)
 
     assert result.returncode == 2
-    assert "mentions git push" in result.stderr
+    assert "git followed by push" in result.stderr
 
 
 @pytest.mark.parametrize(
@@ -501,6 +563,8 @@ def test_push_guard_refuses_anything_but_a_plain_push(repo: Path, shell: str, co
         "git -c push.default=matching push",
         "git --config-env=push.default=X push",
         "git -c user.name=AB push origin feat",
+        "git --git-dir ../x/.git push origin feat",
+        "git --config-env push.default=PD push",
     ],
 )
 def test_push_guard_blocks_pushes_it_cannot_read(repo: Path, shell: str, command: str) -> None:
@@ -540,15 +604,17 @@ def test_push_guard_allows_feature_and_tag_pushes(repo: Path, shell: str, comman
     "command",
     [
         "git stash push -m wip",
-        "git stash push -m 'wip: push guard'",
-        'git commit -m "ci: refuse pushes the push guard cannot read"',
-        "git commit -F - <<'EOF'\nci: x\n\nPush the branch first.\nEOF",
         "git log --grep=push",
-        "git --no-pager log --oneline | grep -i push",
-        "git -C /tmp log --oneline | grep push",
         "git log --oneline git push --force",
+        "git config push.default current",
+        "git status && git config --get remote.origin.push",
+        "git commit -m 'feat: add pushover alerts' && git log -1",
+        "grep -rn push .github/workflows && git status",
+        "git-lfs push origin main",
         "docker push ghcr.io/x/y:1",
+        "npm run push",
         "gh pr create --title x --body-file /tmp/body.md",
+        "git commit -F /tmp/msg.txt",
     ],
 )
 def test_push_guard_ignores_commands_that_do_not_push(repo: Path, shell: str, command: str) -> None:
@@ -573,6 +639,9 @@ def test_push_guard_ignores_commands_that_do_not_push(repo: Path, shell: str, co
         ("git push --recurse-submodules check origin", 2),
         ("git push origin :", 2),
         ("git push -otodo origin HEAD feat", 2),
+        ("git push --repo x origin", 2),
+        ("git push --exec x origin", 2),
+        ("git push --receive-pack x origin", 2),
         ("git push origin v1.2.3", 0),
         ("git push --tags", 0),
         ("git push origin feat", 0),
@@ -586,6 +655,14 @@ def test_push_guard_on_main_needs_a_named_target(
 
     assert result.returncode == expected
     assert ("Direct push to main" in result.stderr) == bool(expected)
+
+
+@pytest.mark.parametrize("command", ["git push", "git push origin HEAD"])
+def test_push_guard_treats_master_like_main(master_repo: Path, shell: str, command: str) -> None:
+    result = _run(_PUSH_GUARD_HOOK, _bash(command), master_repo, shell=shell)
+
+    assert result.returncode == 2
+    assert "Direct push to main or force push" in result.stderr
 
 
 def test_push_guard_reads_the_branch_of_the_checkout_named_by_dash_c(
@@ -621,7 +698,7 @@ def test_push_guard_refuses_pushes_wrapped_in_shell_syntax(repo: Path, command: 
     result = _run(_PUSH_GUARD_HOOK, _bash(command), repo)
 
     assert result.returncode == 2
-    assert "mentions git push" in result.stderr
+    assert "git followed by push" in result.stderr
 
 
 @pytest.mark.parametrize("command", _wrapped("git push", "git push origin HEAD"))
@@ -630,7 +707,7 @@ def test_push_guard_refuses_wrapped_pushes_on_main(main_repo: Path, command: str
     result = _run(_PUSH_GUARD_HOOK, _bash(command), main_repo)
 
     assert result.returncode == 2
-    assert "mentions git push" in result.stderr
+    assert "git followed by push" in result.stderr
 
 
 def test_stop_hook_warns_once_about_unfinished_markers(tmp_path: Path) -> None:

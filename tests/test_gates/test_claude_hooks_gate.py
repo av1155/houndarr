@@ -4,10 +4,10 @@ Claude Code passes hook input as JSON on stdin (``tool_input.file_path``,
 ``tool_input.command``, ``last_assistant_message``) and sets no file-path
 environment variable.  The edit hooks in ``.claude/settings.json`` once looped
 over an unset ``$CLAUDE_FILE_PATHS`` and silently did nothing (#868), and
-nothing in the suite ran them.  These tests run each hook command under bash
-with that JSON, inside a throwaway git repo whose ``.venv`` links to the
-environment running pytest, and check the hook acceptance criteria of #867 and
-#868.
+nothing in the suite ran them.  These tests run each hook command with that
+JSON, inside a throwaway git repo whose ``.venv`` links to the environment
+running pytest, and check the hook acceptance criteria of #867 and #868.  Most
+push guard cases also run under every shell in ``_SHELLS``.
 """
 
 from __future__ import annotations
@@ -65,8 +65,36 @@ _STOP_HOOK = _hook("Stop", "last_assistant_message")
 
 _UNFORMATTED_MD = "# Notes\n\n```python\nx=1\n```\n"
 
-# Claude Code runs a hook command through bash or the user's $SHELL, and sh is dash on Linux.
+# The hooks reference runs shell-form hooks with sh -c (dash on Ubuntu), and the settings
+# schema says its default bash shell means $SHELL when that is bash, zsh or sh.
 _SHELLS = [shell for shell in ("bash", "sh", "zsh") if shutil.which(shell)]
+
+# Places an agent's command often puts a push, with the operators glued on.
+_SHELL_WRAPPERS = [
+    "CMD",
+    "CMD;echo ok",
+    "CMD&&echo ok",
+    "CMD||echo failed",
+    "CMD|tail -1",
+    "CMD|&tee log",
+    "CMD&",
+    "CMD>/dev/null",
+    "CMD 2>&1",
+    "CMD &>/dev/null",
+    "(CMD)",
+    "out=$(CMD)",
+    'out="$(CMD 2>&1)"',
+    "x=`CMD`",
+    "if CMD;then echo ok;fi",
+    "{ CMD;}",
+    "true;CMD",
+    "true&&CMD",
+    "CMD # note",
+]
+
+
+def _wrapped(*commands: str) -> list[str]:
+    return [wrapper.replace("CMD", command) for command in commands for wrapper in _SHELL_WRAPPERS]
 
 
 def _run(
@@ -396,6 +424,12 @@ def test_commit_hook_passes_a_formatted_tree_from_a_subdirectory(repo: Path) -> 
         'git "push" origin main',
         "git p\\ush --force origin feat",
         "git $'push' --force origin feat",
+        "git push --repo 'x;' origin main",
+        "git push --repo x\\; origin main",
+        "GIT push --force",
+        "git --shallow-file /dev/null push origin main",
+        'echo "$(git log -1)" && git push --force',
+        'x="$( (true) && git push --force )"',
     ],
 )
 def test_push_guard_blocks_force_pushes_and_pushes_to_main(
@@ -427,6 +461,9 @@ def test_push_guard_blocks_force_pushes_and_pushes_to_main(
         "X=matching git --config-env=push.default=X push",
         "GIT_CONFIG_PARAMETERS=\"'push.default=matching'\" git push",
         "git push origin $'\\x6dain'",
+        "git push -o 'a;b' origin feat",
+        'git -C "$(pwd)" push origin feat',
+        "git push origin $(\n  echo main\n)",
     ],
 )
 def test_push_guard_blocks_pushes_it_cannot_read(repo: Path, shell: str, command: str) -> None:
@@ -459,6 +496,9 @@ def test_push_guard_blocks_pushes_it_cannot_read(repo: Path, shell: str, command
         "grep 'git push --force' AGENTS.md",
         'git commit -m "docs: explain git push origin main"',
         "git commit -F - <<'EOF'\nci: x\n\nThe guard's git push check reads quotes.\nEOF",
+        "git push origin feat 2>&1 | grep -v '^$'",
+        "git push -ofoo origin feat",
+        "git push -u origin feat  # not main",
     ],
 )
 def test_push_guard_allows_feature_and_tag_pushes(repo: Path, shell: str, command: str) -> None:
@@ -483,6 +523,8 @@ def test_push_guard_allows_feature_and_tag_pushes(repo: Path, shell: str, comman
         ("git push --recu check origin", 2),
         ("git push --recurse-submodules check origin", 2),
         ("git push origin :", 2),
+        ("git push origin 2>&1", 2),
+        ("git push -otodo origin HEAD feat", 2),
         ("git push origin v1.2.3", 0),
         ("git push --tags", 0),
         ("git push origin feat", 0),
@@ -518,6 +560,45 @@ def test_push_guard_reads_the_branch_of_the_checkout_named_by_dash_c(
     assert push(f"git -C {worktree} push", main_repo) == 0
     assert push(f"git -C {root} -C {worktree.name} push", main_repo) == 0
     assert push(f"git -C ~/{worktree.name} push", main_repo) == 0
+
+
+# The wrappers change only the text the hook reads, so these cases run under bash alone.
+@pytest.mark.parametrize(
+    "command",
+    _wrapped(
+        "git push --force",
+        "git push --force-with-lease",
+        "git push -f origin feat",
+        "git push --all",
+        "git push --mirror",
+        "git push --branches",
+        "git push origin main",
+        "git push origin HEAD:main",
+        "git push origin +feat",
+        "git push origin :",
+    ),
+)
+def test_push_guard_blocks_pushes_wrapped_in_shell_syntax(repo: Path, command: str) -> None:
+    result = _run(_PUSH_GUARD_HOOK, _bash(command), repo)
+
+    assert result.returncode == 2
+    assert "Direct push to main or force push" in result.stderr
+
+
+@pytest.mark.parametrize(
+    "command",
+    _wrapped("git push", "git push origin", "git push -u origin HEAD", "git push origin @"),
+)
+def test_push_guard_blocks_wrapped_pushes_of_main(main_repo: Path, command: str) -> None:
+    result = _run(_PUSH_GUARD_HOOK, _bash(command), main_repo)
+
+    assert result.returncode == 2
+    assert "Direct push to main or force push" in result.stderr
+
+
+@pytest.mark.parametrize("command", _wrapped("git push origin feat", "git push -u origin HEAD"))
+def test_push_guard_allows_wrapped_feature_pushes(repo: Path, command: str) -> None:
+    assert _run(_PUSH_GUARD_HOOK, _bash(command), repo).returncode == 0
 
 
 def test_stop_hook_warns_once_about_unfinished_markers(tmp_path: Path) -> None:

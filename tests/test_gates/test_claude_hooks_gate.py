@@ -64,6 +64,7 @@ _COMMIT_HOOK = _hook("PreToolUse", "ruff format --check")
 _STOP_HOOK = _hook("Stop", "last_assistant_message")
 
 _UNFORMATTED_MD = "# Notes\n\n```python\nx=1\n```\n"
+_UNFIXED_PY = 'x=f"a"\n'
 
 # The hooks reference runs shell-form hooks with sh -c (dash on Ubuntu), and the settings
 # schema says its default bash shell means $SHELL when that is bash, zsh or sh.
@@ -201,15 +202,18 @@ def test_format_hook_formats_python_blocks_in_markdown(repo: Path) -> None:
 
 
 def test_format_hook_leaves_ignored_and_outside_files_alone(repo: Path, tmp_path: Path) -> None:
-    """ruff's --force-exclude still formats a gitignored file passed by path."""
+    """ruff's --force-exclude still formats a gitignored file passed by path.
+
+    The .py fixtures need a lint fix and formatting, so either ruff step would change them.
+    """
     (repo / "ignored").mkdir()
     (repo / "_build").mkdir()
     untouched = {
-        repo / "ignored" / "probe.py": "x=1\n",
+        repo / "ignored" / "probe.py": _UNFIXED_PY,
         repo / "ignored" / "notes.md": _UNFORMATTED_MD,
         repo / "config.yml": "a:    1\n",
-        repo / "_build" / "probe.py": "x=1\n",
-        tmp_path.resolve() / "outside.py": "x=1\n",
+        repo / "_build" / "probe.py": _UNFIXED_PY,
+        tmp_path.resolve() / "outside.py": _UNFIXED_PY,
     }
     for path, text in untouched.items():
         path.write_text(text)

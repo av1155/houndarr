@@ -65,7 +65,7 @@ If `just` is unavailable, read `justfile` for the underlying
 
 ## Running Tests
 
-~3090 tests. `just test`, `test-quick`, `test-integration`, and `pin`
+~3800 tests. `just test`, `test-quick`, `test-integration`, and `pin`
 run with `pytest -n auto` (pytest-xdist). Override with
 `PYTEST_WORKERS=0` for serial triage, or `PYTEST_WORKERS=4` to constrain.
 

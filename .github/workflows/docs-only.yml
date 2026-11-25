@@ -1,0 +1,90 @@
+name: Docs-only check
+
+# Reports whether a PR changes only docs-only paths.  Callers run on every PR
+# and skip their jobs by `if:` when docs_only is 'true': branch protection
+# counts a job skipped that way as passing, while a workflow skipped by a path
+# filter leaves its required checks pending forever.
+#
+# No concurrency block: github.workflow here is the caller's name, so a group
+# copied from a caller would share that caller's group.
+
+on:
+  workflow_call:
+    outputs:
+      docs_only:
+        description: "'true' when every changed path matches a docs-only pattern"
+        value: ${{ jobs.classify.outputs.docs_only }}
+
+permissions: {}
+
+jobs:
+  classify:
+    name: Classify changed files
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # Widening this means widening the `changes` job in every caller.
+    permissions:
+      pull-requests: read
+    outputs:
+      docs_only: ${{ steps.classify.outputs.docs_only }}
+    steps:
+      - name: Classify changed files
+        id: classify
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const DOCS_ONLY_GLOBS = ['docs/**', '**/*.md', 'website/**', '.claude/**', 'scripts/marketing/**'];
+            // pulls.listFiles stops returning entries at 3000 files.
+            const LIST_FILES_CAP = 3000;
+
+            const toRegExp = (glob) => {
+              let source = '';
+              for (let i = 0; i < glob.length; ) {
+                if (glob.startsWith('**/', i)) {
+                  source += '(?:.*/)?';
+                  i += 3;
+                } else if (glob.startsWith('**', i)) {
+                  source += '.*';
+                  i += 2;
+                } else if (glob[i] === '*') {
+                  source += '[^/]*';
+                  i += 1;
+                } else {
+                  source += glob[i].replace(/[\\^$.|?*+()[\]{}]/g, '\\$&');
+                  i += 1;
+                }
+              }
+              return new RegExp(`^${source}$`);
+            };
+            const patterns = DOCS_ONLY_GLOBS.map(toRegExp);
+            const isDocsOnly = (path) => patterns.some((pattern) => pattern.test(path));
+
+            const { owner, repo } = context.repo;
+            const event = context.payload.pull_request;
+            const files = await github.paginate(github.rest.pulls.listFiles, {
+              owner,
+              repo,
+              pull_number: event.number,
+              per_page: 100,
+            });
+            // Read after listing, so a push or retarget during the listing shows up.
+            const { data: pr } = await github.rest.pulls.get({ owner, repo, pull_number: event.number });
+
+            // A rename counts on both sides, as GitHub's own path filters do.
+            const paths = files.flatMap((file) =>
+              file.previous_filename ? [file.filename, file.previous_filename] : [file.filename],
+            );
+            const outside = paths.filter((path) => !isDocsOnly(path)).length;
+            // A symlink type change lists one path twice but counts once in changed_files.
+            const listed = new Set(files.map((file) => file.filename)).size;
+            const defaultBranch = context.payload.repository.default_branch;
+            const intoDefault = event.base.ref === defaultBranch && pr.base.ref === defaultBranch;
+            const headUnchanged = pr.head.sha === event.head.sha;
+            const complete = files.length < LIST_FILES_CAP && listed >= pr.changed_files;
+
+            // Paths are never logged: a crafted filename could inject workflow commands.
+            core.info(
+              `${listed} of ${pr.changed_files} changed files listed, ${outside} paths outside the ` +
+                `docs-only patterns; into default branch: ${intoDefault}, head unchanged: ${headUnchanged}`,
+            );
+            core.setOutput('docs_only', String(intoDefault && headUnchanged && complete && outside === 0));

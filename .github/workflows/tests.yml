@@ -1,7 +1,7 @@
 name: Tests
 
-# No paths-ignore: the tests read docs/api/, scripts/marketing/ and
-# .claude/settings.json, so ci-skip.yml must not stub these checks either.
+# Runs in full on docs-only PRs too: the tests read docs/api/,
+# scripts/marketing/ and .claude/settings.json.
 on:
   pull_request:
 

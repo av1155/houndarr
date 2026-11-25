@@ -48,6 +48,7 @@ PR stays blocked.
 | `test-deploy.yml` | PRs touching `website/**` | Tests Docusaurus build without deploying |
 | `link-check.yml` | PRs touching `**/*.md`, `**/*.mdx`, `lychee.toml` + weekly (Monday 08:00 UTC) + manual | Runs `lychee` against every Markdown file to catch broken external links; rules live in `lychee.toml` |
 | `cleanup-actions-cache.yml` | Weekly (Monday 05:00 UTC) + manual | Prunes stale GitHub Actions caches |
+| `docker.yml` (scheduled) | Weekly on main (Sunday 06:00 UTC) + manual | Builds the amd64 image, uploads its Trivy scan as `trivy-image` code scanning results, and builds arm64 as a canary; pushes nothing. A manual run on a tag ref skips the build and scan, so it cannot publish |
 
 ## Branch protection on `main`
 

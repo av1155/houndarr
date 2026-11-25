@@ -131,11 +131,11 @@ The `chartRef` field (instead of `chart.spec.sourceRef`) is what connects a `Hel
 | `startupProbe.failureThreshold` | `60` | Probe attempts before the pod is marked unhealthy. Combined with `periodSeconds`, the default gives a 10-minute startup budget for first-boot migrations |
 | `startupProbe.periodSeconds` | `10` | Seconds between startup probe attempts |
 | `startupProbe.timeoutSeconds` | `5` | Seconds each startup probe attempt waits for `/api/health` |
-| `livenessProbe.initialDelaySeconds` | `10` | Seconds after the startup probe passes before the first liveness check |
+| `livenessProbe.initialDelaySeconds` | `10` | Seconds after the container starts before liveness checks begin. Liveness and readiness checks also wait for the startup probe to pass |
 | `livenessProbe.periodSeconds` | `30` | Seconds between liveness checks |
 | `livenessProbe.timeoutSeconds` | `5` | Seconds each liveness check waits for `/api/health` |
 | `livenessProbe.failureThreshold` | `3` | Consecutive failures before Kubernetes restarts the container |
-| `readinessProbe.initialDelaySeconds` | `5` | Seconds after the startup probe passes before the first readiness check |
+| `readinessProbe.initialDelaySeconds` | `5` | Seconds after the container starts before readiness checks begin |
 | `readinessProbe.periodSeconds` | `10` | Seconds between readiness checks |
 | `readinessProbe.timeoutSeconds` | `5` | Seconds each readiness check waits for `/api/health` |
 | `readinessProbe.failureThreshold` | `3` | Consecutive failures before the pod leaves the Service endpoints |

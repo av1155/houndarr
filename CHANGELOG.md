@@ -7,13 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `livenessProbe` and `readinessProbe` timings and `startupProbe.timeoutSeconds` are configurable in the Helm chart's `values.yaml`. (#830)
+
 ### Fixed
 
 - Allowed Search Window skip rows read `outside allowed time window (TZ=<value> not loaded, using UTC)` on the Logs page when `TZ` could not be loaded. (#824)
 - Log deduplication holds 16,384 `(instance, item, pass, reason)` combinations instead of 1,024; past that only the ones that did not fit write repeat rows. (#819)
 - The container log warns `Skip-log throttle is full (16384 keys)` at most once a day when log deduplication runs out of room. (#819)
-- Helm chart probes wait 5 s for `/api/health` instead of Kubernetes' 1 s default, which a busy moment could exceed and take the pod out of the Service. (#830)
-- `livenessProbe` and `readinessProbe` timings and `startupProbe.timeoutSeconds` are configurable in the Helm chart's `values.yaml`. (#830)
+- Helm chart probes wait 5 s for `/api/health` instead of Kubernetes' 1 s default, so a stall shorter than 5 s no longer fails readiness and liveness checks. (#830)
 
 ### Security
 

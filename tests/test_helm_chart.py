@@ -46,7 +46,8 @@ def _render_probes(*set_args: str) -> dict[str, dict[str, Any]]:
     cmd = ["helm", "template", "houndarr", str(_CHART)]
     for arg in set_args:
         cmd += ["--set", arg]
-    result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
     statefulset = next(
         doc
         for doc in yaml.safe_load_all(result.stdout)
@@ -63,6 +64,12 @@ def _render_probes(*set_args: str) -> dict[str, dict[str, Any]]:
 
 def test_default_render_sets_every_probe_timeout() -> None:
     assert _render_probes() == _DEFAULT_PROBES
+
+
+def test_values_yaml_lists_every_probe_default() -> None:
+    """The template fallbacks would hide a block dropped from ``helm show values``."""
+    values = yaml.safe_load((_CHART / "values.yaml").read_text())
+    assert {name: values[name] for name in _DEFAULT_PROBES} == _DEFAULT_PROBES
 
 
 @pytest.mark.parametrize(

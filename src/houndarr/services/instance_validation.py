@@ -228,7 +228,7 @@ def validate_tag_filter(raw: str, *, field_label: str) -> tuple[str | None, str]
     if not raw or not raw.strip():
         return None, ""
 
-    seen: list[str] = []
+    seen: dict[str, None] = {}
     for entry in raw.split(","):
         label = entry.strip().lower()
         if not label:
@@ -237,8 +237,7 @@ def validate_tag_filter(raw: str, *, field_label: str) -> tuple[str | None, str]
             return (
                 f"{field_label}: each label must be {_TAG_LABEL_MAX_LENGTH} characters or fewer."
             ), ""
-        if label not in seen:
-            seen.append(label)
+        seen[label] = None
 
     if len(seen) > _TAG_LIST_MAX_ENTRIES:
         return (f"{field_label}: at most {_TAG_LIST_MAX_ENTRIES} tags allowed."), ""

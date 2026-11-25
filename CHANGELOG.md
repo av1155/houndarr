@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `Missing Tag Exclude`, `Cutoff Tag Exclude`, and `Upgrade Tag Exclude` skip tagged items on that one pass, on top of `Tag Filter · Exclude`. Schema v22 adds three columns with empty defaults. (#833)
+
+### Changed
+
+- A failed `/tag` lookup skips the passes that carry tag-filter labels for that cycle instead of searching them unfiltered. (#833)
+
 ### Fixed
 
 - Allowed Search Window skip rows read `outside allowed time window (TZ=<value> not loaded, using UTC)` on the Logs page when `TZ` could not be loaded. (#824)

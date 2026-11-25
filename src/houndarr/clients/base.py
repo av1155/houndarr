@@ -400,8 +400,8 @@ class ArrClient(ABC):
             ClientHTTPError: The server returned a non-2xx status.
             ClientTransportError: The request failed before a response
                 arrived.
-            ClientValidationError: The response did not match the
-                :class:`ArrTag` list shape.
+            ClientValidationError: The response was not JSON or did not
+                match the :class:`ArrTag` list shape.
         """
         try:
             result = await self._get(self._TAG_PATH)
@@ -413,6 +413,10 @@ class ArrClient(ABC):
             raise ClientTransportError(
                 f"get_tags: transport error reaching {self._TAG_PATH}: {describe_exception(exc)}"
             ) from exc
+        except ValueError as exc:
+            # A non-JSON body (e.g. a proxy login page) must reach the
+            # engine as a typed error so tag-filtered passes fail closed.
+            raise ClientValidationError(f"get_tags: non-JSON body from {self._TAG_PATH}") from exc
 
         if not isinstance(result, list):
             raise ClientValidationError(f"get_tags: expected a JSON list from {self._TAG_PATH}")

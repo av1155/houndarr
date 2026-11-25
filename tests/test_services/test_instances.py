@@ -9,6 +9,7 @@ from houndarr.services.instances import (
     Instance,
     InstanceType,
     SonarrSearchMode,
+    TagFilterPolicy,
     create_instance,
     delete_instance,
     get_instance,
@@ -216,6 +217,39 @@ async def test_update_hot_retry_fields(db: None, master_key: bytes) -> None:
     assert updated is not None
     assert updated.missing.missing_hot_retry_window_hrs == 24
     assert updated.missing.missing_hot_retry_interval_hrs == 2
+
+
+@pytest.mark.asyncio()
+async def test_create_instance_wires_per_pass_tag_excludes(db: None, master_key: bytes) -> None:
+    inst = await _make(
+        master_key,
+        tag_filter_exclude="skip",
+        tag_filter_missing_exclude="no-backfill",
+        tag_filter_cutoff_exclude="no-upgrade",
+        tag_filter_upgrade_exclude="keep-sd",
+    )
+    assert inst.tag_filter == TagFilterPolicy(
+        exclude=("skip",),
+        missing_exclude=("no-backfill",),
+        cutoff_exclude=("no-upgrade",),
+        upgrade_exclude=("keep-sd",),
+    )
+
+
+@pytest.mark.asyncio()
+async def test_update_instance_accepts_per_pass_tag_excludes(db: None, master_key: bytes) -> None:
+    inst = await _make(master_key, tag_filter_cutoff_exclude="no-upgrade")
+    updated = await update_instance(
+        inst.core.id,
+        master_key=master_key,
+        tag_filter_missing_exclude="no-backfill",
+        tag_filter_cutoff_exclude="",
+        tag_filter_upgrade_exclude="keep-sd",
+    )
+    assert updated is not None
+    assert updated.tag_filter == TagFilterPolicy(
+        missing_exclude=("no-backfill",), upgrade_exclude=("keep-sd",)
+    )
 
 
 @pytest.mark.asyncio()

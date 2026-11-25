@@ -203,7 +203,7 @@ _TAG_LABEL_MAX_LENGTH = 64
 _TAG_LIST_MAX_ENTRIES = 32
 
 
-def validate_tag_filter(raw: str, *, direction: str) -> tuple[str | None, str]:
+def validate_tag_filter(raw: str, *, field_label: str) -> tuple[str | None, str]:
     """Validate and canonicalise a comma-separated tag-filter string.
 
     Splits *raw* on commas, strips and lowercases each entry, drops
@@ -216,9 +216,9 @@ def validate_tag_filter(raw: str, *, direction: str) -> tuple[str | None, str]:
     Args:
         raw: The raw form value (empty string when the operator left
             the field blank).
-        direction: ``"include"`` or ``"exclude"``; appears verbatim in
-            error messages so the operator can spot which field
-            tripped the bound.
+        field_label: Name of the form field, such as ``"Tag filter include"``
+            or ``"Cutoff tag exclude"``; prefixes every error message so the
+            operator can spot which field tripped the bound.
 
     Returns:
         ``(None, canonical)`` on success.  ``(error, "")`` on failure
@@ -235,14 +235,13 @@ def validate_tag_filter(raw: str, *, direction: str) -> tuple[str | None, str]:
             continue
         if len(label) > _TAG_LABEL_MAX_LENGTH:
             return (
-                f"Tag filter {direction}: each label must be {_TAG_LABEL_MAX_LENGTH} "
-                "characters or fewer."
+                f"{field_label}: each label must be {_TAG_LABEL_MAX_LENGTH} characters or fewer."
             ), ""
         if label not in seen:
             seen.append(label)
 
     if len(seen) > _TAG_LIST_MAX_ENTRIES:
-        return (f"Tag filter {direction}: at most {_TAG_LIST_MAX_ENTRIES} tags allowed."), ""
+        return (f"{field_label}: at most {_TAG_LIST_MAX_ENTRIES} tags allowed."), ""
 
     return None, ",".join(seen)
 

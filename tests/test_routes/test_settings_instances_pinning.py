@@ -108,54 +108,69 @@ class TestValidateTagFilter:
     """
 
     def test_empty_input_returns_empty_canonical(self) -> None:
-        assert validate_tag_filter("", direction="include") == (None, "")
-        assert validate_tag_filter("   ", direction="exclude") == (None, "")
+        assert validate_tag_filter("", field_label="Tag filter include") == (None, "")
+        assert validate_tag_filter("   ", field_label="Tag filter exclude") == (None, "")
 
     def test_strips_lowercases_and_dedupes(self) -> None:
-        err, canonical = validate_tag_filter("  1080p, 4K ,1080p ,kids", direction="include")
+        err, canonical = validate_tag_filter(
+            "  1080p, 4K ,1080p ,kids", field_label="Tag filter include"
+        )
         assert err is None
         assert canonical == "1080p,4k,kids"
 
     def test_label_too_long_rejected(self) -> None:
         too_long = "a" * 65
-        err, canonical = validate_tag_filter(too_long, direction="include")
+        err, canonical = validate_tag_filter(too_long, field_label="Tag filter include")
         assert err is not None
         assert "include" in err
         assert canonical == ""
 
     def test_too_many_entries_rejected(self) -> None:
         labels = ",".join(f"tag{i}" for i in range(33))
-        err, canonical = validate_tag_filter(labels, direction="exclude")
+        err, canonical = validate_tag_filter(labels, field_label="Tag filter exclude")
         assert err is not None
         assert "exclude" in err
         assert canonical == ""
 
-    def test_direction_word_appears_in_error(self) -> None:
-        """The direction is surfaced verbatim so the operator can tell which
-        of the two fields tripped the bound."""
-        err_include, _ = validate_tag_filter("a" * 65, direction="include")
-        err_exclude, _ = validate_tag_filter("a" * 65, direction="exclude")
-        assert err_include is not None
-        assert err_exclude is not None
-        assert "include" in err_include
-        assert "exclude" in err_exclude
+    def test_field_label_names_the_per_pass_field(self) -> None:
+        """The label prefixes the error so the operator sees which field tripped."""
+        assert validate_tag_filter("a" * 65, field_label="Cutoff tag exclude") == (
+            "Cutoff tag exclude: each label must be 64 characters or fewer.",
+            "",
+        )
+        too_many = ",".join(f"tag{i}" for i in range(33))
+        assert validate_tag_filter(too_many, field_label="Upgrade tag exclude") == (
+            "Upgrade tag exclude: at most 32 tags allowed.",
+            "",
+        )
+
+    def test_canonical_form_ignores_the_label(self) -> None:
+        raw = " No-Upgrade , sd-keep,no-upgrade"
+        assert validate_tag_filter(raw, field_label="Missing tag exclude") == (
+            None,
+            "no-upgrade,sd-keep",
+        )
+        assert validate_tag_filter(raw, field_label="Tag filter exclude") == (
+            None,
+            "no-upgrade,sd-keep",
+        )
 
     def test_exact_messages_for_instance_wide_fields(self) -> None:
         too_long = "a" * 65
         too_many = ",".join(f"tag{i}" for i in range(33))
-        assert validate_tag_filter(too_long, direction="include") == (
+        assert validate_tag_filter(too_long, field_label="Tag filter include") == (
             "Tag filter include: each label must be 64 characters or fewer.",
             "",
         )
-        assert validate_tag_filter(too_many, direction="include") == (
+        assert validate_tag_filter(too_many, field_label="Tag filter include") == (
             "Tag filter include: at most 32 tags allowed.",
             "",
         )
-        assert validate_tag_filter(too_long, direction="exclude") == (
+        assert validate_tag_filter(too_long, field_label="Tag filter exclude") == (
             "Tag filter exclude: each label must be 64 characters or fewer.",
             "",
         )
-        assert validate_tag_filter(too_many, direction="exclude") == (
+        assert validate_tag_filter(too_many, field_label="Tag filter exclude") == (
             "Tag filter exclude: at most 32 tags allowed.",
             "",
         )

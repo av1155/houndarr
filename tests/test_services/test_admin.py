@@ -136,13 +136,22 @@ async def test_reset_all_instance_policy_leaves_tag_filters_alone(db: None) -> N
         api_key="sonarr-key",
         tag_filter_include="1080p",
         tag_filter_exclude="houndarr-skip",
+        tag_filter_missing_exclude="no-backfill",
+        tag_filter_cutoff_exclude="no-upgrade",
+        tag_filter_upgrade_exclude="keep-sd",
     )
 
     await reset_all_instance_policy(master_key=_MASTER_KEY, supervisor=None)
 
     inst = await get_instance(created.core.id, master_key=_MASTER_KEY)
     assert inst is not None
-    assert inst.tag_filter == TagFilterPolicy(include=("1080p",), exclude=("houndarr-skip",))
+    assert inst.tag_filter == TagFilterPolicy(
+        include=("1080p",),
+        exclude=("houndarr-skip",),
+        missing_exclude=("no-backfill",),
+        cutoff_exclude=("no-upgrade",),
+        upgrade_exclude=("keep-sd",),
+    )
 
 
 @pytest.mark.asyncio()

@@ -73,6 +73,12 @@ class AppData:
     # Readarr does not.  Measured: Lidarr 3.1.0.4875 answers
     # ``no such column: Albums.TotalGarbageXyz`` for ``totalGarbageXyz``.
     sort_key_error_capitalises: bool = False
+    # ``/tag`` answers ``tags`` unless ``tag_status`` is an error code or
+    # ``tag_html`` serves a login page; ``tag_requests`` counts reads.
+    tags: list[dict[str, Any]] = field(default_factory=list)
+    tag_status: int = 200
+    tag_html: bool = False
+    tag_requests: int = 0
 
 
 @dataclass(slots=True)

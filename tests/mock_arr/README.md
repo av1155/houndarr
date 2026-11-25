@@ -48,6 +48,7 @@ Every app:
 - `GET  /api/v{N}/system/status`
 - `GET  /api/v{N}/queue/status`
 - `GET  /api/v{N}/queue/details` (lists the ids seeded via `/__queue__/{app}`)
+- `GET  /api/v{N}/tag` (serves the tags set via `/__tags__/{app}`)
 - `POST /api/v{N}/command`
 
 Sonarr / Whisparr v2:
@@ -76,7 +77,13 @@ Debug:
 - `PUT /__queue__/{app}` with a JSON list of leaf ids (episode, movie,
   album, or book) sets what `/queue/details` reports; `GET /__queue__/{app}`
   returns those ids plus how many times `/queue/details` was read.
-  `POST /__reset__/{app}` clears both.
+- `PUT /__tags__/{app}` with `{"tags": [{"id": 9, "label": "no-upgrade"}],
+  "items": {"12": [9]}}` sets what `/tag` lists and which leaves carry
+  which tag ids (Sonarr and Whisparr v2 leaves carry them on the embedded
+  `series`). Add `"status": 503` or `"html": true` to make `/tag` fail;
+  either resets on the next PUT that omits it. `GET /__tags__/{app}`
+  returns the setup plus how many times `/tag` was read.
+- `POST /__reset__/{app}` clears the queue and tag setup.
 
 ## Wiring it into Houndarr
 

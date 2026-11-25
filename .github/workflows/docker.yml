@@ -208,6 +208,9 @@ jobs:
           severity: CRITICAL,HIGH
           ignore-unfixed: "true"
           exit-code: "1"
+          # Same Trivy as the filesystem scans, so all three share one cached
+          # binary and report from the same scanner.
+          version: v0.76.2
 
       # Upload SARIF to the GitHub Security tab for non-fork runs, whether the
       # gate above passed or failed, so failing findings still reach the tab.
@@ -227,6 +230,10 @@ jobs:
           severity: CRITICAL,HIGH
           ignore-unfixed: "true"
           exit-code: "0"
+          # Reuses the gate's binary and DB; a second cache restore would
+          # overwrite that DB with the older cached one and re-download it.
+          skip-setup-trivy: "true"
+          cache: "false"
 
       - name: Upload Trivy SARIF to GitHub Security tab
         if: ${{ !cancelled() && steps.trivy-sarif.outcome == 'success' }}

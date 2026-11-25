@@ -42,7 +42,7 @@ PR stays blocked.
 | `release.yml` | `v*` tag push | Validates VERSION == tag, extracts CHANGELOG block, creates GitHub Release |
 | `chart.yml` | `v*` tag push | Packages `charts/houndarr/` with version from `VERSION` file, pushes to `oci://ghcr.io/av1155/charts` |
 | `dockerfile-lint.yml` | Changes to `Dockerfile` | `hadolint Dockerfile` |
-| `workflow-lint.yml` | Changes to `.github/workflows/**` | `actionlint` via reviewdog, plus a pin check that fails on any action not pinned to a full commit SHA with a trailing version comment |
+| `workflow-lint.yml` | Changes to `.github/workflows/**` | `actionlint` via reviewdog, plus a pin check that fails on any non-local action not pinned to a full commit SHA with a trailing comment |
 | `api-snapshot-refresh.yml` | Weekly (Monday 10:00 UTC) + manual | Fetches upstream Radarr/Sonarr/Whisparr/Lidarr/Readarr OpenAPI specs, updates `docs/api/` snapshots and `tests/test_docs_api.py` hashes, opens a PR if changed |
 | `pages.yml` | Pushes to `main` touching `website/**` | Deploys docs site to GitHub Pages |
 | `test-deploy.yml` | PRs touching `website/**` or the workflow itself | Tests the Docusaurus build without deploying; its `Trivy website scan` job fails on fixable CRITICAL / HIGH findings in the docs site's dependencies |
@@ -80,8 +80,21 @@ PR stays blocked.
   cannot. When pinning by hand, dereference annotated tags to their
   commit: for those actions `git/ref/tags/vN` returns a tag object
   whose SHA the runner cannot resolve.
-- A `.trivyignore.yaml` entry for a website finding needs both
-  `website/pnpm-lock.yaml` and `pnpm-lock.yaml` in its `paths`:
-  `security.yml` scans the repo root, the `Trivy website scan` job scans
-  `website/`, and an entry's paths only match relative to the scan root.
-  Pass the file to that job's gating step with `trivyignores:` as well.
+- Every Trivy job pins `version:` on its first trivy-action call, and
+  later calls in the job reuse that binary and DB with
+  `skip-setup-trivy: "true"` and `cache: "false"`. Dependabot bumps the
+  action but not this input, so raise it by hand. Keep it at 0.72 or
+  later: earlier releases read only the first document of a
+  multi-document pnpm lockfile and pass with nothing scanned. pnpm
+  writes one once a project has config dependencies, declares
+  `devEngines.packageManager`, or pins pnpm 12.
+- No Trivy ignore file exists today. `.trivyignore.yaml` paths match
+  relative to the scan root, so suppressing a website finding takes two
+  new files. A root `.trivyignore.yaml` lists `website/pnpm-lock.yaml`
+  for `security.yml`, which scans `.`; a bare `pnpm-lock.yaml` there
+  would also match the root CSS-build lockfile. A
+  `website/.trivyignore.yaml` lists `pnpm-lock.yaml` for the
+  `Trivy website scan` job, which scans `website/`, and its path keeps
+  that job triggering when the file changes. Wire each one in with
+  `trivyignores:` on the calls that scan with it: both `security.yml`
+  steps and the website job's gating step.

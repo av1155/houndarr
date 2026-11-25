@@ -193,7 +193,7 @@ Both `## [Unreleased]` and every versioned block end with a `---` line
 ## Non-user-facing PRs
 
 CI-only, refactor-only, test-only, docs-only, and chore/infrastructure
-changes do not get a Changelog bullet. The /ship workflow filters these
+changes do not get a Changelog bullet. The /ship-it workflow filters these
 out automatically.
 
 ## CI-enforced validation

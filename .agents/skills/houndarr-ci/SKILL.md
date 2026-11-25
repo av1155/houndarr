@@ -42,10 +42,10 @@ PR stays blocked.
 | `release.yml` | `v*` tag push | Validates VERSION == tag, extracts CHANGELOG block, creates GitHub Release |
 | `chart.yml` | `v*` tag push | Packages `charts/houndarr/` with version from `VERSION` file, pushes to `oci://ghcr.io/av1155/charts` |
 | `dockerfile-lint.yml` | Changes to `Dockerfile` | `hadolint Dockerfile` |
-| `workflow-lint.yml` | Changes to `.github/workflows/**` | `actionlint` via reviewdog |
+| `workflow-lint.yml` | Changes to `.github/workflows/**` | `actionlint` via reviewdog, plus a pin check that fails on any action not pinned to a full commit SHA with a trailing version comment |
 | `api-snapshot-refresh.yml` | Weekly (Monday 10:00 UTC) + manual | Fetches upstream Radarr/Sonarr/Whisparr/Lidarr/Readarr OpenAPI specs, updates `docs/api/` snapshots and `tests/test_docs_api.py` hashes, opens a PR if changed |
 | `pages.yml` | Pushes to `main` touching `website/**` | Deploys docs site to GitHub Pages |
-| `test-deploy.yml` | PRs touching `website/**` | Tests Docusaurus build without deploying |
+| `test-deploy.yml` | PRs touching `website/**` or the workflow itself | Tests the Docusaurus build without deploying; its `Trivy website scan` job fails on fixable CRITICAL / HIGH findings in the docs site's dependencies |
 | `link-check.yml` | PRs touching `**/*.md`, `**/*.mdx`, `lychee.toml` + weekly (Monday 08:00 UTC) + manual | Runs `lychee` against every Markdown file to catch broken external links; rules live in `lychee.toml` |
 | `cleanup-actions-cache.yml` | Weekly (Monday 05:00 UTC) + manual | Prunes stale GitHub Actions caches |
 
@@ -80,3 +80,8 @@ PR stays blocked.
   cannot. When pinning by hand, dereference annotated tags to their
   commit: for those actions `git/ref/tags/vN` returns a tag object
   whose SHA the runner cannot resolve.
+- A `.trivyignore.yaml` entry for a website finding needs both
+  `website/pnpm-lock.yaml` and `pnpm-lock.yaml` in its `paths`:
+  `security.yml` scans the repo root, the `Trivy website scan` job scans
+  `website/`, and an entry's paths only match relative to the scan root.
+  Pass the file to that job's gating step with `trivyignores:` as well.

@@ -50,3 +50,37 @@ jobs:
       - name: Build site
         run: pnpm run build
         working-directory: website
+
+  # security.yml's required Trivy scan ignores website/** and ci-skip.yml
+  # stubs its check, so a website-only PR gets no other lockfile scan.
+  # No SARIF upload: security.yml's weekly whole-repo scan already files
+  # website findings as code scanning alerts.
+  trivy:
+    name: Trivy website scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      # Scans the checkout alone: an installed node_modules carries a Ruby
+      # Gemfile.lock from lunr-languages that would fail the gate.
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: List website findings
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: website
+          format: table
+
+      # Reuses the binary and DB from the step above; a second cache restore
+      # would overwrite that DB with the older cached one and re-download it.
+      - name: Fail on fixable CRITICAL or HIGH
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: website
+          severity: CRITICAL,HIGH
+          ignore-unfixed: "true"
+          exit-code: "1"
+          skip-setup-trivy: "true"
+          cache: "false"

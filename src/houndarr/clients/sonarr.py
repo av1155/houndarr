@@ -116,9 +116,7 @@ class SonarrClient(ArrClient):
         """Return a page of monitored episodes that have not met their quality cutoff.
 
         Calls ``GET /api/v3/wanted/cutoff`` with ``includeSeries=true`` so that
-        series metadata is embedded in each record.  Sonarr's cutoff
-        endpoint historically omits the sort params, so the call passes
-        ``include_sort=False`` to suppress them.
+        series metadata is embedded in each record.
 
         Args:
             page: 1-based page number.
@@ -127,12 +125,7 @@ class SonarrClient(ArrClient):
         Returns:
             List of :class:`MissingEpisode` dataclasses for cutoff-unmet episodes.
         """
-        envelope = await self._fetch_wanted_page(
-            "cutoff",
-            page=page,
-            page_size=page_size,
-            include_sort=False,
-        )
+        envelope = await self._fetch_wanted_page("cutoff", page=page, page_size=page_size)
         return [_parse_episode(w) for w in envelope.records]
 
     async def get_wanted_total(self, kind: WantedKind) -> int:

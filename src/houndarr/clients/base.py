@@ -432,7 +432,6 @@ class ArrClient(ABC):
         *,
         page: int,
         page_size: int,
-        include_sort: bool = True,
         include_param: bool = True,
     ) -> PaginatedResponse[Any]:
         """Fetch one page of ``/wanted/{kind}`` via the per-subclass envelope.
@@ -442,9 +441,8 @@ class ArrClient(ABC):
         - :attr:`_WANTED_BASE_PATH`: API root that prefixes ``/{kind}``.
           Defaults to ``/api/v3/wanted`` for v3-API clients (Sonarr, Radarr,
           Whisparr v2); Lidarr and Readarr override to ``/api/v1/wanted``.
-        - :attr:`_WANTED_SORT_KEY`: sort field name passed when ``include_sort``
-          is true.  Required for every paginated /wanted client; the missing
-          pass on every client and the cutoff pass on Radarr include it.
+        - :attr:`_WANTED_SORT_KEY`: the release-date column every page sorts
+          ascending by.  Required for every paginated /wanted client.
         - :attr:`_WANTED_INCLUDE_PARAM`: optional embed-parent query param
           (``includeSeries`` for Sonarr / Whisparr v2, ``includeArtist`` for
           Lidarr, ``includeAuthor`` for Readarr, ``None`` for Radarr).
@@ -452,12 +450,9 @@ class ArrClient(ABC):
           subclass (e.g. ``PaginatedResponse[RadarrWantedMovie]``) that
           validates the response payload.
 
-        ``include_sort`` defaults to ``True`` because the missing pass on
-        every paginated client sorts ascending by its release-date field.
-        Callers pass ``include_sort=False`` for the cutoff pass on Sonarr,
-        Lidarr, Readarr, and Whisparr v2 because those endpoints today omit
-        the sort params; Radarr's cutoff endpoint includes them so it
-        relies on the default.
+        Every request sends ``sortKey`` and ``sortDirection=ascending``.
+        Without them each app falls back to an order of its own choosing,
+        and Sonarr 3.0.10.1567's cutoff endpoint answers 500.
 
         ``include_param`` defaults to ``True`` because the page reads on
         every embed-using client want the parent aggregate inlined into
@@ -484,8 +479,6 @@ class ArrClient(ABC):
             kind: ``"missing"`` or ``"cutoff"``.
             page: 1-based page number.
             page_size: Number of records to request.
-            include_sort: When true, append ``sortKey`` and
-                ``sortDirection`` to the request.
             include_param: When true and :attr:`_WANTED_INCLUDE_PARAM` is
                 set, append ``{_WANTED_INCLUDE_PARAM}=true`` to the
                 request.
@@ -515,10 +508,9 @@ class ArrClient(ABC):
             "page": page,
             "pageSize": page_size,
             "monitored": "true",
+            "sortKey": self._WANTED_SORT_KEY,
+            "sortDirection": "ascending",
         }
-        if include_sort:
-            params["sortKey"] = self._WANTED_SORT_KEY
-            params["sortDirection"] = "ascending"
         if include_param and self._WANTED_INCLUDE_PARAM is not None:
             params[self._WANTED_INCLUDE_PARAM] = "true"
         data = await self._get(path, **params)

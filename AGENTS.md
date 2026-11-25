@@ -314,7 +314,7 @@ Subject line max 50 characters (including the `type(scope): ` prefix); body line
 
 ```
 1. Each fix/feature PR adds a bullet under `## [Unreleased]` in
-   CHANGELOG.md as part of its own commit (the /ship workflow
+   CHANGELOG.md as part of its own commit (the /ship-it workflow
    handles this for user-facing changes; non-user-facing PRs skip
    the bullet).
 2. When ready to release, open a separate "chore: bump version to

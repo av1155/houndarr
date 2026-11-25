@@ -123,6 +123,17 @@ _PING_SAFE_ERRORS: tuple[type[BaseException], ...] = (
 # depth against a future accidental ``follow_redirects=True`` flip.
 _REDIRECT_STATUS_CODES: frozenset[int] = frozenset({301, 302, 303, 307, 308})
 
+_WANTED_SORT_DIRECTION = "ascending"
+
+# (client class, base URL, wanted path) already warned about a sort
+# mismatch.  A client is rebuilt for every pass and refresh, so the memory
+# lives here.
+_sort_echo_warned: set[tuple[str, str, str]] = set()
+
+
+def _sort_column(sort_key: str) -> str:
+    return sort_key.rsplit(".", 1)[-1].casefold()
+
 
 async def _redirect_guard(response: httpx.Response) -> None:
     """Reject redirect targets that resolve to a blocked address range.
@@ -216,7 +227,7 @@ class ArrClient(ABC):
         api_key: str,
         timeout: httpx.Timeout = _DEFAULT_TIMEOUT,
     ) -> None:
-        base = url.rstrip("/")
+        self._base_url = url.rstrip("/")
         # SSRF posture: redirects never followed at the client level; see
         # services/url_validation.py threat model.  ``follow_redirects``
         # is stated explicitly (httpx's own default is False) so a
@@ -227,7 +238,7 @@ class ArrClient(ABC):
         # target (loopback, link-local, unspecified) raises before the
         # transport would chase it.
         self._client = httpx.AsyncClient(
-            base_url=base,
+            base_url=self._base_url,
             headers={"X-Api-Key": api_key, "Accept": "application/json"},
             timeout=timeout,
             follow_redirects=False,
@@ -509,12 +520,49 @@ class ArrClient(ABC):
             "pageSize": page_size,
             "monitored": "true",
             "sortKey": self._WANTED_SORT_KEY,
-            "sortDirection": "ascending",
+            "sortDirection": _WANTED_SORT_DIRECTION,
         }
         if include_param and self._WANTED_INCLUDE_PARAM is not None:
             params[self._WANTED_INCLUDE_PARAM] = "true"
         data = await self._get(path, **params)
-        return envelope_cls.model_validate(data)
+        envelope = envelope_cls.model_validate(data)
+        self._warn_on_sort_mismatch(path, data)
+        return envelope
+
+    def _warn_on_sort_mismatch(self, path: str, data: object) -> None:
+        """Log once per instance and list when the app sorted differently.
+
+        Allowlisted builds swap an unlisted key for their own default and
+        report the swap only in the envelope, so without this a key that
+        stops being honoured reads as a healthy page in the wrong order.
+        Keys compare by the part after the last ``.`` so Sonarr's bare
+        ``airDateUtc`` matches the ``episodes.airDateUtc`` it reports.  The
+        raw payload is read so an odd echo can never fail the page.
+        """
+        if not isinstance(data, dict):
+            return
+        reported_key = data.get("sortKey")
+        if not isinstance(reported_key, str):
+            return
+        direction = data.get("sortDirection")
+        same_key = _sort_column(reported_key) == _sort_column(self._WANTED_SORT_KEY)
+        ascending = not isinstance(direction, str) or direction.casefold() == _WANTED_SORT_DIRECTION
+        if same_key and ascending:
+            return
+        warn_key = (type(self).__name__, self._base_url, path)
+        if warn_key in _sort_echo_warned:
+            return
+        _sort_echo_warned.add(warn_key)
+        logger.warning(
+            "Wanted list %s%s came back sorted by %s %s instead of %s %s; "
+            "Chronological order is not oldest-first",
+            self._base_url,
+            path,
+            reported_key,
+            direction,
+            self._WANTED_SORT_KEY,
+            _WANTED_SORT_DIRECTION,
+        )
 
     async def _fetch_wanted_total(self, kind: WantedKind) -> int:
         """Default size-1 probe for ``/wanted/{kind}`` totals with typed wraps.

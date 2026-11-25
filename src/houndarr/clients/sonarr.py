@@ -49,6 +49,9 @@ class MissingEpisode:
 class SonarrClient(ArrClient):
     """Async client for the Sonarr v3 REST API."""
 
+    # Bare on purpose: 3.0.10.1567 resolves the key as an Episode property
+    # path and answers 500 for ``episodes.airDateUtc``, while 4.x swaps the
+    # bare form for that same column and reports ``episodes.airDateUtc``.
     _WANTED_SORT_KEY: ClassVar[str] = "airDateUtc"
     _WANTED_INCLUDE_PARAM: ClassVar[str | None] = "includeSeries"
     # Annotation is inherited from ``ArrClient._WANTED_ENVELOPE``

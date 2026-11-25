@@ -26,6 +26,7 @@ from houndarr.errors import (
     ClientTransportError,
     ClientValidationError,
     describe_exception,
+    redact_url_credentials,
 )
 from houndarr.services.url_validation import is_blocked_address
 
@@ -554,10 +555,9 @@ class ArrClient(ABC):
             return
         _sort_echo_warned.add(warn_key)
         logger.warning(
-            "Wanted list %s%s came back sorted by %s %s instead of %s %s; "
+            "Wanted list %s came back sorted by %s %s instead of %s %s; "
             "Chronological order is not oldest-first",
-            self._base_url,
-            path,
+            redact_url_credentials(self._base_url + path),
             reported_key,
             direction,
             self._WANTED_SORT_KEY,

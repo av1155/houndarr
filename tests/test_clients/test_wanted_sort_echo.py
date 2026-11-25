@@ -113,6 +113,19 @@ async def test_a_flipped_direction_warns(caplog: pytest.LogCaptureFixture) -> No
 
 @pytest.mark.asyncio()
 @respx.mock
+async def test_a_url_password_never_reaches_the_log(caplog: pytest.LogCaptureFixture) -> None:
+    respx.get(f"{_SONARR}/api/v3/wanted/cutoff").respond(
+        json=_envelope(sortKey="series.sortTitle", sortDirection="ascending")
+    )
+    with caplog.at_level(logging.WARNING, logger="houndarr.clients.base"):
+        await _fetch_cutoff("http://admin:hunter2@sonarr:8989")
+    [message] = _warnings(caplog)
+    assert "hunter2" not in message
+    assert message.startswith("Wanted list http://admin:[secure]@sonarr:8989/api/v3/wanted/cutoff ")
+
+
+@pytest.mark.asyncio()
+@respx.mock
 async def test_an_odd_echo_never_fails_the_page() -> None:
     record = {"id": 7, "seriesId": 1, "title": "Pilot", "seasonNumber": 1, "episodeNumber": 1}
     respx.get(f"{_SONARR}/api/v3/wanted/cutoff").respond(

@@ -35,7 +35,12 @@ from houndarr.services.admin import (
     factory_reset,
     reset_all_instance_policy,
 )
-from houndarr.services.instances import InstanceType, create_instance, get_instance
+from houndarr.services.instances import (
+    InstanceType,
+    TagFilterPolicy,
+    create_instance,
+    get_instance,
+)
 
 _MASTER_KEY = Fernet.generate_key()
 
@@ -118,6 +123,26 @@ async def test_reset_all_instance_policy_reverts_columns(
     assert inst.schedule.cutoff_page_offset == 1
     assert inst.upgrade.upgrade_item_offset == 0
     assert inst.upgrade.upgrade_series_offset == 0
+
+
+@pytest.mark.asyncio()
+async def test_reset_all_instance_policy_leaves_tag_filters_alone(db: None) -> None:
+    """Clearing a protective exclude on reset would widen what gets searched."""
+    created = await create_instance(
+        master_key=_MASTER_KEY,
+        name="Sonarr Tags",
+        type=InstanceType.sonarr,
+        url="http://sonarr:8989",
+        api_key="sonarr-key",
+        tag_filter_include="1080p",
+        tag_filter_exclude="houndarr-skip",
+    )
+
+    await reset_all_instance_policy(master_key=_MASTER_KEY, supervisor=None)
+
+    inst = await get_instance(created.core.id, master_key=_MASTER_KEY)
+    assert inst is not None
+    assert inst.tag_filter == TagFilterPolicy(include=("1080p",), exclude=("houndarr-skip",))
 
 
 @pytest.mark.asyncio()

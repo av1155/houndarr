@@ -23,6 +23,7 @@ from houndarr.engine.search_loop import (
 )
 from houndarr.errors import ClientTransportError
 from houndarr.services.instances import TagFilterPolicy
+from tests.test_engine.conftest import get_log_rows
 
 
 def _make_candidate(tags: tuple[int, ...] = ()) -> SearchCandidate:
@@ -245,3 +246,28 @@ class TestResolveTagFilterIds:
         )
         assert include_ids is None
         assert exclude_ids is None
+
+    @pytest.mark.pinning()
+    @pytest.mark.asyncio()
+    async def test_unknown_label_message_without_own_labels_is_unchanged(
+        self, instance: Any, seeded_instances: None
+    ) -> None:
+        """Unknown instance-wide labels share one sorted, deduped info row."""
+        import dataclasses  # noqa: PLC0415
+
+        scoped = dataclasses.replace(
+            instance,
+            tag_filter=TagFilterPolicy(include=("1080p", "b-typo"), exclude=("a-typo", "b-typo")),
+        )
+        adapter = self._stub_adapter(get_tags_result={"1080p": 1})
+        await _resolve_tag_filter_ids(scoped, adapter, cycle_id="c1", cycle_trigger="scheduled")
+
+        rows = await get_log_rows()
+        assert len(rows) == 1
+        row = rows[0]
+        assert row["action"] == "info"
+        assert row["item_id"] is None
+        assert row["reason"] == "tag filter (unknown label)"
+        assert row["message"] == "tag filter: unknown label(s) on Test Instance: a-typo, b-typo"
+        assert row["cycle_id"] == "c1"
+        assert row["cycle_trigger"] == "scheduled"

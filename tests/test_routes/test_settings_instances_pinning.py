@@ -140,6 +140,26 @@ class TestValidateTagFilter:
         assert "include" in err_include
         assert "exclude" in err_exclude
 
+    def test_exact_messages_for_instance_wide_fields(self) -> None:
+        too_long = "a" * 65
+        too_many = ",".join(f"tag{i}" for i in range(33))
+        assert validate_tag_filter(too_long, direction="include") == (
+            "Tag filter include: each label must be 64 characters or fewer.",
+            "",
+        )
+        assert validate_tag_filter(too_many, direction="include") == (
+            "Tag filter include: at most 32 tags allowed.",
+            "",
+        )
+        assert validate_tag_filter(too_long, direction="exclude") == (
+            "Tag filter exclude: each label must be 64 characters or fewer.",
+            "",
+        )
+        assert validate_tag_filter(too_many, direction="exclude") == (
+            "Tag filter exclude: at most 32 tags allowed.",
+            "",
+        )
+
 
 # resolve_search_modes
 

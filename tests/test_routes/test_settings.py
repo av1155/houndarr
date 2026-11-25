@@ -1086,3 +1086,58 @@ def test_update_instance_toggles_search_order(app: TestClient) -> None:
     assert revert.status_code == 200
     edit_after = app.get("/settings/instances/1/edit")
     assert _option_selected(edit_after.content, "chronological")
+
+
+# ---------------------------------------------------------------------------
+# Tag filters (#637, #833)
+# ---------------------------------------------------------------------------
+
+_TOO_LONG_LABEL = "a" * 65
+_TOO_MANY_LABELS = ",".join(f"t{i}" for i in range(33))
+
+
+@pytest.mark.parametrize("path", ["create", "update"])
+@pytest.mark.parametrize(
+    ("field", "raw", "message"),
+    [
+        (
+            "tag_filter_include",
+            _TOO_LONG_LABEL,
+            "Tag filter include: each label must be 64 characters or fewer.",
+        ),
+        ("tag_filter_include", _TOO_MANY_LABELS, "Tag filter include: at most 32 tags allowed."),
+        (
+            "tag_filter_exclude",
+            _TOO_LONG_LABEL,
+            "Tag filter exclude: each label must be 64 characters or fewer.",
+        ),
+        ("tag_filter_exclude", _TOO_MANY_LABELS, "Tag filter exclude: at most 32 tags allowed."),
+    ],
+)
+def test_instance_wide_tag_filter_errors_unchanged(
+    app: TestClient, path: str, field: str, raw: str, message: str
+) -> None:
+    _login(app)
+    target = "/settings/instances"
+    if path == "update":
+        created = app.post(target, data=_VALID_FORM, headers=csrf_headers(app))
+        assert created.status_code == 200
+        target = "/settings/instances/1"
+
+    resp = app.post(target, data={**_VALID_FORM, field: raw}, headers=csrf_headers(app))
+
+    assert resp.status_code == 422
+    assert resp.text == f'<span class="text-xs text-red-400">{message}</span>'
+
+
+def test_add_form_every_tip_ref_has_a_template(app: TestClient) -> None:
+    """A tooltip trigger whose template is missing opens an empty panel."""
+    import re
+
+    _login(app)
+    html = app.get("/settings/instances/add-form").text
+
+    refs = set(re.findall(r'data-tip-ref="([^"]+)"', html))
+    templates = set(re.findall(r'<template id="tip-([^"]+)"', html))
+    assert refs
+    assert refs <= templates, refs - templates

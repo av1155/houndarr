@@ -43,6 +43,11 @@ uv run pytest
 
 `just check` runs all of the above as a single recipe.
 
+The browser tests need Docker and run separately: `just e2e-up`, then
+`just test-browser chromium` (or `firefox`, `webkit`), then `just e2e-down`.
+The recipe installs Playwright from the lockfile's `e2e` group and downloads
+the browser on first use.
+
 ## Pull request guidance
 
 - Keep PRs focused and small.

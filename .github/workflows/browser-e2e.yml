@@ -19,7 +19,7 @@ concurrency:
 jobs:
   browser-e2e:
     name: Browser E2E (${{ matrix.browser }})
-    # playwright in tests/e2e_browser/requirements.txt must support this Ubuntu release.
+    # The playwright version in uv.lock must support this Ubuntu release.
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     strategy:
@@ -35,16 +35,16 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Set up Python 3.13
-        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+      - name: Install uv
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
-          python-version: "3.13"
-          cache: pip
+          enable-cache: true
+
+      - name: Set up Python 3.13
+        run: uv python install 3.13
 
       - name: Install browser test dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r tests/e2e_browser/requirements.txt
+        run: uv sync --frozen --group e2e
 
       # Playwright upstream recommends against caching the browser
       # binaries themselves: restore cost is comparable to a fresh
@@ -52,7 +52,7 @@ jobs:
       # binary and library versions.  See
       # https://playwright.dev/docs/ci#caching-browsers.
       - name: Install Playwright browser
-        run: playwright install --with-deps "$BROWSER"
+        run: uv run --frozen --group e2e playwright install --with-deps "$BROWSER"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
@@ -113,7 +113,7 @@ jobs:
 
       - name: Wait for Houndarr health
         run: |
-          for i in $(seq 1 60); do
+          for _ in $(seq 1 60); do
             if curl -sf http://localhost:8877/api/health | grep -q '"status":"ok"'; then
               echo "Houndarr healthy"
               exit 0
@@ -138,7 +138,7 @@ jobs:
           HOUNDARR_E2E_PASS: CITestPass1!
         run: |
           mkdir -p test-results
-          pytest tests/e2e_browser/ \
+          uv run --frozen --group e2e pytest tests/e2e_browser/ \
             --confcutdir tests/e2e_browser \
             --browser "$BROWSER" \
             --tracing retain-on-failure \

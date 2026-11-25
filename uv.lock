@@ -543,6 +543,7 @@ dev = [
 e2e = [
     { name = "playwright" },
     { name = "pytest-playwright" },
+    { name = "pytest-rerunfailures" },
 ]
 
 [package.metadata]
@@ -580,6 +581,7 @@ dev = [
 e2e = [
     { name = "playwright", specifier = ">=1.55.0" },
     { name = "pytest-playwright", specifier = ">=0.7.1" },
+    { name = "pytest-rerunfailures", specifier = ">=16.7" },
 ]
 
 [[package]]
@@ -1168,6 +1170,19 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/91/de/1c45f90a545771201ac11aead321ced92b66190da56f2138ee1ee78cee8a/pytest_playwright-0.10.0.tar.gz", hash = "sha256:47baf574dfb120bb53675d05c9784f8bf94e04c6dd7477dc56159ce732191952", size = 22634, upload-time = "2026-10-08T22:38:46.758Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/09/15/ab14dfdfd6756389e0a5467417863cf6fffa18ecfba0a68bfdc15dc5895a/pytest_playwright-0.10.0-py3-none-any.whl", hash = "sha256:8314d1af726e2c15531635902ece3ee47ed83f5a75c937a7eda8686d3dae6c0d", size = 22485, upload-time = "2026-10-08T22:38:49.089Z" },
+]
+
+[[package]]
+name = "pytest-rerunfailures"
+version = "16.7"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "packaging" },
+    { name = "pytest" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/d1/b0/6b5337f9d59b26b0069ea3d5e863c31dc04b69e51bbfb1cf2ea6328fba87/pytest_rerunfailures-16.7.tar.gz", hash = "sha256:6956ddfb65ca1d07e7e3d99e2c5359d82300f4cb062e6049563bd2c106f72d5c", size = 59666, upload-time = "2026-09-17T07:08:48.871Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/c1/d3/07ea35102cf2020ddaaac368d2a6f0bcc63d6523fb8918805bac3eb8b98f/pytest_rerunfailures-16.7-py3-none-any.whl", hash = "sha256:edf1886209c2b7dafe35b5bf1708d6ec40ccf6c6b357f0f02807efcec0204c99", size = 23952, upload-time = "2026-09-17T07:08:47.635Z" },
 ]
 
 [[package]]

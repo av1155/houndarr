@@ -19,10 +19,10 @@ pytest := ".venv/bin/pytest"
 # `auto` picks the physical-CPU count (psutil-aware).  Override via
 # `PYTEST_WORKERS=4 just test` for CI runners with constrained cores
 # or `PYTEST_WORKERS=0 just test` to fall back to serial when
-# debugging an ordering-sensitive flake.  Browser e2e + visual
-# baseline recipes ignore this and stay serial because they share a
-# single Houndarr instance + mock-arr stack on fixed ports (one of
-# the canonical pytest-xdist anti-patterns).
+# debugging an ordering-sensitive flake.  The browser e2e recipe
+# ignores this and stays serial because its tests share a single
+# Houndarr instance + mock-arr stack on fixed ports (one of the
+# canonical pytest-xdist anti-patterns).
 workers := env_var_or_default("PYTEST_WORKERS", "auto")
 
 # Default target: list every recipe.
@@ -109,12 +109,14 @@ serve:
 mock-arr port='9100' items='500' seed='42':
     {{python}} -m tests.mock_arr.server --port {{port}} --items {{items}} --seed {{seed}}
 
-# Browser e2e against a Docker-Compose stack. Assumes the image is built
-# and mock-sonarr / mock-radarr are reachable on the shared network.
-# Host env: HOUNDARR_URL, MOCK_SONARR_URL, MOCK_RADARR_URL, HOUNDARR_E2E_USER,
-# HOUNDARR_E2E_PASS.
+# Browser e2e against the stack from `just e2e-up`. On Linux the browser
+# also needs system libraries: `uv run --group e2e playwright install-deps
+# <browser>` (uses sudo). HOUNDARR_URL, MOCK_SONARR_URL, MOCK_RADARR_URL,
+# HOUNDARR_E2E_USER and HOUNDARR_E2E_PASS override the conftest defaults,
+# which already match e2e-up.
 test-browser browser="chromium":
-    {{pytest}} tests/e2e_browser/ --confcutdir tests/e2e_browser --browser {{browser}} -q
+    uv run --group e2e playwright install {{browser}}
+    uv run --group e2e pytest tests/e2e_browser/ --confcutdir tests/e2e_browser --browser {{browser}} -q
 
 # Build the houndarr:e2e image (idempotent), create the arr-net docker
 # network, start mock-sonarr + mock-radarr + houndarr-e2e, and wait for

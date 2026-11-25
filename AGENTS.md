@@ -74,7 +74,9 @@ just test                       # full suite
 just test-quick                 # unit only (-m "not integration")
 just test-integration           # async engine cycles
 just pin                        # characterisation tests
-just test-browser chromium      # Playwright e2e (serial, shared stack)
+just e2e-up                     # Docker stack the browser suite drives
+just test-browser chromium      # Playwright e2e via the uv `e2e` group (serial)
+just e2e-down                   # tear the stack down
 .venv/bin/pytest tests/test_auth.py::test_x -v   # one-off
 ```
 

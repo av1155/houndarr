@@ -10,6 +10,6 @@ Bash orchestrator for the browser end-to-end suite under
 - `just test-browser <browser>`: run the suite against that stack.
 - `just e2e-down`: tear the whole thing down.
 
-Both route through `capture_baselines.sh`, which takes a mode
-argument (`up` or `down`).  Read the script header for the defaults
+`e2e-up` and `e2e-down` route through `capture_baselines.sh`, which
+takes a mode argument (`up` or `down`).  Read the script header for the defaults
 and the environment-variable knobs.

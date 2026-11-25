@@ -379,10 +379,11 @@ someone comments, so reporters get immediate feedback.
 - `.github/workflows/`: changes trigger workflow-lint and may affect required checks
 - `src/houndarr/database.py` schema migrations: requires `SCHEMA_VERSION` bump
 - `tests/conftest.py` shared fixtures: changes affect all test files
-- `pyproject.toml` (`[project] dependencies` + `[dependency-groups] dev`)
-  and `uv.lock`: dependency changes require `pip-audit` to pass.
-  `requirements.txt` / `requirements-dev.txt` are no longer checked in;
-  the security workflow generates them on the fly via `uv export`
+- `pyproject.toml` (`[project] dependencies` + `[dependency-groups]` `dev`
+  and `e2e`) and `uv.lock`: dependency changes require `pip-audit` to pass.
+  No requirements files are checked in; the security workflow generates
+  `requirements.txt`, `requirements-dev.txt` and `requirements-e2e.txt`
+  on the fly via `uv export`
 
 ### When to add or update tests
 

@@ -46,7 +46,8 @@ uv run pytest
 The browser tests need Docker and run separately: `just e2e-up`, then
 `just test-browser chromium` (or `firefox`, `webkit`), then `just e2e-down`.
 The recipe installs Playwright from the lockfile's `e2e` group and downloads
-the browser on first use.
+the browser on first use. On Linux, install the browser's system libraries
+once with `uv run --group e2e playwright install-deps <browser>` (uses sudo).
 
 ## Pull request guidance
 

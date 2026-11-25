@@ -38,7 +38,7 @@ PR stays blocked.
 
 | Workflow | Trigger | Purpose |
 |----------|---------|---------|
-| `browser-e2e.yml` | PRs (skips docs, Markdown, `website/**`, `.claude/**`) + manual | Builds the image, starts mock Sonarr/Radarr, and runs `tests/e2e_browser/` on chromium, firefox and webkit with the locked `e2e` group (`uv sync --frozen --group e2e`) |
+| `browser-e2e.yml` | PRs (same paths-ignore as the four filtered workflows) + manual | Builds the image, starts mock Sonarr/Radarr, and runs `tests/e2e_browser/` on chromium, firefox and webkit with the locked `e2e` group (`uv sync --frozen --group e2e`) |
 | `version-check.yml` | PRs changing `VERSION` or `CHANGELOG.md` | Validates VERSION format, CHANGELOG heading match, allowed `###` headers, `---` separator |
 | `release.yml` | `v*` tag push | Validates VERSION == tag, extracts CHANGELOG block, creates GitHub Release |
 | `chart.yml` | `v*` tag push | Packages `charts/houndarr/` with version from `VERSION` file, pushes to `oci://ghcr.io/av1155/charts` |

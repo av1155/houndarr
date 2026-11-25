@@ -96,19 +96,20 @@ def test_missing_probe_values_fall_back_to_the_values_yaml_defaults(
 
 
 def test_overrides_reach_the_rendered_probes() -> None:
-    probes = _render_probes(
-        "startupProbe.failureThreshold=120",
-        "livenessProbe.timeoutSeconds=10",
-        "readinessProbe.initialDelaySeconds=0",
-        "readinessProbe.failureThreshold=6",
-    )
-
-    expected = {name: dict(fields) for name, fields in _DEFAULT_PROBES.items()}
-    expected["startupProbe"]["failureThreshold"] = 120
-    expected["livenessProbe"]["timeoutSeconds"] = 10
+    """Distinct values per field catch a mistyped key or a probe reading another's block."""
+    expected = {
+        name: {key: 100 + 10 * i + j for j, key in enumerate(fields)}
+        for i, (name, fields) in enumerate(_DEFAULT_PROBES.items())
+    }
+    # An explicit 0 must survive; a sprig `default` fallback would turn it into 5.
     expected["readinessProbe"]["initialDelaySeconds"] = 0
-    expected["readinessProbe"]["failureThreshold"] = 6
-    assert probes == expected
+    set_args = [
+        f"{name}.{key}={value}"
+        for name, fields in expected.items()
+        for key, value in fields.items()
+    ]
+
+    assert _render_probes(*set_args) == expected
 
 
 def test_chart_passes_strict_lint() -> None:

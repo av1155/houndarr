@@ -14,7 +14,7 @@ scale beyond 1.
 
 ## Prerequisites
 
-- Helm 3.8 or later (OCI registry support is required)
+- Helm 3.14 or later (OCI chart support, and `--reset-then-reuse-values` for upgrades)
 - A Kubernetes cluster
 - A namespace: `kubectl create namespace houndarr`
 
@@ -25,7 +25,6 @@ Install directly from the OCI registry:
 ```bash
 helm install houndarr \
   oci://ghcr.io/av1155/charts/houndarr \
-  --version 1.4.0 \
   --namespace houndarr \
   --create-namespace
 ```
@@ -36,7 +35,6 @@ helm install houndarr \
 
 ```bash
 helm install houndarr oci://ghcr.io/av1155/charts/houndarr \
-  --version 1.4.0 \
   --namespace houndarr \
   --set securityMode=nonroot
 ```
@@ -45,7 +43,6 @@ helm install houndarr oci://ghcr.io/av1155/charts/houndarr \
 
 ```bash
 helm install houndarr oci://ghcr.io/av1155/charts/houndarr \
-  --version 1.4.0 \
   --namespace houndarr \
   --set ingress.enabled=true \
   --set ingress.host=houndarr.example.com \
@@ -61,8 +58,10 @@ helm install houndarr oci://ghcr.io/av1155/charts/houndarr \
 helm upgrade houndarr oci://ghcr.io/av1155/charts/houndarr \
   --version <new-version> \
   --namespace houndarr \
-  --reuse-values
+  --reset-then-reuse-values
 ```
+
+`--reset-then-reuse-values` keeps your overrides and picks up defaults that the new chart version adds. Plain `--reuse-values` also reuses the old chart's defaults, so new keys stay unset.
 
 :::danger
 Back up the `/data` PVC before upgrading. It contains the Fernet encryption master key (`houndarr.masterkey`). Loss of the master key makes all stored *arr API keys unrecoverable.
@@ -131,6 +130,15 @@ The `chartRef` field (instead of `chart.spec.sourceRef`) is what connects a `Hel
 | `env.logRetentionDays` | `30` | `HOUNDARR_LOG_RETENTION_DAYS`: days of `search_log` rows to keep. `0` disables purges; `7` to `365` overrides the default |
 | `startupProbe.failureThreshold` | `60` | Probe attempts before the pod is marked unhealthy. Combined with `periodSeconds`, the default gives a 10-minute startup budget for first-boot migrations |
 | `startupProbe.periodSeconds` | `10` | Seconds between startup probe attempts |
+| `startupProbe.timeoutSeconds` | `5` | Seconds each startup probe attempt waits for `/api/health` |
+| `livenessProbe.initialDelaySeconds` | `10` | Seconds after the startup probe passes before the first liveness check |
+| `livenessProbe.periodSeconds` | `30` | Seconds between liveness checks |
+| `livenessProbe.timeoutSeconds` | `5` | Seconds each liveness check waits for `/api/health` |
+| `livenessProbe.failureThreshold` | `3` | Consecutive failures before Kubernetes restarts the container |
+| `readinessProbe.initialDelaySeconds` | `5` | Seconds after the startup probe passes before the first readiness check |
+| `readinessProbe.periodSeconds` | `10` | Seconds between readiness checks |
+| `readinessProbe.timeoutSeconds` | `5` | Seconds each readiness check waits for `/api/health` |
+| `readinessProbe.failureThreshold` | `3` | Consecutive failures before the pod leaves the Service endpoints |
 | `persistence.size` | `1Gi` | PVC size |
 | `persistence.storageClassName` | `""` | StorageClass. Empty uses the cluster default |
 | `persistence.accessMode` | `ReadWriteOnce` | PVC access mode |

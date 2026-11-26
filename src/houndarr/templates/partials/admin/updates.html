@@ -23,7 +23,7 @@
 {% call layout.admin_section(id="admin-updates", title="Updates") %}
   <div class="rounded-container border border-border-subtle bg-surface-1 p-5 sm:p-6 space-y-3">
     <form
-      hx-post="/settings/admin/update-check/preferences"
+      hx-post="{{ base_path }}/settings/admin/update-check/preferences"
       hx-target="#update-check-status"
       hx-swap="outerHTML"
     >
@@ -49,14 +49,14 @@
        /preferences. #}
     <div
       id="update-check-status"
-      hx-get="/settings/admin/update-check"
+      hx-get="{{ base_path }}/settings/admin/update-check"
       hx-trigger="load once delay:200ms"
       hx-swap="outerHTML"
     ></div>
 
     <div class="pt-3 mt-3 border-t border-border-subtle/60 space-y-3">
       <form
-        hx-post="/settings/changelog/preferences"
+        hx-post="{{ base_path }}/settings/changelog/preferences"
         hx-target="#admin-updates"
         hx-swap="outerHTML"
       >
@@ -79,7 +79,7 @@
       <div class="flex flex-wrap items-center gap-2">
         <button
           type="button"
-          hx-get="/settings/changelog/popup?force=1"
+          hx-get="{{ base_path }}/settings/changelog/popup?force=1"
           hx-target="#changelog-slot"
           hx-swap="outerHTML"
           class="btn btn-soft btn-neutral px-3 py-1.5 text-xs font-medium font-sans"

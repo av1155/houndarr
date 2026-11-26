@@ -27,6 +27,7 @@ from houndarr.auth import rate_limit as _rate_limit
 from houndarr.auth.csrf import _CSRF_PROTECTED_METHODS, validate_csrf
 from houndarr.auth.session import CSRF_COOKIE_NAME, validate_session
 from houndarr.auth.setup import is_setup_complete
+from houndarr.base_path import app_url, route_path
 from houndarr.config import get_settings
 from houndarr.repositories import widget_api_key as _widget_api_key_repo
 
@@ -83,7 +84,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
         Per-request dispatch keeps the middleware thin and lets each
         branch handle its own public-path and CSRF rules.
         """
-        path = request.url.path
+        path = route_path(request)
 
         if path in _API_KEY_PATHS:
             return await self._dispatch_api_key(request, call_next)
@@ -149,10 +150,10 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
         setup_done = await is_setup_complete()
         if not setup_done:
-            return RedirectResponse(url="/setup", status_code=302)
+            return RedirectResponse(url=app_url(request, "/setup"), status_code=302)
 
         if not await validate_session(request):
-            return RedirectResponse(url="/login", status_code=302)
+            return RedirectResponse(url=app_url(request, "/login"), status_code=302)
 
         # CSRF check on state-changing methods
         if request.method in _CSRF_PROTECTED_METHODS and not await validate_csrf(request):
@@ -185,9 +186,9 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
         # Setup, login, and logout serve no purpose in proxy mode
         if path in _proxy_auth._PROXY_DEAD_PATHS:
-            return RedirectResponse(url="/", status_code=302)
+            return RedirectResponse(url=app_url(request, "/"), status_code=302)
         if path == _LOGOUT_PATH and request.method == "POST":
-            logout_response = RedirectResponse(url="/", status_code=302)
+            logout_response = RedirectResponse(url=app_url(request, "/"), status_code=302)
             logout_response.delete_cookie(CSRF_COOKIE_NAME)
             return logout_response
 

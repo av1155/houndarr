@@ -288,6 +288,28 @@ def _parse_log_retention_days(raw: str) -> int:
     return parsed
 
 
+# The value lands in HTML, JS, and Location headers, so only plain path segments pass.
+_URL_BASE_RE = re.compile(r"^(?:/[A-Za-z0-9._~-]+)+$")
+
+
+def _parse_url_base(raw: str) -> str:
+    """Normalise HOUNDARR_URL_BASE to ``/houndarr`` form, or ``""`` for the root.
+
+    Invalid values log a warning and fall back to the root.
+    """
+    value = raw.strip().strip("/")
+    if not value:
+        return ""
+    value = f"/{value}"
+    if not _URL_BASE_RE.match(value) or any(seg in (".", "..") for seg in value.split("/")):
+        logger.warning(
+            "HOUNDARR_URL_BASE=%r is not a valid URL path; serving from the root instead",
+            raw,
+        )
+        return ""
+    return value
+
+
 def _parse_update_check_repo(raw: str) -> str:
     """Validate HOUNDARR_UPDATE_CHECK_REPO; fall back to the default on junk.
 
@@ -337,6 +359,7 @@ def get_settings() -> AppSettings:
         log_retention_days=_parse_log_retention_days(
             os.environ.get("HOUNDARR_LOG_RETENTION_DAYS", "")
         ),
+        url_base=_parse_url_base(os.environ.get("HOUNDARR_URL_BASE", "")),
     )
 
 
@@ -362,6 +385,7 @@ class BootstrapOverrides(TypedDict, total=False):
     auth_proxy_header: str
     update_check_repo: str
     log_retention_days: int
+    url_base: str
 
 
 def bootstrap_settings(**overrides: Unpack[BootstrapOverrides]) -> AppSettings:
@@ -448,6 +472,9 @@ class AppSettings:
             purges; ``7`` to ``365`` overrides the default of ``30``
             (which matches the value shipped through v1.10.x).
             Corresponds to ``HOUNDARR_LOG_RETENTION_DAYS`` env var.
+        url_base: URL prefix when a reverse proxy serves Houndarr under a
+            sub-path (e.g. ``/houndarr``); empty for the root.
+            Corresponds to ``HOUNDARR_URL_BASE`` env var.
     """
 
     data_dir: str = "/data"
@@ -462,6 +489,7 @@ class AppSettings:
     auth_proxy_header: str = ""
     update_check_repo: str = _DEFAULT_UPDATE_CHECK_REPO
     log_retention_days: int = _LOG_RETENTION_DEFAULT_DAYS
+    url_base: str = ""
 
     # Derived paths (computed from data_dir)
     db_path: Path = field(init=False)

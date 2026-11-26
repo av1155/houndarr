@@ -15,6 +15,7 @@ services:
       # - HOUNDARR_SECURE_COOKIES=true         # set Secure flag on cookies when behind HTTPS
       # - HOUNDARR_COOKIE_SAMESITE=lax           # lax (default, allows dashboard links) or strict
       # - HOUNDARR_TRUSTED_PROXIES=172.18.0.0/16  # trust X-Forwarded-For from this proxy IP/subnet
+      # - HOUNDARR_URL_BASE=/houndarr            # when the proxy serves Houndarr under a sub-path
       # SSO proxy auth (Authelia, Authentik, oauth2-proxy, etc.); all three required together:
       # - HOUNDARR_AUTH_MODE=proxy
       # - HOUNDARR_AUTH_PROXY_HEADER=Remote-User  # header your proxy sets (e.g. X-authentik-username)

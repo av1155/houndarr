@@ -42,6 +42,8 @@ from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.types import ASGIApp
 
+from houndarr.base_path import route_path
+
 _HTML_CONTENT_TYPE_PREFIX = "text/html"
 _JSON_CONTENT_TYPE_PREFIX = "application/json"
 _STATIC_PATH_PREFIX = "/static/"
@@ -66,7 +68,7 @@ class CacheControlMiddleware(BaseHTTPMiddleware):
         """Apply the three cache rules to *response* before returning."""
         response = await call_next(request)
 
-        path = request.url.path
+        path = route_path(request)
         is_static_2xx = path.startswith(_STATIC_PATH_PREFIX) and 200 <= response.status_code < 300
         if is_static_2xx:
             response.headers.setdefault("Cache-Control", _STATIC_CACHE_CONTROL)

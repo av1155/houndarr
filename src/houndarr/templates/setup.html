@@ -10,7 +10,7 @@
 <div class="auth-card">
   <div class="auth-card__topbar">
     <span class="auth-card__brand">
-      <img src="/static/img/houndarr-logo-dark.png" alt="Houndarr logo" />
+      <img src="{{ base_path }}/static/img/houndarr-logo-dark.png" alt="Houndarr logo" />
       <span>Houndarr</span>
     </span>
   </div>
@@ -32,7 +32,7 @@
     </div>
     {% endif %}
 
-    <form action="/setup" method="post" data-auth-form>
+    <form action="{{ base_path }}/setup" method="post" data-auth-form>
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
 
       <div class="field">
@@ -109,5 +109,5 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="/static/js/auth.js?v={{ version }}" defer></script>
+<script src="{{ base_path }}/static/js/auth.js?v={{ version }}" defer></script>
 {% endblock %}

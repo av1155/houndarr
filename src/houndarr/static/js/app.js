@@ -108,7 +108,8 @@
     // header flip a single BEM modifier, while the mobile drawer rows
     // keep the original Tailwind utility swap. Branch on the nearest
     // .pill-nav ancestor so a single pass handles both.
-    const path = window.location.pathname;
+    const basePath = window.houndarrClientHelpers?.basePath || '';
+    const path = window.location.pathname.slice(basePath.length) || '/';
     navLinks().forEach((link) => {
       const route = link.getAttribute('data-shell-route') || '';
       const isActive = routeIsActive(route, path);

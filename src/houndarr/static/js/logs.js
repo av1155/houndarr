@@ -8,6 +8,7 @@ function initLogsPage() {
   const controller = new AbortController();
   window.__houndarrLogsPageController = controller;
   const { signal } = controller;
+  const BASE_PATH = window.houndarrClientHelpers?.basePath || '';
 
   const FEED = document.getElementById('log-feed');
   const FORM = document.getElementById('log-filter-form');
@@ -519,7 +520,7 @@ function initLogsPage() {
       const qs = newestCycleId
         ? `?since_cycle_id=${encodeURIComponent(newestCycleId)}`
         : '';
-      const res = await fetch(`/api/logs/head${qs}`, { signal });
+      const res = await fetch(`${BASE_PATH}/api/logs/head${qs}`, { signal });
       if (!res.ok) return;
       const data = await res.json();
       pendingCount = Number(data.count_newer_than) || 0;

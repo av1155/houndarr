@@ -154,7 +154,7 @@ full tuning order is in
 
 ## Adding env vars that are not in the template
 
-The template covers the nine fields most users need. Two others are
+The template covers the nine fields most users need. Three others are
 useful for specific cases:
 
 - `HOUNDARR_COOKIE_SAMESITE`: defaults to `lax`. Set to `strict` for
@@ -162,8 +162,11 @@ useful for specific cases:
   apps like Homarr that click through to Houndarr.
 - `HOUNDARR_LOG_LEVEL`: defaults to `info`. Set to `debug` when
   working through a support thread.
+- `HOUNDARR_URL_BASE`: defaults to empty. Set to a path such as
+  `/houndarr` when SWAG or Nginx Proxy Manager serves Houndarr under
+  a sub-path; see [Reverse Proxy](/docs/guides/reverse-proxy#serving-from-a-sub-path).
 
-To add either, scroll to the bottom of the template editor, click
+To add any of them, scroll to the bottom of the template editor, click
 **Add another Path, Port, Variable, Label or Device**, choose type
 **Variable**, set the key and value, and apply.
 

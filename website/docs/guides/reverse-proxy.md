@@ -60,6 +60,28 @@ houndarr.example.com {
 Caddy handles HTTPS automatically and sets appropriate forwarding
 headers.
 
+## Serving from a sub-path
+
+To reach Houndarr at a path such as `https://example.com/houndarr`
+instead of its own hostname, set `HOUNDARR_URL_BASE=/houndarr` and
+proxy that location to Houndarr. Redirects, links, and static assets
+then carry the prefix.
+
+```nginx
+location /houndarr/ {
+    proxy_pass http://houndarr:8877;
+    proxy_set_header Host $http_host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+}
+```
+
+Houndarr accepts requests with or without the prefix, so a
+`proxy_pass` that strips it (`http://houndarr:8877/`) works too, and the
+container health check on `/api/health` is unaffected. `$http_host`
+keeps a non-standard port in the `Host` header.
+
 ## Example: Traefik (Docker labels)
 
 ```yaml

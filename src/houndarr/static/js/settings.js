@@ -10,6 +10,7 @@ function initSettingsPage() {
   const controller = new AbortController();
   window.__houndarrSettingsPageController = controller;
   const { signal } = controller;
+  const BASE_PATH = window.houndarrClientHelpers?.basePath || '';
 
   (() => {
     async function writeClipboard(text, host = document.body) {
@@ -714,7 +715,7 @@ function initSettingsPage() {
     function openFor(kind) {
       const copy = COPY[kind];
       if (!copy) return;
-      form.setAttribute('hx-post', copy.endpoint);
+      form.setAttribute('hx-post', `${BASE_PATH}${copy.endpoint}`);
       if (window.htmx && typeof window.htmx.process === 'function') {
         window.htmx.process(form);
       }

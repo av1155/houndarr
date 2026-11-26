@@ -36,6 +36,7 @@ from houndarr.auth import (
     clear_session,
     record_failed_login,
 )
+from houndarr.base_path import app_url
 from houndarr.config import get_settings
 from houndarr.deps import get_master_key
 from houndarr.errors import ServiceError
@@ -204,7 +205,7 @@ async def admin_factory_reset(
         settings.auth_mode,
     )
 
-    redirect_target = "/" if is_proxy else "/setup"
+    redirect_target = app_url(request, "/" if is_proxy else "/setup")
 
     response = hx_redirect_response(Response(status_code=200), redirect_target)
     clear_session(response)

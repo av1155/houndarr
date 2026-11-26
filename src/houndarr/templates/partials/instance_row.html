@@ -8,5 +8,5 @@
    default with-context behaviour.  Removing the import or switching
    the include to `without context` would break this; keep the
    import inside this partial. #}
-{%- import "_macros/instances.html" as instances -%}
+{%- import "_macros/instances.html" as instances with context -%}
 {{ instances.instance_row(instance, active_error_ids) }}

@@ -16,9 +16,9 @@
      or a Starlette 500 page does not land in a UI slot.  ``error: true``
      stays so ``htmx:responseError`` listeners still fire. #}
   <meta name="htmx-config" content='{"responseHandling":[{"code":"^204$","swap":false},{"code":"^[23]..$","swap":true},{"code":"^422$","swap":true,"error":true},{"code":"^[45]..$","swap":false,"error":true},{"code":"...","swap":false,"error":true}]}' />
-  <link rel="icon" type="image/png" href="/static/img/houndarr-logo-dark.png" />
-  <link rel="shortcut icon" href="/static/img/houndarr-logo-dark.png" />
-  <link rel="apple-touch-icon" href="/static/img/houndarr-logo-dark.png" />
+  <link rel="icon" type="image/png" href="{{ base_path }}/static/img/houndarr-logo-dark.png" />
+  <link rel="shortcut icon" href="{{ base_path }}/static/img/houndarr-logo-dark.png" />
+  <link rel="apple-touch-icon" href="{{ base_path }}/static/img/houndarr-logo-dark.png" />
   <title>{% block title %}Houndarr{% endblock %}</title>
 
   {# Tailwind CSS v4 + custom design-system CSS, compiled at Docker build
@@ -26,10 +26,10 @@
      src/houndarr/static/css/: input.css (theme + imports), tokens.css,
      app.css, auth.css, auth-fields.css. Bundles Google Fonts @import,
      Tailwind utilities, and all component primitives into one file. #}
-  <link rel="stylesheet" href="/static/css/app.built.css?v={{ version }}" />
+  <link rel="stylesheet" href="{{ base_path }}/static/css/app.built.css?v={{ version }}" />
 
   <!-- HTMX (self-hosted; source: https://unpkg.com/htmx.org@2.0.4) -->
-  <script src="/static/js/htmx.min.js?v={{ version }}" defer></script>
+  <script src="{{ base_path }}/static/js/htmx.min.js?v={{ version }}" defer></script>
 
   <!-- Client helpers: defined early so page scripts can use them on first load -->
   <script>
@@ -50,7 +50,10 @@
           timeZoneName: 'short',
         }).format(parsed);
       }
-      window.houndarrClientHelpers = { formatLocalTimestamp };
+      window.houndarrClientHelpers = {
+        formatLocalTimestamp,
+        basePath: {{ (base_path or '') | tojson }},
+      };
     })();
   </script>
 
@@ -58,7 +61,7 @@
 </head>
 <body class="text-slate-100 min-h-dvh flex flex-col font-sans{% if show_nav is defined and not show_nav %} is-auth{% endif %}">
 
-  {%- import "_macros/htmx.html" as hx -%}
+  {%- import "_macros/htmx.html" as hx with context -%}
 
   {% if show_nav is not defined or show_nav %}
   <!-- Navigation -->
@@ -74,7 +77,7 @@
       <div class="grid grid-cols-[1fr_auto_1fr] items-center h-16 sm:h-14 gap-4 sm:gap-6">
         {% call hx.hx_shell_fetch('/', class_='col-start-1 justify-self-start -ml-1 flex items-center gap-2 text-brand-400 font-semibold text-lg leading-none hover:text-brand-300 transition-colors') -%}
           <img
-            src="/static/img/houndarr-logo-dark.png"
+            src="{{ base_path }}/static/img/houndarr-logo-dark.png"
             alt="Houndarr logo"
             class="w-8 h-8 sm:w-9 sm:h-9 object-contain logo-glow"
           />
@@ -99,7 +102,7 @@
           </svg>
         </button>
 
-        <form action="/logout" method="post" class="hidden sm:flex col-start-3 justify-self-end">
+        <form action="{{ base_path }}/logout" method="post" class="hidden sm:flex col-start-3 justify-self-end">
           <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
           <button type="submit"
                   class="nav-iconbtn nav-logout"
@@ -121,7 +124,7 @@
             {% include "partials/shell_nav_links.html" %}
           {% endwith %}
           <div class="mt-1 pt-1 border-t border-surface-3">
-            <form action="/logout" method="post">
+            <form action="{{ base_path }}/logout" method="post">
               <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
               <button type="submit"
                       class="w-full text-left px-3 py-2.5 rounded-container text-sm font-medium text-slate-500 hover:text-slate-300 hover:bg-surface-2 transition-colors duration-base ease-station">
@@ -187,26 +190,26 @@
 
   {% if show_nav is not defined or show_nav %}
   <div id="changelog-slot"
-       hx-get="/settings/changelog/popup"
+       hx-get="{{ base_path }}/settings/changelog/popup"
        hx-trigger="load once delay:800ms"
        hx-swap="outerHTML"
        hx-target="this"></div>
   {% endif %}
 
-  <script src="/static/js/app.js?v={{ version }}"></script>
-  <script src="/static/js/hx-dialog.js?v={{ version }}"></script>
-  <script src="/static/js/hx-scrollbar.js?v={{ version }}"></script>
-  <script src="/static/js/tooltip.js?v={{ version }}"></script>
-  <script src="/static/js/settings.js?v={{ version }}"></script>
-  <script src="/static/js/dashboard.js?v={{ version }}"></script>
-  <script src="/static/js/logs.js?v={{ version }}"></script>
-  <script src="/static/js/changelog.js?v={{ version }}"></script>
+  <script src="{{ base_path }}/static/js/app.js?v={{ version }}"></script>
+  <script src="{{ base_path }}/static/js/hx-dialog.js?v={{ version }}"></script>
+  <script src="{{ base_path }}/static/js/hx-scrollbar.js?v={{ version }}"></script>
+  <script src="{{ base_path }}/static/js/tooltip.js?v={{ version }}"></script>
+  <script src="{{ base_path }}/static/js/settings.js?v={{ version }}"></script>
+  <script src="{{ base_path }}/static/js/dashboard.js?v={{ version }}"></script>
+  <script src="{{ base_path }}/static/js/logs.js?v={{ version }}"></script>
+  <script src="{{ base_path }}/static/js/changelog.js?v={{ version }}"></script>
   {# auth.js powers password show/hide, caps-lock badge, and strength
      meter. Login / setup templates load it themselves (they render
      without the nav shell); elsewhere we ship it from base so the
      Admin > Security form reuses the same primitives as /login. #}
   {% if show_nav is not defined or show_nav %}
-  <script src="/static/js/auth.js?v={{ version }}"></script>
+  <script src="{{ base_path }}/static/js/auth.js?v={{ version }}"></script>
   {% endif %}
 
 </body>

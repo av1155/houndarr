@@ -779,7 +779,7 @@
        stack. -->
   <div
     id="instance-grid"
-    hx-get="/api/status"
+    hx-get="{{ base_path }}/api/status"
     hx-trigger="every 30s queue:none"
     hx-swap="innerHTML"
     hx-target="#instance-grid"

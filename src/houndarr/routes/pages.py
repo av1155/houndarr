@@ -21,6 +21,7 @@ from houndarr.auth import (
     set_username,
     validate_username,
 )
+from houndarr.base_path import app_url
 from houndarr.deps import get_master_key
 from houndarr.repositories.settings import set_setting
 from houndarr.routes._htmx import is_hx_request
@@ -62,7 +63,7 @@ def _render(
 async def setup_get(request: Request) -> HTMLResponse:
     """Show the first-run password setup page."""
     if await is_setup_complete():
-        return RedirectResponse(url="/login", status_code=302)  # type: ignore[return-value]
+        return RedirectResponse(url=app_url(request, "/login"), status_code=302)  # type: ignore[return-value]
     return _render(request, "setup.html", show_nav=False)
 
 
@@ -75,7 +76,7 @@ async def setup_post(
 ) -> HTMLResponse:
     """Process the first-run password setup form."""
     if await is_setup_complete():
-        return RedirectResponse(url="/login", status_code=302)  # type: ignore[return-value]
+        return RedirectResponse(url=app_url(request, "/login"), status_code=302)  # type: ignore[return-value]
 
     username_error = validate_username(username)
     if username_error is not None:
@@ -111,7 +112,7 @@ async def setup_post(
     # see the "What's new" modal on their first dashboard load.  Upgraders
     # (no stored value yet) fall through to the pre-feature catch-up path.
     await set_setting("changelog_last_seen_version", __version__)
-    return RedirectResponse(url="/login", status_code=303)  # type: ignore[return-value]
+    return RedirectResponse(url=app_url(request, "/login"), status_code=303)  # type: ignore[return-value]
 
 
 # ---------------------------------------------------------------------------
@@ -123,7 +124,7 @@ async def setup_post(
 async def login_get(request: Request) -> HTMLResponse:
     """Show the login page."""
     if not await is_setup_complete():
-        return RedirectResponse(url="/setup", status_code=302)  # type: ignore[return-value]
+        return RedirectResponse(url=app_url(request, "/setup"), status_code=302)  # type: ignore[return-value]
     return _render(request, "login.html", show_nav=False)
 
 
@@ -135,7 +136,7 @@ async def login_post(
 ) -> HTMLResponse:
     """Process login form."""
     if not await is_setup_complete():
-        return RedirectResponse(url="/setup", status_code=302)  # type: ignore[return-value]
+        return RedirectResponse(url=app_url(request, "/setup"), status_code=302)  # type: ignore[return-value]
 
     if not check_login_rate_limit(request):
         return _render(
@@ -157,7 +158,7 @@ async def login_post(
         )
 
     clear_login_attempts(request)
-    response: RedirectResponse = RedirectResponse(url="/", status_code=303)
+    response: RedirectResponse = RedirectResponse(url=app_url(request, "/"), status_code=303)
     await create_session(response)
     return response  # type: ignore[return-value]
 
@@ -165,7 +166,7 @@ async def login_post(
 @router.post("/logout")
 async def logout(request: Request) -> RedirectResponse:
     """Clear session and redirect to login."""
-    response = RedirectResponse(url="/login", status_code=303)
+    response = RedirectResponse(url=app_url(request, "/login"), status_code=303)
     clear_session(response)
     return response
 

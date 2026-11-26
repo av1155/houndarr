@@ -66,8 +66,8 @@
     <div class="flex flex-wrap gap-2">
       <form
         method="post"
-        action="/settings/api-key/generate"
-        hx-post="/settings/api-key/generate"
+        action="{{ base_path }}/settings/api-key/generate"
+        hx-post="{{ base_path }}/settings/api-key/generate"
         hx-target="#admin-api-key"
         hx-swap="outerHTML"
         hx-disabled-elt="find button"
@@ -88,8 +88,8 @@
       {% if api_key %}
       <form
         method="post"
-        action="/settings/api-key/revoke"
-        hx-post="/settings/api-key/revoke"
+        action="{{ base_path }}/settings/api-key/revoke"
+        hx-post="{{ base_path }}/settings/api-key/revoke"
         hx-target="#admin-api-key"
         hx-swap="outerHTML"
         hx-disabled-elt="find button"

@@ -42,7 +42,7 @@ _DEFAULT_PROBES: dict[str, dict[str, int]] = {
 }
 
 
-def _render_probes(*set_args: str) -> dict[str, dict[str, Any]]:
+def _render_container(*set_args: str) -> dict[str, Any]:
     cmd = ["helm", "template", "houndarr", str(_CHART)]
     for arg in set_args:
         cmd += ["--set", arg]
@@ -53,7 +53,12 @@ def _render_probes(*set_args: str) -> dict[str, dict[str, Any]]:
         for doc in yaml.safe_load_all(result.stdout)
         if doc is not None and doc["kind"] == "StatefulSet"
     )
-    container = statefulset["spec"]["template"]["spec"]["containers"][0]
+    container: dict[str, Any] = statefulset["spec"]["template"]["spec"]["containers"][0]
+    return container
+
+
+def _render_probes(*set_args: str) -> dict[str, dict[str, Any]]:
+    container = _render_container(*set_args)
     probes: dict[str, dict[str, Any]] = {}
     for name in _DEFAULT_PROBES:
         probe = dict(container[name])
@@ -110,6 +115,21 @@ def test_overrides_reach_the_rendered_probes() -> None:
     ]
 
     assert _render_probes(*set_args) == expected
+
+
+@pytest.mark.parametrize(
+    ("set_args", "expected"),
+    [
+        pytest.param((), None, id="default"),
+        pytest.param(("env.urlBase=/houndarr",), "/houndarr", id="set"),
+        pytest.param(("env.urlBase=null",), None, id="reuse-values-without-key"),
+    ],
+)
+def test_url_base_sets_env_only_when_configured(
+    set_args: tuple[str, ...], expected: str | None
+) -> None:
+    env = {e["name"]: e.get("value") for e in _render_container(*set_args)["env"]}
+    assert env.get("HOUNDARR_URL_BASE") == expected
 
 
 def test_chart_passes_strict_lint() -> None:

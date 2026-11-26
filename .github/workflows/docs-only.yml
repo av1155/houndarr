@@ -78,7 +78,9 @@ jobs:
             // A symlink type change lists one path twice but counts once in changed_files.
             const listed = new Set(files.map((file) => file.filename)).size;
             const defaultBranch = context.payload.repository.default_branch;
-            const intoDefault = event.base.ref === defaultBranch && pr.base.ref === defaultBranch;
+            // Temporary for #849 verification: also accept the feature branch as a base.
+            const accepted = [defaultBranch, 'ci/docs-only-job-skips'];
+            const intoDefault = event.base.ref === pr.base.ref && accepted.includes(pr.base.ref);
             const headUnchanged = pr.head.sha === event.head.sha;
             const complete = files.length > 0 && files.length < LIST_FILES_CAP && listed >= pr.changed_files;
 

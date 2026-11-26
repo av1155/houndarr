@@ -241,6 +241,13 @@ const config: Config = {
     },
     mermaid: {
       theme: {light: 'default', dark: 'dark'},
+      // mermaid 12 defaults flowcharts to ELK, the "neo" look, and 120px label
+      // wrapping and minimum width; these restore 11.x dagre/classic rendering.
+      options: {
+        layout: 'dagre',
+        look: 'classic',
+        flowchart: {wrappingWidth: 200, minNodeWidth: 0},
+      },
     },
     zoom: {
       selector: '.markdown :not(em) > img, .landing-zoomable img',

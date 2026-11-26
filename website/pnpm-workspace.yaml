@@ -19,8 +19,12 @@ overrides:
   # unescaped </style> in stringify output). Transitive via
   # @docusaurus/core.
   postcss: ">=8.5.23"
-  # uuid <14.0.0 floor for a single resolved major across the tree;
-  # multiple Docusaurus transitives still pin older 9.x/10.x lines.
+  # GHSA-w5hq-g745-h8pq (CVE-2026-41907): uuid's v3, v5 and v6 skip
+  # the buffer bounds check when the caller supplies buf. Fixed in
+  # 11.1.1, 12.0.1 and 13.0.1, never on 8.x; the floor sits on 14.0.0,
+  # the current major, since every fix is a major jump anyway.
+  # Transitive via @docusaurus/core > webpack-dev-server > sockjs,
+  # which declares ^8.3.2; only active during `pnpm start`.
   uuid: ">=14.0.0"
   # GHSA-rwhq-pwvg-2vrg: @babel/plugin-transform-modules-systemjs
   # 7.12.0..=7.29.3 can generate arbitrary code when compiling
@@ -49,16 +53,16 @@ overrides:
   # @docusaurus/core > @docusaurus/mdx-loader; runs only while the
   # docs site builds.
   image-size: ">=2.0.3"
-  # mermaid <11.16.1 carries five advisories, all fixed in 11.16.1:
-  # GHSA-3rrr-jr9j-h3q3 (prototype pollution through Architecture
-  # diagrams), GHSA-rhh3-jpg6-66xh (DoS via radar diagrams),
-  # GHSA-6x64-9x62-f2gx (CSS injection reaching siblings of the
-  # diagram), GHSA-2v8p-3f2j-5mp7 (infinite-loop DoS in XY charts),
-  # and GHSA-c4c3-pg64-4m4v (prototype pollution via the configuration
-  # APIs). Supersedes the earlier >=11.15.0 floor that cleared the
-  # classDef, classDefs, configuration, and Gantt sanitisation alerts.
-  # Transitive via @docusaurus/theme-mermaid.
-  mermaid: ">=11.16.1"
+  # GHSA-238p-pmpm-9mq7 (CVE-2026-103923): katex <0.18.2 lets existing
+  # prototype pollution bypass its trust restrictions. Every mermaid
+  # before 12.2.0 requires katex ^0.16, so the floor sits on mermaid
+  # 12.2.0, the first release on katex ^0.18. Supersedes the earlier
+  # >=11.16.1 floor for GHSA-3rrr-jr9j-h3q3, GHSA-rhh3-jpg6-66xh,
+  # GHSA-6x64-9x62-f2gx, GHSA-2v8p-3f2j-5mp7, and GHSA-c4c3-pg64-4m4v,
+  # and the >=11.15.0 floor before it. Transitive via
+  # @docusaurus/theme-mermaid. Held to the 12.x line, whose new
+  # flowchart defaults docusaurus.config.ts turns back off.
+  mermaid: ">=12.2.0 <13"
   # webpack-dev-server <=5.2.5 carries GHSA-m28w-2pqf-7qgj (DoS via a
   # malformed Host or Origin header) and GHSA-f5vj-f2hx-8m93 (CSRF
   # through internal developer endpoints), both fixed in 5.2.6;

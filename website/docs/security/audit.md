@@ -119,5 +119,6 @@ request. Security coverage in the required set:
 | Security smoke test | Live-container checks via `scripts/security_smoke_test.sh` |
 
 Additional workflows run conditionally when relevant files change:
-Dockerfile linting (`hadolint`) and GitHub Actions workflow linting
-(`actionlint`).
+Dockerfile linting (`hadolint`), GitHub Actions workflow linting
+(`actionlint`), and a Trivy scan of the docs site's dependencies
+(CRITICAL / HIGH with known fixes).

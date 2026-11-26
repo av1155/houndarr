@@ -11,16 +11,20 @@ on:
       - ".claude/**"
       - "scripts/marketing/**"
   schedule:
-    # Weekly arm64 canary every Sunday at 06:00 UTC.  PR builds skip arm64
-    # for speed, so this run is the regular safety net for arm64 regressions
-    # outside the release path.  Not a required check.
+    # Every Sunday at 06:00 UTC, build main's amd64 image and upload its
+    # Trivy scan to code scanning, so main's image is scanned between code
+    # PRs.  The same run builds arm64 as a canary, since PR builds skip
+    # arm64 for speed.  Nothing is pushed.
     - cron: "0 6 * * 0"
+  workflow_dispatch:
 
 # Permissions set at job level for least-privilege.
 permissions: {}
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  # The event name keeps a manual run on a tag ref from cancelling that
+  # tag's release run.
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 env:
@@ -29,7 +33,9 @@ env:
 jobs:
   build:
     name: Build ${{ startsWith(github.ref, 'refs/tags/v') && '+ Push' || '(no push)' }}
-    if: github.event_name != 'schedule'
+    # A manual run on a tag ref would pass the tag-gated publish steps
+    # below, so manual runs build branches only.
+    if: github.event_name != 'workflow_dispatch' || startsWith(github.ref, 'refs/heads/')
     runs-on: ubuntu-latest
     timeout-minutes: 45
     permissions:
@@ -140,7 +146,7 @@ jobs:
 
   arm64-canary:
     name: arm64 canary build
-    if: github.event_name == 'schedule'
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     permissions:
@@ -168,12 +174,13 @@ jobs:
           sbom: false
           build-args: |
             HOUNDARR_VERSION=arm64-canary
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          # Own scope, so this export does not replace the amd64 cache the
+          # build job writes in the same run.
+          cache-from: type=gha,scope=arm64-canary
+          cache-to: type=gha,scope=arm64-canary,mode=max
 
   scan:
     name: Trivy image scan
-    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     needs: build
@@ -188,8 +195,9 @@ jobs:
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
 
       # Build a single-platform image and load it into the local daemon
-      # for Trivy to scan.  This reuses the GHA build cache from the
-      # multi-arch build job so the extra cost is minimal.
+      # for Trivy to scan.  It keeps the default HOUNDARR_VERSION, which the
+      # Dockerfile bakes in above the apt and pip layers, so only the
+      # css-build stage can come from the build job's cache.
       - name: Build image for scanning
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
@@ -208,6 +216,9 @@ jobs:
           severity: CRITICAL,HIGH
           ignore-unfixed: "true"
           exit-code: "1"
+          # Same Trivy as the filesystem scans, so all three share one cached
+          # binary and report from the same scanner.
+          version: v0.76.2
 
       # Upload SARIF to the GitHub Security tab for non-fork runs, whether the
       # gate above passed or failed, so failing findings still reach the tab.
@@ -227,6 +238,10 @@ jobs:
           severity: CRITICAL,HIGH
           ignore-unfixed: "true"
           exit-code: "0"
+          # Reuses the gate's binary and DB; a second cache restore can put an
+          # older cached DB back over it and force another download.
+          skip-setup-trivy: "true"
+          cache: "false"
 
       - name: Upload Trivy SARIF to GitHub Security tab
         if: ${{ !cancelled() && steps.trivy-sarif.outcome == 'success' }}

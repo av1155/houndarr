@@ -53,6 +53,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
+          PROBE: ${{ github.no_such_property }}
           # workflow_dispatch provides the input; scheduled runs default
           # to "false" (always execute).
           DRY_RUN: ${{ inputs.dry_run || 'false' }}

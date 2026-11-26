@@ -51,10 +51,6 @@ class MissingMovie:
 class RadarrClient(ArrClient):
     """Async client for the Radarr v3 REST API."""
 
-    # Radarr is the only paginated client whose cutoff endpoint includes
-    # the sort params (Sonarr, Lidarr, Readarr, and Whisparr v2 omit them
-    # for cutoff); the template's ``include_sort=True`` default captures
-    # both passes here.
     # The table prefix is load-bearing: ``inCinemas`` lives on the joined
     # MovieMetadata table, so an unqualified key is a SQL error on 5.6.0
     # through 5.10.3 and is silently replaced by the title sort after that.

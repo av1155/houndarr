@@ -70,6 +70,18 @@ Lidarr / Readarr (v1):
 Whisparr v3 (no `/wanted` endpoints):
 - `GET /api/v3/movie` (full library; Houndarr filters in memory)
 
+Every `/wanted` page is sorted the way the real app sorts it, and the
+envelope reports the key and direction actually used:
+- A key no supported build accepts answers 500 (`no such column`).
+- Sonarr and Whisparr v2 swap a key outside their newer allowlist for
+  `episodes.airDateUtc`, so a bare `airDateUtc` comes back as
+  `episodes.airDateUtc`.
+- A missing `sortDirection` sorts descending.
+- A missing `sortKey` falls back to the app's own order: id for Lidarr
+  cutoff and both Readarr lists, release date for Lidarr missing,
+  `episodes.airDateUtc` for Sonarr missing and Whisparr v2, sort title
+  for Radarr. Sonarr cutoff answers 500, as Sonarr 3.0.10.1567 does.
+
 Debug:
 - `GET /__commands__/{sonarr|radarr|lidarr|readarr|whisparr_v2|whisparr_v3}` returns
   every command POSTed to that app since launch. Useful for asserting
@@ -108,6 +120,11 @@ just mock-arr items=20  # N = 2 pages at pageSize=10
 
 For per-app overrides, import `SeedConfig` from `tests.mock_arr.server`
 and call `create_app(SeedConfig(...))` directly.
+
+Seeded release dates rise with id, so storage order is already
+oldest-first. Pass `--shuffle-dates` (or `SeedConfig(shuffle_dates=True)`)
+to deal the same dates out in a seeded random order, which makes only a
+correctly sorted request come back oldest-first.
 
 ## Determinism
 

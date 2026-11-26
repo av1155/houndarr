@@ -59,6 +59,8 @@ class SeedConfig:
     whisparr_v3_movies: int = 500
     missing_ratio: float = 0.5
     cutoff_ratio: float = 0.2
+    # Seeded dates rise with id unless this is set; see ``shuffle_date_fields``.
+    shuffle_dates: bool = False
 
 
 def build_state(config: SeedConfig) -> MockState:
@@ -70,12 +72,14 @@ def build_state(config: SeedConfig) -> MockState:
             episodes_per_series=config.sonarr_episodes_per_series,
             missing_ratio=config.missing_ratio,
             cutoff_ratio=config.cutoff_ratio,
+            shuffle_dates=config.shuffle_dates,
         ),
         radarr=make_radarr_data(
             seed=config.seed,
             movie_count=config.radarr_movies,
             missing_ratio=config.missing_ratio,
             cutoff_ratio=config.cutoff_ratio,
+            shuffle_dates=config.shuffle_dates,
         ),
         lidarr=make_lidarr_data(
             seed=config.seed,
@@ -83,6 +87,7 @@ def build_state(config: SeedConfig) -> MockState:
             albums_per_artist=config.lidarr_albums_per_artist,
             missing_ratio=config.missing_ratio,
             cutoff_ratio=config.cutoff_ratio,
+            shuffle_dates=config.shuffle_dates,
         ),
         readarr=make_readarr_data(
             seed=config.seed,
@@ -90,6 +95,7 @@ def build_state(config: SeedConfig) -> MockState:
             books_per_author=config.readarr_books_per_author,
             missing_ratio=config.missing_ratio,
             cutoff_ratio=config.cutoff_ratio,
+            shuffle_dates=config.shuffle_dates,
         ),
         whisparr_v2=make_whisparr_v2_data(
             seed=config.seed,
@@ -97,12 +103,14 @@ def build_state(config: SeedConfig) -> MockState:
             episodes_per_series=config.whisparr_v2_episodes_per_series,
             missing_ratio=config.missing_ratio,
             cutoff_ratio=config.cutoff_ratio,
+            shuffle_dates=config.shuffle_dates,
         ),
         whisparr_v3=make_whisparr_v3_data(
             seed=config.seed,
             movie_count=config.whisparr_v3_movies,
             missing_ratio=config.missing_ratio,
             cutoff_ratio=config.cutoff_ratio,
+            shuffle_dates=config.shuffle_dates,
         ),
     )
 
@@ -284,6 +292,12 @@ def _summary(data: object) -> dict[str, int]:
 )
 @click.option("--missing-ratio", default=0.5, show_default=True)
 @click.option("--cutoff-ratio", default=0.2, show_default=True)
+@click.option(
+    "--shuffle-dates",
+    is_flag=True,
+    default=False,
+    help="Store release dates out of id order, so only real sorting yields date order.",
+)
 @click.option("--log-level", default="info", show_default=True)
 def main(
     port: int,
@@ -292,6 +306,7 @@ def main(
     items: int,
     missing_ratio: float,
     cutoff_ratio: float,
+    shuffle_dates: bool,
     log_level: str,
 ) -> None:
     """Launch the mock server."""
@@ -311,6 +326,7 @@ def main(
         whisparr_v3_movies=items,
         missing_ratio=missing_ratio,
         cutoff_ratio=cutoff_ratio,
+        shuffle_dates=shuffle_dates,
     )
     app = create_app(config)
     uvicorn.run(app, host=host, port=port, log_level=log_level)

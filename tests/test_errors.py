@@ -23,6 +23,7 @@ from houndarr.errors import (
     RouteError,
     ServiceError,
     TimeWindowSpecError,
+    redact_url_credentials,
 )
 
 
@@ -104,3 +105,34 @@ class TestRaiseAndCatch:
     def test_does_not_catch_framework_exception(self) -> None:
         """Built-in ``ValueError`` is NOT a HoundarrError."""
         assert not issubclass(ValueError, HoundarrError)
+
+
+@pytest.mark.parametrize(
+    ("text", "masked"),
+    [
+        ("http://admin:hunter2@sonarr:8989", "http://admin:[secure]@sonarr:8989"),
+        ("http://admin:p@ss@sonarr:8989/api/v3", "http://admin:[secure]@sonarr:8989/api/v3"),
+        ("http://:s3cret@sonarr:8989", "http://:[secure]@sonarr:8989"),
+        (
+            "http://admin:pw@sonarr:8989/x?mail=a@b.c",
+            "http://admin:[secure]@sonarr:8989/x?mail=a@b.c",
+        ),
+        (
+            "http://admin:pw@sonarr:8989?mail=a@b.c",
+            "http://admin:[secure]@sonarr:8989?mail=a@b.c",
+        ),
+        ("http://sonarr:8989/api?x=1", "http://sonarr:8989/api?x=1"),
+        ("http://sonarr:8989?x=a@b", "http://sonarr:8989?x=a@b"),
+    ],
+    ids=[
+        "plain",
+        "at-in-password",
+        "no-username",
+        "at-in-query",
+        "at-in-query-no-path",
+        "no-credential",
+        "no-credential-at-in-query",
+    ],
+)
+def test_redact_url_credentials_masks_every_password(text: str, masked: str) -> None:
+    assert redact_url_credentials(text) == masked

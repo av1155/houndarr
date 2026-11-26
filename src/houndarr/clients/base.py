@@ -26,6 +26,7 @@ from houndarr.errors import (
     ClientTransportError,
     ClientValidationError,
     describe_exception,
+    redact_url_credentials,
 )
 from houndarr.services.url_validation import is_blocked_address
 
@@ -65,11 +66,16 @@ class ReconcileSets:
     the parent id carried on each item (e.g. ``series_id``,
     ``artist_id``, ``author_id``).  Reconciliation stays a pure set
     membership check and does not need adapter-specific logic.
+
+    ``None`` marks a pass whose list could not be read in full this
+    refresh (a wanted list past the page cap, a series that failed to
+    load); the reconciler leaves that pass's rows alone rather than
+    delete cooldowns for items it never saw.
     """
 
-    missing: frozenset[tuple[str, int]]
-    cutoff: frozenset[tuple[str, int]]
-    upgrade: frozenset[tuple[str, int]]
+    missing: frozenset[tuple[str, int]] | None
+    cutoff: frozenset[tuple[str, int]] | None
+    upgrade: frozenset[tuple[str, int]] | None
 
     @classmethod
     def empty(cls) -> ReconcileSets:
@@ -83,7 +89,10 @@ class ReconcileSets:
         return cls(missing=frozenset(), cutoff=frozenset(), upgrade=frozenset())
 
     def is_empty(self) -> bool:
-        """Return True if every pass set is empty.
+        """Return True if every pass was read in full and holds no id.
+
+        A ``None`` pass proves the fetch itself succeeded, so the passes
+        beside it that were read in full still reconcile.
 
         The reconciler treats an all-empty result as an explicit
         signal to SKIP the DELETE step: an instance that genuinely has
@@ -92,10 +101,35 @@ class ReconcileSets:
         failure that returned :meth:`empty` must never drive the DB
         to a blank state.
         """
-        return not self.missing and not self.cutoff and not self.upgrade
+        passes = (self.missing, self.cutoff, self.upgrade)
+        return all(ids is not None and not ids for ids in passes)
+
+    def incomplete(self) -> tuple[str, ...]:
+        """Return the passes whose list could not be read in full."""
+        passes = (("missing", self.missing), ("cutoff", self.cutoff), ("upgrade", self.upgrade))
+        return tuple(name for name, ids in passes if ids is None)
 
 
 WantedKind = Literal["missing", "cutoff"]
+
+
+@dataclass(frozen=True, slots=True)
+class WantedWalk[T]:
+    """Every item one ``/wanted`` list returned, and whether that was all of it.
+
+    ``complete`` is false when the walk stopped at the reconcile page cap
+    with pages still full, so ``items`` may be missing the tail of the list.
+    """
+
+    items: list[T]
+    complete: bool
+
+
+type WantedWalks = dict[WantedKind, WantedWalk[Any]]
+"""Walks already made during one snapshot refresh, keyed by list.
+
+The supervisor creates one per refresh and hands it to both the snapshot
+and the reconcile fetch, so each list is read once per refresh."""
 
 
 # Default timeouts (seconds): connect=5, read=30
@@ -122,6 +156,17 @@ _PING_SAFE_ERRORS: tuple[type[BaseException], ...] = (
 # re-validates the Location target against the SSRF guard as defense-in-
 # depth against a future accidental ``follow_redirects=True`` flip.
 _REDIRECT_STATUS_CODES: frozenset[int] = frozenset({301, 302, 303, 307, 308})
+
+_WANTED_SORT_DIRECTION = "ascending"
+
+# (client class, base URL, wanted path) already warned about a sort
+# mismatch.  A client is rebuilt for every pass and refresh, so the memory
+# lives here.
+_sort_echo_warned: set[tuple[str, str, str]] = set()
+
+
+def _sort_column(sort_key: str) -> str:
+    return sort_key.rsplit(".", 1)[-1].casefold()
 
 
 async def _redirect_guard(response: httpx.Response) -> None:
@@ -216,7 +261,7 @@ class ArrClient(ABC):
         api_key: str,
         timeout: httpx.Timeout = _DEFAULT_TIMEOUT,
     ) -> None:
-        base = url.rstrip("/")
+        self._base_url = url.rstrip("/")
         # SSRF posture: redirects never followed at the client level; see
         # services/url_validation.py threat model.  ``follow_redirects``
         # is stated explicitly (httpx's own default is False) so a
@@ -227,7 +272,7 @@ class ArrClient(ABC):
         # target (loopback, link-local, unspecified) raises before the
         # transport would chase it.
         self._client = httpx.AsyncClient(
-            base_url=base,
+            base_url=self._base_url,
             headers={"X-Api-Key": api_key, "Accept": "application/json"},
             timeout=timeout,
             follow_redirects=False,
@@ -432,7 +477,6 @@ class ArrClient(ABC):
         *,
         page: int,
         page_size: int,
-        include_sort: bool = True,
         include_param: bool = True,
     ) -> PaginatedResponse[Any]:
         """Fetch one page of ``/wanted/{kind}`` via the per-subclass envelope.
@@ -442,9 +486,8 @@ class ArrClient(ABC):
         - :attr:`_WANTED_BASE_PATH`: API root that prefixes ``/{kind}``.
           Defaults to ``/api/v3/wanted`` for v3-API clients (Sonarr, Radarr,
           Whisparr v2); Lidarr and Readarr override to ``/api/v1/wanted``.
-        - :attr:`_WANTED_SORT_KEY`: sort field name passed when ``include_sort``
-          is true.  Required for every paginated /wanted client; the missing
-          pass on every client and the cutoff pass on Radarr include it.
+        - :attr:`_WANTED_SORT_KEY`: the release-date column every page sorts
+          ascending by.  Required for every paginated /wanted client.
         - :attr:`_WANTED_INCLUDE_PARAM`: optional embed-parent query param
           (``includeSeries`` for Sonarr / Whisparr v2, ``includeArtist`` for
           Lidarr, ``includeAuthor`` for Readarr, ``None`` for Radarr).
@@ -452,12 +495,9 @@ class ArrClient(ABC):
           subclass (e.g. ``PaginatedResponse[RadarrWantedMovie]``) that
           validates the response payload.
 
-        ``include_sort`` defaults to ``True`` because the missing pass on
-        every paginated client sorts ascending by its release-date field.
-        Callers pass ``include_sort=False`` for the cutoff pass on Sonarr,
-        Lidarr, Readarr, and Whisparr v2 because those endpoints today omit
-        the sort params; Radarr's cutoff endpoint includes them so it
-        relies on the default.
+        Every request sends ``sortKey`` and ``sortDirection=ascending``.
+        Without them each app falls back to an order of its own choosing,
+        and Sonarr 3.0.10.1567's cutoff endpoint answers 500.
 
         ``include_param`` defaults to ``True`` because the page reads on
         every embed-using client want the parent aggregate inlined into
@@ -484,8 +524,6 @@ class ArrClient(ABC):
             kind: ``"missing"`` or ``"cutoff"``.
             page: 1-based page number.
             page_size: Number of records to request.
-            include_sort: When true, append ``sortKey`` and
-                ``sortDirection`` to the request.
             include_param: When true and :attr:`_WANTED_INCLUDE_PARAM` is
                 set, append ``{_WANTED_INCLUDE_PARAM}=true`` to the
                 request.
@@ -515,14 +553,49 @@ class ArrClient(ABC):
             "page": page,
             "pageSize": page_size,
             "monitored": "true",
+            "sortKey": self._WANTED_SORT_KEY,
+            "sortDirection": _WANTED_SORT_DIRECTION,
         }
-        if include_sort:
-            params["sortKey"] = self._WANTED_SORT_KEY
-            params["sortDirection"] = "ascending"
         if include_param and self._WANTED_INCLUDE_PARAM is not None:
             params[self._WANTED_INCLUDE_PARAM] = "true"
         data = await self._get(path, **params)
-        return envelope_cls.model_validate(data)
+        envelope = envelope_cls.model_validate(data)
+        self._warn_on_sort_mismatch(path, data)
+        return envelope
+
+    def _warn_on_sort_mismatch(self, path: str, data: object) -> None:
+        """Log once per instance and list when the app sorted differently.
+
+        Allowlisted builds swap an unlisted key for their own default and
+        report the swap only in the envelope, so without this a key that
+        stops being honoured reads as a healthy page in the wrong order.
+        Keys compare by the part after the last ``.`` so Sonarr's bare
+        ``airDateUtc`` matches the ``episodes.airDateUtc`` it reports.  The
+        raw payload is read so an odd echo can never fail the page.
+        """
+        if not isinstance(data, dict):
+            return
+        reported_key = data.get("sortKey")
+        if not isinstance(reported_key, str):
+            return
+        direction = data.get("sortDirection")
+        same_key = _sort_column(reported_key) == _sort_column(self._WANTED_SORT_KEY)
+        ascending = not isinstance(direction, str) or direction.casefold() == _WANTED_SORT_DIRECTION
+        if same_key and ascending:
+            return
+        warn_key = (type(self).__name__, self._base_url, path)
+        if warn_key in _sort_echo_warned:
+            return
+        _sort_echo_warned.add(warn_key)
+        logger.warning(
+            "Wanted list %s came back sorted by %s %s instead of %s %s; "
+            "Chronological order is not oldest-first",
+            redact_url_credentials(self._base_url + path),
+            reported_key,
+            direction,
+            self._WANTED_SORT_KEY,
+            _WANTED_SORT_DIRECTION,
+        )
 
     async def _fetch_wanted_total(self, kind: WantedKind) -> int:
         """Default size-1 probe for ``/wanted/{kind}`` totals with typed wraps.

@@ -16,9 +16,9 @@ from fastapi import APIRouter, Query
 
 from tests.mock_arr._common import (
     attach_common_routes,
-    paginate,
     partition_leaf_ids,
-    resolve_sort_key,
+    shuffle_date_fields,
+    wanted_page,
 )
 from tests.mock_arr.store import AppData
 
@@ -30,6 +30,7 @@ def make_whisparr_v2_data(
     episodes_per_series: int = 10,
     missing_ratio: float = 0.5,
     cutoff_ratio: float = 0.2,
+    shuffle_dates: bool = False,
 ) -> AppData:
     rng = random.Random(seed)
     parents: list[dict[str, Any]] = []
@@ -72,6 +73,8 @@ def make_whisparr_v2_data(
 
     rng.shuffle(leaves)
     leaves.sort(key=lambda x: x["id"])
+    if shuffle_dates:
+        shuffle_date_fields(leaves, ("releaseDate",), seed=seed)
 
     leaf_ids = [leaf["id"] for leaf in leaves]
     missing_ids, cutoff_ids, upgrade_ids = partition_leaf_ids(
@@ -87,8 +90,16 @@ def make_whisparr_v2_data(
         api_prefix="/whisparr_v2/api/v3",
         api_version="v3",
         sort_key_default="episodes.airDateUtc",
-        sort_direction_default="ascending",
         sort_keys=frozenset({"airDateUtc", "episodes.airDateUtc", "series.sortTitle"}),
+        sort_key_allowlist=frozenset(
+            {"episodes.airDateUtc", "episodes.lastSearchTime", "series.sortTitle"}
+        ),
+        sort_fields={
+            "airdateutc": "releaseDate",
+            "episodes.airdateutc": "releaseDate",
+            "series.sorttitle": "seriesTitle",
+        },
+        unsorted_keys={"missing": "episodes.airDateUtc", "cutoff": "episodes.airDateUtc"},
         sort_key_table="Episodes",
         parents=parents,
         leaves=leaves,
@@ -121,18 +132,17 @@ def make_whisparr_v2_router(data: AppData) -> APIRouter:
     async def wanted_missing(
         page: int = Query(1, ge=1),
         page_size: int = Query(10, ge=1, le=2000, alias="pageSize"),
-        sort_key: str = Query("episodes.airDateUtc", alias="sortKey"),
-        sort_direction: str = Query("ascending", alias="sortDirection"),
+        sort_key: str | None = Query(None, alias="sortKey"),
+        sort_direction: str | None = Query(None, alias="sortDirection"),
         monitored: bool = Query(True),
         include_series: bool = Query(False, alias="includeSeries"),
     ) -> dict[str, Any]:
-        data.page_log.entries.append(("missing", page, page_size))
-        records = [leaf for leaf in data.leaves if leaf["id"] in data.missing_ids]
-        return paginate(
-            records,
+        return wanted_page(
+            data,
+            "missing",
             page=page,
             page_size=page_size,
-            sort_key=resolve_sort_key(sort_key, data),
+            sort_key=sort_key,
             sort_direction=sort_direction,
         )
 
@@ -140,18 +150,17 @@ def make_whisparr_v2_router(data: AppData) -> APIRouter:
     async def wanted_cutoff(
         page: int = Query(1, ge=1),
         page_size: int = Query(10, ge=1, le=2000, alias="pageSize"),
-        sort_key: str = Query("episodes.airDateUtc", alias="sortKey"),
-        sort_direction: str = Query("ascending", alias="sortDirection"),
+        sort_key: str | None = Query(None, alias="sortKey"),
+        sort_direction: str | None = Query(None, alias="sortDirection"),
         monitored: bool = Query(True),
         include_series: bool = Query(False, alias="includeSeries"),
     ) -> dict[str, Any]:
-        data.page_log.entries.append(("cutoff", page, page_size))
-        records = [leaf for leaf in data.leaves if leaf["id"] in data.cutoff_ids]
-        return paginate(
-            records,
+        return wanted_page(
+            data,
+            "cutoff",
             page=page,
             page_size=page_size,
-            sort_key=resolve_sort_key(sort_key, data),
+            sort_key=sort_key,
             sort_direction=sort_direction,
         )
 

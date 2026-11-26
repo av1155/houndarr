@@ -12,14 +12,14 @@ import logging
 import httpx
 from pydantic import ValidationError
 
-from houndarr.clients.base import InstanceSnapshot, ReconcileSets
+from houndarr.clients.base import InstanceSnapshot, ReconcileSets, WantedWalks
 from houndarr.clients.lidarr import LibraryAlbum, LidarrClient, MissingAlbum
 from houndarr.engine.adapters._common import (
     ContextOverride,
     build_cutoff_candidate,
     build_missing_candidate,
     compute_default_snapshot,
-    paginate_wanted,
+    walk_wanted,
 )
 from houndarr.engine.candidates import (
     SearchCandidate,
@@ -31,6 +31,7 @@ from houndarr.services.instances import Instance, LidarrSearchMode
 logger = logging.getLogger(__name__)
 
 _UPGRADE_CUTOFF_EXCLUSION_HARD_CAP = 100
+_CUTOFF_EXCLUSION_PAGE_SIZE = 250
 
 # ---------------------------------------------------------------------------
 # Label builders
@@ -228,7 +229,9 @@ async def fetch_upgrade_pool(
     page = 1
     while page <= _UPGRADE_CUTOFF_EXCLUSION_HARD_CAP:
         try:
-            cutoff_items = await client.get_cutoff_unmet(page=page, page_size=250)
+            cutoff_items = await client.get_cutoff_unmet(
+                page=page, page_size=_CUTOFF_EXCLUSION_PAGE_SIZE
+            )
         except (httpx.HTTPError, httpx.InvalidURL, ValidationError):
             logger.warning(
                 "[%s] failed to fetch cutoff page %d for exclusion set",
@@ -238,7 +241,7 @@ async def fetch_upgrade_pool(
             break
         for item in cutoff_items:
             exclusion.add(item.album_id)
-        if len(cutoff_items) < 250:
+        if len(cutoff_items) < _CUTOFF_EXCLUSION_PAGE_SIZE:
             break
         page += 1
     if page > _UPGRADE_CUTOFF_EXCLUSION_HARD_CAP:
@@ -248,9 +251,17 @@ async def fetch_upgrade_pool(
             "upgrade pool may include some that are still cutoff-unmet",
             instance.core.name,
             _UPGRADE_CUTOFF_EXCLUSION_HARD_CAP,
-            _UPGRADE_CUTOFF_EXCLUSION_HARD_CAP * 250,
+            _UPGRADE_CUTOFF_EXCLUSION_HARD_CAP * _CUTOFF_EXCLUSION_PAGE_SIZE,
         )
 
+    return await _library_upgrade_pool(client, exclusion)
+
+
+async def _library_upgrade_pool(
+    client: LidarrClient,
+    exclusion: set[int],
+) -> list[LibraryAlbum]:
+    """Return monitored albums with files whose id is not in *exclusion*."""
     library = await client.get_albums()
     return [a for a in library if a.monitored and a.has_file and a.album_id not in exclusion]
 
@@ -305,7 +316,12 @@ def _artist_synth_pairs(items: list[MissingAlbum]) -> frozenset[tuple[str, int]]
     return frozenset(("album", _artist_item_id(aid)) for aid in artists)
 
 
-async def fetch_reconcile_sets(client: LidarrClient, instance: Instance) -> ReconcileSets:
+async def fetch_reconcile_sets(
+    client: LidarrClient,
+    instance: Instance,
+    *,
+    walks: WantedWalks | None = None,
+) -> ReconcileSets:
     """Return the authoritative wanted / upgrade-pool sets for Lidarr.
 
     The missing set always carries leaf album ids.  When the instance
@@ -315,18 +331,25 @@ async def fetch_reconcile_sets(client: LidarrClient, instance: Instance) -> Reco
     Cutoff cooldowns are always leaf (album-level dispatch); no
     context-mode promotion happens there.  When ``upgrade_enabled`` is
     false the upgrade set short-circuits to empty so the library scan
-    + cutoff-exclusion paginate loop are skipped.
+    is skipped.
     """
-    missing_items = await paginate_wanted(client.get_missing)
-    cutoff_items = await paginate_wanted(client.get_cutoff_unmet)
-    missing_set = _album_leaf_pairs(missing_items)
-    cutoff_set = _album_leaf_pairs(cutoff_items)
-    if instance.missing.lidarr_search_mode != LidarrSearchMode.album:
-        missing_set = missing_set | _artist_synth_pairs(missing_items)
+    missing = await walk_wanted(walks, "missing", client.get_missing)
+    cutoff = await walk_wanted(walks, "cutoff", client.get_cutoff_unmet)
+    missing_set: frozenset[tuple[str, int]] | None = None
+    if missing.complete:
+        missing_set = _album_leaf_pairs(missing.items)
+        if instance.missing.lidarr_search_mode != LidarrSearchMode.album:
+            missing_set = missing_set | _artist_synth_pairs(missing.items)
+    cutoff_set = _album_leaf_pairs(cutoff.items) if cutoff.complete else None
     upgrade_set: frozenset[tuple[str, int]] = frozenset()
     if instance.upgrade.upgrade_enabled:
+        # The cycle's pool excludes only the first
+        # _UPGRADE_CUTOFF_EXCLUSION_HARD_CAP pages of this same sorted list,
+        # so excluding more here would reap upgrade cooldowns it still stamps.
+        excluded = cutoff.items[: _UPGRADE_CUTOFF_EXCLUSION_HARD_CAP * _CUTOFF_EXCLUSION_PAGE_SIZE]
+        exclusion = {item.album_id for item in excluded}
         upgrade_candidates = [
-            adapt_upgrade(item, instance) for item in await fetch_upgrade_pool(client, instance)
+            adapt_upgrade(item, instance) for item in await _library_upgrade_pool(client, exclusion)
         ]
         upgrade_set = frozenset((str(c.item_type), c.item_id) for c in upgrade_candidates)
     return ReconcileSets(missing=missing_set, cutoff=cutoff_set, upgrade=upgrade_set)
@@ -335,6 +358,8 @@ async def fetch_reconcile_sets(client: LidarrClient, instance: Instance) -> Reco
 async def fetch_instance_snapshot(
     client: LidarrClient,
     instance: Instance,
+    *,
+    walks: WantedWalks | None = None,
 ) -> InstanceSnapshot:
     """Compose the dashboard snapshot for a Lidarr instance.
 
@@ -346,7 +371,7 @@ async def fetch_instance_snapshot(
     def _anchor(album: MissingAlbum) -> str | None:
         return album.release_date
 
-    return await compute_default_snapshot(client, anchor_fn=_anchor)
+    return await compute_default_snapshot(client, anchor_fn=_anchor, walks=walks)
 
 
 class LidarrAdapter:

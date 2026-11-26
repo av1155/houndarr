@@ -27,7 +27,13 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Protocol
 
-from houndarr.clients.base import ArrClient, InstanceSnapshot, WantedKind
+from houndarr.clients.base import (
+    ArrClient,
+    InstanceSnapshot,
+    WantedKind,
+    WantedWalk,
+    WantedWalks,
+)
 from houndarr.engine.candidates import (
     SearchCandidate,
     _is_unreleased,
@@ -104,7 +110,7 @@ async def paginate_wanted[T](
     fetch_page: Callable[..., Awaitable[list[T]]],
     *,
     page_size: int = _RECONCILE_PAGE_SIZE,
-) -> list[T]:
+) -> WantedWalk[T]:
     """Return every wanted item by paginating *fetch_page* until exhausted.
 
     Stops on the first short page (length < *page_size*) since that is
@@ -112,12 +118,7 @@ async def paginate_wanted[T](
     empty list without a second request.  A hard cap of
     :data:`_RECONCILE_MAX_PAGES` bounds the loop so a misbehaving *arr
     that always returns a full page cannot spin forever; hitting the
-    cap returns what has been collected so far and leaves reconcile to
-    act conservatively against a possibly-truncated view.
-
-    Used by every adapter's :func:`fetch_reconcile_sets` to walk the
-    full wanted list so the reconciler sees a complete picture of which
-    items are still wanted at this instant.
+    cap returns what has been collected so far, marked incomplete.
 
     Args:
         fetch_page: ``async def(page=N, page_size=M)`` callable.
@@ -127,15 +128,34 @@ async def paginate_wanted[T](
             maximum so total requests stay minimal at full library scale.
 
     Returns:
-        Flat list of every item across every page, preserving order.
+        Every item across every page, preserving order, and whether the
+        walk reached the last page.
     """
     items: list[T] = []
     for page in range(1, _RECONCILE_MAX_PAGES + 1):
         chunk = await fetch_page(page=page, page_size=page_size)
         items.extend(chunk)
         if len(chunk) < page_size:
-            return items
-    return items
+            return WantedWalk(items, complete=True)
+    return WantedWalk(items, complete=False)
+
+
+async def walk_wanted[T](
+    walks: WantedWalks | None,
+    kind: WantedKind,
+    fetch_page: Callable[..., Awaitable[list[T]]],
+) -> WantedWalk[T]:
+    """Return the walk of ``/wanted/{kind}``, reusing one already in *walks*.
+
+    *fetch_page* must be the client method for *kind*.  A walk that
+    raises is not stored, so the next caller tries again.
+    """
+    if walks is not None and kind in walks:
+        return walks[kind]
+    walk = await paginate_wanted(fetch_page)
+    if walks is not None:
+        walks[kind] = walk
+    return walk
 
 
 @dataclass(frozen=True, slots=True)
@@ -277,6 +297,7 @@ async def compute_default_snapshot[T](
     *,
     anchor_fn: Callable[[T], str | None] | Callable[[T], datetime | None],
     anchor_is_dt: bool = False,
+    walks: WantedWalks | None = None,
 ) -> InstanceSnapshot:
     """Build an :class:`InstanceSnapshot` from a ``/wanted``-paged client.
 
@@ -292,7 +313,7 @@ async def compute_default_snapshot[T](
       ``ArrClient.get_instance_snapshot`` default precisely so the
       number does not drift after the refactor.
     - ``unreleased_count``: walks ``/wanted/missing`` once via
-      :func:`paginate_wanted` and counts items whose
+      :func:`walk_wanted` and counts items whose
       ``anchor_fn(item)`` resolves as still-in-the-future per
       :func:`_is_unreleased` (string anchor) or
       :func:`_is_unreleased_dt` (pre-parsed datetime anchor).  Cutoff
@@ -313,6 +334,7 @@ async def compute_default_snapshot[T](
         anchor_is_dt: When ``True`` the anchor is a pre-parsed
             ``datetime``; pick the dt-typed unreleased helper.  Default
             ``False`` keeps the string path.
+        walks: This refresh's walk memo, shared with the reconcile fetch.
 
     Returns:
         :class:`InstanceSnapshot` with both counts populated.
@@ -323,7 +345,8 @@ async def compute_default_snapshot[T](
         cutoff_kind
     )
 
-    items: list[T] = await paginate_wanted(client.get_missing)
+    walk: WantedWalk[T] = await walk_wanted(walks, "missing", client.get_missing)
+    items = walk.items
     if anchor_is_dt:
         dt_fn: Callable[[T], datetime | None] = anchor_fn  # type: ignore[assignment]
         unreleased_count = sum(1 for item in items if _is_unreleased_dt(dt_fn(item)))

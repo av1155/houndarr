@@ -15,14 +15,14 @@ import httpx
 from pydantic import ValidationError
 
 from houndarr.clients._wire_models import ArrSeries
-from houndarr.clients.base import InstanceSnapshot, ReconcileSets
+from houndarr.clients.base import InstanceSnapshot, ReconcileSets, WantedWalks
 from houndarr.clients.sonarr import LibraryEpisode, MissingEpisode, SonarrClient
 from houndarr.engine.adapters._common import (
     ContextOverride,
     build_cutoff_candidate,
     build_missing_candidate,
     compute_default_snapshot,
-    paginate_wanted,
+    walk_wanted,
 )
 from houndarr.engine.candidates import (
     SearchCandidate,
@@ -253,16 +253,18 @@ async def _collect_upgrade_episodes(
     client: SonarrClient,
     instance: Instance,
     series_list: Sequence[ArrSeries],
-) -> list[LibraryEpisode]:
+) -> tuple[list[LibraryEpisode], bool]:
     """Return monitored, on-disk, cutoff-met episodes for the given series.
 
     Shared loop body between the rotation-windowed search-cycle fetch
     (:func:`fetch_upgrade_pool`) and the full-library reconcile fetch
     (:func:`_fetch_all_upgrade_episodes`).  Transport or validation
     errors on a single series are logged and skipped so one flaky
-    series cannot blank the whole pool.
+    series cannot blank the whole pool; the flag is false when any series
+    was skipped.
     """
     episodes: list[LibraryEpisode] = []
+    complete = True
     for s in series_list:
         series_id = s.id or 0
         try:
@@ -273,9 +275,10 @@ async def _collect_upgrade_episodes(
                 instance.core.name,
                 series_id,
             )
+            complete = False
             continue
         episodes.extend(e for e in eps if e.monitored and e.has_file and e.cutoff_met)
-    return episodes
+    return episodes, complete
 
 
 async def fetch_upgrade_pool(
@@ -316,13 +319,14 @@ async def fetch_upgrade_pool(
         remaining = window - len(selected)
         selected += monitored[:remaining]
 
-    return await _collect_upgrade_episodes(client, instance, selected)
+    episodes, _ = await _collect_upgrade_episodes(client, instance, selected)
+    return episodes
 
 
 async def _fetch_all_upgrade_episodes(
     client: SonarrClient,
     instance: Instance,
-) -> list[LibraryEpisode]:
+) -> tuple[list[LibraryEpisode], bool]:
     """Return upgrade-eligible episodes across EVERY monitored series.
 
     The cycle-facing :func:`fetch_upgrade_pool` windows the series list
@@ -407,7 +411,12 @@ def _season_synth_pairs(items: list[MissingEpisode]) -> frozenset[tuple[str, int
     return frozenset(("episode", _season_item_id(sid, sn)) for sid, sn in parents)
 
 
-async def fetch_reconcile_sets(client: SonarrClient, instance: Instance) -> ReconcileSets:
+async def fetch_reconcile_sets(
+    client: SonarrClient,
+    instance: Instance,
+    *,
+    walks: WantedWalks | None = None,
+) -> ReconcileSets:
     """Return the authoritative wanted / upgrade-pool sets for Sonarr.
 
     Always unions leaf episode ids into the missing / cutoff sets.
@@ -425,25 +434,29 @@ async def fetch_reconcile_sets(client: SonarrClient, instance: Instance) -> Reco
     frozenset so no library traffic is paid; no upgrade cooldowns can
     exist in that state anyway.
     """
-    missing_items = await paginate_wanted(client.get_missing)
-    cutoff_items = await paginate_wanted(client.get_cutoff_unmet)
-    missing_set = _episode_leaf_pairs(missing_items)
-    cutoff_set = _episode_leaf_pairs(cutoff_items)
-    if instance.missing.sonarr_search_mode != SonarrSearchMode.episode:
-        missing_set = missing_set | _season_synth_pairs(missing_items)
-    upgrade_set: frozenset[tuple[str, int]] = frozenset()
+    missing = await walk_wanted(walks, "missing", client.get_missing)
+    cutoff = await walk_wanted(walks, "cutoff", client.get_cutoff_unmet)
+    missing_set: frozenset[tuple[str, int]] | None = None
+    if missing.complete:
+        missing_set = _episode_leaf_pairs(missing.items)
+        if instance.missing.sonarr_search_mode != SonarrSearchMode.episode:
+            missing_set = missing_set | _season_synth_pairs(missing.items)
+    cutoff_set = _episode_leaf_pairs(cutoff.items) if cutoff.complete else None
+    upgrade_set: frozenset[tuple[str, int]] | None = frozenset()
     if instance.upgrade.upgrade_enabled:
-        upgrade_candidates = [
-            adapt_upgrade(item, instance)
-            for item in await _fetch_all_upgrade_episodes(client, instance)
-        ]
-        upgrade_set = frozenset((str(c.item_type), c.item_id) for c in upgrade_candidates)
+        episodes, complete = await _fetch_all_upgrade_episodes(client, instance)
+        upgrade_set = None
+        if complete:
+            upgrade_candidates = [adapt_upgrade(item, instance) for item in episodes]
+            upgrade_set = frozenset((str(c.item_type), c.item_id) for c in upgrade_candidates)
     return ReconcileSets(missing=missing_set, cutoff=cutoff_set, upgrade=upgrade_set)
 
 
 async def fetch_instance_snapshot(
     client: SonarrClient,
     instance: Instance,
+    *,
+    walks: WantedWalks | None = None,
 ) -> InstanceSnapshot:
     """Compose the dashboard snapshot for a Sonarr instance.
 
@@ -457,7 +470,7 @@ async def fetch_instance_snapshot(
     def _anchor(ep: MissingEpisode) -> str | None:
         return ep.air_date_utc
 
-    return await compute_default_snapshot(client, anchor_fn=_anchor)
+    return await compute_default_snapshot(client, anchor_fn=_anchor, walks=walks)
 
 
 class SonarrAdapter:

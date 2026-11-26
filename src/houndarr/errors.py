@@ -12,17 +12,17 @@ from __future__ import annotations
 
 import re
 
-_URL_CREDENTIAL = re.compile(r"//([^/\s:@]+):[^/\s@]*@")
+_URL_CREDENTIAL = re.compile(r"//([^/?#\s:@]*):[^/?#\s]*@")
 
 
 def redact_url_credentials(text: str) -> str:
     """Return *text* with any ``//user:password@`` password replaced.
 
     An operator fronting an \\*arr with basic auth puts the credential in
-    the instance URL, and two things then carry it into a log: ``httpx``
-    builds its ``HTTPStatusError`` message from ``str(request.url)``,
-    which keeps userinfo where the URL's ``repr`` redacts it, and the
-    reconnect rows interpolate ``instance.core.url`` directly.
+    the instance URL, and any message built from that URL carries it into
+    a log.  ``httpx`` builds its ``HTTPStatusError`` message from
+    ``str(request.url)``, which keeps userinfo where the URL's ``repr``
+    redacts it.
 
     The username is left alone; only the secret is masked, following
     httpx's own ``repr`` convention.  Text carrying no such credential

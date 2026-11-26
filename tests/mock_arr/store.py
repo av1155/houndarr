@@ -47,8 +47,9 @@ class AppData:
     app_version: str
     api_prefix: str
     api_version: str
+    # What an allowlisted build sorts by when it discards a key, and the
+    # fallback for a request with no key when ``unsorted_keys`` has no entry.
     sort_key_default: str
-    sort_direction_default: str
     parents: list[dict[str, Any]]
     leaves: list[dict[str, Any]]
     missing_ids: set[int]
@@ -64,10 +65,21 @@ class AppData:
     # rather than clamped, and Whisparr v2 2.0.0.2151 answers 500 for
     # ``releaseDate`` while 2.2.0 silently accepts it.  Each set is the
     # intersection, so the mock refuses anything not safe everywhere.
-    # Lidarr and Readarr have no allowlist upstream at all, so their sets
+    # Current Lidarr and Readarr hand any key to SQLite, so their sets
     # are the columns this repo needs plus a few real ones; widen them
     # when a client legitimately needs another column.
     sort_keys: frozenset[str] = frozenset()
+    # The API-layer allowlist of the newest builds (Sonarr 4.0.9.2421+,
+    # Whisparr v2 2.2.0+), compared case-insensitively.  A key that passes
+    # ``sort_keys`` but is not listed here is swapped for
+    # ``sort_key_default``, and the envelope reports the swapped key.
+    sort_key_allowlist: frozenset[str] = frozenset()
+    # Lower-cased sort key -> leaf field the mock sorts by.  A key with no
+    # entry sorts every row as NULL, which leaves them in id order.
+    sort_fields: dict[str, str] = field(default_factory=dict)
+    # Effective key per kind when the request carries no sortKey; ``None``
+    # answers 500, as Sonarr 3.0.10.1567's cutoff endpoint does.
+    unsorted_keys: dict[str, str | None] = field(default_factory=dict)
     sort_key_table: str = ""
     # Lidarr upper-cases the first letter of the column in its error text;
     # Readarr does not.  Measured: Lidarr 3.1.0.4875 answers

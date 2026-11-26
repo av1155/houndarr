@@ -8,8 +8,8 @@ measured against live instances:
   2024. An unlisted key is silently swapped for the app's own default, so
   the request succeeds and sorts by the wrong column. Sonarr 4.0.20.3014
   answers 200 and reports ``episodes.airDateUtc`` for a made-up key.
-- Lidarr and Readarr never got one, so the key reaches SQLite. Lidarr
-  3.1.0.4875 answers 500 with ``no such column: Albums.<key>``.
+- Current Lidarr and Readarr hand the key to SQLite. Lidarr 3.1.0.4875
+  answers 500 with ``no such column: Albums.<key>``.
 
 The client keys are asserted against the same sets, so a client that
 starts sending a key its app would discard fails here.
@@ -62,8 +62,9 @@ def test_a_key_the_app_would_not_accept_is_refused(
     [
         # Sonarr keeps the bare form: 3.0.10.1567 answers 500 for
         # "episodes.airDateUtc" because `episodes` is not a property of its
-        # Episode model, while 4.x clamps the bare form to that same column.
-        ("sonarr", "/sonarr/api/v3", SonarrClient._WANTED_SORT_KEY, "airDateUtc"),
+        # Episode model, while 4.x clamps the bare form to that same column
+        # and reports the qualified name.
+        ("sonarr", "/sonarr/api/v3", SonarrClient._WANTED_SORT_KEY, "episodes.airDateUtc"),
         ("radarr", "/radarr/api/v3", RadarrClient._WANTED_SORT_KEY, "movieMetadata.inCinemas"),
         # Whisparr v2 takes the qualified form: 2.0.0.2151 resolves both to the
         # same column and 2.2.0 honours only this one.

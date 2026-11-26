@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from houndarr.clients.base import InstanceSnapshot, ReconcileSets
+from houndarr.clients.base import InstanceSnapshot, ReconcileSets, WantedWalks
 from houndarr.clients.whisparr_v3 import (
     LibraryWhisparrV3Movie,
     MissingWhisparrV3Movie,
@@ -200,6 +200,8 @@ def make_client(instance: Instance) -> WhisparrV3Client:
 async def fetch_reconcile_sets(
     client: WhisparrV3Client,
     instance: Instance,
+    *,
+    walks: WantedWalks | None = None,
 ) -> ReconcileSets:
     """Return the authoritative wanted / upgrade-pool sets for Whisparr v3.
 
@@ -209,7 +211,8 @@ async def fetch_reconcile_sets(
     without additional network calls: missing = monitored without
     file; cutoff = monitored with file but cutoff-unmet; upgrade =
     monitored with file and cutoff-met.  There is no context-mode
-    variant to handle.
+    variant to handle, and *walks* goes unused because the cache
+    already serves both reads.
     """
     library = await client.get_library()
     missing_ids: set[int] = set()
@@ -234,6 +237,8 @@ async def fetch_reconcile_sets(
 async def fetch_instance_snapshot(
     client: WhisparrV3Client,
     instance: Instance,
+    *,
+    walks: WantedWalks | None = None,
 ) -> InstanceSnapshot:
     """Compose the dashboard snapshot for a Whisparr v3 instance.
 

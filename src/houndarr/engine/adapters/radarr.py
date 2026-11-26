@@ -9,13 +9,13 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from houndarr.clients.base import InstanceSnapshot, ReconcileSets
+from houndarr.clients.base import InstanceSnapshot, ReconcileSets, WantedWalks
 from houndarr.clients.radarr import LibraryMovie, MissingMovie, RadarrClient
 from houndarr.engine.adapters._common import (
     build_missing_candidate,
     compute_default_snapshot,
     fetch_movie_upgrade_pool,
-    paginate_wanted,
+    walk_wanted,
 )
 from houndarr.engine.candidates import (
     SearchCandidate,
@@ -182,6 +182,8 @@ async def dispatch_search(client: RadarrClient, candidate: SearchCandidate) -> N
 async def fetch_reconcile_sets(
     client: RadarrClient,
     instance: Instance,
+    *,
+    walks: WantedWalks | None = None,
 ) -> ReconcileSets:
     """Return the authoritative wanted / upgrade-pool sets for Radarr.
 
@@ -191,19 +193,21 @@ async def fetch_reconcile_sets(
     set short-circuits to empty so the ``/movie`` library call is
     skipped.
     """
-    missing_items = await paginate_wanted(client.get_missing)
-    cutoff_items = await paginate_wanted(client.get_cutoff_unmet)
+    missing = await walk_wanted(walks, "missing", client.get_missing)
+    cutoff = await walk_wanted(walks, "cutoff", client.get_cutoff_unmet)
+    missing_set = _movie_leaf_pairs(missing.items) if missing.complete else None
+    cutoff_set = _movie_leaf_pairs(cutoff.items) if cutoff.complete else None
     upgrade_set: frozenset[tuple[str, int]] = frozenset()
     if instance.upgrade.upgrade_enabled:
         upgrade_candidates = [
             adapt_upgrade(item, instance) for item in await fetch_upgrade_pool(client, instance)
         ]
         upgrade_set = frozenset((str(c.item_type), c.item_id) for c in upgrade_candidates)
-    return ReconcileSets(
-        missing=frozenset(("movie", m.movie_id) for m in missing_items),
-        cutoff=frozenset(("movie", m.movie_id) for m in cutoff_items),
-        upgrade=upgrade_set,
-    )
+    return ReconcileSets(missing=missing_set, cutoff=cutoff_set, upgrade=upgrade_set)
+
+
+def _movie_leaf_pairs(items: list[MissingMovie]) -> frozenset[tuple[str, int]]:
+    return frozenset(("movie", m.movie_id) for m in items)
 
 
 def make_client(instance: Instance) -> RadarrClient:
@@ -221,6 +225,8 @@ def make_client(instance: Instance) -> RadarrClient:
 async def fetch_instance_snapshot(
     client: RadarrClient,
     instance: Instance,
+    *,
+    walks: WantedWalks | None = None,
 ) -> InstanceSnapshot:
     """Compose the dashboard snapshot for a Radarr instance.
 
@@ -236,6 +242,7 @@ async def fetch_instance_snapshot(
     return await compute_default_snapshot(
         client,
         anchor_fn=_radarr_release_anchor,
+        walks=walks,
     )
 
 

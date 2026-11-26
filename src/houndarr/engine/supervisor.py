@@ -18,7 +18,7 @@ from uuid import uuid4
 
 import httpx
 
-from houndarr.clients.base import ReconcileSets
+from houndarr.clients.base import ReconcileSets, WantedWalks
 from houndarr.database import get_db
 from houndarr.engine.adapters import get_adapter
 from houndarr.engine.adapters.protocols import AppAdapterProto
@@ -116,6 +116,10 @@ class Supervisor:
         # at debug, mirroring the reconnect state machine's one-row-per-streak
         # rule; membership clears on the next successful refresh.
         self._snapshot_fail_warned: set[int] = set()
+        # Instances in a streak of refreshes where some pass's list could
+        # not be read in full, so its cooldowns were kept.  Same
+        # one-warning-per-streak rule as above.
+        self._incomplete_lists_warned: set[int] = set()
 
     # Lifecycle
 
@@ -519,7 +523,9 @@ class Supervisor:
         failure anywhere in the reconcile fetch causes the reconcile
         step to skip (the :meth:`ReconcileSets.empty` sentinel path),
         preserving existing rows rather than risking a wipe on a
-        transient *arr blip.
+        transient *arr blip.  Both fetches share one walk memo, so each
+        ``/wanted`` list is read once per refresh; a pass whose list was
+        not read in full keeps its rows.
         """
         if not instance.core.enabled:
             return
@@ -528,9 +534,14 @@ class Supervisor:
             try:
                 adapter: AppAdapterProto = get_adapter(instance.core.type)
                 async with adapter.make_client(instance) as client:
-                    snap = await adapter.fetch_instance_snapshot(client, instance)
+                    walks: WantedWalks = {}
+                    snap = await adapter.fetch_instance_snapshot(client, instance, walks=walks)
+                    reconcile_read = False
                     try:
-                        reconcile_sets = await adapter.fetch_reconcile_sets(client, instance)
+                        reconcile_sets = await adapter.fetch_reconcile_sets(
+                            client, instance, walks=walks
+                        )
+                        reconcile_read = True
                     except (httpx.TransportError, ClientTransportError):
                         reconcile_sets = ReconcileSets.empty()
                         logger.debug(
@@ -570,6 +581,8 @@ class Supervisor:
                     unreleased_count=snap.unreleased_count,
                 )
                 await reconcile_cooldowns(instance.core.id, reconcile_sets)
+                if reconcile_read:
+                    self._report_incomplete_lists(instance, reconcile_sets)
                 self._snapshot_fail_warned.discard(instance.core.id)
                 # A successful snapshot proves the *arr is reachable, so an
                 # open run-now error can be paired here too.  Without this,
@@ -605,6 +618,26 @@ class Supervisor:
                     )
             except Exception:
                 logger.exception("Supervisor: snapshot refresh failed for %r", instance.core.name)
+
+    def _report_incomplete_lists(self, instance: Instance, sets: ReconcileSets) -> None:
+        """Warn once per streak when a pass kept its cooldowns for want of a full list."""
+        incomplete = sets.incomplete()
+        if not incomplete:
+            self._incomplete_lists_warned.discard(instance.core.id)
+            return
+        lists = " and ".join(incomplete)
+        noun = "list" if len(incomplete) == 1 else "lists"
+        if instance.core.id in self._incomplete_lists_warned:
+            logger.debug("Supervisor: %r %s %s still incomplete", instance.core.name, lists, noun)
+            return
+        self._incomplete_lists_warned.add(instance.core.id)
+        logger.warning(
+            "Supervisor: %r %s %s incomplete; keeping those cooldowns until a refresh "
+            "reads them in full",
+            instance.core.name,
+            lists,
+            noun,
+        )
 
     async def _refresh_all_snapshots_once(self) -> None:
         """Refresh the snapshot columns for every enabled instance once.

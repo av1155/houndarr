@@ -67,7 +67,10 @@ class AppAdapterProto(Protocol):
         ``/wanted/cutoff`` for leaf ids, call :attr:`fetch_upgrade_pool`
         for upgrade-pool ids, and (in context-mode adapters) UNION in
         the synthetic parent ids derived from leaf parent metadata so
-        the DB match stays pure set membership.
+        the DB match stays pure set membership.  The keyword-only
+        ``walks`` memo is shared with :attr:`fetch_instance_snapshot`, so a
+        list the snapshot already read is not fetched again, and a pass
+        whose list was not read in full comes back as ``None``.
         """
         ...
 
@@ -84,6 +87,7 @@ class AppAdapterProto(Protocol):
         different shape, so anchor selection lives per-adapter; the
         five ``/wanted``-paged adapters delegate to
         :func:`compute_default_snapshot` while Whisparr v3 walks its
-        cached ``/api/v3/movie`` response inline.
+        cached ``/api/v3/movie`` response inline.  Takes the same
+        keyword-only ``walks`` memo as :attr:`fetch_reconcile_sets`.
         """
         ...

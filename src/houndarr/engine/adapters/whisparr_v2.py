@@ -21,7 +21,7 @@ import httpx
 from pydantic import ValidationError
 
 from houndarr.clients._wire_models import ArrSeries
-from houndarr.clients.base import InstanceSnapshot, ReconcileSets
+from houndarr.clients.base import InstanceSnapshot, ReconcileSets, WantedWalks
 from houndarr.clients.whisparr_v2 import (
     LibraryWhisparrV2Episode,
     MissingWhisparrV2Episode,
@@ -32,7 +32,7 @@ from houndarr.engine.adapters._common import (
     build_cutoff_candidate,
     build_missing_candidate,
     compute_default_snapshot,
-    paginate_wanted,
+    walk_wanted,
 )
 from houndarr.engine.candidates import SearchCandidate
 from houndarr.services.instances import Instance, WhisparrV2SearchMode
@@ -251,16 +251,18 @@ async def _collect_upgrade_episodes(
     client: WhisparrV2Client,
     instance: Instance,
     series_list: Sequence[ArrSeries],
-) -> list[LibraryWhisparrV2Episode]:
+) -> tuple[list[LibraryWhisparrV2Episode], bool]:
     """Return monitored, on-disk, cutoff-met episodes for the given series.
 
     Shared loop body between the rotation-windowed search-cycle fetch
     (:func:`fetch_upgrade_pool`) and the full-library reconcile fetch
     (:func:`_fetch_all_upgrade_episodes`).  Transport or validation
     errors on a single series are logged and skipped so one flaky
-    series cannot blank the whole pool.
+    series cannot blank the whole pool; the flag is false when any series
+    was skipped.
     """
     episodes: list[LibraryWhisparrV2Episode] = []
+    complete = True
     for s in series_list:
         series_id = s.id or 0
         try:
@@ -271,9 +273,10 @@ async def _collect_upgrade_episodes(
                 instance.core.name,
                 series_id,
             )
+            complete = False
             continue
         episodes.extend(e for e in eps if e.monitored and e.has_file and e.cutoff_met)
-    return episodes
+    return episodes, complete
 
 
 async def fetch_upgrade_pool(
@@ -312,13 +315,14 @@ async def fetch_upgrade_pool(
         remaining = window - len(selected)
         selected += monitored[:remaining]
 
-    return await _collect_upgrade_episodes(client, instance, selected)
+    episodes, _ = await _collect_upgrade_episodes(client, instance, selected)
+    return episodes
 
 
 async def _fetch_all_upgrade_episodes(
     client: WhisparrV2Client,
     instance: Instance,
-) -> list[LibraryWhisparrV2Episode]:
+) -> tuple[list[LibraryWhisparrV2Episode], bool]:
     """Return upgrade-eligible episodes across EVERY monitored series.
 
     The cycle-facing :func:`fetch_upgrade_pool` windows the series list
@@ -392,7 +396,12 @@ def _whisparr_v2_season_synth_pairs(
     return frozenset(("whisparr_v2_episode", _season_item_id(sid, sn)) for sid, sn in parents)
 
 
-async def fetch_reconcile_sets(client: WhisparrV2Client, instance: Instance) -> ReconcileSets:
+async def fetch_reconcile_sets(
+    client: WhisparrV2Client,
+    instance: Instance,
+    *,
+    walks: WantedWalks | None = None,
+) -> ReconcileSets:
     """Return the authoritative wanted / upgrade-pool sets for Whisparr v2.
 
     Mirrors the Sonarr implementation but uses the
@@ -405,25 +414,29 @@ async def fetch_reconcile_sets(client: WhisparrV2Client, instance: Instance) -> 
     one rotation period.  An upgrade-disabled instance short-circuits
     to an empty upgrade set so no library traffic is paid.
     """
-    missing_items = await paginate_wanted(client.get_missing)
-    cutoff_items = await paginate_wanted(client.get_cutoff_unmet)
-    missing_set = _whisparr_v2_leaf_pairs(missing_items)
-    cutoff_set = _whisparr_v2_leaf_pairs(cutoff_items)
-    if instance.missing.whisparr_v2_search_mode != WhisparrV2SearchMode.episode:
-        missing_set = missing_set | _whisparr_v2_season_synth_pairs(missing_items)
-    upgrade_set: frozenset[tuple[str, int]] = frozenset()
+    missing = await walk_wanted(walks, "missing", client.get_missing)
+    cutoff = await walk_wanted(walks, "cutoff", client.get_cutoff_unmet)
+    missing_set: frozenset[tuple[str, int]] | None = None
+    if missing.complete:
+        missing_set = _whisparr_v2_leaf_pairs(missing.items)
+        if instance.missing.whisparr_v2_search_mode != WhisparrV2SearchMode.episode:
+            missing_set = missing_set | _whisparr_v2_season_synth_pairs(missing.items)
+    cutoff_set = _whisparr_v2_leaf_pairs(cutoff.items) if cutoff.complete else None
+    upgrade_set: frozenset[tuple[str, int]] | None = frozenset()
     if instance.upgrade.upgrade_enabled:
-        upgrade_candidates = [
-            adapt_upgrade(item, instance)
-            for item in await _fetch_all_upgrade_episodes(client, instance)
-        ]
-        upgrade_set = frozenset((str(c.item_type), c.item_id) for c in upgrade_candidates)
+        episodes, complete = await _fetch_all_upgrade_episodes(client, instance)
+        upgrade_set = None
+        if complete:
+            upgrade_candidates = [adapt_upgrade(item, instance) for item in episodes]
+            upgrade_set = frozenset((str(c.item_type), c.item_id) for c in upgrade_candidates)
     return ReconcileSets(missing=missing_set, cutoff=cutoff_set, upgrade=upgrade_set)
 
 
 async def fetch_instance_snapshot(
     client: WhisparrV2Client,
     instance: Instance,
+    *,
+    walks: WantedWalks | None = None,
 ) -> InstanceSnapshot:
     """Compose the dashboard snapshot for a Whisparr v2 instance.
 
@@ -442,6 +455,7 @@ async def fetch_instance_snapshot(
         client,
         anchor_fn=_anchor,
         anchor_is_dt=True,
+        walks=walks,
     )
 
 

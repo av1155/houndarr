@@ -66,11 +66,16 @@ class ReconcileSets:
     the parent id carried on each item (e.g. ``series_id``,
     ``artist_id``, ``author_id``).  Reconciliation stays a pure set
     membership check and does not need adapter-specific logic.
+
+    ``None`` marks a pass whose list could not be read in full this
+    refresh (a wanted list past the page cap, a series that failed to
+    load); the reconciler leaves that pass's rows alone rather than
+    delete cooldowns for items it never saw.
     """
 
-    missing: frozenset[tuple[str, int]]
-    cutoff: frozenset[tuple[str, int]]
-    upgrade: frozenset[tuple[str, int]]
+    missing: frozenset[tuple[str, int]] | None
+    cutoff: frozenset[tuple[str, int]] | None
+    upgrade: frozenset[tuple[str, int]] | None
 
     @classmethod
     def empty(cls) -> ReconcileSets:
@@ -84,7 +89,10 @@ class ReconcileSets:
         return cls(missing=frozenset(), cutoff=frozenset(), upgrade=frozenset())
 
     def is_empty(self) -> bool:
-        """Return True if every pass set is empty.
+        """Return True if no pass set holds an id (each is empty or ``None``).
+
+        A ``None`` pass beside empty ones therefore also skips this
+        refresh's reconcile, including the passes that were read in full.
 
         The reconciler treats an all-empty result as an explicit
         signal to SKIP the DELETE step: an instance that genuinely has
@@ -95,8 +103,32 @@ class ReconcileSets:
         """
         return not self.missing and not self.cutoff and not self.upgrade
 
+    def incomplete(self) -> tuple[str, ...]:
+        """Return the passes whose list could not be read in full."""
+        passes = (("missing", self.missing), ("cutoff", self.cutoff), ("upgrade", self.upgrade))
+        return tuple(name for name, ids in passes if ids is None)
+
 
 WantedKind = Literal["missing", "cutoff"]
+
+
+@dataclass(frozen=True, slots=True)
+class WantedWalk[T]:
+    """Every item one ``/wanted`` list returned, and whether that was all of it.
+
+    ``complete`` is false when the walk stopped at the reconcile page cap
+    with pages still full, so ``items`` may be missing the tail of the list.
+    """
+
+    items: list[T]
+    complete: bool
+
+
+type WantedWalks = dict[WantedKind, WantedWalk[Any]]
+"""Walks already made during one snapshot refresh, keyed by list.
+
+The supervisor creates one per refresh and hands it to both the snapshot
+and the reconcile fetch, so each list is read once per refresh."""
 
 
 # Default timeouts (seconds): connect=5, read=30

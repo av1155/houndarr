@@ -12,14 +12,14 @@ import logging
 import httpx
 from pydantic import ValidationError
 
-from houndarr.clients.base import InstanceSnapshot, ReconcileSets
+from houndarr.clients.base import InstanceSnapshot, ReconcileSets, WantedWalks
 from houndarr.clients.readarr import LibraryBook, MissingBook, ReadarrClient
 from houndarr.engine.adapters._common import (
     ContextOverride,
     build_cutoff_candidate,
     build_missing_candidate,
     compute_default_snapshot,
-    paginate_wanted,
+    walk_wanted,
 )
 from houndarr.engine.candidates import (
     SearchCandidate,
@@ -250,6 +250,14 @@ async def fetch_upgrade_pool(
             _UPGRADE_CUTOFF_EXCLUSION_HARD_CAP * 250,
         )
 
+    return await _library_upgrade_pool(client, exclusion)
+
+
+async def _library_upgrade_pool(
+    client: ReadarrClient,
+    exclusion: set[int],
+) -> list[LibraryBook]:
+    """Return monitored books with files whose id is not in *exclusion*."""
     library = await client.get_books()
     return [b for b in library if b.monitored and b.has_file and b.book_id not in exclusion]
 
@@ -297,7 +305,12 @@ def _author_synth_pairs(items: list[MissingBook]) -> frozenset[tuple[str, int]]:
     return frozenset(("book", _author_item_id(aid)) for aid in authors)
 
 
-async def fetch_reconcile_sets(client: ReadarrClient, instance: Instance) -> ReconcileSets:
+async def fetch_reconcile_sets(
+    client: ReadarrClient,
+    instance: Instance,
+    *,
+    walks: WantedWalks | None = None,
+) -> ReconcileSets:
     """Return the authoritative wanted / upgrade-pool sets for Readarr.
 
     Parallels the Lidarr implementation: leaf book ids always, plus
@@ -307,16 +320,21 @@ async def fetch_reconcile_sets(client: ReadarrClient, instance: Instance) -> Rec
     empty so the library scan + cutoff-exclusion paginate loop are
     skipped.
     """
-    missing_items = await paginate_wanted(client.get_missing)
-    cutoff_items = await paginate_wanted(client.get_cutoff_unmet)
-    missing_set = _book_leaf_pairs(missing_items)
-    cutoff_set = _book_leaf_pairs(cutoff_items)
-    if instance.missing.readarr_search_mode != ReadarrSearchMode.book:
-        missing_set = missing_set | _author_synth_pairs(missing_items)
+    missing = await walk_wanted(walks, "missing", client.get_missing)
+    cutoff = await walk_wanted(walks, "cutoff", client.get_cutoff_unmet)
+    missing_set: frozenset[tuple[str, int]] | None = None
+    if missing.complete:
+        missing_set = _book_leaf_pairs(missing.items)
+        if instance.missing.readarr_search_mode != ReadarrSearchMode.book:
+            missing_set = missing_set | _author_synth_pairs(missing.items)
+    cutoff_set = _book_leaf_pairs(cutoff.items) if cutoff.complete else None
     upgrade_set: frozenset[tuple[str, int]] = frozenset()
     if instance.upgrade.upgrade_enabled:
+        # The cutoff walk above doubles as the exclusion set; a truncated
+        # walk leaves extra books in the pool, which only keeps more rows.
+        exclusion = {item.book_id for item in cutoff.items}
         upgrade_candidates = [
-            adapt_upgrade(item, instance) for item in await fetch_upgrade_pool(client, instance)
+            adapt_upgrade(item, instance) for item in await _library_upgrade_pool(client, exclusion)
         ]
         upgrade_set = frozenset((str(c.item_type), c.item_id) for c in upgrade_candidates)
     return ReconcileSets(missing=missing_set, cutoff=cutoff_set, upgrade=upgrade_set)
@@ -325,6 +343,8 @@ async def fetch_reconcile_sets(client: ReadarrClient, instance: Instance) -> Rec
 async def fetch_instance_snapshot(
     client: ReadarrClient,
     instance: Instance,
+    *,
+    walks: WantedWalks | None = None,
 ) -> InstanceSnapshot:
     """Compose the dashboard snapshot for a Readarr instance.
 
@@ -336,7 +356,7 @@ async def fetch_instance_snapshot(
     def _anchor(book: MissingBook) -> str | None:
         return book.release_date
 
-    return await compute_default_snapshot(client, anchor_fn=_anchor)
+    return await compute_default_snapshot(client, anchor_fn=_anchor, walks=walks)
 
 
 class ReadarrAdapter:

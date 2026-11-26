@@ -17,7 +17,8 @@ parent ids for context modes) at snapshot-refresh cadence, and this
 function deletes every cooldown row whose ``(item_type, item_id)`` does
 not appear in the matching ``search_kind`` set.  An empty
 :class:`ReconcileSets` (e.g. a mid-fetch failure) is a hard skip: never
-drive the DB to an empty state from an unreliable source.
+drive the DB to an empty state from an unreliable source.  A ``None``
+pass (its list could not be read in full) keeps every row of that pass.
 """
 
 from __future__ import annotations
@@ -46,7 +47,8 @@ async def reconcile_cooldowns(instance_id: int, sets: ReconcileSets) -> int:
             ``search_kind`` bucket.  Produced by the adapter's
             ``fetch_reconcile_sets`` method.  An empty sets object
             (every bucket empty) is treated as an explicit skip so a
-            mid-fetch failure never wipes the table.
+            mid-fetch failure never wipes the table, and a ``None``
+            bucket keeps all of that pass's rows.
 
     Returns:
         Number of cooldown rows deleted.  Zero is the expected steady
@@ -61,9 +63,9 @@ async def reconcile_cooldowns(instance_id: int, sets: ReconcileSets) -> int:
 
     # Pull every cooldown row for the instance, classify each by its
     # stamped search_kind, and compare (item_type, item_id) against
-    # the matching pass's wanted set.  Rows with an unrecognised
-    # search_kind keep the column CHECK honest and are skipped from
-    # reconciliation (they should never exist; defensive only).
+    # the matching pass's wanted set.  Rows whose pass set is ``None``
+    # (list not read in full) are skipped, as are rows with an
+    # unrecognised search_kind (should never exist; defensive only).
     stale: list[int] = []
     async with get_db() as db:
         async with db.execute(

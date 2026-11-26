@@ -10,34 +10,65 @@ from __future__ import annotations
 import random
 from typing import Any
 
-from fastapi import APIRouter, Body, HTTPException, Query
+from fastapi import APIRouter, Body, HTTPException
 
 from tests.mock_arr.store import AppData
 
 
-def resolve_sort_key(sort_key: str, data: AppData) -> str:
-    """Return the sortKey, or raise the way the strictest supported build would.
+def resolve_sort_key(sort_key: str | None, data: AppData, kind: str) -> str:
+    """Return the key the app ends up sorting by, or raise the way it would.
 
     Real behaviour splits by version.  Builds from late 2024 on carry an
     API-layer allowlist and quietly swap an unlisted key for their own
     default, so a wrong key reads as a healthy 200 that sorts by the wrong
     column.  Older builds hand the key to SQLite and answer 500.
 
-    The mock models the strict half on purpose: a key is only safe if every
-    supported build accepts it, so anything outside ``sort_keys`` fails here
-    even when the newest build would have forgiven it.
+    The mock models both halves.  A key outside ``sort_keys`` fails as on
+    the older builds, because a key is only safe if every supported build
+    accepts it.  A key inside ``sort_keys`` but outside the allowlist is
+    swapped for ``sort_key_default``, as on the newer ones.  With no key at
+    all, each app falls back to its ``unsorted_keys`` entry for the kind,
+    else to ``sort_key_default``.
     """
-    if not data.sort_keys:
-        return sort_key
-    if sort_key.lower() in {key.lower() for key in data.sort_keys}:
-        return sort_key
-    column = sort_key
-    if data.sort_key_error_capitalises:
-        column = column[:1].upper() + column[1:]
-    raise HTTPException(
-        status_code=500,
-        detail=f"SQL logic error\nno such column: {data.sort_key_table}.{column}",
-    )
+    if sort_key is None:
+        fallback = data.unsorted_keys.get(kind, data.sort_key_default)
+        if fallback is None:
+            raise HTTPException(
+                status_code=500,
+                detail="Object reference not set to an instance of an object.",
+            )
+        return fallback
+    if _rejects(data.sort_keys, sort_key):
+        column = sort_key
+        if data.sort_key_error_capitalises:
+            column = column[:1].upper() + column[1:]
+        raise HTTPException(
+            status_code=500,
+            detail=f"SQL logic error\nno such column: {data.sort_key_table}.{column}",
+        )
+    if _rejects(data.sort_key_allowlist, sort_key):
+        return data.sort_key_default
+    return sort_key
+
+
+def _rejects(keys: frozenset[str], sort_key: str) -> bool:
+    return bool(keys) and sort_key.lower() not in {key.lower() for key in keys}
+
+
+def sort_records(
+    records: list[dict[str, Any]], *, field: str | None, descending: bool
+) -> list[dict[str, Any]]:
+    """Order ``records`` by ``field`` the way SQLite orders a nullable column.
+
+    NULLs come first ascending and last descending.  Ties keep their
+    incoming order, which is id order for every router.
+    """
+    if field is None:
+        return list(records)
+    dated = [record for record in records if record.get(field) is not None]
+    undated = [record for record in records if record.get(field) is None]
+    dated.sort(key=lambda record: record[field], reverse=descending)
+    return dated + undated if descending else undated + dated
 
 
 def paginate(
@@ -48,11 +79,10 @@ def paginate(
     sort_key: str,
     sort_direction: str,
 ) -> dict[str, Any]:
-    """Wrap a slice of ``records`` in the *arr pagination envelope.
+    """Wrap a slice of already-sorted ``records`` in the *arr pagination envelope.
 
-    Real *arr APIs sort server-side. The mock keeps records in a stable
-    seeded order so callers see deterministic pagination; we still echo
-    the requested ``sort_key`` / ``sort_direction`` to match the wire shape.
+    ``sort_key`` and ``sort_direction`` are the effective ones, which is
+    what the real envelope reports.
     """
     total = len(records)
     start = max(0, (page - 1) * page_size)
@@ -65,6 +95,57 @@ def paginate(
         "totalRecords": total,
         "records": records[start:end],
     }
+
+
+def wanted_page(
+    data: AppData,
+    kind: str,
+    *,
+    page: int,
+    page_size: int,
+    sort_key: str | None,
+    sort_direction: str | None,
+) -> dict[str, Any]:
+    """Answer one ``/wanted/{kind}`` request the way the real app would.
+
+    Current builds of every app read a missing ``sortDirection`` as
+    descending in their paging resource, before any controller default
+    applies.
+    """
+    data.page_log.entries.append((kind, page, page_size))
+    wanted_ids = data.missing_ids if kind == "missing" else data.cutoff_ids
+    records = [leaf for leaf in data.leaves if leaf["id"] in wanted_ids]
+    effective_key = resolve_sort_key(sort_key, data, kind)
+    descending = sort_direction is None or sort_direction.lower() == "descending"
+    ordered = sort_records(
+        records,
+        field=data.sort_fields.get(effective_key.lower()),
+        descending=descending,
+    )
+    return paginate(
+        ordered,
+        page=page,
+        page_size=page_size,
+        sort_key=effective_key,
+        sort_direction="descending" if descending else "ascending",
+    )
+
+
+def shuffle_date_fields(
+    leaves: list[dict[str, Any]], fields: tuple[str, ...], *, seed: int
+) -> None:
+    """Deal the leaves' date ``fields`` out again in a seeded random order.
+
+    Seeded dates rise with id, so storage order already equals date order
+    and a mock that never sorted would pass any ordering test.  Moving the
+    fields together keeps each leaf's dates consistent with each other, and
+    a permutation adds no date the default seed lacks.  The separate
+    ``Random`` leaves every other draw, and so the default seeds, untouched.
+    """
+    rows = [tuple(leaf[name] for name in fields) for leaf in leaves]
+    random.Random(f"{seed}:dates").shuffle(rows)
+    for leaf, row in zip(leaves, rows, strict=True):
+        leaf.update(zip(fields, row, strict=True))
 
 
 def partition_leaf_ids(
@@ -152,16 +233,3 @@ def attach_common_routes(router: APIRouter, data: AppData) -> None:
             "status": "queued",
             "queued": "2026-04-25T00:00:00Z",
         }
-
-
-def standard_pagination_params() -> dict[str, Any]:
-    """Return the FastAPI ``Query`` defaults shared by every wanted handler.
-
-    Centralised so individual routers only declare per-app-specific params.
-    """
-    return {
-        "page": Query(1, ge=1),
-        "page_size": Query(10, ge=1, le=2000, alias="pageSize"),
-        "sort_key": Query(None, alias="sortKey"),
-        "sort_direction": Query("ascending", alias="sortDirection"),
-    }

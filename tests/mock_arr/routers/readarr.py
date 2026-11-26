@@ -15,9 +15,9 @@ from fastapi import APIRouter, Query
 
 from tests.mock_arr._common import (
     attach_common_routes,
-    paginate,
     partition_leaf_ids,
-    resolve_sort_key,
+    shuffle_date_fields,
+    wanted_page,
 )
 from tests.mock_arr.store import AppData
 
@@ -29,6 +29,7 @@ def make_readarr_data(
     books_per_author: int = 10,
     missing_ratio: float = 0.5,
     cutoff_ratio: float = 0.2,
+    shuffle_dates: bool = False,
 ) -> AppData:
     rng = random.Random(seed)
     parents: list[dict[str, Any]] = []
@@ -72,6 +73,8 @@ def make_readarr_data(
 
     rng.shuffle(leaves)
     leaves.sort(key=lambda x: x["id"])
+    if shuffle_dates:
+        shuffle_date_fields(leaves, ("releaseDate",), seed=seed)
 
     leaf_ids = [leaf["id"] for leaf in leaves]
     missing_ids, cutoff_ids, upgrade_ids = partition_leaf_ids(
@@ -87,8 +90,9 @@ def make_readarr_data(
         api_prefix="/readarr/api/v1",
         api_version="v1",
         sort_key_default="releaseDate",
-        sort_direction_default="ascending",
         sort_keys=frozenset({"releaseDate", "title", "id"}),
+        sort_fields={"releasedate": "releaseDate", "title": "title", "id": "id", "books.id": "id"},
+        unsorted_keys={"missing": "Books.Id", "cutoff": "Books.Id"},
         sort_key_table="Books",
         parents=parents,
         leaves=leaves,
@@ -121,18 +125,17 @@ def make_readarr_router(data: AppData) -> APIRouter:
     async def wanted_missing(
         page: int = Query(1, ge=1),
         page_size: int = Query(10, ge=1, le=2000, alias="pageSize"),
-        sort_key: str = Query("releaseDate", alias="sortKey"),
-        sort_direction: str = Query("ascending", alias="sortDirection"),
+        sort_key: str | None = Query(None, alias="sortKey"),
+        sort_direction: str | None = Query(None, alias="sortDirection"),
         monitored: bool = Query(True),
         include_author: bool = Query(False, alias="includeAuthor"),
     ) -> dict[str, Any]:
-        data.page_log.entries.append(("missing", page, page_size))
-        records = [leaf for leaf in data.leaves if leaf["id"] in data.missing_ids]
-        return paginate(
-            records,
+        return wanted_page(
+            data,
+            "missing",
             page=page,
             page_size=page_size,
-            sort_key=resolve_sort_key(sort_key, data),
+            sort_key=sort_key,
             sort_direction=sort_direction,
         )
 
@@ -140,18 +143,17 @@ def make_readarr_router(data: AppData) -> APIRouter:
     async def wanted_cutoff(
         page: int = Query(1, ge=1),
         page_size: int = Query(10, ge=1, le=2000, alias="pageSize"),
-        sort_key: str = Query("releaseDate", alias="sortKey"),
-        sort_direction: str = Query("ascending", alias="sortDirection"),
+        sort_key: str | None = Query(None, alias="sortKey"),
+        sort_direction: str | None = Query(None, alias="sortDirection"),
         monitored: bool = Query(True),
         include_author: bool = Query(False, alias="includeAuthor"),
     ) -> dict[str, Any]:
-        data.page_log.entries.append(("cutoff", page, page_size))
-        records = [leaf for leaf in data.leaves if leaf["id"] in data.cutoff_ids]
-        return paginate(
-            records,
+        return wanted_page(
+            data,
+            "cutoff",
             page=page,
             page_size=page_size,
-            sort_key=resolve_sort_key(sort_key, data),
+            sort_key=sort_key,
             sort_direction=sort_direction,
         )
 

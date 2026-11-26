@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- The container log warns `Wanted list <url> came back sorted by ...` once per instance and list when an \*arr sorts a wanted list by a different column or direction than Houndarr asked for. (#852)
+
+### Fixed
+
+- Sonarr, Lidarr, Readarr and Whisparr v2 cutoff searches in Chronological order walk the cutoff list oldest-first instead of newest-first or most recently added first. (#854)
+- Cutoff list requests to Sonarr 3.0.10.1567 no longer fail with HTTP 500, so cycles reach the upgrade pass after the cutoff pass and cooldown reconcile stops failing on every snapshot refresh. (#854)
+- Snapshot refresh reads the missing list once instead of twice, and Lidarr and Readarr with the upgrade pass on read the cutoff list once instead of twice. (#839)
+- Cooldown reconcile keeps a pass's cooldowns when its wanted list holds 50,000 items or more or a Sonarr or Whisparr v2 series fails to load, and logs `incomplete; keeping those cooldowns` once. (#839)
+
+### Security
+
+- Logs page rows mask the whole password of an \*arr URL whose password contains `@` or whose username is empty; before, the text after the first `@` or the whole password showed. (#895)
+
 ---
 
 ## [1.13.4] - 2026-11-25

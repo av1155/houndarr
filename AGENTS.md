@@ -415,10 +415,10 @@ someone comments, so reporters get immediate feedback.
   `browser-e2e.yml`, whose check is not required, keeps a filter; keep its
   list equal to `DOCS_ONLY_GLOBS` in `docs-only.yml`
 - If mypy CI fails with "merge ref not found": push an empty commit to retrigger
-- Do not skip a job whose name is an expression (`Build ${{ ... }}`) with a
-  job-level `if:`: it then reports under the unevaluated expression and
-  its required check stays pending. `docker.yml`'s build skips its steps
-  instead
+- On a PR, do not skip a required job whose name is an expression
+  (`Build ${{ ... }}`) with a job-level `if:`: it then reports under the
+  unevaluated expression and its required check stays pending.
+  `docker.yml`'s build skips its steps on docs-only PRs instead
 - Keep every action pinned to a full 40-character commit SHA with the release
   version as the last token of a trailing comment
   (`uses: owner/repo@<sha> # vX.Y.Z`). Dependabot rewrites the SHA and the

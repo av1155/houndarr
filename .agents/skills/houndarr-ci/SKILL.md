@@ -85,10 +85,10 @@ pins the job conditions.
   required check: a workflow skipped by a path filter leaves its checks
   pending. `browser-e2e.yml` keeps its filter because its check is not
   required; keep its list equal to `DOCS_ONLY_GLOBS` in `docs-only.yml`.
-- Do not skip a job whose name is an expression with a job-level `if:`:
-  it reports under the unevaluated expression and its required check
-  stays pending. Gate its steps, as `docker.yml`'s build does with
-  `DOCS_ONLY`, and gate any step added there too.
+- On a PR, do not skip a required job whose name is an expression with a
+  job-level `if:`: it reports under the unevaluated expression and its
+  required check stays pending. Gate its steps, as `docker.yml`'s build
+  does with `DOCS_ONLY`, and gate any step added there too.
 - Gate a required job as
   `!cancelled() && !(needs.changes.result == 'success' && needs.changes.outputs.docs_only == 'true')`,
   so only a successful classifier can skip it.

@@ -375,19 +375,23 @@ def test_build_reports_on_docs_only_prs_and_skips_its_steps() -> None:
 def test_manual_runs_never_take_the_release_path() -> None:
     text = (_WORKFLOWS / "docker.yml").read_text()
     build = _jobs(text)["build"]
-    assert (
-        "(github.event_name != 'workflow_dispatch' || startsWith(github.ref, 'refs/heads/'))"
-        in (_key(build, "if"))
+    assert _key(build, "if") == (
+        "${{ !cancelled() && "
+        "(github.event_name != 'workflow_dispatch' || startsWith(github.ref, 'refs/heads/')) }}"
     )
+    tag_push = "github.event_name != 'pull_request' && startsWith(github.ref, 'refs/tags/v')"
+    assert f"          push: ${{{{ {tag_push} }}}}\n" in build
+    assert build.count(f"        if: {tag_push}\n") == 3
     group = re.search(r"^concurrency:\n(?:  #.*\n)*  group: (.*)$", text, re.MULTILINE)
     assert group
     assert "github.event_name" in group.group(1)
 
 
-def test_scan_waits_for_a_successful_build() -> None:
+def test_scan_waits_for_a_successful_build_and_runs_weekly() -> None:
     scan = _workflow_jobs("docker.yml")["scan"]
     assert _key(scan, "needs") == "[changes, build]"
     assert "needs.build.result == 'success'" in _key(scan, "if")
+    assert "schedule" not in _key(scan, "if")
 
 
 def test_computed_job_names_are_never_skipped_as_docs_only() -> None:

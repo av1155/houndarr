@@ -11,7 +11,7 @@ paths:
 
 SQLite via aiosqlite. `get_db()` is an async context manager that opens
 a fresh connection per call (FKs enabled per connection; WAL mode set
-once in `init_db()`). Schema version is currently 21. Bump
+once in `init_db()`). Schema version is currently 22. Bump
 `SCHEMA_VERSION` and add a `_migrate_to_vN` when changing schema.
 
 ## Schema reference
@@ -50,6 +50,10 @@ rebuild migration's CHECK clause.
 2. Add a `_migrate_to_vN(conn)` function that performs the migration.
 3. If the migration renames a value used in CHECK constraints, introduce
    a fresh `_FOO_TYPES_VN` snapshot and reference it in the new migration.
-4. Add an entry to `_MIGRATIONS` keyed by the new version.
+4. Call it from `_run_migrations` (`if from_version < N:`) and from the
+   self-heal list in `init_db_migrations`, so a database stamped at the
+   current version but missing the columns is repaired.
 5. Update `_SCHEMA_SQL` if the canonical fresh-install DDL changed.
-6. Add tests under `tests/test_database/` covering the migration path.
+6. Add tests in `tests/test_database.py` for the fresh DDL, the
+   `N-1` to `N` migration, and the self-heal path, and move its
+   `schema_version == "N-1"` pins to `"N"`.

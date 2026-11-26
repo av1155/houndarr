@@ -13,7 +13,7 @@ from houndarr.clients.radarr import RadarrClient
 from houndarr.clients.readarr import ReadarrClient
 from houndarr.clients.sonarr import SonarrClient
 from houndarr.clients.whisparr_v2 import WhisparrV2Client
-from houndarr.errors import ClientHTTPError, ClientTransportError
+from houndarr.errors import ClientHTTPError, ClientTransportError, ClientValidationError
 
 # ---------------------------------------------------------------------------
 # Queue status: per-app path verification
@@ -31,6 +31,20 @@ async def test_sonarr_queue_status_success() -> None:
     async with SonarrClient(url="http://sonarr:8989", api_key="test") as client:
         result = await client.get_queue_status()
     assert result.total_count == 5
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_queue_status_non_json_body_wraps_to_client_validation_error() -> None:
+    """A proxy login page served with 200 must not escape as a raw ValueError."""
+    respx.get("http://sonarr:8989/api/v3/queue/status").mock(
+        return_value=httpx.Response(200, text="<html>Sign in</html>"),
+    )
+    async with SonarrClient(url="http://sonarr:8989", api_key="test") as client:
+        with pytest.raises(ClientValidationError) as exc_info:
+            await client.get_queue_status()
+    assert str(exc_info.value) == "queue status: non-JSON body from /api/v3/queue/status"
+    assert isinstance(exc_info.value.__cause__, json.JSONDecodeError)
 
 
 @pytest.mark.asyncio()

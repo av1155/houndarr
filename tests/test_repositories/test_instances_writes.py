@@ -30,6 +30,7 @@ from houndarr.services.instances import (
     InstanceType,
     SearchOrder,
     SonarrSearchMode,
+    TagFilterPolicy,
     create_instance,
 )
 
@@ -105,6 +106,74 @@ async def test_insert_instance_applies_schema_defaults(db: None, master_key: byt
     assert inst.cutoff.cutoff_cooldown_days == 21
     assert inst.cutoff.cutoff_hourly_cap == 1
     assert inst.missing.sonarr_search_mode is SonarrSearchMode.episode
+    assert inst.tag_filter == TagFilterPolicy()
+
+
+@pytest.mark.asyncio()
+async def test_insert_instance_round_trips_per_pass_tag_excludes(
+    db: None, master_key: bytes
+) -> None:
+    """Each per-pass exclude column lands in its own TagFilterPolicy field."""
+    payload = InstanceInsert(
+        name="Tags",
+        type=InstanceType.sonarr,
+        url="http://sonarr:8989",
+        api_key="k",
+        tag_filter_exclude="skip",
+        tag_filter_missing_exclude="no-backfill",
+        tag_filter_cutoff_exclude="no-upgrade,sd-keep",
+        tag_filter_upgrade_exclude="keep-sd",
+    )
+    row_id = await insert_instance(payload, master_key=master_key)
+
+    inst = await repo.get_instance(row_id, master_key=master_key)
+    assert inst is not None
+    assert inst.tag_filter == TagFilterPolicy(
+        exclude=("skip",),
+        missing_exclude=("no-backfill",),
+        cutoff_exclude=("no-upgrade", "sd-keep"),
+        upgrade_exclude=("keep-sd",),
+    )
+    async with get_db() as conn:
+        async with conn.execute(
+            "SELECT tag_filter_missing_exclude, tag_filter_cutoff_exclude, "
+            "tag_filter_upgrade_exclude FROM instances WHERE id = ?",
+            (row_id,),
+        ) as cur:
+            row = await cur.fetchone()
+    assert row is not None
+    assert tuple(row) == ("no-backfill", "no-upgrade,sd-keep", "keep-sd")
+
+
+@pytest.mark.asyncio()
+async def test_update_instance_writes_and_clears_per_pass_tag_excludes(
+    db: None, master_key: bytes
+) -> None:
+    """An empty string clears one per-pass exclude and leaves the others alone."""
+    created = await create_instance(
+        master_key=master_key,
+        name="Tags",
+        type=InstanceType.sonarr,
+        url="http://s:8989",
+        api_key="k",
+        tag_filter_missing_exclude="no-backfill",
+    )
+    await update_instance(
+        created.core.id,
+        InstanceUpdate(
+            tag_filter_cutoff_exclude="no-upgrade", tag_filter_upgrade_exclude="keep-sd"
+        ),
+        master_key=master_key,
+    )
+    await update_instance(
+        created.core.id, InstanceUpdate(tag_filter_cutoff_exclude=""), master_key=master_key
+    )
+
+    inst = await repo.get_instance(created.core.id, master_key=master_key)
+    assert inst is not None
+    assert inst.tag_filter == TagFilterPolicy(
+        missing_exclude=("no-backfill",), upgrade_exclude=("keep-sd",)
+    )
 
 
 @pytest.mark.pinning()
@@ -471,6 +540,9 @@ def test_instance_update_has_every_updatable_column() -> None:
         "search_order",
         "tag_filter_include",
         "tag_filter_exclude",
+        "tag_filter_missing_exclude",
+        "tag_filter_cutoff_exclude",
+        "tag_filter_upgrade_exclude",
         "monitored_total",
         "unreleased_count",
         "snapshot_refreshed_at",

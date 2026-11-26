@@ -174,7 +174,7 @@ skill (loads on `src/houndarr/engine/**`).
 
 ### Non-obvious patterns to know up front
 
-- **Database**: SQLite via aiosqlite, schema version 21. `get_db()`
+- **Database**: SQLite via aiosqlite, schema version 22. `get_db()`
   opens a fresh connection per call (FKs enabled per connection; WAL
   mode set once in `init_db()`).
 - **Config**: `AppSettings` is a plain dataclass, **not Pydantic**.

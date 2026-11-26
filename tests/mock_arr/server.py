@@ -202,7 +202,8 @@ def create_app(config: SeedConfig | None = None) -> FastAPI:
 
         Every key is optional.  ``tags`` replaces the ``[{"id", "label"}]``
         list.  ``items`` maps leaf ids to tag ids and replaces every leaf's
-        tags (Sonarr-shaped leaves carry them on the embedded series).
+        tags, also on the embedded series, artist or author that Houndarr
+        reads them from.
         ``status`` is the HTTP code ``/tag`` answers with and ``html`` serves
         a login page instead of JSON; both reset to healthy when omitted.
         """
@@ -248,7 +249,7 @@ def create_app(config: SeedConfig | None = None) -> FastAPI:
 def _set_leaf_tags(store: AppData, items: dict[int, list[int]]) -> None:
     for leaf in store.leaves:
         tags = items.get(leaf["id"])
-        for target in (leaf, leaf.get("series")):
+        for target in (leaf, leaf.get("series"), leaf.get("artist"), leaf.get("author")):
             if not isinstance(target, dict):
                 continue
             if tags is None:

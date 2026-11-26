@@ -40,15 +40,21 @@ def test_item_tags_reach_wanted_and_library_records(client: TestClient) -> None:
     assert _movie(client, "movie", library_id)["tags"] == [9]
 
 
-def test_sonarr_leaf_tags_ride_on_the_embedded_series(client: TestClient) -> None:
-    state = client.app.state.mock_state  # type: ignore[attr-defined]
-    episode_id = min(state.sonarr.missing_ids)
+@pytest.mark.parametrize(
+    ("app", "parent"), [("sonarr", "series"), ("lidarr", "artist"), ("readarr", "author")]
+)
+def test_leaf_tags_ride_on_the_parent_houndarr_reads(
+    client: TestClient, app: str, parent: str
+) -> None:
+    store = getattr(client.app.state.mock_state, app)  # type: ignore[attr-defined]
+    leaf_id = min(store.missing_ids)
 
-    client.put("/__tags__/sonarr", json={"items": {str(episode_id): [4]}})
+    client.put(f"/__tags__/{app}", json={"items": {str(leaf_id): [4]}})
 
-    records = client.get("/sonarr/api/v3/wanted/missing", params={"pageSize": 2000}).json()
-    episode = next(r for r in records["records"] if r["id"] == episode_id)
-    assert episode["series"]["tags"] == [4]
+    path = f"/{app}/api/{store.api_version}/wanted/missing"
+    records = client.get(path, params={"pageSize": 2000}).json()
+    leaf = next(r for r in records["records"] if r["id"] == leaf_id)
+    assert leaf[parent]["tags"] == [4]
 
 
 @pytest.mark.parametrize(("config", "status"), [({"status": 503}, 503), ({"html": True}, 200)])

@@ -241,8 +241,8 @@ const config: Config = {
     },
     mermaid: {
       theme: {light: 'default', dark: 'dark'},
-      // mermaid 12 lays flowcharts out with ELK in its "neo" look and wraps
-      // node labels at 120px; these restore the 11.x dagre/classic output.
+      // mermaid 12 defaults flowcharts to ELK, the "neo" look, and 120px label
+      // wrapping and minimum width; these restore 11.x dagre/classic rendering.
       options: {
         layout: 'dagre',
         look: 'classic',

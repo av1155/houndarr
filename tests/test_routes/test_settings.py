@@ -1086,3 +1086,222 @@ def test_update_instance_toggles_search_order(app: TestClient) -> None:
     assert revert.status_code == 200
     edit_after = app.get("/settings/instances/1/edit")
     assert _option_selected(edit_after.content, "chronological")
+
+
+# ---------------------------------------------------------------------------
+# Tag filters (#637, #833)
+# ---------------------------------------------------------------------------
+
+_TOO_LONG_LABEL = "a" * 65
+_TOO_MANY_LABELS = ",".join(f"t{i}" for i in range(33))
+
+
+@pytest.mark.parametrize("path", ["create", "update"])
+@pytest.mark.parametrize(
+    ("field", "raw", "message"),
+    [
+        (
+            "tag_filter_include",
+            _TOO_LONG_LABEL,
+            "Tag filter include: each label must be 64 characters or fewer.",
+        ),
+        ("tag_filter_include", _TOO_MANY_LABELS, "Tag filter include: at most 32 tags allowed."),
+        (
+            "tag_filter_exclude",
+            _TOO_LONG_LABEL,
+            "Tag filter exclude: each label must be 64 characters or fewer.",
+        ),
+        ("tag_filter_exclude", _TOO_MANY_LABELS, "Tag filter exclude: at most 32 tags allowed."),
+    ],
+)
+def test_instance_wide_tag_filter_errors_unchanged(
+    app: TestClient, path: str, field: str, raw: str, message: str
+) -> None:
+    _login(app)
+    target = "/settings/instances"
+    if path == "update":
+        created = app.post(target, data=_VALID_FORM, headers=csrf_headers(app))
+        assert created.status_code == 200
+        target = "/settings/instances/1"
+
+    resp = app.post(target, data={**_VALID_FORM, field: raw}, headers=csrf_headers(app))
+
+    assert resp.status_code == 422
+    assert resp.text == f'<span class="text-xs text-red-400">{message}</span>'
+
+
+def test_add_form_every_tip_ref_has_a_template(app: TestClient) -> None:
+    """A tooltip trigger whose template is missing opens an empty panel."""
+    import re
+
+    _login(app)
+    html = app.get("/settings/instances/add-form").text
+
+    refs = set(re.findall(r'data-tip-ref="([^"]+)"', html))
+    templates = set(re.findall(r'<template id="tip-([^"]+)"', html))
+    assert refs
+    assert refs <= templates, refs - templates
+
+
+_PER_PASS_TAG_FIELDS = {
+    "missing": ("tag_filter_missing_exclude", "e.g. no-backfill"),
+    "cutoff": ("tag_filter_cutoff_exclude", "e.g. no-upgrade"),
+    "upgrade": ("tag_filter_upgrade_exclude", "e.g. no-upgrade"),
+}
+
+
+def _input_tag(html: str, name: str) -> str:
+    import re
+
+    match = re.search(rf'<input[^>]*\sname="{name}"[^>]*/>', html)
+    assert match is not None, name
+    return match.group(0)
+
+
+def _input_value(html: str, name: str) -> str:
+    import re
+
+    match = re.search(r'\svalue="([^"]*)"', _input_tag(html, name))
+    assert match is not None, name
+    return match.group(1)
+
+
+@pytest.mark.parametrize("kind", list(_PER_PASS_TAG_FIELDS))
+def test_add_form_renders_per_pass_tag_exclude_field(app: TestClient, kind: str) -> None:
+    _login(app)
+    html = app.get("/settings/instances/add-form").text
+    name, placeholder = _PER_PASS_TAG_FIELDS[kind]
+    title = kind.capitalize()
+
+    tag = _input_tag(html, name)
+    assert 'type="text"' in tag
+    assert f'placeholder="{placeholder}"' in tag
+    assert ' value=""' in tag
+    assert 'data-default-value=""' in tag
+    assert f">{title} Tag Exclude<button" in html
+    assert f'data-tip-ref="{name}"' in html
+    assert f'<template id="tip-{name}">' in html
+    assert f'<p class="tip__eyebrow">{title} tag exclude</p>' in html
+    assert (
+        f"Skip items carrying any of these tags on the {kind} pass only, in addition to "
+        "Tag Filter · Exclude. Comma-separated, case-insensitive labels." in html
+    )
+    assert (
+        '<p class="mt-1.5 text-xs text-slate-600">Comma-separated tag labels. Also skip '
+        f"these on the {kind} pass, on top of Tag Filter · Exclude. Blank = no extra "
+        "exclusions.</p>" in html
+    )
+
+
+def test_add_form_places_per_pass_tag_excludes_in_their_sections(app: TestClient) -> None:
+    _login(app)
+    html = app.get("/settings/instances/add-form").text
+
+    def at(marker: str) -> int:
+        return html.index(marker)
+
+    assert (
+        at('name="tag_filter_exclude"')
+        < at('name="tag_filter_missing_exclude"')
+        < at('name="search_order"')
+    )
+    assert (
+        at("Cutoff Upgrades</h4>")
+        < at('name="cutoff_hourly_cap"')
+        < at('name="tag_filter_cutoff_exclude"')
+        < at("Library Upgrades</h4>")
+    )
+    assert (
+        at('name="upgrade_hourly_cap"')
+        < at('name="tag_filter_upgrade_exclude"')
+        < at('name="upgrade_series_window_size"')
+    )
+
+
+def test_create_and_update_per_pass_tag_excludes_round_trip(app: TestClient) -> None:
+    _login(app)
+    created = app.post(
+        "/settings/instances",
+        data={
+            **_VALID_FORM,
+            "tag_filter_exclude": " Skip ",
+            "tag_filter_missing_exclude": "No-Backfill, no-backfill ,",
+            "tag_filter_cutoff_exclude": " No-Upgrade ,SD-Keep",
+            "tag_filter_upgrade_exclude": "4K-HDR,, Keep-Original",
+        },
+        headers=csrf_headers(app),
+    )
+    assert created.status_code == 200
+
+    edit = app.get("/settings/instances/1/edit").text
+    assert _input_value(edit, "tag_filter_exclude") == "skip"
+    assert _input_value(edit, "tag_filter_missing_exclude") == "no-backfill"
+    assert _input_value(edit, "tag_filter_cutoff_exclude") == "no-upgrade,sd-keep"
+    assert _input_value(edit, "tag_filter_upgrade_exclude") == "4k-hdr,keep-original"
+    for name, _ in _PER_PASS_TAG_FIELDS.values():
+        assert 'data-default-value=""' in _input_tag(edit, name)
+
+    updated = app.post(
+        "/settings/instances/1",
+        data={
+            **_VALID_FORM,
+            "api_key": "__UNCHANGED__",
+            "tag_filter_exclude": "skip",
+            "tag_filter_missing_exclude": "",
+            "tag_filter_cutoff_exclude": "Only-Cutoff",
+            "tag_filter_upgrade_exclude": " Only-Upgrade ",
+        },
+        headers=csrf_headers(app),
+    )
+    assert updated.status_code == 200
+
+    edit = app.get("/settings/instances/1/edit").text
+    assert _input_value(edit, "tag_filter_exclude") == "skip"
+    assert _input_value(edit, "tag_filter_missing_exclude") == ""
+    assert _input_value(edit, "tag_filter_cutoff_exclude") == "only-cutoff"
+    assert _input_value(edit, "tag_filter_upgrade_exclude") == "only-upgrade"
+
+
+@pytest.mark.parametrize("kind", list(_PER_PASS_TAG_FIELDS))
+@pytest.mark.parametrize(
+    ("raw", "problem"),
+    [
+        (_TOO_LONG_LABEL, "each label must be 64 characters or fewer."),
+        (_TOO_MANY_LABELS, "at most 32 tags allowed."),
+    ],
+)
+def test_create_rejects_invalid_per_pass_tag_exclude(
+    app: TestClient, kind: str, raw: str, problem: str
+) -> None:
+    _login(app)
+    name, _ = _PER_PASS_TAG_FIELDS[kind]
+    resp = app.post(
+        "/settings/instances", data={**_VALID_FORM, name: raw}, headers=csrf_headers(app)
+    )
+    assert resp.status_code == 422
+    assert resp.text == (
+        f'<span class="text-xs text-red-400">{kind.capitalize()} tag exclude: {problem}</span>'
+    )
+    assert app.get("/settings/instances/1/edit").status_code == 404
+
+
+@pytest.mark.parametrize("kind", list(_PER_PASS_TAG_FIELDS))
+def test_update_rejects_invalid_per_pass_tag_exclude(app: TestClient, kind: str) -> None:
+    _login(app)
+    name, _ = _PER_PASS_TAG_FIELDS[kind]
+    created = app.post(
+        "/settings/instances", data={**_VALID_FORM, name: "keep-me"}, headers=csrf_headers(app)
+    )
+    assert created.status_code == 200
+
+    resp = app.post(
+        "/settings/instances/1",
+        data={**_VALID_FORM, "api_key": "__UNCHANGED__", name: _TOO_LONG_LABEL},
+        headers=csrf_headers(app),
+    )
+    assert resp.status_code == 422
+    assert resp.text == (
+        f'<span class="text-xs text-red-400">{kind.capitalize()} tag exclude: '
+        "each label must be 64 characters or fewer.</span>"
+    )
+    assert _input_value(app.get("/settings/instances/1/edit").text, name) == "keep-me"

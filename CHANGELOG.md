@@ -10,6 +10,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - The container log warns `Wanted list <url> came back sorted by ...` once per instance and list when an \*arr sorts a wanted list by a different column or direction than Houndarr asked for. (#852)
+- `Missing Tag Exclude`, `Cutoff Tag Exclude`, and `Upgrade Tag Exclude` skip tagged items on that one pass, on top of `Tag Filter · Exclude`. Schema v22 adds three columns with empty defaults. (#833)
+
+### Changed
+
+- A failed `/tag` lookup skips the passes that carry tag-filter labels for that cycle instead of searching them unfiltered, and the cycle is logged as an error. (#833)
 
 ### Fixed
 
@@ -17,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Cutoff list requests to Sonarr 3.0.10.1567 no longer fail with HTTP 500, so cycles reach the upgrade pass after the cutoff pass and cooldown reconcile stops failing on every snapshot refresh. (#854)
 - Snapshot refresh reads the missing list once instead of twice, and Lidarr and Readarr with the upgrade pass on read the cutoff list once instead of twice. (#839)
 - Cooldown reconcile keeps a pass's cooldowns when its wanted list holds 50,000 items or more or a Sonarr or Whisparr v2 series fails to load, and logs `incomplete; keeping those cooldowns` once. (#839)
+- With `Queue Limit` set, a non-JSON answer from the \*arr's queue status (such as a proxy login page) lets the search proceed instead of failing the whole cycle. (#833)
 
 ### Security
 

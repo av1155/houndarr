@@ -38,6 +38,7 @@ from houndarr.config import (
     DEFAULT_UPGRADE_WHISPARR_V2_SEARCH_MODE,
     DEFAULT_WHISPARR_V2_SEARCH_MODE,
 )
+from houndarr.enums import SearchKind
 
 
 class InstanceType(StrEnum):
@@ -273,14 +274,35 @@ class TagFilterPolicy:
     operator types into the settings form; the engine resolves them to
     numeric *arr tag IDs once per cycle by GET-ing the instance's
     ``/tag`` endpoint.  Storing labels (not IDs) keeps the configuration
-    portable across instances and survives tag rename / re-creation.
+    portable across instances and survives deleting and re-creating a
+    tag under the same label; renaming a tag in the *arr needs the label
+    updated here.
 
-    Both lists default to empty: with neither set the filter is a no-op
+    Every list defaults to empty: with none set the filter is a no-op
     and the engine processes items exactly as before.  Issue #637.
+
+    The per-pass exclude lists add to *exclude* on their own pass only,
+    so filling one can never drop an instance-wide exclusion.  Include
+    stays instance-wide.  Issue #833.
     """
 
     include: tuple[str, ...] = ()
     exclude: tuple[str, ...] = ()
+    missing_exclude: tuple[str, ...] = ()
+    cutoff_exclude: tuple[str, ...] = ()
+    upgrade_exclude: tuple[str, ...] = ()
+
+    def pass_exclude(self, kind: SearchKind) -> tuple[str, ...]:
+        """Return the exclude labels set on *kind*'s own field."""
+        if kind is SearchKind.missing:
+            return self.missing_exclude
+        if kind is SearchKind.cutoff:
+            return self.cutoff_exclude
+        return self.upgrade_exclude
+
+    def exclude_for(self, kind: SearchKind) -> tuple[str, ...]:
+        """Return the labels *kind*'s pass skips: instance-wide first, then its own."""
+        return tuple(dict.fromkeys(self.exclude + self.pass_exclude(kind)))
 
 
 @dataclass(frozen=True, slots=True)
@@ -377,6 +399,9 @@ async def create_instance(
     search_order: SearchOrder = SearchOrder(DEFAULT_SEARCH_ORDER),
     tag_filter_include: str = "",
     tag_filter_exclude: str = "",
+    tag_filter_missing_exclude: str = "",
+    tag_filter_cutoff_exclude: str = "",
+    tag_filter_upgrade_exclude: str = "",
 ) -> Instance:
     """Insert a new instance row and return the populated :class:`Instance`.
 
@@ -425,6 +450,14 @@ async def create_instance(
             first behaviour; ``random`` picks a random start page and
             shuffles items within each fetched page, and replaces the
             upgrade-pool offset rotation with a shuffle.
+        tag_filter_include: Canonical comma-separated labels an item must
+            carry one of on every pass.  Empty string disables include.
+        tag_filter_exclude: Canonical comma-separated labels that skip an
+            item on every pass.
+        tag_filter_missing_exclude: Labels the missing pass also skips,
+            on top of *tag_filter_exclude*.
+        tag_filter_cutoff_exclude: Labels the cutoff pass also skips.
+        tag_filter_upgrade_exclude: Labels the upgrade pass also skips.
 
     Returns:
         The newly created :class:`Instance` with its database-assigned *id*.
@@ -468,6 +501,9 @@ async def create_instance(
         search_order=search_order,
         tag_filter_include=tag_filter_include,
         tag_filter_exclude=tag_filter_exclude,
+        tag_filter_missing_exclude=tag_filter_missing_exclude,
+        tag_filter_cutoff_exclude=tag_filter_cutoff_exclude,
+        tag_filter_upgrade_exclude=tag_filter_upgrade_exclude,
     )
     row_id = await _repo_insert_instance(payload, master_key=master_key)
 

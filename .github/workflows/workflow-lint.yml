@@ -30,6 +30,10 @@ jobs:
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           reporter: github-check
+          # Default none never fails; error would pass shellcheck warning and info findings.
+          fail_level: any
+          # Default file skips callers of an edited reusable workflow.
+          filter_mode: nofilter
 
   # Separate from the actionlint job on purpose: actionlint has no rule for
   # pinning, so a failure reported under its name would send whoever hits

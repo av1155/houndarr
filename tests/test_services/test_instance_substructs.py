@@ -373,6 +373,30 @@ def test_schedule_policy_defaults_match_config() -> None:
     assert policy.cutoff_page_offset == 1
 
 
+# TagFilterPolicy.
+
+
+def test_tag_filter_policy_fields_in_declaration_order() -> None:
+    """Instance-wide lists first, then one exclude per pass in cycle order."""
+    assert _field_names(TagFilterPolicy) == [
+        "include",
+        "exclude",
+        "missing_exclude",
+        "cutoff_exclude",
+        "upgrade_exclude",
+    ]
+
+
+def test_tag_filter_policy_defaults_are_empty() -> None:
+    assert _field_defaults(TagFilterPolicy) == {
+        "include": (),
+        "exclude": (),
+        "missing_exclude": (),
+        "cutoff_exclude": (),
+        "upgrade_exclude": (),
+    }
+
+
 # RuntimeSnapshot.
 
 

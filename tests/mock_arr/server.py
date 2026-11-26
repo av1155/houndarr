@@ -32,7 +32,7 @@ from tests.mock_arr.routers.whisparr_v3 import (
     make_whisparr_v3_data,
     make_whisparr_v3_router,
 )
-from tests.mock_arr.store import MockState
+from tests.mock_arr.store import AppData, MockState
 
 logger = logging.getLogger(__name__)
 
@@ -196,9 +196,39 @@ def create_app(config: SeedConfig | None = None) -> FastAPI:
             return {"error": f"unknown app: {app_name}"}
         return {"queued": sorted(store.queued_ids), "requests": store.queue_detail_requests}
 
+    @app.put("/__tags__/{app_name}")
+    async def set_tags(app_name: str, config: dict[str, Any] = Body(default_factory=dict)) -> Any:
+        """Configure ``/tag`` and item tags for one app.
+
+        Every key is optional.  ``tags`` replaces the ``[{"id", "label"}]``
+        list.  ``items`` maps leaf ids to tag ids and replaces every leaf's
+        tags, also on the embedded series, artist or author that Houndarr
+        reads them from.  That parent is a per-leaf copy, so a whole series,
+        artist or author is tagged only when every one of its leaves is listed.
+        ``status`` is the HTTP code ``/tag`` answers with and ``html`` serves
+        a login page instead of JSON; both reset to healthy when omitted.
+        """
+        store = getattr(state, app_name, None)
+        if store is None:
+            return {"error": f"unknown app: {app_name}"}
+        store.tags = list(config.get("tags", store.tags))
+        store.tag_status = int(config.get("status", 200))
+        store.tag_html = bool(config.get("html", False))
+        if "items" in config:
+            _set_leaf_tags(store, {int(k): list(v) for k, v in config["items"].items()})
+        return _tag_state(store)
+
+    @app.get("/__tags__/{app_name}")
+    async def get_tags(app_name: str) -> dict[str, Any]:
+        """Return the tag setup and how many ``/tag`` reads happened."""
+        store = getattr(state, app_name, None)
+        if store is None:
+            return {"error": f"unknown app: {app_name}"}
+        return _tag_state(store)
+
     @app.post("/__reset__/{app_name}")
     async def reset_app(app_name: str) -> dict[str, Any]:
-        """Wipe command, page, and queue state for one app, leaving seed data intact."""
+        """Wipe command, page, queue, and tag state for one app, leaving seed data intact."""
         store = getattr(state, app_name, None)
         if store is None:
             return {"error": f"unknown app: {app_name}"}
@@ -206,10 +236,37 @@ def create_app(config: SeedConfig | None = None) -> FastAPI:
         store.page_log.entries.clear()
         store.queued_ids.clear()
         store.queue_detail_requests = 0
+        store.tags = []
+        store.tag_status = 200
+        store.tag_html = False
+        store.tag_requests = 0
+        _set_leaf_tags(store, {})
         return {"reset": app_name}
 
     app.state.mock_state = state
     return app
+
+
+def _set_leaf_tags(store: AppData, items: dict[int, list[int]]) -> None:
+    for leaf in store.leaves:
+        tags = items.get(leaf["id"])
+        for target in (leaf, leaf.get("series"), leaf.get("artist"), leaf.get("author")):
+            if not isinstance(target, dict):
+                continue
+            if tags is None:
+                target.pop("tags", None)
+            else:
+                target["tags"] = list(tags)
+
+
+def _tag_state(store: AppData) -> dict[str, Any]:
+    return {
+        "tags": store.tags,
+        "status": store.tag_status,
+        "html": store.tag_html,
+        "requests": store.tag_requests,
+        "tagged": {leaf["id"]: leaf["tags"] for leaf in store.leaves if "tags" in leaf},
+    }
 
 
 def _summary(data: object) -> dict[str, int]:

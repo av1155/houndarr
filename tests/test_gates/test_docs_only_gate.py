@@ -54,16 +54,18 @@ const core = {
   setOutput: (name, value) => { outputs[name] = value; },
 };
 const listed = input.files.slice(0, 3000);
+let headSha = input.event.head.sha;
 const github = {
   rest: {
     pulls: {
       listFiles: async ({ page, per_page }) => {
         pages.push({ page, per_page });
+        if (input.headMovesDuringListing) headSha = 'b'.repeat(40);
         return { data: listed.slice((page - 1) * per_page, page * per_page) };
       },
       get: async () => {
         if (input.getFails) throw new Error('pulls.get failed');
-        return { data: input.pr };
+        return { data: { ...input.pr, head: { sha: headSha } } };
       },
     },
   },
@@ -114,7 +116,7 @@ def _classify(
     changed_files: int | None = None,
     event_base: str = "main",
     pr_base: str = "main",
-    head_moved: bool = False,
+    head_moves_during_listing: bool = False,
     get_fails: bool = False,
     tmp_path: Path,
 ) -> dict[str, Any]:
@@ -122,11 +124,7 @@ def _classify(
     if changed_files is None:
         changed_files = len({f["filename"] for f in files})
     event = {"number": 1, "head": {"sha": "a" * 40}, "base": {"ref": event_base}}
-    pr = {
-        "head": {"sha": ("b" if head_moved else "a") * 40},
-        "base": {"ref": pr_base},
-        "changed_files": changed_files,
-    }
+    pr = {"base": {"ref": pr_base}, "changed_files": changed_files}
     harness = tmp_path / "harness.js"
     harness.write_text(_HARNESS)
     payload = {
@@ -134,6 +132,7 @@ def _classify(
         "files": files,
         "event": event,
         "pr": pr,
+        "headMovesDuringListing": head_moves_during_listing,
         "getFails": get_fails,
     }
     result = subprocess.run(
@@ -184,6 +183,28 @@ def test_classifies_changed_paths(
 
 
 @_needs_node
+@pytest.mark.parametrize(
+    "path",
+    [
+        "Dockerfile",
+        ".dockerignore",
+        "entrypoint.sh",
+        "pyproject.toml",
+        "uv.lock",
+        "VERSION",
+        ".trivyignore.yaml",
+        ".github/workflows/security.yml",
+        "charts/houndarr/values.yaml",
+        "scripts/security_smoke_test.sh",
+        "tests/test_gates/test_docs_only_gate.py",
+    ],
+)
+def test_inputs_of_the_skipped_jobs_are_never_docs_only(path: str, tmp_path: Path) -> None:
+    outcome = _classify([_file(path)], tmp_path=tmp_path)
+    assert outcome["outputs"] == {"docs_only": "false"}
+
+
+@_needs_node
 def test_removed_source_file_is_not_docs_only(tmp_path: Path) -> None:
     removed = {"filename": "src/houndarr/legacy.py", "status": "removed"}
     outcome = _classify([_file("docs/guide.md"), removed], tmp_path=tmp_path)
@@ -210,13 +231,25 @@ def test_listing_shorter_than_changed_files_is_not_docs_only(
     assert outcome["outputs"] == {"docs_only": "false"}
 
 
-def test_patterns_use_only_glob_syntax_the_classifier_translates() -> None:
+def _docs_only_globs() -> list[str]:
     declaration = re.search(r"^const DOCS_ONLY_GLOBS = \[(.*)\];$", _script(), re.MULTILINE)
     assert declaration
-    globs = re.findall(r"'([^']*)'", declaration.group(1))
+    return re.findall(r"'([^']*)'", declaration.group(1))
+
+
+def test_patterns_use_only_glob_syntax_the_classifier_translates() -> None:
+    globs = _docs_only_globs()
     assert globs
     for glob in globs:
         assert re.fullmatch(r"[\w./*-]+", glob), f"{glob!r} needs syntax toRegExp lacks"
+
+
+def test_browser_e2e_ignores_exactly_the_docs_only_paths() -> None:
+    text = (_WORKFLOWS / "browser-e2e.yml").read_text()
+    block = re.search(r"^    paths-ignore:\n((?: {6}- .*\n)+)", text, re.MULTILINE)
+    assert block
+    ignored = re.findall(r'^ {6}- "([^"]*)"$', block.group(1), re.MULTILINE)
+    assert ignored == _docs_only_globs()
 
 
 @_needs_node
@@ -238,7 +271,7 @@ def test_reads_every_page(last: str, expected: str, tmp_path: Path) -> None:
 
 @_needs_node
 def test_head_moved_during_listing_is_not_docs_only(tmp_path: Path) -> None:
-    outcome = _classify([_file("docs/guide.md")], head_moved=True, tmp_path=tmp_path)
+    outcome = _classify([_file("docs/guide.md")], head_moves_during_listing=True, tmp_path=tmp_path)
     assert outcome["outputs"] == {"docs_only": "false"}
 
 

@@ -39,10 +39,11 @@ The classifier says `true` only when the PR targets the default branch,
 its head has not moved, the file list is complete and not empty (under
 3000 entries and at least `changed_files` distinct paths), and every
 path, both sides of a rename included, matches `docs/**`, `**/*.md`,
-`website/**`, `.claude/**` or `scripts/marketing/**`. A failed or skipped
-classifier (any non-PR event) runs every gated job. It needs only `pull-requests: read`, which fork
-PR tokens have. `tests/test_gates/test_docs_only_gate.py` runs its
-script under node and pins the job conditions.
+`website/**`, `.claude/**` or `scripts/marketing/**`. A failed or
+skipped classifier (any non-PR event) never skips a job. It needs only
+`pull-requests: read`, which fork PR tokens have.
+`tests/test_gates/test_docs_only_gate.py` runs its script under node and
+pins the job conditions.
 
 ## Additional workflows (not required checks)
 

@@ -573,6 +573,30 @@ def test_status_v2_active_error_none_when_latest_row_non_error(app: TestClient) 
     assert inst["active_error"] is None
 
 
+@pytest.mark.parametrize(
+    ("actions", "failures"),
+    [(("info", "error"), 1), (("error", "info"), None)],
+    ids=["error-written-last", "info-written-last"],
+)
+def test_status_active_error_breaks_timestamp_ties_by_insert_order(
+    app: TestClient, actions: tuple[str, str], failures: int | None
+) -> None:
+    """A cycle's info row and error row often share a millisecond."""
+    _login(app)
+    iid = _create_instance(app)
+    stamp = (datetime.now(UTC) - timedelta(minutes=5)).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+    asyncio.run(
+        _seed_search_log(
+            [(iid, None, None, None, action, None, None, action, stamp) for action in actions]
+        )
+    )
+    inst = app.get("/api/status").json()["instances"][0]
+    if failures is None:
+        assert inst["active_error"] is None
+    else:
+        assert inst["active_error"]["failures_count"] == failures
+
+
 def test_status_v2_recent_searches_last_7_days(app: TestClient) -> None:
     _login(app)
     iid = _create_instance(app)

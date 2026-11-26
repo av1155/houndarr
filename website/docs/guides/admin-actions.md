@@ -120,6 +120,9 @@ Identity stays put: each instance keeps its name, type, URL, encrypted
 API key, enabled flag, timestamps, and the monitored/unreleased
 snapshot counts that feed the Dashboard.
 
+Tag filters keep their values too, per-pass excludes included, so a
+reset never starts searching items you filtered out.
+
 Nothing else is touched. Cooldown rows and the `search_log` table are
 left alone so an accidental click does not flood your indexers on the
 next cycle.

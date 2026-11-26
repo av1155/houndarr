@@ -84,7 +84,7 @@ SELECT instance_id, action, timestamp
 FROM (
     SELECT instance_id, action, timestamp,
            ROW_NUMBER() OVER (
-               PARTITION BY instance_id ORDER BY timestamp DESC
+               PARTITION BY instance_id ORDER BY timestamp DESC, id DESC
            ) AS rn
     FROM search_log
     WHERE instance_id IN ({placeholders})
@@ -96,13 +96,14 @@ WHERE rn = 1
 # Latest row per instance regardless of action.  Used for the error banner's
 # "latest-row" self-clearing trigger: when the newest row is action='error'
 # we render the banner; when the newest is any non-error row the banner
-# clears on the next poll.
+# clears on the next poll.  ``id`` breaks ties: a cycle often writes an
+# info row and its error row within the same millisecond.
 _LATEST_ROW_SQL = """
 SELECT instance_id, action, timestamp, reason, message
 FROM (
     SELECT instance_id, action, timestamp, reason, message,
            ROW_NUMBER() OVER (
-               PARTITION BY instance_id ORDER BY timestamp DESC
+               PARTITION BY instance_id ORDER BY timestamp DESC, id DESC
            ) AS rn
     FROM search_log
     WHERE instance_id IN ({placeholders})
@@ -110,16 +111,22 @@ FROM (
 WHERE rn = 1
 """
 
-# Error run-length since the last non-error row.  Count scoped per instance.
+# Error run-length since the last non-error row, in the same
+# (timestamp, id) order as _LATEST_ROW_SQL.  Count scoped per instance.
 _ERROR_STREAK_SQL = """
+WITH last_ok AS (
+    SELECT timestamp, id FROM search_log
+    WHERE instance_id = ? AND action != 'error'
+    ORDER BY timestamp DESC, id DESC
+    LIMIT 1
+)
 SELECT COUNT(*) AS count
 FROM search_log
 WHERE instance_id = ?
   AND action = 'error'
-  AND timestamp > COALESCE(
-      (SELECT MAX(timestamp) FROM search_log
-       WHERE instance_id = ? AND action != 'error'),
-      '1970-01-01T00:00:00Z'
+  AND (
+      NOT EXISTS (SELECT 1 FROM last_ok)
+      OR (timestamp, id) > (SELECT timestamp, id FROM last_ok)
   )
 """
 

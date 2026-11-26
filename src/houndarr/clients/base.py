@@ -300,6 +300,33 @@ class ArrClient(ABC):
         response.raise_for_status()
         return response.json()
 
+    async def _get_json_list(self, path: str, label: str, **params: str) -> list[Any]:
+        """GET *path* and return its JSON list, wrapping every failure as a typed error.
+
+        *label* prefixes each error message (``"queue details"``, ``"get_tags"``).
+
+        Raises:
+            ClientHTTPError: The server returned a non-2xx status.
+            ClientTransportError: The request failed before a response
+                arrived.
+            ClientValidationError: The body was not JSON or not a list.
+        """
+        try:
+            result = await self._get(path, **params)
+        except httpx.HTTPStatusError as exc:
+            raise ClientHTTPError(f"{label}: HTTP {exc.response.status_code} from {path}") from exc
+        except (httpx.RequestError, httpx.InvalidURL) as exc:
+            raise ClientTransportError(
+                f"{label}: transport error reaching {path}: {describe_exception(exc)}"
+            ) from exc
+        except ValueError as exc:
+            # A non-JSON body (e.g. a proxy login page) must reach the
+            # engine as a typed error so its caller can fail open or closed.
+            raise ClientValidationError(f"{label}: non-JSON body from {path}") from exc
+        if not isinstance(result, list):
+            raise ClientValidationError(f"{label}: expected a JSON list from {path}")
+        return result
+
     async def _post(self, path: str, json: Any = None) -> Any:
         """POST *path* with optional JSON body, raise on non-2xx."""
         response = await self._client.post(path, json=json)
@@ -353,8 +380,8 @@ class ArrClient(ABC):
             ClientTransportError: The request failed before a response
                 arrived (connection refused, DNS failure, timeout,
                 malformed URL, etc.).
-            ClientValidationError: The response parsed as JSON but did
-                not match the :class:`QueueStatus` schema.
+            ClientValidationError: The response was not JSON or did not
+                match the :class:`QueueStatus` schema.
         """
         try:
             result = await self._get(self._QUEUE_STATUS_PATH)
@@ -366,6 +393,12 @@ class ArrClient(ABC):
             raise ClientTransportError(
                 f"queue status: transport error reaching {self._QUEUE_STATUS_PATH}: "
                 f"{describe_exception(exc)}"
+            ) from exc
+        except ValueError as exc:
+            # A non-JSON body (e.g. a proxy login page) must reach the
+            # backpressure gate as a typed error so the cycle fails open.
+            raise ClientValidationError(
+                f"queue status: non-JSON body from {self._QUEUE_STATUS_PATH}"
             ) from exc
 
         try:
@@ -395,28 +428,7 @@ class ArrClient(ABC):
         params: dict[str, str] = {}
         if self._QUEUE_DETAILS_EMBED_PARAM is not None:
             params[self._QUEUE_DETAILS_EMBED_PARAM] = "false"
-        try:
-            result = await self._get(self._QUEUE_DETAILS_PATH, **params)
-        except httpx.HTTPStatusError as exc:
-            raise ClientHTTPError(
-                f"queue details: HTTP {exc.response.status_code} from {self._QUEUE_DETAILS_PATH}"
-            ) from exc
-        except (httpx.RequestError, httpx.InvalidURL) as exc:
-            raise ClientTransportError(
-                f"queue details: transport error reaching {self._QUEUE_DETAILS_PATH}: "
-                f"{describe_exception(exc)}"
-            ) from exc
-        except ValueError as exc:
-            # A non-JSON body (e.g. a proxy login page) must reach the
-            # engine as a typed error so the cycle fails open.
-            raise ClientValidationError(
-                f"queue details: non-JSON body from {self._QUEUE_DETAILS_PATH}"
-            ) from exc
-
-        if not isinstance(result, list):
-            raise ClientValidationError(
-                f"queue details: expected a JSON list from {self._QUEUE_DETAILS_PATH}"
-            )
+        result = await self._get_json_list(self._QUEUE_DETAILS_PATH, "queue details", **params)
         try:
             records = [QueueRecord.model_validate(row) for row in result]
         except ValidationError as exc:
@@ -445,22 +457,10 @@ class ArrClient(ABC):
             ClientHTTPError: The server returned a non-2xx status.
             ClientTransportError: The request failed before a response
                 arrived.
-            ClientValidationError: The response did not match the
-                :class:`ArrTag` list shape.
+            ClientValidationError: The response was not JSON or did not
+                match the :class:`ArrTag` list shape.
         """
-        try:
-            result = await self._get(self._TAG_PATH)
-        except httpx.HTTPStatusError as exc:
-            raise ClientHTTPError(
-                f"get_tags: HTTP {exc.response.status_code} from {self._TAG_PATH}"
-            ) from exc
-        except (httpx.RequestError, httpx.InvalidURL) as exc:
-            raise ClientTransportError(
-                f"get_tags: transport error reaching {self._TAG_PATH}: {describe_exception(exc)}"
-            ) from exc
-
-        if not isinstance(result, list):
-            raise ClientValidationError(f"get_tags: expected a JSON list from {self._TAG_PATH}")
+        result = await self._get_json_list(self._TAG_PATH, "get_tags")
         try:
             tags = [ArrTag.model_validate(row) for row in result]
         except ValidationError as exc:

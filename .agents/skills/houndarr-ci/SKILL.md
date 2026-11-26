@@ -92,7 +92,7 @@ PR stays blocked.
   relative to the scan root, so suppressing a website finding takes two
   new files. A root `.trivyignore.yaml` lists `website/pnpm-lock.yaml`
   for `security.yml`, which scans `.`; a bare `pnpm-lock.yaml` there
-  would also match the root CSS-build lockfile. A
+  would match the root CSS-build lockfile instead. A
   `website/.trivyignore.yaml` lists `pnpm-lock.yaml` for the
   `Trivy website scan` job, which scans `website/`, and its path keeps
   that job triggering when the file changes. Wire each one in with

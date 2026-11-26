@@ -76,7 +76,7 @@ jobs:
           version: v0.76.2
 
       # Reuses the binary and DB from the step above; a second cache restore
-      # would overwrite that DB with the older cached one and re-download it.
+      # can put an older cached DB back over it and force another download.
       - name: Fail on fixable CRITICAL or HIGH
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:

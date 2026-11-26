@@ -133,8 +133,8 @@ jobs:
           severity: CRITICAL,HIGH
           ignore-unfixed: "true"
           exit-code: "0"
-          # Reuses the gate's binary and DB; a second cache restore would
-          # overwrite that DB with the older cached one and re-download it.
+          # Reuses the gate's binary and DB; a second cache restore can put an
+          # older cached DB back over it and force another download.
           skip-setup-trivy: "true"
           cache: "false"
 

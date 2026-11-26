@@ -19,11 +19,12 @@ overrides:
   # unescaped </style> in stringify output). Transitive via
   # @docusaurus/core.
   postcss: ">=8.5.23"
-  # GHSA-w5hq-g745-h8pq (duplicate GHSA-qmq6-f8pr-cx5x, which lists
-  # every uuid before 14.0.0): v3, v5 and v6 skip the buffer bounds
-  # check when the caller supplies buf. Transitive via @docusaurus/core
-  # > webpack-dev-server > sockjs, which declares ^8.3.2; only active
-  # during `pnpm start`.
+  # GHSA-w5hq-g745-h8pq (CVE-2026-41907): uuid's v3, v5 and v6 skip
+  # the buffer bounds check when the caller supplies buf. Fixed in
+  # 11.1.1, 12.0.1 and 13.0.1, never on 8.x; the floor sits on 14.0.0,
+  # the current major, since every fix is a major jump anyway.
+  # Transitive via @docusaurus/core > webpack-dev-server > sockjs,
+  # which declares ^8.3.2; only active during `pnpm start`.
   uuid: ">=14.0.0"
   # GHSA-rwhq-pwvg-2vrg: @babel/plugin-transform-modules-systemjs
   # 7.12.0..=7.29.3 can generate arbitrary code when compiling

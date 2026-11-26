@@ -2,19 +2,13 @@ name: Security
 
 on:
   pull_request:
-    paths-ignore:
-      - "docs/**"
-      - "**/*.md"
-      - "website/**"
-      - ".claude/**"
-      - "scripts/marketing/**"
   schedule:
     # Every Monday at 09:00 UTC
     - cron: "0 9 * * 1"
   # Manual re-scan handle for when a website-only fix lands and the
   # next cron is too far out to clear stale alerts.  Most relevant
-  # for pnpm-lock.yaml CVE bumps where the fix PR's paths-ignore
-  # excludes website/** so the PR-time Trivy run is skipped.
+  # for pnpm-lock.yaml CVE bumps, whose website-only fix PR skips the
+  # PR-time Trivy run as docs-only.
   workflow_dispatch:
 
 permissions:
@@ -25,8 +19,17 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  changes:
+    name: Docs-only check
+    if: github.event_name == 'pull_request'
+    uses: ./.github/workflows/docs-only.yml
+    permissions:
+      pull-requests: read
+
   dependency-audit:
     name: Dependency audit (pip-audit)
+    needs: changes
+    if: ${{ !cancelled() && !(needs.changes.result == 'success' && needs.changes.outputs.docs_only == 'true') }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -70,6 +73,8 @@ jobs:
 
   sast:
     name: SAST (bandit)
+    needs: changes
+    if: ${{ !cancelled() && !(needs.changes.result == 'success' && needs.changes.outputs.docs_only == 'true') }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -92,6 +97,8 @@ jobs:
 
   trivy-fs:
     name: Trivy filesystem scan
+    needs: changes
+    if: ${{ !cancelled() && !(needs.changes.result == 'success' && needs.changes.outputs.docs_only == 'true') }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:

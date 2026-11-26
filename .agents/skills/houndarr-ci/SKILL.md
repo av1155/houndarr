@@ -1,6 +1,6 @@
 ---
 name: houndarr-ci
-description: Houndarr's CI workflow reference and branch protection. Loads when reading or editing .github/workflows/. Covers the 12 required status checks (exact names matter for branch protection), the additional non-required workflows, the paths-ignore + ci-skip pattern that keeps docs-only PRs green, and the rule against changing required check job names.
+description: Houndarr's CI workflow reference and branch protection. Loads when reading or editing .github/workflows/. Covers the 12 required status checks (exact names matter for branch protection), the additional non-required workflows, the docs-only classifier that skips required jobs on docs-only PRs, and the rule against changing required check job names.
 paths:
   - ".github/workflows/**"
 ---
@@ -24,21 +24,33 @@ paths:
 | Trivy image scan | `docker.yml` | Trivy scan of built Docker image (CRITICAL/HIGH with known fix) |
 | Security smoke test | `security-smoke-test.yml` | Live container: unauthenticated sweep, CSRF, XFF, rate limiting, API key exposure, container security |
 
-`quality` and `tests` run on every PR: ruff checks every `.py` and `.md`
-file, and the tests read `docs/api/`, `scripts/marketing/` and
+`quality` and `tests` run in full on every PR: ruff checks every `.py`
+and `.md` file, and the tests read `docs/api/`, `scripts/marketing/` and
 `.claude/settings.json`. The other four main workflows (`security`,
-`dependency-review`, `docker`, `security-smoke-test`) use
-`paths-ignore: ["docs/**", "**/*.md", "website/**", ".claude/**", "scripts/marketing/**"]`. When a PR
-touches only those paths, `ci-skip.yml` provides passing no-op jobs with
-their check names so branch protection is satisfied. Fork PRs get a
-read-only token, so the stubs can't be created there and a docs-only fork
-PR stays blocked.
+`dependency-review`, `docker`, `security-smoke-test`) also run on every
+PR. Each has a `changes` job that calls `docs-only.yml` (check name
+`Docs-only check / Classify changed files`), and their required jobs are
+skipped by `if:` when it reports `docs_only == 'true'`. Branch protection
+counts a job skipped that way as passing. `Build (no push)` is the
+exception: it runs and skips each of its steps, because its name is an
+expression.
+
+The classifier says `true` only when the PR targets the default branch,
+its head has not moved, the file list is complete and not empty (under
+3000 entries and at least `changed_files` distinct paths), and every
+path, both sides of a rename included, matches `docs/**`, `**/*.md`,
+`website/**`, `.claude/**` or `scripts/marketing/**`. A failed or
+skipped classifier (any non-PR event) never skips a job. It needs only
+`pull-requests: read`, which fork PR tokens have.
+`tests/test_gates/test_docs_only_gate.py` runs its script under node and
+pins the job conditions.
 
 ## Additional workflows (not required checks)
 
 | Workflow | Trigger | Purpose |
 |----------|---------|---------|
-| `browser-e2e.yml` | PRs (same paths-ignore as the four filtered workflows) + manual | Builds the image, starts mock Sonarr/Radarr, and runs `tests/e2e_browser/` on chromium, firefox and webkit with the locked `e2e` group (`uv sync --frozen --group e2e`) |
+| `docs-only.yml` | `workflow_call` from the four workflows above | Classifies a PR as docs-only for its callers; no concurrency block, since `github.workflow` there is the caller's |
+| `browser-e2e.yml` | PRs (paths-ignore equal to `DOCS_ONLY_GLOBS`) + manual | Builds the image, starts mock Sonarr/Radarr, and runs `tests/e2e_browser/` on chromium, firefox and webkit with the locked `e2e` group (`uv sync --frozen --group e2e`) |
 | `version-check.yml` | PRs changing `VERSION` or `CHANGELOG.md` | Validates VERSION format, CHANGELOG heading match, allowed `###` headers, `---` separator |
 | `release.yml` | `v*` tag push | Validates VERSION == tag, extracts CHANGELOG block, creates GitHub Release |
 | `chart.yml` | `v*` tag push | Packages `charts/houndarr/` with version from `VERSION` file, pushes to `oci://ghcr.io/av1155/charts` |
@@ -69,9 +81,20 @@ PR stays blocked.
 
 - Do not modify the 12 required check job names; branch protection
   depends on exact name matches.
-- Do not change `ci-skip.yml` job names without updating branch protection.
-- Keep the `paths-ignore` patterns of the four filtered workflows and
-  `browser-e2e.yml` in sync with each other and with `ci-skip.yml`'s `paths`.
+- Do not put a `paths` or `paths-ignore` filter on a workflow with a
+  required check: a workflow skipped by a path filter leaves its checks
+  pending. `browser-e2e.yml` keeps its filter because its check is not
+  required; keep its list equal to `DOCS_ONLY_GLOBS` in `docs-only.yml`.
+- On a PR, do not skip a required job whose name is an expression with a
+  job-level `if:`: it reports under the unevaluated expression and its
+  required check stays pending. Gate its steps, as `docker.yml`'s build
+  does with `DOCS_ONLY`, and gate any step added there too.
+- Gate a required job as
+  `!cancelled() && !(needs.changes.result == 'success' && needs.changes.outputs.docs_only == 'true')`,
+  so only a successful classifier can skip it.
+- Each caller's `changes` job grants `docs-only.yml` its permissions:
+  widening the classifier's means widening all four callers in the same
+  PR.
 - If mypy CI fails with "merge ref not found": push an empty commit to
   retrigger.
 - Keep every action pinned to a full 40-character commit SHA with the

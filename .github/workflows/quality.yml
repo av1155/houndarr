@@ -1,7 +1,7 @@
 name: Quality
 
-# No paths-ignore: ruff checks every .py and .md file in the repo, docs/ and
-# website/ included, so ci-skip.yml must not stub these checks either.
+# Runs in full on docs-only PRs too: ruff checks every .py and .md file in
+# the repo, docs/ and website/ included.
 on:
   pull_request:
 

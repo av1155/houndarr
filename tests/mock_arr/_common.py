@@ -11,6 +11,7 @@ import random
 from typing import Any
 
 from fastapi import APIRouter, Body, HTTPException
+from fastapi.responses import Response
 
 from tests.mock_arr.store import AppData
 
@@ -185,7 +186,7 @@ _QUEUE_LEAF_KEYS: dict[str, str] = {
 
 
 def attach_common_routes(router: APIRouter, data: AppData) -> None:
-    """Wire ``/system/status``, the two queue reads, and ``POST /command``.
+    """Wire ``/system/status``, the two queue reads, ``/tag``, and ``POST /command``.
 
     Every *arr app exposes these endpoints with the same shape, so each
     per-app router gets them via this helper rather than re-declaring.
@@ -221,6 +222,15 @@ def attach_common_routes(router: APIRouter, data: AppData) -> None:
             }
             for leaf_id in sorted(data.queued_ids)
         ]
+
+    @router.get("/tag", response_model=None)
+    async def get_tags() -> list[dict[str, Any]] | Response:
+        data.tag_requests += 1
+        if data.tag_status != 200:
+            raise HTTPException(status_code=data.tag_status)
+        if data.tag_html:
+            return Response("<html>Sign in</html>", media_type="text/html")
+        return data.tags
 
     @router.post("/command")
     async def post_command(

@@ -218,6 +218,9 @@ def _row_to_instance(row: aiosqlite.Row, master_key: bytes) -> Instance:
         tag_filter=TagFilterPolicy(
             include=_parse_tag_labels(_optional_row_str(row, "tag_filter_include")),
             exclude=_parse_tag_labels(_optional_row_str(row, "tag_filter_exclude")),
+            missing_exclude=_parse_tag_labels(_optional_row_str(row, "tag_filter_missing_exclude")),
+            cutoff_exclude=_parse_tag_labels(_optional_row_str(row, "tag_filter_cutoff_exclude")),
+            upgrade_exclude=_parse_tag_labels(_optional_row_str(row, "tag_filter_upgrade_exclude")),
         ),
         snapshot=RuntimeSnapshot(
             monitored_total=_optional_row_int(row, "monitored_total"),
@@ -328,6 +331,9 @@ class InstanceInsert:
     # Resolved to numeric tag IDs at engine-cycle time (issue #637).
     tag_filter_include: str = ""
     tag_filter_exclude: str = ""
+    tag_filter_missing_exclude: str = ""
+    tag_filter_cutoff_exclude: str = ""
+    tag_filter_upgrade_exclude: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -384,6 +390,9 @@ class InstanceUpdate:
     search_order: SearchOrder | None = None
     tag_filter_include: str | None = None
     tag_filter_exclude: str | None = None
+    tag_filter_missing_exclude: str | None = None
+    tag_filter_cutoff_exclude: str | None = None
+    tag_filter_upgrade_exclude: str | None = None
     monitored_total: int | None = None
     unreleased_count: int | None = None
     snapshot_refreshed_at: str | None = None
@@ -478,10 +487,11 @@ async def insert_instance(payload: InstanceInsert, *, master_key: bytes) -> int:
                 upgrade_readarr_search_mode, upgrade_whisparr_v2_search_mode,
                 upgrade_series_window_size,
                 allowed_time_window, search_order,
-                tag_filter_include, tag_filter_exclude
+                tag_filter_include, tag_filter_exclude, tag_filter_missing_exclude,
+                tag_filter_cutoff_exclude, tag_filter_upgrade_exclude
             ) VALUES (
                 ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
             )
             """,
             (
@@ -520,6 +530,9 @@ async def insert_instance(payload: InstanceInsert, *, master_key: bytes) -> int:
                 payload.search_order.value,
                 payload.tag_filter_include,
                 payload.tag_filter_exclude,
+                payload.tag_filter_missing_exclude,
+                payload.tag_filter_cutoff_exclude,
+                payload.tag_filter_upgrade_exclude,
             ),
         )
         await db.commit()

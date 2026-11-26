@@ -64,8 +64,8 @@ class AppAdapterProto(Protocol):
         :class:`~houndarr.clients.base.ReconcileSets` drive the cooldown
         reconciliation that reaps rows for items no longer wanted.
         Implementations paginate ``/wanted/missing`` and
-        ``/wanted/cutoff`` for leaf ids, call :attr:`fetch_upgrade_pool`
-        for upgrade-pool ids, and (in context-mode adapters) UNION in
+        ``/wanted/cutoff`` for leaf ids, collect the upgrade-pool ids
+        across the whole library, and (in context-mode adapters) UNION in
         the synthetic parent ids derived from leaf parent metadata so
         the DB match stays pure set membership.  The keyword-only
         ``walks`` memo is shared with :attr:`fetch_instance_snapshot`, so a

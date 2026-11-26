@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import re
 
-_URL_CREDENTIAL = re.compile(r"//([^/\s:@]+):[^/\s@]*@")
+_URL_CREDENTIAL = re.compile(r"//([^/?#\s:@]*):[^/?#\s]*@")
 
 
 def redact_url_credentials(text: str) -> str:

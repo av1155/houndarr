@@ -31,6 +31,7 @@ from houndarr.services.instances import Instance, ReadarrSearchMode
 logger = logging.getLogger(__name__)
 
 _UPGRADE_CUTOFF_EXCLUSION_HARD_CAP = 100
+_CUTOFF_EXCLUSION_PAGE_SIZE = 250
 
 # ---------------------------------------------------------------------------
 # Label builders
@@ -227,7 +228,9 @@ async def fetch_upgrade_pool(
     page = 1
     while page <= _UPGRADE_CUTOFF_EXCLUSION_HARD_CAP:
         try:
-            cutoff_items = await client.get_cutoff_unmet(page=page, page_size=250)
+            cutoff_items = await client.get_cutoff_unmet(
+                page=page, page_size=_CUTOFF_EXCLUSION_PAGE_SIZE
+            )
         except (httpx.HTTPError, httpx.InvalidURL, ValidationError):
             logger.warning(
                 "[%s] failed to fetch cutoff page %d for exclusion set",
@@ -237,7 +240,7 @@ async def fetch_upgrade_pool(
             break
         for item in cutoff_items:
             exclusion.add(item.book_id)
-        if len(cutoff_items) < 250:
+        if len(cutoff_items) < _CUTOFF_EXCLUSION_PAGE_SIZE:
             break
         page += 1
     if page > _UPGRADE_CUTOFF_EXCLUSION_HARD_CAP:
@@ -247,7 +250,7 @@ async def fetch_upgrade_pool(
             "upgrade pool may include some that are still cutoff-unmet",
             instance.core.name,
             _UPGRADE_CUTOFF_EXCLUSION_HARD_CAP,
-            _UPGRADE_CUTOFF_EXCLUSION_HARD_CAP * 250,
+            _UPGRADE_CUTOFF_EXCLUSION_HARD_CAP * _CUTOFF_EXCLUSION_PAGE_SIZE,
         )
 
     return await _library_upgrade_pool(client, exclusion)
@@ -317,8 +320,7 @@ async def fetch_reconcile_sets(
     synthetic negative author ids when the instance runs author-context
     missing-pass mode.  Cutoff cooldowns are always leaf.  When
     ``upgrade_enabled`` is false the upgrade set short-circuits to
-    empty so the library scan + cutoff-exclusion paginate loop are
-    skipped.
+    empty so the library scan is skipped.
     """
     missing = await walk_wanted(walks, "missing", client.get_missing)
     cutoff = await walk_wanted(walks, "cutoff", client.get_cutoff_unmet)
@@ -330,9 +332,11 @@ async def fetch_reconcile_sets(
     cutoff_set = _book_leaf_pairs(cutoff.items) if cutoff.complete else None
     upgrade_set: frozenset[tuple[str, int]] = frozenset()
     if instance.upgrade.upgrade_enabled:
-        # The cutoff walk above doubles as the exclusion set; a truncated
-        # walk leaves extra books in the pool, which only keeps more rows.
-        exclusion = {item.book_id for item in cutoff.items}
+        # The cycle's pool excludes only the first
+        # _UPGRADE_CUTOFF_EXCLUSION_HARD_CAP pages of this same sorted list,
+        # so excluding more here would reap upgrade cooldowns it still stamps.
+        excluded = cutoff.items[: _UPGRADE_CUTOFF_EXCLUSION_HARD_CAP * _CUTOFF_EXCLUSION_PAGE_SIZE]
+        exclusion = {item.book_id for item in excluded}
         upgrade_candidates = [
             adapt_upgrade(item, instance) for item in await _library_upgrade_pool(client, exclusion)
         ]

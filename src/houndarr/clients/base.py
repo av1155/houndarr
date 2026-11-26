@@ -89,10 +89,10 @@ class ReconcileSets:
         return cls(missing=frozenset(), cutoff=frozenset(), upgrade=frozenset())
 
     def is_empty(self) -> bool:
-        """Return True if no pass set holds an id (each is empty or ``None``).
+        """Return True if every pass was read in full and holds no id.
 
-        A ``None`` pass beside empty ones therefore also skips this
-        refresh's reconcile, including the passes that were read in full.
+        A ``None`` pass proves the fetch itself succeeded, so the passes
+        beside it that were read in full still reconcile.
 
         The reconciler treats an all-empty result as an explicit
         signal to SKIP the DELETE step: an instance that genuinely has
@@ -101,7 +101,8 @@ class ReconcileSets:
         failure that returned :meth:`empty` must never drive the DB
         to a blank state.
         """
-        return not self.missing and not self.cutoff and not self.upgrade
+        passes = (self.missing, self.cutoff, self.upgrade)
+        return all(ids is not None and not ids for ids in passes)
 
     def incomplete(self) -> tuple[str, ...]:
         """Return the passes whose list could not be read in full."""

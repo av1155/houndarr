@@ -21,10 +21,12 @@ import respx
 from houndarr.clients.base import WantedWalks
 from houndarr.database import get_db
 from houndarr.engine.adapters import _common
+from houndarr.engine.adapters import lidarr as lidarr_adapter
+from houndarr.engine.adapters import readarr as readarr_adapter
 from houndarr.engine.adapters._common import paginate_wanted, walk_wanted
 from houndarr.engine.supervisor import Supervisor
 from houndarr.services.instances import InstanceType, get_instance
-from tests.mock_arr.server import create_app
+from tests.mock_arr.server import SeedConfig, create_app
 
 from .conftest import MASTER_KEY, make_instance
 
@@ -39,8 +41,8 @@ _PAGED_APPS = [
 ]
 
 
-def _serve_mock() -> Any:
-    mock = create_app()
+def _serve_mock(config: SeedConfig | None = None) -> Any:
+    mock = create_app(config)
     respx.route(host="mock-arr").mock(side_effect=respx.ASGIHandler(mock))
     return mock.state.mock_state
 
@@ -124,18 +126,41 @@ async def test_whisparr_v3_refresh_reads_its_library_once(seeded_instances: None
     assert await _cooldown_ids(6) == {wanted}
 
 
+_LARGE = SeedConfig(
+    shuffle_dates=True,
+    sonarr_series=200,
+    radarr_movies=2000,
+    lidarr_artists=200,
+    readarr_authors=200,
+    whisparr_v2_series=200,
+)
+
+
 @pytest.mark.asyncio()
+@pytest.mark.parametrize(
+    ("instance_id", "itype", "app", "item_type"),
+    _PAGED_APPS,
+    ids=[app for _, _, app, _ in _PAGED_APPS],
+)
 @respx.mock
-async def test_a_list_past_the_page_cap_keeps_its_cooldowns(
-    seeded_instances: None, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+async def test_lists_past_the_page_cap_keep_their_cooldowns(
+    seeded_instances: None,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+    instance_id: int,
+    itype: InstanceType,
+    app: str,
+    item_type: str,
 ) -> None:
     monkeypatch.setattr(_common, "_RECONCILE_MAX_PAGES", 1)
-    data = _serve_mock().sonarr
-    assert len(data.missing_ids) >= 250, "the missing list must fill the one allowed page"
-    unseen, gone = min(data.upgrade_ids), max(data.upgrade_ids)
-    await _seed_cooldowns(1, "episode", [(unseen, "missing"), (gone, "cutoff")])
+    data = getattr(_serve_mock(_LARGE), app)
+    assert min(len(data.missing_ids), len(data.cutoff_ids)) > 250, "both lists must overflow"
+    unseen_missing, unseen_cutoff = sorted(data.upgrade_ids)[:2]
+    await _seed_cooldowns(
+        instance_id, item_type, [(unseen_missing, "missing"), (unseen_cutoff, "cutoff")]
+    )
     instance = make_instance(
-        instance_id=1, itype=InstanceType.sonarr, url=f"{_MOCK}/sonarr", cutoff_enabled=True
+        instance_id=instance_id, itype=itype, url=f"{_MOCK}/{app}", cutoff_enabled=True
     )
     supervisor = Supervisor(master_key=MASTER_KEY)
 
@@ -143,18 +168,55 @@ async def test_a_list_past_the_page_cap_keeps_its_cooldowns(
         await supervisor._refresh_one_snapshot(instance)
         await supervisor._refresh_one_snapshot(instance)
 
-    assert await _cooldown_ids(1) == {unseen}
+    assert await _cooldown_ids(instance_id) == {unseen_missing, unseen_cutoff}
     messages = [
         (r.levelno, r.getMessage()) for r in caplog.records if "incomplete" in r.getMessage()
     ]
     assert messages == [
         (
             logging.WARNING,
-            "Supervisor: 'Test Instance' missing list incomplete; keeping those cooldowns "
-            "until a refresh reads them in full",
+            "Supervisor: 'Test Instance' missing and cutoff lists incomplete; keeping those "
+            "cooldowns until a refresh reads them in full",
         ),
-        (logging.DEBUG, "Supervisor: 'Test Instance' missing list still incomplete"),
+        (logging.DEBUG, "Supervisor: 'Test Instance' missing and cutoff lists still incomplete"),
     ]
+
+
+@pytest.mark.asyncio()
+@pytest.mark.parametrize(
+    ("module", "itype", "app"),
+    [
+        (lidarr_adapter, InstanceType.lidarr, "lidarr"),
+        (readarr_adapter, InstanceType.readarr, "readarr"),
+    ],
+    ids=["lidarr", "readarr"],
+)
+@pytest.mark.parametrize("exclusion_pages", [1, None], ids=["cycle-cap-hit", "default-cap"])
+@respx.mock
+async def test_reconcile_upgrade_set_matches_the_cycle_pool(
+    seeded_instances: None,
+    monkeypatch: pytest.MonkeyPatch,
+    module: Any,
+    itype: InstanceType,
+    app: str,
+    exclusion_pages: int | None,
+) -> None:
+    if exclusion_pages is not None:
+        monkeypatch.setattr(module, "_UPGRADE_CUTOFF_EXCLUSION_HARD_CAP", exclusion_pages)
+    data = getattr(_serve_mock(_LARGE), app)
+    assert len(data.cutoff_ids) > 250, "the cutoff list must outrun a one-page exclusion"
+    instance = make_instance(itype=itype, url=f"{_MOCK}/{app}", upgrade_enabled=True)
+
+    async with module.make_client(instance) as client:
+        pool = await module.fetch_upgrade_pool(client, instance)
+        sets = await module.fetch_reconcile_sets(client, instance)
+
+    pool_pairs = {
+        (str(c.item_type), c.item_id) for c in (module.adapt_upgrade(i, instance) for i in pool)
+    }
+    assert sets.upgrade == pool_pairs
+    excluded = len(data.leaves) - len(data.missing_ids) - len(pool)
+    assert excluded == (250 if exclusion_pages == 1 else len(data.cutoff_ids))
 
 
 @pytest.mark.asyncio()

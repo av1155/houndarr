@@ -7,8 +7,8 @@ too often lets a code change merge untested.  ci-skip.yml used to post passing
 stub checks whenever any file was docs, and failed on fork PRs (#849).
 
 The classifier tests run the workflow's own script under node with a mocked
-GitHub client; the workflow tests read the YAML as text, since PyYAML is not a
-declared dependency.
+GitHub client; the workflow tests read the YAML as text, so they pin each
+condition's exact wording.
 """
 
 from __future__ import annotations

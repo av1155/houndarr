@@ -106,11 +106,12 @@ required jobs live in the `houndarr-ci` skill (loads on
 `quality.yml` and `tests.yml` run in full on every PR: ruff checks every
 `.py` and `.md` file, and the tests read `docs/api/`, `scripts/marketing/`
 and `.claude/settings.json`. The other four main workflows also run on
-every PR, first call `docs-only.yml`, and skip their required jobs by
-`if:` when every changed path matches `docs/**`, `**/*.md`, `website/**`,
-`.claude/**` or `scripts/marketing/**`. Branch protection counts a
-skipped job as passing, fork PRs included. **Do not modify the 12
-required check job names**: branch protection depends on exact name
+every PR and call `docs-only.yml`, which reports a PR into `main` as
+docs-only when every changed path matches `docs/**`, `**/*.md`,
+`website/**`, `.claude/**` or `scripts/marketing/**`. On such a PR their
+required jobs are skipped by `if:`, which branch protection counts as
+passing; `Build (no push)` skips its steps instead. **Do not modify the
+12 required check job names**: branch protection depends on exact name
 matches.
 
 Branch protection on `main`: 12 required status checks (strict; branch

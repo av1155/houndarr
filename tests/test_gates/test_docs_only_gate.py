@@ -191,15 +191,21 @@ def test_classifies_changed_paths(
         "entrypoint.sh",
         "pyproject.toml",
         "uv.lock",
+        "hatch_build.py",
+        "package.json",
+        "pnpm-lock.yaml",
+        "pnpm-workspace.yaml",
         "VERSION",
         ".trivyignore.yaml",
         ".github/workflows/security.yml",
         "charts/houndarr/values.yaml",
         "scripts/security_smoke_test.sh",
+        "src/houndarr/templates/base.html",
+        "src/houndarr/static/img/houndarr-logo.png",
         "tests/test_gates/test_docs_only_gate.py",
     ],
 )
-def test_inputs_of_the_skipped_jobs_are_never_docs_only(path: str, tmp_path: Path) -> None:
+def test_code_and_build_config_are_never_docs_only(path: str, tmp_path: Path) -> None:
     outcome = _classify([_file(path)], tmp_path=tmp_path)
     assert outcome["outputs"] == {"docs_only": "false"}
 
@@ -344,6 +350,8 @@ def test_required_job_skips_only_on_a_successful_docs_only_result(
     condition = _key(job, "if")
     assert condition.startswith("${{ !cancelled() && ")
     assert _GATE in condition
+    if workflow != "docker.yml":
+        assert condition == f"${{{{ !cancelled() && {_GATE} }}}}"
 
 
 def test_build_reports_on_docs_only_prs_and_skips_its_steps() -> None:
@@ -374,7 +382,7 @@ def test_computed_job_names_are_never_skipped_as_docs_only() -> None:
     for workflow in sorted(_WORKFLOWS.glob("*.yml")):
         for job_id, job in _jobs(workflow.read_text()).items():
             name = re.search(r"^    name: (.*)$", job, re.MULTILINE)
-            if name and "${{" in name.group(1) and "\n    if:" in job:
+            if name and "${{" in name.group(1) and re.search(r"^    if:", job, re.MULTILINE):
                 assert "docs_only" not in _key(job, "if"), f"{workflow.name}: {job_id}"
 
 

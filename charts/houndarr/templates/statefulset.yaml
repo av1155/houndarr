@@ -85,6 +85,10 @@ spec:
           volumeMounts:
             - name: data
               mountPath: /data
+          {{- /* dig defaults mirror values.yaml so --reuse-values upgrades from a chart without these keys still render every field. */}}
+          {{- $startup := .Values.startupProbe | default dict }}
+          {{- $liveness := .Values.livenessProbe | default dict }}
+          {{- $readiness := .Values.readinessProbe | default dict }}
           # startupProbe gates the liveness and readiness checks until
           # the lifespan finishes initialising the database.  On clean
           # boots the schema/migrations/index sweep finishes in seconds,
@@ -97,20 +101,25 @@ spec:
             httpGet:
               path: /api/health
               port: http
-            failureThreshold: {{ .Values.startupProbe.failureThreshold }}
-            periodSeconds: {{ .Values.startupProbe.periodSeconds }}
+            failureThreshold: {{ dig "failureThreshold" 60 $startup }}
+            periodSeconds: {{ dig "periodSeconds" 10 $startup }}
+            timeoutSeconds: {{ dig "timeoutSeconds" 5 $startup }}
           livenessProbe:
             httpGet:
               path: /api/health
               port: http
-            initialDelaySeconds: 10
-            periodSeconds: 30
+            initialDelaySeconds: {{ dig "initialDelaySeconds" 10 $liveness }}
+            periodSeconds: {{ dig "periodSeconds" 30 $liveness }}
+            timeoutSeconds: {{ dig "timeoutSeconds" 5 $liveness }}
+            failureThreshold: {{ dig "failureThreshold" 3 $liveness }}
           readinessProbe:
             httpGet:
               path: /api/health
               port: http
-            initialDelaySeconds: 5
-            periodSeconds: 10
+            initialDelaySeconds: {{ dig "initialDelaySeconds" 5 $readiness }}
+            periodSeconds: {{ dig "periodSeconds" 10 $readiness }}
+            timeoutSeconds: {{ dig "timeoutSeconds" 5 $readiness }}
+            failureThreshold: {{ dig "failureThreshold" 3 $readiness }}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
   volumeClaimTemplates:

@@ -14,7 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- A failed `/tag` lookup skips the passes that carry tag-filter labels for that cycle instead of searching them unfiltered. (#833)
+- A failed `/tag` lookup skips the passes that carry tag-filter labels for that cycle instead of searching them unfiltered, and the cycle is logged as an error. (#833)
 
 ### Fixed
 

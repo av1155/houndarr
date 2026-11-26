@@ -18,7 +18,7 @@ import httpx
 import pytest
 import respx
 
-from houndarr.clients.base import WantedWalks
+from houndarr.clients.base import ReconcileSets, WantedWalks
 from houndarr.database import get_db
 from houndarr.engine.adapters import _common
 from houndarr.engine.adapters import lidarr as lidarr_adapter
@@ -80,8 +80,13 @@ async def test_one_refresh_walks_each_wanted_list_once(
     seeded_instances: None, instance_id: int, itype: InstanceType, app: str, item_type: str
 ) -> None:
     data = getattr(_serve_mock(), app)
-    wanted, gone = min(data.missing_ids), min(data.upgrade_ids)
-    await _seed_cooldowns(instance_id, item_type, [(wanted, "missing"), (gone, "missing")])
+    wanted = min(data.missing_ids)
+    gone_missing, gone_cutoff = sorted(data.upgrade_ids)[:2]
+    await _seed_cooldowns(
+        instance_id,
+        item_type,
+        [(wanted, "missing"), (gone_missing, "missing"), (gone_cutoff, "cutoff")],
+    )
     instance = make_instance(
         instance_id=instance_id,
         itype=itype,
@@ -248,6 +253,40 @@ async def test_a_failed_reconcile_fetch_does_not_end_the_incomplete_streak(
         if "list" in r.getMessage() and "incomplete" in r.getMessage()
     ]
     assert levels == [logging.WARNING, logging.DEBUG]
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_a_new_incomplete_streak_warns_again(
+    seeded_instances: None, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    _serve_mock()
+    instance = make_instance(
+        instance_id=1, itype=InstanceType.sonarr, url=f"{_MOCK}/sonarr", cutoff_enabled=True
+    )
+    supervisor = Supervisor(master_key=MASTER_KEY)
+
+    with caplog.at_level(logging.DEBUG, logger="houndarr.engine.supervisor"):
+        for max_pages in (1, 200, 1):
+            monkeypatch.setattr(_common, "_RECONCILE_MAX_PAGES", max_pages)
+            await supervisor._refresh_one_snapshot(instance)
+
+    levels = [r.levelno for r in caplog.records if "incomplete" in r.getMessage()]
+    assert levels == [logging.WARNING, logging.WARNING]
+
+
+def test_the_incomplete_warning_lists_every_pass(caplog: pytest.LogCaptureFixture) -> None:
+    instance = make_instance(itype=InstanceType.sonarr)
+
+    with caplog.at_level(logging.WARNING, logger="houndarr.engine.supervisor"):
+        Supervisor(master_key=MASTER_KEY)._report_incomplete_lists(
+            instance, ReconcileSets(missing=None, cutoff=None, upgrade=None)
+        )
+
+    assert caplog.messages == [
+        "Supervisor: 'Test Instance' missing, cutoff and upgrade lists incomplete; keeping "
+        "those cooldowns until a refresh reads them in full"
+    ]
 
 
 @pytest.mark.asyncio()

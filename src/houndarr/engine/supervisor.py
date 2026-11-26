@@ -625,7 +625,8 @@ class Supervisor:
         if not incomplete:
             self._incomplete_lists_warned.discard(instance.core.id)
             return
-        lists = " and ".join(incomplete)
+        *head, last = incomplete
+        lists = f"{', '.join(head)} and {last}" if head else last
         noun = "list" if len(incomplete) == 1 else "lists"
         if instance.core.id in self._incomplete_lists_warned:
             logger.debug("Supervisor: %r %s %s still incomplete", instance.core.name, lists, noun)

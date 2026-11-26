@@ -73,8 +73,9 @@ class SearchPassConfig:
             means the operator typed labels that did not resolve, so
             no item can match: every candidate fails the include
             filter for this cycle.  Issue #637.
-        tag_filter_exclude_ids: Resolved tag IDs the operator wants to
-            skip.  ``None`` disables the exclude direction.  Empty
+        tag_filter_exclude_ids: Resolved tag IDs this pass skips: the
+            instance-wide exclude plus the pass's own (issue #833).
+            ``None`` disables the exclude direction.  Empty
             frozenset behaves like ``None`` (no items match an empty
             set, so no exclusion fires).
         in_queue_fn: Optional predicate reporting whether a candidate's

@@ -20,8 +20,8 @@ the per-app API command Houndarr sends see
 :::tip Want to start fresh?
 If you want every instance back to default policy without losing the
 instances themselves, use **Settings > Admin > Maintenance > Reset
-all instance settings**. It reverts every field below at once but
-keeps your connection details and API keys. See
+all instance settings**. It reverts every field below at once except
+the tag filters, and keeps your connection details and API keys. See
 [Admin actions](/docs/guides/admin-actions) for the full list of
 what a reset touches.
 :::
@@ -153,8 +153,9 @@ movie level.
 ## Tag filter
 
 Scope a per-instance search to (or away from) items carrying specific
-*arr tags. Applies to missing, cutoff, and upgrade passes uniformly.
-Two fields, both empty by default:
+*arr tags. The two fields below apply to the missing, cutoff, and
+upgrade passes alike and are empty by default. Each pass can also skip
+tags of its own; see [Per-pass exclude](#per-pass-exclude).
 
 ### Tag Filter · Include
 
@@ -175,12 +176,21 @@ tags are skipped with `tag filter (excluded tag)`.
 
 Labels are normalized to lowercase, stripped, and de-duplicated on
 save. Labels are resolved against each instance's `/tag` endpoint at
-the start of every cycle, so renaming a tag in Radarr or Sonarr keeps
-the filter working without re-editing the field. Operator-typed labels
-that do not resolve to any *arr tag are logged once per cycle and
-otherwise ignored. If the `/tag` fetch fails for that cycle, the
-filter is disabled for that one cycle and `tag filter (fetch failed)`
-appears as an info row; the search pass proceeds.
+the start of every cycle, so deleting and re-creating a tag under the
+same label keeps the filter working. Renaming a tag in the *arr does
+not: the old label stops matching until you update the field here.
+Operator-typed labels that do not resolve to any *arr tag are logged
+once per cycle as `tag filter (unknown label)` and otherwise ignored,
+so an excluded tag that was renamed or mistyped stops excluding
+anything until the field is fixed.
+
+If the *arr answers the `/tag` request with an error, each enabled pass
+with labels to apply (from these two fields or its own
+[per-pass exclude](#per-pass-exclude)) is skipped for that cycle, and
+one `tag filter (fetch failed)` info row names the skipped passes.
+Passes without labels run as usual, and the cycle is then logged as an
+error. An *arr that can't be reached at all is handled like any other
+connection failure.
 
 Item-to-tag mapping by app:
 
@@ -193,6 +203,31 @@ Item-to-tag mapping by app:
 
 For the skip-row format see
 [Skip Reasons](/docs/reference/skip-reasons#tag-filter).
+
+### Per-pass exclude
+
+`Missing Tag Exclude` (under `Tag Filter · Exclude`), `Cutoff Tag
+Exclude` (Cutoff Upgrades), and `Upgrade Tag Exclude` (Library
+Upgrades) skip items carrying any of their tags on that one pass. They
+add to `Tag Filter · Exclude` instead of replacing it, so an item
+excluded there stays excluded on every pass.
+
+- Default: empty (only `Tag Filter · Exclude` applies)
+- Skips log `tag filter (excluded tag)` under the pass that made them.
+- Labels on a disabled pass are not looked up or reported.
+
+To stop Houndarr replacing a series' files while it still fills the
+gaps, tag the series in Sonarr and add that tag to both `Cutoff Tag
+Exclude` and `Upgrade Tag Exclude`.
+
+These fields hold back Houndarr's searches only. The *arr's RSS sync
+still grabs upgrades, and so can a missing-pass search in
+Season-context, Artist-context, or Author-context mode: its
+`SeasonSearch`, `ArtistSearch`, or `AuthorSearch` covers every
+monitored episode, album, or book in that season, artist, or author,
+including ones that already have files, and the *arr takes any upgrade
+its quality profile allows. Leave the missing search mode on its
+default when tagged files must stay as they are.
 
 ## Search Order
 
@@ -234,6 +269,11 @@ Cutoff searches use separate cap and cooldown from missing
 searches, so the two passes do not draw from the same budget. The
 missing-pass release-aware retry does not apply to cutoff searches.
 
+### Cutoff Tag Exclude
+
+Skips tagged items on the cutoff pass only. See
+[Per-pass exclude](#per-pass-exclude).
+
 ## Library upgrade controls
 
 ### Upgrade search
@@ -263,6 +303,11 @@ quality profiles and custom format scoring.
 - Default: `1`
 - Hard cap: `5`. Engine-enforced.
 - Set `0` to disable the upgrade hourly cap.
+
+### Upgrade Tag Exclude
+
+Skips tagged items on the upgrade pass only. See
+[Per-pass exclude](#per-pass-exclude).
 
 ### Upgrade Search Mode
 

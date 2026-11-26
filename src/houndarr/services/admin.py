@@ -130,10 +130,12 @@ async def reset_all_instance_policy(
     """Revert every instance's policy columns to :mod:`houndarr.config` defaults.
 
     Identity (name, type, url, api_key, enabled), timestamps, and snapshot
-    counters are preserved. The supervisor is reconciled per row so the
-    running search loop adopts the new cadence on its next wake; the
-    search loop re-reads columns each cycle already, so this is mostly a
-    belt-and-braces for the upgrade-offset reset.
+    counters are preserved.  Tag filters are preserved too: clearing a
+    protective exclude would widen what the next cycle searches.  The
+    supervisor is reconciled per row so the running search loop adopts
+    the new cadence on its next wake; the search loop re-reads columns
+    each cycle already, so this is mostly a belt-and-braces for the
+    upgrade-offset reset.
 
     Args:
         master_key: Fernet master key used to decrypt / re-encrypt the

@@ -154,6 +154,9 @@ async def instance_create(
     search_order: Annotated[str, Form()] = DEFAULT_SEARCH_ORDER,
     tag_filter_include: Annotated[str, Form()] = "",
     tag_filter_exclude: Annotated[str, Form()] = "",
+    tag_filter_missing_exclude: Annotated[str, Form()] = "",
+    tag_filter_cutoff_exclude: Annotated[str, Form()] = "",
+    tag_filter_upgrade_exclude: Annotated[str, Form()] = "",
     connection_verified: Annotated[str, Form()] = "false",
 ) -> HTMLResponse:
     """Create a new instance and return the updated instance table body."""
@@ -194,6 +197,9 @@ async def instance_create(
             search_order=search_order,
             tag_filter_include=tag_filter_include,
             tag_filter_exclude=tag_filter_exclude,
+            tag_filter_missing_exclude=tag_filter_missing_exclude,
+            tag_filter_cutoff_exclude=tag_filter_cutoff_exclude,
+            tag_filter_upgrade_exclude=tag_filter_upgrade_exclude,
             connection_verified=connection_verified == "true",
         )
     except InstanceValidationError as exc:
@@ -278,6 +284,9 @@ async def instance_update(
     search_order: Annotated[str, Form()] = DEFAULT_SEARCH_ORDER,
     tag_filter_include: Annotated[str, Form()] = "",
     tag_filter_exclude: Annotated[str, Form()] = "",
+    tag_filter_missing_exclude: Annotated[str, Form()] = "",
+    tag_filter_cutoff_exclude: Annotated[str, Form()] = "",
+    tag_filter_upgrade_exclude: Annotated[str, Form()] = "",
     connection_verified: Annotated[str, Form()] = "false",
 ) -> HTMLResponse:
     """Update an existing instance and return the refreshed row partial.
@@ -325,6 +334,9 @@ async def instance_update(
             search_order=search_order,
             tag_filter_include=tag_filter_include,
             tag_filter_exclude=tag_filter_exclude,
+            tag_filter_missing_exclude=tag_filter_missing_exclude,
+            tag_filter_cutoff_exclude=tag_filter_cutoff_exclude,
+            tag_filter_upgrade_exclude=tag_filter_upgrade_exclude,
             connection_verified=connection_verified == "true",
         )
     except InstanceNotFoundError:

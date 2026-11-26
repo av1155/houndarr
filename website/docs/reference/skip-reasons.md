@@ -34,7 +34,7 @@ scheduling behavior, not errors.
 | `cutoff hourly limit reached (N/hr)`  | per-item    | Cutoff pass hit `Cutoff Cap` of `N`.                                                                 |
 | `upgrade hourly limit reached (N/hr)` | per-item    | Upgrade pass hit `Upgrade Cap` of `N`.                                                               |
 | `tag filter (no included tag)`        | per-item    | `Tag Filter · Include` is set and the item does not carry any matching tag.                          |
-| `tag filter (excluded tag)`           | per-item    | `Tag Filter · Exclude` is set and the item carries one of those tags.                                |
+| `tag filter (excluded tag)`           | per-item    | The item carries a tag in `Tag Filter · Exclude` or in that pass's own `Tag Exclude` field.          |
 | `already in download queue`           | per-item    | The \*arr already has this item in its download queue (downloading, importing, or delayed).          |
 | `queue backpressure (N/M)`            | cycle-level (info) | Download queue has `N` items, at or above `Queue Limit` of `M`. Entire cycle is skipped.      |
 | `outside allowed time window`         | cycle-level (info) | Current time falls outside every window defined in `Allowed Search Window`. Entire cycle is skipped. Adds `(TZ=<value> not loaded, using UTC)` when `TZ` could not be loaded. |
@@ -149,21 +149,27 @@ and the row reads
 
 `Tag Filter · Include` and `Tag Filter · Exclude` in instance
 settings scope the missing, cutoff, and upgrade passes to (or away
-from) items carrying specific *arr tags. Both fields take
-comma-separated tag labels and default to empty. With both empty the
-filter is a no-op and behavior matches earlier versions.
+from) items carrying specific *arr tags, and `Missing Tag Exclude`,
+`Cutoff Tag Exclude`, and `Upgrade Tag Exclude` skip more tags on one
+pass each. Every field takes comma-separated tag labels and defaults to
+empty. With all five empty the filter is a no-op and behavior matches
+earlier versions.
 
 The engine resolves labels to numeric tag IDs once per cycle by
-GET-ing each instance's `/tag` endpoint, so renaming a tag in Radarr
-or Sonarr does not require re-editing the field. Two cycle-level info
-rows can appear:
+GET-ing each instance's `/tag` endpoint, so a tag deleted and
+re-created under the same label keeps working, while a renamed tag
+needs the field updated. Two cycle-level info rows can appear:
 
 - `tag filter (unknown label)` lists labels the operator typed that
   did not resolve to any *arr tag on the current cycle. The remaining
-  labels still apply.
-- `tag filter (fetch failed)` indicates the `/tag` GET failed for
-  that one cycle. The filter is disabled for that cycle and the
-  search pass proceeds normally; the next cycle retries the fetch.
+  labels still apply. A label that only appears in one pass's exclude
+  field is followed by that field, as in `no-upgarde (cutoff exclude)`.
+- `tag filter (fetch failed)` indicates the *arr answered the `/tag`
+  GET with an error for that cycle. Every enabled pass with labels to
+  apply is skipped, since searching it unfiltered could search items
+  you excluded, and the message names those passes. Passes without
+  labels run normally, the cycle then writes an error row, and the next
+  cycle retries the fetch.
 
 See [Instance Settings > Tag filter](/docs/reference/instance-settings#tag-filter)
 for the field reference and the per-app tag-source mapping.

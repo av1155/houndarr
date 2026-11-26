@@ -174,6 +174,21 @@ async def test_queue_missing_total_count_fails_open(
 
 @pytest.mark.asyncio()
 @respx.mock
+async def test_queue_non_json_body_fails_open(seeded_instances: None) -> None:
+    """A proxy login page on the queue endpoint lets the search proceed."""
+    respx.get(f"{SONARR_URL}/api/v3/queue/status").mock(
+        return_value=httpx.Response(200, text="<html>Sign in</html>"),
+    )
+    _mock_missing_and_command()
+
+    inst = _sonarr_instance(queue_limit=5)
+    count = await run_instance_search(inst, MASTER_KEY)
+
+    assert count == 1
+
+
+@pytest.mark.asyncio()
+@respx.mock
 async def test_queue_backpressure_logs_info_action(
     seeded_instances: None,
 ) -> None:

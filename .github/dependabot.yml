@@ -29,8 +29,9 @@ updates:
           - "python-multipart"
           - "click"
           - "pydantic"
-          # pyproject lists it under dev, but the image ships it as a transitive dependency.
+          # pyproject lists these under dev, but the image ships them as transitive dependencies.
           - "anyio"
+          - "pyyaml"
       dev-deps:
         patterns:
           - "ruff"

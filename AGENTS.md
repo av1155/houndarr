@@ -409,8 +409,8 @@ someone comments, so reporters get immediate feedback.
   PR, and `/bump` reseeds an empty one after each promotion
 - Do not change `ci-skip.yml` job names without updating branch protection
 - If mypy CI fails with "merge ref not found": push an empty commit to retrigger
-- Keep the `paths-ignore` patterns of the four filtered workflows in sync
-  with each other and with `ci-skip.yml`'s `paths`
+- Keep the `paths-ignore` patterns of the four filtered workflows and
+  `browser-e2e.yml` in sync with each other and with `ci-skip.yml`'s `paths`
 - Keep every action pinned to a full 40-character commit SHA with the release
   version as the last token of a trailing comment
   (`uses: owner/repo@<sha> # vX.Y.Z`). Dependabot rewrites the SHA and the

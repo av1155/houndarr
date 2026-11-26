@@ -107,6 +107,6 @@ against the stack `just e2e-up` starts (shared stack on fixed ports;
 `just e2e-down` removes it). The recipe runs through `uv run --group e2e`,
 so playwright, pytest-playwright and pytest-rerunfailures come from
 `uv.lock` even after a plain `uv sync`, and it downloads the browser on
-first use. On Linux, install the browser's system libraries once with
-`uv run --group e2e playwright install-deps <browser>`. The Browser E2E
-workflow installs the same locked group.
+first use. On Debian or Ubuntu, install the browser's system libraries
+once with `uv run --group e2e playwright install-deps <browser>`. The
+Browser E2E workflow installs the same locked group.

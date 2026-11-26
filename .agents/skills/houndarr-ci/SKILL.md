@@ -69,8 +69,8 @@ PR stays blocked.
 - Do not modify the 12 required check job names; branch protection
   depends on exact name matches.
 - Do not change `ci-skip.yml` job names without updating branch protection.
-- Keep the `paths-ignore` patterns of the four filtered workflows in sync
-  with each other and with `ci-skip.yml`'s `paths`.
+- Keep the `paths-ignore` patterns of the four filtered workflows and
+  `browser-e2e.yml` in sync with each other and with `ci-skip.yml`'s `paths`.
 - If mypy CI fails with "merge ref not found": push an empty commit to
   retrigger.
 - Keep every action pinned to a full 40-character commit SHA with the

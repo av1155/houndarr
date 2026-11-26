@@ -109,13 +109,14 @@ serve:
 mock-arr port='9100' items='500' seed='42':
     {{python}} -m tests.mock_arr.server --port {{port}} --items {{items}} --seed {{seed}}
 
-# Browser e2e against the stack from `just e2e-up`. On Linux the browser
-# also needs system libraries: `uv run --group e2e playwright install-deps
-# <browser>` (uses sudo). HOUNDARR_URL, MOCK_SONARR_URL, MOCK_RADARR_URL,
-# HOUNDARR_E2E_USER and HOUNDARR_E2E_PASS override the conftest defaults,
-# which already match e2e-up. The guard stops other names before
-# `playwright install`, which treats channels such as chrome or msedge as
-# system-wide installs run under sudo.
+# On Debian or Ubuntu the browser also needs system libraries (uses sudo):
+# `uv run --group e2e playwright install-deps <browser>`.
+# HOUNDARR_URL, MOCK_SONARR_URL, MOCK_RADARR_URL, HOUNDARR_E2E_USER and
+# HOUNDARR_E2E_PASS override the conftest defaults, which already match
+# e2e-up. The case guard rejects any other browser name before `playwright
+# install`, which treats channels such as chrome or msedge as system-wide
+# installs run under sudo.
+# Browser e2e (chromium, firefox or webkit) against the `just e2e-up` stack.
 test-browser browser="chromium":
     @case "{{browser}}" in chromium|firefox|webkit) ;; *) echo "test-browser: browser must be chromium, firefox or webkit" >&2; exit 2 ;; esac
     uv run --group e2e playwright install {{browser}}

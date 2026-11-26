@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import dataclasses
 from typing import Any
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import httpx
 import pytest
@@ -196,15 +196,14 @@ class TestResolveTagFilterIds:
         """Build a minimal adapter whose ``make_client`` yields a stub client.
 
         ``get_tags_result`` is the dict the client returns; ``raises`` is
-        an exception to throw instead (for the failure-mode test).
-        ``make_client`` is wired as a ``MagicMock`` (not a lambda) so the
-        short-circuit assertions in the no-filter test can inspect call
-        history.
+        an exception to throw instead (for the fetch-failure tests).  An
+        ``httpx.InvalidURL`` is raised by ``make_client`` itself, the only
+        place the real client lets one escape unwrapped.  ``make_client``
+        is wired as a ``MagicMock`` (not a lambda) so the short-circuit
+        assertions in the no-filter test can inspect call history.
         """
-        from unittest.mock import MagicMock  # noqa: PLC0415
-
         client = AsyncMock()
-        if raises is not None:
+        if raises is not None and not isinstance(raises, httpx.InvalidURL):
             client.get_tags = AsyncMock(side_effect=raises)
         else:
             client.get_tags = AsyncMock(return_value=get_tags_result or {})
@@ -214,7 +213,10 @@ class TestResolveTagFilterIds:
         ctx.__aexit__ = AsyncMock(return_value=None)
 
         adapter = AsyncMock()
-        adapter.make_client = MagicMock(return_value=ctx)
+        if isinstance(raises, httpx.InvalidURL):
+            adapter.make_client = MagicMock(side_effect=raises)
+        else:
+            adapter.make_client = MagicMock(return_value=ctx)
         return adapter
 
     @pytest.mark.asyncio()
@@ -326,32 +328,45 @@ class TestResolveTagFilterIds:
         assert rows[0]["cycle_id"] == "c1"
         assert rows[0]["cycle_trigger"] == "run_now"
 
+    @pytest.mark.parametrize(
+        "exc",
+        [
+            ClientHTTPError("get_tags: HTTP 503 from /api/v3/tag"),
+            httpx.InvalidURL("bad url"),
+        ],
+        ids=["http", "invalid-url"],
+    )
     @pytest.mark.asyncio()
-    async def test_fetch_failure_with_instance_wide_label_skips_every_enabled_pass(
-        self, seeded_instances: None
+    async def test_fetch_failure_reraises_when_no_enabled_pass_can_run(
+        self, exc: Exception, seeded_instances: None
     ) -> None:
+        """The cycle fails like any other failed request, so the instance reads as failing.
+
+        Returning normally would leave an instance whose *arr rejects every
+        request (a rotated API key, a proxy login page) looking healthy while
+        it searches nothing.  The disabled upgrade pass does not count.
+        """
         scoped = _with_policy(
             make_instance(cutoff_enabled=True), TagFilterPolicy(include=("1080p",))
         )
-        adapter = self._stub_adapter(raises=ClientHTTPError("get_tags: HTTP 503 from /api/v3/tag"))
-        resolved = await _resolve_tag_filter_ids(
-            scoped, adapter, cycle_id="c1", cycle_trigger="scheduled"
-        )
+        adapter = self._stub_adapter(raises=exc)
+        with pytest.raises(type(exc)):
+            await _resolve_tag_filter_ids(scoped, adapter, cycle_id="c1", cycle_trigger="scheduled")
 
-        assert resolved[SearchKind.missing] == _SKIP_TAG_FILTER
-        assert resolved[SearchKind.cutoff] == _SKIP_TAG_FILTER
-        assert resolved[SearchKind.upgrade] == _NO_TAG_FILTER
         rows = await get_log_rows()
-        assert [r["message"] for r in rows] == [
-            "tag filter unavailable, skipping the missing, cutoff passes this cycle: "
-            "get_tags: HTTP 503 from /api/v3/tag"
+        assert [(r["action"], r["reason"], r["message"]) for r in rows] == [
+            (
+                "info",
+                "tag filter (fetch failed)",
+                f"tag filter unavailable, skipping the missing, cutoff passes this cycle: {exc}",
+            )
         ]
 
     @pytest.mark.asyncio()
-    async def test_fetch_failure_single_pass_message(
-        self, instance: Any, seeded_instances: None
-    ) -> None:
-        scoped = _with_policy(instance, TagFilterPolicy(exclude=("uncut",)))
+    async def test_fetch_failure_single_pass_message(self, seeded_instances: None) -> None:
+        scoped = _with_policy(
+            make_instance(cutoff_enabled=True), TagFilterPolicy(missing_exclude=("uncut",))
+        )
         adapter = self._stub_adapter(raises=ClientHTTPError("get_tags: HTTP 500 from /api/v3/tag"))
         await _resolve_tag_filter_ids(scoped, adapter, cycle_id="c1", cycle_trigger="scheduled")
 
@@ -363,9 +378,11 @@ class TestResolveTagFilterIds:
 
     @pytest.mark.asyncio()
     async def test_fetch_failure_message_redacts_url_credentials(
-        self, instance: Any, seeded_instances: None
+        self, seeded_instances: None
     ) -> None:
-        scoped = _with_policy(instance, TagFilterPolicy(exclude=("uncut",)))
+        scoped = _with_policy(
+            make_instance(cutoff_enabled=True), TagFilterPolicy(missing_exclude=("uncut",))
+        )
         adapter = self._stub_adapter(raises=httpx.InvalidURL("bad url http://user:secret@arr/x"))
         await _resolve_tag_filter_ids(scoped, adapter, cycle_id="c1", cycle_trigger="scheduled")
 

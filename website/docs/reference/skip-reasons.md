@@ -156,9 +156,9 @@ empty. With all five empty the filter is a no-op and behavior matches
 earlier versions.
 
 The engine resolves labels to numeric tag IDs once per cycle by
-GET-ing each instance's `/tag` endpoint, so renaming a tag in Radarr
-or Sonarr does not require re-editing the field. Two cycle-level info
-rows can appear:
+GET-ing each instance's `/tag` endpoint, so a tag deleted and
+re-created under the same label keeps working, while a renamed tag
+needs the field updated. Two cycle-level info rows can appear:
 
 - `tag filter (unknown label)` lists labels the operator typed that
   did not resolve to any *arr tag on the current cycle. The remaining
@@ -168,7 +168,9 @@ rows can appear:
   GET with an error for that cycle. Every enabled pass with labels to
   apply is skipped, since searching it unfiltered could search items
   you excluded, and the message names those passes. Passes without
-  labels run normally; the next cycle retries the fetch.
+  labels run normally; the next cycle retries the fetch. When no pass
+  is left to run, the cycle also writes an error row, so the instance
+  shows as failing until `/tag` answers again.
 
 See [Instance Settings > Tag filter](/docs/reference/instance-settings#tag-filter)
 for the field reference and the per-app tag-source mapping.

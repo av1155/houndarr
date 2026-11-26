@@ -176,15 +176,22 @@ tags are skipped with `tag filter (excluded tag)`.
 
 Labels are normalized to lowercase, stripped, and de-duplicated on
 save. Labels are resolved against each instance's `/tag` endpoint at
-the start of every cycle, so renaming a tag in Radarr or Sonarr keeps
-the filter working without re-editing the field. Operator-typed labels
-that do not resolve to any *arr tag are logged once per cycle and
-otherwise ignored. If the *arr answers the `/tag` request with an
-error, each enabled pass with labels to apply (from these two fields or
-its own [per-pass exclude](#per-pass-exclude)) is skipped for that
-cycle, and one `tag filter (fetch failed)` info row names the skipped
-passes. Passes without labels run as usual. An *arr that can't be
-reached at all is handled like any other connection failure.
+the start of every cycle, so deleting and re-creating a tag under the
+same label keeps the filter working. Renaming a tag in the *arr does
+not: the old label stops matching until you update the field here.
+Operator-typed labels that do not resolve to any *arr tag are logged
+once per cycle as `tag filter (unknown label)` and otherwise ignored,
+so an excluded tag that was renamed or mistyped stops excluding
+anything until the field is fixed.
+
+If the *arr answers the `/tag` request with an error, each enabled pass
+with labels to apply (from these two fields or its own
+[per-pass exclude](#per-pass-exclude)) is skipped for that cycle, and
+one `tag filter (fetch failed)` info row names the skipped passes.
+Passes without labels run as usual. When no pass is left to run, the
+cycle is also logged as an error, so the instance shows as failing
+until `/tag` answers again. An *arr that can't be reached at all is
+handled like any other connection failure.
 
 Item-to-tag mapping by app:
 

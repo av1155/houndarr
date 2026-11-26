@@ -12,7 +12,9 @@ import respx
 
 from houndarr.database import get_db
 from houndarr.engine.search_loop import run_instance_search
-from houndarr.errors import ClientTransportError
+from houndarr.engine.supervisor import Supervisor
+from houndarr.errors import ClientHTTPError, ClientTransportError
+from houndarr.repositories.search_log import fetch_active_error_instance_ids
 from houndarr.services.instances import Instance, InstanceType, SearchOrder, TagFilterPolicy
 
 from .conftest import (
@@ -314,23 +316,24 @@ async def test_tag_fetch_failure_skips_labelled_pass_and_runs_unlabelled_pass(
 @pytest.mark.parametrize("trigger", ["scheduled", "run_now"])
 @pytest.mark.asyncio()
 @respx.mock
-async def test_tag_fetch_failure_with_instance_wide_label_skips_every_pass(
+async def test_tag_fetch_failure_with_instance_wide_label_skips_every_pass_and_fails(
     seeded_instances: None, trigger: str
 ) -> None:
-    """Fail-closed replaces #644's fail-open: no pass runs unfiltered."""
+    """Fail-closed replaces #644's fail-open: no pass runs unfiltered, and with
+    nothing left to run the cycle fails like any other failed request."""
     routes = _serve_empty_radarr()
     routes["tag"].mock(return_value=httpx.Response(500))
     command = respx.post(f"{RADARR_URL}/api/v3/command").mock(
         return_value=httpx.Response(201, json={"id": 1})
     )
 
-    count = await run_instance_search(
-        _radarr_all_passes(TagFilterPolicy(include=("1080p",))),
-        MASTER_KEY,
-        cycle_trigger=trigger,
-    )
+    with pytest.raises(ClientHTTPError, match=_TAG_500):
+        await run_instance_search(
+            _radarr_all_passes(TagFilterPolicy(include=("1080p",))),
+            MASTER_KEY,
+            cycle_trigger=trigger,
+        )
 
-    assert count == 0
     assert not routes["missing"].called
     assert not routes["cutoff"].called
     assert not routes["upgrade"].called
@@ -344,6 +347,39 @@ async def test_tag_fetch_failure_with_instance_wide_label_skips_every_pass(
             f"{_TAG_500}",
         )
     ]
+
+
+@pytest.mark.parametrize(
+    ("policy", "flagged"),
+    [
+        (TagFilterPolicy(exclude=("skip",)), {2}),
+        (TagFilterPolicy(cutoff_exclude=("skip",)), set()),
+    ],
+    ids=["every-pass-labelled", "one-pass-unlabelled"],
+)
+@pytest.mark.asyncio()
+@respx.mock
+async def test_rejected_tag_lookup_marks_instance_failing_only_when_nothing_ran(
+    seeded_instances: None, policy: TagFilterPolicy, flagged: set[int]
+) -> None:
+    """A *arr answering 401 to everything still shows up as failing.
+
+    With every enabled pass labelled, a rejected ``/tag`` would otherwise
+    be the cycle's only outcome and the status dot would stay green.
+    """
+    routes = _serve_empty_radarr()
+    routes["tag"].mock(return_value=httpx.Response(401))
+    instance = dataclasses.replace(
+        make_instance(instance_id=2, itype=InstanceType.radarr, cutoff_enabled=True),
+        tag_filter=policy,
+    )
+
+    await Supervisor(master_key=MASTER_KEY)._run_search_cycle(instance, cycle_trigger="scheduled")
+
+    assert await fetch_active_error_instance_ids() == flagged
+    actions = [r["action"] for r in await get_log_rows()]
+    assert actions[0] == "info"
+    assert ("error" in actions) is bool(flagged)
 
 
 @pytest.mark.asyncio()

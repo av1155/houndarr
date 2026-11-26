@@ -274,7 +274,9 @@ class TagFilterPolicy:
     operator types into the settings form; the engine resolves them to
     numeric *arr tag IDs once per cycle by GET-ing the instance's
     ``/tag`` endpoint.  Storing labels (not IDs) keeps the configuration
-    portable across instances and survives tag rename / re-creation.
+    portable across instances and survives deleting and re-creating a
+    tag under the same label; renaming a tag in the *arr needs the label
+    updated here.
 
     Every list defaults to empty: with none set the filter is a no-op
     and the engine processes items exactly as before.  Issue #637.

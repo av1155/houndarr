@@ -243,7 +243,10 @@ async def _resolve_tag_filter_ids(
     When ``/tag`` answers with an error or an unusable body, every
     enabled pass with labels gets ``skip=True`` and one info row records
     it: searching those passes unfiltered could grab what the operator
-    excluded.  A transport error propagates instead, so the supervisor's
+    excluded.  When that leaves no enabled pass to run, the error is
+    re-raised after the row so the supervisor records a failed cycle and
+    the instance reads as failing rather than quietly searching nothing.
+    A transport error propagates without the row, so the supervisor's
     unreachable handling and quick retry apply as for any other request.
 
     Labels that do not resolve against the *arr's current /tag list
@@ -253,12 +256,14 @@ async def _resolve_tag_filter_ids(
 
     Raises:
         ClientTransportError: ``/tag`` could not be reached.
+        ClientError: ``/tag`` failed and every enabled pass carries a label.
+        httpx.InvalidURL: The client could not be built and every enabled
+            pass carries a label.
     """
     policy = instance.tag_filter
     resolved = dict.fromkeys(SearchKind, _NO_TAG_FILTER)
-    labelled = [
-        kind for kind in _enabled_kinds(instance) if policy.include or policy.exclude_for(kind)
-    ]
+    enabled = _enabled_kinds(instance)
+    labelled = [kind for kind in enabled if policy.include or policy.exclude_for(kind)]
     if not labelled:
         return resolved
 
@@ -284,6 +289,8 @@ async def _resolve_tag_filter_ids(
             reason="tag filter (fetch failed)",
             message=message,
         )
+        if len(labelled) == len(enabled):
+            raise
         return {**resolved, **dict.fromkeys(labelled, _SKIP_TAG_FILTER)}
 
     def _ids(labels: tuple[str, ...]) -> frozenset[int] | None:

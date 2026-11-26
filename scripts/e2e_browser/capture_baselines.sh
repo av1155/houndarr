@@ -5,11 +5,12 @@
 #   bash scripts/e2e_browser/capture_baselines.sh <mode>
 #
 # Modes:
-#   up        Build the houndarr:e2e image if missing, create arr-net,
-#             start mock-sonarr + mock-radarr + houndarr-e2e on the
-#             bridge.  Waits for Houndarr /api/health.  Leaves the
-#             stack running for interactive debugging; no pytest
-#             is invoked.  Does NOT auto-teardown on exit.
+#   up        Build the houndarr:e2e image, create arr-net, start
+#             mock-sonarr + mock-radarr + houndarr-e2e on the bridge.
+#             Waits for Houndarr /api/health and creates the test admin
+#             account.  Leaves the stack running for `just test-browser`
+#             or interactive debugging; no pytest is invoked.  Does NOT
+#             auto-teardown on exit.
 #   down      Tear the stack down (docker rm -f the three containers,
 #             docker network rm arr-net, rm -rf /tmp/houndarr-e2e-data).
 #             Idempotent; safe to run when the stack is already down.

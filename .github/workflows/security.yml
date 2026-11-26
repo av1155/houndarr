@@ -55,6 +55,7 @@ jobs:
         run: |
           uv export --frozen --no-hashes --no-emit-project --no-dev -o requirements.txt
           uv export --frozen --no-hashes --no-emit-project --only-group dev -o requirements-dev.txt
+          uv export --frozen --no-hashes --no-emit-project --only-group e2e -o requirements-e2e.txt
 
       - name: Run dependency audit
         env:
@@ -64,7 +65,7 @@ jobs:
           PIP_AUDIT_IGNORE: ""
         shell: bash
         run: |
-          args=(pip-audit -r requirements.txt -r requirements-dev.txt)
+          args=(pip-audit -r requirements.txt -r requirements-dev.txt -r requirements-e2e.txt)
           for cve in $PIP_AUDIT_IGNORE; do
             args+=(--ignore-vuln "$cve")
           done

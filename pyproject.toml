@@ -55,15 +55,13 @@ dev = [
     "respx>=0.23.1",
     "anyio>=4.14.2",
 ]
-# Optional browser-e2e group: playwright is heavy (~80 MB of browser
-# binaries) and only the dedicated CI job and the marketing screenshot
-# script need it.  Editor users can opt in with ``uv sync --group e2e``
-# to silence the three ``reportMissingImports`` findings on
-# ``scripts/marketing/capture_screenshots.py`` and ``tests/e2e_browser/``;
-# default ``uv sync`` keeps the dev install lean.
+# Browser e2e group: only the Browser E2E workflow, ``just test-browser``
+# and the marketing screenshot script need playwright, so the default
+# ``uv sync`` leaves it out.
 e2e = [
     "playwright>=1.55.0",
     "pytest-playwright>=0.7.1",
+    "pytest-rerunfailures>=16.7",
 ]
 
 [project.scripts]
@@ -181,9 +179,9 @@ skips = [
 # ---------------------------------------------------------------------------
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-# Browser e2e suite boots a live container and needs playwright installed;
-# skip it during the default pytest run and invoke explicitly with
-# ``pytest tests/e2e_browser/ --browser ...`` from the dedicated CI job.
+# The browser e2e suite drives a live container stack and needs the e2e
+# group, so the default run skips it; ``just test-browser`` and the
+# Browser E2E workflow run it explicitly.
 norecursedirs = ["e2e_browser"]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"

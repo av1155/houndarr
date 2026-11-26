@@ -74,7 +74,9 @@ just test                       # full suite
 just test-quick                 # unit only (-m "not integration")
 just test-integration           # async engine cycles
 just pin                        # characterisation tests
-just test-browser chromium      # Playwright e2e (serial, shared stack)
+just e2e-up                     # Docker stack the browser suite drives
+just test-browser chromium      # Playwright e2e via the uv `e2e` group (serial)
+just e2e-down                   # tear the stack down
 .venv/bin/pytest tests/test_auth.py::test_x -v   # one-off
 ```
 
@@ -377,10 +379,11 @@ someone comments, so reporters get immediate feedback.
 - `.github/workflows/`: changes trigger workflow-lint and may affect required checks
 - `src/houndarr/database.py` schema migrations: requires `SCHEMA_VERSION` bump
 - `tests/conftest.py` shared fixtures: changes affect all test files
-- `pyproject.toml` (`[project] dependencies` + `[dependency-groups] dev`)
-  and `uv.lock`: dependency changes require `pip-audit` to pass.
-  `requirements.txt` / `requirements-dev.txt` are no longer checked in;
-  the security workflow generates them on the fly via `uv export`
+- `pyproject.toml` (`[project] dependencies` + `[dependency-groups]` `dev`
+  and `e2e`) and `uv.lock`: dependency changes require `pip-audit` to pass.
+  No requirements files are checked in; the security workflow generates
+  `requirements.txt`, `requirements-dev.txt` and `requirements-e2e.txt`
+  on the fly via `uv export`
 
 ### When to add or update tests
 
@@ -406,8 +409,8 @@ someone comments, so reporters get immediate feedback.
   PR, and `/bump` reseeds an empty one after each promotion
 - Do not change `ci-skip.yml` job names without updating branch protection
 - If mypy CI fails with "merge ref not found": push an empty commit to retrigger
-- Keep the `paths-ignore` patterns of the four filtered workflows in sync
-  with each other and with `ci-skip.yml`'s `paths`
+- Keep the `paths-ignore` patterns of the four filtered workflows and
+  `browser-e2e.yml` in sync with each other and with `ci-skip.yml`'s `paths`
 - Keep every action pinned to a full 40-character commit SHA with the release
   version as the last token of a trailing comment
   (`uses: owner/repo@<sha> # vX.Y.Z`). Dependabot rewrites the SHA and the

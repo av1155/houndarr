@@ -53,6 +53,25 @@ env:
 startupProbe:
   failureThreshold: 60
   periodSeconds: 10
+  # -- Seconds each attempt waits for /api/health. Kubernetes defaults to 1 s,
+  # which a brief stall can exceed; the Docker HEALTHCHECK allows 10 s.
+  timeoutSeconds: 5
+
+# -- Liveness probe on /api/health. Kubernetes restarts the container after
+# failureThreshold consecutive failures.
+livenessProbe:
+  initialDelaySeconds: 10
+  periodSeconds: 30
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+# -- Readiness probe on /api/health. Kubernetes removes the pod from the
+# Service endpoints after failureThreshold consecutive failures.
+readinessProbe:
+  initialDelaySeconds: 5
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
 
 # -- Persistent volume for /data (SQLite database and encryption master key).
 persistence:

@@ -72,18 +72,27 @@ spec:
           volumeMounts:
             - name: data
               mountPath: /data
+          startupProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            failureThreshold: 60
+            periodSeconds: 10
+            timeoutSeconds: 5
           livenessProbe:
             httpGet:
               path: /api/health
               port: http
             initialDelaySeconds: 10
             periodSeconds: 30
+            timeoutSeconds: 5
           readinessProbe:
             httpGet:
               path: /api/health
               port: http
             initialDelaySeconds: 5
             periodSeconds: 10
+            timeoutSeconds: 5
           resources:
             requests:
               memory: "64Mi"
@@ -104,6 +113,11 @@ spec:
 The `volumeClaimTemplates` block creates a PVC automatically. The StatefulSet
 manages its lifecycle; the PVC persists even if the pod is deleted or
 rescheduled.
+
+The startup probe gives first-boot migrations on a large database up to
+10 minutes before the liveness and readiness probes take over. Each probe
+waits 5 seconds for `/api/health`, since Kubernetes' 1-second default can
+expire while the app is busy.
 
 The `/data` PVC contains the encryption master key and the
 database. Back it up; losing the master key makes every stored
@@ -160,18 +174,27 @@ spec:
           volumeMounts:
             - name: data
               mountPath: /data
+          startupProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            failureThreshold: 60
+            periodSeconds: 10
+            timeoutSeconds: 5
           livenessProbe:
             httpGet:
               path: /api/health
               port: http
             initialDelaySeconds: 10
             periodSeconds: 30
+            timeoutSeconds: 5
           readinessProbe:
             httpGet:
               path: /api/health
               port: http
             initialDelaySeconds: 5
             periodSeconds: 10
+            timeoutSeconds: 5
           resources:
             requests:
               memory: "64Mi"

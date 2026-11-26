@@ -70,7 +70,7 @@ jobs:
             // Read after listing, so a push or retarget during the listing shows up.
             const { data: pr } = await github.rest.pulls.get({ owner, repo, pull_number: event.number });
 
-            // A rename counts on both sides, as GitHub's own path filters do.
+            // A rename's old path counts too: moving a file out of src/ changes code.
             const paths = files.flatMap((file) =>
               file.previous_filename ? [file.filename, file.previous_filename] : [file.filename],
             );
@@ -80,7 +80,7 @@ jobs:
             const defaultBranch = context.payload.repository.default_branch;
             const intoDefault = event.base.ref === defaultBranch && pr.base.ref === defaultBranch;
             const headUnchanged = pr.head.sha === event.head.sha;
-            const complete = files.length < LIST_FILES_CAP && listed >= pr.changed_files;
+            const complete = files.length > 0 && files.length < LIST_FILES_CAP && listed >= pr.changed_files;
 
             // Paths are never logged: a crafted filename could inject workflow commands.
             core.info(

@@ -36,11 +36,11 @@ exception: it runs and skips each of its steps, because its name is an
 expression.
 
 The classifier says `true` only when the PR targets the default branch,
-its head has not moved, the file list is complete (under 3000 entries and
-at least `changed_files` distinct paths), and every path, both sides of a
-rename included, matches `docs/**`, `**/*.md`, `website/**`, `.claude/**`
-or `scripts/marketing/**`. A failed or skipped classifier (any non-PR
-event) runs every job. It needs only `pull-requests: read`, which fork
+its head has not moved, the file list is complete and not empty (under
+3000 entries and at least `changed_files` distinct paths), and every
+path, both sides of a rename included, matches `docs/**`, `**/*.md`,
+`website/**`, `.claude/**` or `scripts/marketing/**`. A failed or skipped
+classifier (any non-PR event) runs every gated job. It needs only `pull-requests: read`, which fork
 PR tokens have. `tests/test_gates/test_docs_only_gate.py` runs its
 script under node and pins the job conditions.
 
@@ -81,7 +81,7 @@ script under node and pins the job conditions.
 - Do not put a `paths` or `paths-ignore` filter on a workflow with a
   required check: a workflow skipped by a path filter leaves its checks
   pending. `browser-e2e.yml` keeps its filter because its check is not
-  required.
+  required; keep its list equal to `DOCS_ONLY_GLOBS` in `docs-only.yml`.
 - Do not skip a job whose name is an expression with a job-level `if:`:
   it reports under the unevaluated expression and its required check
   stays pending. Gate its steps, as `docker.yml`'s build does with

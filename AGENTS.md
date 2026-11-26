@@ -407,7 +407,9 @@ someone comments, so reporters get immediate feedback.
   PR, and `/bump` reseeds an empty one after each promotion
 - Do not put a `paths` or `paths-ignore` filter on a workflow with a
   required check: a workflow skipped by a path filter leaves its checks
-  pending. Skip its jobs by `if:` on `docs-only.yml`'s output instead
+  pending. Skip its jobs by `if:` on `docs-only.yml`'s output instead.
+  `browser-e2e.yml`, whose check is not required, keeps a filter; keep its
+  list equal to `DOCS_ONLY_GLOBS` in `docs-only.yml`
 - If mypy CI fails with "merge ref not found": push an empty commit to retrigger
 - Do not skip a job whose name is an expression (`Build ${{ ... }}`) with a
   job-level `if:`: it then reports under the unevaluated expression and

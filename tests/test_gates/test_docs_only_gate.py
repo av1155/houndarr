@@ -172,7 +172,7 @@ _needs_node = pytest.mark.skipif(
         pytest.param([_file("website")], "false", id="bare-directory-name"),
         pytest.param([_file("src/docs/notes.py")], "false", id="anchored-at-start"),
         pytest.param([_file("CHANGES.md.bak")], "false", id="anchored-at-end"),
-        pytest.param([], "true", id="no-files"),
+        pytest.param([], "false", id="no-files"),
     ],
 )
 def test_classifies_changed_paths(
@@ -198,9 +198,25 @@ def test_symlink_type_change_listed_twice_counts_once(tmp_path: Path) -> None:
 
 
 @_needs_node
-def test_listing_shorter_than_changed_files_is_not_docs_only(tmp_path: Path) -> None:
-    outcome = _classify([_file("docs/guide.md")], changed_files=2, tmp_path=tmp_path)
+@pytest.mark.parametrize(
+    "files",
+    [[_file("docs/guide.md")], [_file("docs/guide.md"), _file("docs/guide.md")]],
+    ids=["one-missing", "duplicate-hides-a-missing-path"],
+)
+def test_listing_shorter_than_changed_files_is_not_docs_only(
+    files: list[dict[str, str]], tmp_path: Path
+) -> None:
+    outcome = _classify(files, changed_files=2, tmp_path=tmp_path)
     assert outcome["outputs"] == {"docs_only": "false"}
+
+
+def test_patterns_use_only_glob_syntax_the_classifier_translates() -> None:
+    declaration = re.search(r"^const DOCS_ONLY_GLOBS = \[(.*)\];$", _script(), re.MULTILINE)
+    assert declaration
+    globs = re.findall(r"'([^']*)'", declaration.group(1))
+    assert globs
+    for glob in globs:
+        assert re.fullmatch(r"[\w./*-]+", glob), f"{glob!r} needs syntax toRegExp lacks"
 
 
 @_needs_node
@@ -304,7 +320,7 @@ def test_build_reports_on_docs_only_prs_and_skips_its_steps() -> None:
     assert _key(build, "if").startswith("${{ !cancelled() && ")
     assert "docs_only" not in _key(build, "if")
     assert f"      DOCS_ONLY: ${{{{ {_DOCS_ONLY} }}}}\n" in build
-    steps = build.split("\n      - name: ")[1:]
+    steps = build.split("\n      - ")[1:]
     assert len(steps) == 8
     for step in steps:
         condition = re.search(r"^        if: (.*)$", step, re.MULTILINE)
@@ -334,6 +350,14 @@ def test_classifier_has_no_concurrency_group_and_reads_only_pull_requests() -> N
     assert not re.search(r"^\s*concurrency:", text, re.MULTILINE)
     assert "\npermissions: {}\n" in text
     assert "    permissions:\n      pull-requests: read\n    outputs:\n" in text
+
+
+def test_classifier_output_reaches_the_callers() -> None:
+    text = _CLASSIFIER.read_text()
+    assert "        value: ${{ jobs.classify.outputs.docs_only }}\n" in text
+    assert "      docs_only: ${{ steps.classify.outputs.docs_only }}\n" in text
+    assert "        id: classify\n" in text
+    assert "core.setOutput('docs_only', " in _script()
 
 
 def test_no_workflow_posts_stub_check_runs() -> None:

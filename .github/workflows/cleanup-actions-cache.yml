@@ -58,6 +58,7 @@ jobs:
           DRY_RUN: ${{ inputs.dry_run || 'false' }}
         run: |
           set -euo pipefail
+          probe_unused=1
 
           deleted=0
           failed=0

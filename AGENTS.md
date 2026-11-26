@@ -92,8 +92,8 @@ Fixture graph, FK-seeding pattern, and route-test helpers live in the
 ## CI Checks
 
 12 required status checks (branch protection enforced). Full check
-table, additional non-required workflows, and the paths-ignore /
-ci-skip pattern live in the `houndarr-ci` skill (loads on
+table, additional non-required workflows, and how docs-only PRs skip
+required jobs live in the `houndarr-ci` skill (loads on
 `.github/workflows/**`):
 
 | Check group | Workflow |
@@ -105,14 +105,16 @@ ci-skip pattern live in the `houndarr-ci` skill (loads on
 | Build (no push), Trivy image scan | `docker.yml` |
 | Security smoke test | `security-smoke-test.yml` |
 
-`quality.yml` and `tests.yml` run on every PR: ruff checks every `.py`
-and `.md` file, and the tests read `docs/api/`, `scripts/marketing/` and
-`.claude/settings.json`. The other four main workflows use
-`paths-ignore: ["docs/**", "**/*.md", "website/**", ".claude/**", "scripts/marketing/**"]`;
-`ci-skip.yml` provides passing no-op jobs with their check names so
-docs-only PRs satisfy branch protection (except fork PRs, whose token
-cannot create check runs). **Do not modify the 12 required check job
-names**: branch protection depends on exact name matches.
+`quality.yml` and `tests.yml` run in full on every PR: ruff checks every
+`.py` and `.md` file, and the tests read `docs/api/`, `scripts/marketing/`
+and `.claude/settings.json`. The other four main workflows also run on
+every PR and call `docs-only.yml`, which reports a PR into `main` as
+docs-only when every changed path matches `docs/**`, `**/*.md`,
+`website/**`, `.claude/**` or `scripts/marketing/**`. On such a PR their
+required jobs are skipped by `if:`, which branch protection counts as
+passing; `Build (no push)` skips its steps instead. **Do not modify the
+12 required check job names**: branch protection depends on exact name
+matches.
 
 Branch protection on `main`: 12 required status checks (strict; branch
 must be up to date), PRs required, stale reviews dismissed,
@@ -407,10 +409,16 @@ someone comments, so reporters get immediate feedback.
 - Do not delete the `## [Unreleased]` block at the top of CHANGELOG.md;
   `version-check.yml` requires it as the topmost `## [...]` block on every
   PR, and `/bump` reseeds an empty one after each promotion
-- Do not change `ci-skip.yml` job names without updating branch protection
+- Do not put a `paths` or `paths-ignore` filter on a workflow with a
+  required check: a workflow skipped by a path filter leaves its checks
+  pending. Skip its jobs by `if:` on `docs-only.yml`'s output instead.
+  `browser-e2e.yml`, whose check is not required, keeps a filter; keep its
+  list equal to `DOCS_ONLY_GLOBS` in `docs-only.yml`
 - If mypy CI fails with "merge ref not found": push an empty commit to retrigger
-- Keep the `paths-ignore` patterns of the four filtered workflows and
-  `browser-e2e.yml` in sync with each other and with `ci-skip.yml`'s `paths`
+- On a PR, do not skip a required job whose name is an expression
+  (`Build ${{ ... }}`) with a job-level `if:`: it then reports under the
+  unevaluated expression and its required check stays pending.
+  `docker.yml`'s build skips its steps on docs-only PRs instead
 - Keep every action pinned to a full 40-character commit SHA with the release
   version as the last token of a trailing comment
   (`uses: owner/repo@<sha> # vX.Y.Z`). Dependabot rewrites the SHA and the

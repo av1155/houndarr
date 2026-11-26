@@ -92,9 +92,12 @@ Debug:
 - `PUT /__tags__/{app}` with `{"tags": [{"id": 9, "label": "no-upgrade"}],
   "items": {"12": [9]}}` sets what `/tag` lists and which leaves carry
   which tag ids (Sonarr and Whisparr v2 leaves carry them on the embedded
-  `series`, Lidarr on `artist`, Readarr on `author`). Add `"status": 503` or `"html": true` to make `/tag` fail;
-  either resets on the next PUT that omits it. `GET /__tags__/{app}`
-  returns the setup plus how many times `/tag` was read.
+  `series`, Lidarr on `artist`, Readarr on `author`). Each leaf holds its
+  own copy of its parent, so list every leaf of a series, artist or author
+  with the same tags, as a real *arr would report them. Add
+  `"status": 503` or `"html": true` to make `/tag` fail; either resets on
+  the next PUT that omits it. `GET /__tags__/{app}` returns the setup plus
+  how many times `/tag` was read.
 - `POST /__reset__/{app}` clears the queue and tag setup.
 
 ## Wiring it into Houndarr

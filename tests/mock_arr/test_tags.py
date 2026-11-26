@@ -41,7 +41,13 @@ def test_item_tags_reach_wanted_and_library_records(client: TestClient) -> None:
 
 
 @pytest.mark.parametrize(
-    ("app", "parent"), [("sonarr", "series"), ("lidarr", "artist"), ("readarr", "author")]
+    ("app", "parent"),
+    [
+        ("sonarr", "series"),
+        ("whisparr_v2", "series"),
+        ("lidarr", "artist"),
+        ("readarr", "author"),
+    ],
 )
 def test_leaf_tags_ride_on_the_parent_houndarr_reads(
     client: TestClient, app: str, parent: str

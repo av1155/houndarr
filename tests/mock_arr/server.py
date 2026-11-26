@@ -203,7 +203,8 @@ def create_app(config: SeedConfig | None = None) -> FastAPI:
         Every key is optional.  ``tags`` replaces the ``[{"id", "label"}]``
         list.  ``items`` maps leaf ids to tag ids and replaces every leaf's
         tags, also on the embedded series, artist or author that Houndarr
-        reads them from.
+        reads them from.  That parent is a per-leaf copy, so a whole series,
+        artist or author is tagged only when every one of its leaves is listed.
         ``status`` is the HTTP code ``/tag`` answers with and ``html`` serves
         a login page instead of JSON; both reset to healthy when omitted.
         """

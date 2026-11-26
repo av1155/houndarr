@@ -49,16 +49,16 @@ overrides:
   # @docusaurus/core > @docusaurus/mdx-loader; runs only while the
   # docs site builds.
   image-size: ">=2.0.3"
-  # mermaid <11.16.1 carries five advisories, all fixed in 11.16.1:
-  # GHSA-3rrr-jr9j-h3q3 (prototype pollution through Architecture
-  # diagrams), GHSA-rhh3-jpg6-66xh (DoS via radar diagrams),
-  # GHSA-6x64-9x62-f2gx (CSS injection reaching siblings of the
-  # diagram), GHSA-2v8p-3f2j-5mp7 (infinite-loop DoS in XY charts),
-  # and GHSA-c4c3-pg64-4m4v (prototype pollution via the configuration
-  # APIs). Supersedes the earlier >=11.15.0 floor that cleared the
-  # classDef, classDefs, configuration, and Gantt sanitisation alerts.
-  # Transitive via @docusaurus/theme-mermaid.
-  mermaid: ">=11.16.1"
+  # GHSA-238p-pmpm-9mq7 (CVE-2026-103923): katex <0.18.2 lets existing
+  # prototype pollution bypass its trust restrictions. Every mermaid
+  # before 12.2.0 requires katex ^0.16, so the floor sits on mermaid
+  # 12.2.0, the first release on katex ^0.18. Supersedes the earlier
+  # >=11.16.1 floor for GHSA-3rrr-jr9j-h3q3, GHSA-rhh3-jpg6-66xh,
+  # GHSA-6x64-9x62-f2gx, GHSA-2v8p-3f2j-5mp7, and GHSA-c4c3-pg64-4m4v,
+  # and the >=11.15.0 floor before it. Transitive via
+  # @docusaurus/theme-mermaid. Held to the 12.x line, whose new
+  # flowchart defaults docusaurus.config.ts turns back off.
+  mermaid: ">=12.2.0 <13"
   # webpack-dev-server <=5.2.5 carries GHSA-m28w-2pqf-7qgj (DoS via a
   # malformed Host or Origin header) and GHSA-f5vj-f2hx-8m93 (CSRF
   # through internal developer endpoints), both fixed in 5.2.6;

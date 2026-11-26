@@ -335,8 +335,8 @@ class ArrClient(ABC):
             ClientTransportError: The request failed before a response
                 arrived (connection refused, DNS failure, timeout,
                 malformed URL, etc.).
-            ClientValidationError: The response parsed as JSON but did
-                not match the :class:`QueueStatus` schema.
+            ClientValidationError: The response was not JSON or did not
+                match the :class:`QueueStatus` schema.
         """
         try:
             result = await self._get(self._QUEUE_STATUS_PATH)
@@ -348,6 +348,12 @@ class ArrClient(ABC):
             raise ClientTransportError(
                 f"queue status: transport error reaching {self._QUEUE_STATUS_PATH}: "
                 f"{describe_exception(exc)}"
+            ) from exc
+        except ValueError as exc:
+            # A non-JSON body (e.g. a proxy login page) must reach the
+            # backpressure gate as a typed error so the cycle fails open.
+            raise ClientValidationError(
+                f"queue status: non-JSON body from {self._QUEUE_STATUS_PATH}"
             ) from exc
 
         try:

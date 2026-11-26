@@ -54,6 +54,7 @@ dev = [
     "httpx>=0.28.1",
     "respx>=0.23.1",
     "anyio>=4.14.2",
+    "pyyaml>=6.0.3",
 ]
 # Browser e2e group: only the Browser E2E workflow, ``just test-browser``
 # and the marketing screenshot script need playwright, so the default

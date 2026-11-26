@@ -13,9 +13,10 @@ import respx
 from houndarr.database import get_db
 from houndarr.engine.search_loop import run_instance_search
 from houndarr.engine.supervisor import Supervisor
-from houndarr.errors import ClientHTTPError, ClientTransportError
+from houndarr.errors import ClientHTTPError, ClientTransportError, ClientValidationError
 from houndarr.repositories.search_log import fetch_active_error_instance_ids
 from houndarr.services.instances import Instance, InstanceType, SearchOrder, TagFilterPolicy
+from houndarr.services.metrics import gather_active_errors
 
 from .conftest import (
     _EPISODE_RECORD,
@@ -277,40 +278,39 @@ async def test_instance_wide_exclude_still_applies_on_pass_with_own_exclude(
     ]
 
 
+@pytest.mark.parametrize("labelled", ["missing", "cutoff", "upgrade"])
 @pytest.mark.asyncio()
 @respx.mock
-async def test_tag_fetch_failure_skips_labelled_pass_and_runs_unlabelled_pass(
-    seeded_instances: None,
+async def test_tag_fetch_failure_skips_labelled_pass_runs_the_others_then_fails(
+    seeded_instances: None, labelled: str
 ) -> None:
-    respx.get(f"{SONARR_URL}/api/v3/tag").mock(return_value=httpx.Response(500))
-    respx.get(f"{SONARR_URL}/api/v3/wanted/missing").mock(
-        return_value=_page([_episode(101, number=1, series_tags=[7])])
-    )
-    cutoff_route = respx.get(f"{SONARR_URL}/api/v3/wanted/cutoff").mock(
-        return_value=_page([_episode(102, number=2, series_tags=[])])
-    )
-    command = respx.post(f"{SONARR_URL}/api/v3/command").mock(
+    routes = _serve_empty_radarr()
+    routes["tag"].mock(return_value=httpx.Response(500))
+    routes["missing"].mock(return_value=_page([_movie(201, [])]))
+    routes["cutoff"].mock(return_value=_page([_movie(202, [])]))
+    routes["upgrade"].mock(return_value=httpx.Response(200, json=[_library_movie(203, [])]))
+    command = respx.post(f"{RADARR_URL}/api/v3/command").mock(
         return_value=httpx.Response(201, json={"id": 1})
     )
-    instance = dataclasses.replace(
-        make_instance(cutoff_enabled=True),
-        tag_filter=TagFilterPolicy(cutoff_exclude=("no-upgrade",)),
+    policy = TagFilterPolicy(**{f"{labelled}_exclude": ("no-upgrade",)})
+
+    with pytest.raises(ClientHTTPError, match=_TAG_500):
+        await run_instance_search(_radarr_all_passes(policy), MASTER_KEY)
+
+    item_by_pass = {"missing": 201, "cutoff": 202, "upgrade": 203}
+    assert not routes[labelled].called
+    assert sorted(_searched_ids(command, "movieIds")) == sorted(
+        item for kind, item in item_by_pass.items() if kind != labelled
     )
-
-    count = await run_instance_search(instance, MASTER_KEY)
-
-    assert count == 1
-    assert not cutoff_route.called
-    assert _searched_ids(command, "episodeIds") == [101]
     rows = await get_log_rows()
+    assert _rows_for(rows, labelled) == []
     info = [r for r in rows if r["action"] == "info"]
     assert [(r["reason"], r["message"]) for r in info] == [
         (
             "tag filter (fetch failed)",
-            f"tag filter unavailable, skipping the cutoff pass this cycle: {_TAG_500}",
+            f"tag filter unavailable, skipping the {labelled} pass this cycle: {_TAG_500}",
         )
     ]
-    assert _rows_for(rows, "cutoff") == []
 
 
 @pytest.mark.parametrize("trigger", ["scheduled", "run_now"])
@@ -319,8 +319,8 @@ async def test_tag_fetch_failure_skips_labelled_pass_and_runs_unlabelled_pass(
 async def test_tag_fetch_failure_with_instance_wide_label_skips_every_pass_and_fails(
     seeded_instances: None, trigger: str
 ) -> None:
-    """Fail-closed replaces #644's fail-open: no pass runs unfiltered, and with
-    nothing left to run the cycle fails like any other failed request."""
+    """Fail-closed replaces #644's fail-open: no pass runs unfiltered, and the
+    cycle fails like any other failed request."""
     routes = _serve_empty_radarr()
     routes["tag"].mock(return_value=httpx.Response(500))
     command = respx.post(f"{RADARR_URL}/api/v3/command").mock(
@@ -350,36 +350,66 @@ async def test_tag_fetch_failure_with_instance_wide_label_skips_every_pass_and_f
 
 
 @pytest.mark.parametrize(
-    ("policy", "flagged"),
+    "policy",
     [
-        (TagFilterPolicy(exclude=("skip",)), {2}),
-        (TagFilterPolicy(cutoff_exclude=("skip",)), set()),
+        TagFilterPolicy(exclude=("skip",)),
+        TagFilterPolicy(cutoff_exclude=("skip",)),
+        TagFilterPolicy(missing_exclude=("skip",), cutoff_exclude=("skip",)),
     ],
-    ids=["every-pass-labelled", "one-pass-unlabelled"],
+    ids=["every-pass-labelled", "cutoff-labelled", "only-upgrade-unlabelled"],
 )
 @pytest.mark.asyncio()
 @respx.mock
-async def test_rejected_tag_lookup_marks_instance_failing_only_when_nothing_ran(
-    seeded_instances: None, policy: TagFilterPolicy, flagged: set[int]
+async def test_rejected_tag_lookup_marks_instance_failing(
+    seeded_instances: None, policy: TagFilterPolicy
 ) -> None:
-    """A *arr answering 401 to everything still shows up as failing.
+    """A *arr answering 401 to everything shows as failing on both status surfaces.
 
-    With every enabled pass labelled, a rejected ``/tag`` would otherwise
-    be the cycle's only outcome and the status dot would stay green.
+    The upgrade pass reads a failed library fetch as an empty pool, so an
+    instance whose only unlabelled pass is upgrade relies on the ``/tag``
+    error to end the cycle as an error.
     """
-    routes = _serve_empty_radarr()
-    routes["tag"].mock(return_value=httpx.Response(401))
-    instance = dataclasses.replace(
-        make_instance(instance_id=2, itype=InstanceType.radarr, cutoff_enabled=True),
-        tag_filter=policy,
+    for route in _serve_empty_radarr().values():
+        route.mock(return_value=httpx.Response(401))
+
+    await Supervisor(master_key=MASTER_KEY)._run_search_cycle(
+        _radarr_all_passes(policy), cycle_trigger="scheduled"
     )
 
-    await Supervisor(master_key=MASTER_KEY)._run_search_cycle(instance, cycle_trigger="scheduled")
+    assert await fetch_active_error_instance_ids() == {2}
+    async with get_db() as conn:
+        active = await gather_active_errors(conn, [2])
+    assert active[2]["failures_count"] == 1
+    rows = await get_log_rows()
+    assert rows[0]["reason"] == "tag filter (fetch failed)"
+    assert rows[-1]["action"] == "error"
 
-    assert await fetch_active_error_instance_ids() == flagged
-    actions = [r["action"] for r in await get_log_rows()]
-    assert actions[0] == "info"
-    assert ("error" in actions) is bool(flagged)
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_tag_fetch_failure_on_upgrade_only_instance_fails_after_nothing_ran(
+    seeded_instances: None,
+) -> None:
+    """Run now with every enabled pass skipped writes no "no wanted items" row."""
+    routes = _serve_empty_radarr()
+    routes["tag"].mock(return_value=httpx.Response(500))
+    instance = dataclasses.replace(
+        make_instance(
+            instance_id=2,
+            itype=InstanceType.radarr,
+            missing_enabled=False,
+            upgrade_enabled=True,
+            upgrade_cooldown_days=7,
+            upgrade_hourly_cap=5,
+        ),
+        tag_filter=TagFilterPolicy(upgrade_exclude=("keep-sd",)),
+    )
+
+    with pytest.raises(ClientHTTPError, match=_TAG_500):
+        await run_instance_search(instance, MASTER_KEY, cycle_trigger="run_now")
+
+    assert not routes["upgrade"].called
+    assert [r["reason"] for r in await get_log_rows()] == ["tag filter (fetch failed)"]
 
 
 @pytest.mark.asyncio()
@@ -393,7 +423,7 @@ async def test_tag_non_json_body_skips_labelled_pass(seeded_instances: None) -> 
         return_value=_page([_episode(101, number=1, series_tags=[])])
     )
     cutoff_route = respx.get(f"{SONARR_URL}/api/v3/wanted/cutoff").mock(return_value=_page([]))
-    respx.post(f"{SONARR_URL}/api/v3/command").mock(
+    command = respx.post(f"{SONARR_URL}/api/v3/command").mock(
         return_value=httpx.Response(201, json={"id": 1})
     )
     instance = dataclasses.replace(
@@ -401,9 +431,10 @@ async def test_tag_non_json_body_skips_labelled_pass(seeded_instances: None) -> 
         tag_filter=TagFilterPolicy(cutoff_exclude=("no-upgrade",)),
     )
 
-    count = await run_instance_search(instance, MASTER_KEY)
+    with pytest.raises(ClientValidationError, match="non-JSON body"):
+        await run_instance_search(instance, MASTER_KEY)
 
-    assert count == 1
+    assert _searched_ids(command, "episodeIds") == [101]
     assert not cutoff_route.called
     rows = await get_log_rows()
     assert [r["message"] for r in rows if r["action"] == "info"] == [
@@ -443,7 +474,8 @@ async def test_skipped_pass_keeps_its_page_offset(seeded_instances: None) -> Non
         tag_filter=TagFilterPolicy(cutoff_exclude=("no-upgrade",)),
     )
 
-    await run_instance_search(instance, MASTER_KEY)
+    with pytest.raises(ClientHTTPError, match=_TAG_500):
+        await run_instance_search(instance, MASTER_KEY)
 
     async with get_db() as conn:
         async with conn.execute("SELECT cutoff_page_offset FROM instances WHERE id = 1") as cur:

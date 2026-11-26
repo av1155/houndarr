@@ -188,10 +188,9 @@ If the *arr answers the `/tag` request with an error, each enabled pass
 with labels to apply (from these two fields or its own
 [per-pass exclude](#per-pass-exclude)) is skipped for that cycle, and
 one `tag filter (fetch failed)` info row names the skipped passes.
-Passes without labels run as usual. When no pass is left to run, the
-cycle is also logged as an error, so the instance shows as failing
-until `/tag` answers again. An *arr that can't be reached at all is
-handled like any other connection failure.
+Passes without labels run as usual, and the cycle is then logged as an
+error. An *arr that can't be reached at all is handled like any other
+connection failure.
 
 Item-to-tag mapping by app:
 

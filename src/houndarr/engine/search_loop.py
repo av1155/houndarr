@@ -227,7 +227,7 @@ async def _resolve_tag_filter_ids(
     *,
     cycle_id: str,
     cycle_trigger: CycleTrigger | str,
-) -> dict[SearchKind, _PassTagFilter]:
+) -> tuple[dict[SearchKind, _PassTagFilter], ClientError | httpx.InvalidURL | None]:
     """Resolve each enabled pass's tag labels to numeric tag IDs.
 
     One ``/tag`` GET serves every pass, and none is made when no enabled
@@ -243,29 +243,30 @@ async def _resolve_tag_filter_ids(
     When ``/tag`` answers with an error or an unusable body, every
     enabled pass with labels gets ``skip=True`` and one info row records
     it: searching those passes unfiltered could grab what the operator
-    excluded.  When that leaves no enabled pass to run, the error is
-    re-raised after the row so the supervisor records a failed cycle and
-    the instance reads as failing rather than quietly searching nothing.
-    A transport error propagates without the row, so the supervisor's
-    unreachable handling and quick retry apply as for any other request.
+    excluded.  The error is returned so the cycle can raise it once the
+    unlabelled passes have run, and the instance reads as failing rather
+    than quietly searching less than configured.  A transport error
+    propagates without the row, so the supervisor's unreachable handling
+    and quick retry apply as for any other request.
 
     Labels that do not resolve against the *arr's current /tag list
     are dropped silently for the cycle but recorded as an info row so
     the operator can see the typo without the loop failing on every
     candidate.
 
+    Returns:
+        The per-pass filters, and the ``/tag`` error when the lookup
+        failed (``None`` otherwise).
+
     Raises:
         ClientTransportError: ``/tag`` could not be reached.
-        ClientError: ``/tag`` failed and every enabled pass carries a label.
-        httpx.InvalidURL: The client could not be built and every enabled
-            pass carries a label.
     """
     policy = instance.tag_filter
     resolved = dict.fromkeys(SearchKind, _NO_TAG_FILTER)
     enabled = _enabled_kinds(instance)
     labelled = [kind for kind in enabled if policy.include or policy.exclude_for(kind)]
     if not labelled:
-        return resolved
+        return resolved, None
 
     try:
         async with adapter.make_client(instance) as client:
@@ -289,9 +290,7 @@ async def _resolve_tag_filter_ids(
             reason="tag filter (fetch failed)",
             message=message,
         )
-        if len(labelled) == len(enabled):
-            raise
-        return {**resolved, **dict.fromkeys(labelled, _SKIP_TAG_FILTER)}
+        return {**resolved, **dict.fromkeys(labelled, _SKIP_TAG_FILTER)}, exc
 
     def _ids(labels: tuple[str, ...]) -> frozenset[int] | None:
         if not labels:
@@ -325,7 +324,7 @@ async def _resolve_tag_filter_ids(
             message=message,
         )
 
-    return resolved
+    return resolved, None
 
 
 # Download-queue check (issue #765)
@@ -1869,7 +1868,7 @@ async def _run_instance_search_impl(
     # One ``/tag`` GET at the top of the cycle serves all three passes.
     # A pass with labels sits the cycle out when that GET fails, and no
     # GET is made when no enabled pass carries a label.
-    tag_filters = await _resolve_tag_filter_ids(
+    tag_filters, tag_fetch_error = await _resolve_tag_filter_ids(
         instance,
         adapter,
         cycle_id=cycle_id_value,
@@ -2023,6 +2022,11 @@ async def _run_instance_search_impl(
                 upgrade_searched,
             )
             searched += upgrade_searched
+
+    # A pass skipped for a failed ``/tag`` lookup must leave the instance
+    # failing even when the passes that did run swallow their own errors.
+    if tag_fetch_error is not None:
+        raise tag_fetch_error
 
     # --- Run-now empty-cycle epilogue ---
     # A manual cycle that wrote no rows at all (empty wanted list, or

@@ -421,9 +421,6 @@
           <p class="mt-1.5 text-xs text-slate-600">Restrict scheduled cycles to one or more <code>HH:MM-HH:MM</code> windows (container local time via <code>TZ</code>). Blank = always allowed. Run Now bypasses the window.</p>
         </div>
         <div class="sm:col-span-2">
-          {# Tag filters resolve operator-typed labels against the *arr's
-             /tag endpoint each cycle, so a future tag rename does not
-             require touching this form.  Issue #637. #}
           {{ forms.form_field(
               id=form_id ~ "-tag-include",
               name="tag_filter_include",

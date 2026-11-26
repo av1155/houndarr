@@ -168,9 +168,8 @@ needs the field updated. Two cycle-level info rows can appear:
   GET with an error for that cycle. Every enabled pass with labels to
   apply is skipped, since searching it unfiltered could search items
   you excluded, and the message names those passes. Passes without
-  labels run normally; the next cycle retries the fetch. When no pass
-  is left to run, the cycle also writes an error row, so the instance
-  shows as failing until `/tag` answers again.
+  labels run normally, the cycle then writes an error row, and the next
+  cycle retries the fetch.
 
 See [Instance Settings > Tag filter](/docs/reference/instance-settings#tag-filter)
 for the field reference and the per-app tag-source mapping.

@@ -224,10 +224,11 @@ class TestResolveTagFilterIds:
         """With no labels anywhere every pass is unfiltered and no client
         is opened (and therefore no /tag GET fires)."""
         adapter = self._stub_adapter()
-        resolved = await _resolve_tag_filter_ids(
+        resolved, fetch_error = await _resolve_tag_filter_ids(
             instance, adapter, cycle_id="c1", cycle_trigger="scheduled"
         )
         assert resolved == dict.fromkeys(SearchKind, _NO_TAG_FILTER)
+        assert fetch_error is None
         adapter.make_client.assert_not_called()
 
     @pytest.mark.asyncio()
@@ -247,7 +248,7 @@ class TestResolveTagFilterIds:
         adapter = self._stub_adapter(
             get_tags_result={"1080p": 1, "4k": 2, "uncut": 7},
         )
-        resolved = await _resolve_tag_filter_ids(
+        resolved, fetch_error = await _resolve_tag_filter_ids(
             scoped, adapter, cycle_id="c1", cycle_trigger="scheduled"
         )
         both = _PassTagFilter(frozenset({1}), frozenset({7}))
@@ -256,6 +257,7 @@ class TestResolveTagFilterIds:
             SearchKind.cutoff: both,
             SearchKind.upgrade: _NO_TAG_FILTER,
         }
+        assert fetch_error is None
 
     @pytest.mark.asyncio()
     async def test_unknown_labels_become_empty_set(
@@ -269,7 +271,7 @@ class TestResolveTagFilterIds:
         """
         scoped = _with_policy(instance, TagFilterPolicy(include=("nope",), exclude=()))
         adapter = self._stub_adapter(get_tags_result={"1080p": 1})
-        resolved = await _resolve_tag_filter_ids(
+        resolved, _ = await _resolve_tag_filter_ids(
             scoped, adapter, cycle_id="c1", cycle_trigger="scheduled"
         )
         assert resolved[SearchKind.missing] == _PassTagFilter(frozenset(), None)
@@ -309,7 +311,7 @@ class TestResolveTagFilterIds:
             TagFilterPolicy(cutoff_exclude=("no-upgrade",), upgrade_exclude=("keep-sd",)),
         )
         adapter = self._stub_adapter(raises=exc)
-        resolved = await _resolve_tag_filter_ids(
+        resolved, fetch_error = await _resolve_tag_filter_ids(
             scoped, adapter, cycle_id="c1", cycle_trigger="run_now"
         )
 
@@ -318,6 +320,7 @@ class TestResolveTagFilterIds:
             SearchKind.cutoff: _SKIP_TAG_FILTER,
             SearchKind.upgrade: _SKIP_TAG_FILTER,
         }
+        assert fetch_error is exc
         rows = await get_log_rows()
         assert len(rows) == 1
         assert rows[0]["action"] == "info"
@@ -337,22 +340,27 @@ class TestResolveTagFilterIds:
         ids=["http", "invalid-url"],
     )
     @pytest.mark.asyncio()
-    async def test_fetch_failure_reraises_when_no_enabled_pass_can_run(
+    async def test_fetch_failure_returns_the_error_without_raising(
         self, exc: Exception, seeded_instances: None
     ) -> None:
-        """The cycle fails like any other failed request, so the instance reads as failing.
+        """The cycle raises it after the unlabelled passes; here every enabled pass skips.
 
-        Returning normally would leave an instance whose *arr rejects every
-        request (a rotated API key, a proxy login page) looking healthy while
-        it searches nothing.  The disabled upgrade pass does not count.
+        The disabled upgrade pass is neither skipped nor named.
         """
         scoped = _with_policy(
             make_instance(cutoff_enabled=True), TagFilterPolicy(include=("1080p",))
         )
         adapter = self._stub_adapter(raises=exc)
-        with pytest.raises(type(exc)):
-            await _resolve_tag_filter_ids(scoped, adapter, cycle_id="c1", cycle_trigger="scheduled")
+        resolved, fetch_error = await _resolve_tag_filter_ids(
+            scoped, adapter, cycle_id="c1", cycle_trigger="scheduled"
+        )
 
+        assert resolved == {
+            SearchKind.missing: _SKIP_TAG_FILTER,
+            SearchKind.cutoff: _SKIP_TAG_FILTER,
+            SearchKind.upgrade: _NO_TAG_FILTER,
+        }
+        assert fetch_error is exc
         rows = await get_log_rows()
         assert [(r["action"], r["reason"], r["message"]) for r in rows] == [
             (
@@ -399,7 +407,7 @@ class TestResolveTagFilterIds:
             TagFilterPolicy(cutoff_exclude=("no-upgrade",), upgrade_exclude=("no-upgrade",)),
         )
         adapter = self._stub_adapter()
-        resolved = await _resolve_tag_filter_ids(
+        resolved, _ = await _resolve_tag_filter_ids(
             scoped, adapter, cycle_id="c1", cycle_trigger="scheduled"
         )
 
@@ -413,7 +421,7 @@ class TestResolveTagFilterIds:
             make_instance(cutoff_enabled=True), TagFilterPolicy(cutoff_exclude=("no-upgrade",))
         )
         adapter = self._stub_adapter(get_tags_result={"no-upgrade": 5})
-        resolved = await _resolve_tag_filter_ids(
+        resolved, _ = await _resolve_tag_filter_ids(
             scoped, adapter, cycle_id="c1", cycle_trigger="scheduled"
         )
 
@@ -435,7 +443,7 @@ class TestResolveTagFilterIds:
         adapter = self._stub_adapter(
             get_tags_result={"all-out": 3, "no-backfill": 4, "no-upgrade": 5, "keep-sd": 6}
         )
-        resolved = await _resolve_tag_filter_ids(
+        resolved, _ = await _resolve_tag_filter_ids(
             scoped, adapter, cycle_id="c1", cycle_trigger="scheduled"
         )
 
@@ -457,7 +465,7 @@ class TestResolveTagFilterIds:
             TagFilterPolicy(exclude=("skip",), cutoff_exclude=("no-upgarde",)),
         )
         adapter = self._stub_adapter(get_tags_result={"skip": 3})
-        resolved = await _resolve_tag_filter_ids(
+        resolved, _ = await _resolve_tag_filter_ids(
             scoped, adapter, cycle_id="c1", cycle_trigger="scheduled"
         )
         assert resolved[SearchKind.cutoff].exclude_ids == frozenset({3})
@@ -524,7 +532,7 @@ class TestResolveTagFilterIds:
             instance, TagFilterPolicy(exclude=("uncut",), upgrade_exclude=("typo",))
         )
         adapter = self._stub_adapter(get_tags_result={"uncut": 7})
-        resolved = await _resolve_tag_filter_ids(
+        resolved, _ = await _resolve_tag_filter_ids(
             scoped, adapter, cycle_id="c1", cycle_trigger="scheduled"
         )
 

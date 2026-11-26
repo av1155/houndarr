@@ -61,6 +61,7 @@ pins the job conditions.
 | `test-deploy.yml` | PRs touching `website/**` or the workflow itself | Tests the Docusaurus build without deploying; its `Trivy website scan` job fails on fixable CRITICAL / HIGH findings in the docs site's dependencies |
 | `link-check.yml` | PRs touching `**/*.md`, `**/*.mdx`, `lychee.toml` + weekly (Monday 08:00 UTC) + manual | Runs `lychee` against every Markdown file to catch broken external links; rules live in `lychee.toml` |
 | `cleanup-actions-cache.yml` | Weekly (Monday 05:00 UTC) + manual | Prunes stale GitHub Actions caches |
+| `docker.yml` (scheduled) | Weekly on main (Sunday 06:00 UTC) + manual | Builds the amd64 image, uploads its Trivy scan as `trivy-image` code scanning results, and builds arm64 as a canary; pushes nothing. A manual run on a tag ref skips the build and scan and gets its own concurrency group, so it can neither publish nor cancel a release run |
 
 ## Branch protection on `main`
 

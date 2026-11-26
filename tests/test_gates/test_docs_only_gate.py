@@ -372,6 +372,18 @@ def test_build_reports_on_docs_only_prs_and_skips_its_steps() -> None:
         ), f"step {step.splitlines()[0]!r} runs on docs-only PRs"
 
 
+def test_manual_runs_never_take_the_release_path() -> None:
+    text = (_WORKFLOWS / "docker.yml").read_text()
+    build = _jobs(text)["build"]
+    assert (
+        "(github.event_name != 'workflow_dispatch' || startsWith(github.ref, 'refs/heads/'))"
+        in (_key(build, "if"))
+    )
+    group = re.search(r"^concurrency:\n(?:  #.*\n)*  group: (.*)$", text, re.MULTILINE)
+    assert group
+    assert "github.event_name" in group.group(1)
+
+
 def test_scan_waits_for_a_successful_build() -> None:
     scan = _workflow_jobs("docker.yml")["scan"]
     assert _key(scan, "needs") == "[changes, build]"

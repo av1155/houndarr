@@ -14,7 +14,7 @@ Coverage promises by app type:
   ``_UPGRADE_MAX_SERIES_PER_CYCLE`` constant). ``upgrade_series_offset``
   advances by 5 every cycle, so all monitored series are sampled within
   ``ceil(monitored_series / 5)`` cycles.
-- Lidarr / Readarr: paginated cutoff exclusion (max 10 pages * 250 records)
+- Lidarr / Readarr: paginated cutoff exclusion (max 100 pages * 250 records)
   followed by a full library fetch. The exclusion set is capped, so very
   large cutoff backlogs may not fully filter the upgrade pool.
 

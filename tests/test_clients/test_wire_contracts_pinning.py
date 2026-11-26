@@ -4,11 +4,10 @@ Sonarr, Radarr, Lidarr, Readarr, and Whisparr v2 all route through
 the shared ``_fetch_wanted_page`` template method on ``ArrClient``;
 Whisparr v3 stays a documented outlier (no ``/wanted`` endpoint).
 
-Every client has a ``get_missing`` case pinning its full query string,
-including the sort key.  Coverage of ``get_cutoff_unmet`` and
-``get_wanted_total`` is per-client rather than uniform; the sort key
-itself is pinned for all of them in
-``tests/test_engine/test_adapter_registry_gate.py``.
+Every client has a ``get_missing`` and a ``get_cutoff_unmet`` case
+pinning the sort key and direction, because a cutoff page sent without
+them comes back in the app's own order (newest first) or, on Sonarr
+3.0.10.1567, as a 500.  Coverage of ``get_wanted_total`` is per-client.
 """
 
 from __future__ import annotations
@@ -62,7 +61,8 @@ class TestSonarrWireContract:
         assert params["pageSize"] == "10"
         assert params["includeSeries"] == "true"
         assert params["monitored"] == "true"
-        assert "sortKey" not in params
+        assert params["sortKey"] == "airDateUtc"
+        assert params["sortDirection"] == "ascending"
 
     @pytest.mark.asyncio()
     @respx.mock
@@ -109,9 +109,8 @@ class TestRadarrWireContract:
             await client.get_cutoff_unmet(page=1, page_size=10)
         params = route.calls[0].request.url.params
         assert params["monitored"] == "true"
-        # Radarr is the only client that sorts on the cutoff pass, so this
-        # endpoint carries the same 500 risk the missing one does.
         assert params["sortKey"] == "movieMetadata.inCinemas"
+        assert params["sortDirection"] == "ascending"
 
     @pytest.mark.asyncio()
     @respx.mock
@@ -153,7 +152,11 @@ class TestLidarrWireContract:
         )
         async with LidarrClient(url="http://lidarr:8686", api_key="k") as client:
             await client.get_cutoff_unmet(page=1, page_size=10)
-        assert route.called
+        params = route.calls[0].request.url.params
+        assert params["includeArtist"] == "true"
+        assert params["monitored"] == "true"
+        assert params["sortKey"] == "releaseDate"
+        assert params["sortDirection"] == "ascending"
 
 
 # Readarr (v1 API)
@@ -182,7 +185,11 @@ class TestReadarrWireContract:
         )
         async with ReadarrClient(url="http://readarr:8787", api_key="k") as client:
             await client.get_cutoff_unmet(page=1, page_size=10)
-        assert route.called
+        params = route.calls[0].request.url.params
+        assert params["includeAuthor"] == "true"
+        assert params["monitored"] == "true"
+        assert params["sortKey"] == "releaseDate"
+        assert params["sortDirection"] == "ascending"
 
 
 # Whisparr v2 (Sonarr-shaped API at v3)
@@ -212,7 +219,11 @@ class TestWhisparrV2WireContract:
         )
         async with WhisparrV2Client(url="http://whisparr:6969", api_key="k") as client:
             await client.get_cutoff_unmet(page=1, page_size=10)
-        assert route.called
+        params = route.calls[0].request.url.params
+        assert params["includeSeries"] == "true"
+        assert params["monitored"] == "true"
+        assert params["sortKey"] == "episodes.airDateUtc"
+        assert params["sortDirection"] == "ascending"
 
 
 # Cross-app path dispatch sanity: every wanted endpoint carries api key + accept

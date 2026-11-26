@@ -171,8 +171,6 @@ class ReadarrClient(ArrClient):
         """Return a page of monitored books that have not met their quality cutoff.
 
         Calls ``GET /api/v1/wanted/cutoff`` with ``includeAuthor=true``.
-        Readarr's cutoff endpoint historically omits the sort params, so
-        the call passes ``include_sort=False`` to suppress them.
 
         Args:
             page: 1-based page number.
@@ -181,12 +179,7 @@ class ReadarrClient(ArrClient):
         Returns:
             List of :class:`MissingBook` dataclasses.
         """
-        envelope = await self._fetch_wanted_page(
-            "cutoff",
-            page=page,
-            page_size=page_size,
-            include_sort=False,
-        )
+        envelope = await self._fetch_wanted_page("cutoff", page=page, page_size=page_size)
         books = [_parse_book(w) for w in envelope.records]
         return await self._hydrate_author_names(books)
 

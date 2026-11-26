@@ -14,7 +14,11 @@ from typing import Any
 
 from fastapi import APIRouter
 
-from tests.mock_arr._common import attach_common_routes, partition_leaf_ids
+from tests.mock_arr._common import (
+    attach_common_routes,
+    partition_leaf_ids,
+    shuffle_date_fields,
+)
 from tests.mock_arr.store import AppData
 
 
@@ -24,6 +28,7 @@ def make_whisparr_v3_data(
     movie_count: int = 500,
     missing_ratio: float = 0.5,
     cutoff_ratio: float = 0.2,
+    shuffle_dates: bool = False,
 ) -> AppData:
     rng = random.Random(seed)
     leaves: list[dict[str, Any]] = []
@@ -54,6 +59,8 @@ def make_whisparr_v3_data(
 
     rng.shuffle(leaves)
     leaves.sort(key=lambda x: x["id"])
+    if shuffle_dates:
+        shuffle_date_fields(leaves, ("releaseDate",), seed=seed)
 
     leaf_ids = [leaf["id"] for leaf in leaves]
     missing_ids, cutoff_ids, upgrade_ids = partition_leaf_ids(
@@ -69,7 +76,6 @@ def make_whisparr_v3_data(
         api_prefix="/whisparr_v3/api/v3",
         api_version="v3",
         sort_key_default="movieMetadata.sortTitle",
-        sort_direction_default="ascending",
         parents=[],
         leaves=leaves,
         missing_ids=missing_ids,

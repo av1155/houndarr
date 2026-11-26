@@ -75,6 +75,38 @@ async def test_empty_sets_skip_delete(seeded_instance: None) -> None:
 
 
 @pytest.mark.asyncio()
+async def test_a_pass_not_read_in_full_keeps_its_rows(seeded_instance: None) -> None:
+    """A ``None`` pass keeps every row; the other passes still reconcile."""
+    await _seed_cooldown(1, 100, "episode", "missing")
+    await _seed_cooldown(1, 200, "episode", "cutoff")
+    await _seed_cooldown(1, 300, "episode", "cutoff")
+    sets = ReconcileSets(missing=None, cutoff=frozenset({("episode", 200)}), upgrade=frozenset())
+    assert sets.incomplete() == ("missing",)
+    removed = await reconcile_cooldowns(1, sets)
+    assert removed == 1
+    async with get_db() as conn:
+        async with conn.execute("SELECT item_id FROM cooldowns ORDER BY item_id") as cur:
+            assert [row["item_id"] for row in await cur.fetchall()] == [100, 200]
+
+
+@pytest.mark.asyncio()
+async def test_passes_read_in_full_still_reconcile_beside_a_missing_one(
+    seeded_instance: None,
+) -> None:
+    """An empty pass read in full is authoritative even when another pass is ``None``."""
+    await _seed_cooldown(1, 100, "episode", "missing")
+    await _seed_cooldown(1, 200, "episode", "cutoff")
+    sets = ReconcileSets(missing=None, cutoff=frozenset(), upgrade=frozenset())
+    assert not sets.is_empty()
+    assert ReconcileSets(missing=None, cutoff=None, upgrade=None).is_empty() is False
+    assert ReconcileSets.empty().is_empty()
+    assert await reconcile_cooldowns(1, sets) == 1
+    async with get_db() as conn:
+        async with conn.execute("SELECT item_id FROM cooldowns") as cur:
+            assert [row["item_id"] for row in await cur.fetchall()] == [100]
+
+
+@pytest.mark.asyncio()
 async def test_keeps_matching_rows(seeded_instance: None) -> None:
     """Rows whose (item_type, item_id) is in the matching set stay."""
     await _seed_cooldown(1, 100, "episode", "missing")

@@ -15,9 +15,9 @@ from fastapi import APIRouter, Query
 
 from tests.mock_arr._common import (
     attach_common_routes,
-    paginate,
     partition_leaf_ids,
-    resolve_sort_key,
+    shuffle_date_fields,
+    wanted_page,
 )
 from tests.mock_arr.store import AppData
 
@@ -28,6 +28,7 @@ def make_radarr_data(
     movie_count: int = 500,
     missing_ratio: float = 0.5,
     cutoff_ratio: float = 0.2,
+    shuffle_dates: bool = False,
 ) -> AppData:
     """Build the seeded Radarr-shaped record set."""
     rng = random.Random(seed)
@@ -60,6 +61,10 @@ def make_radarr_data(
 
     rng.shuffle(leaves)
     leaves.sort(key=lambda x: x["id"])
+    if shuffle_dates:
+        shuffle_date_fields(
+            leaves, ("inCinemas", "physicalRelease", "digitalRelease", "releaseDate"), seed=seed
+        )
 
     leaf_ids = [leaf["id"] for leaf in leaves]
     missing_ids, cutoff_ids, upgrade_ids = partition_leaf_ids(
@@ -75,7 +80,6 @@ def make_radarr_data(
         api_prefix="/radarr/api/v3",
         api_version="v3",
         sort_key_default="movieMetadata.sortTitle",
-        sort_direction_default="ascending",
         sort_keys=frozenset(
             {
                 "movieMetadata.digitalRelease",
@@ -86,6 +90,13 @@ def make_radarr_data(
                 "movies.lastSearchTime",
             }
         ),
+        sort_fields={
+            "moviemetadata.digitalrelease": "digitalRelease",
+            "moviemetadata.incinemas": "inCinemas",
+            "moviemetadata.physicalrelease": "physicalRelease",
+            "moviemetadata.sorttitle": "sortTitle",
+            "moviemetadata.year": "year",
+        },
         sort_key_table="Movies",
         parents=[],
         leaves=leaves,
@@ -119,17 +130,16 @@ def make_radarr_router(data: AppData) -> APIRouter:
     async def wanted_missing(
         page: int = Query(1, ge=1),
         page_size: int = Query(10, ge=1, le=2000, alias="pageSize"),
-        sort_key: str = Query("movieMetadata.sortTitle", alias="sortKey"),
-        sort_direction: str = Query("ascending", alias="sortDirection"),
+        sort_key: str | None = Query(None, alias="sortKey"),
+        sort_direction: str | None = Query(None, alias="sortDirection"),
         monitored: bool = Query(True),
     ) -> dict[str, Any]:
-        data.page_log.entries.append(("missing", page, page_size))
-        records = [leaf for leaf in data.leaves if leaf["id"] in data.missing_ids]
-        return paginate(
-            records,
+        return wanted_page(
+            data,
+            "missing",
             page=page,
             page_size=page_size,
-            sort_key=resolve_sort_key(sort_key, data),
+            sort_key=sort_key,
             sort_direction=sort_direction,
         )
 
@@ -137,17 +147,16 @@ def make_radarr_router(data: AppData) -> APIRouter:
     async def wanted_cutoff(
         page: int = Query(1, ge=1),
         page_size: int = Query(10, ge=1, le=2000, alias="pageSize"),
-        sort_key: str = Query("movieMetadata.sortTitle", alias="sortKey"),
-        sort_direction: str = Query("ascending", alias="sortDirection"),
+        sort_key: str | None = Query(None, alias="sortKey"),
+        sort_direction: str | None = Query(None, alias="sortDirection"),
         monitored: bool = Query(True),
     ) -> dict[str, Any]:
-        data.page_log.entries.append(("cutoff", page, page_size))
-        records = [leaf for leaf in data.leaves if leaf["id"] in data.cutoff_ids]
-        return paginate(
-            records,
+        return wanted_page(
+            data,
+            "cutoff",
             page=page,
             page_size=page_size,
-            sort_key=resolve_sort_key(sort_key, data),
+            sort_key=sort_key,
             sort_direction=sort_direction,
         )
 

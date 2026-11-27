@@ -87,15 +87,21 @@ async def window_skip(*_: Any, **kwargs: Any) -> int:
 
 
 async def deferred(*_: Any, **kwargs: Any) -> int:
-    """The upgrade list answered 503 and nothing else was read."""
+    """The upgrade list read timed out and nothing else answered."""
     _mark(kwargs, upgrade_deferred=True)
     return 0
 
 
 async def deferred_after_contact(*_: Any, **kwargs: Any) -> int:
-    """The missing list was read, then the upgrade list answered 503."""
+    """The upgrade list answered 503, which proves the *arr is up."""
     _mark(kwargs, reached=True, upgrade_deferred=True)
     return 0
+
+
+async def lost_mid_cycle(*_: Any, **kwargs: Any) -> int:
+    """The missing pass searched, then the next request could not connect."""
+    await searched(**kwargs)
+    raise httpx.ConnectError("refused")
 
 
 async def pool_rejected(*_: Any, **kwargs: Any) -> int:
@@ -275,6 +281,26 @@ async def test_a_deferred_cycle_that_reached_the_arr_ends_an_outage(
     await _loop(Supervisor(master_key=MASTER_KEY), [unreachable, deferred_after_contact])
 
     assert await _messages() == [("error", OUTAGE), ("info", REACHABLE)]
+
+
+@pytest.mark.asyncio()
+async def test_a_deferred_cycle_nothing_answered_keeps_the_outage_and_its_retry(
+    seeded_instances: None,
+) -> None:
+    sleeps = await _loop(Supervisor(master_key=MASTER_KEY), [unreachable, deferred])
+
+    assert await _messages() == [("error", OUTAGE)]
+    assert sleeps == [supervisor_module._CONNECT_RETRY_SECS] * 2
+
+
+@pytest.mark.asyncio()
+async def test_an_outage_mid_cycle_is_logged_after_the_cycles_rows(
+    seeded_instances: None,
+) -> None:
+    await _loop(Supervisor(master_key=MASTER_KEY), [unreachable, lost_mid_cycle])
+
+    assert await _messages() == [("error", OUTAGE), ("searched", None), ("error", OUTAGE)]
+    assert await _failing_on(settings=True, dashboard=True)
 
 
 @pytest.mark.asyncio()

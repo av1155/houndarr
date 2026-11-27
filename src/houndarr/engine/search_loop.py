@@ -91,11 +91,11 @@ _RETRYABLE_CLIENT_STATUSES = frozenset({408, 429})
 class CycleReport:
     """What one cycle learned about its *arr, filled in as the cycle runs.
 
-    ``reached`` is set once the *arr answered a request with the data it
-    asked for (the queue status, a wanted page, the upgrade list), which
-    proves it is reachable and accepts the API key.  ``upgrade_deferred``
-    is set when the upgrade list could not be read for a reason that is
-    expected to pass.
+    ``reached`` is set once the *arr answered a request: the queue status,
+    a wanted page or the upgrade list, or a status code or payload on an
+    upgrade list it could not serve.  ``upgrade_deferred`` is set when the
+    upgrade list could not be read for a reason that is expected to pass;
+    together with ``reached`` it proves the *arr is up, not that it works.
     """
 
     reached: bool = False
@@ -228,6 +228,19 @@ class _PassTagFilter:
 
 _NO_TAG_FILTER = _PassTagFilter()
 _SKIP_TAG_FILTER = _PassTagFilter(skip=True)
+
+
+async def _newest_row_is_error(instance_id: int) -> bool:
+    """Return whether *instance_id*'s newest log row is an error.
+
+    A cycle that proves nothing about the *arr (a window skip, a manual run
+    that read nothing) must not write an info row over an open error: the
+    status surfaces would read the instance as healthy until a later cycle.
+    """
+    from houndarr.repositories.search_log import fetch_newest_log_row
+
+    newest = await fetch_newest_log_row(instance_id)
+    return newest is not None and newest.action == SearchAction.error.value
 
 
 def _enabled_kinds(instance: Instance) -> tuple[SearchKind, ...]:
@@ -1513,6 +1526,8 @@ async def _run_upgrade_pass(
             logger.warning("[%s] upgrade pool fetch deferred: %s", instance.core.name, exc)
             if report is not None:
                 report.upgrade_deferred = True
+                if isinstance(exc.__cause__, (httpx.HTTPStatusError, ValidationError)):
+                    report.reached = True
             return 0
         logger.warning("[%s] upgrade pool fetch failed: %s", instance.core.name, exc)
         await _write_log(
@@ -1857,16 +1872,17 @@ async def _run_instance_search_impl(
             if not is_within_window(now_local, ranges):
                 reason, message = describe_outside_window(now_local, ranges)
                 logger.info("[%s] skipping cycle: %s (%s)", instance.core.name, reason, message)
-                await _write_log(
-                    instance.core.id,
-                    None,
-                    None,
-                    SearchAction.info.value,
-                    cycle_id=cycle_id_value,
-                    cycle_trigger=cycle_trigger,
-                    reason=reason,
-                    message=message,
-                )
+                if not await _newest_row_is_error(instance.core.id):
+                    await _write_log(
+                        instance.core.id,
+                        None,
+                        None,
+                        SearchAction.info.value,
+                        cycle_id=cycle_id_value,
+                        cycle_trigger=cycle_trigger,
+                        reason=reason,
+                        message=message,
+                    )
                 return 0
 
     # --- Queue backpressure gate ---
@@ -2092,7 +2108,9 @@ async def _run_instance_search_impl(
     if cycle_trigger == "run_now" and searched == 0:
         from houndarr.repositories.search_log import has_rows_for_cycle
 
-        if not await has_rows_for_cycle(cycle_id_value):
+        if not await has_rows_for_cycle(cycle_id_value) and not await _newest_row_is_error(
+            instance.core.id
+        ):
             if report.upgrade_deferred:
                 message = "Run now finished: the upgrade list could not be read, try again shortly"
             elif _enabled_kinds(instance):

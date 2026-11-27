@@ -125,8 +125,8 @@ class Supervisor:
         # A failed refresh leaves the dashboard counters at their last-known
         # values (0 forever on a never-synced instance), so the first failure
         # in a streak must be visible at the default log level.  Repeats stay
-        # at debug, mirroring the reconnect state machine's one-row-per-streak
-        # rule; membership clears on the next successful refresh.
+        # at debug, mirroring the one ``Could not reach`` row per outage;
+        # membership clears on the next successful refresh.
         self._snapshot_fail_warned: set[int] = set()
         # Instances in a streak of refreshes where some pass's list could
         # not be read in full, so its cooldowns were kept.  Same
@@ -422,7 +422,8 @@ class Supervisor:
                     redact_url_credentials(instance.core.url),
                     _CONNECT_RETRY_SECS,
                 )
-                if not _is_unreachable(before):
+                # Re-read: the cycle may have written rows before it lost the *arr.
+                if not _is_unreachable(await self._newest_row(instance)):
                     await self._write_health_row(
                         instance,
                         SearchAction.error,
@@ -479,7 +480,8 @@ class Supervisor:
         instance failing.  Only a cycle that reached the *arr may close an
         earlier error, and only a clean one may close a failure other than
         an outage: a deferred upgrade list proves the *arr answers, not
-        that the failure is fixed.
+        that the failure is fixed.  A deferred cycle that nothing answered
+        during an outage stays ``unreachable``.
         """
         outcome = CycleOutcome.deferred if report.upgrade_deferred else CycleOutcome.ok
         try:
@@ -492,6 +494,9 @@ class Supervisor:
         error = SearchAction.error.value
         if after is not None and after.cycle_id == cycle_id and after.action == error:
             return CycleOutcome.failed
+        if report.upgrade_deferred and not report.reached and _is_unreachable(before):
+            # Nothing answered (a read timeout), so the outage goes on: keep its quick retry.
+            return CycleOutcome.unreachable
         if not report.reached or before is None or before.action != error:
             return outcome
         if _is_unreachable(before):

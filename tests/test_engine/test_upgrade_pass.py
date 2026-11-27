@@ -448,29 +448,33 @@ async def test_upgrade_empty_pool_returns_zero(
     new_callable=AsyncMock,
 )
 @pytest.mark.parametrize(
-    "failure",
+    ("failure", "answered"),
     [
-        httpx.ReadTimeout("slow"),
-        httpx.RemoteProtocolError("reset"),
-        httpx.Response(500),
-        httpx.Response(502),
-        httpx.Response(503),
-        httpx.Response(504),
-        httpx.Response(408),
-        httpx.Response(429),
+        (httpx.ReadTimeout("slow"), False),
+        (httpx.RemoteProtocolError("reset"), False),
+        (httpx.Response(500), True),
+        (httpx.Response(502), True),
+        (httpx.Response(503), True),
+        (httpx.Response(504), True),
+        (httpx.Response(408), True),
+        (httpx.Response(429), True),
+        (httpx.Response(200, json={"not": "a list"}), True),
     ],
-    ids=["read-timeout", "protocol", "500", "502", "503", "504", "408", "429"],
+    ids=["read-timeout", "protocol", "500", "502", "503", "504", "408", "429", "bad-payload"],
 )
 async def test_upgrade_pool_fetch_transient_error_defers_without_rows(
     mock_update: AsyncMock,
     seeded_instances: None,
     failure: httpx.Response | Exception,
+    answered: bool,
 ) -> None:
     """A transient library fetch failure defers the pass and writes no row.
 
     No ``error`` row, so a flaky *arr does not spam the log feed (#620).
     No ``nothing to upgrade right now`` row either: the list was never
-    read, and that row would read as healthy over an earlier error.
+    read, and that row would read as healthy over an earlier error.  A
+    status code or a payload still proves the *arr answered, which ends
+    an outage.
     """
     _mock_radarr_empty_missing()
     route = respx.get(f"{RADARR_URL}/api/v3/movie")
@@ -484,7 +488,7 @@ async def test_upgrade_pool_fetch_transient_error_defers_without_rows(
 
     assert count == 0
     assert report.upgrade_deferred is True
-    assert report.reached is False
+    assert report.reached is answered
     assert [r for r in await get_log_rows() if r["search_kind"] == "upgrade"] == []
 
 
@@ -570,6 +574,34 @@ async def test_run_now_deferred_upgrade_list_says_so(
     assert [(r["action"], r["message"]) for r in rows] == [
         ("info", "Run now finished: the upgrade list could not be read, try again shortly"),
     ]
+
+
+@pytest.mark.asyncio()
+@respx.mock
+@patch(
+    "houndarr.engine.search_loop.update_instance",
+    new_callable=AsyncMock,
+)
+async def test_run_now_that_read_nothing_leaves_an_open_error_newest(
+    mock_update: AsyncMock,
+    seeded_instances: None,
+) -> None:
+    """A manual run that proves nothing must not write its closing row over an error."""
+    from houndarr.repositories.search_log import insert_log_row
+
+    inst = _radarr_instance()
+    await insert_log_row(
+        instance_id=inst.core.id,
+        item_id=None,
+        item_type=None,
+        action="error",
+        message="upgrade pool fetch failed: HTTP 401 from /api/v3/movie",
+    )
+    respx.get(f"{RADARR_URL}/api/v3/movie").mock(return_value=httpx.Response(503))
+
+    await run_instance_search(inst, MASTER_KEY, cycle_trigger="run_now")
+
+    assert [r["action"] for r in await get_log_rows()] == ["error"]
 
 
 @pytest.mark.asyncio()

@@ -93,6 +93,9 @@ SUBSTRUCTS: list[type] = [
     InstanceTimestamps,
 ]
 
+# TagFilterPolicy is not part of the historical flat surface that SUBSTRUCTS partitions.
+ALL_SUBSTRUCTS: list[type] = [*SUBSTRUCTS, TagFilterPolicy]
+
 
 # Map every historical flat field to the sub-struct that owns it.
 # Still the single source of truth for the disjoint partitioning
@@ -175,7 +178,7 @@ def _field_defaults(cls: type) -> dict[str, Any]:
 # Structural invariants shared by every sub-struct.
 
 
-@pytest.mark.parametrize("cls", SUBSTRUCTS)
+@pytest.mark.parametrize("cls", ALL_SUBSTRUCTS)
 def test_substruct_is_frozen_slotted_dataclass(cls: type) -> None:
     """Every sub-struct is a frozen, slotted dataclass."""
     assert dataclasses.is_dataclass(cls), f"{cls.__name__} is not a dataclass"
@@ -184,7 +187,7 @@ def test_substruct_is_frozen_slotted_dataclass(cls: type) -> None:
     assert "__slots__" in cls.__dict__, f"{cls.__name__} does not declare __slots__"
 
 
-@pytest.mark.parametrize("cls", SUBSTRUCTS)
+@pytest.mark.parametrize("cls", ALL_SUBSTRUCTS)
 def test_substruct_rejects_attribute_assignment(cls: type) -> None:
     """Frozen sub-structs raise ``FrozenInstanceError`` on setattr."""
     instance = _construct_with_required(cls)
@@ -193,7 +196,7 @@ def test_substruct_rejects_attribute_assignment(cls: type) -> None:
         setattr(instance, first_field, getattr(instance, first_field))
 
 
-@pytest.mark.parametrize("cls", SUBSTRUCTS)
+@pytest.mark.parametrize("cls", ALL_SUBSTRUCTS)
 def test_substruct_rejects_unknown_attribute(cls: type) -> None:
     """Slotted sub-structs reject attribute names outside ``__slots__``."""
     instance = _construct_with_required(cls)

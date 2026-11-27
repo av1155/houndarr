@@ -40,7 +40,7 @@ from houndarr.services.instances import (
 
 _MASTER_KEY = Fernet.generate_key()
 
-# Identity, timestamps, snapshot counters and tag filters survive a policy reset.
+# Columns a policy reset leaves out: identity, timestamps, snapshot counters and tag filters.
 _RESET_KEEPS: frozenset[str] = frozenset(
     {
         "id",
@@ -241,7 +241,7 @@ async def test_reset_all_instance_policy_preserves_identity(
     assert inst.core.enabled is True
     assert inst.snapshot.monitored_total == 120
     assert inst.snapshot.unreleased_count == 8
-    assert inst.snapshot.snapshot_refreshed_at is not None
+    assert inst.snapshot.snapshot_refreshed_at != ""
     assert inst.snapshot == before.snapshot
     assert inst.timestamps.created_at == before.timestamps.created_at
 

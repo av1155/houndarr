@@ -119,8 +119,8 @@ Reverts every instance's policy columns to defaults:
 - Pagination cursors (missing, cutoff) and upgrade-pool offsets
 
 Identity stays put: each instance keeps its name, type, URL, encrypted
-API key, enabled flag, timestamps, and the monitored/unreleased
-snapshot counts that feed the Dashboard.
+API key, enabled flag, and the monitored/unreleased snapshot counts
+that feed the Dashboard.
 
 Tag filters keep their values too, per-pass excludes included, so a
 reset never starts searching items you filtered out.

@@ -130,8 +130,8 @@ async def reset_all_instance_policy(
 ) -> int:
     """Revert every instance's policy columns to :mod:`houndarr.config` defaults.
 
-    Identity (name, type, url, api_key, enabled), timestamps, and snapshot
-    counters are preserved.  Tag filters are preserved too: clearing a
+    Identity (name, type, url, api_key, enabled), ``created_at``, and
+    snapshot counters are preserved.  Tag filters are preserved too: clearing a
     protective exclude would widen what the next cycle searches.  The
     supervisor is reconciled per row so the running search loop adopts
     the new cadence on its next wake; the search loop re-reads columns

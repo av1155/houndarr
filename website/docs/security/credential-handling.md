@@ -190,6 +190,13 @@ defaults to `false` because Houndarr serves plain HTTP and expects
 HTTPS to be terminated by a reverse proxy. Set it to `true` when
 running behind HTTPS.
 
+Both cookies use `Path=/`, including under `HOUNDARR_URL_BASE`. On a
+hostname shared with other apps (`example.com/houndarr` next to
+`example.com/sonarr`), the browser sends Houndarr's cookies to those
+apps too, and their pages run in the same origin as Houndarr, so a
+cookie path would not separate them anyway. Give Houndarr its own
+hostname when the other apps on it are less trusted.
+
 ## CSRF protection
 
 All state-changing requests (POST, PUT, PATCH, DELETE) require a
@@ -219,6 +226,9 @@ Only these paths are accessible without authentication:
 | `/login` | Login form | Redirects to `/` |
 | `/api/health` | Health check (returns only `{"status": "ok"}`) | Public (unchanged) |
 | `/static/*` | Static assets (CSS, JS, images) | Public (unchanged) |
+
+With `HOUNDARR_URL_BASE` set, the same paths are public under the
+prefix (`/houndarr/login`) and without it.
 
 No unauthenticated route exposes configuration, API keys, instance
 data, or any information beyond a static health status.

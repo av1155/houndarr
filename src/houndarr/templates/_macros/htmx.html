@@ -32,10 +32,10 @@
      with the same selector. -#}
 {%- macro shell_nav_link(route, label, is_active, variant='pill') -%}
 {%- if variant == 'mobile' -%}
-<a href="{{ route }}"
+<a href="{{ base_path }}{{ route }}"
    data-shell-nav="true"
    data-shell-route="{{ route }}"
-   hx-get="{{ route }}"
+   hx-get="{{ base_path }}{{ route }}"
    hx-target="#app-content"
    hx-swap="innerHTML"
    hx-push-url="true"
@@ -43,10 +43,10 @@
   {{ label }}
 </a>
 {%- else -%}
-<a href="{{ route }}"
+<a href="{{ base_path }}{{ route }}"
    data-shell-nav="true"
    data-shell-route="{{ route }}"
-   hx-get="{{ route }}"
+   hx-get="{{ base_path }}{{ route }}"
    hx-target="#app-content"
    hx-swap="innerHTML"
    hx-push-url="true"
@@ -58,8 +58,8 @@
 
 
 {%- macro hx_shell_fetch(href, class_='') -%}
-<a href="{{ href }}"
-   hx-get="{{ href }}"
+<a href="{{ base_path }}{{ href }}"
+   hx-get="{{ base_path }}{{ href }}"
    hx-target="#app-content"
    hx-swap="innerHTML"
    hx-push-url="true"

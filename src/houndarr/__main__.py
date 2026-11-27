@@ -159,6 +159,16 @@ from houndarr import __version__  # noqa: E402
         "instances; large libraries can extend it.  See issue #586."
     ),
 )
+@click.option(
+    "--url-base",
+    default="",
+    show_default=False,
+    envvar="HOUNDARR_URL_BASE",
+    help=(
+        "URL path prefix when a reverse proxy serves Houndarr under a "
+        "sub-path, e.g. '/houndarr'.  Leave empty to serve from the root."
+    ),
+)
 def cli(
     data_dir: str,
     host: str,
@@ -171,6 +181,7 @@ def cli(
     auth_mode: str,
     auth_proxy_header: str,
     log_retention_days: str,
+    url_base: str,
 ) -> None:
     """Houndarr: search for missing media in your *arr stack, politely.
 
@@ -185,7 +196,7 @@ def cli(
     import uvicorn
 
     from houndarr.bootstrap import bootstrap_non_web
-    from houndarr.config import _parse_log_retention_days, _parse_samesite
+    from houndarr.config import _parse_log_retention_days, _parse_samesite, _parse_url_base
     from houndarr.log_redaction import uvicorn_log_config
 
     # Configure the root logger so that application loggers (houndarr.*)
@@ -210,6 +221,7 @@ def cli(
         auth_mode=auth_mode.lower(),
         auth_proxy_header=auth_proxy_header,
         log_retention_days=_parse_log_retention_days(log_retention_days),
+        url_base=_parse_url_base(url_base),
     )
 
     # Validate authentication configuration before starting
@@ -223,6 +235,8 @@ def cli(
         logging.info("Auth mode: proxy (trusted proxies configured)")
     else:
         logging.info("Auth mode: builtin")
+    if settings.url_base:
+        logging.info("URL base: %s", settings.url_base)
 
     # Propagate the remaining resolved CLI values to env vars so that
     # uvicorn's reload child process (which reimports modules fresh,
@@ -237,6 +251,7 @@ def cli(
     os.environ["HOUNDARR_AUTH_MODE"] = auth_mode.lower()
     os.environ["HOUNDARR_AUTH_PROXY_HEADER"] = auth_proxy_header
     os.environ["HOUNDARR_LOG_RETENTION_DAYS"] = log_retention_days
+    os.environ["HOUNDARR_URL_BASE"] = url_base
 
     # In --dev, narrow the WatchFiles reload watcher to the running
     # Python source.  The default watches the whole cwd, which on macOS

@@ -18,6 +18,8 @@ concurrency:
 jobs:
   build:
     name: Build docs site
+    # Forks have no GitHub Pages site to deploy to, so this run would fail there.
+    if: github.repository == 'av1155/houndarr'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:

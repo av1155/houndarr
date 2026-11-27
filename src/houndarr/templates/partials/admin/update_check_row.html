@@ -17,7 +17,7 @@
   id="update-check-status"
   class="mt-1 text-xs text-slate-400 font-sans"
   {% if s.enabled and not s.checked_at and not s.last_error_at %}
-  hx-get="/settings/admin/update-check"
+  hx-get="{{ base_path }}/settings/admin/update-check"
   hx-trigger="load delay:50ms"
   hx-swap="outerHTML"
   {% endif %}
@@ -25,7 +25,7 @@
   <div class="flex flex-wrap items-center gap-2">
     <button
       type="button"
-      hx-post="/settings/admin/update-check/refresh"
+      hx-post="{{ base_path }}/settings/admin/update-check/refresh"
       hx-target="#update-check-status"
       hx-swap="outerHTML"
       hx-disabled-elt="this"

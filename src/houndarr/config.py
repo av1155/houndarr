@@ -288,6 +288,47 @@ def _parse_log_retention_days(raw: str) -> int:
     return parsed
 
 
+# The value lands in HTML, JS, and Location headers, so only plain path segments pass.
+_URL_BASE_RE = re.compile(r"(?:/[A-Za-z0-9._~-]+)+")
+
+# Unprefixed requests (healthcheck, widget) still route, so a base whose first
+# segment is one of the app's own would swallow them.
+_URL_BASE_RESERVED_SEGMENTS = frozenset(
+    {"api", "docs", "login", "logout", "logs", "openapi.json", "settings", "setup", "static"}
+)
+
+
+def _parse_url_base(raw: str) -> str:
+    """Normalise HOUNDARR_URL_BASE to ``/houndarr`` form, or ``""`` for the root.
+
+    Adds a missing leading ``/`` and drops one trailing ``/``; anything
+    else invalid is left for :meth:`AppSettings.validate_auth_config` to
+    reject, so the env-var fallback in :func:`get_settings` never raises.
+    """
+    if not raw:
+        return ""
+    value = raw if raw.startswith("/") else f"/{raw}"
+    return value.removesuffix("/")
+
+
+def _url_base_error(value: str) -> str | None:
+    """Return why *value* cannot serve as the URL base, or ``None`` if it can."""
+    if not value:
+        return None
+    segments = value.split("/")[1:]
+    if not _URL_BASE_RE.fullmatch(value) or any(seg in (".", "..") for seg in segments):
+        return (
+            "HOUNDARR_URL_BASE must be a path such as '/houndarr' whose segments use "
+            f"only letters, digits, '.', '_', '~' and '-', got {value!r}"
+        )
+    if segments[0].lower() in _URL_BASE_RESERVED_SEGMENTS:
+        return (
+            f"HOUNDARR_URL_BASE {value!r} starts with '/{segments[0]}', which Houndarr "
+            "already serves; use another prefix such as '/houndarr'"
+        )
+    return None
+
+
 def _parse_update_check_repo(raw: str) -> str:
     """Validate HOUNDARR_UPDATE_CHECK_REPO; fall back to the default on junk.
 
@@ -337,6 +378,7 @@ def get_settings() -> AppSettings:
         log_retention_days=_parse_log_retention_days(
             os.environ.get("HOUNDARR_LOG_RETENTION_DAYS", "")
         ),
+        url_base=_parse_url_base(os.environ.get("HOUNDARR_URL_BASE", "")),
     )
 
 
@@ -362,6 +404,7 @@ class BootstrapOverrides(TypedDict, total=False):
     auth_proxy_header: str
     update_check_repo: str
     log_retention_days: int
+    url_base: str
 
 
 def bootstrap_settings(**overrides: Unpack[BootstrapOverrides]) -> AppSettings:
@@ -448,6 +491,9 @@ class AppSettings:
             purges; ``7`` to ``365`` overrides the default of ``30``
             (which matches the value shipped through v1.10.x).
             Corresponds to ``HOUNDARR_LOG_RETENTION_DAYS`` env var.
+        url_base: URL prefix when a reverse proxy serves Houndarr under a
+            sub-path (e.g. ``/houndarr``); empty for the root.
+            Corresponds to ``HOUNDARR_URL_BASE`` env var.
     """
 
     data_dir: str = "/data"
@@ -462,6 +508,7 @@ class AppSettings:
     auth_proxy_header: str = ""
     update_check_repo: str = _DEFAULT_UPDATE_CHECK_REPO
     log_retention_days: int = _LOG_RETENTION_DEFAULT_DAYS
+    url_base: str = ""
 
     # Derived paths (computed from data_dir)
     db_path: Path = field(init=False)
@@ -481,12 +528,15 @@ class AppSettings:
         return self._trusted_proxy_cache
 
     def validate_auth_config(self) -> list[str]:
-        """Return fatal configuration errors for authentication settings.
+        """Return fatal configuration errors for authentication and URL settings.
 
         Returns:
             List of error messages.  Empty means the configuration is valid.
         """
         errors: list[str] = []
+        url_base_error = _url_base_error(self.url_base)
+        if url_base_error:
+            errors.append(url_base_error)
         if self.cookie_samesite not in ("lax", "strict"):
             errors.append(
                 f"HOUNDARR_COOKIE_SAMESITE must be 'lax' or 'strict', got '{self.cookie_samesite}'"

@@ -6,7 +6,7 @@
 #}
 {%- import "_macros/forms.html" as forms -%}
 {%- import "_macros/alerts.html" as alerts -%}
-{%- import "_macros/instances.html" as instances -%}
+{%- import "_macros/instances.html" as instances with context -%}
 {% set is_edit = editing is defined and editing %}
 
 {# Shared input class: Station style. Reuses the .station-input helper
@@ -763,7 +763,7 @@
         <button type="button"
                 id="instance-test-connection-btn"
                 data-test-connection-btn="true"
-                hx-post="/settings/instances/test-connection"
+                hx-post="{{ base_path }}/settings/instances/test-connection"
                 hx-include="#{{ form_id }} [name='type'],#{{ form_id }} [name='url'],#{{ form_id }} [name='api_key']{% if is_edit %},#{{ form_id }} [name='instance_id']{% endif %}"
                 hx-target="#instance-connection-status"
                 hx-swap="innerHTML"

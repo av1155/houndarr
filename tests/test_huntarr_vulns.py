@@ -532,13 +532,14 @@ class TestCSRFImplementation:
 
     Huntarr used substring matching for its auth bypass whitelist (e.g.,
     '/api/user/2fa/' in path), which caused route creep: new routes under
-    those prefixes were accidentally made public. Houndarr uses a frozen
-    set of four exact prefixes and constant-time token comparison.
+    those prefixes were accidentally made public. Houndarr matches a frozen
+    set of three exact paths plus the segment-bounded ``/static`` mount, and
+    uses constant-time token comparison.
     """
 
     def test_public_paths_is_exact_expected_set(self) -> None:
-        """_PUBLIC_PATHS must contain exactly the four expected path prefixes."""
-        expected = frozenset(["/setup", "/login", "/api/health", "/static"])
+        """_PUBLIC_PATHS must contain exactly the three expected paths."""
+        expected = frozenset(["/setup", "/login", "/api/health"])
         assert expected == _PUBLIC_PATHS, (
             f"_PUBLIC_PATHS changed: got {_PUBLIC_PATHS!r}, expected {expected!r}"
         )
@@ -561,23 +562,21 @@ class TestCSRFImplementation:
             "/api/health/extra",
         ],
     )
-    def test_near_miss_paths_return_404_over_http(
+    def test_near_miss_paths_go_through_auth(
         self,
         app: TestClient,
         path: str,
     ) -> None:
-        """Near-miss paths that match the startswith whitelist must still return 404.
+        """Near-miss paths must not match the public allowlist.
 
-        The startswith matching means /setupextra matches /setup in the allowlist.
-        That is safe only because no route handler exists for those paths.
-        This test verifies that at the HTTP level they return 404 rather than
-        serving any protected or unprotected content, ensuring whitelist breadth
-        does not grant access to unintended resources.
+        Exact matching means /setupextra is not /setup, so an anonymous
+        request is sent to first-run setup instead of reaching the router.
         """
         resp = app.get(path, follow_redirects=False)
-        assert resp.status_code == 404, (
-            f"GET {path} returned {resp.status_code}; a near-miss public path matched a real route"
+        assert resp.status_code == 302, (
+            f"GET {path} returned {resp.status_code}; a near-miss path skipped the auth check"
         )
+        assert resp.headers["location"] == "/setup"
 
     def test_validate_csrf_uses_compare_digest(self) -> None:
         """validate_csrf must use hmac.compare_digest for constant-time comparison.

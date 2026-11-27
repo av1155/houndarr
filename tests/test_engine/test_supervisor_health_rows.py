@@ -35,6 +35,7 @@ REJECTED = "get_tags: HTTP 401 from /api/v3/tag"
 POOL_REJECTED = "upgrade pool fetch failed: HTTP 401 from /api/v3/series"
 QUEUE_FULL = "Download queue has 10 items, limit is 5"
 STILL_FAILING = f"{REACHABLE}; its last error is not rechecked yet: {POOL_REJECTED}"
+HOURLY_CAP = "hourly limit reached"
 
 Step = Callable[..., Awaitable[int]]
 
@@ -107,6 +108,13 @@ async def deferred(*_: Any, **kwargs: Any) -> int:
 async def deferred_after_contact(*_: Any, **kwargs: Any) -> int:
     """The upgrade list answered 503, which proves the *arr is up."""
     _mark(kwargs, reached=True, upgrade_deferred=True)
+    return 0
+
+
+async def deferred_after_a_pass(*_: Any, **kwargs: Any) -> int:
+    """The missing pass read its list and logged a skip; the upgrade list answered 503."""
+    _mark(kwargs, reached=True, upgrade_deferred=True)
+    await _write("skipped", cycle_id=kwargs["cycle_id"], message=HOURLY_CAP)
     return 0
 
 
@@ -341,6 +349,52 @@ async def test_a_carried_error_is_not_nested_across_outages(seeded_instances: No
         ("error", OUTAGE),
         ("error", STILL_FAILING),
     ]
+
+
+@pytest.mark.asyncio()
+async def test_pass_output_over_an_outage_is_not_covered_by_a_carried_error(
+    seeded_instances: None,
+) -> None:
+    """The cycle's own pass rows are newer than the error the outage covered."""
+    sup = Supervisor(master_key=MASTER_KEY)
+    for step in (pool_rejected, unreachable, deferred_after_a_pass):
+        await _cycle(sup, step)
+
+    assert await _messages() == [
+        ("error", POOL_REJECTED),
+        ("error", OUTAGE),
+        ("skipped", HOURLY_CAP),
+        ("info", REACHABLE),
+    ]
+
+
+@pytest.mark.asyncio()
+@pytest.mark.parametrize(
+    "close",
+    [_close_by_backpressure, _close_by_deferred_list, _snapshot],
+    ids=["backpressure", "deferred-list", "snapshot"],
+)
+async def test_an_outage_over_a_healthy_instance_closes_plainly(
+    seeded_instances: None, close: Callable[[Supervisor], Awaitable[None]]
+) -> None:
+    sup = Supervisor(master_key=MASTER_KEY)
+    await _cycle(sup, searched)
+    await _cycle(sup, unreachable)
+    await close(sup)
+
+    assert await _messages() == [("searched", None), ("error", OUTAGE), ("info", REACHABLE)]
+    assert await _failing_on(settings=False, dashboard=False)
+
+
+@pytest.mark.asyncio()
+async def test_adjacent_outage_rows_close_plainly(seeded_instances: None) -> None:
+    """Two outage rows in a row (left by a failed dedupe read) carry nothing forward."""
+    await _write("error", cycle_id=None, message=OUTAGE)
+    await _write("error", cycle_id=None, message=OUTAGE)
+
+    await _cycle(Supervisor(master_key=MASTER_KEY), backpressure)
+
+    assert (await _messages())[-1] == ("info", REACHABLE)
 
 
 @pytest.mark.asyncio()

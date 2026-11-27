@@ -395,8 +395,8 @@ class Supervisor:
         - Reached the *arr after an error: one closing row after the
           cycle's own rows, which clears the card even on an empty
           backlog where a healthy cycle writes nothing else.  When an
-          outage ends before the error it covered is rechecked, its
-          closing row is an error that carries that error forward.
+          outage ends on a cycle that searched nothing, the closing row
+          is an error that carries forward the error the outage covered.
 
         Records the cycle-end wallclock in ``_last_cycle_end`` regardless
         of cycle outcome so the dashboard countdown anchors on a signal
@@ -493,9 +493,10 @@ class Supervisor:
         earlier error, and only one whose passes ran cleanly may close a
         failure other than an outage: a deferred upgrade list or a
         backpressure skip proves the *arr answers, not that the failure is
-        fixed.  That holds for an error the outage row *covered* too.  A
-        deferred cycle that nothing answered during an outage stays
-        ``unreachable``.
+        fixed.  That holds for an error the outage row *covered* too,
+        unless the cycle wrote rows over the outage row: those are newer
+        than the covered error.  A deferred cycle that nothing answered
+        during an outage stays ``unreachable``.
         """
         outcome = CycleOutcome.deferred if report.upgrade_deferred else CycleOutcome.ok
         try:
@@ -515,9 +516,11 @@ class Supervisor:
             return outcome
         clean = outcome is CycleOutcome.ok and not report.passes_skipped
         if _is_unreachable(before):
+            # Pass output written over the outage row is newer than the error it covered.
+            wrote_over_outage = not _is_unreachable(after)
             await self._close_outage(
                 instance,
-                None if clean else covered,
+                None if clean or wrote_over_outage else covered,
                 cycle_id=row_cycle_id,
                 cycle_trigger=cycle_trigger,
             )

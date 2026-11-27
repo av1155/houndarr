@@ -18,9 +18,10 @@ Logs page, and the instance marked offline on the dashboard.
 Houndarr logs that row once per outage and retries every 30
 seconds; an `is reachable again` row follows once the *arr answers.
 If the instance was already failing before the outage and Houndarr
-reconnects without running its search passes cleanly, that row is an
-`error` ending in `its last error is not rechecked yet: <error>`, and
-the instance stays failing until a cycle does.
+reconnects without searching (a full download queue, a closed search
+window), that row is an `error` ending in
+`its last error is not rechecked yet: <error>`, so the instance keeps
+showing that error until its next search.
 
 Checks:
 

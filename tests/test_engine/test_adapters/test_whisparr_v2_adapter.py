@@ -34,6 +34,7 @@ from houndarr.services.instances import (
     UpgradePolicy,
     WhisparrV2SearchMode,
 )
+from tests.test_engine.test_adapters._wanted import serve_wanted
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -479,10 +480,13 @@ class TestFetchInstanceSnapshot:
         future = datetime(2999, 1, 1, tzinfo=UTC)
         client = AsyncMock(spec=WhisparrV2Client)
         client.get_wanted_total.side_effect = lambda kind: {"missing": 2, "cutoff": 1}[kind]
-        client.get_missing.return_value = [
-            _make_episode(episode_id=1, release_date=_OLD_RELEASE),
-            _make_episode(episode_id=2, release_date=future),
-        ]
+        serve_wanted(
+            client,
+            missing=[
+                _make_episode(episode_id=1, release_date=_OLD_RELEASE),
+                _make_episode(episode_id=2, release_date=future),
+            ],
+        )
 
         snap = await fetch_instance_snapshot(client, _make_instance())
 
@@ -498,9 +502,7 @@ class TestFetchInstanceSnapshot:
         """
         client = AsyncMock(spec=WhisparrV2Client)
         client.get_wanted_total.side_effect = lambda kind: {"missing": 1, "cutoff": 0}[kind]
-        client.get_missing.return_value = [
-            _make_episode(episode_id=1, release_date=None),
-        ]
+        serve_wanted(client, missing=[_make_episode(episode_id=1, release_date=None)])
 
         snap = await fetch_instance_snapshot(client, _make_instance())
 

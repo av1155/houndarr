@@ -20,7 +20,7 @@ from uuid import uuid4
 import httpx
 from aiosqlitepool import PoolClosedError, PoolConnectionAcquireTimeoutError
 
-from houndarr.clients.base import ReconcileSets, WantedWalks
+from houndarr.clients.base import ReconcileSets, WantedKind, WantedWalks
 from houndarr.database import get_db
 from houndarr.engine.adapters import get_adapter
 from houndarr.engine.adapters.protocols import AppAdapterProto
@@ -50,6 +50,8 @@ _STARTUP_STAGGER_SECS = 30  # per-instance offset added to startup grace at init
 _SNAPSHOT_REFRESH_INTERVAL_SECS = 600  # 10 minutes, matches the locked plan cadence
 _SNAPSHOT_INITIAL_DELAY_SECS = 20  # first run after startup, gives arr time to come up
 _UNRELEASED_DELTA_LOG_THRESHOLD = 10  # log INFO when |new - prior| exceeds this
+_CHURN_WARN_AFTER = 6  # refreshes in a row, about an hour at the refresh cadence
+_WANTED_KINDS: tuple[WantedKind, ...] = ("missing", "cutoff")
 RunNowStatus = Literal["accepted", "not_found", "disabled"]
 _UNREACHABLE_PREFIX = "Could not reach "
 _NOT_RECHECKED = "; its last error is not rechecked yet: "
@@ -71,6 +73,13 @@ def _is_unreachable(row: NewestLogRow | None) -> bool:
 def _reachable_again(instance: Instance) -> str:
     """Return the row that closes an open ``Could not reach`` error."""
     return f"{instance.core.name!r} ({instance.core.url}) is reachable again"
+
+
+def _name_lists(names: list[str]) -> str:
+    """Return ``"missing list"``, ``"missing and cutoff lists"`` and so on."""
+    *head, last = names
+    joined = f"{', '.join(head)} and {last}" if head else last
+    return f"{joined} {'list' if len(names) == 1 else 'lists'}"
 
 
 async def _read_prior_unreleased(instance_id: int) -> int | None:
@@ -135,10 +144,15 @@ class Supervisor:
         # at debug, mirroring the one ``Could not reach`` row per outage;
         # membership clears on the next successful refresh.
         self._snapshot_fail_warned: set[int] = set()
-        # Instances in a streak of refreshes where some pass's list could
-        # not be read in full, so its cooldowns were kept.  Same
-        # one-warning-per-streak rule as above.
-        self._incomplete_lists_warned: set[int] = set()
+        # (instance, pass) pairs in a streak of refreshes where that pass's
+        # list could not be read in full, so its cooldowns were kept.  Same
+        # one-warning-per-streak rule as above, kept per pass so one list's
+        # streak never hides another's first warning.
+        self._incomplete_lists_warned: set[tuple[int, str]] = set()
+        # Refreshes in a row whose read of a wanted list did not add up,
+        # usually because the list changed mid-walk.  Such a list only joins
+        # the warning above once its streak reaches _CHURN_WARN_AFTER.
+        self._churn_streaks: dict[tuple[int, WantedKind], int] = {}
 
     # Lifecycle
 
@@ -244,6 +258,9 @@ class Supervisor:
         if current is None or not current.core.enabled:
             return False
 
+        # A refresh already running when the instance was stopped can record
+        # state after stop_instance_task forgot it.
+        self._forget_list_state(instance_id)
         task = asyncio.create_task(
             self._instance_loop(instance_id, startup_offset=startup_offset),
             name=f"search-loop-{instance_id}",
@@ -270,9 +287,15 @@ class Supervisor:
         return True
 
     async def stop_instance_task(self, instance_id: int) -> bool:
-        """Cancel scheduled and manual tasks for *instance_id*."""
+        """Cancel scheduled and manual tasks for *instance_id*.
+
+        Also ends its incomplete-list streaks and warnings, as starting it
+        again does, so a list that stops adding up after the instance is
+        re-enabled starts its count afresh and warns again.
+        """
         self._prune_scheduled_tasks()
         self._prune_manual_tasks()
+        self._forget_list_state(instance_id)
 
         stopped = False
 
@@ -291,6 +314,13 @@ class Supervisor:
             stopped = True
 
         return stopped
+
+    def _forget_list_state(self, instance_id: int) -> None:
+        """Drop *instance_id*'s incomplete-list streaks and warnings."""
+        self._churn_streaks = {k: n for k, n in self._churn_streaks.items() if k[0] != instance_id}
+        self._incomplete_lists_warned = {
+            k for k in self._incomplete_lists_warned if k[0] != instance_id
+        }
 
     async def reconcile_instance(self, instance_id: int) -> None:
         """Start or stop tasks to match the instance's current enabled state."""
@@ -684,8 +714,8 @@ class Supervisor:
         step to skip (the :meth:`ReconcileSets.empty` sentinel path),
         preserving existing rows rather than risking a wipe on a
         transient *arr blip.  Both fetches share one walk memo, so each
-        ``/wanted`` list is read once per refresh; a pass whose list was
-        not read in full keeps its rows.
+        ``/wanted`` list is walked once per refresh; a pass whose list was
+        not read in full, or whose reads did not add up, keeps its rows.
         """
         if not instance.core.enabled:
             return
@@ -742,7 +772,7 @@ class Supervisor:
                 )
                 await reconcile_cooldowns(instance.core.id, reconcile_sets)
                 if reconcile_read:
-                    self._report_incomplete_lists(instance, reconcile_sets)
+                    self._report_incomplete_lists(instance, reconcile_sets, walks)
                 self._snapshot_fail_warned.discard(instance.core.id)
                 # A successful snapshot proves the *arr is reachable, so it
                 # closes an open outage row too.  That bounds how long a
@@ -774,26 +804,55 @@ class Supervisor:
             except Exception:
                 logger.exception("Supervisor: snapshot refresh failed for %r", instance.core.name)
 
-    def _report_incomplete_lists(self, instance: Instance, sets: ReconcileSets) -> None:
-        """Warn once per streak when a pass kept its cooldowns for want of a full list."""
+    def _report_incomplete_lists(
+        self, instance: Instance, sets: ReconcileSets, walks: WantedWalks | None = None
+    ) -> None:
+        """Warn once per streak for each pass that kept its cooldowns for want of a full list.
+
+        A wanted list whose reads did not add up (see *walks*) usually
+        just changed between page reads, so it logs at debug and joins the
+        warning only on its ``_CHURN_WARN_AFTER``-th such refresh in a row.
+        """
+        instance_id = instance.core.id
         incomplete = sets.incomplete()
-        if not incomplete:
-            self._incomplete_lists_warned.discard(instance.core.id)
-            return
-        *head, last = incomplete
-        lists = f"{', '.join(head)} and {last}" if head else last
-        noun = "list" if len(incomplete) == 1 else "lists"
-        if instance.core.id in self._incomplete_lists_warned:
-            logger.debug("Supervisor: %r %s %s still incomplete", instance.core.name, lists, noun)
-            return
-        self._incomplete_lists_warned.add(instance.core.id)
-        logger.warning(
-            "Supervisor: %r %s %s incomplete; keeping those cooldowns until a refresh "
-            "reads them in full",
-            instance.core.name,
-            lists,
-            noun,
-        )
+        waiting: set[str] = set()
+        for kind in _WANTED_KINDS:
+            walk = (walks or {}).get(kind)
+            if kind not in incomplete or walk is None or not walk.churned:
+                self._churn_streaks.pop((instance_id, kind), None)
+                continue
+            streak = self._churn_streaks.get((instance_id, kind), 0) + 1
+            self._churn_streaks[(instance_id, kind)] = streak
+            logger.debug(
+                "Supervisor: %r %s list shifted between page reads; keeping its cooldowns "
+                "(%d %s in a row)",
+                instance.core.name,
+                kind,
+                streak,
+                "refresh" if streak == 1 else "refreshes",
+            )
+            if streak < _CHURN_WARN_AFTER:
+                waiting.add(kind)
+        remaining = [name for name in incomplete if name not in waiting]
+        self._incomplete_lists_warned = {
+            k for k in self._incomplete_lists_warned if k[0] != instance_id or k[1] in remaining
+        }
+        fresh = [
+            name for name in remaining if (instance_id, name) not in self._incomplete_lists_warned
+        ]
+        repeated = [name for name in remaining if name not in fresh]
+        if fresh:
+            self._incomplete_lists_warned.update((instance_id, name) for name in fresh)
+            logger.warning(
+                "Supervisor: %r %s incomplete; keeping those cooldowns until a refresh "
+                "reads them in full",
+                instance.core.name,
+                _name_lists(fresh),
+            )
+        if repeated:
+            logger.debug(
+                "Supervisor: %r %s still incomplete", instance.core.name, _name_lists(repeated)
+            )
 
     async def _refresh_all_snapshots_once(self) -> None:
         """Refresh the snapshot columns for every enabled instance once.

@@ -33,6 +33,7 @@ from houndarr.services.instances import (
     TagFilterPolicy,
     UpgradePolicy,
 )
+from tests.test_engine.test_adapters._wanted import serve_wanted
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -431,7 +432,7 @@ class TestFetchInstanceSnapshot:
         past = "2020-01-01T00:00:00Z"
         client = AsyncMock(spec=RadarrClient)
         client.get_wanted_total.side_effect = lambda kind: {"missing": 4, "cutoff": 0}[kind]
-        client.get_missing.return_value = [
+        missing = [
             # Digital is past; physical wins as a fallback in the past, NOT unreleased.
             _make_movie(
                 movie_id=1,
@@ -465,6 +466,7 @@ class TestFetchInstanceSnapshot:
                 in_cinemas=None,
             ),
         ]
+        serve_wanted(client, missing=missing)
 
         snap = await fetch_instance_snapshot(client, _make_instance())
 
@@ -493,17 +495,20 @@ class TestFetchInstanceSnapshot:
         client.get_wanted_total.side_effect = lambda kind: {"missing": 1, "cutoff": 0}[kind]
         # Anchor in past, but isAvailable=false and status='announced'
         # would have the search-loop skip it.  The dashboard does not.
-        client.get_missing.return_value = [
-            _make_movie(
-                movie_id=1,
-                status="announced",
-                is_available=False,
-                digital_release=past,
-                physical_release=past,
-                release_date=past,
-                in_cinemas=past,
-            ),
-        ]
+        serve_wanted(
+            client,
+            missing=[
+                _make_movie(
+                    movie_id=1,
+                    status="announced",
+                    is_available=False,
+                    digital_release=past,
+                    physical_release=past,
+                    release_date=past,
+                    in_cinemas=past,
+                ),
+            ],
+        )
 
         snap = await fetch_instance_snapshot(client, _make_instance())
 

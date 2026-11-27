@@ -22,6 +22,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Cutoff list requests to Sonarr 3.0.10.1567 no longer fail with HTTP 500, so cycles reach the upgrade pass after the cutoff pass and cooldown reconcile stops failing on every snapshot refresh. (#854)
 - Snapshot refresh reads the missing list once instead of twice, and Lidarr and Readarr with the upgrade pass on read the cutoff list once instead of twice. (#839)
 - Cooldown reconcile keeps a pass's cooldowns when its wanted list holds 50,000 items or more or a Sonarr or Whisparr v2 series fails to load, and logs `incomplete; keeping those cooldowns` once. (#839)
+- Items keep their cooldowns when a wanted list's page reads do not add up because it changed mid-read or a PostgreSQL-backed \*arr paged tied dates inconsistently (Readarr cutoff excepted). (#897)
+- `incomplete; keeping those cooldowns` is also logged once when a wanted list's page reads do not add up on six snapshot refreshes in a row. (#897)
 - With `Queue Limit` set, a non-JSON answer from the \*arr's queue status (such as a proxy login page) lets the search proceed instead of failing the whole cycle. (#833)
 - An instance whose \*arr answers with an error such as HTTP 401 after an outage, or after a Run now that could not reach it, stays marked failing instead of logging `is reachable again`. (#908)
 - A clean cycle after an error logs `'<name>' is healthy again`, so the dashboard card clears and Run now re-enables even when there is nothing to search. (#908)

@@ -10,7 +10,7 @@ from houndarr.clients._wire_models import (
     ReadarrLibraryBook,
     ReadarrWantedBook,
 )
-from houndarr.clients.base import ArrClient, WantedKind
+from houndarr.clients.base import ArrClient, WantedKind, WantedPage
 
 __all__ = ["LibraryBook", "MissingBook", "ReadarrClient"]
 
@@ -60,6 +60,8 @@ class ReadarrClient(ArrClient):
     # See SonarrClient for the rationale on dropping the per-subclass
     # ``ClassVar`` re-annotation.
     _WANTED_ENVELOPE = PaginatedResponse[ReadarrWantedBook]
+    # Cutoff returns one row per below-cutoff file, so a multi-part book repeats.
+    _WANTED_TOTAL_COUNTS_ROWS: ClassVar[frozenset[WantedKind]] = frozenset({"cutoff"})
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
@@ -132,9 +134,15 @@ class ReadarrClient(ArrClient):
         Returns:
             List of :class:`MissingBook` dataclasses.
         """
-        envelope = await self._fetch_wanted_page("missing", page=page, page_size=page_size)
-        books = [_parse_book(w) for w in envelope.records]
-        return await self._hydrate_author_names(books)
+        return (await self.get_wanted_page("missing", page=page, page_size=page_size)).items
+
+    async def get_wanted_page(
+        self, kind: WantedKind, *, page: int, page_size: int
+    ) -> WantedPage[MissingBook]:
+        """Return one page of ``/wanted/{kind}`` books with its ids and total."""
+        envelope = await self._fetch_wanted_page(kind, page=page, page_size=page_size)
+        books = await self._hydrate_author_names([_parse_book(w) for w in envelope.records])
+        return self._wanted_page(kind, envelope, books)
 
     async def search(self, item_id: int) -> None:
         """Trigger an automatic book search in Readarr.
@@ -179,9 +187,7 @@ class ReadarrClient(ArrClient):
         Returns:
             List of :class:`MissingBook` dataclasses.
         """
-        envelope = await self._fetch_wanted_page("cutoff", page=page, page_size=page_size)
-        books = [_parse_book(w) for w in envelope.records]
-        return await self._hydrate_author_names(books)
+        return (await self.get_wanted_page("cutoff", page=page, page_size=page_size)).items
 
     async def get_wanted_total(self, kind: WantedKind) -> int:
         """Return the totalRecords count for ``wanted/{kind}`` via a size-1 probe.

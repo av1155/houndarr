@@ -18,8 +18,9 @@ from typing import Any
 
 import click
 import uvicorn
-from fastapi import Body, FastAPI
+from fastapi import Body, FastAPI, HTTPException
 
+from tests.mock_arr._common import arm_wanted_fault
 from tests.mock_arr.routers.lidarr import make_lidarr_data, make_lidarr_router
 from tests.mock_arr.routers.radarr import make_radarr_data, make_radarr_router
 from tests.mock_arr.routers.readarr import make_readarr_data, make_readarr_router
@@ -119,6 +120,10 @@ def create_app(config: SeedConfig | None = None) -> FastAPI:
     """Build the FastAPI app with all six routers mounted."""
     cfg = config or SeedConfig()
     state = build_state(cfg)
+    seeded_ids = {
+        name: (set(store.missing_ids), set(store.cutoff_ids), set(store.upgrade_ids))
+        for name, store in _stores(state).items()
+    }
     app = FastAPI(
         title="Houndarr Mock *arr Server",
         description="Seeded multi-app mock for testing Houndarr's search engine.",
@@ -226,12 +231,60 @@ def create_app(config: SeedConfig | None = None) -> FastAPI:
             return {"error": f"unknown app: {app_name}"}
         return _tag_state(store)
 
-    @app.post("/__reset__/{app_name}")
-    async def reset_app(app_name: str) -> dict[str, Any]:
-        """Wipe command, page, queue, and tag state for one app, leaving seed data intact."""
+    @app.put("/__faults__/{app_name}")
+    async def set_faults(app_name: str, config: dict[str, Any] = Body(default_factory=dict)) -> Any:
+        """Replace the armed ``/wanted`` faults for one app.
+
+        ``faults`` lists ``{"kind", "page", "op"}`` objects with optional
+        ``page_size`` (250) and ``sticky`` (false); ``wanted_page`` in
+        ``_common.py`` documents each op.  An empty list disarms them all.
+        """
         store = getattr(state, app_name, None)
         if store is None:
             return {"error": f"unknown app: {app_name}"}
+        store.wanted_faults.clear()
+        for fault in config.get("faults", []):
+            try:
+                arm_wanted_fault(
+                    store,
+                    str(fault["kind"]),
+                    int(fault["page"]),
+                    str(fault["op"]),
+                    page_size=int(fault.get("page_size", 250)),
+                    sticky=bool(fault.get("sticky", False)),
+                )
+            except (KeyError, ValueError) as exc:
+                store.wanted_faults.clear()
+                raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return _fault_state(store)
+
+    @app.get("/__faults__/{app_name}")
+    async def get_faults(app_name: str) -> dict[str, Any]:
+        """Return the armed faults and every fault that has fired since launch or reset."""
+        store = getattr(state, app_name, None)
+        if store is None:
+            return {"error": f"unknown app: {app_name}"}
+        return _fault_state(store)
+
+    @app.post("/__reset__/{app_name}")
+    async def reset_app(app_name: str) -> dict[str, Any]:
+        """Wipe command, page, queue, tag and fault state for one app.
+
+        Faults move items between the missing, cutoff and upgrade sets, so
+        those go back to the seeded partition too; the records themselves
+        never change.
+        """
+        store = getattr(state, app_name, None)
+        if store is None:
+            return {"error": f"unknown app: {app_name}"}
+        missing, cutoff, upgrade = seeded_ids[app_name]
+        store.missing_ids, store.cutoff_ids, store.upgrade_ids = (
+            set(missing),
+            set(cutoff),
+            set(upgrade),
+        )
+        store.wanted_faults.clear()
+        store.fired_faults.clear()
         store.command_log.entries.clear()
         store.page_log.entries.clear()
         store.queued_ids.clear()
@@ -266,6 +319,27 @@ def _tag_state(store: AppData) -> dict[str, Any]:
         "html": store.tag_html,
         "requests": store.tag_requests,
         "tagged": {leaf["id"]: leaf["tags"] for leaf in store.leaves if "tags" in leaf},
+    }
+
+
+def _stores(state: MockState) -> dict[str, AppData]:
+    return {
+        "sonarr": state.sonarr,
+        "radarr": state.radarr,
+        "lidarr": state.lidarr,
+        "readarr": state.readarr,
+        "whisparr_v2": state.whisparr_v2,
+        "whisparr_v3": state.whisparr_v3,
+    }
+
+
+def _fault_state(store: AppData) -> dict[str, Any]:
+    return {
+        "armed": [
+            {"kind": kind, "page": page, "page_size": size, "op": f.op, "sticky": f.sticky}
+            for (kind, page, size), f in store.wanted_faults.items()
+        ],
+        "fired": list(store.fired_faults),
     }
 
 

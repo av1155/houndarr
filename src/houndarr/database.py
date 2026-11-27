@@ -1604,12 +1604,40 @@ async def _migrate_to_v22(db: aiosqlite.Connection) -> None:
 
 
 _V23_RESET_WARNING = (
-    "Schema v23: reset %s to %d on %d instance(s); the stored value was outside %d-%d"
+    "Schema v23: reset %s to %d on %d instance(s); the stored value was outside %d-%d: %s"
 )
 _V23_RESET_MARKER_SQL = (
     "INSERT INTO settings (key, value) VALUES ('v23_range_reset_complete', '1')"
     " ON CONFLICT(key) DO NOTHING"
 )
+
+
+async def _reset_column_v23(
+    db: aiosqlite.Connection,
+    column: str,
+    default: int | str,
+    where: str,
+    params: tuple[int, ...] = (),
+) -> list[str]:
+    """Set *column* to *default* on the rows *where* matches; describe each old value."""
+    # The reset overwrites the only copy, so the log keeps what each instance had.
+    async with db.execute(  # nosem
+        f"SELECT id, name, {column} FROM instances WHERE {where} ORDER BY id",  # noqa: S608  # nosec
+        params,
+    ) as cur:
+        rows = await cur.fetchall()
+    if rows:
+        await db.execute(  # nosem
+            f"UPDATE instances SET {column} = ? WHERE {where}",  # noqa: S608  # nosec
+            (default, *params),
+        )
+    return [f"id {row[0]} {row[1]!r} was {row[2]!r}" for row in rows]
+
+
+def _warn_range_reset_v23(
+    column: str, default: int, low: int, high: int, changed: list[str]
+) -> None:
+    logger.warning(_V23_RESET_WARNING, column, default, len(changed), low, high, ", ".join(changed))
 
 
 async def _migrate_to_v23(db: aiosqlite.Connection) -> None:
@@ -1663,17 +1691,17 @@ async def _rebuild_instances_v23(db: aiosqlite.Connection) -> None:
         # Legacy isolation opens a transaction only before DML; BEGIN makes
         # the CREATE, DROP and RENAME roll back with the copy on failure.
         await db.execute("BEGIN")
-        cur = await db.execute(
-            "UPDATE instances SET upgrade_series_window_size = 5"
-            " WHERE NOT (typeof(upgrade_series_window_size) = 'integer'"
-            " AND upgrade_series_window_size BETWEEN 1 AND 100)"
+        window_resets = await _reset_column_v23(
+            db,
+            "upgrade_series_window_size",
+            5,
+            "NOT (typeof(upgrade_series_window_size) = 'integer'"
+            " AND upgrade_series_window_size BETWEEN ? AND ?)",
+            (1, 100),
         )
-        window_resets = cur.rowcount
-        cur = await db.execute(
-            "UPDATE instances SET search_order = 'chronological'"
-            " WHERE search_order NOT IN ('chronological', 'random')"
+        order_resets = await _reset_column_v23(
+            db, "search_order", "chronological", "search_order NOT IN ('chronological', 'random')"
         )
-        order_resets = cur.rowcount
         await db.execute("DROP TABLE IF EXISTS instances_new")
         await db.execute(f"CREATE TABLE instances_new ({_INSTANCES_COLUMNS_V23})")  # nosem
         await db.execute(  # nosem
@@ -1715,12 +1743,13 @@ async def _rebuild_instances_v23(db: aiosqlite.Connection) -> None:
 
     logger.info("Schema v23: rebuilt the instances table with its range checks")
     if window_resets:
-        logger.warning(_V23_RESET_WARNING, "upgrade_series_window_size", 5, window_resets, 1, 100)
+        _warn_range_reset_v23("upgrade_series_window_size", 5, 1, 100, window_resets)
     if order_resets:
         logger.warning(
             "Schema v23: reset search_order to chronological on %d instance(s);"
-            " the stored value was neither chronological nor random",
-            order_resets,
+            " the stored value was neither chronological nor random: %s",
+            len(order_resets),
+            ", ".join(order_resets),
         )
     if orphan_cooldowns:
         logger.warning(
@@ -1767,27 +1796,31 @@ async def _reset_out_of_range_settings_v23(db: aiosqlite.Connection) -> None:
         ("upgrade_cooldown_days", 7, 3650, 90),
         ("upgrade_hourly_cap", 0, 10000, 1),
     )
-    resets: list[tuple[str, int, int, int, int]] = []
+    resets: list[tuple[str, int, int, int, list[str]]] = []
     for column, low, high, default in bounds:
-        cur = await db.execute(  # nosem
-            f"UPDATE instances SET {column} = ?"  # noqa: S608  # nosec
-            f" WHERE NOT (typeof({column}) = 'integer' AND {column} BETWEEN ? AND ?)",
-            (default, low, high),
+        changed = await _reset_column_v23(
+            db,
+            column,
+            default,
+            f"NOT (typeof({column}) = 'integer' AND {column} BETWEEN ? AND ?)",
+            (low, high),
         )
-        if cur.rowcount:
-            resets.append((column, default, cur.rowcount, low, high))
+        if changed:
+            resets.append((column, default, low, high, changed))
     # As on save, the interval's 1-hour minimum applies only while the window is on.
-    cur = await db.execute(
-        "UPDATE instances SET missing_hot_retry_interval_hrs = 2"
-        " WHERE missing_hot_retry_window_hrs > 0 AND missing_hot_retry_interval_hrs < 1"
+    changed = await _reset_column_v23(
+        db,
+        "missing_hot_retry_interval_hrs",
+        2,
+        "missing_hot_retry_window_hrs > 0 AND missing_hot_retry_interval_hrs < 1",
     )
-    if cur.rowcount:
-        resets.append(("missing_hot_retry_interval_hrs", 2, cur.rowcount, 1, 8760))
+    if changed:
+        resets.append(("missing_hot_retry_interval_hrs", 2, 1, 8760, changed))
     await db.execute(_V23_RESET_MARKER_SQL)
     await db.commit()
 
     for reset in resets:
-        logger.warning(_V23_RESET_WARNING, *reset)
+        _warn_range_reset_v23(*reset)
 
 
 async def _column_exists(db: aiosqlite.Connection, table_name: str, column_name: str) -> bool:

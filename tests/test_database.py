@@ -251,7 +251,7 @@ async def _table_names_like(conn: aiosqlite.Connection, pattern: str) -> list[st
 
 @pytest.mark.asyncio()
 async def test_v23_rebuild_resets_out_of_range_window_and_unknown_search_order(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:
     db_path = tmp_path / "v22.db"
     await _upgrade_seed_to_v22(db_path, _seed_v12_shaped_db(), monkeypatch)
@@ -282,9 +282,20 @@ async def test_v23_rebuild_resets_out_of_range_window_and_unknown_search_order(
         )
         await conn.commit()
 
+    caplog.set_level(logging.WARNING, logger="houndarr.database")
     await init_db()
 
     assert await get_setting("schema_version") == "23"
+    warnings = [r.getMessage() for r in caplog.records if r.levelno == logging.WARNING]
+    assert (
+        "Schema v23: reset upgrade_series_window_size to 5 on 5 instance(s); the stored value"
+        " was outside 1-100: id 1 'zero' was 0, id 2 'negative' was -5, id 3 'huge' was 1000,"
+        " id 7 'text' was 'abc', id 8 'fraction' was 7.5"
+    ) in warnings
+    assert (
+        "Schema v23: reset search_order to chronological on 2 instance(s); the stored value"
+        " was neither chronological nor random: id 3 'huge' was 'bogus', id 6 'min' was ''"
+    ) in warnings
     async with get_db() as conn:
         async with conn.execute(
             "SELECT id, upgrade_series_window_size, search_order FROM instances ORDER BY id"
@@ -382,7 +393,10 @@ async def test_v23_rebuild_repairs_orphan_rows_and_logs_counts(
             assert [tuple(r) async for r in cur] == []
 
     warnings = [r.getMessage() for r in caplog.records if r.levelno == logging.WARNING]
-    assert any("upgrade_series_window_size" in m and " 1 instance" in m for m in warnings)
+    assert any(
+        "upgrade_series_window_size" in m and " 1 instance" in m and "id 1 'kept' was 0" in m
+        for m in warnings
+    )
     assert any("2 cooldown row" in m for m in warnings)
     assert any("1 search_log row" in m for m in warnings)
     assert not any("search_order" in m for m in warnings)
@@ -509,15 +523,16 @@ async def test_v23_rebuild_copies_every_column(
     await _upgrade_seed_to_v22(db_path, _seed_v12_shaped_db(), monkeypatch)
     async with aiosqlite.connect(str(db_path)) as conn:
         async with conn.execute("PRAGMA table_info(instances)") as cur:
-            columns = [(str(r[1]), str(r[2])) async for r in cur]
+            columns = [(str(r[1]), str(r[2]), r[4]) async for r in cur]
         values: dict[str, object] = {}
-        for name, column_type in columns:
+        for name, column_type, default in columns:
             if name == "id":
                 values[name] = 42
             elif column_type == "TEXT":
                 values[name] = _NON_DEFAULT_TEXT[name]
             else:
-                values[name] = 0 if name in _FLAG_COLUMNS else 7
+                values[name] = 1 - int(default) if name in _FLAG_COLUMNS else 7
+                assert str(values[name]) != default, name
         names = ", ".join(values)
         marks = ", ".join("?" for _ in values)
         await conn.execute(
@@ -575,12 +590,16 @@ async def test_v23_resets_out_of_range_settings_once(
     db_path = tmp_path / "ranges.db"
     await _upgrade_seed_to_v22(db_path, _seed_v12_shaped_db(), monkeypatch)
     names = [name for name, *_ in _V23_RESET_BOUNDS]
+    # Rows 1 and 5 put every field one step outside its range, below or above in turn.
     rows = {
         1: [
             low - 1 if i % 2 else high + 1 for i, (_, low, high, _) in enumerate(_V23_RESET_BOUNDS)
         ],
         2: [low for _, low, _, _ in _V23_RESET_BOUNDS],
         3: [high for _, _, high, _ in _V23_RESET_BOUNDS],
+        5: [
+            high + 1 if i % 2 else low - 1 for i, (_, low, high, _) in enumerate(_V23_RESET_BOUNDS)
+        ],
     }
     async with aiosqlite.connect(str(db_path)) as conn:
         for instance_id, values in rows.items():
@@ -589,11 +608,14 @@ async def test_v23_resets_out_of_range_settings_once(
                 f" VALUES (?, ?, 'sonarr', 'http://s', {', '.join('?' for _ in names)})",
                 (instance_id, f"i{instance_id}", *values),
             )
-        await conn.execute("UPDATE instances SET batch_size = 'abc' WHERE id = 1")
         # Interval 0 is kept with the hot retry window off (id 2) and reset with it on.
         await conn.execute(
             "INSERT INTO instances (id, name, type, url, missing_hot_retry_window_hrs,"
             " missing_hot_retry_interval_hrs) VALUES (4, 'i4', 'sonarr', 'http://s', 5, 0)"
+        )
+        await conn.execute(
+            "INSERT INTO instances (id, name, type, url, batch_size)"
+            " VALUES (6, 'i6', 'sonarr', 'http://s', 'abc')"
         )
         await conn.commit()
 
@@ -608,17 +630,27 @@ async def test_v23_resets_out_of_range_settings_once(
             " FROM instances WHERE id = 4"
         ) as cur:
             assert tuple(await cur.fetchone()) == (5, 2)  # type: ignore[arg-type]
-    assert stored[1] == [default for *_, default in _V23_RESET_BOUNDS]
+    defaults = [default for *_, default in _V23_RESET_BOUNDS]
+    assert stored[1] == defaults
+    assert stored[5] == defaults
     assert stored[2] == rows[2]
     assert stored[3] == rows[3]
+    assert stored[6] == defaults
     assert await get_setting("v23_range_reset_complete") == "1"
     reset_logs = [r.getMessage() for r in caplog.records if r.levelno == logging.WARNING]
-    for name in names:
-        assert any(name in m and " 1 instance" in m for m in reset_logs), name
-    assert any(
-        "missing_hot_retry_interval_hrs to 2 on 1 instance" in m and "outside 1-8760" in m
-        for m in reset_logs
-    )
+    for i, (name, low, high, default) in enumerate(_V23_RESET_BOUNDS):
+        changed = f"id 1 'i1' was {rows[1][i]}, id 5 'i5' was {rows[5][i]}"
+        if name == "batch_size":
+            changed += ", id 6 'i6' was 'abc'"
+        count = changed.count("id ")
+        assert (
+            f"Schema v23: reset {name} to {default} on {count} instance(s);"
+            f" the stored value was outside {low}-{high}: {changed}"
+        ) in reset_logs, name
+    assert (
+        "Schema v23: reset missing_hot_retry_interval_hrs to 2 on 1 instance(s);"
+        " the stored value was outside 1-8760: id 4 'i4' was 0"
+    ) in reset_logs
 
     async with get_db() as conn:
         await conn.execute("UPDATE instances SET sleep_interval_mins = 0 WHERE id = 2")

@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import inspect
+
 import pytest
 from fastapi.testclient import TestClient
 from httpx import Response
 
 from houndarr.clients._wire_models import SystemStatus
 from houndarr.clients.base import ArrClient
+from houndarr.services import instance_submit
 from tests.conftest import csrf_headers
 
 # ---------------------------------------------------------------------------
@@ -789,6 +792,39 @@ def test_create_and_update_reject_out_of_range_numbers(
     }
     edit = app.get("/settings/instances/1/edit").content.decode()
     assert _input_value(edit, field) == stored[field]
+
+
+_NUMBER_FIELDS = sorted(
+    name
+    for name, param in inspect.signature(
+        instance_submit._validate_form, eval_str=True
+    ).parameters.items()
+    if param.annotation is int
+)
+
+
+@pytest.mark.parametrize("field", _NUMBER_FIELDS)
+def test_create_and_update_check_every_number_field(app: TestClient, field: str) -> None:
+    """Both routes pass each posted number to the server check (#916)."""
+    _login(app)
+    created = app.post(
+        "/settings/instances", data={**_VALID_FORM, "name": "Kept"}, headers=csrf_headers(app)
+    )
+    assert created.status_code == 200
+    before = _input_value(app.get("/settings/instances/1/edit").content.decode(), field)
+
+    for url, extra in (
+        ("/settings/instances", {}),
+        ("/settings/instances/1", {"api_key": "__UNCHANGED__"}),
+    ):
+        resp = app.post(
+            url, data={**_VALID_FORM, **extra, field: str(2**63)}, headers=csrf_headers(app)
+        )
+        _assert_guard_banner(resp, " or less.")
+
+    assert b"My Sonarr" not in app.get("/settings").content
+    after = _input_value(app.get("/settings/instances/1/edit").content.decode(), field)
+    assert after == before
 
 
 def test_create_and_update_hot_retry_controls_round_trip(app: TestClient) -> None:

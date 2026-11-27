@@ -162,7 +162,7 @@ def _assert_type_gated_controls(form: Locator, instance_type: str) -> None:
 
 
 def _assert_hiding_restores_series_window(form: Locator, rendered_value: str) -> None:
-    """Switch a Sonarr form holding an out-of-range window to Radarr; the form must stay valid.
+    """Switch a Sonarr form with an out-of-range window to Radarr; no hidden field may be invalid.
 
     The browser cannot point at a hidden invalid field, so it would block Save silently.
     """
@@ -231,6 +231,8 @@ def test_full_instance_lifecycle(
     # Flip to Chronological.  The edit form always starts with
     # connection_verified=false, so re-run the connection test first.
     edit_form.locator('select[name="search_order"]').select_option("chronological")
+    # Not the default 5, so the hide check below can tell the stored value from the default.
+    edit_form.locator('[name="upgrade_series_window_size"]').fill("37")
     _wait_for_connection_ui_idle(page)
     _test_connection_and_wait_for_success(
         page, edit_form, edit_form.locator("button[data-test-connection-btn]")
@@ -243,10 +245,11 @@ def test_full_instance_lifecycle(
     reopened = page.locator('form[data-form-mode="edit"]')
     expect(reopened).to_be_visible()
     expect(reopened.locator('select[name="search_order"]')).to_have_value("chronological")
+    expect(reopened.locator('[name="upgrade_series_window_size"]')).to_have_value("37")
 
     # The Edit form's Type select stays editable, so its gated controls follow it too.
     _assert_type_gated_controls(reopened, "sonarr")
-    _assert_hiding_restores_series_window(reopened, "5")
+    _assert_hiding_restores_series_window(reopened, "37")
     _assert_type_gated_controls(reopened, "radarr")
     reopened.locator('select[name="type"]').select_option("whisparr_v2")
     _assert_type_gated_controls(reopened, "whisparr_v2")

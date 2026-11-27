@@ -37,7 +37,7 @@ via Ruff with `known-first-party = ["houndarr"]`.
   the only deliberately-mutable dataclass (env overrides applied in-place).
 - **Every frozen dataclass uses `slots=True`.** Domain models (`MissingEpisode`,
   `LibraryMovie`, etc.) live next to the client that builds them; `Instance`
-  composes seven frozen sub-structs and is itself frozen and slotted. Callers
+  composes eight frozen sub-structs and is itself frozen and slotted. Callers
   evolve through `dataclasses.replace`.
 
 ## Logging

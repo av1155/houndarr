@@ -3,10 +3,8 @@
 Three top-level helpers back the routes under ``/settings/admin``:
 
 * :func:`reset_all_instance_policy`: revert every instance's policy
-  columns (batch/sleep/cap/cooldown, cutoff, upgrade, search modes,
-  time window, search order) and pagination cursors back to the
-  :mod:`houndarr.config` defaults while preserving identity and
-  snapshot columns.
+  columns and pagination cursors to their defaults while preserving
+  identity, snapshot and tag-filter columns.
 * :func:`clear_all_search_logs`: truncate the ``search_log`` table and
   leave a single audit breadcrumb.
 * :func:`factory_reset`: stop the supervisor, delete the SQLite
@@ -51,6 +49,7 @@ from houndarr.config import (
     DEFAULT_UPGRADE_HOURLY_CAP,
     DEFAULT_UPGRADE_LIDARR_SEARCH_MODE,
     DEFAULT_UPGRADE_READARR_SEARCH_MODE,
+    DEFAULT_UPGRADE_SERIES_WINDOW_SIZE,
     DEFAULT_UPGRADE_SONARR_SEARCH_MODE,
     DEFAULT_UPGRADE_WHISPARR_V2_SEARCH_MODE,
     DEFAULT_WHISPARR_V2_SEARCH_MODE,
@@ -79,11 +78,12 @@ logger = logging.getLogger(__name__)
 def _policy_defaults() -> dict[str, object]:
     """Return the column -> default-value dict used by a policy reset.
 
-    Keeping this in one place makes the test surface small (one fixture
-    covers every field) and guarantees we don't drift from the values
-    the Add-instance form shows as its reset-to-defaults targets.
+    Holds every ``instances`` column except identity, timestamps,
+    snapshot counters and tag filters, each at the value a newly added
+    instance starts with.
     """
     return {
+        "missing_enabled": True,
         "batch_size": DEFAULT_BATCH_SIZE,
         "sleep_interval_mins": DEFAULT_SLEEP_INTERVAL_MINUTES,
         "hourly_cap": DEFAULT_HOURLY_CAP,
@@ -110,6 +110,7 @@ def _policy_defaults() -> dict[str, object]:
         "upgrade_whisparr_v2_search_mode": WhisparrV2SearchMode(
             DEFAULT_UPGRADE_WHISPARR_V2_SEARCH_MODE,
         ),
+        "upgrade_series_window_size": DEFAULT_UPGRADE_SERIES_WINDOW_SIZE,
         "allowed_time_window": DEFAULT_ALLOWED_TIME_WINDOW,
         "search_order": SearchOrder(DEFAULT_SEARCH_ORDER),
         # Pagination + upgrade-pool cursors: reset so the next cycle walks
@@ -129,8 +130,8 @@ async def reset_all_instance_policy(
 ) -> int:
     """Revert every instance's policy columns to :mod:`houndarr.config` defaults.
 
-    Identity (name, type, url, api_key, enabled), timestamps, and snapshot
-    counters are preserved.  Tag filters are preserved too: clearing a
+    Identity (name, type, url, api_key, enabled), ``created_at``, and
+    snapshot counters are preserved.  Tag filters are preserved too: clearing a
     protective exclude would widen what the next cycle searches.  The
     supervisor is reconciled per row so the running search loop adopts
     the new cadence on its next wake; the search loop re-reads columns

@@ -12,8 +12,9 @@
       <div class="min-w-0">
         <h4 class="text-sm font-semibold text-slate-100">Reset all instance settings</h4>
         <p class="text-xs text-slate-500 mt-0.5">
-          Reverts policy settings (batch, cadence, cooldowns, cutoff, upgrade)
-          to defaults. Connections, API keys, and enabled state are kept.
+          Reverts policy settings (missing search, batch, cadence, cooldowns,
+          cutoff, upgrade) to defaults. Connections, API keys, and each
+          instance's enabled toggle are kept.
         </p>
       </div>
       {% call buttons.btn(variant="soft-neutral", size="sm", extra="font-medium shrink-0", attrs={

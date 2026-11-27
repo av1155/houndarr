@@ -108,17 +108,19 @@ typed phrase required.
 
 Reverts every instance's policy columns to defaults:
 
+- Missing search toggle (turned back on)
 - Cadence (batch size, sleep interval, hourly cap, cooldown days)
 - Post-release grace, hot retry, and queue backpressure limits
 - Cutoff search settings (enabled / batch / cooldown / cap)
-- Upgrade search settings (enabled / batch / cooldown / cap)
+- Upgrade search settings (enabled / batch / cooldown / cap / series
+  window)
 - Per-app search modes (Sonarr / Lidarr / Readarr / Whisparr v2)
 - Allowed search window and search order
 - Pagination cursors (missing, cutoff) and upgrade-pool offsets
 
 Identity stays put: each instance keeps its name, type, URL, encrypted
-API key, enabled flag, timestamps, and the monitored/unreleased
-snapshot counts that feed the Dashboard.
+API key, enabled flag, and the monitored/unreleased snapshot counts
+that feed the Dashboard.
 
 Tag filters keep their values too, per-pass excludes included, so a
 reset never starts searching items you filtered out.

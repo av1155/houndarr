@@ -78,17 +78,22 @@ function initDashboardPage() {
     }
 
     function completeRunNowRequest(button, statusCode) {
-      const startedAt  = Number(button.dataset.runNowStartedAt || 0);
+      const startedAtToken = button.dataset.runNowStartedAt;
+      const startedAt  = Number(startedAtToken || 0);
       const elapsed    = Math.max(0, Date.now() - startedAt);
       const waitForMin = Math.max(0, RUN_NOW_MIN_RUNNING_MS - elapsed);
       const outcome    = statusCode >= 200 && statusCode < 300 ? 'success' : 'error';
       const holdMs     = outcome === 'success' ? RUN_NOW_SUCCESS_HOLD_MS : RUN_NOW_ERROR_HOLD_MS;
+      // A click during the hold starts a new request; its own timers own the button from then.
+      const isCurrent  = function () {
+        return document.body.contains(button) && button.dataset.runNowStartedAt === startedAtToken;
+      };
 
       window.setTimeout(function () {
-        if (!document.body.contains(button)) return;
+        if (!isCurrent()) return;
         setRunNowButtonState(button, outcome);
         window.setTimeout(function () {
-          if (!document.body.contains(button)) return;
+          if (!isCurrent()) return;
           setRunNowButtonState(button, 'idle');
         }, holdMs);
       }, waitForMin);

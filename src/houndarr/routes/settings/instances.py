@@ -51,7 +51,7 @@ from houndarr.routes.settings._helpers import (
     render,
 )
 from houndarr.services.instance_submit import (
-    InstanceNotFoundError,
+    InstanceSettingsError,
     submit_create,
     submit_update,
 )
@@ -202,6 +202,8 @@ async def instance_create(
             tag_filter_upgrade_exclude=tag_filter_upgrade_exclude,
             connection_verified=connection_verified == "true",
         )
+    except InstanceSettingsError as exc:
+        return connection_guard_response(exc.public_message, connection=False)
     except InstanceValidationError as exc:
         return connection_guard_response(exc.public_message)
 
@@ -339,8 +341,8 @@ async def instance_update(
             tag_filter_upgrade_exclude=tag_filter_upgrade_exclude,
             connection_verified=connection_verified == "true",
         )
-    except InstanceNotFoundError:
-        return HTMLResponse(content="Not found", status_code=404)
+    except InstanceSettingsError as exc:
+        return connection_guard_response(exc.public_message, connection=False)
     except InstanceValidationError as exc:
         return connection_guard_response(exc.public_message)
 

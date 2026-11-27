@@ -437,9 +437,10 @@ def test_update_rejects_type_mismatch(app: TestClient, monkeypatch: pytest.Monke
 
 
 def test_update_instance_not_found(app: TestClient) -> None:
+    """Saving the Edit dialog of a deleted instance says so in the dialog (#931)."""
     _login(app)
     resp = app.post("/settings/instances/9999", data=_VALID_FORM, headers=csrf_headers(app))
-    assert resp.status_code == 404
+    _assert_connection_refusal(resp, "Instance not found.")
 
 
 def test_toggle_instance_enabled(app: TestClient) -> None:
@@ -741,9 +742,19 @@ def test_update_instance_rejects_invalid_hot_retry_controls(app: TestClient) -> 
     assert b"Missing hot retry interval" in resp.content
 
 
-def _assert_guard_banner(resp: Response, message: str) -> None:
+def _assert_settings_refusal(resp: Response, message: str) -> None:
+    """A refused setting shows in the dialog and leaves the tested connection verified."""
     assert resp.status_code == 422
     assert resp.headers["HX-Retarget"] == "#instance-connection-status"
+    assert "HX-Trigger" not in resp.headers
+    assert message.encode() in resp.content
+
+
+def _assert_connection_refusal(resp: Response, message: str) -> None:
+    """A refused connection shows in the dialog and asks for a new test."""
+    assert resp.status_code == 422
+    assert resp.headers["HX-Retarget"] == "#instance-connection-status"
+    assert resp.headers["HX-Trigger"] == "houndarr-connection-test-failure"
     assert message.encode() in resp.content
 
 
@@ -768,13 +779,13 @@ def test_create_and_update_reject_out_of_range_numbers(
     )
     assert created.status_code == 200
 
-    _assert_guard_banner(
+    _assert_settings_refusal(
         app.post(
             "/settings/instances", data={**_VALID_FORM, field: value}, headers=csrf_headers(app)
         ),
         message,
     )
-    _assert_guard_banner(
+    _assert_settings_refusal(
         app.post(
             "/settings/instances/1",
             data={**_VALID_FORM, "api_key": "__UNCHANGED__", field: value},
@@ -820,11 +831,111 @@ def test_create_and_update_check_every_number_field(app: TestClient, field: str)
         resp = app.post(
             url, data={**_VALID_FORM, **extra, field: str(2**63)}, headers=csrf_headers(app)
         )
-        _assert_guard_banner(resp, " or less.")
+        _assert_settings_refusal(resp, " or less.")
 
     assert b"My Sonarr" not in app.get("/settings").content
     after = _input_value(app.get("/settings/instances/1/edit").content.decode(), field)
     assert after == before
+
+
+_SAVE_ROUTES = (
+    ("/settings/instances", {}),
+    ("/settings/instances/1", {"api_key": "__UNCHANGED__"}),
+)
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "message"),
+    [
+        ("allowed_time_window", "nonsense", "Invalid time range format."),
+        ("search_order", "sideways", "Invalid search order."),
+        ("sonarr_search_mode", "sideways", "Invalid Sonarr search mode."),
+        ("upgrade_sonarr_search_mode", "sideways", "Invalid Sonarr search mode."),
+        ("tag_filter_include", "x" * 65, "Tag filter include: each label must be"),
+        ("tag_filter_upgrade_exclude", "x" * 65, "Upgrade tag exclude: each label must be"),
+    ],
+)
+def test_refused_setting_keeps_the_tested_connection(
+    app: TestClient, field: str, value: str, message: str
+) -> None:
+    """Only a connection refusal makes the dialog ask for a new connection test (#931)."""
+    _login(app)
+    created = app.post(
+        "/settings/instances", data={**_VALID_FORM, "name": "Kept"}, headers=csrf_headers(app)
+    )
+    assert created.status_code == 200
+
+    for url, extra in _SAVE_ROUTES:
+        resp = app.post(url, data={**_VALID_FORM, **extra, field: value}, headers=csrf_headers(app))
+        _assert_settings_refusal(resp, message)
+
+
+@pytest.mark.parametrize(
+    ("overrides", "message"),
+    [
+        ({"type": "bogus"}, "Invalid instance type."),
+        ({"url": "ftp://sonarr:8989"}, "is not allowed. Use http:// or https://."),
+        ({"connection_verified": "false"}, "Test connection successfully before"),
+    ],
+)
+def test_refused_connection_asks_for_a_new_test(
+    app: TestClient, overrides: dict[str, str], message: str
+) -> None:
+    _login(app)
+    created = app.post(
+        "/settings/instances", data={**_VALID_FORM, "name": "Kept"}, headers=csrf_headers(app)
+    )
+    assert created.status_code == 200
+
+    for url, extra in _SAVE_ROUTES:
+        resp = app.post(url, data={**_VALID_FORM, **extra, **overrides}, headers=csrf_headers(app))
+        _assert_connection_refusal(resp, message)
+
+
+@pytest.mark.parametrize(
+    ("status", "message"),
+    [
+        (None, "Connection test failed. Re-test before"),
+        (SystemStatus(app_name="Radarr", version="6.0.0"), "Type mismatch"),
+    ],
+)
+def test_remote_refusal_asks_for_a_new_test(
+    app: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    status: SystemStatus | None,
+    message: str,
+) -> None:
+    _login(app)
+    created = app.post(
+        "/settings/instances", data={**_VALID_FORM, "name": "Kept"}, headers=csrf_headers(app)
+    )
+    assert created.status_code == 200
+
+    async def _ping(self: ArrClient) -> SystemStatus | None:
+        return status
+
+    monkeypatch.setattr(ArrClient, "ping", _ping)
+    for url, extra in _SAVE_ROUTES:
+        resp = app.post(url, data={**_VALID_FORM, **extra}, headers=csrf_headers(app))
+        _assert_connection_refusal(resp, message)
+
+
+def test_test_connection_for_a_deleted_instance_shows_in_the_dialog(app: TestClient) -> None:
+    """htmx-config swaps a 422 only, so a 404 here left the old status and a toast (#931)."""
+    _login(app)
+    resp = app.post(
+        "/settings/instances/test-connection",
+        data={
+            "type": "sonarr",
+            "url": "http://sonarr:8989",
+            "api_key": "__UNCHANGED__",
+            "instance_id": "9999",
+        },
+        headers=csrf_headers(app),
+    )
+    assert resp.status_code == 422
+    assert resp.headers["HX-Trigger"] == "houndarr-connection-test-failure"
+    assert b"Instance not found." in resp.content
 
 
 def test_create_and_update_hot_retry_controls_round_trip(app: TestClient) -> None:

@@ -199,8 +199,12 @@ def connection_status_response(message: str, ok: bool, status_code: int) -> HTML
     )
 
 
-def connection_guard_response(message: str) -> HTMLResponse:
-    """Re-target an error to the connection status span when a save is blocked."""
+def connection_guard_response(message: str, *, connection: bool = True) -> HTMLResponse:
+    """Re-target an error to the connection status span when a save is blocked.
+
+    *connection* is ``False`` for a refused search setting: the response then
+    skips the connection-failure trigger, so a tested connection stays verified.
+    """
     return hx_retarget_response(
         HTMLResponse(
             content=f'<span class="text-xs text-red-400">{html.escape(message)}</span>',
@@ -208,7 +212,7 @@ def connection_guard_response(message: str) -> HTMLResponse:
         ),
         target="#instance-connection-status",
         reswap="innerHTML",
-        trigger="houndarr-connection-test-failure",
+        trigger="houndarr-connection-test-failure" if connection else None,
     )
 
 

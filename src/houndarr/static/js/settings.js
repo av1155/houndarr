@@ -133,6 +133,7 @@ function initSettingsPage() {
     const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     let pendingModalShow = false;
     let connectionStatusTimer = null;
+    let connectionFieldsVersion = 0;
 
     if (!addInstanceBtn || !addInstanceModal || !addInstanceModalContent) {
       return;
@@ -295,6 +296,15 @@ function initSettingsPage() {
       return 'Test connection before adding this instance.';
     }
 
+    // The type, URL or API key changed after this element's request was sent.
+    function isStaleConnectionResult(elt) {
+      return (
+        elt instanceof HTMLElement &&
+        elt.dataset.connectionFieldsVersion !== undefined &&
+        Number(elt.dataset.connectionFieldsVersion) !== connectionFieldsVersion
+      );
+    }
+
     function resetConnectionStateOnFieldChange(target) {
       const mode = getModalFormMode();
       if (!isConnectionGuardedFormLoaded() || mode === null) {
@@ -309,6 +319,7 @@ function initSettingsPage() {
         return;
       }
 
+      connectionFieldsVersion += 1;
       const actionLabel = mode === 'edit' ? 'Save Changes' : 'Add Instance';
       if (isConnectionVerified()) {
         setConnectionState(
@@ -464,18 +475,51 @@ function initSettingsPage() {
       'htmx:beforeRequest',
       (evt) => {
         const triggerEl = evt.detail.elt;
-        if (!triggerEl || !triggerEl.matches('[data-test-connection-btn="true"]')) {
+        if (!triggerEl) {
           return;
         }
-        setConnectionTestButtonState('testing');
+        const isTestButton = triggerEl.matches('[data-test-connection-btn="true"]');
+        if (!isTestButton && !triggerEl.matches('form[data-form-mode]')) {
+          return;
+        }
+        triggerEl.dataset.connectionFieldsVersion = String(connectionFieldsVersion);
+        if (isTestButton) {
+          setConnectionTestButtonState('testing');
+        }
+      },
+      { signal },
+    );
+
+    // app.js's failed-request toast listener runs before this one, so a dropped 422 never toasts.
+    document.body.addEventListener(
+      'htmx:beforeSwap',
+      (evt) => {
+        const statusEl = addInstanceModalContent.querySelector('#instance-connection-status');
+        if (!statusEl || evt.detail.target !== statusEl) {
+          return;
+        }
+        if (isStaleConnectionResult(evt.detail.requestConfig.elt)) {
+          evt.detail.shouldSwap = false;
+          return;
+        }
+        if (evt.detail.shouldSwap) {
+          // The server's text replaces any prompt still queued by an earlier field edit.
+          window.clearTimeout(connectionStatusTimer);
+          connectionStatusTimer = null;
+          statusEl.classList.remove('is-updating');
+        }
       },
       { signal },
     );
 
     document.body.addEventListener(
       'houndarr-connection-test-success',
-      () => {
-        if (!isConnectionGuardedFormLoaded() || getModalFormMode() === null) {
+      (evt) => {
+        if (
+          !isConnectionGuardedFormLoaded() ||
+          getModalFormMode() === null ||
+          isStaleConnectionResult(evt.target)
+        ) {
           return;
         }
         // Server response already contains the full message via HTMX swap;
@@ -488,8 +532,8 @@ function initSettingsPage() {
 
     document.body.addEventListener(
       'houndarr-connection-test-failure',
-      () => {
-        if (!isConnectionGuardedFormLoaded()) {
+      (evt) => {
+        if (!isConnectionGuardedFormLoaded() || isStaleConnectionResult(evt.target)) {
           return;
         }
         // Server response already contains the specific error via HTMX swap;

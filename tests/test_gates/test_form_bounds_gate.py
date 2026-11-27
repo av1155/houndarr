@@ -16,7 +16,6 @@ from html.parser import HTMLParser
 
 import pytest
 
-from houndarr.errors import InstanceValidationError
 from houndarr.routes._templates import get_templates
 from houndarr.routes.settings._helpers import blank_instance
 from houndarr.services import instance_submit
@@ -75,7 +74,8 @@ def _accepts(name: str, value: int) -> None:
 
 
 def _rejects(name: str, value: int) -> None:
-    with pytest.raises(InstanceValidationError):
+    # A settings refusal, so the dialog keeps the tested connection and Save enabled.
+    with pytest.raises(instance_submit.InstanceSettingsError):
         instance_submit._validate_form(**{**_baseline(), name: value})  # type: ignore[arg-type]
 
 

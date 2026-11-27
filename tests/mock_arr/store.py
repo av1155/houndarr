@@ -9,7 +9,32 @@ and library scans from the same source of truth without re-randomising.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Literal
+
+type WantedFaultOp = Literal[
+    "leave",
+    "leave_unread",
+    "join",
+    "join_before",
+    "leave_join",
+    "tie_split",
+    "leave_after_records",
+]
+
+
+@dataclass(frozen=True, slots=True)
+class WantedFault:
+    """A list change the mock applies while answering one ``/wanted`` page.
+
+    Keyed in ``AppData.wanted_faults`` by ``(kind, page, page_size)``, it
+    fires on that request, changing the list the way an import, a new
+    release or a database's tie order would between two page reads.  A
+    sticky fault fires on every matching request; any other fires once.
+    ``wanted_page`` documents what each op does.
+    """
+
+    op: WantedFaultOp
+    sticky: bool = False
 
 
 @dataclass(slots=True)
@@ -91,6 +116,10 @@ class AppData:
     tag_status: int = 200
     tag_html: bool = False
     tag_requests: int = 0
+    # ``fired_faults`` holds one entry per fault that fired, naming the
+    # ids that left, joined, went unread or were served twice.
+    wanted_faults: dict[tuple[str, int, int], WantedFault] = field(default_factory=dict)
+    fired_faults: list[dict[str, Any]] = field(default_factory=list)
 
 
 @dataclass(slots=True)

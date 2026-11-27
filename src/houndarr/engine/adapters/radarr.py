@@ -193,8 +193,8 @@ async def fetch_reconcile_sets(
     set short-circuits to empty so the ``/movie`` library call is
     skipped.
     """
-    missing = await walk_wanted(walks, "missing", client.get_missing)
-    cutoff = await walk_wanted(walks, "cutoff", client.get_cutoff_unmet)
+    missing = await walk_wanted(walks, "missing", client.get_wanted_page)
+    cutoff = await walk_wanted(walks, "cutoff", client.get_wanted_page)
     missing_set = _movie_leaf_pairs(missing.items) if missing.complete else None
     cutoff_set = _movie_leaf_pairs(cutoff.items) if cutoff.complete else None
     upgrade_set: frozenset[tuple[str, int]] = frozenset()

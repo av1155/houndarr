@@ -350,25 +350,21 @@ async def test_tag_fetch_failure_with_instance_wide_label_skips_every_pass_and_f
 
 
 @pytest.mark.parametrize(
-    "policy",
+    ("policy", "error_rows"),
     [
-        TagFilterPolicy(exclude=("skip",)),
-        TagFilterPolicy(cutoff_exclude=("skip",)),
-        TagFilterPolicy(missing_exclude=("skip",), cutoff_exclude=("skip",)),
+        (TagFilterPolicy(exclude=("skip",)), 1),
+        (TagFilterPolicy(cutoff_exclude=("skip",)), 1),
+        # The upgrade pass writes its own error row for the refused library fetch.
+        (TagFilterPolicy(missing_exclude=("skip",), cutoff_exclude=("skip",)), 2),
     ],
     ids=["every-pass-labelled", "cutoff-labelled", "only-upgrade-unlabelled"],
 )
 @pytest.mark.asyncio()
 @respx.mock
 async def test_rejected_tag_lookup_marks_instance_failing(
-    seeded_instances: None, policy: TagFilterPolicy
+    seeded_instances: None, policy: TagFilterPolicy, error_rows: int
 ) -> None:
-    """A *arr answering 401 to everything shows as failing on both status surfaces.
-
-    The upgrade pass reads a failed library fetch as an empty pool, so an
-    instance whose only unlabelled pass is upgrade relies on the ``/tag``
-    error to end the cycle as an error.
-    """
+    """A *arr answering 401 to everything shows as failing on both status surfaces."""
     for route in _serve_empty_radarr().values():
         route.mock(return_value=httpx.Response(401))
 
@@ -379,7 +375,7 @@ async def test_rejected_tag_lookup_marks_instance_failing(
     assert await fetch_active_error_instance_ids() == {2}
     async with get_db() as conn:
         active = await gather_active_errors(conn, [2])
-    assert active[2]["failures_count"] == 1
+    assert active[2]["failures_count"] == error_rows
     rows = await get_log_rows()
     assert rows[0]["reason"] == "tag filter (fetch failed)"
     assert rows[-1]["action"] == "error"

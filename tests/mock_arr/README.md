@@ -98,7 +98,22 @@ Debug:
   `"status": 503` or `"html": true` to make `/tag` fail; either resets on
   the next PUT that omits it. `GET /__tags__/{app}` returns the setup plus
   how many times `/tag` was read.
-- `POST /__reset__/{app}` clears the queue and tag setup.
+- `PUT /__faults__/{app}` with `{"faults": [{"kind": "missing", "page": 2,
+  "op": "leave", "sticky": true}]}` arms faults that change a `/wanted`
+  list while it is being paged, the way an import, a new release or a
+  database's tie order would. A fault fires on the request for that
+  `kind`, `page` and `page_size` (250 unless given), once unless
+  `sticky`. The ops are `leave`, `leave_unread`, `join`, `join_before`,
+  `leave_join`, `tie_split` and `leave_after_records`; `wanted_page` in
+  `_common.py` says what each does. Every op but `leave_after_records`
+  needs `page` 2 or more, and an op with no item to act on does nothing.
+  An empty list disarms them all. `GET /__faults__/{app}` returns the
+  armed faults and one entry per fault that fired, naming the ids that
+  left, joined, went unread or were served twice. Lidarr and Readarr
+  also read `cutoff` pages of 250 during search cycles, so arm cutoff
+  faults on those apps while no cycle runs.
+- `POST /__reset__/{app}` clears the queue, tag and fault setup and puts
+  the missing, cutoff and upgrade sets back as seeded.
 
 ## Wiring it into Houndarr
 

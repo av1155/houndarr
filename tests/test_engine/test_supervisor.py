@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import sqlite3
 from collections.abc import AsyncGenerator
 from typing import Any
 from unittest.mock import AsyncMock, patch
@@ -14,6 +15,8 @@ from cryptography.fernet import Fernet
 
 from houndarr.database import get_db
 from houndarr.engine import supervisor as _supervisor_mod
+from houndarr.engine.retry import CycleOutcome
+from houndarr.engine.search_loop import CycleReport
 from houndarr.engine.supervisor import Supervisor
 from houndarr.errors import ClientTransportError
 from houndarr.services.instances import (
@@ -110,6 +113,12 @@ async def _get_log_rows() -> list[dict[str, Any]]:
         async with conn.execute("SELECT * FROM search_log ORDER BY id ASC") as cur:
             rows = await cur.fetchall()
     return [dict(r) for r in rows]
+
+
+async def _reached_cycle(*_: Any, report: CycleReport, **__: Any) -> int:
+    """Stand in for a cycle that read the *arr's lists and searched nothing."""
+    report.reached = True
+    return 0
 
 
 # ---------------------------------------------------------------------------
@@ -288,13 +297,14 @@ async def test_recovery_after_connect_error_writes_info_row(
     instance = _make_instance()
     call_count = 0
 
-    async def fail_once_then_succeed(*_: Any, **__: Any) -> int:
+    async def fail_once_then_succeed(*_: Any, report: CycleReport, **__: Any) -> int:
         nonlocal call_count
         call_count += 1
         if call_count == 1:
             raise httpx.TransportError("refused")
         if call_count == 2:
-            return 0  # success - triggers recovery path
+            report.reached = True  # success - triggers recovery path
+            return 0
         raise asyncio.CancelledError
 
     with (
@@ -325,13 +335,14 @@ async def test_no_extra_log_rows_during_retry_sequence(
     instance = _make_instance()
     call_count = 0
 
-    async def fail_twice_then_succeed(*_: Any, **__: Any) -> int:
+    async def fail_twice_then_succeed(*_: Any, report: CycleReport, **__: Any) -> int:
         nonlocal call_count
         call_count += 1
         if call_count <= 2:
             raise httpx.TransportError("refused")
         if call_count == 3:
-            return 0  # recovery
+            report.reached = True  # recovery
+            return 0
         raise asyncio.CancelledError
 
     with (
@@ -657,9 +668,8 @@ async def test_snapshot_transport_failure_warns_once_per_streak(
 async def test_run_now_transport_error_writes_error_row(seeded_instances: None) -> None:
     """A manual cycle against an unreachable instance leaves a visible error row.
 
-    Manual runs bypass the scheduled loop's reconnect state machine, so the
-    cycle itself must write the row; without it, Run now answers with a
-    success flash and an empty history (issue #678).
+    Without it, Run now answers with a success flash and an empty history
+    (issue #678).
     """
     inst = _make_instance(enabled=True)
 
@@ -668,9 +678,9 @@ async def test_run_now_transport_error_writes_error_row(seeded_instances: None) 
         AsyncMock(side_effect=httpx.ConnectError("refused")),
     ):
         supervisor = Supervisor(master_key=MASTER_KEY)
-        got_error = await supervisor._run_search_cycle(inst, cycle_trigger="run_now")
+        outcome = await supervisor._run_search_cycle(inst, cycle_trigger="run_now")
 
-    assert got_error is True
+    assert outcome is CycleOutcome.unreachable
     async with get_db() as conn:
         async with conn.execute("SELECT action, cycle_trigger, message FROM search_log") as cur:
             rows = [dict(r) for r in await cur.fetchall()]
@@ -699,7 +709,7 @@ async def test_run_now_recovery_writes_reachable_again_row(seeded_instances: Non
 
     with patch(
         "houndarr.engine.supervisor.run_instance_search",
-        AsyncMock(return_value=0),
+        AsyncMock(side_effect=_reached_cycle),
     ):
         await supervisor._run_search_cycle(inst, cycle_trigger="scheduled")
         # A second success must not repeat the recovery row.
@@ -713,8 +723,12 @@ async def test_run_now_recovery_writes_reachable_again_row(seeded_instances: Non
 
 
 @pytest.mark.asyncio()
-async def test_recovery_flag_survives_failed_write(seeded_instances: None) -> None:
-    """A failed recovery write keeps the flag so the pairing row is retried."""
+async def test_failed_recovery_write_is_retried_next_cycle(seeded_instances: None) -> None:
+    """A recovery row lost to a database error lands on the next success.
+
+    The write failure is logged rather than raised, so the scheduled loop
+    keeps running, and the outage row is still the newest row next cycle.
+    """
     inst = _make_instance(enabled=True)
     supervisor = Supervisor(master_key=MASTER_KEY)
 
@@ -725,28 +739,27 @@ async def test_recovery_flag_survives_failed_write(seeded_instances: None) -> No
         await supervisor._run_search_cycle(inst, cycle_trigger="run_now")
 
     with (
-        patch("houndarr.engine.supervisor.run_instance_search", AsyncMock(return_value=0)),
+        patch("houndarr.engine.supervisor.run_instance_search", side_effect=_reached_cycle),
         patch(
             "houndarr.engine.supervisor._write_log",
-            AsyncMock(side_effect=RuntimeError("db locked")),
+            AsyncMock(side_effect=sqlite3.OperationalError("database is locked")),
         ),
-        pytest.raises(RuntimeError),
     ):
-        await supervisor._run_search_cycle(inst, cycle_trigger="scheduled")
+        outcome = await supervisor._run_search_cycle(inst, cycle_trigger="scheduled")
 
-    assert inst.core.id in supervisor._manual_error_open
+    assert outcome is CycleOutcome.ok
+    assert [r["action"] for r in await _get_log_rows()] == ["error"]
 
-    with patch("houndarr.engine.supervisor.run_instance_search", AsyncMock(return_value=0)):
+    with patch("houndarr.engine.supervisor.run_instance_search", side_effect=_reached_cycle):
         await supervisor._run_search_cycle(inst, cycle_trigger="scheduled")
 
     rows = await _get_log_rows()
     assert [r["action"] for r in rows] == ["error", "info"]
-    assert inst.core.id not in supervisor._manual_error_open
 
 
 @pytest.mark.asyncio()
-async def test_snapshot_success_pairs_open_manual_error(seeded_instances: None) -> None:
-    """A successful snapshot refresh pairs an open run-now error too.
+async def test_snapshot_success_closes_open_outage_row(seeded_instances: None) -> None:
+    """A successful snapshot refresh closes an open ``Could not reach`` row too.
 
     Bounds the pinned-offline window (Run now button disabled) at the
     snapshot cadence when the *arr recovers before the next search cycle.
@@ -793,15 +806,13 @@ async def test_snapshot_success_pairs_open_manual_error(seeded_instances: None) 
     assert len(infos) == 1
     assert infos[0]["cycle_trigger"] == "system"
     assert infos[0]["message"] == f"{inst.core.name!r} ({inst.core.url}) is reachable again"
-    assert inst.core.id not in supervisor._manual_error_open
 
 
 @pytest.mark.asyncio()
-async def test_scheduled_transport_error_leaves_row_to_state_machine(
+async def test_scheduled_transport_error_writes_outage_row_outside_any_cycle(
     seeded_instances: None,
 ) -> None:
-    """Scheduled cycles do not write the transport row themselves; the
-    reconnect state machine owns the one-per-streak transition rows."""
+    """A scheduled outage row carries no cycle id, as the reconnect rows always have."""
     inst = _make_instance(enabled=True)
 
     with patch(
@@ -809,13 +820,15 @@ async def test_scheduled_transport_error_leaves_row_to_state_machine(
         AsyncMock(side_effect=httpx.ConnectError("refused")),
     ):
         supervisor = Supervisor(master_key=MASTER_KEY)
-        got_error = await supervisor._run_search_cycle(inst, cycle_trigger="scheduled")
+        outcome = await supervisor._run_search_cycle(inst, cycle_trigger="scheduled")
 
-    assert got_error is True
-    async with get_db() as conn:
-        async with conn.execute("SELECT COUNT(*) AS n FROM search_log") as cur:
-            row = await cur.fetchone()
-    assert row is not None and row["n"] == 0
+    assert outcome is CycleOutcome.unreachable
+    rows = await _get_log_rows()
+    assert len(rows) == 1
+    assert rows[0]["action"] == "error"
+    assert rows[0]["cycle_id"] is None
+    assert rows[0]["cycle_trigger"] == "scheduled"
+    assert rows[0]["message"] == f"Could not reach {inst.core.url}"
 
 
 @pytest.mark.parametrize(
@@ -895,12 +908,12 @@ async def test_run_search_cycle_returns_retry_for_transport_error(
     seeded_instances: None,
     transport_exc: BaseException,
 ) -> None:
-    """Both raw and typed transport errors take the warning + retry branch.
+    """Both raw and typed transport errors take the unreachable branch.
 
     Pins the contract that ``ClientTransportError`` (the typed wrapper introduced
-    by the typed-error refactor) lands on the same retry-with-warning path as
+    by the typed-error refactor) lands on the same retry path as
     ``httpx.TransportError`` instead of falling through to the
-    ``(EngineError, ClientError)`` branch that writes a search_log error row.
+    ``(EngineError, ClientError)`` branch that writes the exception text.
     """
     instance = _make_instance()
 
@@ -909,9 +922,8 @@ async def test_run_search_cycle_returns_retry_for_transport_error(
         AsyncMock(side_effect=transport_exc),
     ):
         supervisor = Supervisor(master_key=MASTER_KEY)
-        retry = await supervisor._run_search_cycle(instance, cycle_trigger="scheduled")
+        outcome = await supervisor._run_search_cycle(instance, cycle_trigger="scheduled")
 
-    assert retry is True, "transport error must signal retry, not error-path completion"
+    assert outcome is CycleOutcome.unreachable
     rows = await _get_log_rows()
-    error_rows = [r for r in rows if r["action"] == "error"]
-    assert error_rows == [], "transport-error retry branch must not write a search_log error row"
+    assert [r["message"] for r in rows] == [f"Could not reach {instance.core.url}"]

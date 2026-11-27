@@ -33,6 +33,7 @@ from houndarr.services.instances import (
     TagFilterPolicy,
     UpgradePolicy,
 )
+from tests.test_engine.test_adapters._wanted import serve_wanted
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -379,10 +380,13 @@ class TestFetchInstanceSnapshot:
         future = "2999-01-01T00:00:00Z"
         client = AsyncMock(spec=ReadarrClient)
         client.get_wanted_total.side_effect = lambda kind: {"missing": 2, "cutoff": 1}[kind]
-        client.get_missing.return_value = [
-            _make_book(book_id=1, release_date=_OLD_DATE),
-            _make_book(book_id=2, release_date=future),
-        ]
+        serve_wanted(
+            client,
+            missing=[
+                _make_book(book_id=1, release_date=_OLD_DATE),
+                _make_book(book_id=2, release_date=future),
+            ],
+        )
 
         snap = await fetch_instance_snapshot(client, _make_instance())
 

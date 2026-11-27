@@ -7,13 +7,17 @@ file focused on the per-app record shape.
 
 from __future__ import annotations
 
+import logging
 import random
-from typing import Any
+from collections.abc import Callable
+from typing import Any, cast, get_args
 
 from fastapi import APIRouter, Body, HTTPException
 from fastapi.responses import Response
 
-from tests.mock_arr.store import AppData
+from tests.mock_arr.store import AppData, WantedFault, WantedFaultOp
+
+logger = logging.getLogger(__name__)
 
 
 def resolve_sort_key(sort_key: str | None, data: AppData, kind: str) -> str:
@@ -112,24 +116,167 @@ def wanted_page(
     Current builds of every app read a missing ``sortDirection`` as
     descending in their paging resource, before any controller default
     applies.
+
+    A fault armed for ``(kind, page, page_size)`` changes the list first.
+    With ``o = (page - 1) * page_size`` the offset this page starts at:
+
+    - ``leave``: the item at ``o - 1``, already read on the page before,
+      leaves the list, so the item at ``o`` slides back and goes unread.
+    - ``leave_unread``: the item at ``o`` leaves before anyone reads it.
+    - ``join``: the first upgrade item that sorts at ``o`` or later joins.
+    - ``join_before``: the first upgrade item that sorts before ``o``
+      joins, pushing the item at ``o - 1`` onto this page a second time.
+    - ``leave_join``: ``leave``, then ``join``, so the total ends unchanged.
+    - ``tie_split``: this response alone swaps the items at ``o - 1`` and
+      ``o``, as a database may order tied rows differently per page.
+    - ``leave_after_records``: this page's records come from the list
+      before its last item leaves and its total from the list after, as
+      when an import lands between the app's records and count queries.
     """
     data.page_log.entries.append((kind, page, page_size))
-    wanted_ids = data.missing_ids if kind == "missing" else data.cutoff_ids
-    records = [leaf for leaf in data.leaves if leaf["id"] in wanted_ids]
     effective_key = resolve_sort_key(sort_key, data, kind)
     descending = sort_direction is None or sort_direction.lower() == "descending"
-    ordered = sort_records(
-        records,
-        field=data.sort_fields.get(effective_key.lower()),
-        descending=descending,
-    )
-    return paginate(
-        ordered,
+    sort_field = data.sort_fields.get(effective_key.lower())
+
+    def ordered() -> list[dict[str, Any]]:
+        wanted_ids = data.missing_ids if kind == "missing" else data.cutoff_ids
+        records = [leaf for leaf in data.leaves if leaf["id"] in wanted_ids]
+        return sort_records(records, field=sort_field, descending=descending)
+
+    served, total = ordered(), None
+    fault = data.wanted_faults.get((kind, page, page_size))
+    if fault is not None:
+        if not fault.sticky:
+            del data.wanted_faults[(kind, page, page_size)]
+        served, total = _apply_fault(data, kind, fault, page, page_size, ordered)
+    envelope = paginate(
+        served,
         page=page,
         page_size=page_size,
         sort_key=effective_key,
         sort_direction="descending" if descending else "ascending",
     )
+    if total is not None:
+        envelope["totalRecords"] = total
+    return envelope
+
+
+_FAULT_OPS = frozenset(get_args(WantedFaultOp.__value__))
+
+
+def arm_wanted_fault(
+    data: AppData,
+    kind: str,
+    page: int,
+    op: str,
+    *,
+    page_size: int = 250,
+    sticky: bool = False,
+) -> None:
+    """Arm ``op`` for the ``(kind, page, page_size)`` request; see ``wanted_page``.
+
+    Every op but ``leave_after_records`` acts on the page boundary before
+    ``page``, so page 1 has none to act on.
+    """
+    if kind not in {"missing", "cutoff"}:
+        raise ValueError(f"unknown wanted kind: {kind}")
+    if op not in _FAULT_OPS:
+        raise ValueError(f"unknown fault op: {op}")
+    if page_size < 1:
+        raise ValueError("page_size must be at least 1")
+    if page < 2 and op != "leave_after_records":
+        raise ValueError(f"{op} needs a page boundary before it: page must be 2 or more")
+    if page < 1:
+        raise ValueError("page must be 1 or more")
+    data.wanted_faults[(kind, page, page_size)] = WantedFault(cast(WantedFaultOp, op), sticky)
+
+
+def _apply_fault(
+    data: AppData,
+    kind: str,
+    fault: WantedFault,
+    page: int,
+    page_size: int,
+    ordered: Callable[[], list[dict[str, Any]]],
+) -> tuple[list[dict[str, Any]], int | None]:
+    """Change the list per ``fault``; return the rows to page and any total override."""
+    before = ordered()
+    n_before = len(before)
+    offset = (page - 1) * page_size
+    wanted = data.missing_ids if kind == "missing" else data.cutoff_ids
+    event: dict[str, Any] = {
+        "op": fault.op,
+        "kind": kind,
+        "page": page,
+        "page_size": page_size,
+        "left": None,
+        "joined": None,
+        "skipped": None,
+        "duplicated": None,
+        "n_before": n_before,
+    }
+
+    def leave(leaf_id: int) -> None:
+        wanted.discard(leaf_id)
+        data.upgrade_ids.add(leaf_id)
+        event["left"] = leaf_id
+
+    def join(lands: Callable[[int], bool]) -> bool:
+        for leaf_id in sorted(data.upgrade_ids):
+            wanted.add(leaf_id)
+            position = next(i for i, leaf in enumerate(ordered()) if leaf["id"] == leaf_id)
+            if lands(position):
+                data.upgrade_ids.discard(leaf_id)
+                event["joined"] = leaf_id
+                return True
+            wanted.discard(leaf_id)
+        return False
+
+    def at(index: int) -> int | None:
+        return before[index]["id"] if 0 <= index < n_before else None
+
+    served, total = before, None
+    fired = True
+    match fault.op:
+        case "leave" | "leave_join":
+            fired = offset - 1 < n_before
+            if fired:
+                leave(before[offset - 1]["id"])
+                event["skipped"] = at(offset)
+                if fault.op == "leave_join":
+                    join(lambda position: position >= offset)
+                served = ordered()
+        case "leave_unread":
+            fired = offset < n_before
+            if fired:
+                leave(before[offset]["id"])
+                served = ordered()
+        case "join" | "join_before":
+            if fault.op == "join":
+                fired = join(lambda position: position >= offset)
+            else:
+                fired = offset - 1 < n_before and join(lambda position: position < offset)
+                event["duplicated"] = at(offset - 1) if fired else None
+            served = ordered()
+        case "tie_split":
+            fired = offset < n_before
+            if fired:
+                served = list(before)
+                served[offset - 1], served[offset] = served[offset], served[offset - 1]
+                event["duplicated"], event["skipped"] = at(offset - 1), at(offset)
+        case "leave_after_records":
+            last = page * page_size - 1
+            fired = last < n_before
+            if fired:
+                leave(before[last]["id"])
+                event["skipped"] = at(last + 1)
+                total = len(ordered())
+    event["n_after"] = len(ordered())
+    if fired:
+        data.fired_faults.append(event)
+    else:
+        logger.info("mock fault %s on %s page %d found no item to act on", fault.op, kind, page)
+    return served, total
 
 
 def shuffle_date_fields(

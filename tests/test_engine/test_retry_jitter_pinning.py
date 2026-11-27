@@ -10,107 +10,56 @@ on the default path.
 from __future__ import annotations
 
 import inspect
+from collections.abc import Awaitable, Callable
 
 import pytest
 
-from houndarr.engine.retry import ReconnectState, run_with_reconnect
-from houndarr.services.instances import (
-    CutoffPolicy,
-    Instance,
-    InstanceCore,
-    InstanceTimestamps,
-    InstanceType,
-    MissingPolicy,
-    RuntimeSnapshot,
-    SchedulePolicy,
-    TagFilterPolicy,
-    UpgradePolicy,
-)
+from houndarr.engine.retry import CycleOutcome, run_with_reconnect
 
 pytestmark = pytest.mark.pinning
 
 
-def _make_instance() -> Instance:
-    return Instance(
-        core=InstanceCore(
-            id=42,
-            name="Retry Pin",
-            type=InstanceType.sonarr,
-            url="http://sonarr:8989",
-            api_key="ignored",
-        ),
-        missing=MissingPolicy(),
-        cutoff=CutoffPolicy(),
-        upgrade=UpgradePolicy(),
-        schedule=SchedulePolicy(),
-        tag_filter=TagFilterPolicy(),
-        snapshot=RuntimeSnapshot(),
-        timestamps=InstanceTimestamps(
-            created_at="2024-01-01T00:00:00Z",
-            updated_at="2024-01-01T00:00:00Z",
-        ),
-    )
+def _cycle(outcome: CycleOutcome) -> Callable[[], Awaitable[CycleOutcome]]:
+    async def cycle() -> CycleOutcome:
+        return outcome
+
+    return cycle
 
 
 @pytest.mark.asyncio()
-async def test_reconnect_default_path_is_deterministic_on_success() -> None:
-    """A successful cycle must return exactly ``success_sleep_secs``.
+@pytest.mark.parametrize(
+    "outcome",
+    [o for o in CycleOutcome if o is not CycleOutcome.unreachable],
+)
+async def test_reconnect_default_path_is_deterministic_after_contact(
+    outcome: CycleOutcome,
+) -> None:
+    """Every outcome but ``unreachable`` returns exactly ``success_sleep_secs``.
 
-    Locks the deterministic contract: zero randomness on the
-    default success branch.  The opt-in ``jitter_secs`` kwarg is
-    exercised by :func:`test_reconnect_jitter_respects_bound`.
+    A cycle that reached the *arr and failed is not retried on the
+    quick connect-retry cadence: its error row already marks the
+    instance failing, and hammering a rejecting *arr every 30 s would
+    only repeat it.
     """
-    state = ReconnectState()
-    log_calls: list[dict[str, object]] = []
-
-    async def log(**kwargs: object) -> None:
-        log_calls.append(kwargs)
-
-    async def cycle_ok() -> bool:
-        return False  # success
-
     delay = await run_with_reconnect(
-        state,
-        instance=_make_instance(),
-        cycle=cycle_ok,
-        cycle_trigger="scheduled",
+        cycle=_cycle(outcome),
         error_retry_secs=30,
         success_sleep_secs=1800,
-        write_log=log,
     )
 
     assert delay == 1800
-    assert log_calls == []
-    assert state.in_retry is False
 
 
 @pytest.mark.asyncio()
-async def test_reconnect_default_path_is_deterministic_on_error() -> None:
-    """A failed cycle must return exactly ``error_retry_secs``."""
-    state = ReconnectState()
-    log_calls: list[dict[str, object]] = []
-
-    async def log(**kwargs: object) -> None:
-        log_calls.append(kwargs)
-
-    async def cycle_fail() -> bool:
-        return True  # connect error
-
+async def test_reconnect_default_path_is_deterministic_when_unreachable() -> None:
+    """An unreachable cycle must return exactly ``error_retry_secs``."""
     delay = await run_with_reconnect(
-        state,
-        instance=_make_instance(),
-        cycle=cycle_fail,
-        cycle_trigger="scheduled",
+        cycle=_cycle(CycleOutcome.unreachable),
         error_retry_secs=30,
         success_sleep_secs=1800,
-        write_log=log,
     )
 
     assert delay == 30
-    assert state.in_retry is True
-    # First error in a streak writes exactly one error row.
-    assert len(log_calls) == 1
-    assert log_calls[0]["action"] == "error"
 
 
 def test_run_with_reconnect_signature_includes_jitter_secs() -> None:
@@ -121,21 +70,11 @@ def test_run_with_reconnect_signature_includes_jitter_secs() -> None:
     future rename or default flip trips this pin.
     """
     signature = inspect.signature(run_with_reconnect)
-    names = list(signature.parameters)
-    assert names[0] == "state"
     keyword_only = {
         name for name, p in signature.parameters.items() if p.kind is inspect.Parameter.KEYWORD_ONLY
     }
-    expected_keyword_only = {
-        "instance",
-        "cycle",
-        "cycle_trigger",
-        "error_retry_secs",
-        "success_sleep_secs",
-        "write_log",
-        "jitter_secs",
-    }
-    assert keyword_only == expected_keyword_only
+    assert keyword_only == set(signature.parameters)
+    assert keyword_only == {"cycle", "error_retry_secs", "success_sleep_secs", "jitter_secs"}
 
     jitter_param = signature.parameters["jitter_secs"]
     assert jitter_param.default is None
@@ -151,24 +90,12 @@ async def test_reconnect_jitter_respects_bound() -> None:
     than a specific value keeps the pin deterministic without
     reaching into the SystemRandom state.
     """
-
-    async def cycle_ok() -> bool:
-        return False
-
-    async def log(**_: object) -> None:
-        return None
-
     observed: list[float] = []
     for _ in range(128):
-        state = ReconnectState()
         delay = await run_with_reconnect(
-            state,
-            instance=_make_instance(),
-            cycle=cycle_ok,
-            cycle_trigger="scheduled",
+            cycle=_cycle(CycleOutcome.ok),
             error_retry_secs=30,
             success_sleep_secs=1800,
-            write_log=log,
             jitter_secs=10.0,
         )
         observed.append(delay)
@@ -191,24 +118,12 @@ async def test_reconnect_jitter_clamps_to_non_negative() -> None:
     nonsensical ``asyncio.sleep`` argument.  The clamp must catch it.
     128 iterations give ~99.99% coverage of the negative-draw branch.
     """
-
-    async def cycle_fail() -> bool:
-        return True  # error branch exercises error_retry_secs
-
-    async def log(**_: object) -> None:
-        return None
-
     observed: list[float] = []
     for _ in range(128):
-        state = ReconnectState()
         delay = await run_with_reconnect(
-            state,
-            instance=_make_instance(),
-            cycle=cycle_fail,
-            cycle_trigger="scheduled",
+            cycle=_cycle(CycleOutcome.unreachable),
             error_retry_secs=5,
             success_sleep_secs=1800,
-            write_log=log,
             jitter_secs=60.0,
         )
         observed.append(delay)

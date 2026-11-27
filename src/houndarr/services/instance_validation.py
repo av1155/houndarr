@@ -157,9 +157,9 @@ def type_mismatch_message(check: ConnectionCheck, selected: InstanceType) -> str
 
 
 # Upper limits for the instance number fields.  The batch and series-window
-# limits match the form's max attributes; the rest have no form max, so they
-# sit far above any real setting and only stop a crafted value from overflowing
-# SQLite's 64-bit INTEGER or the scheduler's date arithmetic.
+# limits match the form's max attributes; the rest have no form max and sit
+# far above any useful setting (ten years of days, a year of minutes or hours),
+# so a value SQLite cannot store gets a message instead of an HTTP 500.
 _MAX_BATCH_SIZE = 250
 _MAX_SERIES_WINDOW = 100
 _MAX_MINUTES = 525_600

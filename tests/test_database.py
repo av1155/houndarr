@@ -561,11 +561,19 @@ async def test_v23_reset_defaults_match_the_schema_defaults(db: None) -> None:
 
 
 @pytest.mark.asyncio()
-async def test_v23_resets_out_of_range_settings_once(
-    tmp_path: Path, caplog: pytest.LogCaptureFixture
-) -> None:
-    set_db_path(str(tmp_path / "ranges.db"))
+async def test_fresh_install_marks_the_v23_reset_done(tmp_path: Path) -> None:
+    """A later release that raises a limit must not see its own values reset."""
+    set_db_path(str(tmp_path / "fresh-marker.db"))
     await init_db()
+    assert await get_setting("v23_range_reset_complete") == "1"
+
+
+@pytest.mark.asyncio()
+async def test_v23_resets_out_of_range_settings_once(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    db_path = tmp_path / "ranges.db"
+    await _upgrade_seed_to_v22(db_path, _seed_v12_shaped_db(), monkeypatch)
     names = [name for name, *_ in _V23_RESET_BOUNDS]
     rows = {
         1: [
@@ -574,7 +582,7 @@ async def test_v23_resets_out_of_range_settings_once(
         2: [low for _, low, _, _ in _V23_RESET_BOUNDS],
         3: [high for _, _, high, _ in _V23_RESET_BOUNDS],
     }
-    async with get_db() as conn:
+    async with aiosqlite.connect(str(db_path)) as conn:
         for instance_id, values in rows.items():
             await conn.execute(
                 f"INSERT INTO instances (id, name, type, url, {', '.join(names)})"

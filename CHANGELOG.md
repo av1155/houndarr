@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - A failed `/tag` lookup skips the passes that carry tag-filter labels for that cycle instead of searching them unfiltered, and the cycle is logged as an error. (#833)
+- Instance number settings have upper limits on save: 3650 for cooldown days, 525600 for `Sleep (minutes)`, 8760 for `Post-Release Grace (hrs)` and the hot retry hours, and 10000 for hourly caps and `Queue Limit`. (#916)
 
 ### Fixed
 
@@ -51,7 +52,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A number typed in exponent form in the instance dialog, such as `1e2` in `Batch Size`, saves as its value instead of closing the dialog with nothing saved. (#916)
 - Schema v23 rebuilds `instances` on databases first created before 1.10.0, resetting a series window outside 1 to 100 to `5` and an unknown `search_order` to `chronological`. To roll back, downgrade to 1.13.4. (#916)
 - The v23 rebuild deletes cooldowns and clears the instance on log rows that still point at a deleted instance, and logs how many it repaired. (#916)
-- Schema v23 resets, once, any instance number setting stored outside the range the form allows to its default, and logs `Schema v23: reset <column> to <default>` for each. (#916)
+- Schema v23 resets, once, each instance number setting stored outside the limits now enforced on save to its default, including a value above a new upper limit such as a 5000-day cooldown, and logs `Schema v23: reset <column> to <default>`. (#916)
 
 ### Security
 

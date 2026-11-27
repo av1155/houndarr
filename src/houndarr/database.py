@@ -416,6 +416,9 @@ async def _init_db_migrations(db: aiosqlite.Connection) -> None:
             "INSERT INTO settings (key, value) VALUES ('schema_version', ?)",
             (str(SCHEMA_VERSION),),
         )
+        # Otherwise a later boot's self-heal runs the v23 reset under whatever
+        # limits that release ships.
+        await db.execute(_V23_RESET_MARKER_SQL)
         await _ensure_v3_indexes(db)
         await db.commit()
         logger.info("Database initialized at schema version %d", SCHEMA_VERSION)
@@ -1603,6 +1606,10 @@ async def _migrate_to_v22(db: aiosqlite.Connection) -> None:
 _V23_RESET_WARNING = (
     "Schema v23: reset %s to %d on %d instance(s); the stored value was outside %d-%d"
 )
+_V23_RESET_MARKER_SQL = (
+    "INSERT INTO settings (key, value) VALUES ('v23_range_reset_complete', '1')"
+    " ON CONFLICT(key) DO NOTHING"
+)
 
 
 async def _migrate_to_v23(db: aiosqlite.Connection) -> None:
@@ -1731,10 +1738,12 @@ async def _rebuild_instances_v23(db: aiosqlite.Connection) -> None:
 async def _reset_out_of_range_settings_v23(db: aiosqlite.Connection) -> None:
     """Reset, once, number settings stored outside the limits enforced on save from v23.
 
-    The settings form declared these limits, but only some reached the
-    server, so a crafted or scripted save could store any integer.
-    Values inside the limits are never touched.  A ``settings`` marker
-    makes this a one-time pass, as the v14 back-fill does, so a later
+    Before v23 the server checked only some lower bounds, so a save could
+    store a value below the form's minimum (a crafted request) or above
+    a limit the form never declared, such as a 5000-day cooldown.  Each
+    such value goes back to its default; values inside the limits are
+    never touched.  A ``settings`` marker makes this a one-time pass, as
+    the v14 back-fill does, and a fresh install writes it too, so a later
     change to the limits cannot re-run it.  The bounds and defaults are
     written out here, locked to v23, for the same reason.
     """
@@ -1774,10 +1783,7 @@ async def _reset_out_of_range_settings_v23(db: aiosqlite.Connection) -> None:
     )
     if cur.rowcount:
         resets.append(("missing_hot_retry_interval_hrs", 2, cur.rowcount, 1, 8760))
-    await db.execute(
-        "INSERT INTO settings (key, value) VALUES ('v23_range_reset_complete', '1')"
-        " ON CONFLICT(key) DO NOTHING"
-    )
+    await db.execute(_V23_RESET_MARKER_SQL)
     await db.commit()
 
     for reset in resets:

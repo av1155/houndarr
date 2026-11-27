@@ -40,6 +40,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The instance table on the Settings page shows the reset batch size and interval right after `Reset all instance settings`, without a reload. (#920)
 - After five wrong passwords in a minute, the password change and factory reset forms show the rate-limit message instead of no response. (#920)
 - A save, delete, toggle or other change that fails with an HTTP error, or cannot reach Houndarr, shows a toast instead of doing nothing. (#920)
+- Wanted and Eligible on the dashboard, and Eligible on the homepage widget, count a Readarr book below its cutoff once instead of once per file. (#924)
+- Dashboard and widget cooldown counts leave out cooldowns past their pass's cooldown window, so those items count as Eligible again instead of gated. (#924)
+- Lidarr upgrade search no longer picks a cutoff-unmet album that a PostgreSQL-backed Lidarr skipped while paging tied dates, once a second full read at another page size finds it. (#924)
+- A Lidarr or Readarr upgrade pass whose cutoff list read stops on a failed page is skipped for that cycle, as a failed library read is, instead of searching the unread cutoff-unmet items as upgrades. (#924)
 
 ### Security
 

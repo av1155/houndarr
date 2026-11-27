@@ -140,7 +140,13 @@ def wanted_page(
 
     def ordered() -> list[dict[str, Any]]:
         wanted_ids = data.missing_ids if kind == "missing" else data.cutoff_ids
-        records = [leaf for leaf in data.leaves if leaf["id"] in wanted_ids]
+        rows = data.cutoff_rows if kind == "cutoff" else {}
+        records = [
+            leaf
+            for leaf in data.leaves
+            if leaf["id"] in wanted_ids
+            for _ in range(rows.get(leaf["id"], 1))
+        ]
         return sort_records(records, field=sort_field, descending=descending)
 
     served, total = ordered(), None

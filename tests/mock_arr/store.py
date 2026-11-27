@@ -120,6 +120,9 @@ class AppData:
     # ids that left, joined, went unread or were served twice.
     wanted_faults: dict[tuple[str, int, int], WantedFault] = field(default_factory=dict)
     fired_faults: list[dict[str, Any]] = field(default_factory=list)
+    # Readarr's cutoff list holds one row per below-cutoff file, counted in
+    # totalRecords too, so a leaf listed here fills that many adjacent rows.
+    cutoff_rows: dict[int, int] = field(default_factory=dict)
 
 
 @dataclass(slots=True)

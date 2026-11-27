@@ -22,7 +22,7 @@ import respx
 
 from houndarr.clients.base import ReconcileSets, WantedPage, WantedWalk, WantedWalks
 from houndarr.database import get_db
-from houndarr.engine.adapters import _common, get_adapter
+from houndarr.engine.adapters import _common
 from houndarr.engine.adapters import lidarr as lidarr_adapter
 from houndarr.engine.adapters import radarr as radarr_adapter
 from houndarr.engine.adapters import readarr as readarr_adapter
@@ -119,6 +119,29 @@ async def test_one_refresh_walks_each_wanted_list_once(
 
 @pytest.mark.asyncio()
 @respx.mock
+async def test_readarr_counts_each_cutoff_book_once(seeded_instances: None) -> None:
+    files = 3
+    data = _serve_mock(SeedConfig(readarr_cutoff_files=files)).readarr
+    wanted = min(data.cutoff_ids)
+    await _seed_cooldowns(4, "book", [(wanted, "cutoff"), (min(data.upgrade_ids), "cutoff")])
+    instance = make_instance(instance_id=4, itype=InstanceType.readarr, url=f"{_MOCK}/readarr")
+
+    await Supervisor(master_key=MASTER_KEY)._refresh_one_snapshot(instance)
+
+    rows = files * len(data.cutoff_ids)
+    pages = Counter((kind, size) for kind, _page, size in data.page_log.entries)
+    assert pages[("cutoff", 250)] == _full_walk_pages(rows)
+    assert await _cooldown_ids(4) == {wanted}
+    stored = await get_instance(4, master_key=MASTER_KEY)
+    assert stored is not None
+    assert stored.snapshot.monitored_total == len(data.missing_ids) + len(data.cutoff_ids)
+    # The search pass pages the cutoff list by row, so its total probe must keep counting rows.
+    async with readarr_adapter.make_client(instance) as client:
+        assert await client.get_wanted_total("cutoff") == rows
+
+
+@pytest.mark.asyncio()
+@respx.mock
 async def test_whisparr_v3_refresh_reads_its_library_once(seeded_instances: None) -> None:
     mock = create_app()
     library = respx.get(f"{_MOCK}/whisparr_v3/api/v3/movie").mock(
@@ -196,43 +219,6 @@ async def test_lists_past_the_page_cap_keep_their_cooldowns(
         ),
         (logging.DEBUG, "Supervisor: 'Test Instance' missing and cutoff lists still incomplete"),
     ]
-
-
-@pytest.mark.asyncio()
-@pytest.mark.parametrize(
-    ("module", "itype", "app"),
-    [
-        (lidarr_adapter, InstanceType.lidarr, "lidarr"),
-        (readarr_adapter, InstanceType.readarr, "readarr"),
-    ],
-    ids=["lidarr", "readarr"],
-)
-@pytest.mark.parametrize("exclusion_pages", [1, None], ids=["cycle-cap-hit", "default-cap"])
-@respx.mock
-async def test_reconcile_upgrade_set_matches_the_cycle_pool(
-    seeded_instances: None,
-    monkeypatch: pytest.MonkeyPatch,
-    module: Any,
-    itype: InstanceType,
-    app: str,
-    exclusion_pages: int | None,
-) -> None:
-    if exclusion_pages is not None:
-        monkeypatch.setattr(module, "_UPGRADE_CUTOFF_EXCLUSION_HARD_CAP", exclusion_pages)
-    data = getattr(_serve_mock(_LARGE), app)
-    assert len(data.cutoff_ids) > 250, "the cutoff list must outrun a one-page exclusion"
-    instance = make_instance(itype=itype, url=f"{_MOCK}/{app}", upgrade_enabled=True)
-
-    async with module.make_client(instance) as client:
-        pool = await module.fetch_upgrade_pool(client, instance)
-        sets = await module.fetch_reconcile_sets(client, instance)
-
-    pool_pairs = {
-        (str(c.item_type), c.item_id) for c in (module.adapt_upgrade(i, instance) for i in pool)
-    }
-    assert sets.upgrade == pool_pairs
-    excluded = len(data.leaves) - len(data.missing_ids) - len(pool)
-    assert excluded == (250 if exclusion_pages == 1 else len(data.cutoff_ids))
 
 
 @pytest.mark.asyncio()
@@ -544,31 +530,25 @@ async def test_a_readarr_cutoff_tie_split_still_loses_the_cooldown(
 
 @pytest.mark.asyncio()
 @respx.mock
-async def test_a_recovered_cutoff_album_keeps_the_upgrade_cooldown_its_cycle_stamps(
+async def test_reconcile_reaps_the_upgrade_cooldown_of_an_album_a_tie_split_hid(
     seeded_instances: None,
 ) -> None:
-    """The cycle's exclusion read skips the album too, so its upgrade pool still holds it."""
+    """The cycle's re-read keeps the album out of its upgrade pool, so reconcile reaps the row."""
     data = _serve_mock(_LARGE).lidarr
-    assert len(data.cutoff_ids) > _RECONCILE_PAGE_SIZE
     arm_wanted_fault(data, "cutoff", 2, "tie_split", page_size=_RECONCILE_PAGE_SIZE, sticky=True)
     instance = make_instance(
         instance_id=3, itype=InstanceType.lidarr, url=f"{_MOCK}/lidarr", upgrade_enabled=True
     )
-    async with get_adapter(InstanceType.lidarr).make_client(instance) as client:
-        pool = {
-            album.album_id for album in await lidarr_adapter.fetch_upgrade_pool(client, instance)
-        }
+    async with lidarr_adapter.make_client(instance) as client:
+        pool = {a.album_id for a in await lidarr_adapter.fetch_upgrade_pool(client, instance)}
     skipped = data.fired_faults[0]["skipped"]
-    read = next(i for i in data.cutoff_ids if i != skipped)
-    assert skipped in pool
-    assert read not in pool
-    await _seed_cooldowns(3, "album", [(skipped, "upgrade"), (read, "upgrade")])
+    assert skipped not in pool
+    kept = min(pool)
+    await _seed_cooldowns(3, "album", [(skipped, "upgrade"), (kept, "upgrade")])
 
     await Supervisor(master_key=MASTER_KEY)._refresh_one_snapshot(instance)
 
-    rows = await _cooldown_rows(3)
-    assert (skipped, "upgrade") in rows
-    assert (read, "upgrade") not in rows
+    assert await _cooldown_ids(3) == {kept}
 
 
 @pytest.mark.asyncio()
@@ -834,7 +814,7 @@ async def test_walk_stopped_by_the_page_cap_reports_incomplete(
 ) -> None:
     monkeypatch.setattr(_common, "_RECONCILE_MAX_PAGES", 2)
     walk = await read_wanted(_Pages(600))
-    assert (len(walk.items), walk.complete, walk.churned) == (500, False, False)
+    assert (len(walk.items), walk.complete, walk.churned, walk.capped) == (500, False, False, True)
 
 
 @pytest.mark.asyncio()
@@ -846,7 +826,7 @@ async def test_the_page_cap_wins_over_a_reordered_read(
     fetch = _Pages(size)
     fetch.views[(2, 250)] = _swap(249, 250)
     walk = await read_wanted(fetch)
-    assert (walk.complete, walk.churned) == (False, False)
+    assert (walk.complete, walk.churned, walk.capped) == (False, False, True)
     assert fetch.walk_sizes() == [250]
 
 
@@ -865,7 +845,7 @@ async def test_a_list_that_moves_between_page_reads_is_churned(hook: Any, gone: 
     fetch = _Pages(600)
     fetch.before[(2, 250)] = hook
     walk = await read_wanted(fetch)
-    assert (walk.complete, walk.churned) == (False, True)
+    assert (walk.complete, walk.churned, walk.capped) == (False, True, False)
     assert fetch.walk_sizes() == [250]
 
 
@@ -894,7 +874,6 @@ async def test_a_tie_split_is_read_again_and_covered() -> None:
     walk = await read_wanted(fetch)
     assert (walk.complete, walk.churned) == (True, False)
     assert walk.items == [*range(250), *range(251, 600), 250]
-    assert walk.first_read == [*range(250), 249, *range(251, 600)]
     assert fetch.walk_sizes() == [239, 250]
 
 
@@ -905,7 +884,6 @@ async def test_a_tie_split_both_reads_share_is_covered_by_the_third() -> None:
     fetch.views[(2, 239)] = _serve_twice(serve=238, instead_of=250)
     walk = await read_wanted(fetch)
     assert (walk.complete, sorted(walk.items)) == (True, list(range(600)))
-    assert walk.first_read.count(249) == 2
     assert fetch.walk_sizes() == [239, 250, 261]
 
 
@@ -920,12 +898,27 @@ async def test_a_tie_split_no_read_covers_stays_churned() -> None:
 
 
 @pytest.mark.asyncio()
+async def test_an_uncovered_list_keeps_the_items_a_reread_recovered() -> None:
+    fetch = _Pages(600)
+    fetch.views[(2, 250)] = _swap(249, 250)
+    fetch.views[(3, 250)] = _swap(499, 500)
+    fetch.views[(3, 239)] = _serve_twice(serve=477, instead_of=500)
+    fetch.views[(2, 261)] = _serve_twice(serve=260, instead_of=500)
+    walk = await read_wanted(fetch)
+    assert (walk.complete, walk.churned) == (False, True)
+    assert (250 in walk.items, 500 in walk.items) == (True, False)
+    assert walk.items.count(249) == 2
+    assert fetch.walk_sizes() == [239, 250, 261]
+
+
+@pytest.mark.asyncio()
 async def test_a_reread_whose_total_moved_does_not_cover_the_list() -> None:
     fetch = _Pages(600)
     fetch.views[(2, 250)] = _swap(249, 250)
     fetch.before[(1, 239)] = lambda rows: rows.append(9_999)
     walk = await read_wanted(fetch)
     assert (walk.complete, walk.churned) == (False, True)
+    assert {250, 9_999} <= set(walk.items)
     assert fetch.walk_sizes() == [239, 250]
 
 

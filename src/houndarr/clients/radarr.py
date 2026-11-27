@@ -10,7 +10,7 @@ from houndarr.clients._wire_models import (
     RadarrLibraryMovie,
     RadarrWantedMovie,
 )
-from houndarr.clients.base import ArrClient, WantedKind
+from houndarr.clients.base import ArrClient, WantedKind, WantedPage
 
 __all__ = ["LibraryMovie", "MissingMovie", "RadarrClient"]
 
@@ -72,13 +72,19 @@ class RadarrClient(ArrClient):
 
         Args:
             page: 1-based page number.
-            page_size: Number of records per page (max 250 in Radarr).
+            page_size: Number of records per page.
 
         Returns:
             List of :class:`MissingMovie` dataclasses.
         """
-        envelope = await self._fetch_wanted_page("missing", page=page, page_size=page_size)
-        return [_parse_movie(w) for w in envelope.records]
+        return (await self.get_wanted_page("missing", page=page, page_size=page_size)).items
+
+    async def get_wanted_page(
+        self, kind: WantedKind, *, page: int, page_size: int
+    ) -> WantedPage[MissingMovie]:
+        """Return one page of ``/wanted/{kind}`` movies with its ids and total."""
+        envelope = await self._fetch_wanted_page(kind, page=page, page_size=page_size)
+        return self._wanted_page(kind, envelope, [_parse_movie(w) for w in envelope.records])
 
     async def search(self, item_id: int) -> None:
         """Trigger an automatic movie search in Radarr.
@@ -110,8 +116,7 @@ class RadarrClient(ArrClient):
         Returns:
             List of :class:`MissingMovie` dataclasses for cutoff-unmet movies.
         """
-        envelope = await self._fetch_wanted_page("cutoff", page=page, page_size=page_size)
-        return [_parse_movie(w) for w in envelope.records]
+        return (await self.get_wanted_page("cutoff", page=page, page_size=page_size)).items
 
     async def get_wanted_total(self, kind: WantedKind) -> int:
         """Return the totalRecords count for ``wanted/{kind}`` via a size-1 probe.

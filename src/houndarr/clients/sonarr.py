@@ -11,7 +11,7 @@ from houndarr.clients._wire_models import (
     SonarrLibraryEpisode,
     SonarrWantedEpisode,
 )
-from houndarr.clients.base import ArrClient, WantedKind
+from houndarr.clients.base import ArrClient, WantedKind, WantedPage
 
 __all__ = ["LibraryEpisode", "MissingEpisode", "SonarrClient"]
 
@@ -75,13 +75,19 @@ class SonarrClient(ArrClient):
 
         Args:
             page: 1-based page number.
-            page_size: Number of records per page (max 250 in Sonarr).
+            page_size: Number of records per page.
 
         Returns:
             List of :class:`MissingEpisode` dataclasses, oldest first.
         """
-        envelope = await self._fetch_wanted_page("missing", page=page, page_size=page_size)
-        return [_parse_episode(w) for w in envelope.records]
+        return (await self.get_wanted_page("missing", page=page, page_size=page_size)).items
+
+    async def get_wanted_page(
+        self, kind: WantedKind, *, page: int, page_size: int
+    ) -> WantedPage[MissingEpisode]:
+        """Return one page of ``/wanted/{kind}`` episodes with its ids and total."""
+        envelope = await self._fetch_wanted_page(kind, page=page, page_size=page_size)
+        return self._wanted_page(kind, envelope, [_parse_episode(w) for w in envelope.records])
 
     async def search(self, item_id: int) -> None:
         """Trigger an automatic episode search in Sonarr.
@@ -128,8 +134,7 @@ class SonarrClient(ArrClient):
         Returns:
             List of :class:`MissingEpisode` dataclasses for cutoff-unmet episodes.
         """
-        envelope = await self._fetch_wanted_page("cutoff", page=page, page_size=page_size)
-        return [_parse_episode(w) for w in envelope.records]
+        return (await self.get_wanted_page("cutoff", page=page, page_size=page_size)).items
 
     async def get_wanted_total(self, kind: WantedKind) -> int:
         """Return the totalRecords count for ``wanted/{kind}`` via a size-1 probe.

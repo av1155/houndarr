@@ -25,12 +25,14 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import datetime
+from functools import partial
 from typing import Any, Protocol
 
 from houndarr.clients.base import (
     ArrClient,
     InstanceSnapshot,
     WantedKind,
+    WantedPage,
     WantedWalk,
     WantedWalks,
 )
@@ -91,10 +93,17 @@ async def fetch_movie_upgrade_pool[T: _UpgradeFilterable](
 _RECONCILE_PAGE_SIZE = 250
 """Page size used when paginating /wanted endpoints for reconciliation.
 
-250 is the maximum every /wanted endpoint accepts.  Picking the ceiling
-means a 5,000-item wanted list becomes 20 requests at refresh time: a
-one-off cost per instance per snapshot cycle rather than a per-poll
-overhead."""
+The apps take any page size; 250 keeps a 5,000-item wanted list to 20
+requests per refresh while each response stays small."""
+
+_RECONCILE_RETRY_PAGE_SIZES = (239, 261)
+"""Page sizes for re-reading a list whose tied rows came back reordered.
+
+Each *arr sorts ``/wanted`` by one date column with no tie-breaker, and
+PostgreSQL may order tied rows differently for each LIMIT/OFFSET, so a
+tie group across a page boundary can repeat one row and skip another.
+These sizes put their boundaries 11 rows per page away from 250's on
+either side, so a re-read usually holds that group inside one page."""
 
 _RECONCILE_MAX_PAGES = 200
 """Safety cap on the paginate-wanted loop.
@@ -106,53 +115,136 @@ exactly ``page_size`` items (whether due to an off-by-one bug or a
 hostile endpoint); without it the loop would never terminate."""
 
 
-async def paginate_wanted[T](
-    fetch_page: Callable[..., Awaitable[list[T]]],
-    *,
-    page_size: int = _RECONCILE_PAGE_SIZE,
-) -> WantedWalk[T]:
-    """Return every wanted item by paginating *fetch_page* until exhausted.
+type WantedPageFetch[T] = Callable[..., Awaitable[WantedPage[T]]]
+"""``async def(*, page, page_size)``: ``ArrClient.get_wanted_page`` bound to one kind."""
 
-    Stops on the first short page (length < *page_size*) since that is
-    the last page by contract.  An explicit empty first page yields an
-    empty list without a second request.  A hard cap of
-    :data:`_RECONCILE_MAX_PAGES` bounds the loop so a misbehaving *arr
-    that always returns a full page cannot spin forever; hitting the
-    cap returns what has been collected so far, marked incomplete.
 
-    Args:
-        fetch_page: ``async def(page=N, page_size=M)`` callable.
-            Typically bound to ``client.get_missing`` or
-            ``client.get_cutoff_unmet``.
-        page_size: Items per request.  Defaults to the /wanted endpoint
-            maximum so total requests stay minimal at full library scale.
+@dataclass(frozen=True, slots=True)
+class _Pass[T]:
+    """Everything one walk of a list read, at one page size."""
 
-    Returns:
-        Every item across every page, preserving order, and whether the
-        walk reached the last page.
-    """
+    items: list[T]
+    ids: list[int]
+    totals: list[int | None]
+    counts_rows: bool
+    capped: bool
+
+    def total(self) -> int | None:
+        """Return the one total every read reported, or ``None`` if they differ or lack one."""
+        first = self.totals[0]
+        if first is None or any(t != first for t in self.totals):
+            return None
+        return first
+
+    def counted(self) -> int:
+        return len(self.ids) if self.counts_rows else len(set(self.ids))
+
+    def reordered(self) -> bool:
+        """Return True when a steady list came back with a row repeated and another skipped.
+
+        With the total unchanged, a full read of it repeating a row must
+        also have skipped one.  A list counted by rows can repeat
+        legitimately, so it cannot tell this from its own repeats.
+        """
+        total = self.total()
+        return (
+            not self.capped
+            and not self.counts_rows
+            and total is not None
+            and len(self.ids) == total
+            and len(set(self.ids)) < total
+        )
+
+
+async def _read_pass[T](fetch: WantedPageFetch[T], page_size: int) -> _Pass[T]:
+    # The apps count after reading the page, so only a count taken before
+    # page 1 catches an item that leaves between page 1's two queries.
+    first = await fetch(page=1, page_size=1)
+    totals = [first.total_records]
     items: list[T] = []
+    ids: list[int] = []
     for page in range(1, _RECONCILE_MAX_PAGES + 1):
-        chunk = await fetch_page(page=page, page_size=page_size)
-        items.extend(chunk)
-        if len(chunk) < page_size:
+        chunk = await fetch(page=page, page_size=page_size)
+        items.extend(chunk.items)
+        ids.extend(chunk.ids)
+        totals.append(chunk.total_records)
+        if len(chunk.ids) < page_size:
+            return _Pass(items, ids, totals, first.total_counts_rows, capped=False)
+    return _Pass(items, ids, totals, first.total_counts_rows, capped=True)
+
+
+def _verdict[T](walked: _Pass[T]) -> WantedWalk[T]:
+    if walked.capped:
+        return WantedWalk(walked.items, complete=False)
+    if None in walked.totals:
+        # A proxy that strips totalRecords leaves the short page as the only signal.
+        return WantedWalk(walked.items, complete=True)
+    total = walked.total()
+    if total is None or walked.counted() != total:
+        return WantedWalk(walked.items, complete=False, churned=True)
+    return WantedWalk(walked.items, complete=True)
+
+
+async def read_wanted[T](fetch_page: WantedPageFetch[T]) -> WantedWalk[T]:
+    """Read every page of one wanted list and say whether the reads account for all of it.
+
+    Reads a size-1 page for the list's total first, then every page of
+    :data:`_RECONCILE_PAGE_SIZE` up to the first short one, the last by
+    contract.  Items keep their order and any repeats.
+
+    The walk is incomplete when it stops at :data:`_RECONCILE_MAX_PAGES`
+    with pages still full.  It is incomplete and churned when the totals
+    differ between reads, or when the records read (distinct ids, or rows
+    on a list that counts rows) do not match the total: the list changed
+    or reordered between page reads, so an item may have gone unread.
+    When any read lacks a total, the short page alone decides.
+
+    When a steady list came back with a row repeated and another skipped
+    (:meth:`_Pass.reordered`), each size in
+    :data:`_RECONCILE_RETRY_PAGE_SIZES` reads it again until the reads
+    together cover every item.  Every read must report the same total, so
+    a list that changed meanwhile stays churned.  A covered list is
+    complete and lists each item once, in the order first read.
+    """
+    first = await _read_pass(fetch_page, _RECONCILE_PAGE_SIZE)
+    if not first.reordered():
+        return _verdict(first)
+    total = first.total()
+    seen: set[int] = set()
+    items = _first_of_each(first, seen)
+    for size in _RECONCILE_RETRY_PAGE_SIZES:
+        retry = await _read_pass(fetch_page, size)
+        if retry.capped or retry.total() != total:
+            break
+        items.extend(_first_of_each(retry, seen))
+        if len(seen) == total:
             return WantedWalk(items, complete=True)
-    return WantedWalk(items, complete=False)
+    return _verdict(first)
+
+
+def _first_of_each[T](walked: _Pass[T], seen: set[int]) -> list[T]:
+    """Return *walked*'s items whose id is not yet in *seen*, adding each id to it."""
+    out: list[T] = []
+    for item, item_id in zip(walked.items, walked.ids, strict=True):
+        if item_id not in seen:
+            seen.add(item_id)
+            out.append(item)
+    return out
 
 
 async def walk_wanted[T](
     walks: WantedWalks | None,
     kind: WantedKind,
-    fetch_page: Callable[..., Awaitable[list[T]]],
+    fetch_page: Callable[..., Awaitable[WantedPage[T]]],
 ) -> WantedWalk[T]:
-    """Return the walk of ``/wanted/{kind}``, reusing one already in *walks*.
+    """Return the :func:`read_wanted` walk of ``/wanted/{kind}``, reusing one already in *walks*.
 
-    *fetch_page* must be the client method for *kind*.  A walk that
-    raises is not stored, so the next caller tries again.
+    *fetch_page* is ``client.get_wanted_page``.  A walk that raises is not
+    stored, so the next caller tries again.
     """
     if walks is not None and kind in walks:
         return walks[kind]
-    walk = await paginate_wanted(fetch_page)
+    walk = await read_wanted(partial(fetch_page, kind))
     if walks is not None:
         walks[kind] = walk
     return walk
@@ -345,7 +437,7 @@ async def compute_default_snapshot[T](
         cutoff_kind
     )
 
-    walk: WantedWalk[T] = await walk_wanted(walks, "missing", client.get_missing)
+    walk: WantedWalk[T] = await walk_wanted(walks, "missing", client.get_wanted_page)
     items = walk.items
     if anchor_is_dt:
         dt_fn: Callable[[T], datetime | None] = anchor_fn  # type: ignore[assignment]

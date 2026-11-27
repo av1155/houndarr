@@ -68,9 +68,10 @@ class ReconcileSets:
     membership check and does not need adapter-specific logic.
 
     ``None`` marks a pass whose list could not be read in full this
-    refresh (a wanted list past the page cap, a series that failed to
-    load); the reconciler leaves that pass's rows alone rather than
-    delete cooldowns for items it never saw.
+    refresh (a wanted list past the page cap, one whose page reads did
+    not add up, a series that failed to load); the reconciler leaves
+    that pass's rows alone rather than delete cooldowns for items it
+    never saw.
     """
 
     missing: frozenset[tuple[str, int]] | None
@@ -114,15 +115,34 @@ WantedKind = Literal["missing", "cutoff"]
 
 
 @dataclass(frozen=True, slots=True)
+class WantedPage[T]:
+    """One ``/wanted`` page, with what a walk needs to vouch for the whole list.
+
+    ``ids`` holds the wire id of every record, repeats kept.
+    ``total_records`` is ``None`` when the envelope left ``totalRecords``
+    out.  ``total_counts_rows`` is set when the app counts rows rather than
+    items for this list, so one item may fill several rows.
+    """
+
+    items: list[T]
+    ids: tuple[int, ...]
+    total_records: int | None
+    total_counts_rows: bool
+
+
+@dataclass(frozen=True, slots=True)
 class WantedWalk[T]:
     """Every item one ``/wanted`` list returned, and whether that was all of it.
 
     ``complete`` is false when the walk stopped at the reconcile page cap
-    with pages still full, so ``items`` may be missing the tail of the list.
+    with pages still full, or when ``churned``: the page totals moved or
+    the records read did not match them, so the list changed or reordered
+    between reads and ``items`` may be missing some of it.
     """
 
     items: list[T]
     complete: bool
+    churned: bool = False
 
 
 type WantedWalks = dict[WantedKind, WantedWalk[Any]]
@@ -254,6 +274,8 @@ class ArrClient(ABC):
     _WANTED_SORT_KEY: ClassVar[str] = ""
     _WANTED_INCLUDE_PARAM: ClassVar[str | None] = None
     _WANTED_ENVELOPE: ClassVar[type[PaginatedResponse[Any]] | None] = None
+    # Lists whose ``totalRecords`` counts rows rather than distinct items.
+    _WANTED_TOTAL_COUNTS_ROWS: ClassVar[frozenset[WantedKind]] = frozenset()
 
     def __init__(
         self,
@@ -562,6 +584,35 @@ class ArrClient(ABC):
         envelope = envelope_cls.model_validate(data)
         self._warn_on_sort_mismatch(path, data)
         return envelope
+
+    def _wanted_page[T](
+        self, kind: WantedKind, envelope: PaginatedResponse[Any], items: list[T]
+    ) -> WantedPage[T]:
+        """Pair a page's parsed ``items`` with its wire ids and the list's total."""
+        total = envelope.total_records if "total_records" in envelope.model_fields_set else None
+        return WantedPage(
+            items=items,
+            ids=tuple(record.id for record in envelope.records),
+            total_records=total,
+            total_counts_rows=kind in self._WANTED_TOTAL_COUNTS_ROWS,
+        )
+
+    async def get_wanted_page(
+        self, kind: WantedKind, *, page: int, page_size: int
+    ) -> WantedPage[Any]:
+        """Return one page of ``/wanted/{kind}`` for a walk that must account for every item.
+
+        Every client with ``/wanted`` endpoints overrides this; Whisparr v3
+        has none.  ``get_missing`` and ``get_cutoff_unmet`` return the same
+        page's items alone.
+
+        Raises:
+            NotImplementedError: The client has no paginated ``/wanted`` list.
+            httpx.HTTPError: Non-2xx response or transport failure.
+            pydantic.ValidationError: Response payload did not match the
+                declared envelope schema.
+        """
+        raise NotImplementedError(f"{type(self).__name__} has no paginated /wanted endpoint")
 
     def _warn_on_sort_mismatch(self, path: str, data: object) -> None:
         """Log once per instance and list when the app sorted differently.

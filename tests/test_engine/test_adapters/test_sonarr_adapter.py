@@ -35,6 +35,7 @@ from houndarr.services.instances import (
     TagFilterPolicy,
     UpgradePolicy,
 )
+from tests.test_engine.test_adapters._wanted import serve_wanted
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -435,8 +436,7 @@ class TestFetchReconcileSetsUpgrade:
         }
 
         client = AsyncMock(spec=SonarrClient)
-        client.get_missing.return_value = []
-        client.get_cutoff_unmet.return_value = []
+        serve_wanted(client)
         client.get_series.return_value = series_list
         client.get_episodes.side_effect = lambda series_id: episodes_by_series[series_id]
 
@@ -462,8 +462,7 @@ class TestFetchReconcileSetsUpgrade:
         """Upgrade-disabled instance returns an empty upgrade set and
         never touches the ``/series`` endpoint."""
         client = AsyncMock(spec=SonarrClient)
-        client.get_missing.return_value = []
-        client.get_cutoff_unmet.return_value = []
+        serve_wanted(client)
 
         instance = _make_instance()  # UpgradePolicy() defaults to upgrade_enabled=False
 
@@ -484,7 +483,7 @@ class TestFetchInstanceSnapshot:
 
     monitored_total comes from get_wanted_total('missing') +
     get_wanted_total('cutoff') (cheap pageSize=1 probes).
-    unreleased_count comes from a paginate_wanted walk of /wanted/missing
+    unreleased_count comes from a full walk of /wanted/missing
     counting items whose ``air_date_utc`` is strictly in the future.
 
     Marked ``pinning`` because ``fetch_instance_snapshot`` is a new
@@ -501,11 +500,14 @@ class TestFetchInstanceSnapshot:
         past = "2020-01-01T00:00:00Z"
         client = AsyncMock(spec=SonarrClient)
         client.get_wanted_total.side_effect = lambda kind: {"missing": 3, "cutoff": 5}[kind]
-        client.get_missing.return_value = [
-            _make_episode(episode_id=1, air_date_utc=future),
-            _make_episode(episode_id=2, air_date_utc=past),
-            _make_episode(episode_id=3, air_date_utc=future),
-        ]
+        serve_wanted(
+            client,
+            missing=[
+                _make_episode(episode_id=1, air_date_utc=future),
+                _make_episode(episode_id=2, air_date_utc=past),
+                _make_episode(episode_id=3, air_date_utc=future),
+            ],
+        )
 
         snap = await fetch_instance_snapshot(client, _make_instance())
 
@@ -516,10 +518,13 @@ class TestFetchInstanceSnapshot:
     async def test_no_unreleased_when_all_anchors_past(self):
         client = AsyncMock(spec=SonarrClient)
         client.get_wanted_total.side_effect = lambda kind: {"missing": 2, "cutoff": 0}[kind]
-        client.get_missing.return_value = [
-            _make_episode(episode_id=1, air_date_utc=_OLD_DATE),
-            _make_episode(episode_id=2, air_date_utc=_OLD_DATE),
-        ]
+        serve_wanted(
+            client,
+            missing=[
+                _make_episode(episode_id=1, air_date_utc=_OLD_DATE),
+                _make_episode(episode_id=2, air_date_utc=_OLD_DATE),
+            ],
+        )
 
         snap = await fetch_instance_snapshot(client, _make_instance())
 
@@ -536,7 +541,7 @@ class TestFetchInstanceSnapshot:
         """
         client = AsyncMock(spec=SonarrClient)
         client.get_wanted_total.side_effect = lambda kind: {"missing": 1, "cutoff": 0}[kind]
-        client.get_missing.return_value = [_make_episode(episode_id=1, air_date_utc=None)]
+        serve_wanted(client, missing=[_make_episode(episode_id=1, air_date_utc=None)])
 
         snap = await fetch_instance_snapshot(client, _make_instance())
 
@@ -554,7 +559,7 @@ class TestFetchInstanceSnapshot:
         """
         client = AsyncMock(spec=SonarrClient)
         client.get_wanted_total.side_effect = lambda kind: {"missing": 100, "cutoff": 50}[kind]
-        client.get_missing.return_value = []
+        serve_wanted(client)
 
         snap = await fetch_instance_snapshot(client, _make_instance())
 
@@ -591,8 +596,7 @@ class TestFetchReconcileSetsMissingDisabled:
             air_date_utc=None,
         )
         client = AsyncMock(spec=SonarrClient)
-        client.get_missing.return_value = [missing_item]
-        client.get_cutoff_unmet.return_value = []
+        serve_wanted(client, missing=[missing_item])
 
         base = _make_instance()
         instance = dataclasses.replace(
@@ -603,4 +607,4 @@ class TestFetchReconcileSetsMissingDisabled:
         sets = await fetch_reconcile_sets(client, instance)
 
         assert sets.missing == frozenset({("episode", 101)})
-        client.get_missing.assert_awaited()
+        client.get_wanted_page.assert_any_await("missing", page=1, page_size=250)

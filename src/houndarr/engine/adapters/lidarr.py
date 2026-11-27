@@ -333,8 +333,8 @@ async def fetch_reconcile_sets(
     false the upgrade set short-circuits to empty so the library scan
     is skipped.
     """
-    missing = await walk_wanted(walks, "missing", client.get_missing)
-    cutoff = await walk_wanted(walks, "cutoff", client.get_cutoff_unmet)
+    missing = await walk_wanted(walks, "missing", client.get_wanted_page)
+    cutoff = await walk_wanted(walks, "cutoff", client.get_wanted_page)
     missing_set: frozenset[tuple[str, int]] | None = None
     if missing.complete:
         missing_set = _album_leaf_pairs(missing.items)

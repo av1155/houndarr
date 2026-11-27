@@ -31,6 +31,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Instances that only run upgrade search log `Could not reach <url>` during an outage and retry every 30 seconds; a 5xx or read timeout skips the pass without an error row. (#911)
 - The Settings page marks an instance failing for as long as its newest log row is an error, like the dashboard, instead of clearing it after 48 hours. (#908)
 - The Settings page no longer fails with HTTP 500 for up to 48 hours after deleting an instance whose newest log row was an error. (#908)
+- `Reset all instance settings` also turns `Enable missing search` back on and resets `Upgrade Series Window (per cycle)` to `5`. (#909)
 
 ### Security
 

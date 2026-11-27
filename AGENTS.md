@@ -181,7 +181,7 @@ skill (loads on `src/houndarr/engine/**`).
   Pydantic is used only at the *arr wire boundary
   (`src/houndarr/clients/_wire_models/`).
 - **Domain models**: frozen dataclasses with `slots=True`. `Instance`
-  composes seven frozen sub-structs and is itself frozen and slotted;
+  composes eight frozen sub-structs and is itself frozen and slotted;
   callers evolve through `dataclasses.replace`. `AppSettings` is the
   only deliberately-mutable dataclass.
 - **Encryption**: master key in `request.app.state.master_key`; passed

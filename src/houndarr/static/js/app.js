@@ -73,6 +73,23 @@
     if (msg) showToast(msg);
   });
 
+  // GETs are skipped: the dashboard polls every 30 s and would toast on each miss while offline.
+  function isMutation(detail) {
+    return detail.requestConfig.verb.toLowerCase() !== 'get';
+  }
+
+  // Error bodies htmx-config does not swap would otherwise end a failed action silently.
+  document.body.addEventListener('htmx:beforeSwap', function (evt) {
+    const detail = evt.detail;
+    if (!detail.isError || detail.shouldSwap || !isMutation(detail)) return;
+    showToast('Request failed (HTTP ' + detail.xhr.status + '). Reload the page and try again.');
+  });
+
+  document.body.addEventListener('htmx:sendError', function (evt) {
+    if (!isMutation(evt.detail)) return;
+    showToast('Could not reach Houndarr. Check that it is running, then try again.');
+  });
+
   function consumeFlashCookie() {
     const match = document.cookie.match(/(?:^|;\s*)houndarr_flash=([^;]*)/);
     if (!match) return;

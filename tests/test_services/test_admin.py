@@ -16,6 +16,7 @@ from fastapi import FastAPI
 
 from houndarr.config import DEFAULT_UPGRADE_SERIES_WINDOW_SIZE
 from houndarr.database import close_all_pools, get_db, set_db_path
+from houndarr.errors import ServiceError
 from houndarr.routes.settings._helpers import blank_instance
 from houndarr.services.admin import (
     _policy_defaults,
@@ -283,6 +284,75 @@ async def test_reset_all_instance_policy_no_instances(db: None) -> None:
     assert count == 0
 
 
+async def _execute(sql: str) -> None:
+    async with get_db() as conn:
+        await conn.execute(sql)
+        await conn.commit()
+
+
+async def _system_log_count() -> int:
+    async with get_db() as conn:
+        async with conn.execute(
+            "SELECT COUNT(*) AS n FROM search_log WHERE cycle_trigger = 'system'"
+        ) as cur:
+            row = await cur.fetchone()
+    assert row is not None
+    return int(row["n"])
+
+
+@pytest.mark.asyncio()
+async def test_reset_all_instance_policy_changes_nothing_when_a_row_fails(
+    seeded_instances: list[int],
+) -> None:
+    first, second = seeded_instances
+    before = await get_instance(first, master_key=_MASTER_KEY)
+    await _execute(
+        f"CREATE TRIGGER fail_second BEFORE UPDATE ON instances WHEN OLD.id = {second}"
+        " BEGIN SELECT RAISE(ABORT, 'injected'); END"
+    )
+    supervisor = AsyncMock()
+
+    with pytest.raises(ServiceError):
+        await reset_all_instance_policy(master_key=_MASTER_KEY, supervisor=supervisor)
+
+    assert await get_instance(first, master_key=_MASTER_KEY) == before
+    assert await _system_log_count() == 0
+    supervisor.reconcile_instance.assert_not_awaited()
+
+
+@pytest.mark.asyncio()
+async def test_reset_all_instance_policy_changes_nothing_when_audit_row_fails(
+    seeded_instances: list[int],
+) -> None:
+    before = [await get_instance(i, master_key=_MASTER_KEY) for i in seeded_instances]
+    await _execute(
+        "CREATE TRIGGER fail_audit BEFORE INSERT ON search_log"
+        " WHEN NEW.cycle_trigger = 'system' BEGIN SELECT RAISE(ABORT, 'injected'); END"
+    )
+
+    with pytest.raises(ServiceError):
+        await reset_all_instance_policy(master_key=_MASTER_KEY, supervisor=None)
+
+    assert [await get_instance(i, master_key=_MASTER_KEY) for i in seeded_instances] == before
+
+
+@pytest.mark.asyncio()
+async def test_reset_all_instance_policy_reconciles_every_row_when_one_reconcile_fails(
+    seeded_instances: list[int],
+) -> None:
+    supervisor = AsyncMock()
+    supervisor.reconcile_instance.side_effect = [RuntimeError("supervisor down"), None]
+
+    count = await reset_all_instance_policy(master_key=_MASTER_KEY, supervisor=supervisor)
+
+    assert count == 2
+    assert supervisor.reconcile_instance.await_count == 2
+    for instance_id in seeded_instances:
+        inst = await get_instance(instance_id, master_key=_MASTER_KEY)
+        assert inst is not None
+        assert inst.missing == MissingPolicy()
+
+
 # ---------------------------------------------------------------------------
 # clear_all_search_logs
 # ---------------------------------------------------------------------------
@@ -341,6 +411,28 @@ async def test_clear_all_search_logs_empty_table(db: None) -> None:
     # The breadcrumb is inserted even when nothing was removed, so exactly 1.
     assert row is not None
     assert row["n"] == 1
+
+
+@pytest.mark.asyncio()
+async def test_clear_all_search_logs_keeps_rows_when_breadcrumb_fails(db: None) -> None:
+    async with get_db() as conn:
+        await conn.executemany(
+            "INSERT INTO search_log (action, message) VALUES (?, ?)",
+            [("searched", "item 1"), ("error", "boom")],
+        )
+        await conn.commit()
+    await _execute(
+        "CREATE TRIGGER fail_audit BEFORE INSERT ON search_log"
+        " WHEN NEW.cycle_trigger = 'system' BEGIN SELECT RAISE(ABORT, 'injected'); END"
+    )
+
+    with pytest.raises(ServiceError):
+        await clear_all_search_logs()
+
+    async with get_db() as conn:
+        async with conn.execute("SELECT message FROM search_log ORDER BY id") as cur:
+            rows = await cur.fetchall()
+    assert [row["message"] for row in rows] == ["item 1", "boom"]
 
 
 # ---------------------------------------------------------------------------

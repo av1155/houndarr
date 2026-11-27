@@ -24,6 +24,8 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+import aiosqlite
+
 from houndarr.database import get_db
 from houndarr.errors import redact_url_credentials
 
@@ -508,28 +510,32 @@ async def delete_logs_for_instance(instance_id: int) -> int:
         return cur.rowcount or 0
 
 
-async def delete_all_logs() -> int:
+async def delete_all_logs(*, db: aiosqlite.Connection | None = None) -> int:
     """Truncate the ``search_log`` table and return the removed row count.
 
-    Backs the Admin > Maintenance > Clear all logs action.  The audit
-    breadcrumb row ("Audit log cleared by admin ...") is written by
-    :func:`insert_admin_audit` after this returns, so the DELETE and
-    the follow-up INSERT are two separate statements against two
-    separate connections; that keeps the truncate a pure wipe and
-    lets concurrent supervisor writes interleave without corrupting
-    the breadcrumb row.
+    Backs the Admin > Maintenance > Clear all logs action, which passes
+    its own connection so the DELETE and the audit breadcrumb written
+    by :func:`insert_admin_audit` commit together or not at all.
+
+    Args:
+        db: Connection of a transaction the caller owns.  The DELETE
+            runs on it uncommitted; without it, the DELETE commits on
+            its own pooled connection.
 
     Returns:
         Number of rows that were removed (excluding the breadcrumb,
         which is written by the caller afterwards).
     """
-    async with get_db() as db:
+    if db is not None:
         cur = await db.execute("DELETE FROM search_log")
-        await db.commit()
+        return cur.rowcount or 0
+    async with get_db() as conn:
+        cur = await conn.execute("DELETE FROM search_log")
+        await conn.commit()
         return cur.rowcount or 0
 
 
-async def insert_admin_audit(message: str) -> None:
+async def insert_admin_audit(message: str, *, db: aiosqlite.Connection | None = None) -> None:
     """Insert a single system-audit row into ``search_log``.
 
     Used by admin operations (policy reset, log clear, factory reset)
@@ -543,14 +549,20 @@ async def insert_admin_audit(message: str) -> None:
     Args:
         message: Free-text audit message written to the ``message``
             column verbatim.
+        db: Connection of a transaction the caller owns.  The INSERT
+            runs on it uncommitted; without it, the INSERT commits on
+            its own pooled connection.
     """
-    async with get_db() as db:
-        await db.execute(
-            "INSERT INTO search_log (instance_id, cycle_trigger, action, message)"
-            " VALUES (NULL, 'system', 'info', ?)",
-            (message,),
-        )
-        await db.commit()
+    sql = (
+        "INSERT INTO search_log (instance_id, cycle_trigger, action, message)"
+        " VALUES (NULL, 'system', 'info', ?)"
+    )
+    if db is not None:
+        await db.execute(sql, (message,))
+        return
+    async with get_db() as conn:
+        await conn.execute(sql, (message,))
+        await conn.commit()
 
 
 async def purge_old_logs(retention_days: int) -> int:

@@ -1,4 +1,5 @@
-{# Refreshed table body: returned by POST /settings/instances after create. #}
+{# Refreshed table body: returned by POST /settings/instances after create,
+   and swapped out of band by POST /settings/admin/reset-instances. #}
 {% for instance in instances %}
   {% include "partials/instance_row.html" %}
 {% endfor %}

@@ -14,6 +14,8 @@ from contextlib import suppress
 import pytest
 from playwright.sync_api import Locator, Page, expect
 
+from houndarr.config import DEFAULT_BATCH_SIZE, DEFAULT_SLEEP_INTERVAL_MINUTES
+
 
 def _wait_for_connection_ui_idle(page: Page) -> None:
     """Drain the 80 ms setTimeout scheduled by the field-change handler.
@@ -922,3 +924,113 @@ def test_api_key_reveal_copy_fallback_targets_open_dialog(
     assert state["parentTag"] == "DIALOG", (
         f"fallback textarea parent was {state['parentTag']!r}, expected DIALOG"
     )
+
+
+@pytest.mark.integration
+def test_admin_reset_instances_refreshes_table_without_reload(
+    logged_in_page: Page, houndarr_url: str, mock_sonarr_url: str
+) -> None:
+    """After Reset all instance settings the table row shows the default batch / interval."""
+    page = logged_in_page
+    instance_name = f"E2E Reset {uuid.uuid4().hex[:8]}"
+    page.goto(f"{houndarr_url}/settings")
+
+    page.get_by_role("button", name=re.compile(r"add\s*instance", re.I)).first.click()
+    add_form = page.locator('form[data-form-mode="add"]')
+    expect(add_form).to_be_visible()
+    add_form.locator('input[name="name"]').fill(instance_name)
+    add_form.locator('select[name="type"]').select_option("sonarr")
+    add_form.locator('input[name="url"]').fill(mock_sonarr_url)
+    add_form.locator('input[name="api_key"]').fill("e2e-sonarr-key")
+    add_form.locator('input[name="batch_size"]').fill("7")
+    add_form.locator('input[name="sleep_interval_mins"]').fill("45")
+    _wait_for_connection_ui_idle(page)
+    _test_connection_and_wait_for_success(
+        page, add_form, add_form.locator("button[data-test-connection-btn]")
+    )
+    _submit_form(add_form)
+    batch_cell = (
+        page.locator("#instance-tbody tr")
+        .filter(has_text=instance_name)
+        .locator('[data-col="batch"]')
+    )
+    expect(batch_cell).to_have_text(re.compile(r"^\s*7 / 45m\s*$"), timeout=10_000)
+
+    page.evaluate("() => { window.__resetNoReload = true; }")
+    _open_admin_dropdown(page)
+    page.locator('button[data-confirm-reset="instances"]').click()
+    page.locator("#confirm-go").click()
+
+    expect(page.locator("#admin-flash")).to_contain_text("Policy settings reset", timeout=4_000)
+    expect(batch_cell).to_have_text(
+        re.compile(rf"^\s*{DEFAULT_BATCH_SIZE} / {DEFAULT_SLEEP_INTERVAL_MINUTES}m\s*$"),
+        timeout=4_000,
+    )
+    assert page.evaluate("() => window.__resetNoReload === true")
+
+
+@pytest.mark.integration
+def test_admin_action_server_error_shows_toast(
+    logged_in_page: Page, houndarr_url: str, console_guard
+) -> None:
+    """An unswapped 5xx on an admin action surfaces the global toast instead of nothing."""
+    for p in _EXPECTED_500_CONSOLE_NOISE:
+        console_guard.allow(p)
+    page = logged_in_page
+    page.goto(f"{houndarr_url}/settings")
+    _open_admin_dropdown(page)
+
+    pattern = re.compile(r"/settings/admin/clear-logs$")
+    page.route(pattern, lambda route: route.fulfill(status=500, body="Internal Server Error"))
+    try:
+        page.locator('button[data-confirm-reset="logs"]').click()
+        with page.expect_response(
+            lambda r: "/settings/admin/clear-logs" in r.url and r.request.method == "POST"
+        ):
+            page.locator("#confirm-go").click()
+        expect(page.locator("#toast")).to_be_visible(timeout=4_000)
+        expect(page.locator("#toast")).to_contain_text("Request failed (HTTP 500)")
+        expect(page.locator("#admin-flash")).not_to_contain_text("Internal Server Error")
+    finally:
+        page.unroute(pattern)
+
+
+_EXPECTED_429_CONSOLE_NOISE = [
+    r"Failed to load resource: the server responded with a status of 429",
+    r"Response Status Error Code 429",
+]
+
+
+@pytest.mark.integration
+def test_admin_factory_reset_rate_limit_flash_renders(
+    logged_in_page: Page, houndarr_url: str, console_guard
+) -> None:
+    """The factory-reset 429 flash lands in #admin-flash.
+
+    The response is stubbed: tripping the real limit would lock /login for
+    the rest of the suite, since both share one IP-scoped bucket.
+    """
+    for p in _EXPECTED_429_CONSOLE_NOISE:
+        console_guard.allow(p)
+    page = logged_in_page
+    page.goto(f"{houndarr_url}/settings")
+    _open_admin_dropdown(page)
+
+    flash = (
+        '<div data-admin-flash data-admin-flash-tone="danger" role="status">'
+        "Too many attempts. Try again in a minute.</div>"
+    )
+    pattern = re.compile(r"/settings/admin/factory-reset$")
+    page.route(
+        pattern,
+        lambda route: route.fulfill(status=429, body=flash, content_type="text/html"),
+    )
+    try:
+        page.locator('button[data-confirm-reset="factory"]').click()
+        page.locator("#confirm-phrase-input").fill("RESET")
+        page.locator("#confirm-password-input").fill("WrongPassword123!")
+        page.locator("#confirm-go").click()
+        expect(page.locator("#admin-flash")).to_contain_text("Too many attempts", timeout=4_000)
+        expect(page.locator("#toast")).to_be_hidden()
+    finally:
+        page.unroute(pattern)

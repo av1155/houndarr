@@ -24,6 +24,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Cooldown reconcile keeps a pass's cooldowns when its wanted list holds 50,000 items or more or a Sonarr or Whisparr v2 series fails to load, and logs `incomplete; keeping those cooldowns` once. (#839)
 - With `Queue Limit` set, a non-JSON answer from the \*arr's queue status (such as a proxy login page) lets the search proceed instead of failing the whole cycle. (#833)
 - `Reset all instance settings` also turns `Enable missing search` back on and resets `Upgrade Series Window (per cycle)` to `5`. (#909)
+- `Reset all instance settings` resets every instance or none, and a failure shows an error in the Admin panel instead of closing the dialog with no message. (#920)
+- `Clear all logs` keeps every row when it fails, and the Admin panel shows an error instead of closing the dialog with no message. (#920)
+- The instance table on the Settings page shows the reset batch size and interval right after `Reset all instance settings`, without a reload. (#920)
+- After five wrong passwords in a minute, the password change and factory reset forms show the rate-limit message instead of no response. (#920)
+- A save, delete, toggle or other change that fails with an HTTP error, or cannot reach Houndarr, shows a toast instead of doing nothing. (#920)
 
 ### Security
 

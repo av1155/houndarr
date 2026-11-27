@@ -240,7 +240,7 @@ function initSettingsPage() {
 
     function setConnectionState(isVerified, statusText, statusTone) {
       const verifiedInput = addInstanceModalContent.querySelector('#instance-connection-verified');
-      const submitBtn = addInstanceModalContent.querySelector('#instance-submit-btn');
+      const submitBtn = getSubmitButton();
       const statusEl = addInstanceModalContent.querySelector('#instance-connection-status');
 
       if (verifiedInput) {

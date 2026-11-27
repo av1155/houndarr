@@ -156,6 +156,55 @@ def type_mismatch_message(check: ConnectionCheck, selected: InstanceType) -> str
     return None
 
 
+# Upper limits for the instance number fields.  The batch and series-window
+# limits match the form's max attributes; the rest have no form max, so they
+# sit far above any real setting and only stop a crafted value from overflowing
+# SQLite's 64-bit INTEGER or the scheduler's date arithmetic.
+_MAX_BATCH_SIZE = 250
+_MAX_SERIES_WINDOW = 100
+_MAX_MINUTES = 525_600
+_MAX_HOURS = 8_760
+_MAX_DAYS = 3_650
+_MAX_COUNT = 10_000
+
+
+def _first_out_of_range(*fields: tuple[str, int, int, int]) -> str | None:
+    """Return the message for the first ``(label, value, low, high)`` outside its range."""
+    for label, value, low, high in fields:
+        if value < low:
+            return (
+                f"{label} must be 0 or greater." if low == 0 else f"{label} must be at least {low}."
+            )
+        if value > high:
+            return f"{label} must be {high} or less."
+    return None
+
+
+def validate_missing_controls(
+    *,
+    batch_size: int,
+    sleep_interval_mins: int,
+    hourly_cap: int,
+    cooldown_days: int,
+    post_release_grace_hrs: int,
+    queue_limit: int,
+) -> str | None:
+    """Validate the missing-pass and cycle numeric controls from form submissions.
+
+    Returns:
+        User-facing error string on the first failed bound, or
+        ``None`` when every value is valid.
+    """
+    return _first_out_of_range(
+        ("Batch size", batch_size, 1, _MAX_BATCH_SIZE),
+        ("Sleep minutes", sleep_interval_mins, 1, _MAX_MINUTES),
+        ("Hourly cap", hourly_cap, 0, _MAX_COUNT),
+        ("Cooldown days", cooldown_days, 0, _MAX_DAYS),
+        ("Post-release grace hours", post_release_grace_hrs, 0, _MAX_HOURS),
+        ("Queue limit", queue_limit, 0, _MAX_COUNT),
+    )
+
+
 def validate_cutoff_controls(
     cutoff_batch_size: int,
     cutoff_cooldown_days: int,
@@ -167,13 +216,11 @@ def validate_cutoff_controls(
         User-facing error string on the first failed bound, or
         ``None`` when every value is valid.
     """
-    if cutoff_batch_size < 1:
-        return "Cutoff batch size must be at least 1."
-    if cutoff_cooldown_days < 0:
-        return "Cutoff cooldown days must be 0 or greater."
-    if cutoff_hourly_cap < 0:
-        return "Cutoff hourly cap must be 0 or greater."
-    return None
+    return _first_out_of_range(
+        ("Cutoff batch size", cutoff_batch_size, 1, _MAX_BATCH_SIZE),
+        ("Cutoff cooldown days", cutoff_cooldown_days, 0, _MAX_DAYS),
+        ("Cutoff hourly cap", cutoff_hourly_cap, 0, _MAX_COUNT),
+    )
 
 
 def validate_missing_hot_retry_controls(
@@ -182,12 +229,19 @@ def validate_missing_hot_retry_controls(
 ) -> str | None:
     """Validate missing-pass hot retry controls from form submissions.
 
+    The interval's 1-hour minimum applies only while the window is on;
+    with the window off the interval is unused, so 0 is accepted.
+
     Returns:
         User-facing error string on the first failed bound, or
         ``None`` when every value is valid.
     """
-    if window_hrs < 0:
-        return "Missing hot retry window must be 0 or greater."
+    out_of_range = _first_out_of_range(
+        ("Missing hot retry window", window_hrs, 0, _MAX_HOURS),
+        ("Missing hot retry interval", interval_hrs, 0, _MAX_HOURS),
+    )
+    if out_of_range is not None:
+        return out_of_range
     if window_hrs > 0 and interval_hrs < 1:
         return "Missing hot retry interval must be at least 1 hour when the window is enabled."
     return None
@@ -249,6 +303,7 @@ def validate_upgrade_controls(
     upgrade_batch_size: int,
     upgrade_cooldown_days: int,
     upgrade_hourly_cap: int,
+    upgrade_series_window_size: int,
 ) -> str | None:
     """Validate upgrade-specific numeric controls from form submissions.
 
@@ -257,19 +312,20 @@ def validate_upgrade_controls(
     a tighter cooldown would thrash the indexers for minimal
     benefit.  The route form enforces this with a ``min="7"``
     attribute; the service validator backs it up so a crafted POST
-    cannot bypass the UI constraint.
+    cannot bypass the UI constraint.  The series window is checked for
+    every instance type because the database rejects a value outside
+    1 to 100 whichever type the row has.
 
     Returns:
         User-facing error string on the first failed bound, or
         ``None`` when every value is valid.
     """
-    if upgrade_batch_size < 1:
-        return "Upgrade batch size must be at least 1."
-    if upgrade_cooldown_days < 7:
-        return "Upgrade cooldown days must be at least 7."
-    if upgrade_hourly_cap < 0:
-        return "Upgrade hourly cap must be 0 or greater."
-    return None
+    return _first_out_of_range(
+        ("Upgrade batch size", upgrade_batch_size, 1, _MAX_BATCH_SIZE),
+        ("Upgrade cooldown days", upgrade_cooldown_days, 7, _MAX_DAYS),
+        ("Upgrade hourly cap", upgrade_hourly_cap, 0, _MAX_COUNT),
+        ("Upgrade series window", upgrade_series_window_size, 1, _MAX_SERIES_WINDOW),
+    )
 
 
 class SearchModes:

@@ -55,6 +55,7 @@ to pause missing searches without changing the settings below.
 Maximum number of missing items considered per cycle.
 
 - Default: `2`
+- Range: `1` to `250`
 - Lower values are safer; higher values clear backlog faster.
 
 ### Sleep (minutes)
@@ -62,6 +63,7 @@ Maximum number of missing items considered per cycle.
 Wait time between cycles for each enabled instance.
 
 - Default: `30`
+- Minimum: `1`
 - Lower values increase request frequency.
 
 ### Hourly Cap
@@ -259,6 +261,7 @@ Enable searching for items that do not meet your quality cutoff.
 Maximum cutoff items considered per cutoff cycle.
 
 - Default: `1`
+- Range: `1` to `250`
 
 ### Cutoff Cooldown
 
@@ -297,6 +300,7 @@ quality profiles and custom format scoring.
 ### Upgrade Batch
 
 - Default: `1`
+- Range: `1` to `250`
 - Hard cap: `5`. Engine-enforced; configured values above 5 are
   clamped to 5.
 

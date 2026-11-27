@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Schema version: bump when adding new migrations
 # ---------------------------------------------------------------------------
-SCHEMA_VERSION = 22
+SCHEMA_VERSION = 23
 
 # v20: per-instance tag-based include / exclude filter for *arr items.
 # Column names are baked in here as constants so a future rename never
@@ -44,8 +44,8 @@ _V22_TAG_FILTER_UPGRADE_EXCLUDE_COLUMN = "tag_filter_upgrade_exclude"
 # 'whisparr_episode' to 'whisparr_v2_episode') cannot retroactively invalidate
 # the CHECK clauses written by earlier migrations.  Never edit a snapshot once
 # its migration has shipped: add a new constant for the migration that performs
-# the rename instead, and update _ITEM_TYPES / _INSTANCE_TYPES below to point at
-# the latest snapshot for fresh-install DDL.
+# the change instead, and point the _ITEM_TYPES / _INSTANCES_COLUMNS aliases
+# below at the latest snapshot for fresh-install DDL.
 
 _INSTANCE_TYPES_V5 = "'sonarr', 'radarr', 'lidarr', 'readarr', 'whisparr'"
 _INSTANCE_TYPES_V10 = "'radarr', 'sonarr', 'lidarr', 'readarr', 'whisparr_v2', 'whisparr_v3'"
@@ -57,28 +57,13 @@ _ITEM_TYPES_V10 = "'episode', 'movie', 'album', 'book', 'whisparr_episode', 'whi
 _ITEM_TYPES_V15 = _ITEM_TYPES_V10
 _ITEM_TYPES_V16 = "'episode', 'movie', 'album', 'book', 'whisparr_v2_episode', 'whisparr_v3_movie'"
 
-# Aliases used by _SCHEMA_SQL and the latest-shipped CHECK clauses.  Always
-# point at the most recent snapshot.
-_INSTANCE_TYPES = _INSTANCE_TYPES_V10
-_ITEM_TYPES = _ITEM_TYPES_V16
-
-_SCHEMA_SQL = f"""
-CREATE TABLE IF NOT EXISTS settings (
-    key   TEXT PRIMARY KEY,
-    value TEXT NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS widget_api_key (
-    id           INTEGER PRIMARY KEY CHECK(id = 1),
-    hash         TEXT    NOT NULL CHECK(length(hash) = 64 AND hash NOT GLOB '*[^0-9a-f]*'),
-    created_at   TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-    last_used_at TEXT
-);
-
-CREATE TABLE IF NOT EXISTS instances (
+# The instances column block at v23.  _migrate_to_v23 rebuilds older tables from
+# it and _SCHEMA_SQL creates fresh ones from it, so both carry the same columns,
+# order, defaults and CHECK clauses.
+_INSTANCES_COLUMNS_V23 = f"""
     id                   INTEGER PRIMARY KEY AUTOINCREMENT,
     name                 TEXT    NOT NULL,
-    type                 TEXT    NOT NULL CHECK(type IN ({_INSTANCE_TYPES})),
+    type                 TEXT    NOT NULL CHECK(type IN ({_INSTANCE_TYPES_V10})),
     url                  TEXT    NOT NULL,
     encrypted_api_key    TEXT    NOT NULL DEFAULT '',
     missing_enabled      INTEGER NOT NULL DEFAULT 1,
@@ -136,7 +121,78 @@ CREATE TABLE IF NOT EXISTS instances (
     enabled              INTEGER NOT NULL DEFAULT 1,
     created_at           TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     updated_at           TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+"""
+
+# Column order of _INSTANCES_COLUMNS_V23; the v23 copy names every column.
+_INSTANCES_COLUMN_NAMES_V23 = (
+    "id",
+    "name",
+    "type",
+    "url",
+    "encrypted_api_key",
+    "missing_enabled",
+    "batch_size",
+    "sleep_interval_mins",
+    "hourly_cap",
+    "cooldown_days",
+    "post_release_grace_hrs",
+    "missing_hot_retry_window_hrs",
+    "missing_hot_retry_interval_hrs",
+    "queue_limit",
+    "cutoff_enabled",
+    "cutoff_batch_size",
+    "cutoff_cooldown_days",
+    "cutoff_hourly_cap",
+    "sonarr_search_mode",
+    "lidarr_search_mode",
+    "readarr_search_mode",
+    "whisparr_v2_search_mode",
+    "upgrade_enabled",
+    "upgrade_batch_size",
+    "upgrade_cooldown_days",
+    "upgrade_hourly_cap",
+    "upgrade_sonarr_search_mode",
+    "upgrade_lidarr_search_mode",
+    "upgrade_readarr_search_mode",
+    "upgrade_whisparr_v2_search_mode",
+    "upgrade_item_offset",
+    "upgrade_series_offset",
+    "upgrade_series_window_size",
+    "missing_page_offset",
+    "cutoff_page_offset",
+    "allowed_time_window",
+    "search_order",
+    "monitored_total",
+    "unreleased_count",
+    "snapshot_refreshed_at",
+    "tag_filter_include",
+    "tag_filter_exclude",
+    "tag_filter_missing_exclude",
+    "tag_filter_cutoff_exclude",
+    "tag_filter_upgrade_exclude",
+    "enabled",
+    "created_at",
+    "updated_at",
+)
+
+# Aliases used by _SCHEMA_SQL.  Always point at the most recent snapshot.
+_INSTANCES_COLUMNS = _INSTANCES_COLUMNS_V23
+_ITEM_TYPES = _ITEM_TYPES_V16
+
+_SCHEMA_SQL = f"""
+CREATE TABLE IF NOT EXISTS settings (
+    key   TEXT PRIMARY KEY,
+    value TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS widget_api_key (
+    id           INTEGER PRIMARY KEY CHECK(id = 1),
+    hash         TEXT    NOT NULL CHECK(length(hash) = 64 AND hash NOT GLOB '*[^0-9a-f]*'),
+    created_at   TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    last_used_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS instances ({_INSTANCES_COLUMNS});
 
 CREATE TABLE IF NOT EXISTS cooldowns (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -339,47 +395,64 @@ async def init_db_schema() -> None:
 async def init_db_migrations() -> None:
     """Advance the schema to the current ``SCHEMA_VERSION`` and re-heal."""
     async with get_db() as db:
-        async with db.execute("SELECT value FROM settings WHERE key = 'schema_version'") as cur:
-            row = await cur.fetchone()
+        try:
+            await _init_db_migrations(db)
+        finally:
+            # A rebuild migration that ran inside an open transaction turned
+            # foreign_keys off and its own PRAGMA foreign_keys=ON was a no-op
+            # there.  This connection goes back to the pool, so end any
+            # transaction and turn enforcement back on whatever happened.
+            if db.in_transaction:
+                await db.rollback()
+            await db.execute("PRAGMA foreign_keys=ON")
 
-        if row is None:
-            await db.execute(
-                "INSERT INTO settings (key, value) VALUES ('schema_version', ?)",
-                (str(SCHEMA_VERSION),),
-            )
-            await _ensure_v3_indexes(db)
-            await db.commit()
-            logger.info("Database initialized at schema version %d", SCHEMA_VERSION)
-            return
 
-        current = int(row["value"])
-        if current < SCHEMA_VERSION:
-            await _run_migrations(db, current)
-        # Self-heal: re-apply the latest idempotent migration so that
-        # a corrupted state (version bumped but columns missing) is
-        # repaired automatically.  Each guard inside the migration
-        # checks _column_exists first, so this is a no-op on a
-        # healthy database.
-        await _migrate_to_v9(db)
-        await _migrate_to_v10(db)
-        await _migrate_to_v11(db)
-        await _migrate_to_v12(db)
-        await _migrate_to_v13(db)
-        await _migrate_to_v14(db)
-        await _migrate_to_v15(db)
-        await _migrate_to_v16(db)
-        await _migrate_to_v17(db)
-        await _migrate_to_v18(db)
-        await _migrate_to_v19(db)
-        await _migrate_to_v20(db)
-        await _migrate_to_v21(db)
-        await _migrate_to_v22(db)
+async def _init_db_migrations(db: aiosqlite.Connection) -> None:
+    async with db.execute("SELECT value FROM settings WHERE key = 'schema_version'") as cur:
+        row = await cur.fetchone()
+
+    if row is None:
+        await db.execute(
+            "INSERT INTO settings (key, value) VALUES ('schema_version', ?)",
+            (str(SCHEMA_VERSION),),
+        )
         await _ensure_v3_indexes(db)
-        # PRAGMA optimize keeps the planner's sqlite_stat1 entries fresh as
-        # search_log grows.  Cheap on healthy DBs, prevents silent index
-        # regressions after large back-fills (issue #586).
-        await db.execute("PRAGMA optimize")
         await db.commit()
+        logger.info("Database initialized at schema version %d", SCHEMA_VERSION)
+        return
+
+    current = int(row["value"])
+    if current < SCHEMA_VERSION:
+        await _run_migrations(db, current)
+    # Self-heal: re-apply every idempotent migration so that a corrupted
+    # state (version bumped but columns or CHECK clauses missing) is
+    # repaired automatically.  Each one guards on the column it adds or on
+    # the CHECK text in sqlite_master, so this is a no-op on a healthy
+    # database.
+    await _migrate_to_v9(db)
+    await _migrate_to_v10(db)
+    await _migrate_to_v11(db)
+    await _migrate_to_v12(db)
+    await _migrate_to_v13(db)
+    await _migrate_to_v14(db)
+    await _migrate_to_v15(db)
+    await _migrate_to_v16(db)
+    await _migrate_to_v17(db)
+    await _migrate_to_v18(db)
+    await _migrate_to_v19(db)
+    await _migrate_to_v20(db)
+    await _migrate_to_v21(db)
+    await _migrate_to_v22(db)
+    # Only here, never in _run_migrations: the v23 rebuild copies every
+    # v23 column by name, and only this pass guarantees they all exist on
+    # a database stamped ahead of its columns.
+    await _migrate_to_v23(db)
+    await _ensure_v3_indexes(db)
+    # PRAGMA optimize keeps the planner's sqlite_stat1 entries fresh as
+    # search_log grows.  Cheap on healthy DBs, prevents silent index
+    # regressions after large back-fills (issue #586).
+    await db.execute("PRAGMA optimize")
+    await db.commit()
 
 
 async def init_db() -> None:
@@ -439,6 +512,7 @@ async def _run_migrations(db: aiosqlite.Connection, from_version: int) -> None:
         await _migrate_to_v21(db)
     if from_version < 22:
         await _migrate_to_v22(db)
+    # v23 runs from the self-heal pass in init_db_migrations instead.
 
     logger.info("Migrated database from schema version %d to %d", from_version, SCHEMA_VERSION)
     await db.execute(
@@ -503,8 +577,8 @@ async def _migrate_to_v5(db: aiosqlite.Connection) -> None:
     await db.execute("PRAGMA foreign_keys=OFF")
 
     # -- 1) Recreate instances with expanded type CHECK ----------------------
-    # Use the v5 snapshot of _INSTANCE_TYPES so this rebuild stays correct even
-    # when the current alias rotates in a later migration.
+    # Use the v5 snapshot of the instance-type list so this rebuild stays
+    # correct after a later migration changes the list.
     await db.execute(  # nosem
         f"""
         CREATE TABLE instances_new (
@@ -810,7 +884,7 @@ async def _migrate_to_v10(db: aiosqlite.Connection) -> None:
     await db.execute("DROP TABLE IF EXISTS search_log_new")
 
     # -- 1) Recreate instances with expanded type CHECK + rename whisparr ------
-    # v10 snapshot of _INSTANCE_TYPES locks the CHECK clause to what this
+    # The v10 instance-type snapshot locks the CHECK clause to what this
     # migration introduced; later renames live in their own migrations.
     await db.execute(  # nosem
         f"""
@@ -988,10 +1062,9 @@ async def _migrate_to_v12(db: aiosqlite.Connection) -> None:
     migration keeps existing rows on ``'chronological'`` so upgrades do not
     silently change behaviour for instances that have been running for
     months.  New instances added via the UI always get the ``config.py``
-    default (currently ``'random'``).  The CHECK constraint lives in
-    ``_SCHEMA_SQL``; SQLite's ``ALTER TABLE ADD COLUMN`` cannot add a CHECK,
-    so migrated rows rely on the service layer (which only accepts
-    ``SearchOrder`` enum values) for validation.
+    default (currently ``'random'``).  The ALTER below left out the CHECK
+    clause ``_SCHEMA_SQL`` carries, so databases migrated through here
+    accepted any string until :func:`_migrate_to_v23` rebuilt the table.
     """
     if not await _column_exists(db, "instances", "search_order"):
         await db.execute(
@@ -1120,9 +1193,9 @@ async def _migrate_to_v14(db: aiosqlite.Connection) -> None:
 async def _migrate_to_v15(db: aiosqlite.Connection) -> None:
     """Enforce the ``search_kind`` CHECK constraint on migrated databases.
 
-    v14's ``ALTER TABLE ADD COLUMN`` could only set the ``NOT NULL
-    DEFAULT 'missing'`` clause; SQLite does not let you append a CHECK
-    constraint to an existing column.  Fresh installs already carry
+    v14's ``ALTER TABLE ADD COLUMN`` set only the ``NOT NULL DEFAULT
+    'missing'`` clause, and SQLite cannot add a CHECK to a column that
+    already exists.  Fresh installs already carry
     the ``CHECK(search_kind IN ('missing', 'cutoff', 'upgrade'))``
     clause from ``_SCHEMA_SQL``, but databases that migrated through
     v14 silently accept any string in that column.  Re-create the
@@ -1431,8 +1504,9 @@ async def _migrate_to_v17(db: aiosqlite.Connection) -> None:
     coverage without forking the code.
 
     Default of 5 preserves the old behaviour for every existing instance.
-    The CHECK clause caps the value at 100 to prevent a runaway value
-    from triggering a single cycle that fetches every series at once.
+    The fresh DDL caps the value at 1 to 100 with a CHECK so a runaway
+    value cannot fetch every series in one cycle; the ALTER below left
+    that CHECK out, which :func:`_migrate_to_v23` restores.
     """
     if not await _column_exists(db, "instances", "upgrade_series_window_size"):
         await db.execute(
@@ -1524,6 +1598,190 @@ async def _migrate_to_v22(db: aiosqlite.Connection) -> None:
     ):
         if not await _column_exists(db, "instances", column):
             await db.execute(f"ALTER TABLE instances ADD COLUMN {column} TEXT NOT NULL DEFAULT ''")
+
+
+_V23_RESET_WARNING = (
+    "Schema v23: reset %s to %d on %d instance(s); the stored value was outside %d-%d"
+)
+
+
+async def _migrate_to_v23(db: aiosqlite.Connection) -> None:
+    """Bring every ``instances`` table up to the fresh range checks.
+
+    Issue #916.  v12 and v17 added ``search_order`` and
+    ``upgrade_series_window_size`` with ``ALTER TABLE ADD COLUMN``
+    statements that left out the CHECK clauses the fresh DDL carries, so
+    databases created before those versions accept any value in either
+    column.  A CHECK cannot be added to an existing column, so
+    :func:`_rebuild_instances_v23` rebuilds the table, then
+    :func:`_reset_out_of_range_settings_v23` resets, once, any other
+    number setting stored outside the limits enforced on save from v23.
+
+    Both steps are idempotent and run from the self-heal pass only.
+    """
+    await _rebuild_instances_v23(db)
+    await _reset_out_of_range_settings_v23(db)
+
+
+async def _rebuild_instances_v23(db: aiosqlite.Connection) -> None:
+    """Rebuild ``instances`` from ``_INSTANCES_COLUMNS_V23`` when its CHECKs are missing.
+
+    A series window outside 1 to 100 is reset to the default 5 and an
+    unknown search order to ``'chronological'``, the value v12 gave
+    existing rows, before every column is copied as stored.
+
+    The rebuild runs with foreign keys off, so it also repairs the rows
+    a connection left with foreign keys off could have orphaned (see
+    :func:`init_db_migrations`): cooldowns whose instance is gone are
+    deleted and search_log rows lose their instance id, as the
+    ``ON DELETE`` actions would have done.  ``PRAGMA foreign_key_check``
+    must then come back empty or the whole rebuild rolls back.  The
+    AUTOINCREMENT high-water mark is carried over so a new instance
+    never reuses a deleted instance's id.
+    """
+    async with db.execute(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='instances'"
+    ) as cur:
+        row = await cur.fetchone()
+    compact = "".join(str(row[0] if row else "").split())
+    if "CHECK(upgrade_series_window_size>=1" in compact and "CHECK(search_orderIN" in compact:
+        return
+
+    columns = ", ".join(_INSTANCES_COLUMN_NAMES_V23)
+
+    # PRAGMA foreign_keys is a no-op inside a transaction, so flush first.
+    await db.commit()
+    await db.execute("PRAGMA foreign_keys=OFF")
+    try:
+        # Legacy isolation opens a transaction only before DML; BEGIN makes
+        # the CREATE, DROP and RENAME roll back with the copy on failure.
+        await db.execute("BEGIN")
+        cur = await db.execute(
+            "UPDATE instances SET upgrade_series_window_size = 5"
+            " WHERE NOT (typeof(upgrade_series_window_size) = 'integer'"
+            " AND upgrade_series_window_size BETWEEN 1 AND 100)"
+        )
+        window_resets = cur.rowcount
+        cur = await db.execute(
+            "UPDATE instances SET search_order = 'chronological'"
+            " WHERE search_order NOT IN ('chronological', 'random')"
+        )
+        order_resets = cur.rowcount
+        await db.execute("DROP TABLE IF EXISTS instances_new")
+        await db.execute(f"CREATE TABLE instances_new ({_INSTANCES_COLUMNS_V23})")  # nosem
+        await db.execute(  # nosem
+            f"INSERT INTO instances_new ({columns}) SELECT {columns} FROM instances"  # noqa: S608  # nosec
+        )
+        async with db.execute("SELECT seq FROM sqlite_sequence WHERE name = 'instances'") as cur:
+            seq_row = await cur.fetchone()
+        await db.execute("DROP TABLE instances")
+        await db.execute("ALTER TABLE instances_new RENAME TO instances")
+        if seq_row is not None:
+            cur = await db.execute(
+                "UPDATE sqlite_sequence SET seq = MAX(seq, ?) WHERE name = 'instances'",
+                (seq_row[0],),
+            )
+            if cur.rowcount == 0:
+                await db.execute(
+                    "INSERT INTO sqlite_sequence (name, seq) VALUES ('instances', ?)",
+                    (seq_row[0],),
+                )
+        cur = await db.execute(
+            "DELETE FROM cooldowns WHERE instance_id NOT IN (SELECT id FROM instances)"
+        )
+        orphan_cooldowns = cur.rowcount
+        cur = await db.execute(
+            "UPDATE search_log SET instance_id = NULL"
+            " WHERE instance_id IS NOT NULL AND instance_id NOT IN (SELECT id FROM instances)"
+        )
+        orphan_logs = cur.rowcount
+        async with db.execute("PRAGMA foreign_key_check") as cur:
+            violations = [tuple(r) for r in await cur.fetchall()]
+        if violations:
+            msg = f"Schema v23: foreign key check failed after the repair: {violations[:5]}"
+            raise RuntimeError(msg)
+        await db.commit()
+    finally:
+        if db.in_transaction:
+            await db.rollback()
+        await db.execute("PRAGMA foreign_keys=ON")
+
+    logger.info("Schema v23: rebuilt the instances table with its range checks")
+    if window_resets:
+        logger.warning(_V23_RESET_WARNING, "upgrade_series_window_size", 5, window_resets, 1, 100)
+    if order_resets:
+        logger.warning(
+            "Schema v23: reset search_order to chronological on %d instance(s);"
+            " the stored value was neither chronological nor random",
+            order_resets,
+        )
+    if orphan_cooldowns:
+        logger.warning(
+            "Schema v23: deleted %d cooldown row(s) whose instance no longer exists",
+            orphan_cooldowns,
+        )
+    if orphan_logs:
+        logger.warning(
+            "Schema v23: cleared the instance on %d search_log row(s)"
+            " whose instance no longer exists",
+            orphan_logs,
+        )
+
+
+async def _reset_out_of_range_settings_v23(db: aiosqlite.Connection) -> None:
+    """Reset, once, number settings stored outside the limits enforced on save from v23.
+
+    The settings form declared these limits, but only some reached the
+    server, so a crafted or scripted save could store any integer.
+    Values inside the limits are never touched.  A ``settings`` marker
+    makes this a one-time pass, as the v14 back-fill does, so a later
+    change to the limits cannot re-run it.  The bounds and defaults are
+    written out here, locked to v23, for the same reason.
+    """
+    async with db.execute("SELECT 1 FROM settings WHERE key = 'v23_range_reset_complete'") as cur:
+        if await cur.fetchone() is not None:
+            return
+
+    bounds = (
+        ("batch_size", 1, 250, 2),
+        ("sleep_interval_mins", 1, 525600, 30),
+        ("hourly_cap", 0, 10000, 4),
+        ("cooldown_days", 0, 3650, 14),
+        ("post_release_grace_hrs", 0, 8760, 6),
+        ("missing_hot_retry_window_hrs", 0, 8760, 0),
+        ("missing_hot_retry_interval_hrs", 0, 8760, 2),
+        ("queue_limit", 0, 10000, 0),
+        ("cutoff_batch_size", 1, 250, 1),
+        ("cutoff_cooldown_days", 0, 3650, 21),
+        ("cutoff_hourly_cap", 0, 10000, 1),
+        ("upgrade_batch_size", 1, 250, 1),
+        ("upgrade_cooldown_days", 7, 3650, 90),
+        ("upgrade_hourly_cap", 0, 10000, 1),
+    )
+    resets: list[tuple[str, int, int, int, int]] = []
+    for column, low, high, default in bounds:
+        cur = await db.execute(  # nosem
+            f"UPDATE instances SET {column} = ?"  # noqa: S608  # nosec
+            f" WHERE NOT (typeof({column}) = 'integer' AND {column} BETWEEN ? AND ?)",
+            (default, low, high),
+        )
+        if cur.rowcount:
+            resets.append((column, default, cur.rowcount, low, high))
+    # As on save, the interval's 1-hour minimum applies only while the window is on.
+    cur = await db.execute(
+        "UPDATE instances SET missing_hot_retry_interval_hrs = 2"
+        " WHERE missing_hot_retry_window_hrs > 0 AND missing_hot_retry_interval_hrs < 1"
+    )
+    if cur.rowcount:
+        resets.append(("missing_hot_retry_interval_hrs", 2, cur.rowcount, 1, 8760))
+    await db.execute(
+        "INSERT INTO settings (key, value) VALUES ('v23_range_reset_complete', '1')"
+        " ON CONFLICT(key) DO NOTHING"
+    )
+    await db.commit()
+
+    for reset in resets:
+        logger.warning(_V23_RESET_WARNING, *reset)
 
 
 async def _column_exists(db: aiosqlite.Connection, table_name: str, column_name: str) -> bool:

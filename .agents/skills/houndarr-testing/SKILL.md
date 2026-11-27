@@ -98,7 +98,7 @@ Current CSRF exemptions: `POST /logout`, `/login`, `/setup`.
 ## Markers
 
 - `@pytest.mark.integration`: 12 async engine-cycle cases in `tests/test_e2e/`
-  plus 18 Playwright flows in `tests/e2e_browser/` (browser tree excluded
+  plus 27 Playwright cases in `tests/e2e_browser/` (browser tree excluded
   from default collection via `norecursedirs`; `test_e2e/` is collected and
   filterable).
 - `@pytest.mark.pinning`: characterisation tests pinning current behaviour

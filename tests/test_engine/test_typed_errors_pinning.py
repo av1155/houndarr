@@ -33,6 +33,7 @@ from cryptography.fernet import Fernet
 from houndarr.database import get_db
 from houndarr.engine import search_loop as search_loop_module
 from houndarr.engine import supervisor as supervisor_module
+from houndarr.engine.retry import CycleOutcome
 from houndarr.engine.search_loop import run_instance_search
 from houndarr.engine.supervisor import Supervisor
 from houndarr.errors import (
@@ -204,12 +205,12 @@ class TestSupervisorCycleCatchSurface:
     """Pin ``Supervisor._run_search_cycle`` typed-error catch behaviour."""
 
     @pytest.mark.asyncio()
-    async def test_engine_error_writes_row_and_returns_false(
+    async def test_engine_error_writes_row_and_returns_failed(
         self,
         seeded_supervisor_instance: None,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """EngineError from run_instance_search produces one error row, returns False."""
+        """EngineError from run_instance_search produces one error row and a failed cycle."""
         monkeypatch.setattr(
             supervisor_module,
             "run_instance_search",
@@ -220,7 +221,7 @@ class TestSupervisorCycleCatchSurface:
 
         result = await sup._run_search_cycle(instance, cycle_trigger="scheduled")
 
-        assert result is False
+        assert result is CycleOutcome.failed
         rows = await _fetch_error_rows()
         assert len(rows) == 1
         assert rows[0]["instance_id"] == 1
@@ -233,7 +234,7 @@ class TestSupervisorCycleCatchSurface:
         "cls",
         [ClientHTTPError, ClientValidationError],
     )
-    async def test_client_error_writes_row_and_returns_false(
+    async def test_client_error_writes_row_and_returns_failed(
         self,
         seeded_supervisor_instance: None,
         monkeypatch: pytest.MonkeyPatch,
@@ -244,7 +245,7 @@ class TestSupervisorCycleCatchSurface:
         ``ClientTransportError`` is intentionally excluded: it is a
         transport failure dressed in the typed hierarchy, so it belongs
         on the retry branch covered by
-        :meth:`test_transport_error_returns_true_and_writes_nothing`.
+        :meth:`test_transport_error_returns_unreachable_and_writes_outage_row`.
         """
         monkeypatch.setattr(
             supervisor_module,
@@ -256,7 +257,7 @@ class TestSupervisorCycleCatchSurface:
 
         result = await sup._run_search_cycle(instance, cycle_trigger="run_now")
 
-        assert result is False
+        assert result is CycleOutcome.failed
         rows = await _fetch_error_rows()
         assert len(rows) == 1
         assert rows[0]["instance_id"] == 1
@@ -272,21 +273,18 @@ class TestSupervisorCycleCatchSurface:
         ],
         ids=["httpx_transport", "client_transport"],
     )
-    async def test_transport_error_returns_true_and_writes_nothing(
+    async def test_transport_error_returns_unreachable_and_writes_outage_row(
         self,
         seeded_supervisor_instance: None,
         monkeypatch: pytest.MonkeyPatch,
         exc: BaseException,
     ) -> None:
-        """Transport errors trigger the reconnect branch and skip the row.
+        """Transport errors take the unreachable branch: one ``Could not reach`` row.
 
-        Pinning: the row write happens in the outer reconnect loop the
-        FIRST time a connection error is seen, not here.  This branch
-        only signals the outer loop via the ``True`` return value.
         Both the raw ``httpx.TransportError`` and the typed
         ``ClientTransportError`` wrapper take this branch; the typed
-        wrapper used to fall through to the error-row branch before the
-        catch list was extended.
+        wrapper used to fall through to the error-row branch (which
+        writes the exception text) before the catch list was extended.
         """
         monkeypatch.setattr(
             supervisor_module,
@@ -298,17 +296,17 @@ class TestSupervisorCycleCatchSurface:
 
         result = await sup._run_search_cycle(instance, cycle_trigger="scheduled")
 
-        assert result is True
+        assert result is CycleOutcome.unreachable
         rows = await _fetch_error_rows()
-        assert rows == []
+        assert [r["message"] for r in rows] == [f"Could not reach {instance.core.url}"]
 
     @pytest.mark.asyncio()
-    async def test_success_returns_false_and_writes_nothing(
+    async def test_success_returns_ok_and_writes_nothing(
         self,
         seeded_supervisor_instance: None,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """Happy path: run_instance_search returns, cycle returns False, no row."""
+        """Happy path: run_instance_search returns, the cycle is ok, no row."""
         monkeypatch.setattr(
             supervisor_module,
             "run_instance_search",
@@ -319,6 +317,6 @@ class TestSupervisorCycleCatchSurface:
 
         result = await sup._run_search_cycle(instance, cycle_trigger="scheduled")
 
-        assert result is False
+        assert result is CycleOutcome.ok
         rows = await _fetch_error_rows()
         assert rows == []

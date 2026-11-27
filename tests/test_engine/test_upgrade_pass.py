@@ -9,7 +9,8 @@ import httpx
 import pytest
 import respx
 
-from houndarr.engine.search_loop import run_instance_search
+from houndarr.engine.search_loop import CycleReport, run_instance_search
+from houndarr.errors import ClientTransportError
 from houndarr.services.cooldown import record_search
 from houndarr.services.instances import InstanceType
 
@@ -446,35 +447,161 @@ async def test_upgrade_empty_pool_returns_zero(
     "houndarr.engine.search_loop.update_instance",
     new_callable=AsyncMock,
 )
-async def test_upgrade_pool_fetch_transient_error_no_error_row(
+@pytest.mark.parametrize(
+    ("failure", "answered"),
+    [
+        (httpx.ReadTimeout("slow"), False),
+        (httpx.RemoteProtocolError("reset"), False),
+        (httpx.Response(500), True),
+        (httpx.Response(502), False),
+        (httpx.Response(503), True),
+        (httpx.Response(504), False),
+        (httpx.Response(408), True),
+        (httpx.Response(429), True),
+        (httpx.Response(200, json={"not": "a list"}), True),
+    ],
+    ids=["read-timeout", "protocol", "500", "502", "503", "504", "408", "429", "bad-payload"],
+)
+async def test_upgrade_pool_fetch_transient_error_defers_without_rows(
+    mock_update: AsyncMock,
+    seeded_instances: None,
+    failure: httpx.Response | Exception,
+    answered: bool,
+) -> None:
+    """A transient library fetch failure defers the pass and writes no row.
+
+    No ``error`` row, so a flaky *arr does not spam the log feed (#620).
+    No ``nothing to upgrade right now`` row either: the list was never
+    read, and that row would read as healthy over an earlier error.  A
+    status code or a payload still proves the *arr answered, which ends
+    an outage; a proxy's 502 or 504 says the *arr behind it did not.
+    """
+    _mock_radarr_empty_missing()
+    route = respx.get(f"{RADARR_URL}/api/v3/movie")
+    if isinstance(failure, httpx.Response):
+        route.mock(return_value=failure)
+    else:
+        route.mock(side_effect=failure)
+
+    report = CycleReport()
+    count = await run_instance_search(_radarr_instance(), MASTER_KEY, report=report)
+
+    assert count == 0
+    assert report.upgrade_deferred is True
+    assert report.reached is answered
+    assert [r for r in await get_log_rows() if r["search_kind"] == "upgrade"] == []
+
+
+@pytest.mark.asyncio()
+@respx.mock
+@patch(
+    "houndarr.engine.search_loop.update_instance",
+    new_callable=AsyncMock,
+)
+@pytest.mark.parametrize("status", [301, 302, 307, 401, 403, 404])
+async def test_upgrade_pool_fetch_rejected_writes_error_row(
+    mock_update: AsyncMock,
+    seeded_instances: None,
+    status: int,
+) -> None:
+    """A library fetch the *arr refuses marks the instance failing (#911).
+
+    A wrong API key (401/403), a reverse proxy's login redirect (3xx, the
+    client never follows redirects) or a moved URL base (404) does not
+    pass on its own, so it must not read as an empty upgrade list.
+    """
+    respx.get(f"{RADARR_URL}/api/v3/movie").mock(
+        return_value=httpx.Response(status, headers={"Location": "/login"}),
+    )
+
+    report = CycleReport()
+    count = await run_instance_search(_radarr_instance(), MASTER_KEY, report=report)
+
+    assert count == 0
+    assert report.upgrade_deferred is False
+    rows = [r for r in await get_log_rows() if r["search_kind"] == "upgrade"]
+    assert [(r["action"], r["message"]) for r in rows] == [
+        ("error", f"upgrade pool fetch failed: HTTP {status} from /api/v3/movie"),
+    ]
+
+
+@pytest.mark.asyncio()
+@respx.mock
+@patch(
+    "houndarr.engine.search_loop.update_instance",
+    new_callable=AsyncMock,
+)
+@pytest.mark.parametrize(
+    "failure",
+    [httpx.ConnectError("refused"), httpx.ConnectTimeout("no answer")],
+    ids=["connect-error", "connect-timeout"],
+)
+async def test_upgrade_pool_fetch_connect_failure_raises_transport_error(
+    mock_update: AsyncMock,
+    seeded_instances: None,
+    failure: Exception,
+) -> None:
+    """A library fetch that cannot connect is an outage, not an empty list (#911).
+
+    It surfaces as :class:`ClientTransportError` so the supervisor writes
+    one ``Could not reach`` row and retries on the short cadence.
+    """
+    respx.get(f"{RADARR_URL}/api/v3/movie").mock(side_effect=failure)
+
+    with pytest.raises(ClientTransportError) as info:
+        await run_instance_search(_radarr_instance(), MASTER_KEY)
+
+    assert info.value.__cause__ is failure
+    assert await get_log_rows() == []
+
+
+@pytest.mark.asyncio()
+@respx.mock
+@patch(
+    "houndarr.engine.search_loop.update_instance",
+    new_callable=AsyncMock,
+)
+async def test_run_now_deferred_upgrade_list_says_so(
     mock_update: AsyncMock,
     seeded_instances: None,
 ) -> None:
-    """Transient httpx failure on the library fetch: cycle returns 0 and no
-    ``error`` row is written.  The deferred-empty INFO row fires through
-    the existing 6-hour throttle so the operator-facing log feed stays
-    calm.  See issue #620: a recurring upgrade-pass ERROR row was
-    polluting the dashboard on every cycle when Lidarr/Readarr's
-    library endpoint was briefly unavailable.
-    """
-    from houndarr.services.cooldown import _reset_info_log_cache
+    """A manual run whose upgrade list could not be read does not claim an empty backlog."""
+    respx.get(f"{RADARR_URL}/api/v3/movie").mock(return_value=httpx.Response(503))
 
-    _reset_info_log_cache()
-    _mock_radarr_empty_missing()
-    respx.get(f"{RADARR_URL}/api/v3/movie").mock(
-        side_effect=httpx.ConnectError("timeout"),
-    )
+    await run_instance_search(_radarr_instance(), MASTER_KEY, cycle_trigger="run_now")
+
+    rows = await get_log_rows()
+    assert [(r["action"], r["message"]) for r in rows] == [
+        ("info", "Run now finished: the upgrade list could not be read, try again shortly"),
+    ]
+
+
+@pytest.mark.asyncio()
+@respx.mock
+@patch(
+    "houndarr.engine.search_loop.update_instance",
+    new_callable=AsyncMock,
+)
+async def test_run_now_that_read_nothing_leaves_an_open_error_newest(
+    mock_update: AsyncMock,
+    seeded_instances: None,
+) -> None:
+    """A manual run that proves nothing must not write its closing row over an error."""
+    from houndarr.repositories.search_log import insert_log_row
 
     inst = _radarr_instance()
-    count = await run_instance_search(inst, MASTER_KEY)
+    await insert_log_row(
+        instance_id=inst.core.id,
+        item_id=None,
+        item_type=None,
+        action="error",
+        message="upgrade pool fetch failed: HTTP 401 from /api/v3/movie",
+    )
+    respx.get(f"{RADARR_URL}/api/v3/movie").mock(return_value=httpx.Response(503))
 
-    assert count == 0
-    rows = await get_log_rows()
-    error_rows = [r for r in rows if r["action"] == "error" and r["search_kind"] == "upgrade"]
-    info_rows = [r for r in rows if r["action"] == "info" and r["search_kind"] == "upgrade"]
-    assert error_rows == []
-    assert len(info_rows) == 1
-    assert "nothing to upgrade right now" in (info_rows[0].get("message") or "")
+    await run_instance_search(inst, MASTER_KEY, cycle_trigger="run_now")
+
+    assert [r["action"] for r in await get_log_rows()] == ["error"]
 
 
 @pytest.mark.asyncio()
@@ -523,11 +650,8 @@ async def test_upgrade_pool_fetch_transient_error_no_error_row_lidarr(
     Radarr test above proves correctness; this case defends against
     future adapter-specific drift on the originally reported path.
     """
-    from houndarr.services.cooldown import _reset_info_log_cache
-
     from .conftest import LIDARR_URL
 
-    _reset_info_log_cache()
     respx.get(f"{LIDARR_URL}/api/v1/wanted/missing").mock(
         return_value=httpx.Response(200, json=_EMPTY_PAGE),
     )
@@ -535,19 +659,15 @@ async def test_upgrade_pool_fetch_transient_error_no_error_row_lidarr(
         return_value=httpx.Response(200, json=_EMPTY_PAGE),
     )
     respx.get(f"{LIDARR_URL}/api/v1/album").mock(
-        side_effect=httpx.ConnectError("timeout"),
+        side_effect=httpx.ReadTimeout("timeout"),
     )
 
-    inst = _lidarr_instance()
-    count = await run_instance_search(inst, MASTER_KEY)
+    report = CycleReport()
+    count = await run_instance_search(_lidarr_instance(), MASTER_KEY, report=report)
 
     assert count == 0
-    rows = await get_log_rows()
-    error_rows = [r for r in rows if r["action"] == "error" and r["search_kind"] == "upgrade"]
-    info_rows = [r for r in rows if r["action"] == "info" and r["search_kind"] == "upgrade"]
-    assert error_rows == []
-    assert len(info_rows) == 1
-    assert "nothing to upgrade right now" in (info_rows[0].get("message") or "")
+    assert report.upgrade_deferred is True
+    assert [r for r in await get_log_rows() if r["search_kind"] == "upgrade"] == []
 
 
 # ---------------------------------------------------------------------------

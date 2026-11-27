@@ -13,8 +13,15 @@ not sure.
 
 ## Houndarr cannot connect to your *arr instance
 
-Symptoms: `error` rows in the Logs page with "connection refused"
-or "timeout" in the message field.
+Symptoms: an `error` row reading `Could not reach <url>` in the
+Logs page, and the instance marked offline on the dashboard.
+Houndarr logs that row once per outage and retries every 30
+seconds; an `is reachable again` row follows once the *arr answers.
+If the instance was already failing before the outage and Houndarr
+reconnects without searching (a full download queue, a closed search
+window), that row is an `error` ending in
+`its last error is not rechecked yet: <error>`, so the instance keeps
+showing that error until its next search.
 
 Checks:
 
@@ -77,16 +84,23 @@ Checks:
 `error` rows include a message field explaining what went wrong.
 Common causes:
 
-- HTTP 401: the API key is wrong, or your *arr instance rotated
-  the key.
+- HTTP 401 or 403: the API key is wrong, your *arr instance
+  rotated the key, or a reverse proxy in front of it wants its own
+  login. On an instance that only runs upgrade search this reads
+  `upgrade pool fetch failed: HTTP 401 from <path>`.
+- A redirect status such as HTTP 302: usually a reverse proxy
+  sending Houndarr to its login page.
 - HTTP 404: the item was removed from the instance between the
   time Houndarr read the wanted list and the time it issued the
-  search. Occasional 404s are harmless.
-- Connection refused or timeout: the instance is unreachable.
-  See the first section above.
+  search. Occasional 404s are harmless. A repeating
+  `upgrade pool fetch failed: HTTP 404` points at a wrong URL base
+  instead.
+- `Could not reach <url>`: the instance is unreachable. See the
+  first section above.
 
-A stream of connection errors suggests a network or configuration
-problem. A single 404 or 401 usually does not.
+An error that repeats every cycle needs fixing; a single 404 does
+not. Once a cycle runs cleanly again, Houndarr logs
+`'<name>' is healthy again` and the dashboard clears the instance.
 
 ## Dashboard shows "next patrol" but nothing happens
 

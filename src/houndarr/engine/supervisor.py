@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import sqlite3
 from contextlib import suppress
 from datetime import UTC, datetime
 from functools import partial
@@ -17,15 +18,21 @@ from typing import Literal
 from uuid import uuid4
 
 import httpx
+from aiosqlitepool import PoolClosedError, PoolConnectionAcquireTimeoutError
 
 from houndarr.clients.base import ReconcileSets, WantedKind, WantedWalks
 from houndarr.database import get_db
 from houndarr.engine.adapters import get_adapter
 from houndarr.engine.adapters.protocols import AppAdapterProto
-from houndarr.engine.retry import ReconnectState, run_with_reconnect
-from houndarr.engine.search_loop import _write_log, run_instance_search
+from houndarr.engine.retry import CycleOutcome, run_with_reconnect
+from houndarr.engine.search_loop import CycleReport, _write_log, run_instance_search
 from houndarr.enums import CycleTrigger, SearchAction
-from houndarr.errors import ClientError, ClientTransportError, EngineError
+from houndarr.errors import ClientError, ClientTransportError, EngineError, redact_url_credentials
+from houndarr.repositories.search_log import (
+    NewestLogRow,
+    fetch_newest_log_row,
+    fetch_newest_log_row_under_errors,
+)
 from houndarr.services.cooldown_reconcile import reconcile_cooldowns
 from houndarr.services.instances import (
     Instance,
@@ -46,6 +53,26 @@ _UNRELEASED_DELTA_LOG_THRESHOLD = 10  # log INFO when |new - prior| exceeds this
 _CHURN_WARN_AFTER = 6  # refreshes in a row, about an hour at the refresh cadence
 _WANTED_KINDS: tuple[WantedKind, ...] = ("missing", "cutoff")
 RunNowStatus = Literal["accepted", "not_found", "disabled"]
+_UNREACHABLE_PREFIX = "Could not reach "
+_NOT_RECHECKED = "; its last error is not rechecked yet: "
+# Stands in for a row under an outage that could not be read.
+_UNREADABLE_ROW = NewestLogRow(action="", cycle_id=None, message=None)
+# A database hiccup around the health rows must not end an instance's loop.
+_DB_ERRORS = (sqlite3.Error, PoolClosedError, PoolConnectionAcquireTimeoutError)
+
+
+def _is_unreachable(row: NewestLogRow | None) -> bool:
+    """Return whether *row* is an open ``Could not reach`` error."""
+    return (
+        row is not None
+        and row.action == SearchAction.error.value
+        and (row.message or "").startswith(_UNREACHABLE_PREFIX)
+    )
+
+
+def _reachable_again(instance: Instance) -> str:
+    """Return the row that closes an open ``Could not reach`` error."""
+    return f"{instance.core.name!r} ({instance.core.url}) is reachable again"
 
 
 def _name_lists(names: list[str]) -> str:
@@ -110,20 +137,12 @@ class Supervisor:
         # `last_activity_at` in that case until the first post-restart cycle
         # completes.
         self._last_cycle_end: dict[int, datetime] = {}
-        # Instances with an unresolved run-now "Could not reach" error row.
-        # The dashboard marks a card offline while its newest row is an
-        # error, and healthy cycles on an empty backlog write no rows at
-        # all, so that row would pin the card offline forever (with the
-        # Run now button disabled) unless the next successful cycle pairs
-        # it with the same recovery info row the reconnect state machine
-        # writes for scheduled streaks.
-        self._manual_error_open: set[int] = set()
         # Instances whose snapshot refresh is in a transport-failure streak.
         # A failed refresh leaves the dashboard counters at their last-known
         # values (0 forever on a never-synced instance), so the first failure
         # in a streak must be visible at the default log level.  Repeats stay
-        # at debug, mirroring the reconnect state machine's one-row-per-streak
-        # rule; membership clears on the next successful refresh.
+        # at debug, mirroring the one ``Could not reach`` row per outage;
+        # membership clears on the next successful refresh.
         self._snapshot_fail_warned: set[int] = set()
         # (instance, pass) pairs in a streak of refreshes where that pass's
         # list could not be read in full, so its cooldowns were kept.  Same
@@ -339,11 +358,10 @@ class Supervisor:
         """Run search cycles for one instance until cancelled.
 
         A one-time startup grace delay gives co-located *arr services time
-        to become ready before the first cycle fires.  Connection errors are
-        logged to ``search_log`` only on state transitions (first failure and
-        recovery) to avoid inflating the dashboard error counter with retry
-        noise; the state machine lives in
-        :func:`houndarr.engine.retry.run_with_reconnect`.
+        to become ready before the first cycle fires.  An unreachable *arr
+        is retried on a short cadence (see
+        :func:`houndarr.engine.retry.run_with_reconnect`); the health rows
+        are written by :meth:`_run_search_cycle`.
         """
         logger.debug("Supervisor: loop started for instance id=%d", instance_id)
 
@@ -353,8 +371,6 @@ class Supervisor:
             instance_id,
         )
         await asyncio.sleep(_STARTUP_GRACE_SECS + startup_offset)
-
-        state = ReconnectState()
 
         try:
             while True:
@@ -374,13 +390,9 @@ class Supervisor:
                     return
 
                 sleep_secs = await run_with_reconnect(
-                    state,
-                    instance=instance,
                     cycle=partial(self._run_search_cycle, instance, cycle_trigger="scheduled"),
-                    cycle_trigger="scheduled",
                     error_retry_secs=_CONNECT_RETRY_SECS,
                     success_sleep_secs=instance.missing.sleep_interval_mins * 60,
-                    write_log=_write_log,
                 )
                 await asyncio.sleep(sleep_secs)
 
@@ -398,77 +410,68 @@ class Supervisor:
 
     async def _run_search_cycle(
         self, instance: Instance, *, cycle_trigger: CycleTrigger | str
-    ) -> bool:
+    ) -> CycleOutcome:
         """Run exactly one cycle for *instance* under the per-instance lock.
 
-        Returns:
-            ``True`` if the cycle failed with a connection error, ``False`` otherwise.
+        An instance's health is its newest ``search_log`` row: the
+        dashboard and the settings page both mark it failing while that
+        row is an error.  This method keeps that row truthful, judging
+        from the stored row rather than from memory so a restart, a
+        retention purge or a manual run cannot drop or repeat a row:
+
+        - Unreachable: one ``Could not reach`` row per outage, written
+          unless the newest row already is one.
+        - Failed: the cycle's error row stays newest.
+        - Reached the *arr after an error: one closing row after the
+          cycle's own rows, which clears the card even on an empty
+          backlog where a healthy cycle writes nothing else.  When an
+          outage ends on a cycle that neither ran its passes cleanly nor
+          wrote rows over it, the closing row is an error that carries
+          forward the error the outage covered.
 
         Records the cycle-end wallclock in ``_last_cycle_end`` regardless
-        of cycle outcome (success / transport error / engine error) so
-        the dashboard countdown anchors on a signal that advances once
-        per cycle even when every skip is throttled.
+        of cycle outcome so the dashboard countdown anchors on a signal
+        that advances once per cycle even when every skip is throttled.
+
+        Returns:
+            The cycle's :class:`CycleOutcome`.
         """
         lock = self._run_locks.setdefault(instance.core.id, asyncio.Lock())
         async with lock:
             cycle_id = str(uuid4())
+            # Scheduled health rows carry no cycle id; a run-now row joins its
+            # own cycle so the run's history shows it.
+            row_cycle_id = cycle_id if cycle_trigger == "run_now" else None
+            before = await self._newest_row(instance)
+            report = CycleReport()
             try:
                 await run_instance_search(
                     instance,
                     self._master_key,
                     cycle_id=cycle_id,
                     cycle_trigger=cycle_trigger,
+                    report=report,
                 )
-                if instance.core.id in self._manual_error_open:
-                    # Write before clearing the flag (mirrors the reconnect
-                    # state machine): a failed write leaves the flag set so
-                    # the pairing row is retried on the next success instead
-                    # of silently never landing.
-                    await _write_log(
-                        instance_id=instance.core.id,
-                        item_id=None,
-                        item_type=None,
-                        action=SearchAction.info.value,
-                        cycle_id=cycle_id,
-                        cycle_trigger=cycle_trigger,
-                        message=(
-                            f"{instance.core.name!r} ({instance.core.url}) is reachable again"
-                        ),
-                    )
-                    self._manual_error_open.discard(instance.core.id)
-                return False
             except (httpx.TransportError, ClientTransportError):
                 # ``ClientTransportError`` is the typed wrapper the *arr
-                # clients raise instead of the raw ``httpx.TransportError``
-                # since the typed-error refactor; both mean the same
-                # thing here (instance unreachable) and must take the
-                # same warning + retry path.
+                # clients raise instead of the raw ``httpx.TransportError``;
+                # both mean the instance is unreachable.
                 logger.warning(
                     "Supervisor: could not reach %r (%s); retrying in %d s",
                     instance.core.name,
-                    instance.core.url,
+                    redact_url_credentials(instance.core.url),
                     _CONNECT_RETRY_SECS,
                 )
-                # Manual runs bypass the reconnect state machine (it lives
-                # in the scheduled loop), so without this row an unreachable
-                # instance answers Run now with a success flash and an empty
-                # history.  Scheduled cycles leave the row to the state
-                # machine's one-per-streak transition instead.
-                if cycle_trigger == "run_now":
-                    await _write_log(
-                        instance_id=instance.core.id,
-                        item_id=None,
-                        item_type=None,
-                        action=SearchAction.error.value,
-                        cycle_id=cycle_id,
+                # Re-read: the cycle may have written rows before it lost the *arr.
+                if not _is_unreachable(await self._newest_row(instance)):
+                    await self._write_health_row(
+                        instance,
+                        SearchAction.error,
+                        f"{_UNREACHABLE_PREFIX}{instance.core.url}",
+                        cycle_id=row_cycle_id,
                         cycle_trigger=cycle_trigger,
-                        message=f"Could not reach {instance.core.url}",
                     )
-                    # Flag only after the row exists; a failed write must not
-                    # leave an orphan flag that pairs a recovery row with an
-                    # error row that never landed.
-                    self._manual_error_open.add(instance.core.id)
-                return True
+                return CycleOutcome.unreachable
             except (EngineError, ClientError) as exc:
                 # ``run_instance_search`` wraps any non-typed escape in
                 # :class:`EngineError` before it reaches this handler,
@@ -480,18 +483,175 @@ class Supervisor:
                     instance.core.name,
                     exc,
                 )
-                await _write_log(
-                    instance_id=instance.core.id,
-                    item_id=None,
-                    item_type=None,
-                    action=SearchAction.error.value,
+                await self._write_health_row(
+                    instance,
+                    SearchAction.error,
+                    str(exc),
                     cycle_id=cycle_id,
                     cycle_trigger=cycle_trigger,
-                    message=str(exc),
                 )
-                return False
+                return CycleOutcome.failed
+            else:
+                return await self._settle_cycle(
+                    instance,
+                    before,
+                    report,
+                    cycle_id=cycle_id,
+                    row_cycle_id=row_cycle_id,
+                    cycle_trigger=cycle_trigger,
+                )
             finally:
                 self._last_cycle_end[instance.core.id] = datetime.now(UTC)
+
+    async def _settle_cycle(
+        self,
+        instance: Instance,
+        before: NewestLogRow | None,
+        report: CycleReport,
+        *,
+        cycle_id: str,
+        row_cycle_id: str | None,
+        cycle_trigger: CycleTrigger | str,
+    ) -> CycleOutcome:
+        """Classify a cycle that returned, and close an earlier error it proved stale.
+
+        A cycle can end on its own error row (an upgrade list the *arr
+        refused, a failed dispatch) without raising; that leaves the
+        instance failing.  Only a cycle that reached the *arr may close an
+        earlier error, and only one whose passes ran cleanly may close a
+        failure other than an outage: a deferred upgrade list or a
+        backpressure skip proves the *arr answers, not that the failure is
+        fixed.  That holds for an error an outage row covered too,
+        unless the cycle wrote rows over the outage row: those are newer
+        than the covered error.  A deferred cycle that nothing answered
+        during an outage stays ``unreachable``.
+        """
+        outcome = CycleOutcome.deferred if report.upgrade_deferred else CycleOutcome.ok
+        try:
+            after = await fetch_newest_log_row(instance.core.id)
+        except _DB_ERRORS:
+            logger.warning(
+                "Supervisor: could not read %r's newest log row", instance.core.name, exc_info=True
+            )
+            return outcome
+        error = SearchAction.error.value
+        if after is not None and after.cycle_id == cycle_id and after.action == error:
+            return CycleOutcome.failed
+        if report.upgrade_deferred and not report.reached and _is_unreachable(before):
+            # Nothing answered (a read timeout), so the outage goes on: keep its quick retry.
+            return CycleOutcome.unreachable
+        if not report.reached or before is None or before.action != error:
+            return outcome
+        clean = outcome is CycleOutcome.ok and not report.passes_skipped
+        if _is_unreachable(before):
+            await self._close_outage(
+                instance,
+                None if clean else await self._row_under_outage(instance),
+                cycle_id=row_cycle_id,
+                cycle_trigger=cycle_trigger,
+            )
+        elif clean:
+            await self._write_recovery_row(
+                instance,
+                f"{instance.core.name!r} is healthy again",
+                cycle_id=row_cycle_id,
+                cycle_trigger=cycle_trigger,
+            )
+        return outcome
+
+    async def _close_outage(
+        self,
+        instance: Instance,
+        unchecked: NewestLogRow | None,
+        *,
+        cycle_id: str | None,
+        cycle_trigger: CycleTrigger | str,
+    ) -> None:
+        """Write the row that ends an open outage.
+
+        *unchecked* is the instance's newest row that is not an outage row
+        (pass output the closing cycle wrote, or else the row the outage
+        covered), passed unless the cycle ran its passes cleanly.  If it is
+        an error, the closing row stays an error and carries its message
+        forward, so the instance keeps reading failing until a cycle runs
+        its passes cleanly.  When it could not be read the outage stays open
+        for the next cycle or refresh to close.
+        """
+        if unchecked is _UNREADABLE_ROW:
+            return
+        reachable = _reachable_again(instance)
+        if unchecked is None or unchecked.action != SearchAction.error.value:
+            await self._write_recovery_row(
+                instance, reachable, cycle_id=cycle_id, cycle_trigger=cycle_trigger
+            )
+            return
+        earlier = (unchecked.message or SearchAction.error.value).split(_NOT_RECHECKED, 1)[-1]
+        message = f"{reachable}{_NOT_RECHECKED}{earlier}"
+        logger.warning("Supervisor: %s", redact_url_credentials(message))
+        await self._write_health_row(
+            instance, SearchAction.error, message, cycle_id=cycle_id, cycle_trigger=cycle_trigger
+        )
+
+    async def _row_under_outage(self, instance: Instance) -> NewestLogRow | None:
+        """Return the row *instance*'s open outage rows cover, or ``_UNREADABLE_ROW``."""
+        try:
+            return await fetch_newest_log_row_under_errors(instance.core.id, _UNREACHABLE_PREFIX)
+        except _DB_ERRORS:
+            logger.warning(
+                "Supervisor: could not read %r's log row under its outage",
+                instance.core.name,
+                exc_info=True,
+            )
+            return _UNREADABLE_ROW
+
+    async def _newest_row(self, instance: Instance) -> NewestLogRow | None:
+        """Return *instance*'s newest log row, or ``None`` when it cannot be read."""
+        try:
+            return await fetch_newest_log_row(instance.core.id)
+        except _DB_ERRORS:
+            logger.warning(
+                "Supervisor: could not read %r's newest log row", instance.core.name, exc_info=True
+            )
+            return None
+
+    async def _write_recovery_row(
+        self,
+        instance: Instance,
+        message: str,
+        *,
+        cycle_id: str | None,
+        cycle_trigger: CycleTrigger | str,
+    ) -> None:
+        """Log and write the ``info`` row that closes an open error."""
+        logger.info("Supervisor: %s", redact_url_credentials(message))
+        await self._write_health_row(
+            instance, SearchAction.info, message, cycle_id=cycle_id, cycle_trigger=cycle_trigger
+        )
+
+    async def _write_health_row(
+        self,
+        instance: Instance,
+        action: SearchAction,
+        message: str,
+        *,
+        cycle_id: str | None,
+        cycle_trigger: CycleTrigger | str,
+    ) -> None:
+        """Write a health row; a database error is logged, not raised."""
+        try:
+            await _write_log(
+                instance_id=instance.core.id,
+                item_id=None,
+                item_type=None,
+                action=action.value,
+                cycle_id=cycle_id,
+                cycle_trigger=cycle_trigger,
+                message=message,
+            )
+        except _DB_ERRORS:
+            logger.warning(
+                "Supervisor: could not write %r's health row", instance.core.name, exc_info=True
+            )
 
     def cycle_end_timestamps(self) -> dict[int, str]:
         """Return ISO-8601 UTC timestamps for each instance's most recent cycle end.
@@ -614,24 +774,19 @@ class Supervisor:
                 if reconcile_read:
                     self._report_incomplete_lists(instance, reconcile_sets, walks)
                 self._snapshot_fail_warned.discard(instance.core.id)
-                # A successful snapshot proves the *arr is reachable, so an
-                # open run-now error can be paired here too.  Without this,
-                # a transient blip caught only by a manual click would pin
-                # the card offline (Run now button disabled) until the next
-                # scheduled cycle, up to a full sleep interval away; the
-                # snapshot loop bounds that window at its 10-minute cadence.
-                if instance.core.id in self._manual_error_open:
-                    await _write_log(
-                        instance_id=instance.core.id,
-                        item_id=None,
-                        item_type=None,
-                        action=SearchAction.info.value,
+                # A successful snapshot proves the *arr is reachable, so it
+                # closes an open outage row too.  That bounds how long a
+                # recovered instance whose next cycle is far away stays
+                # offline (Run now disabled) to the 10-minute refresh cadence.
+                # A newer error from a cycle that reached the *arr stays open,
+                # and so does one the outage row covered: a snapshot runs no pass.
+                if _is_unreachable(await self._newest_row(instance)):
+                    await self._close_outage(
+                        instance,
+                        await self._row_under_outage(instance),
+                        cycle_id=None,
                         cycle_trigger="system",
-                        message=(
-                            f"{instance.core.name!r} ({instance.core.url}) is reachable again"
-                        ),
                     )
-                    self._manual_error_open.discard(instance.core.id)
             except (httpx.TransportError, ClientTransportError):
                 if instance.core.id not in self._snapshot_fail_warned:
                     self._snapshot_fail_warned.add(instance.core.id)
@@ -639,7 +794,7 @@ class Supervisor:
                         "Supervisor: snapshot refresh failed for %r (%s); dashboard "
                         "counts keep their last-known values until a refresh succeeds",
                         instance.core.name,
-                        instance.core.url,
+                        redact_url_credentials(instance.core.url),
                     )
                 else:
                     logger.debug(

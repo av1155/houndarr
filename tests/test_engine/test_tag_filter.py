@@ -29,6 +29,7 @@ from houndarr.engine.search_loop import (
 )
 from houndarr.enums import SearchKind
 from houndarr.errors import ClientHTTPError, ClientTransportError, ClientValidationError
+from houndarr.repositories.search_log import insert_log_row
 from houndarr.services.instances import Instance, TagFilterPolicy
 from tests.test_engine.conftest import get_log_rows, make_instance
 
@@ -485,6 +486,30 @@ class TestResolveTagFilterIds:
                 "tag filter: unknown label(s) on Test Instance: no-upgarde (cutoff exclude)",
             )
         ]
+
+    @pytest.mark.asyncio()
+    async def test_unknown_label_row_keeps_an_open_error_newest(
+        self, seeded_instances: None
+    ) -> None:
+        """A typo'd label says nothing about an earlier error, so its row must not bury it."""
+        scoped = _with_policy(make_instance(), TagFilterPolicy(exclude=("nope",)))
+        await insert_log_row(
+            instance_id=scoped.core.id,
+            item_id=None,
+            item_type=None,
+            action="error",
+            cycle_trigger="scheduled",
+            message="upgrade pool fetch failed: HTTP 404 from /api/v3/series",
+        )
+        adapter = self._stub_adapter(get_tags_result={"other": 1})
+
+        resolved, error = await _resolve_tag_filter_ids(
+            scoped, adapter, cycle_id="c1", cycle_trigger="scheduled"
+        )
+
+        assert error is None
+        assert resolved[SearchKind.missing].exclude_ids == frozenset()
+        assert [r["action"] for r in await get_log_rows()] == ["error"]
 
     @pytest.mark.asyncio()
     async def test_label_unknown_in_both_lists_is_listed_bare_once(

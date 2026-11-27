@@ -5,12 +5,8 @@ codebase uses ``slots=True`` for the small memory win and to make
 attribute typos surface as ``AttributeError`` rather than silently
 writing a new instance attribute.
 
-Two dataclasses are deliberately mutable and unslotted:
-
-- :class:`houndarr.config.AppSettings` (env overrides applied
-    in-place).
-- :class:`houndarr.engine.retry.ReconnectState` (one-field state
-    flipped by the supervisor's reconnect helper).
+:class:`houndarr.config.AppSettings` is deliberately mutable and
+unslotted (env overrides applied in-place).
 
 This test walks every module under ``src/houndarr``, finds every
 dataclass, and asserts that frozen ones declare ``__slots__``.  A

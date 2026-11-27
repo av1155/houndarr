@@ -25,11 +25,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Items keep their cooldowns when a wanted list's page reads do not add up because it changed mid-read or a PostgreSQL-backed \*arr paged tied dates inconsistently (Readarr cutoff excepted). (#897)
 - `incomplete; keeping those cooldowns` is also logged once when a wanted list's page reads do not add up on six snapshot refreshes in a row. (#897)
 - With `Queue Limit` set, a non-JSON answer from the \*arr's queue status (such as a proxy login page) lets the search proceed instead of failing the whole cycle. (#833)
+- An instance whose \*arr answers with an error such as HTTP 401 after an outage, or after a Run now that could not reach it, stays marked failing instead of logging `is reachable again`. (#908)
+- A clean cycle after an error logs `'<name>' is healthy again`, so the dashboard card clears and Run now re-enables even when there is nothing to search. (#908)
+- `Could not reach <url>` stays the newest row through an outage, across restarts and log purges, and `is reachable again` follows only once the \*arr answers. (#908)
+- An instance with an open error keeps showing it outside the `Allowed Search Window` and while the download queue is at its `Queue Limit`. (#908)
+- An error from before an outage stays open when the \*arr comes back before a search pass can recheck it, logged as `its last error is not rechecked yet`. (#908)
+- Instances that only run upgrade search show as failing with `upgrade pool fetch failed: HTTP 401 from <path>` when the \*arr rejects the key or redirects to a login page, instead of `nothing to upgrade right now`. (#911)
+- Instances that only run upgrade search log `Could not reach <url>` during an outage and retry every 30 seconds; a 5xx or read timeout skips the pass without an error row. (#911)
+- The Settings page marks an instance failing for as long as its newest log row is an error, like the dashboard, instead of clearing it after 48 hours. (#908)
+- The Settings page no longer fails with HTTP 500 for up to 48 hours after deleting an instance whose newest log row was an error. (#908)
 - `Reset all instance settings` also turns `Enable missing search` back on and resets `Upgrade Series Window (per cycle)` to `5`. (#909)
 
 ### Security
 
 - Logs page rows mask the whole password of an \*arr URL whose password contains `@` or whose username is empty; before, the text after the first `@` or the whole password showed. (#895)
+- The container log masks the password of an \*arr URL in Houndarr's connection warnings, in `httpx`'s `HTTP Request:` lines and in tracebacks. (#908)
 
 ---
 

@@ -555,12 +555,9 @@ async def active_error_instance_ids() -> set[int]:
     """Return the set of instance IDs whose newest ``search_log`` row is an error.
 
     Thin delegator over
-    :func:`houndarr.repositories.search_log.fetch_active_error_instance_ids`
-    since D.27.  The service layer exposes this for the settings
-    page and dashboard consumers; the repository owns the windowed
-    ``ROW_NUMBER()`` SQL.  See the repository function's docstring
-    for the reasoning behind the 48-hour window and the
-    ``strftime`` cutoff format.
+    :func:`houndarr.repositories.search_log.fetch_active_error_instance_ids`.
+    The service layer exposes this for the settings page; the repository
+    owns the newest-row SQL and the reason it has no time window.
     """
     from houndarr.repositories.search_log import fetch_active_error_instance_ids
 

@@ -239,6 +239,9 @@ class Supervisor:
         if current is None or not current.core.enabled:
             return False
 
+        # A refresh already running when the instance was stopped can record
+        # state after stop_instance_task forgot it.
+        self._forget_list_state(instance_id)
         task = asyncio.create_task(
             self._instance_loop(instance_id, startup_offset=startup_offset),
             name=f"search-loop-{instance_id}",
@@ -267,15 +270,13 @@ class Supervisor:
     async def stop_instance_task(self, instance_id: int) -> bool:
         """Cancel scheduled and manual tasks for *instance_id*.
 
-        Also ends its incomplete-list streaks, so a list that stops adding
-        up while the instance is disabled starts its count afresh.
+        Also ends its incomplete-list streaks and warnings, as starting it
+        again does, so a list that stops adding up after the instance is
+        re-enabled starts its count afresh and warns again.
         """
         self._prune_scheduled_tasks()
         self._prune_manual_tasks()
-        self._churn_streaks = {k: n for k, n in self._churn_streaks.items() if k[0] != instance_id}
-        self._incomplete_lists_warned = {
-            k for k in self._incomplete_lists_warned if k[0] != instance_id
-        }
+        self._forget_list_state(instance_id)
 
         stopped = False
 
@@ -294,6 +295,13 @@ class Supervisor:
             stopped = True
 
         return stopped
+
+    def _forget_list_state(self, instance_id: int) -> None:
+        """Drop *instance_id*'s incomplete-list streaks and warnings."""
+        self._churn_streaks = {k: n for k, n in self._churn_streaks.items() if k[0] != instance_id}
+        self._incomplete_lists_warned = {
+            k for k in self._incomplete_lists_warned if k[0] != instance_id
+        }
 
     async def reconcile_instance(self, instance_id: int) -> None:
         """Start or stop tasks to match the instance's current enabled state."""

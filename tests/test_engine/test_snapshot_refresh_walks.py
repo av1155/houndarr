@@ -10,6 +10,7 @@ which then deleted the cooldowns of every item it never saw.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from collections import Counter
 from typing import Any
@@ -717,6 +718,28 @@ async def test_disabling_an_instance_lets_its_next_incomplete_list_warn_again(
         await supervisor._refresh_one_snapshot(instance)
 
     assert _incomplete(caplog) == [_warning("missing"), _still("missing"), _warning("missing")]
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_reenabling_an_instance_forgets_what_a_refresh_running_at_disable_kept(
+    seeded_instances: None, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    monkeypatch.setattr(_common, "_RECONCILE_MAX_PAGES", 1)
+    _serve_mock()
+    instance = make_instance(instance_id=1, itype=InstanceType.sonarr, url=f"{_MOCK}/sonarr")
+    supervisor = Supervisor(master_key=MASTER_KEY)
+    monkeypatch.setattr(supervisor, "_instance_loop", AsyncMock())
+
+    with caplog.at_level(logging.DEBUG, logger="houndarr.engine.supervisor"):
+        await supervisor._refresh_one_snapshot(instance)
+        await supervisor.stop_instance_task(1)
+        await supervisor._refresh_one_snapshot(instance)
+        assert await supervisor.start_instance_task(1, instance=instance)
+        await asyncio.gather(*supervisor._prime_tasks)
+        await supervisor.stop_instance_task(1)
+
+    assert _incomplete(caplog) == [_warning("missing")] * 3
 
 
 class _Pages:

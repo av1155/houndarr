@@ -17,14 +17,14 @@ import respx
 from houndarr.engine.search_loop import CycleReport, run_instance_search
 from houndarr.services.instances import InstanceType, TagFilterPolicy
 
-from .conftest import MASTER_KEY, SONARR_URL, make_instance
+from .conftest import MASTER_KEY, RADARR_URL, SONARR_URL, make_instance
 
 _EMPTY_PAGE = {"page": 1, "pageSize": 10, "totalRecords": 0, "records": []}
 
 
-async def _run(**overrides: Any) -> CycleReport:
+async def _run(*, itype: InstanceType = InstanceType.sonarr, **overrides: Any) -> CycleReport:
     tag_filter = overrides.pop("tag_filter", None)
-    instance = make_instance(instance_id=1, itype=InstanceType.sonarr, **overrides)
+    instance = make_instance(instance_id=1, itype=itype, **overrides)
     if tag_filter is not None:
         instance = dataclasses.replace(instance, tag_filter=tag_filter)
     report = CycleReport()
@@ -40,6 +40,28 @@ async def test_an_empty_wanted_page_counts_as_reached(seeded_instances: None) ->
     )
 
     report = await _run()
+
+    assert report == CycleReport(reached=True)
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_an_empty_cutoff_page_counts_as_reached(seeded_instances: None) -> None:
+    respx.get(f"{SONARR_URL}/api/v3/wanted/cutoff").mock(
+        return_value=httpx.Response(200, json=_EMPTY_PAGE)
+    )
+
+    report = await _run(missing_enabled=False, cutoff_enabled=True)
+
+    assert report == CycleReport(reached=True)
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_an_upgrade_list_read_counts_as_reached(seeded_instances: None) -> None:
+    respx.get(f"{RADARR_URL}/api/v3/movie").mock(return_value=httpx.Response(200, json=[]))
+
+    report = await _run(itype=InstanceType.radarr, missing_enabled=False, upgrade_enabled=True)
 
     assert report == CycleReport(reached=True)
 

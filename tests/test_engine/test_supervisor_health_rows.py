@@ -86,9 +86,14 @@ async def window_skip(*_: Any, **__: Any) -> int:
 
 
 async def backpressure(*_: Any, **kwargs: Any) -> int:
-    """The queue status answered over the limit, so no pass ran."""
+    """The queue status answered over the limit, so no pass ran.
+
+    Its info row is written only when the newest row is not an error.
+    """
     _mark(kwargs, reached=True, passes_skipped=True)
-    await _write("info", cycle_id=kwargs["cycle_id"], message=QUEUE_FULL)
+    rows = await get_log_rows()
+    if not rows or rows[-1]["action"] != "error":
+        await _write("info", cycle_id=kwargs["cycle_id"], message=QUEUE_FULL)
     return 0
 
 
@@ -274,14 +279,16 @@ async def test_a_backpressure_skip_ends_an_outage_but_no_other_failure(
     seeded_instances: None,
 ) -> None:
     """A queue status read proves the *arr is up, not that a 401 seen before is fixed."""
-    await _loop(Supervisor(master_key=MASTER_KEY), [unreachable, backpressure])
-    assert await _messages() == [("error", OUTAGE), ("info", QUEUE_FULL), ("info", REACHABLE)]
+    await _loop(Supervisor(master_key=MASTER_KEY), [unreachable, backpressure, backpressure])
+    assert await _messages() == [("error", OUTAGE), ("info", REACHABLE), ("info", QUEUE_FULL)]
+    assert await _failing_on(settings=False, dashboard=False)
 
     async with get_db() as conn:
         await conn.execute("DELETE FROM search_log")
         await conn.commit()
-    await _loop(Supervisor(master_key=MASTER_KEY), [rejected, backpressure])
-    assert await _messages() == [("error", REJECTED), ("info", QUEUE_FULL)]
+    await _loop(Supervisor(master_key=MASTER_KEY), [rejected, backpressure, backpressure])
+    assert await _messages() == [("error", REJECTED)]
+    assert await _failing_on(settings=True, dashboard=True)
 
 
 @pytest.mark.asyncio()

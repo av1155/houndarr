@@ -98,8 +98,8 @@ class CycleReport:
     than a gateway error) or payload on an upgrade list it could not
     serve.  ``upgrade_deferred`` is set when the upgrade list could not be
     read for a reason that is expected to pass, and ``passes_skipped`` when
-    queue backpressure stopped the cycle before any pass ran; either way
-    the cycle proves the *arr is up, not that it works.
+    queue backpressure stopped the cycle before any pass ran; neither
+    proves that an earlier failure is fixed.
     """
 
     reached: bool = False
@@ -238,9 +238,11 @@ _SKIP_TAG_FILTER = _PassTagFilter(skip=True)
 async def _newest_row_is_error(instance_id: int) -> bool:
     """Return whether *instance_id*'s newest log row is an error.
 
-    A cycle that proves nothing about the *arr (a window skip, a manual run
-    that read nothing) must not write an info row over an open error: the
-    status surfaces would read the instance as healthy until a later cycle.
+    An info row that says nothing about whether an earlier error is fixed
+    (a window skip, a queue-backpressure skip, an unknown tag label, a
+    manual run that read nothing) must not land on top of an open error:
+    the status surfaces would read the instance as healthy until a later
+    cycle.
     """
     from houndarr.repositories.search_log import fetch_newest_log_row
 
@@ -288,9 +290,10 @@ async def _resolve_tag_filter_ids(
     and quick retry apply as for any other request.
 
     Labels that do not resolve against the *arr's current /tag list
-    are dropped silently for the cycle but recorded as an info row so
-    the operator can see the typo without the loop failing on every
-    candidate.  A ``/tag`` list read marks *report* reached.
+    are dropped silently for the cycle but recorded as an info row (held
+    back while the newest row is an error) so the operator can see the
+    typo without the loop failing on every candidate.  A ``/tag`` list
+    read marks *report* reached.
 
     Returns:
         The per-pass filters, and the ``/tag`` error when the lookup
@@ -353,16 +356,17 @@ async def _resolve_tag_filter_ids(
     if unknown:
         message = f"tag filter: unknown label(s) on {instance.core.name}: {', '.join(unknown)}"
         logger.info("[%s] %s", instance.core.name, message)
-        await _write_log(
-            instance.core.id,
-            None,
-            None,
-            SearchAction.info.value,
-            cycle_id=cycle_id,
-            cycle_trigger=cycle_trigger,
-            reason="tag filter (unknown label)",
-            message=message,
-        )
+        if not await _newest_row_is_error(instance.core.id):
+            await _write_log(
+                instance.core.id,
+                None,
+                None,
+                SearchAction.info.value,
+                cycle_id=cycle_id,
+                cycle_trigger=cycle_trigger,
+                reason="tag filter (unknown label)",
+                message=message,
+            )
 
     return resolved, None
 
@@ -1908,19 +1912,20 @@ async def _run_instance_search_impl(
                 report.passes_skipped = True
                 reason = f"queue backpressure ({total_queued}/{instance.missing.queue_limit})"
                 logger.info("[%s] skipping cycle: %s", instance.core.name, reason)
-                await _write_log(
-                    instance.core.id,
-                    None,
-                    None,
-                    SearchAction.info.value,
-                    cycle_id=cycle_id_value,
-                    cycle_trigger=cycle_trigger,
-                    reason=reason,
-                    message=(
-                        f"Download queue has {total_queued} items,"
-                        f" limit is {instance.missing.queue_limit}"
-                    ),
-                )
+                if not await _newest_row_is_error(instance.core.id):
+                    await _write_log(
+                        instance.core.id,
+                        None,
+                        None,
+                        SearchAction.info.value,
+                        cycle_id=cycle_id_value,
+                        cycle_trigger=cycle_trigger,
+                        reason=reason,
+                        message=(
+                            f"Download queue has {total_queued} items,"
+                            f" limit is {instance.missing.queue_limit}"
+                        ),
+                    )
                 return 0
             logger.debug(
                 "[%s] queue check passed (%d/%d)",

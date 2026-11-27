@@ -41,6 +41,7 @@
   const TOAST_LEAVE_MS = 240;
   let toastTimer = null;
   let shownToast = null;
+  const watchedDialogs = new WeakSet();
 
   // An open modal <dialog> sits in the top layer and makes the rest of the page inert, so the
   // toast is cloned into it as a manual popover; the top layer also escapes the dialog's transform.
@@ -50,23 +51,32 @@
     if (!dialog || typeof base.showPopover !== 'function') return base;
     let toast = dialog.querySelector(':scope > .toast');
     if (!toast) {
-      const clone = base.cloneNode(true);
-      clone.removeAttribute('id');
-      clone.setAttribute('popover', 'manual');
-      dialog.appendChild(clone);
-      // A dialog can close (or be removed) while its toast shows: move the message out for
-      // the time it has left. Listening on the dialog itself still fires once it is detached.
+      toast = base.cloneNode(true);
+      toast.removeAttribute('id');
+      toast.setAttribute('popover', 'manual');
+      dialog.appendChild(toast);
+    }
+    // Keyed on the dialog: an htmx history restore brings back a clone inside a new dialog.
+    // Bound to the dialog itself so it still fires when the dialog is removed right after close().
+    if (!watchedDialogs.has(dialog)) {
+      watchedDialogs.add(dialog);
       dialog.addEventListener('close', function () {
-        const live = shownToast === clone && !clone.hidden;
-        if (live && !clone.classList.contains('is-leaving')) {
-          present(toastFor(base), clone.querySelector('.toast__label').textContent);
-        } else {
-          setToastShown(clone, false);
-        }
+        handOverToast(dialog, base);
       });
-      toast = clone;
     }
     return toast;
+  }
+
+  // Move a still-showing message out of a closing dialog for the time it has left.
+  function handOverToast(dialog, base) {
+    const clone = dialog.querySelector(':scope > .toast');
+    if (!clone) return;
+    const live = shownToast === clone && !clone.hidden;
+    if (live && !clone.classList.contains('is-leaving')) {
+      present(toastFor(base), clone.querySelector('.toast__label').textContent);
+    } else {
+      setToastShown(clone, false);
+    }
   }
 
   function setToastShown(toast, shown) {
@@ -120,9 +130,9 @@
   document.body.addEventListener('htmx:beforeSwap', function (evt) {
     const detail = evt.detail;
     if (!detail.isError || detail.shouldSwap || !isMutation(detail)) return;
-    // Password change and factory reset answer a rate limit with a target-ready 429 body. GETs
-    // stay unswapped so a proxy's own 429 page never replaces a polled slot.
-    if (detail.xhr.status === 429) {
+    // Password change and factory reset mark their target-ready 429 bodies; a proxy's own 429
+    // page carries no marker, so it gets the toast instead of replacing the target.
+    if (detail.xhr.status === 429 && detail.xhr.getResponseHeader('X-Houndarr-Swap-Error')) {
       detail.shouldSwap = true;
       return;
     }

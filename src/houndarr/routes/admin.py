@@ -39,7 +39,7 @@ from houndarr.auth import (
 from houndarr.config import get_settings
 from houndarr.deps import get_master_key
 from houndarr.errors import ServiceError
-from houndarr.routes._htmx import hx_redirect_response
+from houndarr.routes._htmx import hx_redirect_response, swappable_error_response
 from houndarr.routes._templates import get_templates
 from houndarr.services.admin import (
     clear_all_search_logs,
@@ -69,8 +69,8 @@ def _flash_response(
     ``tone`` is ``"success"``, ``"danger"``, or ``"info"`` and maps to the
     existing alert palette in ``base.html``. Failures the panel should
     show use status ``422``, which the htmx-config meta in ``base.html``
-    swaps, or ``429`` for the rate limit, which ``app.js`` swaps for
-    non-GET requests.
+    swaps, or ``429`` for the rate limit, which ``app.js`` swaps when
+    :func:`~houndarr.routes._htmx.swappable_error_response` marks it.
     """
     csrf_token = request.cookies.get(CSRF_COOKIE_NAME, "")
     return get_templates().TemplateResponse(
@@ -215,11 +215,13 @@ async def admin_factory_reset(
         # scoped bucket with /login so a stolen session cannot brute-force
         # the admin password through this endpoint either.
         if not check_login_rate_limit(request):
-            return _flash_response(
-                request,
-                tone="danger",
-                message="Too many attempts. Try again in a minute.",
-                status_code=429,
+            return swappable_error_response(
+                _flash_response(
+                    request,
+                    tone="danger",
+                    message="Too many attempts. Try again in a minute.",
+                    status_code=429,
+                )
             )
         if not current_password or not await check_password(current_password):
             record_failed_login(request)

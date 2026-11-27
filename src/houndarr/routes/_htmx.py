@@ -58,6 +58,18 @@ def hx_redirect_response[R: Response](response: R, location: str) -> R:
     return response
 
 
+def swappable_error_response[R: Response](response: R) -> R:
+    """Set ``X-Houndarr-Swap-Error: true`` so ``app.js`` swaps this 429 body.
+
+    The htmx-config meta leaves 429 unswapped so a reverse proxy's own
+    rate-limit page never replaces a UI slot; Houndarr's rate-limit
+    responses carry this header because their bodies are rendered for
+    the requesting form's target.
+    """
+    response.headers["X-Houndarr-Swap-Error"] = "true"
+    return response
+
+
 def hx_trigger_response[R: Response](response: R, event: str) -> R:
     """Set ``HX-Trigger: <event>`` to dispatch a custom DOM event before swap.
 

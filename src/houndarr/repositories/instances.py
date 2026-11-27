@@ -546,6 +546,7 @@ async def update_instance(
     payload: InstanceUpdate,
     *,
     master_key: bytes,
+    db: aiosqlite.Connection | None = None,
 ) -> None:
     """Partially update the instance row for *instance_id*.
 
@@ -562,6 +563,9 @@ async def update_instance(
             update.  ``api_key``, when set, is plaintext.
         master_key: Fernet key used to re-encrypt ``api_key`` when
             it is part of the update.
+        db: Connection of a transaction the caller owns.  The update
+            runs on it uncommitted; without it, the update commits on
+            its own pooled connection.
     """
     assignments: list[str] = []
     values: list[Any] = []
@@ -579,9 +583,12 @@ async def update_instance(
     assignments.append("updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')")
     values.append(instance_id)
     sql = f"UPDATE instances SET {', '.join(assignments)} WHERE id = ?"  # noqa: S608  # nosec
-    async with get_db() as db:
+    if db is not None:
         await db.execute(sql, values)  # nosem
-        await db.commit()
+        return
+    async with get_db() as conn:
+        await conn.execute(sql, values)  # nosem
+        await conn.commit()
 
 
 async def delete_instance(instance_id: int) -> bool:

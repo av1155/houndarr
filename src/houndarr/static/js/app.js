@@ -40,23 +40,71 @@
   const TOAST_VISIBLE_MS = 2400;
   const TOAST_LEAVE_MS = 240;
   let toastTimer = null;
+  let shownToast = null;
+  const watchedDialogs = new WeakSet();
 
-  function showToast(message) {
-    const toast = document.getElementById('toast');
-    if (!toast || !message) return;
+  // An open modal <dialog> sits in the top layer and makes the rest of the page inert, so the
+  // toast is cloned into it as a manual popover; the top layer also escapes the dialog's transform.
+  function toastFor(base) {
+    const dialogs = document.querySelectorAll('dialog[open]');
+    const dialog = dialogs[dialogs.length - 1];
+    if (!dialog || typeof base.showPopover !== 'function') return base;
+    let toast = dialog.querySelector(':scope > .toast');
+    if (!toast) {
+      toast = base.cloneNode(true);
+      toast.removeAttribute('id');
+      toast.setAttribute('popover', 'manual');
+      dialog.appendChild(toast);
+    }
+    // Keyed on the dialog: an htmx history restore brings back a clone inside a new dialog.
+    // Bound to the dialog itself so it still fires when the dialog is removed right after close().
+    if (!watchedDialogs.has(dialog)) {
+      watchedDialogs.add(dialog);
+      dialog.addEventListener('close', function () {
+        handOverToast(dialog, base);
+      });
+    }
+    return toast;
+  }
+
+  // Move a still-showing message out of a closing dialog for the time it has left.
+  function handOverToast(dialog, base) {
+    const clone = dialog.querySelector(':scope > .toast');
+    if (!clone) return;
+    const live = shownToast === clone && !clone.hidden;
+    if (live && !clone.classList.contains('is-leaving')) {
+      present(toastFor(base), clone.querySelector('.toast__label').textContent);
+    } else {
+      setToastShown(clone, false);
+    }
+  }
+
+  function setToastShown(toast, shown) {
+    toast.hidden = !shown;
+    if (!toast.hasAttribute('popover') || shown === toast.matches(':popover-open')) return;
+    if (shown) toast.showPopover();
+    else toast.hidePopover();
+  }
+
+  function present(toast, message) {
     const label = toast.querySelector('.toast__label');
     if (label) label.textContent = message;
-    if (toastTimer !== null) {
-      clearTimeout(toastTimer);
-      toastTimer = null;
-    }
+    if (shownToast && shownToast !== toast) setToastShown(shownToast, false);
+    shownToast = toast;
     toast.classList.remove('is-leaving');
-    toast.hidden = false;
+    setToastShown(toast, true);
+  }
+
+  function showToast(message) {
+    const base = document.getElementById('toast');
+    if (!base || !message) return;
+    present(toastFor(base), message);
+    if (toastTimer !== null) clearTimeout(toastTimer);
     toastTimer = window.setTimeout(function () {
-      toast.classList.add('is-leaving');
+      shownToast.classList.add('is-leaving');
       toastTimer = window.setTimeout(function () {
-        toast.hidden = true;
-        toast.classList.remove('is-leaving');
+        setToastShown(shownToast, false);
+        shownToast.classList.remove('is-leaving');
         toastTimer = null;
       }, TOAST_LEAVE_MS);
     }, TOAST_VISIBLE_MS);
@@ -71,6 +119,29 @@
     else if (payload && typeof payload.value === 'string') msg = payload.value;
     else if (payload && typeof payload.message === 'string') msg = payload.message;
     if (msg) showToast(msg);
+  });
+
+  // GETs are skipped: the dashboard polls every 30 s and would toast on each miss while offline.
+  function isMutation(detail) {
+    return detail.requestConfig.verb.toLowerCase() !== 'get';
+  }
+
+  // Error bodies htmx-config does not swap would otherwise end a failed action silently.
+  document.body.addEventListener('htmx:beforeSwap', function (evt) {
+    const detail = evt.detail;
+    if (!detail.isError || detail.shouldSwap || !isMutation(detail)) return;
+    // Password change and factory reset mark their target-ready 429 bodies; a proxy's own 429
+    // page carries no marker, so it gets the toast instead of replacing the target.
+    if (detail.xhr.status === 429 && detail.xhr.getResponseHeader('X-Houndarr-Swap-Error')) {
+      detail.shouldSwap = true;
+      return;
+    }
+    showToast('Request failed (HTTP ' + detail.xhr.status + '). Reload the page and try again.');
+  });
+
+  document.body.addEventListener('htmx:sendError', function (evt) {
+    if (!isMutation(evt.detail)) return;
+    showToast('Could not reach Houndarr. Check that it is running, then try again.');
   });
 
   function consumeFlashCookie() {

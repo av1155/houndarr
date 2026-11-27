@@ -21,7 +21,7 @@ from __future__ import annotations
 import asyncio
 import hmac
 import logging
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, Response
@@ -39,7 +39,7 @@ from houndarr.auth import (
 from houndarr.config import get_settings
 from houndarr.deps import get_master_key
 from houndarr.errors import ServiceError
-from houndarr.routes._htmx import hx_redirect_response
+from houndarr.routes._htmx import hx_redirect_response, swappable_error_response
 from houndarr.routes._templates import get_templates
 from houndarr.services.admin import (
     clear_all_search_logs,
@@ -47,6 +47,7 @@ from houndarr.services.admin import (
     request_process_exit,
     reset_all_instance_policy,
 )
+from houndarr.services.instances import active_error_instance_ids, list_instances
 from houndarr.services.metrics import invalidate_dashboard_cache
 
 logger = logging.getLogger(__name__)
@@ -60,23 +61,27 @@ def _flash_response(
     tone: str,
     message: str,
     status_code: int = 200,
+    template: str = "partials/admin/flash.html",
+    extra_context: dict[str, Any] | None = None,
 ) -> HTMLResponse:
     """Render the small toast partial swapped into ``#admin-flash``.
 
     ``tone`` is ``"success"``, ``"danger"``, or ``"info"`` and maps to the
-    existing alert palette in ``base.html``. Status code ``422`` is used
-    for validation failures so HTMX opts into the swap (see the htmx-config
-    meta in ``base.html``).
+    existing alert palette in ``base.html``. Failures the panel should
+    show use status ``422``, which the htmx-config meta in ``base.html``
+    swaps, or ``429`` for the rate limit, which ``app.js`` swaps when
+    :func:`~houndarr.routes._htmx.swappable_error_response` marks it.
     """
     csrf_token = request.cookies.get(CSRF_COOKIE_NAME, "")
     return get_templates().TemplateResponse(
         request=request,
-        name="partials/admin/flash.html",
+        name=template,
         context={
             "tone": tone,
             "message": message,
             "csrf_token": csrf_token,
             "version": __version__,
+            **(extra_context or {}),
         },
         status_code=status_code,
     )
@@ -94,17 +99,40 @@ async def admin_reset_instances(
 ) -> HTMLResponse:
     """Revert every instance's policy columns back to :mod:`config` defaults."""
     supervisor = getattr(request.app.state, "supervisor", None)
-    count = await reset_all_instance_policy(master_key=master_key, supervisor=supervisor)
+    try:
+        count = await reset_all_instance_policy(master_key=master_key, supervisor=supervisor)
+    except ServiceError:
+        logger.exception("Policy reset failed; no instance was changed")
+        return _flash_response(
+            request,
+            tone="danger",
+            message="Reset failed, so nothing was changed. See the container logs for details.",
+            status_code=422,
+        )
 
     invalidate_dashboard_cache(request.app.state)
 
     if count == 0:
-        message = "No instances configured: nothing to reset."
-    else:
-        message = (
-            f"Policy settings reset to defaults for {count} instance{'s' if count != 1 else ''}."
+        return _flash_response(
+            request, tone="success", message="No instances configured: nothing to reset."
         )
-    return _flash_response(request, tone="success", message=message)
+    message = f"Policy settings reset to defaults for {count} instance{'s' if count != 1 else ''}."
+    # The reset has committed, so a failed table refresh must not report the reset as failed.
+    try:
+        instances = await list_instances(master_key=master_key)
+        active_error_ids = await active_error_instance_ids()
+    except Exception:
+        logger.exception("Policy reset applied; refreshing the instance table failed")
+        instances = []
+    if not instances:
+        return _flash_response(request, tone="success", message=message)
+    return _flash_response(
+        request,
+        tone="success",
+        message=message,
+        template="partials/admin/reset_flash.html",
+        extra_context={"instances": instances, "active_error_ids": active_error_ids},
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -115,7 +143,18 @@ async def admin_reset_instances(
 @router.post("/settings/admin/clear-logs", response_class=HTMLResponse)
 async def admin_clear_logs(request: Request) -> HTMLResponse:
     """Truncate ``search_log`` and leave a single audit breadcrumb."""
-    removed = await clear_all_search_logs()
+    try:
+        removed = await clear_all_search_logs()
+    except ServiceError:
+        logger.exception("Clearing logs failed; no row was removed")
+        return _flash_response(
+            request,
+            tone="danger",
+            message=(
+                "Clearing logs failed, so nothing was removed. See the container logs for details."
+            ),
+            status_code=422,
+        )
     invalidate_dashboard_cache(request.app.state)
     if removed == 0:
         message = "Logs were already empty."
@@ -176,11 +215,13 @@ async def admin_factory_reset(
         # scoped bucket with /login so a stolen session cannot brute-force
         # the admin password through this endpoint either.
         if not check_login_rate_limit(request):
-            return _flash_response(
-                request,
-                tone="danger",
-                message="Too many attempts. Try again in a minute.",
-                status_code=429,
+            return swappable_error_response(
+                _flash_response(
+                    request,
+                    tone="danger",
+                    message="Too many attempts. Try again in a minute.",
+                    status_code=429,
+                )
             )
         if not current_password or not await check_password(current_password):
             record_failed_login(request)

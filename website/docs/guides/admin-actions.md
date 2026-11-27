@@ -132,12 +132,18 @@ next cycle.
 A single info row is written to the Activity log so you can tell when
 the reset happened.
 
+The reset applies to every instance or to none. If it fails, nothing
+changes, the panel shows an error, and the cause is in the container
+logs. After a successful reset the instance table shows the new values
+right away.
+
 ### Clear all logs
 
 Empties the `search_log` table (what the Activity log page displays).
-A single breadcrumb row is inserted immediately after the truncate
-("Audit log cleared by admin (N rows removed)") so the wipe is itself
-visible. Cooldowns, settings, and instances are not touched.
+A single breadcrumb row is inserted with the truncate ("Audit log
+cleared by admin (N rows removed)") so the wipe is itself visible.
+Cooldowns, settings, and instances are not touched. If the clear
+fails, every row stays and the panel shows an error.
 
 ## Danger zone
 

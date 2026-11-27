@@ -1,0 +1,14 @@
+{#
+  Reset success flash plus an out-of-band refresh of the instance
+  table, so each row shows its reset values without a reload.  Only
+  rendered when at least one instance exists: instance_table_body.html
+  has no empty-state row.  The <template> keeps the HTML parser from
+  dropping a <tbody> that follows the flash markup; htmx swaps OOB
+  elements found inside template content.
+#}
+{% include "partials/admin/flash.html" %}
+<template>
+  <tbody hx-swap-oob="innerHTML:#instance-tbody">
+    {% include "partials/instance_table_body.html" %}
+  </tbody>
+</template>

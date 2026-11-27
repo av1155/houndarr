@@ -9,6 +9,7 @@ init_db, and the Fernet master-key persistence contract.
 
 from __future__ import annotations
 
+import asyncio
 import base64
 from collections.abc import Generator
 from pathlib import Path
@@ -18,8 +19,17 @@ import pytest
 from houndarr import config as _cfg
 from houndarr.bootstrap import bootstrap_non_web
 from houndarr.config import AppSettings, bootstrap_settings
+from houndarr.database import close_all_pools
 
 pytestmark = pytest.mark.pinning
+
+
+# bootstrap_non_web leaves its pool open; an open pool's aiosqlite threads
+# are non-daemon and keep the interpreter from exiting.
+@pytest.fixture(autouse=True)
+def _close_pools() -> Generator[None]:
+    yield
+    asyncio.run(close_all_pools())
 
 
 @pytest.fixture(autouse=True)

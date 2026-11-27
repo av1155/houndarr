@@ -29,7 +29,7 @@ from houndarr.config import (
     DEFAULT_UPGRADE_COOLDOWN_DAYS,
     DEFAULT_UPGRADE_HOURLY_CAP,
 )
-from houndarr.database import get_db, set_db_path
+from houndarr.database import close_all_pools, get_db, set_db_path
 from houndarr.services.admin import (
     clear_all_search_logs,
     factory_reset,
@@ -43,6 +43,14 @@ from houndarr.services.instances import (
 )
 
 _MASTER_KEY = Fernet.generate_key()
+
+
+# A factory_reset test opens its pools without the ``db`` fixture; an open
+# pool's aiosqlite threads are non-daemon and keep the interpreter from exiting.
+@pytest_asyncio.fixture(autouse=True)
+async def _close_pools() -> AsyncGenerator[None]:
+    yield
+    await close_all_pools()
 
 
 @pytest_asyncio.fixture()

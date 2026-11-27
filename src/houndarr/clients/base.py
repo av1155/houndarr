@@ -134,25 +134,20 @@ class WantedPage[T]:
 class WantedWalk[T]:
     """Every item one ``/wanted`` list returned, and whether that was all of it.
 
-    ``complete`` is false when the walk stopped at the reconcile page cap
-    with pages still full, or when ``churned``: the page totals moved or
-    the records read did not match them, so the list changed or reordered
-    between reads and ``items`` may be missing some of it.
+    ``complete`` is false when the walk is ``capped``, stopped at the
+    reconcile page cap with pages still full, or ``churned``: the page
+    totals moved or the records read did not match them, so the list
+    changed or reordered between reads and ``items`` may be missing some
+    of it.
 
     When a re-read at another page size covered a reordered first read,
-    ``items`` lists each item once and ``paged_rows`` keeps the first
-    read's rows as returned, repeats kept and the skipped items absent.
+    ``items`` lists each item once.
     """
 
     items: list[T]
     complete: bool
     churned: bool = False
-    paged_rows: list[T] | None = None
-
-    @property
-    def first_read(self) -> list[T]:
-        """The first read's rows as returned: what a plain paged walk of the list sees."""
-        return self.items if self.paged_rows is None else self.paged_rows
+    capped: bool = False
 
 
 type WantedWalks = dict[WantedKind, WantedWalk[Any]]

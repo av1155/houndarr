@@ -938,6 +938,51 @@ def test_status_v2_cooldown_breakdown_splits_by_kind(app: TestClient) -> None:
     assert body["cooldown_breakdown"] == {"missing": 2, "cutoff": 1, "upgrade": 1}
 
 
+def test_status_counts_only_cooldowns_inside_their_window(app: TestClient) -> None:
+    """The engine searches an item again once its pass's window passes, so it is not gated."""
+    _login(app)
+    iid = _create_instance(app)
+    # Defaults: cooldown_days=14, cutoff_cooldown_days=21, upgrade_cooldown_days=90.
+    for item_id, kind, days_ago in [
+        (601, "missing", 13.0),
+        (602, "missing", 15.0),
+        (603, "cutoff", 20.0),
+        (604, "cutoff", 22.0),
+        (605, "upgrade", 89.0),
+        (606, "upgrade", 91.0),
+    ]:
+        asyncio.run(_seed_cooldown(iid, item_id, "episode", days_ago=days_ago, search_kind=kind))
+
+    body = app.get("/api/status").json()["instances"][0]
+
+    assert body["cooldown_breakdown"] == {"missing": 1, "cutoff": 1, "upgrade": 1}
+    assert body["cooldown_total"] == 3
+    assert {r["item_id"] for r in body["unlocking_next"]} == {601, 603, 605}
+
+
+def test_status_counts_a_cooldown_whose_time_does_not_parse(app: TestClient) -> None:
+    """Its age is unknown, so it stays gated, with no unlock estimate."""
+    _login(app)
+    iid = _create_instance(app)
+
+    async def _seed() -> None:
+        async with get_db() as conn:
+            await conn.execute(
+                "INSERT INTO cooldowns (instance_id, item_id, item_type, search_kind, searched_at)"
+                " VALUES (?, 701, 'episode', 'missing', 'yesterday')",
+                (iid,),
+            )
+            await conn.commit()
+
+    asyncio.run(_seed())
+
+    body = app.get("/api/status").json()["instances"][0]
+
+    assert body["cooldown_breakdown"]["missing"] == 1
+    assert body["cooldown_total"] == 1
+    assert body["unlocking_next"] == []
+
+
 def test_status_monitored_total_reads_column(app: TestClient, async_client: object) -> None:
     """monitored_total reflects the authoritative column written by the
     supervisor's snapshot refresh task."""

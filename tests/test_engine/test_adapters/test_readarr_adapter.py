@@ -3,11 +3,15 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+from typing import Any
 from unittest.mock import AsyncMock
 
+import httpx
 import pytest
 
+from houndarr.clients.base import WantedPage
 from houndarr.clients.readarr import MissingBook, ReadarrClient
+from houndarr.engine.adapters import _common
 from houndarr.engine.adapters.readarr import (
     _author_context_label,
     _author_item_id,
@@ -386,9 +390,75 @@ class TestFetchInstanceSnapshot:
                 _make_book(book_id=1, release_date=_OLD_DATE),
                 _make_book(book_id=2, release_date=future),
             ],
+            cutoff=[_make_book(book_id=3)],
         )
 
         snap = await fetch_instance_snapshot(client, _make_instance())
 
         assert snap.monitored_total == 3
         assert snap.unreleased_count == 1
+
+    @pytest.mark.asyncio()
+    async def test_a_cutoff_book_counts_once_however_many_files_it_has(self):
+        """Readarr's cutoff total counts a row per below-cutoff file; the snapshot counts books."""
+        client = AsyncMock(spec=ReadarrClient)
+        client.get_wanted_total.side_effect = lambda kind: {"missing": 2, "cutoff": 3}[kind]
+        serve_wanted(
+            client,
+            missing=[_make_book(book_id=1), _make_book(book_id=2)],
+            cutoff=[_make_book(book_id=7), _make_book(book_id=7), _make_book(book_id=8)],
+        )
+
+        snap = await fetch_instance_snapshot(client, _make_instance())
+
+        assert snap.monitored_total == 4
+
+    @pytest.mark.asyncio()
+    async def test_a_cutoff_list_past_the_page_cap_keeps_its_row_total(
+        self, monkeypatch: pytest.MonkeyPatch
+    ):
+        monkeypatch.setattr(_common, "_RECONCILE_MAX_PAGES", 1)
+        client = AsyncMock(spec=ReadarrClient)
+        client.get_wanted_total.side_effect = lambda kind: {"missing": 0, "cutoff": 251}[kind]
+        serve_wanted(client, cutoff=[_make_book(book_id=i) for i in range(1, 252)])
+
+        snap = await fetch_instance_snapshot(client, _make_instance())
+
+        assert snap.monitored_total == 251
+
+    @pytest.mark.asyncio()
+    async def test_a_cutoff_walk_that_fails_fails_the_snapshot(self):
+        """As a failed missing walk does, so the dashboard keeps its last good count."""
+        client = AsyncMock(spec=ReadarrClient)
+        client.get_wanted_total.side_effect = lambda kind: {"missing": 1, "cutoff": 3}[kind]
+        serve_wanted(client, missing=[_make_book(book_id=1)])
+        serve_missing = client.get_wanted_page.side_effect
+
+        async def page(kind: str, *, page: int, page_size: int) -> Any:
+            if kind == "cutoff":
+                raise httpx.ReadTimeout("slow")
+            return await serve_missing(kind, page=page, page_size=page_size)
+
+        client.get_wanted_page.side_effect = page
+
+        with pytest.raises(httpx.ReadTimeout):
+            await fetch_instance_snapshot(client, _make_instance())
+
+    @pytest.mark.asyncio()
+    async def test_a_cutoff_list_that_moved_counts_the_books_it_read(self):
+        client = AsyncMock(spec=ReadarrClient)
+        client.get_wanted_total.side_effect = lambda kind: {"missing": 0, "cutoff": 5}[kind]
+        rows = [_make_book(book_id=7), _make_book(book_id=7), _make_book(book_id=8)]
+
+        async def page(kind: str, *, page: int, page_size: int) -> WantedPage[Any]:
+            chunk = rows[:page_size] if kind == "cutoff" and page == 1 else []
+            # The size-1 count read sees a fourth row that is gone by page 1.
+            total = 4 if kind == "cutoff" and page_size == 1 else len(chunk)
+            ids = tuple(b.book_id for b in chunk)
+            return WantedPage(items=chunk, ids=ids, total_records=total, total_counts_rows=True)
+
+        client.get_wanted_page.side_effect = page
+
+        snap = await fetch_instance_snapshot(client, _make_instance())
+
+        assert snap.monitored_total == 2

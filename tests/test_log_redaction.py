@@ -5,12 +5,19 @@ from __future__ import annotations
 import io
 import logging
 import logging.config
+import os
 import sys
 from collections.abc import Iterator
+from pathlib import Path
+from typing import Any
 
 import pytest
+import uvicorn
+from click.testing import CliRunner
 from uvicorn.config import LOGGING_CONFIG
 
+from houndarr.__main__ import cli
+from houndarr.config import AppSettings
 from houndarr.log_redaction import ROOT_LOG_FORMAT, RedactingFormatter, uvicorn_log_config
 
 URL = "http://user:hunter2@sonarr:8989/api/v3/series"
@@ -81,3 +88,34 @@ def test_uvicorn_log_config_leaves_uvicorns_default_untouched() -> None:
     assert repr(LOGGING_CONFIG) == before
     assert config["root"]["level"] == "DEBUG"
     assert set(config["formatters"]) >= {"default", "access"}
+
+
+@pytest.mark.usefixtures("restore_logging")
+def test_dev_reload_child_logs_houndarr_debug(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Under ``--dev`` only uvicorn configures the reload child's logging, from cli()'s config."""
+    captured: dict[str, Any] = {}
+
+    def fake_run(app: str, **kwargs: Any) -> None:
+        captured.update(kwargs, app=app)
+
+    def fake_bootstrap(data_dir: str, **overrides: Any) -> tuple[AppSettings, Path, bytes]:
+        return AppSettings(data_dir=data_dir, **overrides), tmp_path / "houndarr.db", b""
+
+    monkeypatch.setattr(uvicorn, "run", fake_run)
+    monkeypatch.setattr("houndarr.bootstrap.bootstrap_non_web", fake_bootstrap)
+    monkeypatch.setattr(os, "environ", dict(os.environ))
+    args = ["--data-dir", str(tmp_path), "--dev", "--log-level", "debug"]
+    result = CliRunner().invoke(cli, args)
+    assert result.exit_code == 0, result.output
+    config = uvicorn.Config(**captured)
+    root = logging.getLogger()
+    root.handlers.clear()
+    root.setLevel(logging.WARNING)
+
+    # What uvicorn's spawned reload child runs before serving.
+    config.configure_logging()
+
+    assert root.handlers
+    assert logging.getLogger("houndarr.engine.supervisor").isEnabledFor(logging.DEBUG)

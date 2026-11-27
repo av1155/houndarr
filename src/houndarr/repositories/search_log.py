@@ -25,6 +25,8 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+import aiosqlite
+
 from houndarr.database import get_db
 from houndarr.errors import redact_url_credentials
 
@@ -458,29 +460,42 @@ async def fetch_newest_log_row(instance_id: int) -> NewestLogRow | None:
     row the dashboard and settings page show.  Rides
     ``idx_search_log_instance``.
     """
-    return await _fetch_log_row_from_newest(instance_id, 0)
-
-
-async def fetch_log_row_before_newest(instance_id: int) -> NewestLogRow | None:
-    """Return the row just older than *instance_id*'s newest one, or ``None``.
-
-    Ordered like :func:`fetch_newest_log_row`.
-    """
-    return await _fetch_log_row_from_newest(instance_id, 1)
-
-
-async def _fetch_log_row_from_newest(instance_id: int, offset: int) -> NewestLogRow | None:
     async with get_db() as db:
         async with db.execute(
             """
             SELECT action, cycle_id, message FROM search_log
             WHERE instance_id = ?
             ORDER BY timestamp DESC, id DESC
-            LIMIT 1 OFFSET ?
+            LIMIT 1
             """,
-            (instance_id, offset),
+            (instance_id,),
         ) as cur:
-            row = await cur.fetchone()
+            return _newest_log_row(await cur.fetchone())
+
+
+async def fetch_newest_log_row_under_errors(
+    instance_id: int, error_prefix: str
+) -> NewestLogRow | None:
+    """Return *instance_id*'s newest row that is not an error starting with *error_prefix*.
+
+    While the newest rows are such errors, this is the row they were
+    written over.  Ordered like :func:`fetch_newest_log_row`.
+    """
+    async with get_db() as db:
+        async with db.execute(
+            """
+            SELECT action, cycle_id, message FROM search_log
+            WHERE instance_id = ?
+              AND NOT (action = 'error' AND instr(COALESCE(message, ''), ?) = 1)
+            ORDER BY timestamp DESC, id DESC
+            LIMIT 1
+            """,
+            (instance_id, error_prefix),
+        ) as cur:
+            return _newest_log_row(await cur.fetchone())
+
+
+def _newest_log_row(row: aiosqlite.Row | None) -> NewestLogRow | None:
     if row is None:
         return None
     return NewestLogRow(action=row["action"], cycle_id=row["cycle_id"], message=row["message"])

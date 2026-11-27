@@ -30,8 +30,8 @@ from houndarr.enums import CycleTrigger, SearchAction
 from houndarr.errors import ClientError, ClientTransportError, EngineError, redact_url_credentials
 from houndarr.repositories.search_log import (
     NewestLogRow,
-    fetch_log_row_before_newest,
     fetch_newest_log_row,
+    fetch_newest_log_row_under_errors,
 )
 from houndarr.services.cooldown_reconcile import reconcile_cooldowns
 from houndarr.services.instances import (
@@ -395,8 +395,9 @@ class Supervisor:
         - Reached the *arr after an error: one closing row after the
           cycle's own rows, which clears the card even on an empty
           backlog where a healthy cycle writes nothing else.  When an
-          outage ends on a cycle that searched nothing, the closing row
-          is an error that carries forward the error the outage covered.
+          outage ends on a cycle that neither ran its passes cleanly nor
+          wrote rows over it, the closing row is an error that carries
+          forward the error the outage covered.
 
         Records the cycle-end wallclock in ``_last_cycle_end`` regardless
         of cycle outcome so the dashboard countdown anchors on a signal
@@ -412,7 +413,6 @@ class Supervisor:
             # own cycle so the run's history shows it.
             row_cycle_id = cycle_id if cycle_trigger == "run_now" else None
             before = await self._newest_row(instance)
-            covered = await self._row_under_outage(instance) if _is_unreachable(before) else None
             report = CycleReport()
             try:
                 await run_instance_search(
@@ -465,7 +465,6 @@ class Supervisor:
                 return await self._settle_cycle(
                     instance,
                     before,
-                    covered,
                     report,
                     cycle_id=cycle_id,
                     row_cycle_id=row_cycle_id,
@@ -478,7 +477,6 @@ class Supervisor:
         self,
         instance: Instance,
         before: NewestLogRow | None,
-        covered: NewestLogRow | None,
         report: CycleReport,
         *,
         cycle_id: str,
@@ -493,7 +491,7 @@ class Supervisor:
         earlier error, and only one whose passes ran cleanly may close a
         failure other than an outage: a deferred upgrade list or a
         backpressure skip proves the *arr answers, not that the failure is
-        fixed.  That holds for an error the outage row *covered* too,
+        fixed.  That holds for an error an outage row covered too,
         unless the cycle wrote rows over the outage row: those are newer
         than the covered error.  A deferred cycle that nothing answered
         during an outage stays ``unreachable``.
@@ -516,11 +514,9 @@ class Supervisor:
             return outcome
         clean = outcome is CycleOutcome.ok and not report.passes_skipped
         if _is_unreachable(before):
-            # Pass output written over the outage row is newer than the error it covered.
-            wrote_over_outage = not _is_unreachable(after)
             await self._close_outage(
                 instance,
-                None if clean or wrote_over_outage else covered,
+                None if clean else await self._row_under_outage(instance),
                 cycle_id=row_cycle_id,
                 cycle_trigger=cycle_trigger,
             )
@@ -543,21 +539,18 @@ class Supervisor:
     ) -> None:
         """Write the row that ends an open outage.
 
-        *unchecked* is the row the outage row was written over, when
-        nothing since has rechecked it.  If that row is an error, the
-        closing row stays an error and carries its message forward, so the
-        instance keeps reading failing until a cycle runs its passes cleanly.
-        When that row could not be read the outage stays open for the next
-        cycle or refresh to close.
+        *unchecked* is the instance's newest row that is not an outage row
+        (pass output the closing cycle wrote, or else the row the outage
+        covered), passed unless the cycle ran its passes cleanly.  If it is
+        an error, the closing row stays an error and carries its message
+        forward, so the instance keeps reading failing until a cycle runs
+        its passes cleanly.  When it could not be read the outage stays open
+        for the next cycle or refresh to close.
         """
         if unchecked is _UNREADABLE_ROW:
             return
         reachable = _reachable_again(instance)
-        if (
-            unchecked is None
-            or unchecked.action != SearchAction.error.value
-            or _is_unreachable(unchecked)
-        ):
+        if unchecked is None or unchecked.action != SearchAction.error.value:
             await self._write_recovery_row(
                 instance, reachable, cycle_id=cycle_id, cycle_trigger=cycle_trigger
             )
@@ -570,9 +563,9 @@ class Supervisor:
         )
 
     async def _row_under_outage(self, instance: Instance) -> NewestLogRow | None:
-        """Return the row *instance*'s open outage row covers, or ``_UNREADABLE_ROW``."""
+        """Return the row *instance*'s open outage rows cover, or ``_UNREADABLE_ROW``."""
         try:
-            return await fetch_log_row_before_newest(instance.core.id)
+            return await fetch_newest_log_row_under_errors(instance.core.id, _UNREACHABLE_PREFIX)
         except _DB_ERRORS:
             logger.warning(
                 "Supervisor: could not read %r's log row under its outage",

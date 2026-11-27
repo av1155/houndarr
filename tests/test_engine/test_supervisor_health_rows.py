@@ -398,13 +398,44 @@ async def test_adjacent_outage_rows_close_plainly(seeded_instances: None) -> Non
 
 
 @pytest.mark.asyncio()
+async def test_adjacent_outage_rows_still_carry_the_error_under_them(
+    seeded_instances: None,
+) -> None:
+    sup = Supervisor(master_key=MASTER_KEY)
+    await _cycle(sup, pool_rejected)
+    await _cycle(sup, unreachable)
+    await _write("error", cycle_id=None, message=OUTAGE)
+    await _cycle(sup, backpressure)
+
+    assert (await _messages())[-1] == ("error", STILL_FAILING)
+    assert await _failing_on(settings=True, dashboard=True)
+
+
+@pytest.mark.asyncio()
+async def test_a_clean_quiet_cycle_closes_an_outage_and_the_error_it_covered(
+    seeded_instances: None,
+) -> None:
+    """An empty backlog writes no rows, yet its passes ran: the covered error is rechecked."""
+    sup = Supervisor(master_key=MASTER_KEY)
+    for step in (pool_rejected, unreachable, quiet):
+        await _cycle(sup, step)
+
+    assert await _messages() == [
+        ("error", POOL_REJECTED),
+        ("error", OUTAGE),
+        ("info", REACHABLE),
+    ]
+    assert await _failing_on(settings=False, dashboard=False)
+
+
+@pytest.mark.asyncio()
 async def test_an_unreadable_covered_row_leaves_the_outage_open(seeded_instances: None) -> None:
     """A read hiccup must not let the reconnect clear an error it could not see."""
     sup = Supervisor(master_key=MASTER_KEY)
     await _cycle(sup, pool_rejected)
     await _cycle(sup, unreachable)
     broken = AsyncMock(side_effect=sqlite3.OperationalError("database is locked"))
-    with patch.object(supervisor_module, "fetch_log_row_before_newest", broken):
+    with patch.object(supervisor_module, "fetch_newest_log_row_under_errors", broken):
         await _cycle(sup, backpressure)
     assert await _messages() == [("error", POOL_REJECTED), ("error", OUTAGE)]
 

@@ -1032,20 +1032,43 @@ async def test_fetch_newest_log_row_orders_like_the_dashboard(seeded_instances: 
 
     assert await repo.fetch_newest_log_row(1) == repo.NewestLogRow("info", "c1", "later")
     assert await repo.fetch_newest_log_row(2) == repo.NewestLogRow("error", "c2", "second")
-    assert await repo.fetch_log_row_before_newest(1) == repo.NewestLogRow("error", "c0", "older")
-    assert await repo.fetch_log_row_before_newest(2) == repo.NewestLogRow("info", "c2", "first")
 
 
 @pytest.mark.asyncio()
 async def test_fetch_newest_log_row_is_none_without_rows(seeded_instances: None) -> None:
     assert await repo.fetch_newest_log_row(1) is None
-    assert await repo.fetch_log_row_before_newest(1) is None
+    assert await repo.fetch_newest_log_row_under_errors(1, "Could not reach ") is None
 
 
 @pytest.mark.asyncio()
-async def test_fetch_log_row_before_newest_is_none_with_one_row(seeded_instances: None) -> None:
-    await repo.insert_log_row(instance_id=1, item_id=None, item_type=None, action="error")
-    assert await repo.fetch_log_row_before_newest(1) is None
+async def test_fetch_newest_log_row_under_errors_skips_only_matching_errors(
+    seeded_instances: None,
+) -> None:
+    async with get_db() as conn:
+        await conn.executemany(
+            "INSERT INTO search_log (instance_id, action, cycle_id, message, timestamp)"
+            " VALUES (?, ?, ?, ?, ?)",
+            [
+                (1, "info", None, "Could not reach x (an info row)", "2026-01-01T00:00:00.000Z"),
+                (1, "error", "c1", "HTTP 401", "2026-01-01T00:00:01.000Z"),
+                (1, "error", None, "Could not reach x", "2026-01-01T00:00:02.000Z"),
+                (1, "error", None, "Could not reach x", "2026-01-01T00:00:03.000Z"),
+                (2, "error", None, "Could not reach y", "2026-01-01T00:00:00.000Z"),
+                (2, "info", None, "Could not reach y (an info row)", "2026-01-01T00:00:01.000Z"),
+            ],
+        )
+        await conn.commit()
+
+    under = repo.fetch_newest_log_row_under_errors
+    assert await under(1, "Could not reach ") == repo.NewestLogRow("error", "c1", "HTTP 401")
+    assert await under(2, "Could not reach ") == repo.NewestLogRow(
+        "info", None, "Could not reach y (an info row)"
+    )
+    async with get_db() as conn:
+        await conn.execute("DELETE FROM search_log WHERE instance_id = 1 AND cycle_id = 'c1'")
+        await conn.execute("DELETE FROM search_log WHERE instance_id = 1 AND action = 'info'")
+        await conn.commit()
+    assert await under(1, "Could not reach ") is None
 
 
 @pytest.mark.pinning()

@@ -18,6 +18,9 @@ concurrency:
 jobs:
   build:
     name: Build docs site
+    # Forks have no `assets` branch, so a dispatched run there would fail on
+    # the checkout below.
+    if: github.repository == 'av1155/houndarr'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:

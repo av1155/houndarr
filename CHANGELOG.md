@@ -40,6 +40,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The instance table on the Settings page shows the reset batch size and interval right after `Reset all instance settings`, without a reload. (#920)
 - After five wrong passwords in a minute, the password change and factory reset forms show the rate-limit message instead of no response. (#920)
 - A save, delete, toggle or other change that fails with an HTTP error, or cannot reach Houndarr, shows a toast instead of doing nothing. (#920)
+- `Upgrade Series Window (per cycle)` shows in the Add and Edit instance forms after switching `Type` to Sonarr or Whisparr v2, and hides for other types. (#907)
 
 ### Security
 

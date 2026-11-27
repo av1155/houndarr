@@ -181,6 +181,16 @@ function initSettingsPage() {
       urlInput.placeholder = urlInput.dataset[t + 'Placeholder'] || urlInput.dataset.sonarrPlaceholder;
     }
 
+    // tests/test_gates/test_app_only_controls_gate.py checks this against instance_form.html.
+    const APP_ONLY_TYPES = {
+      'data-sonarr-only': ['sonarr'],
+      'data-lidarr-only': ['lidarr'],
+      'data-readarr-only': ['readarr'],
+      'data-whisparr_v2-only': ['whisparr_v2'],
+      'data-whisparr_v3-only': ['whisparr_v3'],
+      'data-sonarr-or-whisparr-v2-only': ['sonarr', 'whisparr_v2'],
+    };
+
     function syncAppOnlyControls() {
       const typeSelect = addInstanceModalContent.querySelector('[data-instance-field="type"]');
       if (!typeSelect) {
@@ -188,14 +198,12 @@ function initSettingsPage() {
       }
 
       const t = typeSelect.value;
-      const appOnlyAttrs = ['data-sonarr-only', 'data-lidarr-only', 'data-readarr-only', 'data-whisparr_v2-only', 'data-whisparr_v3-only'];
-      appOnlyAttrs.forEach((attr) => {
-        const appType = attr.replace('data-', '').replace('-only', '');
+      Object.entries(APP_ONLY_TYPES).forEach(([attr, types]) => {
         addInstanceModalContent.querySelectorAll('[' + attr + '="true"]').forEach((el) => {
           if (!(el instanceof HTMLElement)) {
             return;
           }
-          el.style.display = (t === appType) ? '' : 'none';
+          el.style.display = types.includes(t) ? '' : 'none';
         });
       });
     }

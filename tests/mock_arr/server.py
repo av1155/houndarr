@@ -55,6 +55,8 @@ class SeedConfig:
     lidarr_albums_per_artist: int = 10
     readarr_authors: int = 50
     readarr_books_per_author: int = 10
+    # Files each cutoff-unmet book holds; Readarr's cutoff list has a row per file.
+    readarr_cutoff_files: int = 1
     whisparr_v2_series: int = 30
     whisparr_v2_episodes_per_series: int = 10
     whisparr_v3_movies: int = 500
@@ -97,6 +99,7 @@ def build_state(config: SeedConfig) -> MockState:
             missing_ratio=config.missing_ratio,
             cutoff_ratio=config.cutoff_ratio,
             shuffle_dates=config.shuffle_dates,
+            cutoff_files=config.readarr_cutoff_files,
         ),
         whisparr_v2=make_whisparr_v2_data(
             seed=config.seed,
@@ -374,6 +377,12 @@ def _summary(data: object) -> dict[str, int]:
     default=False,
     help="Store release dates out of id order, so only real sorting yields date order.",
 )
+@click.option(
+    "--readarr-cutoff-files",
+    default=1,
+    show_default=True,
+    help="Files each cutoff-unmet Readarr book holds, one wanted/cutoff row apiece.",
+)
 @click.option("--log-level", default="info", show_default=True)
 def main(
     port: int,
@@ -383,6 +392,7 @@ def main(
     missing_ratio: float,
     cutoff_ratio: float,
     shuffle_dates: bool,
+    readarr_cutoff_files: int,
     log_level: str,
 ) -> None:
     """Launch the mock server."""
@@ -403,6 +413,7 @@ def main(
         missing_ratio=missing_ratio,
         cutoff_ratio=cutoff_ratio,
         shuffle_dates=shuffle_dates,
+        readarr_cutoff_files=readarr_cutoff_files,
     )
     app = create_app(config)
     uvicorn.run(app, host=host, port=port, log_level=log_level)

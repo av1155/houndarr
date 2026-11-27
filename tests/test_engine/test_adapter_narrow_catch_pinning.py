@@ -1,24 +1,17 @@
 """Pin the narrow adapter fallback catches in ``fetch_upgrade_pool``.
 
-Each of Sonarr, Lidarr, Readarr, and Whisparr v2 has a per-iteration
-``try`` inside ``fetch_upgrade_pool`` that swallows transient client
-failures so pool building can continue:
-
-* Sonarr / Whisparr v2 iterate monitored series and catch
-  ``client.get_episodes(series_id)`` failures.
-* Lidarr / Readarr iterate cutoff pages and catch
-  ``client.get_cutoff_unmet(page, page_size)`` failures while
-  building the exclusion set.
-
-Each catch is ``except (httpx.HTTPError, httpx.InvalidURL,
-ValidationError)`` so pool building stays resilient to transient
-network or wire-validation noise.  Anything else (``KeyError``,
-``RuntimeError``, ``AttributeError``, etc.) propagates to the
-search_loop wrap (:func:`_fetch_pool_with_typed_wrap`), which
+Sonarr and Whisparr v2 iterate monitored series inside
+``fetch_upgrade_pool`` and catch ``client.get_episodes(series_id)``
+failures with ``except (httpx.HTTPError, httpx.InvalidURL,
+ValidationError)``, so one series that fails to load does not stop the
+pool.  Anything else (``KeyError``, ``RuntimeError``, etc.) propagates to
+the search_loop wrap (:func:`_fetch_pool_with_typed_wrap`), which
 converts it to :class:`~houndarr.errors.EnginePoolFetchError`.
 
-These tests lock both sides of the narrow-catch contract per
-adapter.
+Lidarr and Readarr catch nothing here: a cutoff page that fails ends the
+exclusion read, so the pass defers or writes its error row instead of
+searching cutoff-unmet items as upgrades.  Only the walk's own tie-split
+re-read swallows a failure, keeping what the first read excluded.
 """
 
 from __future__ import annotations
@@ -133,75 +126,41 @@ class TestWhisparrV2AdapterNarrowCatch:
             )
 
 
-# Lidarr (cutoff-exclusion page loop)
+# Lidarr / Readarr (cutoff exclusion read)
 
 
-class TestLidarrAdapterNarrowCatch:
-    """Pin lidarr.fetch_upgrade_pool's cutoff-exclusion narrow catch."""
-
-    @pytest.mark.asyncio()
-    async def test_http_error_on_cutoff_page_breaks_exclusion_loop(self) -> None:
-        """httpx.ConnectError on get_cutoff_unmet is swallowed; exclusion stays empty."""
-        client = MagicMock()
-        client.get_cutoff_unmet = AsyncMock(side_effect=httpx.ConnectError("refused"))
-        client.get_albums = AsyncMock(return_value=[])
-        result = await lidarr.fetch_upgrade_pool(client, make_instance(itype=InstanceType.lidarr))
-        assert result == []
-
-    @pytest.mark.asyncio()
-    async def test_validation_error_on_cutoff_page_breaks_exclusion_loop(self) -> None:
-        """pydantic.ValidationError on get_cutoff_unmet is swallowed."""
-        client = MagicMock()
-        client.get_cutoff_unmet = AsyncMock(side_effect=_validation_error())
-        client.get_albums = AsyncMock(return_value=[])
-        result = await lidarr.fetch_upgrade_pool(client, make_instance(itype=InstanceType.lidarr))
-        assert result == []
-
-    @pytest.mark.asyncio()
-    async def test_non_http_exception_propagates(self) -> None:
-        """RuntimeError escapes so the outer wrap can type it."""
-        client = MagicMock()
-        client.get_cutoff_unmet = AsyncMock(side_effect=RuntimeError("bug"))
-        client.get_albums = AsyncMock(return_value=[])
-        with pytest.raises(RuntimeError):
-            await lidarr.fetch_upgrade_pool(client, make_instance(itype=InstanceType.lidarr))
-
-
-# Readarr (mirrors Lidarr)
+@pytest.mark.asyncio()
+@pytest.mark.parametrize(
+    ("module", "itype", "library"),
+    [
+        (lidarr, InstanceType.lidarr, "get_albums"),
+        (readarr, InstanceType.readarr, "get_books"),
+    ],
+    ids=["lidarr", "readarr"],
+)
+@pytest.mark.parametrize(
+    "error",
+    [
+        httpx.ConnectError("refused"),
+        httpx.ReadTimeout("slow"),
+        _validation_error(),
+        RuntimeError("bug"),
+    ],
+    ids=["connect", "read-timeout", "validation", "runtime"],
+)
+async def test_a_failed_cutoff_page_propagates_before_the_library_read(
+    module: Any, itype: InstanceType, library: str, error: Exception
+) -> None:
+    """Every cutoff page failure escapes so the outer wrap can defer or report it."""
+    client = MagicMock()
+    client.get_wanted_page = AsyncMock(side_effect=error)
+    setattr(client, library, AsyncMock(return_value=[]))
+    with pytest.raises(type(error)):
+        await module.fetch_upgrade_pool(client, make_instance(itype=itype))
+    getattr(client, library).assert_not_awaited()
 
 
-class TestReadarrAdapterNarrowCatch:
-    """Pin readarr.fetch_upgrade_pool's cutoff-exclusion narrow catch."""
-
-    @pytest.mark.asyncio()
-    async def test_http_error_on_cutoff_page_breaks_exclusion_loop(self) -> None:
-        """httpx.ReadTimeout on get_cutoff_unmet is swallowed; exclusion stays empty."""
-        client = MagicMock()
-        client.get_cutoff_unmet = AsyncMock(side_effect=httpx.ReadTimeout("slow"))
-        client.get_books = AsyncMock(return_value=[])
-        result = await readarr.fetch_upgrade_pool(client, make_instance(itype=InstanceType.readarr))
-        assert result == []
-
-    @pytest.mark.asyncio()
-    async def test_validation_error_on_cutoff_page_breaks_exclusion_loop(self) -> None:
-        """pydantic.ValidationError on get_cutoff_unmet is swallowed."""
-        client = MagicMock()
-        client.get_cutoff_unmet = AsyncMock(side_effect=_validation_error())
-        client.get_books = AsyncMock(return_value=[])
-        result = await readarr.fetch_upgrade_pool(client, make_instance(itype=InstanceType.readarr))
-        assert result == []
-
-    @pytest.mark.asyncio()
-    async def test_non_http_exception_propagates(self) -> None:
-        """AttributeError escapes so the outer wrap can type it."""
-        client = MagicMock()
-        client.get_cutoff_unmet = AsyncMock(side_effect=AttributeError("bug"))
-        client.get_books = AsyncMock(return_value=[])
-        with pytest.raises(AttributeError):
-            await readarr.fetch_upgrade_pool(client, make_instance(itype=InstanceType.readarr))
-
-
-# Shape check: confirm the four fallback catches are indeed narrowed
+# Shape check: confirm the two fallback catches are indeed narrowed
 
 
 @pytest.mark.asyncio()
@@ -210,17 +169,22 @@ async def test_narrow_catch_tuple_is_consistent_across_adapters() -> None:
 
     This is a weak structural check against future edits that drift
     the catch shape between adapters.  It reads the source of each
-    adapter module and asserts the tuple token appears verbatim,
-    once per adapter.
+    adapter module and asserts the tuple token appears verbatim, once
+    in each series-walking adapter and never in Lidarr or Readarr.
     """
     import pathlib
 
     src_root = pathlib.Path(sonarr.__file__).parent
     expected = "except (httpx.HTTPError, httpx.InvalidURL, ValidationError):"
-    for adapter_name in ("sonarr.py", "lidarr.py", "readarr.py", "whisparr_v2.py"):
+    for adapter_name, catches in (
+        ("sonarr.py", 1),
+        ("whisparr_v2.py", 1),
+        ("lidarr.py", 0),
+        ("readarr.py", 0),
+    ):
         source = (src_root / adapter_name).read_text()
         count = source.count(expected)
-        assert count == 1, f"{adapter_name}: expected 1 narrow catch, found {count}"
+        assert count == catches, f"{adapter_name}: expected {catches} narrow catch, found {count}"
 
 
 @pytest.mark.asyncio()

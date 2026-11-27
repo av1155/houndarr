@@ -134,6 +134,52 @@ def _open_admin_dropdown(page: Page) -> None:
     )
 
 
+# Every type-gated control in the instance form, with the types that show it.
+_TYPE_GATED_CONTROLS: tuple[tuple[str, frozenset[str]], ...] = (
+    ('p:has-text("Sonarr-based, focuses on studios.")', frozenset({"whisparr_v2"})),
+    ('p:has-text("Radarr-based, focuses on scenes.")', frozenset({"whisparr_v3"})),
+    ('[name="sonarr_search_mode"]', frozenset({"sonarr"})),
+    ('[name="lidarr_search_mode"]', frozenset({"lidarr"})),
+    ('[name="readarr_search_mode"]', frozenset({"readarr"})),
+    ('[name="whisparr_v2_search_mode"]', frozenset({"whisparr_v2"})),
+    ('[name="upgrade_series_window_size"]', frozenset({"sonarr", "whisparr_v2"})),
+    ('[name="upgrade_sonarr_search_mode"]', frozenset({"sonarr"})),
+    ('[name="upgrade_lidarr_search_mode"]', frozenset({"lidarr"})),
+    ('[name="upgrade_readarr_search_mode"]', frozenset({"readarr"})),
+    ('[name="upgrade_whisparr_v2_search_mode"]', frozenset({"whisparr_v2"})),
+)
+
+
+def _assert_type_gated_controls(form: Locator, instance_type: str) -> None:
+    """Assert each type-gated control is shown exactly for the types that use it."""
+    for selector, types in _TYPE_GATED_CONTROLS:
+        control = form.locator(selector)
+        expect(control).to_have_count(1)
+        if instance_type in types:
+            expect(control, f"{selector} hidden for {instance_type}").to_be_visible()
+        else:
+            expect(control, f"{selector} shown for {instance_type}").to_be_hidden()
+
+
+def _assert_hiding_restores_series_window(form: Locator, rendered_value: str) -> None:
+    """Switch a Sonarr form with an out-of-range window to Radarr; no hidden field may be invalid.
+
+    The browser cannot point at a hidden invalid field, so it would block Save silently.
+    """
+    window = form.locator('[name="upgrade_series_window_size"]')
+    window.fill("0")
+    expect(window).to_have_value("0")
+    form.locator('select[name="type"]').select_option("radarr")
+    expect(window).to_be_hidden()
+    expect(window).to_have_value(rendered_value)
+    hidden_invalid = form.evaluate(
+        "f => [...f.elements]"
+        ".filter((el) => el.willValidate && !el.validity.valid && !el.checkVisibility())"
+        ".map((el) => el.name)"
+    )
+    assert hidden_invalid == [], f"hidden fields fail validation: {hidden_invalid}"
+
+
 @pytest.mark.integration
 def test_full_instance_lifecycle(
     logged_in_page: Page, houndarr_url: str, mock_sonarr_url: str
@@ -185,6 +231,8 @@ def test_full_instance_lifecycle(
     # Flip to Chronological.  The edit form always starts with
     # connection_verified=false, so re-run the connection test first.
     edit_form.locator('select[name="search_order"]').select_option("chronological")
+    # Not the default 5, so the hide check below can tell the stored value from the default.
+    edit_form.locator('[name="upgrade_series_window_size"]').fill("37")
     _wait_for_connection_ui_idle(page)
     _test_connection_and_wait_for_success(
         page, edit_form, edit_form.locator("button[data-test-connection-btn]")
@@ -197,6 +245,41 @@ def test_full_instance_lifecycle(
     reopened = page.locator('form[data-form-mode="edit"]')
     expect(reopened).to_be_visible()
     expect(reopened.locator('select[name="search_order"]')).to_have_value("chronological")
+    expect(reopened.locator('[name="upgrade_series_window_size"]')).to_have_value("37")
+
+    # The Edit form's Type select stays editable, so its gated controls follow it too.
+    _assert_type_gated_controls(reopened, "sonarr")
+    _assert_hiding_restores_series_window(reopened, "37")
+    _assert_type_gated_controls(reopened, "radarr")
+    reopened.locator('select[name="type"]').select_option("whisparr_v2")
+    _assert_type_gated_controls(reopened, "whisparr_v2")
+
+
+@pytest.mark.integration
+def test_add_form_type_gated_controls_follow_type(logged_in_page: Page, houndarr_url: str) -> None:
+    """Each Type pick in the Add form shows that type's controls and hides the rest."""
+    page = logged_in_page
+    page.goto(f"{houndarr_url}/settings")
+    page.get_by_role("button", name=re.compile(r"add\s*instance", re.I)).first.click()
+    add_form = page.locator('form[data-form-mode="add"]')
+    expect(add_form).to_be_visible()
+    type_select = add_form.locator('select[name="type"]')
+    expect(type_select).to_have_value("radarr")
+    _assert_type_gated_controls(add_form, "radarr")
+
+    for instance_type in (
+        "sonarr",
+        "radarr",
+        "whisparr_v2",
+        "lidarr",
+        "readarr",
+        "whisparr_v3",
+        "sonarr",
+    ):
+        type_select.select_option(instance_type)
+        _assert_type_gated_controls(add_form, instance_type)
+
+    _assert_hiding_restores_series_window(add_form, "5")
 
 
 # ---------------------------------------------------------------------------

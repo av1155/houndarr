@@ -678,20 +678,19 @@ async def gather_cooldown_data(
 ) -> dict[int, dict[str, Any]]:
     """Return per-instance ``cooldown_breakdown`` and ``unlocking_next``.
 
-    ``cooldown_breakdown`` groups active cooldown rows by the most
-    recent ``search_kind`` that landed for that item.  Rows with no
-    matching search log entry fall back to ``"missing"``.
+    ``cooldown_breakdown`` and ``cooldown_total`` count the cooldown
+    rows still inside their window, grouped by the ``search_kind``
+    stamped on the row.  The window is the one that matches the pass
+    that wrote the row (``missing`` -> ``cooldown_days``, ``cutoff`` ->
+    ``cutoff_cooldown_days``, ``upgrade`` -> ``upgrade_cooldown_days``),
+    so upgrade-kind rows keep the long 90-day default instead of
+    collapsing to the 14-day missing-pass minimum.
 
-    ``unlocking_next`` surfaces three cooldown rows that represent
+    ``unlocking_next`` surfaces three of those rows that represent
     the schedule: the soonest to unlock, the median, and the latest.
     Picking a spread (instead of the top 3 soonest) avoids rendering
     three rows with identical "11d 8h" labels when a batch of items
-    was dispatched seconds apart and all unlock together.  Unlock
-    time uses the cooldown window that matches the pass that actually
-    wrote the row (``missing`` -> ``cooldown_days``, ``cutoff`` ->
-    ``cutoff_cooldown_days``, ``upgrade`` -> ``upgrade_cooldown_days``),
-    so upgrade-kind rows accurately show the long 90-day default
-    instead of collapsing to the 14-day missing-pass minimum.
+    was dispatched seconds apart and all unlock together.
 
     Args:
         db: Open aiosqlite connection.
@@ -730,6 +729,7 @@ async def gather_cooldown_data(
         for iid in instance_ids
     }
 
+    now = datetime.now(UTC)
     per_instance_rows: dict[int, list[dict[str, Any]]] = {iid: [] for iid in instance_ids}
     async with db.execute(  # nosem
         _COOLDOWNS_SQL.format(placeholders=placeholders), instance_ids
@@ -741,59 +741,35 @@ async def gather_cooldown_data(
             # "missing" only if a legacy row somehow slipped through.
             kind = str(row["search_kind"]) if row["search_kind"] else "missing"
             bucket = kind if kind in ("missing", "cutoff", "upgrade") else "missing"
+            unlock = _cooldown_unlock_at(str(row["searched_at"]), bucket, config[iid])
+            # Nothing deletes a row by age: the engine just searches the
+            # item again once its window passes, so it is no longer gated.
+            if unlock is not None and unlock <= now:
+                continue
             out[iid]["cooldown_breakdown"][bucket] += 1
             out[iid]["cooldown_total"] += 1
+            if unlock is None:
+                continue
             per_instance_rows[iid].append(
                 {
                     "item_id": int(row["item_id"]),
                     "item_type": str(row["item_type"]),
-                    "searched_at": str(row["searched_at"]),
                     "item_label": str(row["item_label"]) if row["item_label"] else None,
                     "last_search_kind": bucket,
+                    "unlock_at": unlock,
                 }
             )
 
-    for iid, rows in per_instance_rows.items():
-        cfg = config[iid]
-        enriched: list[dict[str, Any]] = []
-        for entry in rows:
-            try:
-                parsed = datetime.fromisoformat(entry["searched_at"].replace("Z", "+00:00"))
-            except ValueError:
-                # Defensive: repositories/cooldowns always writes ISO-8601
-                # via _iso(), so a malformed timestamp means the row was
-                # seeded by a pre-D.5 fixture or external tooling.  The
-                # row still counts in cooldown_total + cooldown_breakdown
-                # above; only unlocking_next skips it, so the dashboard
-                # shows the correct count but no unlock estimate.
-                continue
-            if parsed.tzinfo is None:
-                parsed = parsed.replace(tzinfo=UTC)
-            kind = entry["last_search_kind"]
-            if kind == "cutoff":
-                days = cfg["cutoff_cooldown_days"]
-            elif kind == "upgrade":
-                days = cfg["upgrade_cooldown_days"]
-            else:
-                days = cfg["cooldown_days"]
-            unlock = parsed + timedelta(days=days)
-            enriched.append({**entry, "unlock_at": unlock})
-        enriched.sort(key=lambda r: r["unlock_at"])
-        # Drop past-unlock rows so the panel is actually future-looking;
-        # items whose unlock has already passed will be cleared the next
-        # time the engine runs.
-        now = datetime.now(UTC)
-        upcoming = [r for r in enriched if r["unlock_at"] > now]
+    for iid, upcoming in per_instance_rows.items():
+        upcoming.sort(key=lambda r: r["unlock_at"])
         # Pick a spread across the schedule (soonest, median, latest) so
         # the three rows never collapse to a single batch's clone-unlock
         # time.  Batched dispatches finish within seconds of each other,
         # which makes a naive [:3] slice render three identical "11d 8h"
         # rows; the spread gives the user a real sense of the window.
         n = len(upcoming)
-        if n == 0:
-            picks: list[dict[str, Any]] = []
-        elif n <= 3:
-            picks = upcoming
+        if n <= 3:
+            picks: list[dict[str, Any]] = upcoming
         else:
             picks = [upcoming[0], upcoming[n // 2], upcoming[-1]]
         out[iid]["unlocking_next"] = [
@@ -807,3 +783,26 @@ async def gather_cooldown_data(
             for r in picks
         ]
     return out
+
+
+def _cooldown_unlock_at(searched_at: str, kind: str, windows: dict[str, int]) -> datetime | None:
+    """Return when a cooldown row stops gating its item, by its pass's window.
+
+    ``None`` for a timestamp that does not parse: repositories/cooldowns
+    always writes ISO-8601 via ``_iso()``, so such a row was seeded by a
+    test fixture or external tooling.  It still counts as gated, with no
+    unlock estimate.
+    """
+    try:
+        parsed = datetime.fromisoformat(searched_at.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=UTC)
+    if kind == "cutoff":
+        days = windows["cutoff_cooldown_days"]
+    elif kind == "upgrade":
+        days = windows["upgrade_cooldown_days"]
+    else:
+        days = windows["cooldown_days"]
+    return parsed + timedelta(days=days)

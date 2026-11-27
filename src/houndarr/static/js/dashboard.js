@@ -304,10 +304,10 @@ function initDashboardPage() {
         // monitored_total: the overshoot turns the fleet total
         // negative, max clamps to 0, and the rollup headline
         // contradicts the sum of the cards below it.  Cooldown
-        // accounting can run above monitored_total because rows
-        // outlive the wanted item (downloads, unmonitors, cutoff-met
-        // transitions) and there is no current lifecycle cleanup; a
-        // proper reconcile is a separate commit.
+        // accounting can still run above monitored_total: reconcile
+        // deletes the rows of items that left the wanted lists only on
+        // a snapshot refresh, and keeps every row of a list it could
+        // not read in full.
         acc.eligible += Math.max(0, monI - gatedI - unrI);
         return acc;
       }, { monitored: 0, cooldown: 0, cutoffCd: 0, upgradeCd: 0, unreleased: 0, eligible: 0 });

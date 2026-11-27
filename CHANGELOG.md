@@ -51,7 +51,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A number typed in exponent form in the instance dialog, such as `1e2` in `Batch Size`, saves as its value instead of closing the dialog with nothing saved. (#916)
 - Schema v23 rebuilds `instances` on databases first created before 1.10.0, resetting a series window outside 1 to 100 to `5` and an unknown `search_order` to `chronological`. To roll back, downgrade to 1.13.4. (#916)
 - The v23 rebuild deletes cooldowns and clears the instance on log rows that still point at a deleted instance, and logs how many it repaired. (#916)
-- Schema v23 resets, once, each instance number setting stored outside the limits now enforced on save to its default, and logs `Schema v23: reset <column> to <default>`. (#916)
+- Schema v23 resets, once, each instance number setting stored outside the limits now enforced on save to its default, and logs `Schema v23: reset <column> to <default>` with each instance's old value. (#916)
 
 ### Security
 

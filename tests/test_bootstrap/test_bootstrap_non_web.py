@@ -24,8 +24,8 @@ from houndarr.database import close_all_pools
 pytestmark = pytest.mark.pinning
 
 
-# bootstrap_non_web leaves its pool open; an open pool's aiosqlite threads
-# are non-daemon and keep the interpreter from exiting.
+# Tests that read the database after bootstrap_non_web open a pool; its
+# aiosqlite threads are non-daemon and keep the interpreter from exiting.
 @pytest.fixture(autouse=True)
 def _close_pools() -> Generator[None]:
     yield

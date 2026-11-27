@@ -1,5 +1,6 @@
-{%- import "_macros/htmx.html" as hx -%}
+{%- import "_macros/htmx.html" as hx with context -%}
 {%- set _variant = nav_variant | default('pill') -%}
-{{ hx.shell_nav_link('/', 'Dashboard', request.url.path == '/', variant=_variant) }}
-{{ hx.shell_nav_link('/logs', 'Logs', request.url.path == '/logs', variant=_variant) }}
-{{ hx.shell_nav_link('/settings', 'Settings', request.url.path == '/settings' or request.url.path.startswith('/settings/'), variant=_variant) }}
+{%- set _path = request.url.path.removeprefix(base_path or '') or '/' -%}
+{{ hx.shell_nav_link('/', 'Dashboard', _path == '/', variant=_variant) }}
+{{ hx.shell_nav_link('/logs', 'Logs', _path == '/logs', variant=_variant) }}
+{{ hx.shell_nav_link('/settings', 'Settings', _path == '/settings' or _path.startswith('/settings/'), variant=_variant) }}

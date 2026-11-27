@@ -26,7 +26,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 _NODES: tuple[str, ...] = (
     "tests/test_database.py::test_init_db_is_idempotent_on_healthy_v12",
     "tests/test_services/test_admin.py::test_factory_reset_deletes_files_and_reinits",
-    "tests/test_bootstrap/test_bootstrap_non_web.py::TestReturnShape::test_returns_three_tuple",
+    "tests/test_bootstrap/test_bootstrap_non_web.py::TestDbInit::test_schema_version_is_pinned",
 )
 
 # Without the teardown the child never exits; a passing run takes a few seconds.

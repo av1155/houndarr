@@ -19,9 +19,17 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from fastapi import Request
 from fastapi.templating import Jinja2Templates
 
+from houndarr.base_path import app_url
+
 _templates: Jinja2Templates | None = None
+
+
+def _base_path_context(request: Request) -> dict[str, str]:
+    """Expose the URL prefix as ``base_path``; URL macros import ``with context``."""
+    return {"base_path": app_url(request, "")}
 
 
 def get_templates() -> Jinja2Templates:
@@ -42,7 +50,9 @@ def get_templates() -> Jinja2Templates:
     global _templates
     if _templates is None:
         templates_dir = Path(__file__).resolve().parent.parent / "templates"
-        _templates = Jinja2Templates(directory=str(templates_dir))
+        _templates = Jinja2Templates(
+            directory=str(templates_dir), context_processors=[_base_path_context]
+        )
         _register_filters(_templates)
     return _templates
 

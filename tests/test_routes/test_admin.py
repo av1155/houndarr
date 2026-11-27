@@ -77,9 +77,7 @@ def proxy_settings(tmp_data_dir: str) -> AppSettings:
         auth_proxy_header=_AUTH_HEADER,
         trusted_proxies=_TRUSTED_IP,
     )
-    _auth_mod._serializer = None
-    _auth_mod._setup_complete = None
-    _auth_mod._login_attempts.clear()
+    _auth_mod.reset_auth_caches()
     return settings
 
 

@@ -81,7 +81,7 @@
   <td data-col="actions" class="px-4 py-3 text-right">
     <div class="flex items-center justify-end gap-2">
       <button
-        hx-post="/settings/instances/{{ instance.core.id }}/toggle-enabled"
+        hx-post="{{ base_path }}/settings/instances/{{ instance.core.id }}/toggle-enabled"
         hx-target="#instance-row-{{ instance.core.id }}"
         hx-swap="outerHTML"
         class="px-3 py-1 text-xs rounded-inset transition-colors duration-base ease-station min-w-[4.25rem] text-center {% if instance.core.enabled %}bg-warning-bg hover:bg-warning/20 text-warning border border-warning-border{% else %}bg-success-bg hover:bg-success/20 text-success border border-success-border{% endif %}">
@@ -90,14 +90,14 @@
       <button
         type="button"
         data-open-add-instance-modal="true"
-        hx-get="/settings/instances/{{ instance.core.id }}/edit"
+        hx-get="{{ base_path }}/settings/instances/{{ instance.core.id }}/edit"
         hx-target="#add-instance-modal-content"
         hx-swap="innerHTML"
         class="px-3 py-1 text-xs rounded-inset bg-surface-3 hover:bg-border-default text-slate-200 border border-border-default transition-colors duration-base ease-station">
         Edit
       </button>
       <button
-        hx-delete="/settings/instances/{{ instance.core.id }}"
+        hx-delete="{{ base_path }}/settings/instances/{{ instance.core.id }}"
         hx-target="#instance-row-{{ instance.core.id }}"
         hx-swap="outerHTML"
         hx-confirm="Delete '{{ instance.core.name }}'? This cannot be undone."
@@ -145,7 +145,7 @@
 <form id="{{ form_id }}"
       data-form-mode="{{ 'edit' if is_edit else 'add' }}"
       data-instance-name="{{ instance_name }}"
-      hx-post="{{ post_url }}"
+      hx-post="{{ base_path }}{{ post_url }}"
       hx-target="{{ target }}"
       hx-swap="{{ swap }}"
       class="space-y-4">

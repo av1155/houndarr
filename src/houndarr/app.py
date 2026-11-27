@@ -16,6 +16,7 @@ from fastapi.staticfiles import StaticFiles
 
 from houndarr import __version__
 from houndarr.auth import AuthMiddleware, periodic_rate_limit_sweep
+from houndarr.base_path import BasePathMiddleware
 from houndarr.cache_headers import CacheControlMiddleware
 from houndarr.config import get_settings, unresolved_timezone
 from houndarr.crypto import ensure_master_key
@@ -250,10 +251,12 @@ def create_app() -> FastAPI:
     # -----------------------------------------------------------------------
     # Middleware (order matters: outermost = first to receive request)
     # -----------------------------------------------------------------------
-    # CacheControlMiddleware runs outermost so its headers land on every
+    # CacheControlMiddleware runs outside auth so its headers land on every
     # response, including AuthMiddleware redirects and error pages.
+    # BasePathMiddleware is outermost so every layer sees the normalised path.
     app.add_middleware(AuthMiddleware)
     app.add_middleware(CacheControlMiddleware)
+    app.add_middleware(BasePathMiddleware, base_path=settings.url_base)
 
     # -----------------------------------------------------------------------
     # Routes

@@ -43,7 +43,7 @@
     {% else %}
     <form
       data-auth-form
-      hx-post="/settings/account/password"
+      hx-post="{{ base_path }}/settings/account/password"
       hx-target="#admin-security"
       hx-select="#admin-security"
       hx-swap="outerHTML"

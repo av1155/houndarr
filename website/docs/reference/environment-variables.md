@@ -20,6 +20,7 @@ manifests, or the Unraid CA template.
 | `HOUNDARR_DEV` | `false` | Enable development mode (auto-reload, API docs at `/api/docs`) |
 | `HOUNDARR_LOG_LEVEL` | `info` | Log level: `debug`, `info`, `warning`, `error` |
 | `HOUNDARR_LOG_RETENTION_DAYS` | `30` | Days of `search_log` rows to retain. `0` disables automatic purges; `7` to `365` overrides the default |
+| `HOUNDARR_URL_BASE` | _(empty)_ | URL prefix when a reverse proxy serves Houndarr under a sub-path (e.g. `/houndarr`). Houndarr refuses to start on an invalid value. See [Reverse Proxy](/docs/guides/reverse-proxy#serving-from-a-sub-path) |
 
 ## Security settings
 

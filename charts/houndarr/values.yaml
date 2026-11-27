@@ -45,6 +45,10 @@ env:
   # Sets HOUNDARR_LOG_RETENTION_DAYS.  Lower this on small storage to
   # keep the dashboard responsive; large libraries can extend it.
   logRetentionDays: 30
+  # -- URL prefix when an Ingress serves Houndarr under a sub-path, e.g. "/houndarr".
+  # Sets HOUNDARR_URL_BASE and the Ingress path; the Ingress forwards the prefix
+  # unchanged. Probes keep using /api/health without the prefix.
+  urlBase: ""
 
 # -- Startup probe budget for first-boot migrations on large databases.
 # Defaults give 10 minutes (60 attempts * 10 s).  Raise failureThreshold

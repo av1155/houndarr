@@ -8,6 +8,7 @@ function initDashboardPage() {
   const controller = new AbortController();
   window.__houndarrDashboardPageController = controller;
   const { signal } = controller;
+  const BASE_PATH = window.houndarrClientHelpers?.basePath || '';
 
     const RUN_NOW_MIN_RUNNING_MS  = 700;
     const RUN_NOW_SUCCESS_HOLD_MS = 900;
@@ -259,7 +260,7 @@ function initDashboardPage() {
       const qs = failing
         .map((i) => `instance_id=${encodeURIComponent(i.id)}`)
         .join('&');
-      const logsHref = `/logs?${qs}&action=error`;
+      const logsHref = `${BASE_PATH}/logs?${qs}&action=error`;
       const rows = failing.map(renderAlertRow).join('');
       return `
 <section class="dash-alert" role="alert">
@@ -434,8 +435,8 @@ function initDashboardPage() {
 <header class="dash-section-head">
   <h2 class="dash-section-head__title">Instances</h2>
   <span class="dash-section-head__rule" aria-hidden="true"></span>
-  <a class="dash-section-head__add" href="/settings"
-     hx-get="/settings" hx-target="#app-content" hx-swap="innerHTML" hx-push-url="true">+ Add Instance</a>
+  <a class="dash-section-head__add" href="${BASE_PATH}/settings"
+     hx-get="${BASE_PATH}/settings" hx-target="#app-content" hx-swap="innerHTML" hx-push-url="true">+ Add Instance</a>
 </header>`;
     }
 
@@ -482,7 +483,7 @@ function initDashboardPage() {
       }
       if (inst.active_error) {
         const count = toNumber(inst.active_error.failures_count) || 1;
-        const href = `/logs?instance_id=${encodeURIComponent(inst.id)}&action=error`;
+        const href = `${BASE_PATH}/logs?instance_id=${encodeURIComponent(inst.id)}&action=error`;
         return `<a class="dash-pill dash-pill--error" href="${href}"
                   hx-get="${href}" hx-target="#app-content" hx-swap="innerHTML" hx-push-url="true"
                   aria-label="${count} error${count === 1 ? '' : 's'}; view logs"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>${count} error${count === 1 ? '' : 's'}</a>`;
@@ -759,7 +760,7 @@ function initDashboardPage() {
   <span class="dash-card__foot-text">${footText}</span>
   ${renderStaleSnapshotPill(inst)}
   <button class="dash-run-now"
-          hx-post="/api/instances/${inst.id}/run-now"
+          hx-post="${BASE_PATH}/api/instances/${inst.id}/run-now"
           hx-swap="none"
           data-run-now-btn="true"
           data-instance-id="${inst.id}"
@@ -886,8 +887,8 @@ function initDashboardPage() {
     Add a Sonarr, Radarr, Lidarr, Readarr, or Whisparr instance to start patrolling
     your library for missing and cutoff-unmet media.
   </p>
-  <a class="dash-empty-state__cta" href="/settings"
-     hx-get="/settings" hx-target="#app-content" hx-swap="innerHTML" hx-push-url="true">
+  <a class="dash-empty-state__cta" href="${BASE_PATH}/settings"
+     hx-get="${BASE_PATH}/settings" hx-target="#app-content" hx-swap="innerHTML" hx-push-url="true">
     + Add your first instance
   </a>
 </section>`;
@@ -933,7 +934,7 @@ function initDashboardPage() {
         // undefined, renders as empty, and the top section flashes to
         // "No hounds on patrol" until the next /api/status poll.
         const path = (evt.detail.pathInfo && evt.detail.pathInfo.requestPath) || '';
-        if (!path.startsWith('/api/status')) return;
+        if (!path.startsWith(`${BASE_PATH}/api/status`)) return;
 
         let payload;
         try { payload = JSON.parse(evt.detail.serverResponse); } catch { return; }

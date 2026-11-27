@@ -28,7 +28,7 @@
 <section class="controls" aria-label="Log filters">
   <form
     id="log-filter-form"
-    hx-get="/api/logs/partial"
+    hx-get="{{ base_path }}/api/logs/partial"
     hx-target="#log-feed"
     hx-swap="innerHTML"
     hx-trigger="change, submit"

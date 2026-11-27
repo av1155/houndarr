@@ -27,6 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A clean cycle after an error logs `'<name>' is healthy again`, so the dashboard card clears and Run now re-enables even when there is nothing to search. (#908)
 - `Could not reach <url>` stays the newest row through an outage, across restarts and log purges, and `is reachable again` follows only once the \*arr answers. (#908)
 - An instance with an open error keeps showing it outside the `Allowed Search Window` and while the download queue is at its `Queue Limit`. (#908)
+- An error from before an outage stays open when the \*arr comes back before a search pass can recheck it, logged as `its last error is not rechecked yet`. (#908)
 - Instances that only run upgrade search show as failing with `upgrade pool fetch failed: HTTP 401 from <path>` when the \*arr rejects the key or redirects to a login page, instead of `nothing to upgrade right now`. (#911)
 - Instances that only run upgrade search log `Could not reach <url>` during an outage and retry every 30 seconds; a 5xx or read timeout skips the pass without an error row. (#911)
 - The Settings page marks an instance failing for as long as its newest log row is an error, like the dashboard, instead of clearing it after 48 hours. (#908)

@@ -458,15 +458,27 @@ async def fetch_newest_log_row(instance_id: int) -> NewestLogRow | None:
     row the dashboard and settings page show.  Rides
     ``idx_search_log_instance``.
     """
+    return await _fetch_log_row_from_newest(instance_id, 0)
+
+
+async def fetch_log_row_before_newest(instance_id: int) -> NewestLogRow | None:
+    """Return the row just older than *instance_id*'s newest one, or ``None``.
+
+    Ordered like :func:`fetch_newest_log_row`.
+    """
+    return await _fetch_log_row_from_newest(instance_id, 1)
+
+
+async def _fetch_log_row_from_newest(instance_id: int, offset: int) -> NewestLogRow | None:
     async with get_db() as db:
         async with db.execute(
             """
             SELECT action, cycle_id, message FROM search_log
             WHERE instance_id = ?
             ORDER BY timestamp DESC, id DESC
-            LIMIT 1
+            LIMIT 1 OFFSET ?
             """,
-            (instance_id,),
+            (instance_id, offset),
         ) as cur:
             row = await cur.fetchone()
     if row is None:

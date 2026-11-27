@@ -34,6 +34,7 @@ HEALTHY = f"{INSTANCE.core.name!r} is healthy again"
 REJECTED = "get_tags: HTTP 401 from /api/v3/tag"
 POOL_REJECTED = "upgrade pool fetch failed: HTTP 401 from /api/v3/series"
 QUEUE_FULL = "Download queue has 10 items, limit is 5"
+STILL_FAILING = f"{REACHABLE}; its last error is not rechecked yet: {POOL_REJECTED}"
 
 Step = Callable[..., Awaitable[int]]
 
@@ -289,6 +290,87 @@ async def test_a_backpressure_skip_ends_an_outage_but_no_other_failure(
     await _loop(Supervisor(master_key=MASTER_KEY), [rejected, backpressure, backpressure])
     assert await _messages() == [("error", REJECTED)]
     assert await _failing_on(settings=True, dashboard=True)
+
+
+async def _close_by_backpressure(sup: Supervisor) -> None:
+    await _cycle(sup, backpressure)
+
+
+async def _close_by_deferred_list(sup: Supervisor) -> None:
+    await _cycle(sup, deferred_after_contact)
+
+
+@pytest.mark.asyncio()
+@pytest.mark.parametrize(
+    "close",
+    [_close_by_backpressure, _close_by_deferred_list, _snapshot],
+    ids=["backpressure", "deferred-list", "snapshot"],
+)
+async def test_an_outage_closed_without_a_clean_pass_keeps_the_error_it_covered(
+    seeded_instances: None, close: Callable[[Supervisor], Awaitable[None]]
+) -> None:
+    """The reconnect proves the *arr answers, not that the 401 from before the outage is fixed."""
+    sup = Supervisor(master_key=MASTER_KEY)
+    await _cycle(sup, pool_rejected)
+    await _cycle(sup, unreachable)
+    await close(sup)
+    await _cycle(sup, window_skip)
+
+    assert await _messages() == [
+        ("error", POOL_REJECTED),
+        ("error", OUTAGE),
+        ("error", STILL_FAILING),
+    ]
+    assert await _failing_on(settings=True, dashboard=True)
+
+    await _cycle(sup, quiet)
+    assert (await _messages())[-1] == ("info", HEALTHY)
+    assert await _failing_on(settings=False, dashboard=False)
+
+
+@pytest.mark.asyncio()
+async def test_a_carried_error_is_not_nested_across_outages(seeded_instances: None) -> None:
+    sup = Supervisor(master_key=MASTER_KEY)
+    for step in (pool_rejected, unreachable, backpressure, unreachable, backpressure):
+        await _cycle(sup, step)
+
+    assert await _messages() == [
+        ("error", POOL_REJECTED),
+        ("error", OUTAGE),
+        ("error", STILL_FAILING),
+        ("error", OUTAGE),
+        ("error", STILL_FAILING),
+    ]
+
+
+@pytest.mark.asyncio()
+async def test_an_unreadable_covered_row_leaves_the_outage_open(seeded_instances: None) -> None:
+    """A read hiccup must not let the reconnect clear an error it could not see."""
+    sup = Supervisor(master_key=MASTER_KEY)
+    await _cycle(sup, pool_rejected)
+    await _cycle(sup, unreachable)
+    broken = AsyncMock(side_effect=sqlite3.OperationalError("database is locked"))
+    with patch.object(supervisor_module, "fetch_log_row_before_newest", broken):
+        await _cycle(sup, backpressure)
+    assert await _messages() == [("error", POOL_REJECTED), ("error", OUTAGE)]
+
+    await _cycle(sup, backpressure)
+    assert (await _messages())[-1] == ("error", STILL_FAILING)
+
+
+@pytest.mark.asyncio()
+async def test_a_clean_cycle_closes_an_outage_and_the_error_it_covered(
+    seeded_instances: None,
+) -> None:
+    await _loop(Supervisor(master_key=MASTER_KEY), [rejected, unreachable, searched])
+
+    assert await _messages() == [
+        ("error", REJECTED),
+        ("error", OUTAGE),
+        ("searched", None),
+        ("info", REACHABLE),
+    ]
+    assert await _failing_on(settings=False, dashboard=False)
 
 
 @pytest.mark.asyncio()

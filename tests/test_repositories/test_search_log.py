@@ -1032,11 +1032,20 @@ async def test_fetch_newest_log_row_orders_like_the_dashboard(seeded_instances: 
 
     assert await repo.fetch_newest_log_row(1) == repo.NewestLogRow("info", "c1", "later")
     assert await repo.fetch_newest_log_row(2) == repo.NewestLogRow("error", "c2", "second")
+    assert await repo.fetch_log_row_before_newest(1) == repo.NewestLogRow("error", "c0", "older")
+    assert await repo.fetch_log_row_before_newest(2) == repo.NewestLogRow("info", "c2", "first")
 
 
 @pytest.mark.asyncio()
 async def test_fetch_newest_log_row_is_none_without_rows(seeded_instances: None) -> None:
     assert await repo.fetch_newest_log_row(1) is None
+    assert await repo.fetch_log_row_before_newest(1) is None
+
+
+@pytest.mark.asyncio()
+async def test_fetch_log_row_before_newest_is_none_with_one_row(seeded_instances: None) -> None:
+    await repo.insert_log_row(instance_id=1, item_id=None, item_type=None, action="error")
+    assert await repo.fetch_log_row_before_newest(1) is None
 
 
 @pytest.mark.pinning()

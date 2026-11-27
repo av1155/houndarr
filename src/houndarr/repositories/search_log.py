@@ -482,17 +482,19 @@ async def fetch_active_error_instance_ids() -> set[int]:
     unreachable instance writes its ``Could not reach`` row once per
     outage, so a window would clear a long outage on the settings page
     while the dashboard still shows it.  Walking ``instances`` keeps the
-    rows of deleted instances (``instance_id`` NULL) out of the answer,
-    and each lookup is one ``idx_search_log_instance`` probe.
+    rows of deleted instances (``instance_id`` NULL) out of the answer.
 
     Returns:
         Set of instance IDs whose newest ``search_log`` row has
         ``action='error'``.  Empty set when no instance is failing.
     """
+    # Left to itself the planner picks the covering (instance_id, action,
+    # timestamp) index and sorts every row of the instance; this one reads
+    # the newest timestamps first and stops.
     sql = """
     SELECT i.id FROM instances AS i
     WHERE (
-        SELECT sl.action FROM search_log AS sl
+        SELECT sl.action FROM search_log AS sl INDEXED BY idx_search_log_instance
         WHERE sl.instance_id = i.id
         ORDER BY sl.timestamp DESC, sl.id DESC
         LIMIT 1

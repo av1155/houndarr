@@ -85,6 +85,8 @@ _UPGRADE_MIN_COOLDOWN_DAYS = 7
 
 # 4xx codes that ask the client to come back later, so they pass like a 5xx.
 _RETRYABLE_CLIENT_STATUSES = frozenset({408, 429})
+# A reverse proxy's way of saying the *arr behind it did not answer.
+_GATEWAY_STATUSES = frozenset({502, 504})
 
 
 @dataclass(slots=True)
@@ -92,14 +94,17 @@ class CycleReport:
     """What one cycle learned about its *arr, filled in as the cycle runs.
 
     ``reached`` is set once the *arr answered a request: the queue status,
-    a wanted page or the upgrade list, or a status code or payload on an
-    upgrade list it could not serve.  ``upgrade_deferred`` is set when the
-    upgrade list could not be read for a reason that is expected to pass;
-    together with ``reached`` it proves the *arr is up, not that it works.
+    ``/tag``, a wanted page or the upgrade list, or a status code (other
+    than a gateway error) or payload on an upgrade list it could not
+    serve.  ``upgrade_deferred`` is set when the upgrade list could not be
+    read for a reason that is expected to pass, and ``passes_skipped`` when
+    queue backpressure stopped the cycle before any pass ran; either way
+    the cycle proves the *arr is up, not that it works.
     """
 
     reached: bool = False
     upgrade_deferred: bool = False
+    passes_skipped: bool = False
 
 
 # ---------------------------------------------------------------------------
@@ -259,6 +264,7 @@ async def _resolve_tag_filter_ids(
     *,
     cycle_id: str,
     cycle_trigger: CycleTrigger | str,
+    report: CycleReport | None = None,
 ) -> tuple[dict[SearchKind, _PassTagFilter], ClientError | httpx.InvalidURL | None]:
     """Resolve each enabled pass's tag labels to numeric tag IDs.
 
@@ -284,7 +290,7 @@ async def _resolve_tag_filter_ids(
     Labels that do not resolve against the *arr's current /tag list
     are dropped silently for the cycle but recorded as an info row so
     the operator can see the typo without the loop failing on every
-    candidate.
+    candidate.  A ``/tag`` list read marks *report* reached.
 
     Returns:
         The per-pass filters, and the ``/tag`` error when the lookup
@@ -303,6 +309,8 @@ async def _resolve_tag_filter_ids(
     try:
         async with adapter.make_client(instance) as client:
             label_to_id = await client.get_tags()
+        if report is not None:
+            report.reached = True
     except ClientTransportError:
         raise
     except (ClientError, httpx.InvalidURL) as exc:
@@ -1519,14 +1527,18 @@ async def _run_upgrade_pass(
     try:
         pool = await _fetch_pool_with_typed_wrap(adapter, instance)
     except EnginePoolFetchError as exc:
-        if isinstance(exc.__cause__, (httpx.ConnectError, httpx.ConnectTimeout)):
-            raise ClientTransportError(f"upgrade pool fetch: {exc}") from exc.__cause__
+        cause = exc.__cause__
+        if isinstance(cause, (httpx.ConnectError, httpx.ConnectTimeout)):
+            raise ClientTransportError(f"upgrade pool fetch: {exc}") from cause
         failure = _upgrade_pool_failure(exc)
         if failure is None:
             logger.warning("[%s] upgrade pool fetch deferred: %s", instance.core.name, exc)
             if report is not None:
                 report.upgrade_deferred = True
-                if isinstance(exc.__cause__, (httpx.HTTPStatusError, ValidationError)):
+                if isinstance(cause, ValidationError) or (
+                    isinstance(cause, httpx.HTTPStatusError)
+                    and cause.response.status_code not in _GATEWAY_STATUSES
+                ):
                     report.reached = True
             return 0
         logger.warning("[%s] upgrade pool fetch failed: %s", instance.core.name, exc)
@@ -1893,6 +1905,7 @@ async def _run_instance_search_impl(
             report.reached = True
             total_queued = queue_status.total_count
             if total_queued >= instance.missing.queue_limit:
+                report.passes_skipped = True
                 reason = f"queue backpressure ({total_queued}/{instance.missing.queue_limit})"
                 logger.info("[%s] skipping cycle: %s", instance.core.name, reason)
                 await _write_log(
@@ -1939,6 +1952,7 @@ async def _run_instance_search_impl(
         adapter,
         cycle_id=cycle_id_value,
         cycle_trigger=cycle_trigger,
+        report=report,
     )
     missing_tags = tag_filters[SearchKind.missing]
     cutoff_tags = tag_filters[SearchKind.cutoff]

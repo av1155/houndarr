@@ -478,10 +478,11 @@ class Supervisor:
         A cycle can end on its own error row (an upgrade list the *arr
         refused, a failed dispatch) without raising; that leaves the
         instance failing.  Only a cycle that reached the *arr may close an
-        earlier error, and only a clean one may close a failure other than
-        an outage: a deferred upgrade list proves the *arr answers, not
-        that the failure is fixed.  A deferred cycle that nothing answered
-        during an outage stays ``unreachable``.
+        earlier error, and only one whose passes ran cleanly may close a
+        failure other than an outage: a deferred upgrade list or a
+        backpressure skip proves the *arr answers, not that the failure is
+        fixed.  A deferred cycle that nothing answered during an outage
+        stays ``unreachable``.
         """
         outcome = CycleOutcome.deferred if report.upgrade_deferred else CycleOutcome.ok
         try:
@@ -501,7 +502,7 @@ class Supervisor:
             return outcome
         if _is_unreachable(before):
             message = _reachable_again(instance)
-        elif outcome is CycleOutcome.ok:
+        elif outcome is CycleOutcome.ok and not report.passes_skipped:
             message = f"{instance.core.name!r} is healthy again"
         else:
             return outcome

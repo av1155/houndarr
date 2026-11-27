@@ -453,9 +453,9 @@ async def test_upgrade_empty_pool_returns_zero(
         (httpx.ReadTimeout("slow"), False),
         (httpx.RemoteProtocolError("reset"), False),
         (httpx.Response(500), True),
-        (httpx.Response(502), True),
+        (httpx.Response(502), False),
         (httpx.Response(503), True),
-        (httpx.Response(504), True),
+        (httpx.Response(504), False),
         (httpx.Response(408), True),
         (httpx.Response(429), True),
         (httpx.Response(200, json={"not": "a list"}), True),
@@ -474,7 +474,7 @@ async def test_upgrade_pool_fetch_transient_error_defers_without_rows(
     No ``nothing to upgrade right now`` row either: the list was never
     read, and that row would read as healthy over an earlier error.  A
     status code or a payload still proves the *arr answered, which ends
-    an outage.
+    an outage; a proxy's 502 or 504 says the *arr behind it did not.
     """
     _mock_radarr_empty_missing()
     route = respx.get(f"{RADARR_URL}/api/v3/movie")

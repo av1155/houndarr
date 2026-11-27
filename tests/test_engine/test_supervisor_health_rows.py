@@ -33,7 +33,7 @@ REACHABLE = f"{INSTANCE.core.name!r} ({INSTANCE.core.url}) is reachable again"
 HEALTHY = f"{INSTANCE.core.name!r} is healthy again"
 REJECTED = "get_tags: HTTP 401 from /api/v3/tag"
 POOL_REJECTED = "upgrade pool fetch failed: HTTP 401 from /api/v3/series"
-OUTSIDE_WINDOW = "Outside the allowed time window"
+QUEUE_FULL = "Download queue has 10 items, limit is 5"
 
 Step = Callable[..., Awaitable[int]]
 
@@ -80,9 +80,15 @@ async def quiet(*_: Any, **kwargs: Any) -> int:
     return 0
 
 
-async def window_skip(*_: Any, **kwargs: Any) -> int:
-    """A scheduled cycle outside the allowed window, which sends no request."""
-    await _write("info", cycle_id=kwargs["cycle_id"], message=OUTSIDE_WINDOW)
+async def window_skip(*_: Any, **__: Any) -> int:
+    """A scheduled cycle outside the allowed window over an open error: no request, no row."""
+    return 0
+
+
+async def backpressure(*_: Any, **kwargs: Any) -> int:
+    """The queue status answered over the limit, so no pass ran."""
+    _mark(kwargs, reached=True, passes_skipped=True)
+    await _write("info", cycle_id=kwargs["cycle_id"], message=QUEUE_FULL)
     return 0
 
 
@@ -259,7 +265,23 @@ async def test_a_purged_outage_row_is_written_again(seeded_instances: None) -> N
 async def test_a_cycle_that_sends_no_request_claims_no_recovery(seeded_instances: None) -> None:
     await _loop(Supervisor(master_key=MASTER_KEY), [unreachable, window_skip])
 
-    assert await _messages() == [("error", OUTAGE), ("info", OUTSIDE_WINDOW)]
+    assert await _messages() == [("error", OUTAGE)]
+    assert await _failing_on(settings=True, dashboard=True)
+
+
+@pytest.mark.asyncio()
+async def test_a_backpressure_skip_ends_an_outage_but_no_other_failure(
+    seeded_instances: None,
+) -> None:
+    """A queue status read proves the *arr is up, not that a 401 seen before is fixed."""
+    await _loop(Supervisor(master_key=MASTER_KEY), [unreachable, backpressure])
+    assert await _messages() == [("error", OUTAGE), ("info", QUEUE_FULL), ("info", REACHABLE)]
+
+    async with get_db() as conn:
+        await conn.execute("DELETE FROM search_log")
+        await conn.commit()
+    await _loop(Supervisor(master_key=MASTER_KEY), [rejected, backpressure])
+    assert await _messages() == [("error", REJECTED), ("info", QUEUE_FULL)]
 
 
 @pytest.mark.asyncio()

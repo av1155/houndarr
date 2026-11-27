@@ -28,7 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `Could not reach <url>` stays the newest row through an outage, across restarts and log purges, and `is reachable again` follows only once the \*arr answers. (#908)
 - Outside the `Allowed Search Window`, an instance with an open error keeps showing it instead of reading healthy until the window opens. (#908)
 - Instances that only run upgrade search show as failing with `upgrade pool fetch failed: HTTP 401 from <path>` when the \*arr rejects the key or redirects to a login page, instead of `nothing to upgrade right now`. (#911)
-- Instances that only run upgrade search log `Could not reach <url>` during an outage and retry every 30 seconds; a 5xx or read timeout skips the pass without a log row. (#911)
+- Instances that only run upgrade search log `Could not reach <url>` during an outage and retry every 30 seconds; a 5xx or read timeout skips the pass without an error row. (#911)
 - The Settings page marks an instance failing for as long as its newest log row is an error, like the dashboard, instead of clearing it after 48 hours. (#908)
 - The Settings page no longer fails with HTTP 500 for up to 48 hours after deleting an instance whose newest log row was an error. (#908)
 

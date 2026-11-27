@@ -19,12 +19,12 @@ from enum import StrEnum
 class CycleOutcome(StrEnum):
     """How one search cycle ended.
 
-    - ``ok``: the cycle finished and its own rows hold no error.
+    - ``ok``: the cycle finished and did not end on an error row.
     - ``unreachable``: the *arr could not be reached.
     - ``failed``: the *arr answered but the cycle ended on an error row.
     - ``deferred``: the upgrade list could not be read for a reason
       that is expected to pass (5xx, read timeout, wire validation), so
-      the cycle neither marks the instance failing nor clears it.
+      the cycle marks nothing failing and clears at most an outage.
     """
 
     ok = "ok"

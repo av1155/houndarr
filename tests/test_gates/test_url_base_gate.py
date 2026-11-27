@@ -26,6 +26,8 @@ from houndarr.database import get_db
 from houndarr.repositories import widget_api_key
 from tests.conftest import csrf_headers
 
+pytestmark = pytest.mark.pinning
+
 _SRC = Path(__file__).resolve().parents[2] / "src" / "houndarr"
 _TEMPLATES = _SRC / "templates"
 _JS = _SRC / "static" / "js"

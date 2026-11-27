@@ -95,7 +95,7 @@ else
 fi
 _expect GET "$BASE/static/css/app.built.css" 200
 _expect GET "/logs" 200
-_expect POST "$BASE/logout" 302 "$BASE/login" -H "X-CSRF-Token: $(_csrf)"
+_expect POST "$BASE/logout" 303 "$BASE/login" -H "X-CSRF-Token: $(_csrf)"
 
 _expect GET "$BASE/api/v1/widget" 401
 _expect GET "/api/v1/widget" 401

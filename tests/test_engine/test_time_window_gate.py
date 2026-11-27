@@ -12,6 +12,7 @@ from httpx import AsyncClient
 
 from houndarr.engine import search_loop
 from houndarr.engine.search_loop import run_instance_search
+from houndarr.repositories.search_log import insert_log_row
 from houndarr.services.instances import InstanceType
 from tests.conftest import libc_timezone
 
@@ -138,6 +139,29 @@ async def test_outside_window_skips_cycle_with_info_row(
     assert rows[0]["reason"] == "outside allowed time window"
     assert "14:00" in rows[0]["message"]
     assert "09:00-12:00" in rows[0]["message"]
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_outside_window_keeps_an_open_error_newest(
+    seeded_instances: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The skip row must not bury an error the window keeps Houndarr from rechecking."""
+    _freeze_now(monkeypatch, at_utc_hour=14)
+    inst = _sonarr_instance(allowed_time_window="09:00-12:00")
+    await insert_log_row(
+        instance_id=inst.core.id,
+        item_id=None,
+        item_type=None,
+        action="error",
+        cycle_trigger="scheduled",
+        message="get_tags: HTTP 401 from /api/v3/tag",
+    )
+
+    count = await run_instance_search(inst, MASTER_KEY)
+
+    assert count == 0
+    assert [r["action"] for r in await get_log_rows()] == ["error"]
 
 
 _UNLOADED_TZ_REASON = "outside allowed time window (TZ=Nowhere/Nope not loaded, using UTC)"

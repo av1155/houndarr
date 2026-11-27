@@ -434,8 +434,8 @@ async def fetch_reconcile_sets(
     frozenset so no library traffic is paid; no upgrade cooldowns can
     exist in that state anyway.
     """
-    missing = await walk_wanted(walks, "missing", client.get_missing)
-    cutoff = await walk_wanted(walks, "cutoff", client.get_cutoff_unmet)
+    missing = await walk_wanted(walks, "missing", client.get_wanted_page)
+    cutoff = await walk_wanted(walks, "cutoff", client.get_wanted_page)
     missing_set: frozenset[tuple[str, int]] | None = None
     if missing.complete:
         missing_set = _episode_leaf_pairs(missing.items)

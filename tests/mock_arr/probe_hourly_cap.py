@@ -54,7 +54,7 @@ from cryptography.fernet import Fernet
 
 import houndarr.engine.search_loop as _search_loop
 from houndarr.crypto import encrypt
-from houndarr.database import get_db, init_db, set_db_path
+from houndarr.database import close_all_pools, get_db, init_db, set_db_path
 from houndarr.engine.search_loop import run_instance_search
 from houndarr.services.instances import (
     CutoffPolicy,
@@ -178,23 +178,26 @@ async def _temp_db(master_key: bytes, instances: list[Instance]) -> AsyncIterato
     with tempfile.TemporaryDirectory() as data_dir:
         db_path = os.path.join(data_dir, "probe.db")
         set_db_path(db_path)
-        await init_db()
-        encrypted = encrypt("probe-key", master_key)
-        async with get_db() as conn:
-            for inst in instances:
-                await conn.execute(
-                    "INSERT INTO instances (id, name, type, url, encrypted_api_key)"
-                    " VALUES (?, ?, ?, ?, ?)",
-                    (
-                        inst.core.id,
-                        inst.core.name,
-                        inst.core.type.value,
-                        inst.core.url,
-                        encrypted,
-                    ),
-                )
-            await conn.commit()
-        yield
+        try:
+            await init_db()
+            encrypted = encrypt("probe-key", master_key)
+            async with get_db() as conn:
+                for inst in instances:
+                    await conn.execute(
+                        "INSERT INTO instances (id, name, type, url, encrypted_api_key)"
+                        " VALUES (?, ?, ?, ?, ?)",
+                        (
+                            inst.core.id,
+                            inst.core.name,
+                            inst.core.type.value,
+                            inst.core.url,
+                            encrypted,
+                        ),
+                    )
+                await conn.commit()
+            yield
+        finally:
+            await close_all_pools()
 
 
 async def _dispatches_per_instance_kind() -> dict[tuple[int, str], int]:

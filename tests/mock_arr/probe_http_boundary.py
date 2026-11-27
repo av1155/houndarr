@@ -62,7 +62,7 @@ async def _mock_server(port: int):
         await task
 
 
-async def _run_app(base: str, app: str, context: bool) -> dict[str, Any]:
+async def _run_app(base: str, app: str, context: bool, master_key: bytes) -> dict[str, Any]:
     """Run one cycle for *app* and return what the mock actually recorded."""
     from houndarr.engine.search_loop import run_instance_search
     from houndarr.services import instances as inst_mod
@@ -92,7 +92,7 @@ async def _run_app(base: str, app: str, context: bool) -> dict[str, Any]:
     async with httpx.AsyncClient(timeout=20) as c:
         await c.post(f"{base}/__reset__/{app}")
 
-    searched = await run_instance_search(make_instance(**overrides), b"0" * 32)
+    searched = await run_instance_search(make_instance(**overrides), master_key)
 
     async with httpx.AsyncClient(timeout=20) as c:
         cmds = (await c.get(f"{base}/__commands__/{app}")).json()["commands"]
@@ -108,41 +108,51 @@ async def _run_app(base: str, app: str, context: bool) -> dict[str, Any]:
 
 
 async def main() -> None:
-    from houndarr.database import init_db
+    from cryptography.fernet import Fernet
+
+    from houndarr.crypto import encrypt
+    from houndarr.database import close_all_pools, get_db, init_db, set_db_path
 
     port = _free_port()
     base = f"http://127.0.0.1:{port}"
+    # The cycle writes the page offset back through update_instance, which
+    # decrypts the stored API key, so the key and the seeded row must be real.
+    master_key = Fernet.generate_key()
     with tempfile.TemporaryDirectory() as tmp:
         import os
 
         os.environ["HOUNDARR_DATA_DIR"] = str(Path(tmp))
-        await init_db()
-        # search_log carries an FK to instances, so the row has to exist.
-        from houndarr.database import get_db
-
-        async with get_db() as conn:
-            await conn.execute(
-                "INSERT INTO instances (id, name, type, url) VALUES (1, 'Probe', 'sonarr', 'x')"
-            )
-            await conn.commit()
-        async with _mock_server(port):
-            for mode_name, context in (("item mode", False), ("context mode", True)):
-                print(f"\n=== {mode_name} ===")
-                for app in APPS:
-                    if context and APPS[app] is None:
-                        print(f"  {app:<12} (item-level only, no context mode)")
-                        continue
-                    try:
-                        r = await _run_app(base, app, context)
-                    except Exception as exc:  # noqa: BLE001
-                        print(f"  {app:<12} FAILED {type(exc).__name__}: {exc}")
-                        continue
-                    ok = "ok " if r["command_count"] > 0 else "NO DISPATCH"
-                    print(
-                        f"  {app:<12} {ok} searched={r['searched']} "
-                        f"commands={r['command_count']}{set(r['commands']) or ''} "
-                        f"queue_reads={r['queue_reads']} pages={r['pages']}"
-                    )
+        set_db_path(str(Path(tmp) / "probe.db"))
+        try:
+            await init_db()
+            # search_log carries an FK to instances, so the row has to exist.
+            async with get_db() as conn:
+                await conn.execute(
+                    "INSERT INTO instances (id, name, type, url, encrypted_api_key)"
+                    " VALUES (?, ?, ?, ?, ?)",
+                    (1, "Probe", "sonarr", "x", encrypt("probe-key", master_key)),
+                )
+                await conn.commit()
+            async with _mock_server(port):
+                for mode_name, context in (("item mode", False), ("context mode", True)):
+                    print(f"\n=== {mode_name} ===")
+                    for app in APPS:
+                        if context and APPS[app] is None:
+                            print(f"  {app:<12} (item-level only, no context mode)")
+                            continue
+                        try:
+                            r = await _run_app(base, app, context, master_key)
+                        except Exception as exc:  # noqa: BLE001
+                            print(f"  {app:<12} FAILED {type(exc).__name__}: {exc}")
+                            continue
+                        ok = "ok " if r["command_count"] > 0 else "NO DISPATCH"
+                        print(
+                            f"  {app:<12} {ok} searched={r['searched']} "
+                            f"commands={r['command_count']}{set(r['commands']) or ''} "
+                            f"queue_reads={r['queue_reads']} pages={r['pages']}"
+                        )
+        finally:
+            await close_all_pools()
 
 
 if __name__ == "__main__":

@@ -9,6 +9,7 @@ import pytest
 import respx
 
 from houndarr.engine.search_loop import run_instance_search
+from houndarr.repositories.search_log import insert_log_row
 from houndarr.services.instances import InstanceType
 
 from .conftest import (
@@ -271,3 +272,26 @@ async def test_queue_invalid_url_fails_open(
     count = await run_instance_search(inst, MASTER_KEY)
 
     assert count == 1
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_backpressure_keeps_an_open_error_newest(
+    seeded_instances: None,
+) -> None:
+    """A full queue says nothing about an earlier error, so its row must not bury it."""
+    _mock_queue_status(9)
+    inst = _sonarr_instance(queue_limit=5)
+    await insert_log_row(
+        instance_id=inst.core.id,
+        item_id=None,
+        item_type=None,
+        action="error",
+        cycle_trigger="scheduled",
+        message="upgrade pool fetch failed: HTTP 404 from /api/v3/series",
+    )
+
+    count = await run_instance_search(inst, MASTER_KEY)
+
+    assert count == 0
+    assert [r["action"] for r in await get_log_rows()] == ["error"]

@@ -566,6 +566,13 @@ body {
 .toast.is-leaving {
   animation: toast-out 240ms var(--ease-station) forwards;
 }
+/* A toast shown over a modal <dialog> is a manual popover (app.js); undo the
+   UA [popover] centring (inset: 0; margin: auto) so it keeps the toast position. */
+.toast[popover] {
+  top: auto;
+  right: auto;
+  margin: 0;
+}
 @media (prefers-reduced-motion: reduce) {
   .toast,
   .toast.is-leaving { animation: none; }

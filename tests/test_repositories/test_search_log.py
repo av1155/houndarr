@@ -1013,6 +1013,64 @@ async def test_fetch_active_error_instance_ids_returns_empty_on_no_errors(
     assert await repo.fetch_active_error_instance_ids() == set()
 
 
+@pytest.mark.asyncio()
+async def test_fetch_newest_log_row_orders_like_the_dashboard(seeded_instances: None) -> None:
+    """Newest by timestamp, then by id for rows written in the same millisecond."""
+    same_ms = "2026-01-01T00:00:01.000Z"
+    async with get_db() as conn:
+        await conn.executemany(
+            "INSERT INTO search_log (instance_id, action, cycle_id, message, timestamp)"
+            " VALUES (?, ?, ?, ?, ?)",
+            [
+                (1, "info", "c1", "later", "2026-01-01T00:00:02.000Z"),
+                (1, "error", "c0", "older", "2026-01-01T00:00:00.000Z"),
+                (2, "info", "c2", "first", same_ms),
+                (2, "error", "c2", "second", same_ms),
+            ],
+        )
+        await conn.commit()
+
+    assert await repo.fetch_newest_log_row(1) == repo.NewestLogRow("info", "c1", "later")
+    assert await repo.fetch_newest_log_row(2) == repo.NewestLogRow("error", "c2", "second")
+
+
+@pytest.mark.asyncio()
+async def test_fetch_newest_log_row_is_none_without_rows(seeded_instances: None) -> None:
+    assert await repo.fetch_newest_log_row(1) is None
+    assert await repo.fetch_newest_log_row_under_errors(1, "Could not reach ") is None
+
+
+@pytest.mark.asyncio()
+async def test_fetch_newest_log_row_under_errors_skips_only_matching_errors(
+    seeded_instances: None,
+) -> None:
+    async with get_db() as conn:
+        await conn.executemany(
+            "INSERT INTO search_log (instance_id, action, cycle_id, message, timestamp)"
+            " VALUES (?, ?, ?, ?, ?)",
+            [
+                (1, "info", None, "Could not reach x (an info row)", "2026-01-01T00:00:00.000Z"),
+                (1, "error", "c1", "HTTP 401", "2026-01-01T00:00:01.000Z"),
+                (1, "error", None, "Could not reach x", "2026-01-01T00:00:02.000Z"),
+                (1, "error", None, "Could not reach x", "2026-01-01T00:00:03.000Z"),
+                (2, "error", None, "Could not reach y", "2026-01-01T00:00:00.000Z"),
+                (2, "info", None, "Could not reach y (an info row)", "2026-01-01T00:00:01.000Z"),
+            ],
+        )
+        await conn.commit()
+
+    under = repo.fetch_newest_log_row_under_errors
+    assert await under(1, "Could not reach ") == repo.NewestLogRow("error", "c1", "HTTP 401")
+    assert await under(2, "Could not reach ") == repo.NewestLogRow(
+        "info", None, "Could not reach y (an info row)"
+    )
+    async with get_db() as conn:
+        await conn.execute("DELETE FROM search_log WHERE instance_id = 1 AND cycle_id = 'c1'")
+        await conn.execute("DELETE FROM search_log WHERE instance_id = 1 AND action = 'info'")
+        await conn.commit()
+    assert await under(1, "Could not reach ") is None
+
+
 @pytest.mark.pinning()
 @pytest.mark.asyncio()
 async def test_engine_count_searches_last_hour_delegates_through_repo(
@@ -1086,6 +1144,24 @@ async def test_delete_all_logs_wipes_every_row(seeded_instances: None) -> None:
 async def test_delete_all_logs_returns_zero_on_empty_table(seeded_instances: None) -> None:
     """delete_all_logs returns 0 when the table is already empty."""
     assert await repo.delete_all_logs() == 0
+
+
+@pytest.mark.asyncio()
+async def test_admin_writes_on_caller_connection_leave_commit_to_caller(
+    seeded_instances: None,
+) -> None:
+    """With ``db`` both writes join the caller's transaction, so a rollback discards them."""
+    await repo.insert_log_row(instance_id=1, item_id=1, item_type="episode", action="searched")
+    await repo.insert_log_row(instance_id=2, item_id=2, item_type="movie", action="skipped")
+
+    async with get_db() as conn:
+        assert await repo.delete_all_logs(db=conn) == 2
+        await repo.insert_admin_audit("Audit log cleared by admin (2 rows removed)", db=conn)
+        assert conn.in_transaction
+        await conn.rollback()
+
+    rows = await repo.fetch_log_rows()
+    assert sorted(row["action"] for row in rows) == ["searched", "skipped"]
 
 
 @pytest.mark.pinning()

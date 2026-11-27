@@ -24,7 +24,7 @@ from houndarr.auth import (
     rotate_session_secret,
     set_password,
 )
-from houndarr.routes._htmx import hx_refresh_response
+from houndarr.routes._htmx import hx_refresh_response, swappable_error_response
 from houndarr.routes.settings._helpers import render_settings_page
 
 router = APIRouter()
@@ -43,10 +43,12 @@ async def account_password_update(
     # Rate limit: the same IP-scoped bucket that guards /login, so a stolen
     # session cannot brute-force the current password through this endpoint.
     if not check_login_rate_limit(request):
-        return await render_settings_page(
-            request,
-            status_code=429,
-            account_error="Too many password attempts. Try again in a minute.",
+        return swappable_error_response(
+            await render_settings_page(
+                request,
+                status_code=429,
+                account_error="Too many password attempts. Try again in a minute.",
+            )
         )
 
     if not await check_password(current_password):

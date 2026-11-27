@@ -6,8 +6,8 @@ individually; this gate locks the structural shape above them.
 Locked invariants:
 
 * :class:`~houndarr.services.instances.Instance` is a plain dataclass
-  with exactly seven sub-struct fields (``core``, ``missing``,
-  ``cutoff``, ``upgrade``, ``schedule``, ``snapshot``,
+  with exactly eight sub-struct fields (``core``, ``missing``,
+  ``cutoff``, ``upgrade``, ``schedule``, ``tag_filter``, ``snapshot``,
   ``timestamps``); no flat-attribute facade wraps them.
 * Every retired flat attribute name raises ``AttributeError`` when
   accessed on an Instance; callers must reach through the sub-struct.
@@ -18,9 +18,9 @@ Locked invariants:
   ``cooldowns``, ``search_log``) expose their public API surfaces.
 * :mod:`houndarr.deps` exports both :func:`get_supervisor` and
   :func:`get_master_key`.
-* The 40-name flat attribute surface an Instance used to expose is
-  covered exhaustively by the seven sub-structs' field sets; no
-  historical column name is orphaned.
+* The 43-name flat attribute surface an Instance used to expose is
+  covered exhaustively by the field sets of the seven sub-structs
+  other than ``tag_filter``; no historical column name is orphaned.
 """
 
 from __future__ import annotations
@@ -84,7 +84,7 @@ def test_instance_rejects_pre_refactor_flat_kwargs() -> None:
     The flat kwargs travel through ``**dict`` so pyright cannot resolve
     them to named parameters and (correctly) flag this negative test.
     The runtime semantics are identical: Instance's actual __init__ only
-    accepts the seven sub-struct fields, so any of these legacy names
+    accepts the eight sub-struct fields, so any of these legacy names
     raise ``TypeError``.
     """
     legacy_flat_kwargs: dict[str, Any] = {

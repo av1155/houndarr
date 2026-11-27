@@ -21,8 +21,11 @@ via :func:`fetch_log_rows`.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
+
+import aiosqlite
 
 from houndarr.database import get_db
 from houndarr.errors import redact_url_credentials
@@ -440,46 +443,94 @@ async def fetch_latest_missing_grace_skip(
     return str(row[0]), str(row[1])
 
 
+@dataclass(frozen=True, slots=True)
+class NewestLogRow:
+    """The fields of an instance's newest ``search_log`` row its health rests on."""
+
+    action: str
+    cycle_id: str | None
+    message: str | None
+
+
+async def fetch_newest_log_row(instance_id: int) -> NewestLogRow | None:
+    """Return *instance_id*'s newest ``search_log`` row, or ``None`` when it has none.
+
+    Ordered like the dashboard's latest-row query (``timestamp`` then
+    ``id``), so the supervisor judges an instance's state from the same
+    row the dashboard and settings page show.  Rides
+    ``idx_search_log_instance``.
+    """
+    async with get_db() as db:
+        async with db.execute(
+            """
+            SELECT action, cycle_id, message FROM search_log
+            WHERE instance_id = ?
+            ORDER BY timestamp DESC, id DESC
+            LIMIT 1
+            """,
+            (instance_id,),
+        ) as cur:
+            return _newest_log_row(await cur.fetchone())
+
+
+async def fetch_newest_log_row_under_errors(
+    instance_id: int, error_prefix: str
+) -> NewestLogRow | None:
+    """Return *instance_id*'s newest row that is not an error starting with *error_prefix*.
+
+    While the newest rows are such errors, this is the row they were
+    written over.  Ordered like :func:`fetch_newest_log_row`.
+    """
+    async with get_db() as db:
+        async with db.execute(
+            """
+            SELECT action, cycle_id, message FROM search_log
+            WHERE instance_id = ?
+              AND NOT (action = 'error' AND instr(COALESCE(message, ''), ?) = 1)
+            ORDER BY timestamp DESC, id DESC
+            LIMIT 1
+            """,
+            (instance_id, error_prefix),
+        ) as cur:
+            return _newest_log_row(await cur.fetchone())
+
+
+def _newest_log_row(row: aiosqlite.Row | None) -> NewestLogRow | None:
+    if row is None:
+        return None
+    return NewestLogRow(action=row["action"], cycle_id=row["cycle_id"], message=row["message"])
+
+
 async def fetch_active_error_instance_ids() -> set[int]:
     """Return the set of instance IDs whose newest log row is an error.
 
-    Used by the settings page to paint the per-row status dot red and
-    by the dashboard banner to flag active failures.  The window is
-    narrowed to the last 48 hours so the ``ROW_NUMBER()`` partition
-    only scans recent rows: an error that has not re-surfaced in two
-    days is stale for the "is this instance healthy right now?"
-    question, and a genuinely stuck instance writes fresh error rows
-    well inside that window.
-
-    The cutoff uses ``strftime('%Y-%m-%dT%H:%M:%fZ', ...)`` so the
-    boundary matches the stored column format exactly.  SQLite
-    compares TEXT lexicographically, and ``datetime('now',
-    '-2 days')`` returns a space-separated value; at position 10 of
-    the comparison that space (0x20) sorts below the stored value's
-    ``T`` (0x54), which would let same-calendar-day rows older than
-    48 hours slip through.  Matching formats makes the comparison a
-    pure ISO-8601 string compare and restores the advertised window.
+    Used by the settings page to paint the per-row status dot red.  The
+    rule matches the dashboard banner's: no time window, because an
+    unreachable instance writes its ``Could not reach`` row once per
+    outage, so a window would clear a long outage on the settings page
+    while the dashboard still shows it.  Walking ``instances`` keeps the
+    rows of deleted instances (``instance_id`` NULL) out of the answer.
 
     Returns:
-        Set of instance IDs whose newest ``search_log`` row (within
-        the 48h window) has ``action='error'``.  Empty set when no
-        instance is currently failing.
+        Set of instance IDs whose newest ``search_log`` row has
+        ``action='error'``.  Empty set when no instance is failing.
     """
+    # Left to itself the planner picks the covering (instance_id, action,
+    # timestamp) index and sorts every row of the instance; this one reads
+    # the newest timestamps first and stops.
     sql = """
-    SELECT instance_id FROM (
-        SELECT instance_id, action,
-               ROW_NUMBER() OVER (
-                   PARTITION BY instance_id ORDER BY timestamp DESC, id DESC
-               ) AS rn
-        FROM search_log
-        WHERE timestamp >= strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-2 days')
-    )
-    WHERE rn = 1 AND action = 'error'
+    SELECT i.id FROM instances AS i
+    WHERE (
+        SELECT sl.action FROM search_log AS sl INDEXED BY idx_search_log_instance
+        WHERE sl.instance_id = i.id
+        ORDER BY sl.timestamp DESC, sl.id DESC
+        LIMIT 1
+    ) = 'error'
     """
     async with get_db() as db:
         async with db.execute(sql) as cur:
             rows = await cur.fetchall()
-    return {int(row["instance_id"]) for row in rows}
+    return {int(row["id"]) for row in rows}
 
 
 async def delete_logs_for_instance(instance_id: int) -> int:
@@ -508,28 +559,32 @@ async def delete_logs_for_instance(instance_id: int) -> int:
         return cur.rowcount or 0
 
 
-async def delete_all_logs() -> int:
+async def delete_all_logs(*, db: aiosqlite.Connection | None = None) -> int:
     """Truncate the ``search_log`` table and return the removed row count.
 
-    Backs the Admin > Maintenance > Clear all logs action.  The audit
-    breadcrumb row ("Audit log cleared by admin ...") is written by
-    :func:`insert_admin_audit` after this returns, so the DELETE and
-    the follow-up INSERT are two separate statements against two
-    separate connections; that keeps the truncate a pure wipe and
-    lets concurrent supervisor writes interleave without corrupting
-    the breadcrumb row.
+    Backs the Admin > Maintenance > Clear all logs action, which passes
+    its own connection so the DELETE and the audit breadcrumb written
+    by :func:`insert_admin_audit` commit together or not at all.
+
+    Args:
+        db: Connection of a transaction the caller owns.  The DELETE
+            runs on it uncommitted; without it, the DELETE commits on
+            its own pooled connection.
 
     Returns:
         Number of rows that were removed (excluding the breadcrumb,
         which is written by the caller afterwards).
     """
-    async with get_db() as db:
+    if db is not None:
         cur = await db.execute("DELETE FROM search_log")
-        await db.commit()
+        return cur.rowcount or 0
+    async with get_db() as conn:
+        cur = await conn.execute("DELETE FROM search_log")
+        await conn.commit()
         return cur.rowcount or 0
 
 
-async def insert_admin_audit(message: str) -> None:
+async def insert_admin_audit(message: str, *, db: aiosqlite.Connection | None = None) -> None:
     """Insert a single system-audit row into ``search_log``.
 
     Used by admin operations (policy reset, log clear, factory reset)
@@ -543,14 +598,20 @@ async def insert_admin_audit(message: str) -> None:
     Args:
         message: Free-text audit message written to the ``message``
             column verbatim.
+        db: Connection of a transaction the caller owns.  The INSERT
+            runs on it uncommitted; without it, the INSERT commits on
+            its own pooled connection.
     """
-    async with get_db() as db:
-        await db.execute(
-            "INSERT INTO search_log (instance_id, cycle_trigger, action, message)"
-            " VALUES (NULL, 'system', 'info', ?)",
-            (message,),
-        )
-        await db.commit()
+    sql = (
+        "INSERT INTO search_log (instance_id, cycle_trigger, action, message)"
+        " VALUES (NULL, 'system', 'info', ?)"
+    )
+    if db is not None:
+        await db.execute(sql, (message,))
+        return
+    async with get_db() as conn:
+        await conn.execute(sql, (message,))
+        await conn.commit()
 
 
 async def purge_old_logs(retention_days: int) -> int:

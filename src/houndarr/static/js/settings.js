@@ -657,7 +657,7 @@ function initSettingsPage() {
       instances: {
         tone: 'neutral',
         title: 'Reset policy settings?',
-        body: 'Reverts policy settings (batch, cadence, cooldowns, cutoff, upgrade) to their factory defaults.',
+        body: 'Reverts policy settings (missing search, batch, cadence, cooldowns, cutoff, upgrade) to their factory defaults.',
         keep: 'Your instances, connections, and API keys are kept.',
         cta: 'Reset settings',
         endpoint: '/settings/admin/reset-instances',

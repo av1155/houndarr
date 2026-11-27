@@ -190,21 +190,20 @@ def cli(
     indexers happy.
     """
     import logging
+    import logging.config
     import os
 
     import uvicorn
 
     from houndarr.bootstrap import bootstrap_non_web
     from houndarr.config import _parse_log_retention_days, _parse_samesite, _parse_url_base
+    from houndarr.log_redaction import uvicorn_log_config
 
     # Configure the root logger so that application loggers (houndarr.*)
     # respect --log-level.  Without this, only uvicorn's own loggers are
     # configured and all houndarr.* INFO messages are silently dropped
     # (Python's root logger defaults to WARNING).
-    logging.basicConfig(
-        level=getattr(logging, log_level.upper()),
-        format="%(levelname)s:     %(message)s",
-    )
+    logging.config.dictConfig(uvicorn_log_config(log_level))
 
     # Shared non-web bootstrap: pin AppSettings with CLI overrides, ensure
     # the data dir, load the Fernet master key, and run init_db. The
@@ -269,6 +268,7 @@ def cli(
         port=port,
         reload=dev,
         reload_dirs=reload_dirs,
+        log_config=uvicorn_log_config(log_level),
         log_level=log_level.lower(),
         access_log=dev,
     )

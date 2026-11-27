@@ -196,6 +196,31 @@ async def test_update_instance_applies_single_field(db: None, master_key: bytes)
 
 @pytest.mark.pinning()
 @pytest.mark.asyncio()
+async def test_update_instance_on_caller_connection_leaves_commit_to_caller(
+    db: None, master_key: bytes
+) -> None:
+    """With ``db`` the write joins the caller's transaction, so a rollback discards it."""
+    created = await create_instance(
+        master_key=master_key,
+        name="Before",
+        type=InstanceType.sonarr,
+        url="http://s:8989",
+        api_key="k",
+    )
+    async with get_db() as conn:
+        await update_instance(
+            created.core.id, InstanceUpdate(name="Uncommitted"), master_key=master_key, db=conn
+        )
+        assert conn.in_transaction
+        await conn.rollback()
+
+    inst = await repo.get_instance(created.core.id, master_key=master_key)
+    assert inst is not None
+    assert inst.core.name == "Before"
+
+
+@pytest.mark.pinning()
+@pytest.mark.asyncio()
 async def test_update_instance_is_noop_when_payload_is_empty(db: None, master_key: bytes) -> None:
     """Every-None InstanceUpdate skips SQL entirely; updated_at does not change."""
     created = await create_instance(

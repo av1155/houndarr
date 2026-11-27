@@ -450,30 +450,77 @@ async def test_update_instance_snapshot_overwrites_prior_values(
 
 
 # ---------------------------------------------------------------------------
-# active_error_instance_ids: 2-day window
+# active_error_instance_ids: newest row, no time window
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio()
-async def test_active_error_ignores_rows_older_than_window(db: None, master_key: bytes) -> None:
-    """An error row older than 2 days must not keep the dot lit. If a
-    genuinely stuck instance is still failing, a fresh error row lands
-    well inside the window; a two-day silence means the problem is
-    stale."""
+async def test_active_error_reports_an_old_error_row(db: None, master_key: bytes) -> None:
+    """An outage writes its ``Could not reach`` row once, so age must not clear it.
+
+    The dashboard banner has no window; the settings dot must agree with
+    it however long the outage lasts.
+    """
     from datetime import UTC, datetime, timedelta
 
     from houndarr.database import get_db
     from houndarr.services.instances import active_error_instance_ids
 
     inst = await _make(master_key)
-    stale = (datetime.now(tz=UTC) - timedelta(days=3)).isoformat()
+    old = (datetime.now(tz=UTC) - timedelta(days=3)).strftime("%Y-%m-%dT%H:%M:%S.000Z")
     async with get_db() as conn:
         await conn.execute(
             "INSERT INTO search_log (instance_id, action, cycle_trigger, timestamp)"
             " VALUES (?, 'error', 'system', ?)",
-            (inst.core.id, stale),
+            (inst.core.id, old),
         )
         await conn.commit()
+
+    assert await active_error_instance_ids() == {inst.core.id}
+
+
+@pytest.mark.asyncio()
+async def test_active_error_follows_the_newest_row(db: None, master_key: bytes) -> None:
+    """Only the newest row counts: an info row after an error clears the dot."""
+    from houndarr.database import get_db
+    from houndarr.services.instances import active_error_instance_ids
+
+    healthy = await _make(master_key)
+    failing = await _make(master_key, name="Failing")
+    rows = [
+        (healthy.core.id, "error", "2026-01-01T00:00:00.000Z"),
+        (healthy.core.id, "info", "2026-01-01T00:00:01.000Z"),
+        (failing.core.id, "info", "2026-01-01T00:00:00.000Z"),
+        (failing.core.id, "error", "2026-01-01T00:00:01.000Z"),
+    ]
+    async with get_db() as conn:
+        await conn.executemany(
+            "INSERT INTO search_log (instance_id, action, cycle_trigger, timestamp)"
+            " VALUES (?, ?, 'system', ?)",
+            rows,
+        )
+        await conn.commit()
+
+    assert await active_error_instance_ids() == {failing.core.id}
+
+
+@pytest.mark.asyncio()
+async def test_active_error_skips_rows_of_deleted_instances(db: None, master_key: bytes) -> None:
+    """A deleted instance's rows keep a NULL ``instance_id`` and must not break the page."""
+    from houndarr.database import get_db
+    from houndarr.services.instances import active_error_instance_ids
+
+    inst = await _make(master_key)
+    async with get_db() as conn:
+        await conn.execute(
+            "INSERT INTO search_log (instance_id, action, cycle_trigger)"
+            " VALUES (?, 'error', 'system')",
+            (inst.core.id,),
+        )
+        await conn.execute("DELETE FROM instances WHERE id = ?", (inst.core.id,))
+        await conn.commit()
+        async with conn.execute("SELECT instance_id FROM search_log") as cur:
+            assert [r["instance_id"] for r in await cur.fetchall()] == [None]
 
     assert await active_error_instance_ids() == set()
 
@@ -497,45 +544,3 @@ async def test_active_error_reports_fresh_error(db: None, master_key: bytes) -> 
         await conn.commit()
 
     assert await active_error_instance_ids() == {inst.core.id}
-
-
-@pytest.mark.asyncio()
-async def test_active_error_excludes_same_day_older_row(db: None, master_key: bytes) -> None:
-    """Regression for a timestamp format-mismatch bug in the window clause.
-
-    ``search_log.timestamp`` is stored via ``strftime('%Y-%m-%dT%H:%M:%fZ',
-    'now')`` which produces values like ``2026-04-19T14:30:00.123Z`` (ISO
-    8601, 'T' separator, 'Z' suffix). A prior version of the window clause
-    used ``datetime('now', '-2 days')``, which emits ``YYYY-MM-DD HH:MM:SS``
-    (space separator, no fractional seconds, no 'Z'). SQLite compares TEXT
-    lexicographically, so at position 10 the cutoff's space (0x20) sorted
-    below the stored 'T' (0x54); any row whose calendar date equalled the
-    cutoff's was included regardless of its time-of-day, letting stale
-    errors up to ~24 h older than the 48-hour window light the dashboard
-    dot.
-
-    Seed a row at midnight UTC of the cutoff's calendar date. That row is
-    between 24 h and 48 h older than the exact 48-hour cutoff for any
-    non-midnight wall clock and must therefore be excluded.
-    """
-    from datetime import UTC, datetime, timedelta
-
-    from houndarr.database import get_db
-    from houndarr.services.instances import active_error_instance_ids
-
-    inst = await _make(master_key)
-    cutoff_date = (datetime.now(tz=UTC) - timedelta(days=2)).date()
-    # Match the stored ISO 8601 format including the 'Z' suffix; the bug
-    # triggers only when calendar dates collide, which is why we pin the
-    # day portion to the cutoff's date and set the time portion to
-    # midnight so the row is strictly older than the exact 48 h cutoff.
-    stale = f"{cutoff_date.isoformat()}T00:00:00.000Z"
-    async with get_db() as conn:
-        await conn.execute(
-            "INSERT INTO search_log (instance_id, action, cycle_trigger, timestamp)"
-            " VALUES (?, 'error', 'system', ?)",
-            (inst.core.id, stale),
-        )
-        await conn.commit()
-
-    assert await active_error_instance_ids() == set()

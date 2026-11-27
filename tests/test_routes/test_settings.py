@@ -925,6 +925,8 @@ def test_password_change_rate_limit_returns_429_after_five_bad_attempts(
     )
     assert resp.status_code == 429
     assert b"Too many password attempts" in resp.content
+    # app.js swaps a 429 into the page only when it carries this marker.
+    assert resp.headers["X-Houndarr-Swap-Error"] == "true"
 
 
 # ---------------------------------------------------------------------------

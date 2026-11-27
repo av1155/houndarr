@@ -12,7 +12,9 @@ import uuid
 from contextlib import suppress
 
 import pytest
-from playwright.sync_api import Locator, Page, expect
+from playwright.sync_api import Locator, Page, Route, expect
+
+from houndarr.config import DEFAULT_BATCH_SIZE, DEFAULT_SLEEP_INTERVAL_MINUTES
 
 
 def _wait_for_connection_ui_idle(page: Page) -> None:
@@ -922,3 +924,305 @@ def test_api_key_reveal_copy_fallback_targets_open_dialog(
     assert state["parentTag"] == "DIALOG", (
         f"fallback textarea parent was {state['parentTag']!r}, expected DIALOG"
     )
+
+
+@pytest.mark.integration
+def test_admin_reset_instances_refreshes_table_without_reload(
+    logged_in_page: Page, houndarr_url: str, mock_sonarr_url: str
+) -> None:
+    """After Reset all instance settings the table row shows the default batch / interval."""
+    page = logged_in_page
+    instance_name = f"E2E Reset {uuid.uuid4().hex[:8]}"
+    page.goto(f"{houndarr_url}/settings")
+
+    page.get_by_role("button", name=re.compile(r"add\s*instance", re.I)).first.click()
+    add_form = page.locator('form[data-form-mode="add"]')
+    expect(add_form).to_be_visible()
+    add_form.locator('input[name="name"]').fill(instance_name)
+    add_form.locator('select[name="type"]').select_option("sonarr")
+    add_form.locator('input[name="url"]').fill(mock_sonarr_url)
+    add_form.locator('input[name="api_key"]').fill("e2e-sonarr-key")
+    add_form.locator('input[name="batch_size"]').fill("7")
+    add_form.locator('input[name="sleep_interval_mins"]').fill("45")
+    _wait_for_connection_ui_idle(page)
+    _test_connection_and_wait_for_success(
+        page, add_form, add_form.locator("button[data-test-connection-btn]")
+    )
+    _submit_form(add_form)
+    batch_cell = (
+        page.locator("#instance-tbody tr")
+        .filter(has_text=instance_name)
+        .locator('[data-col="batch"]')
+    )
+    expect(batch_cell).to_have_text(re.compile(r"^\s*7 / 45m\s*$"), timeout=10_000)
+
+    page.evaluate("() => { window.__resetNoReload = true; }")
+    _open_admin_dropdown(page)
+    page.locator('button[data-confirm-reset="instances"]').click()
+    page.locator("#confirm-go").click()
+
+    expect(page.locator("#admin-flash")).to_contain_text("Policy settings reset", timeout=4_000)
+    expect(batch_cell).to_have_text(
+        re.compile(rf"^\s*{DEFAULT_BATCH_SIZE} / {DEFAULT_SLEEP_INTERVAL_MINUTES}m\s*$"),
+        timeout=4_000,
+    )
+    assert page.evaluate("() => window.__resetNoReload === true")
+
+
+@pytest.mark.integration
+def test_admin_action_server_error_shows_toast(
+    logged_in_page: Page, houndarr_url: str, console_guard
+) -> None:
+    """An unswapped 5xx on an admin action surfaces the global toast instead of nothing."""
+    for p in _EXPECTED_500_CONSOLE_NOISE:
+        console_guard.allow(p)
+    page = logged_in_page
+    page.goto(f"{houndarr_url}/settings")
+    _open_admin_dropdown(page)
+
+    pattern = re.compile(r"/settings/admin/clear-logs$")
+    page.route(pattern, lambda route: route.fulfill(status=500, body="Internal Server Error"))
+    try:
+        page.locator('button[data-confirm-reset="logs"]').click()
+        with page.expect_response(
+            lambda r: "/settings/admin/clear-logs" in r.url and r.request.method == "POST"
+        ):
+            page.locator("#confirm-go").click()
+        expect(page.locator("#toast")).to_be_visible(timeout=4_000)
+        expect(page.locator("#toast")).to_contain_text("Request failed (HTTP 500)")
+        expect(page.locator("#admin-flash")).not_to_contain_text("Internal Server Error")
+    finally:
+        page.unroute(pattern)
+
+
+_EXPECTED_429_CONSOLE_NOISE = [
+    r"Failed to load resource: the server responded with a status of 429",
+    r"Response Status Error Code 429",
+]
+
+
+@pytest.mark.integration
+def test_admin_factory_reset_rate_limit_flash_renders(
+    logged_in_page: Page, houndarr_url: str, console_guard
+) -> None:
+    """The factory-reset 429 flash lands in #admin-flash.
+
+    The response is stubbed: tripping the real limit would lock /login for
+    the rest of the suite, since both share one IP-scoped bucket.
+    """
+    for p in _EXPECTED_429_CONSOLE_NOISE:
+        console_guard.allow(p)
+    page = logged_in_page
+    page.goto(f"{houndarr_url}/settings")
+    _open_admin_dropdown(page)
+
+    flash = (
+        '<div data-admin-flash data-admin-flash-tone="danger" role="status">'
+        "Too many attempts. Try again in a minute.</div>"
+    )
+    pattern = re.compile(r"/settings/admin/factory-reset$")
+    page.route(
+        pattern,
+        lambda route: route.fulfill(
+            status=429,
+            body=flash,
+            content_type="text/html",
+            headers={"X-Houndarr-Swap-Error": "true"},
+        ),
+    )
+    try:
+        page.locator('button[data-confirm-reset="factory"]').click()
+        page.locator("#confirm-phrase-input").fill("RESET")
+        page.locator("#confirm-password-input").fill("WrongPassword123!")
+        page.locator("#confirm-go").click()
+        expect(page.locator("#admin-flash")).to_contain_text("Too many attempts", timeout=4_000)
+        expect(page.locator("#toast")).to_be_hidden()
+    finally:
+        page.unroute(pattern)
+
+
+_TEST_CONNECTION_500 = "Request failed (HTTP 500)"
+
+
+def _fail_test_connection_in_add_modal(page: Page, mock_sonarr_url: str) -> Locator:
+    """Open the add modal, run Test Connection against a routed 500, return its toast."""
+    page.get_by_role("button", name=re.compile(r"add\s*instance", re.I)).first.click()
+    add_form = page.locator('form[data-form-mode="add"]')
+    expect(add_form).to_be_visible()
+    add_form.locator('input[name="name"]').fill(f"E2E Toast {uuid.uuid4().hex[:8]}")
+    add_form.locator('select[name="type"]').select_option("sonarr")
+    add_form.locator('input[name="url"]').fill(mock_sonarr_url)
+    add_form.locator('input[name="api_key"]').fill("e2e-sonarr-key")
+    _wait_for_connection_ui_idle(page)
+    with page.expect_response(lambda r: "/settings/instances/test-connection" in r.url):
+        add_form.locator("button[data-test-connection-btn]").dispatch_event("click")
+    toast = page.locator("#add-instance-modal > .toast")
+    expect(toast).to_be_visible(timeout=4_000)
+    expect(toast).to_contain_text(_TEST_CONNECTION_500)
+    return toast
+
+
+def _assert_toast_uncovered(toast: Locator) -> None:
+    """``to_be_visible`` passes under a modal backdrop too; hit-test the toast's centre."""
+    uncovered = toast.evaluate(
+        """el => {
+            const r = el.getBoundingClientRect();
+            const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+            return el.contains(hit);
+        }"""
+    )
+    assert uncovered, "the toast is drawn under the instance modal"
+
+
+def _close_add_modal_and_expect_page_toast(page: Page) -> None:
+    page.locator('#add-instance-modal [data-close-add-instance-modal="true"]').first.click()
+    expect(page.locator("dialog#add-instance-modal[open]")).to_have_count(0, timeout=4_000)
+    expect(page.locator("#toast")).to_be_visible()
+    expect(page.locator("#toast")).to_contain_text(_TEST_CONNECTION_500)
+
+
+@pytest.mark.integration
+def test_error_toast_draws_above_open_instance_modal(
+    logged_in_page: Page, houndarr_url: str, mock_sonarr_url: str, console_guard
+) -> None:
+    """A failed request from the instance modal shows a toast the modal does not cover.
+
+    The modal is a top-layer <dialog>, so a toast left on <body> would sit
+    under its backdrop.  Closing the modal hands the message to the page
+    toast, and a reopened modal must draw its next toast on top again.
+    """
+    for p in _EXPECTED_500_CONSOLE_NOISE:
+        console_guard.allow(p)
+    page = logged_in_page
+    page.goto(f"{houndarr_url}/settings")
+    pattern = re.compile(r"/settings/instances/test-connection$")
+    page.route(pattern, lambda route: route.fulfill(status=500, body="Internal Server Error"))
+    try:
+        toast = _fail_test_connection_in_add_modal(page, mock_sonarr_url)
+        _assert_toast_uncovered(toast)
+        # Measure after the 10px slide-in animation settles.
+        gap = toast.evaluate(
+            """el => Promise.all(el.getAnimations().map(a => a.finished))
+                .then(() => window.innerHeight - el.getBoundingClientRect().bottom)"""
+        )
+        assert 20 <= gap <= 40, f"toast sits {gap}px above the viewport bottom, expected 28"
+
+        _close_add_modal_and_expect_page_toast(page)
+        _assert_toast_uncovered(_fail_test_connection_in_add_modal(page, mock_sonarr_url))
+    finally:
+        page.unroute(pattern)
+
+
+@pytest.mark.integration
+def test_error_toast_handed_over_after_history_restore(
+    logged_in_page: Page, houndarr_url: str, mock_sonarr_url: str, console_guard
+) -> None:
+    """Back navigation restores the instance modal with its toast copy from htmx's snapshot;
+    closing that modal must still hand a showing message to the page toast."""
+    for p in _EXPECTED_500_CONSOLE_NOISE:
+        console_guard.allow(p)
+    page = logged_in_page
+    page.goto(f"{houndarr_url}/settings")
+    pattern = re.compile(r"/settings/instances/test-connection$")
+    page.route(pattern, lambda route: route.fulfill(status=500, body="Internal Server Error"))
+    try:
+        _fail_test_connection_in_add_modal(page, mock_sonarr_url)
+        _close_add_modal_and_expect_page_toast(page)
+        expect(page.locator("#toast")).to_be_hidden(timeout=5_000)
+
+        page.get_by_role("link", name="Dashboard", exact=True).first.click()
+        page.wait_for_url(re.compile(rf"^{re.escape(houndarr_url)}/?$"))
+        page.go_back()
+        page.wait_for_url(re.compile(r"/settings$"))
+        expect(page.locator("#add-instance-modal > .toast")).to_have_count(1)
+
+        _fail_test_connection_in_add_modal(page, mock_sonarr_url)
+        _close_add_modal_and_expect_page_toast(page)
+    finally:
+        page.unroute(pattern)
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("failure", "motion", "message"),
+    [
+        ("http-500", "no-preference", "Request failed (HTTP 500)"),
+        ("network", "reduce", "Could not reach Houndarr"),
+    ],
+)
+def test_changelog_dismiss_error_toast_outlives_the_modal(
+    logged_in_page: Page,
+    houndarr_url: str,
+    console_guard,
+    failure: str,
+    motion: str,
+    message: str,
+) -> None:
+    """The changelog modal closes even when dismiss fails; its error toast must stay on screen."""
+    for p in [*_EXPECTED_500_CONSOLE_NOISE, r"net::ERR_FAILED"]:
+        console_guard.allow(p)
+    page = logged_in_page
+    page.emulate_media(reduced_motion=motion)
+    page.goto(f"{houndarr_url}/settings")
+    _open_admin_dropdown(page)
+    page.get_by_role("button", name=re.compile(r"what'?s\s*new", re.I)).click()
+    expect(page.locator("dialog#changelog-modal[open]")).to_be_visible(timeout=4_000)
+
+    pattern = re.compile(r"/settings/changelog/dismiss$")
+    page.route(
+        pattern,
+        lambda route: (
+            route.fulfill(status=500, body="") if failure == "http-500" else route.abort("failed")
+        ),
+    )
+    try:
+        page.locator('[data-changelog-dismiss="true"]').click()
+        expect(page.locator("dialog#changelog-modal")).to_have_count(0, timeout=4_000)
+        expect(page.locator("#toast")).to_be_visible()
+        expect(page.locator("#toast")).to_contain_text(message)
+    finally:
+        page.unroute(pattern)
+
+
+@pytest.mark.integration
+def test_error_toast_skips_gets_and_reports_unreachable_server(
+    logged_in_page: Page, houndarr_url: str, console_guard
+) -> None:
+    """A failed GET stays silent (the dashboard polls); a mutation that never lands toasts.
+
+    A 429 without Houndarr's ``X-Houndarr-Swap-Error`` marker stands in for
+    a reverse proxy's rate-limit page: it must never replace the target, on
+    a GET it stays silent, and on a mutation it gets the toast.
+    """
+    noise = [*_EXPECTED_500_CONSOLE_NOISE, *_EXPECTED_429_CONSOLE_NOISE, r"net::ERR_FAILED"]
+    for p in noise:
+        console_guard.allow(p)
+    page = logged_in_page
+    page.goto(f"{houndarr_url}/settings")
+
+    def respond(route: Route) -> None:
+        outcome = route.request.url.rsplit("=", 1)[-1]
+        if outcome == "abort":
+            route.abort("failed")
+        else:
+            route.fulfill(status=int(outcome), body="proxy rate-limit page")
+
+    probe = re.compile(r"/settings/toast-probe\?outcome=")
+    page.route(probe, respond)
+    request = """([verb, outcome]) => htmx
+        .ajax(verb, '/settings/toast-probe?outcome=' + outcome,
+              {target: '#admin-flash', swap: 'innerHTML'})
+        .then(() => 'done', () => 'done')"""
+    try:
+        page.evaluate(request, ["GET", "500"])
+        expect(page.locator("#toast")).to_be_hidden()
+        page.evaluate(request, ["GET", "429"])
+        expect(page.locator("#admin-flash")).not_to_contain_text("proxy rate-limit page")
+        expect(page.locator("#toast")).to_be_hidden()
+        page.evaluate(request, ["POST", "429"])
+        expect(page.locator("#admin-flash")).not_to_contain_text("proxy rate-limit page")
+        expect(page.locator("#toast")).to_contain_text("Request failed (HTTP 429)")
+        page.evaluate(request, ["POST", "abort"])
+        expect(page.locator("#toast")).to_contain_text("Could not reach Houndarr", timeout=4_000)
+    finally:
+        page.unroute(probe)

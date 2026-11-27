@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import sqlite3
 from collections.abc import AsyncGenerator, Generator
+from contextlib import closing
+from pathlib import Path
 from unittest.mock import AsyncMock
 
 import pytest
@@ -13,7 +16,12 @@ import houndarr.auth as _auth_mod
 from houndarr.auth import CSRF_COOKIE_NAME
 from houndarr.clients._wire_models import SystemStatus
 from houndarr.clients.base import ArrClient
-from houndarr.config import AppSettings, bootstrap_settings
+from houndarr.config import (
+    DEFAULT_BATCH_SIZE,
+    DEFAULT_SLEEP_INTERVAL_MINUTES,
+    AppSettings,
+    bootstrap_settings,
+)
 from houndarr.database import get_db
 from tests.conftest import csrf_headers
 
@@ -156,6 +164,80 @@ def test_reset_instances_no_instances_returns_flash(app: TestClient) -> None:
     )
     assert resp.status_code == 200
     assert b"No instances configured" in resp.content
+    # The table body partial has no empty-state row, so swapping it in would blank the table.
+    assert b"hx-swap-oob" not in resp.content
+
+
+def _abort_writes(db_path: Path, trigger_sql: str) -> None:
+    with closing(sqlite3.connect(db_path)) as conn:
+        conn.execute(trigger_sql)
+        conn.commit()
+
+
+def test_reset_instances_refreshes_instance_table(app: TestClient) -> None:
+    _login(app)
+    app.post(
+        "/settings/instances",
+        data={**_VALID_INSTANCE, "batch_size": "99"},
+        headers=csrf_headers(app),
+    )
+    resp = app.post("/settings/admin/reset-instances", headers=csrf_headers(app))
+
+    assert resp.status_code == 200
+    oob = resp.text.split('hx-swap-oob="innerHTML:#instance-tbody"', 1)
+    assert len(oob) == 2
+    assert "My Sonarr" in oob[1]
+    assert f"{DEFAULT_BATCH_SIZE} / {DEFAULT_SLEEP_INTERVAL_MINUTES}m" in oob[1]
+    assert "99 /" not in oob[1]
+
+
+def test_reset_instances_reports_success_when_table_refresh_fails(
+    app: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _login(app)
+    app.post(
+        "/settings/instances",
+        data={**_VALID_INSTANCE, "batch_size": "99"},
+        headers=csrf_headers(app),
+    )
+    monkeypatch.setattr(
+        "houndarr.routes.admin.active_error_instance_ids",
+        AsyncMock(side_effect=RuntimeError("read failed")),
+    )
+
+    resp = app.post("/settings/admin/reset-instances", headers=csrf_headers(app))
+
+    assert resp.status_code == 200
+    assert 'data-admin-flash-tone="success"' in resp.text
+    assert "hx-swap-oob" not in resp.text
+    assert f"{DEFAULT_BATCH_SIZE} / {DEFAULT_SLEEP_INTERVAL_MINUTES}m" in app.get("/settings").text
+
+
+def test_reset_instances_failure_returns_danger_flash_and_changes_nothing(
+    app: TestClient,
+    test_settings: AppSettings,
+) -> None:
+    _login(app)
+    app.post(
+        "/settings/instances",
+        data={**_VALID_INSTANCE, "batch_size": "99"},
+        headers=csrf_headers(app),
+    )
+    _abort_writes(
+        test_settings.db_path,
+        "CREATE TRIGGER fail_reset BEFORE UPDATE ON instances"
+        " BEGIN SELECT RAISE(ABORT, 'injected'); END",
+    )
+
+    resp = app.post("/settings/admin/reset-instances", headers=csrf_headers(app))
+
+    assert resp.status_code == 422
+    assert 'data-admin-flash-tone="danger"' in resp.text
+    assert "nothing was changed" in resp.text
+    assert "hx-swap-oob" not in resp.text
+    settings_page = app.get("/settings")
+    assert "99 / " in settings_page.text
 
 
 # ---------------------------------------------------------------------------
@@ -181,6 +263,28 @@ def test_clear_logs_happy_path(
     assert resp.status_code == 200
     # Message varies by rowcount; the success flash should mention "Cleared".
     assert b"Cleared" in resp.content or b"already empty" in resp.content
+
+
+def test_clear_logs_failure_returns_danger_flash_and_keeps_rows(
+    app: TestClient,
+    test_settings: AppSettings,
+    seed_one_log_row: None,
+) -> None:
+    _login(app)
+    _abort_writes(
+        test_settings.db_path,
+        "CREATE TRIGGER fail_breadcrumb BEFORE INSERT ON search_log"
+        " WHEN NEW.cycle_trigger = 'system' BEGIN SELECT RAISE(ABORT, 'injected'); END",
+    )
+
+    resp = app.post("/settings/admin/clear-logs", headers=csrf_headers(app))
+
+    assert resp.status_code == 422
+    assert 'data-admin-flash-tone="danger"' in resp.text
+    assert "nothing was removed" in resp.text
+    with closing(sqlite3.connect(test_settings.db_path)) as conn:
+        messages = [row[0] for row in conn.execute("SELECT message FROM search_log")]
+    assert messages == ["seed"]
 
 
 # ---------------------------------------------------------------------------
@@ -281,6 +385,8 @@ def test_factory_reset_rate_limit_returns_429_after_five_bad_attempts(
     )
     assert resp.status_code == 429
     assert b"Too many attempts" in resp.content
+    # app.js swaps a 429 into the page only when it carries this marker.
+    assert resp.headers["X-Houndarr-Swap-Error"] == "true"
     _stub_factory_reset.assert_not_called()
 
 

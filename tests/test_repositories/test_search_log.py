@@ -1146,6 +1146,24 @@ async def test_delete_all_logs_returns_zero_on_empty_table(seeded_instances: Non
     assert await repo.delete_all_logs() == 0
 
 
+@pytest.mark.asyncio()
+async def test_admin_writes_on_caller_connection_leave_commit_to_caller(
+    seeded_instances: None,
+) -> None:
+    """With ``db`` both writes join the caller's transaction, so a rollback discards them."""
+    await repo.insert_log_row(instance_id=1, item_id=1, item_type="episode", action="searched")
+    await repo.insert_log_row(instance_id=2, item_id=2, item_type="movie", action="skipped")
+
+    async with get_db() as conn:
+        assert await repo.delete_all_logs(db=conn) == 2
+        await repo.insert_admin_audit("Audit log cleared by admin (2 rows removed)", db=conn)
+        assert conn.in_transaction
+        await conn.rollback()
+
+    rows = await repo.fetch_log_rows()
+    assert sorted(row["action"] for row in rows) == ["searched", "skipped"]
+
+
 @pytest.mark.pinning()
 @pytest.mark.asyncio()
 async def test_insert_admin_audit_writes_system_info_row(seeded_instances: None) -> None:

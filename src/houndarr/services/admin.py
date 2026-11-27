@@ -14,6 +14,10 @@ Three top-level helpers back the routes under ``/settings/admin``:
   falls back to a delayed process exit so the orchestrator restarts
   the container; on next boot ``init_db`` + ``ensure_master_key``
   resume from the empty data directory exactly as on first run.
+
+The first two write their rows and the audit breadcrumb in one
+transaction, so a failure changes nothing and surfaces as
+:class:`~houndarr.errors.ServiceError`.
 """
 
 from __future__ import annotations
@@ -23,6 +27,7 @@ import logging
 import os
 from contextlib import suppress
 from pathlib import Path
+from typing import Any
 
 from fastapi import FastAPI
 
@@ -55,9 +60,11 @@ from houndarr.config import (
     DEFAULT_WHISPARR_V2_SEARCH_MODE,
 )
 from houndarr.crypto import ensure_master_key
-from houndarr.database import init_db
+from houndarr.database import get_db, init_db
 from houndarr.engine.supervisor import Supervisor
 from houndarr.errors import ServiceError
+from houndarr.repositories.instances import InstanceUpdate
+from houndarr.repositories.instances import update_instance as update_instance_row
 from houndarr.repositories.search_log import (
     delete_all_logs,
     insert_admin_audit,
@@ -69,13 +76,12 @@ from houndarr.services.instances import (
     SonarrSearchMode,
     WhisparrV2SearchMode,
     list_instances,
-    update_instance,
 )
 
 logger = logging.getLogger(__name__)
 
 
-def _policy_defaults() -> dict[str, object]:
+def _policy_defaults() -> dict[str, Any]:
     """Return the column -> default-value dict used by a policy reset.
 
     Holds every ``instances`` column except identity, timestamps,
@@ -132,43 +138,74 @@ async def reset_all_instance_policy(
 
     Identity (name, type, url, api_key, enabled), ``created_at``, and
     snapshot counters are preserved.  Tag filters are preserved too: clearing a
-    protective exclude would widen what the next cycle searches.  The
-    supervisor is reconciled per row so the running search loop adopts
-    the new cadence on its next wake; the search loop re-reads columns
-    each cycle already, so this is mostly a belt-and-braces for the
-    upgrade-offset reset.
+    protective exclude would widen what the next cycle searches.  Every
+    row and the audit breadcrumb commit in one transaction, so a failure
+    leaves every instance as it was.  After the commit the supervisor is
+    reconciled per row so the running search loop adopts the new cadence
+    on its next wake; the search loop re-reads columns each cycle
+    already, so this is mostly a belt-and-braces for the upgrade-offset
+    reset.  A reconcile failure is logged and the remaining rows are
+    still reconciled, because the reset itself has already committed.
 
     Args:
-        master_key: Fernet master key used to decrypt / re-encrypt the
-            stored api_key round-trip inside ``update_instance``.
+        master_key: Fernet master key used to decrypt the stored api_key
+            when listing instances.
         supervisor: Running supervisor from ``app.state`` (may be ``None``
             during tests). When present, ``reconcile_instance`` is called
-            once per row after the update.
+            once per row after the commit.
 
     Returns:
         Number of instances that were reset.
-    """
-    defaults = _policy_defaults()
-    instances = await list_instances(master_key=master_key)
-    for instance in instances:
-        await update_instance(instance.core.id, master_key=master_key, **defaults)
-        if supervisor is not None:
-            await supervisor.reconcile_instance(instance.core.id)
 
-    await insert_admin_audit(
-        f"Policy settings reset to defaults for {len(instances)} instance(s) by admin",
-    )
+    Raises:
+        ServiceError: Listing or writing failed; nothing was changed.
+            The original exception is attached on ``__cause__``.
+    """
+    payload = InstanceUpdate(**_policy_defaults())
+    try:
+        instances = await list_instances(master_key=master_key)
+        async with get_db() as db:
+            for instance in instances:
+                await update_instance_row(instance.core.id, payload, master_key=master_key, db=db)
+            await insert_admin_audit(
+                f"Policy settings reset to defaults for {len(instances)} instance(s) by admin",
+                db=db,
+            )
+            await db.commit()
+    except Exception as exc:
+        raise ServiceError(f"instance policy reset failed: {exc}") from exc
+
+    if supervisor is not None:
+        for instance in instances:
+            try:
+                await supervisor.reconcile_instance(instance.core.id)
+            except Exception:
+                logger.exception(
+                    "Policy reset: reconcile failed for instance id=%d", instance.core.id
+                )
     return len(instances)
 
 
 async def clear_all_search_logs() -> int:
     """Truncate the ``search_log`` table, leaving a single audit breadcrumb.
 
+    The DELETE and the breadcrumb commit in one transaction, so a
+    failure keeps every row.
+
     Returns:
         Number of rows that were removed (excluding the breadcrumb).
+
+    Raises:
+        ServiceError: The DELETE or the breadcrumb failed; nothing was
+            removed.  The original exception is attached on ``__cause__``.
     """
-    removed = await delete_all_logs()
-    await insert_admin_audit(f"Audit log cleared by admin ({removed} rows removed)")
+    try:
+        async with get_db() as db:
+            removed = await delete_all_logs(db=db)
+            await insert_admin_audit(f"Audit log cleared by admin ({removed} rows removed)", db=db)
+            await db.commit()
+    except Exception as exc:
+        raise ServiceError(f"clearing search logs failed: {exc}") from exc
     return removed
 
 

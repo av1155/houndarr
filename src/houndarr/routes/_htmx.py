@@ -12,9 +12,11 @@ reload, ``HX-Redirect`` sends the browser to a new URL,
 ``HX-Trigger`` and its after-swap variant dispatch a custom DOM
 event, and ``HX-Retarget`` + ``HX-Reswap`` redirect the swap into
 a different DOM slot so a 4xx/5xx carrying a validation error can
-render into a status banner instead of the originating form.  F.3
-centralises every one of those names in a one-line helper so a
-typo or rename cannot silently break the client contract.
+render into a status banner instead of the originating form.
+``X-Houndarr-Swap-Error`` is Houndarr's own: ``app.js`` swaps a 429
+into the page only when it is set.  Each name lives in a one-line
+helper here so a typo or rename cannot silently break the client
+contract.
 
 Helpers take an existing ``Response`` (a bare ``Response``,
 ``HTMLResponse``, or ``TemplateResponse``), set the header, and

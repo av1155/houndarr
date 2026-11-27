@@ -8,7 +8,7 @@ sent to the browser.
 
 from __future__ import annotations
 
-from urllib.parse import urlsplit
+from urllib.parse import unquote, urlsplit
 
 from fastapi import Request
 from starlette.datastructures import URL
@@ -51,12 +51,13 @@ def _rebase(scope: Scope, base: str) -> Scope:
     if raw_path is not None:
         raw_base = base.encode()
         raw_has_base = raw_path == raw_base or raw_path.startswith(raw_base + b"/")
-        if raw_has_base == has_base:
-            raw_rest = raw_path[len(raw_base) :] if raw_has_base else raw_path
-            rebased["raw_path"] = raw_base + b"/" + raw_rest.lstrip(b"/")
+        raw_rest = raw_path[len(raw_base) :] if raw_has_base else raw_path
+        new_raw = raw_base + b"/" + raw_rest.lstrip(b"/")
+        if unquote(new_raw.decode("latin-1")) == rebased["path"]:
+            rebased["raw_path"] = new_raw
         else:
-            # A percent-encoded base decodes onto the prefix but the bytes don't;
-            # ASGI lets raw_path be absent, which beats a value that disagrees.
+            # Percent-encoded base or slash bytes decode differently from the new
+            # path; ASGI lets raw_path be absent, which beats a value that disagrees.
             del rebased["raw_path"]
     return rebased
 

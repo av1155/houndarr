@@ -261,8 +261,15 @@ def test_raw_path_stays_in_step_with_path(raw_path: bytes, expected: bytes) -> N
     assert scope["raw_path"] == expected
 
 
-def test_raw_path_dropped_when_the_base_is_percent_encoded() -> None:
-    scope = _rebase(_scope("/houndarr/login", b"/%68oundarr/login"), _BASE)
+@pytest.mark.parametrize(
+    ("path", "raw_path"),
+    [
+        ("/houndarr/login", b"/%68oundarr/login"),
+        ("//login", b"/%2Flogin"),
+    ],
+)
+def test_raw_path_dropped_when_it_would_disagree(path: str, raw_path: bytes) -> None:
+    scope = _rebase(_scope(path, raw_path), _BASE)
     assert scope["path"] == "/houndarr/login"
     assert "raw_path" not in scope
 
@@ -276,6 +283,7 @@ def test_raw_path_dropped_when_the_base_is_percent_encoded() -> None:
         (b"/houndarr/login", b"/houndarr/login"),
         (b"http://other.example/settings", b"http://other.example/settings"),
         (b"http://testserver//evil.example/", b"http://testserver//evil.example/"),
+        (b"http://testserver/\\evil.example/", b"http://testserver/\\evil.example/"),
         (b"http://testserver:8877/settings", b"http://testserver:8877/settings"),
     ],
 )

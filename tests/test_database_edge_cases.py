@@ -378,9 +378,9 @@ async def test_pool_factory_applies_full_pragma_stack(db: None) -> None:
 async def test_pool_per_db_path_isolation(tmp_data_dir: str) -> None:
     """Setting a new ``_db_path`` builds a fresh pool; the old one stays registered.
 
-    Every test points ``set_db_path`` at its own tmp file, so a
-    regression that shares one pool across paths would silently route
-    writes to the wrong DB on the next test.
+    Each test that uses the DB points ``set_db_path`` at its own tmp
+    file, so a regression that shares one pool across paths would
+    silently route writes to the wrong DB on the next test.
     """
     import os
 
@@ -406,6 +406,7 @@ async def test_pool_per_db_path_isolation(tmp_data_dir: str) -> None:
     pool_b = _pools.get(path_b)
     assert pool_b is not None
     assert pool_a is not pool_b
+    assert _pools.get(path_a) is pool_a
 
     await close_all_pools()
     assert path_a not in _pools

@@ -158,16 +158,16 @@ async def _temp_db(master_key: bytes) -> AsyncIterator[None]:
     with tempfile.TemporaryDirectory() as data_dir:
         db_path = os.path.join(data_dir, "probe.db")
         set_db_path(db_path)
-        await init_db()
-        encrypted = encrypt("probe-key", master_key)
-        async with get_db() as conn:
-            await conn.execute(
-                "INSERT INTO instances (id, name, type, url, encrypted_api_key)"
-                " VALUES (?, ?, ?, ?, ?)",
-                (1, "Probe Sonarr", "sonarr", "http://localhost/sonarr", encrypted),
-            )
-            await conn.commit()
         try:
+            await init_db()
+            encrypted = encrypt("probe-key", master_key)
+            async with get_db() as conn:
+                await conn.execute(
+                    "INSERT INTO instances (id, name, type, url, encrypted_api_key)"
+                    " VALUES (?, ?, ?, ?, ?)",
+                    (1, "Probe Sonarr", "sonarr", "http://localhost/sonarr", encrypted),
+                )
+                await conn.commit()
             yield
         finally:
             await close_all_pools()

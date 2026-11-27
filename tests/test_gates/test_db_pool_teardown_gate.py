@@ -48,7 +48,9 @@ def test_lone_db_test_exits(node: str) -> None:
             timeout=_TIMEOUT_SECONDS,
             check=False,
         )
-    except subprocess.TimeoutExpired:
-        pytest.fail(f"{node} did not exit within {_TIMEOUT_SECONDS}s; a pool was left open")
+    except subprocess.TimeoutExpired as exc:
+        # TimeoutExpired carries bytes even with text=True; a "1 passed" tail means it hung at exit.
+        tail = (exc.stdout or b"").decode(errors="replace")[-500:]
+        pytest.fail(f"{node} did not exit within {_TIMEOUT_SECONDS}s; output ends:\n{tail}")
     assert result.returncode == 0, result.stdout + result.stderr
     assert "1 passed" in result.stdout

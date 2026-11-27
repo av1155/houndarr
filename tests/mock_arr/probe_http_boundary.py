@@ -123,8 +123,8 @@ async def main() -> None:
 
         os.environ["HOUNDARR_DATA_DIR"] = str(Path(tmp))
         set_db_path(str(Path(tmp) / "probe.db"))
-        await init_db()
         try:
+            await init_db()
             # search_log carries an FK to instances, so the row has to exist.
             async with get_db() as conn:
                 await conn.execute(

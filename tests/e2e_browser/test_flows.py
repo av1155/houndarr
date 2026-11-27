@@ -343,6 +343,46 @@ def test_save_instance_4xx_renders_error(
 
 
 @pytest.mark.integration
+def test_number_typed_in_exponent_form_saves_its_value(
+    logged_in_page: Page, houndarr_url: str, mock_sonarr_url: str
+) -> None:
+    """``1e2`` is a whole number to a step-1 number input, which submits the text as typed.
+
+    The server rejects exponent notation, so the form must send the parsed
+    value; otherwise the save fails and the dialog closes with nothing saved.
+    """
+    page = logged_in_page
+    instance_name = f"E2E Exponent {uuid.uuid4().hex[:8]}"
+    page.goto(f"{houndarr_url}/settings")
+    page.get_by_role("button", name=re.compile(r"add\s*instance", re.I)).first.click()
+    add_form = page.locator('form[data-form-mode="add"]')
+    expect(add_form).to_be_visible()
+
+    add_form.locator('input[name="name"]').fill(instance_name)
+    add_form.locator('select[name="type"]').select_option("sonarr")
+    add_form.locator('input[name="url"]').fill(mock_sonarr_url)
+    add_form.locator('input[name="api_key"]').fill("e2e-exponent-key")
+    add_form.locator('input[name="batch_size"]').fill("1e2")
+    _wait_for_connection_ui_idle(page)
+    _test_connection_and_wait_for_success(
+        page, add_form, add_form.locator("button[data-test-connection-btn]")
+    )
+
+    with page.expect_response(
+        lambda r: r.url.endswith("/settings/instances") and r.request.method == "POST"
+    ) as resp_info:
+        _submit_form(add_form)
+    assert resp_info.value.status == 200, resp_info.value.status
+    expect(page.locator("#instance-tbody")).to_contain_text(instance_name, timeout=10_000)
+
+    row = page.locator("#instance-tbody tr").filter(has_text=instance_name)
+    row.locator('button[hx-get^="/settings/instances/"]').click()
+    edit_form = page.locator('form[data-form-mode="edit"]')
+    expect(edit_form).to_be_visible()
+    expect(edit_form.locator('input[name="batch_size"]')).to_have_value("100")
+
+
+@pytest.mark.integration
 def test_test_connection_4xx_renders_error(
     logged_in_page: Page, houndarr_url: str, console_guard
 ) -> None:

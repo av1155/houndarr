@@ -55,6 +55,7 @@ to pause missing searches without changing the settings below.
 Maximum number of missing items considered per cycle.
 
 - Default: `2`
+- Range: `1` to `250`
 - Lower values are safer; higher values clear backlog faster.
 
 ### Sleep (minutes)
@@ -62,6 +63,7 @@ Maximum number of missing items considered per cycle.
 Wait time between cycles for each enabled instance.
 
 - Default: `30`
+- Range: `1` to `525600` (one year)
 - Lower values increase request frequency.
 
 ### Hourly Cap
@@ -69,6 +71,7 @@ Wait time between cycles for each enabled instance.
 Maximum successful missing searches per hour.
 
 - Default: `4`
+- Range: `0` to `10000`
 - Set `0` to disable this cap (not recommended unless you trust
   upstream limits).
 
@@ -77,6 +80,7 @@ Maximum successful missing searches per hour.
 Minimum days before retrying the same missing item.
 
 - Default: `14`
+- Range: `0` to `3650` (ten years)
 - Larger values reduce repeat search noise.
 - Release-aware retry applies to the missing pass only. See
   [Skip Reasons](/docs/reference/skip-reasons#release-aware-retry).
@@ -86,6 +90,7 @@ Minimum days before retrying the same missing item.
 Hours to wait after an item's release date before searching.
 
 - Default: `6`
+- Range: `0` to `8760` (one year)
 - Items inside this window log as `post-release grace (Nh)` and
   skip.
 - Items with a release date in the future log as `not yet released`
@@ -98,6 +103,7 @@ Optional hours after post-release grace when a missing item can retry
 on a short interval before the normal missing cooldown takes over.
 
 - Default: `0` (disabled)
+- Range: `0` to `8760`
 - The latest `post-release grace (Nh)` skip opens the window.
 - Hot retries still count against Batch Size and Hourly Cap.
 
@@ -107,6 +113,7 @@ Minimum hours between hot retry attempts while the hot retry window is
 active.
 
 - Default: `2`
+- Maximum: `8760`
 - Must be at least `1` when Hot Retry Window is enabled.
 - Manual Run Now bypasses the interval, but it does not reopen an expired window.
 
@@ -259,18 +266,21 @@ Enable searching for items that do not meet your quality cutoff.
 Maximum cutoff items considered per cutoff cycle.
 
 - Default: `1`
+- Range: `1` to `250`
 
 ### Cutoff Cooldown
 
 Minimum days before retrying the same cutoff item.
 
 - Default: `21`
+- Range: `0` to `3650`
 
 ### Cutoff Cap
 
 Maximum successful cutoff searches per hour.
 
 - Default: `1`
+- Range: `0` to `10000`
 - Set `0` to disable the cutoff hourly cap.
 
 Cutoff searches use separate cap and cooldown from missing
@@ -297,18 +307,19 @@ quality profiles and custom format scoring.
 ### Upgrade Batch
 
 - Default: `1`
+- Range: `1` to `250`
 - Hard cap: `5`. Engine-enforced; configured values above 5 are
   clamped to 5.
 
 ### Upgrade Cooldown (days)
 
 - Default: `90`
-- Minimum: `7`. Engine-enforced; configured values below 7 are
-  clamped to 7.
+- Range: `7` to `3650`
 
 ### Upgrade Cap
 
 - Default: `1`
+- Range: `0` to `10000`
 - Hard cap: `5`. Engine-enforced.
 - Set `0` to disable the upgrade hourly cap.
 
@@ -357,6 +368,7 @@ each cycle.
 ## Queue backpressure
 
 - Default: `0` (disabled)
+- Range: `0` to `10000`
 - When set above zero, the cycle is skipped with reason
   `queue backpressure (N/M)` if the download queue count is at or
   above the limit.

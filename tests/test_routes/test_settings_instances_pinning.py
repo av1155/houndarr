@@ -23,7 +23,7 @@ from houndarr.routes.settings._helpers import (
     validate_missing_hot_retry_controls,
     validate_upgrade_controls,
 )
-from houndarr.services.instance_validation import validate_tag_filter
+from houndarr.services.instance_validation import validate_missing_controls, validate_tag_filter
 from houndarr.services.instances import (
     InstanceType,
     LidarrSearchMode,
@@ -55,6 +55,71 @@ class TestValidateCutoffControls:
         msg = validate_cutoff_controls(1, 0, -1)
         assert msg == "Cutoff hourly cap must be 0 or greater."
 
+    def test_upper_limits_accepted(self) -> None:
+        assert validate_cutoff_controls(250, 3650, 10000) is None
+
+    @pytest.mark.parametrize(
+        ("args", "expected"),
+        [
+            ((251, 0, 0), "Cutoff batch size must be 250 or less."),
+            ((1, 3651, 0), "Cutoff cooldown days must be 3650 or less."),
+            ((1, 0, 10001), "Cutoff hourly cap must be 10000 or less."),
+        ],
+    )
+    def test_values_above_the_limit_rejected(
+        self, args: tuple[int, int, int], expected: str
+    ) -> None:
+        assert validate_cutoff_controls(*args) == expected
+
+
+# validate_missing_controls
+
+
+_MISSING_OK = {
+    "batch_size": 2,
+    "sleep_interval_mins": 30,
+    "hourly_cap": 4,
+    "cooldown_days": 14,
+    "post_release_grace_hrs": 6,
+    "queue_limit": 0,
+}
+
+
+class TestValidateMissingControls:
+    def test_valid_inputs_return_none(self) -> None:
+        assert validate_missing_controls(**_MISSING_OK) is None
+        lows = {**_MISSING_OK, "batch_size": 1, "sleep_interval_mins": 1, "hourly_cap": 0}
+        assert validate_missing_controls(**lows) is None
+        highs = {
+            "batch_size": 250,
+            "sleep_interval_mins": 525600,
+            "hourly_cap": 10000,
+            "cooldown_days": 3650,
+            "post_release_grace_hrs": 8760,
+            "queue_limit": 10000,
+        }
+        assert validate_missing_controls(**highs) is None
+
+    @pytest.mark.parametrize(
+        ("field", "value", "expected"),
+        [
+            ("batch_size", 0, "Batch size must be at least 1."),
+            ("batch_size", 251, "Batch size must be 250 or less."),
+            ("sleep_interval_mins", 0, "Sleep minutes must be at least 1."),
+            ("sleep_interval_mins", 525601, "Sleep minutes must be 525600 or less."),
+            ("hourly_cap", -1, "Hourly cap must be 0 or greater."),
+            ("hourly_cap", 10001, "Hourly cap must be 10000 or less."),
+            ("cooldown_days", -1, "Cooldown days must be 0 or greater."),
+            ("cooldown_days", 3651, "Cooldown days must be 3650 or less."),
+            ("post_release_grace_hrs", -1, "Post-release grace hours must be 0 or greater."),
+            ("post_release_grace_hrs", 8761, "Post-release grace hours must be 8760 or less."),
+            ("queue_limit", -1, "Queue limit must be 0 or greater."),
+            ("queue_limit", 10001, "Queue limit must be 10000 or less."),
+        ],
+    )
+    def test_out_of_range_rejected(self, field: str, value: int, expected: str) -> None:
+        assert validate_missing_controls(**{**_MISSING_OK, field: value}) == expected
+
 
 # validate_missing_hot_retry_controls
 
@@ -63,6 +128,7 @@ class TestValidateMissingHotRetryControls:
     def test_valid_inputs_return_none(self) -> None:
         assert validate_missing_hot_retry_controls(0, 0) is None
         assert validate_missing_hot_retry_controls(24, 2) is None
+        assert validate_missing_hot_retry_controls(8760, 8760) is None
 
     def test_window_negative_rejected(self) -> None:
         msg = validate_missing_hot_retry_controls(-1, 2)
@@ -74,26 +140,53 @@ class TestValidateMissingHotRetryControls:
             "Missing hot retry interval must be at least 1 hour when the window is enabled."
         )
 
+    @pytest.mark.parametrize(
+        ("args", "expected"),
+        [
+            ((8761, 2), "Missing hot retry window must be 8760 or less."),
+            ((0, 8761), "Missing hot retry interval must be 8760 or less."),
+            ((0, -1), "Missing hot retry interval must be 0 or greater."),
+        ],
+    )
+    def test_limits_apply_whether_or_not_the_window_is_on(
+        self, args: tuple[int, int], expected: str
+    ) -> None:
+        assert validate_missing_hot_retry_controls(*args) == expected
+
 
 # validate_upgrade_controls
 
 
 class TestValidateUpgradeControls:
     def test_valid_inputs_return_none(self) -> None:
-        assert validate_upgrade_controls(1, 7, 0) is None
-        assert validate_upgrade_controls(3, 90, 2) is None
+        assert validate_upgrade_controls(1, 7, 0, 1) is None
+        assert validate_upgrade_controls(3, 90, 2, 5) is None
+        assert validate_upgrade_controls(250, 3650, 10000, 100) is None
 
     def test_batch_size_below_one_rejected(self) -> None:
-        msg = validate_upgrade_controls(0, 7, 0)
+        msg = validate_upgrade_controls(0, 7, 0, 5)
         assert msg == "Upgrade batch size must be at least 1."
 
     def test_cooldown_below_seven_rejected(self) -> None:
-        msg = validate_upgrade_controls(1, 6, 0)
+        msg = validate_upgrade_controls(1, 6, 0, 5)
         assert msg == "Upgrade cooldown days must be at least 7."
 
     def test_hourly_cap_negative_rejected(self) -> None:
-        msg = validate_upgrade_controls(1, 7, -1)
+        msg = validate_upgrade_controls(1, 7, -1, 5)
         assert msg == "Upgrade hourly cap must be 0 or greater."
+
+    @pytest.mark.parametrize(
+        ("args", "expected"),
+        [
+            ((251, 7, 0, 5), "Upgrade batch size must be 250 or less."),
+            ((1, 3651, 0, 5), "Upgrade cooldown days must be 3650 or less."),
+            ((1, 7, 10001, 5), "Upgrade hourly cap must be 10000 or less."),
+            ((1, 7, 0, 0), "Upgrade series window must be at least 1."),
+            ((1, 7, 0, 101), "Upgrade series window must be 100 or less."),
+        ],
+    )
+    def test_out_of_range_rejected(self, args: tuple[int, int, int, int], expected: str) -> None:
+        assert validate_upgrade_controls(*args) == expected
 
 
 # validate_tag_filter (issue #637)

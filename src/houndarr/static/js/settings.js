@@ -442,6 +442,24 @@ function initSettingsPage() {
       { signal },
     );
 
+    // Number inputs submit typed text such as "1e2", which the server rejects; send the parsed value.
+    document.body.addEventListener(
+      'htmx:configRequest',
+      (evt) => {
+        const form = evt.detail.elt;
+        if (!form || !form.matches('form[data-form-mode]')) {
+          return;
+        }
+        form.querySelectorAll('input[type="number"][name]').forEach((input) => {
+          if (!input.disabled && Number.isInteger(input.valueAsNumber)) {
+            // BigInt prints every digit; String() switches to "1e+21" from there up.
+            evt.detail.parameters[input.name] = BigInt(input.valueAsNumber).toString();
+          }
+        });
+      },
+      { signal },
+    );
+
     document.body.addEventListener(
       'htmx:beforeRequest',
       (evt) => {

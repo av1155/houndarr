@@ -81,7 +81,7 @@ just e2e-down                   # tear the stack down
 ```
 
 Markers: `@pytest.mark.integration` (12 async engine-cycle cases in
-`tests/test_e2e/` + 18 Playwright flows in `tests/e2e_browser/`; browser
+`tests/test_e2e/` + 28 Playwright cases in `tests/e2e_browser/`; browser
 tree excluded from default collection via `norecursedirs`),
 `@pytest.mark.pinning` (characterisation tests, runs in default suite).
 Fixture graph, FK-seeding pattern, and route-test helpers live in the
@@ -174,9 +174,9 @@ skill (loads on `src/houndarr/engine/**`).
 
 ### Non-obvious patterns to know up front
 
-- **Database**: SQLite via aiosqlite, schema version 22. `get_db()`
-  opens a fresh connection per call (FKs enabled per connection; WAL
-  mode set once in `init_db()`).
+- **Database**: SQLite via aiosqlite, schema version 23. `get_db()`
+  borrows a connection from a per-path pool; `_connection_factory`
+  sets WAL, FKs and the other PRAGMAs once per pool member.
 - **Config**: `AppSettings` is a plain dataclass, **not Pydantic**.
   Pydantic is used only at the *arr wire boundary
   (`src/houndarr/clients/_wire_models/`).

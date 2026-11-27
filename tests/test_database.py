@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
-from collections.abc import AsyncGenerator
+import logging
+import re
+from collections.abc import AsyncGenerator, Callable
+from contextlib import AsyncExitStack
 from pathlib import Path
 from typing import Any
 
@@ -10,6 +13,7 @@ import aiosqlite
 import pytest
 import pytest_asyncio
 
+from houndarr import database
 from houndarr.database import close_all_pools, get_db, init_db, set_db_path
 from houndarr.repositories.search_log import purge_old_logs
 from houndarr.repositories.settings import get_setting, set_setting
@@ -43,7 +47,7 @@ async def test_schema_created(db: None) -> None:
 async def test_schema_version_set(db: None) -> None:
     """Schema version should be set after init."""
     version = await get_setting("schema_version")
-    assert version == "22"
+    assert version == "23"
 
 
 @pytest.mark.asyncio()
@@ -164,7 +168,7 @@ async def test_init_db_migrates_v21_to_v22_per_pass_tag_excludes(tmp_path: Path)
 
     await init_db()
 
-    assert await get_setting("schema_version") == "22"
+    assert await get_setting("schema_version") == "23"
     _assert_v22_column_shape(await _instance_columns())
     async with get_db() as conn:
         async with conn.execute(
@@ -192,8 +196,558 @@ async def test_init_db_self_heals_v22_per_pass_tag_exclude_columns(
 
     await init_db()
 
-    assert await get_setting("schema_version") == "22"
+    assert await get_setting("schema_version") == "23"
     _assert_v22_column_shape(await _instance_columns())
+
+
+# ---------------------------------------------------------------------------
+# v23: instances rebuilt with the window and search_order CHECKs (#916)
+# ---------------------------------------------------------------------------
+
+_V23_TOKENS = ("CHECK(upgrade_series_window_size>=1", "CHECK(search_orderIN")
+
+
+async def _skip_v23(_db: aiosqlite.Connection) -> None:
+    return None
+
+
+async def _upgrade_seed_to_v22(
+    path: Path, seed: str, monkeypatch: pytest.MonkeyPatch, *, stamp: str = "22"
+) -> None:
+    """Run the real pre-v23 ladder on *seed* and leave the file as schema 22 did."""
+    async with aiosqlite.connect(str(path)) as conn:
+        await conn.executescript(seed)
+        await conn.commit()
+    set_db_path(str(path))
+    with monkeypatch.context() as patch:
+        patch.setattr(database, "_migrate_to_v23", _skip_v23)
+        await init_db()
+    await close_all_pools()
+    async with aiosqlite.connect(str(path)) as conn:
+        await conn.execute("UPDATE settings SET value = ? WHERE key = 'schema_version'", (stamp,))
+        await conn.commit()
+
+
+async def _instances_ddl(conn: aiosqlite.Connection) -> str:
+    async with conn.execute(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='instances'"
+    ) as cur:
+        row = await cur.fetchone()
+    assert row is not None
+    return str(row[0])
+
+
+def _has_v23_checks(ddl: str) -> bool:
+    compact = "".join(ddl.split())
+    return all(token in compact for token in _V23_TOKENS)
+
+
+async def _table_names_like(conn: aiosqlite.Connection, pattern: str) -> list[str]:
+    async with conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name LIKE ?", (pattern,)
+    ) as cur:
+        return [str(r[0]) async for r in cur]
+
+
+@pytest.mark.asyncio()
+async def test_v23_rebuild_resets_out_of_range_window_and_unknown_search_order(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    db_path = tmp_path / "v22.db"
+    await _upgrade_seed_to_v22(db_path, _seed_v12_shaped_db(), monkeypatch)
+    async with aiosqlite.connect(str(db_path)) as conn:
+        assert not _has_v23_checks(await _instances_ddl(conn))
+        await conn.executemany(
+            "INSERT INTO instances (id, name, type, url, upgrade_series_window_size,"
+            " search_order) VALUES (?, ?, 'sonarr', 'http://sonarr:8989', ?, ?)",
+            [
+                (1, "zero", 0, "random"),
+                (2, "negative", -5, "chronological"),
+                (3, "huge", 1000, "bogus"),
+                (4, "seven", 7, "random"),
+                (5, "max", 100, "chronological"),
+                (6, "min", 1, ""),
+                (7, "text", "abc", "random"),
+                (8, "fraction", 7.5, "random"),
+            ],
+        )
+        await conn.executemany(
+            "INSERT INTO cooldowns (instance_id, item_id, item_type, searched_at)"
+            " VALUES (?, ?, 'episode', '2024-06-01T00:00:00.000Z')",
+            [(1, 100), (4, 400)],
+        )
+        await conn.execute(
+            "INSERT INTO search_log (instance_id, item_id, item_type, action, timestamp)"
+            " VALUES (3, 300, 'episode', 'searched', '2024-06-01T00:00:00.000Z')"
+        )
+        await conn.commit()
+
+    caplog.set_level(logging.WARNING, logger="houndarr.database")
+    await init_db()
+
+    assert await get_setting("schema_version") == "23"
+    warnings = [r.getMessage() for r in caplog.records if r.levelno == logging.WARNING]
+    assert (
+        "Schema v23: reset upgrade_series_window_size to 5 on 5 instance(s); the stored value"
+        " was outside 1-100: id 1 'zero' was 0, id 2 'negative' was -5, id 3 'huge' was 1000,"
+        " id 7 'text' was 'abc', id 8 'fraction' was 7.5"
+    ) in warnings
+    assert (
+        "Schema v23: reset search_order to chronological on 2 instance(s); the stored value"
+        " was neither chronological nor random: id 3 'huge' was 'bogus', id 6 'min' was ''"
+    ) in warnings
+    async with get_db() as conn:
+        async with conn.execute(
+            "SELECT id, upgrade_series_window_size, search_order FROM instances ORDER BY id"
+        ) as cur:
+            rows = [tuple(r) async for r in cur]
+        assert rows == [
+            (1, 5, "random"),
+            (2, 5, "chronological"),
+            (3, 5, "chronological"),
+            (4, 7, "random"),
+            (5, 100, "chronological"),
+            (6, 1, "chronological"),
+            (7, 5, "random"),
+            (8, 5, "random"),
+        ]
+        async with conn.execute("SELECT instance_id, item_id FROM cooldowns ORDER BY 1") as cur:
+            assert [tuple(r) async for r in cur] == [(1, 100), (4, 400)]
+        async with conn.execute("SELECT instance_id, item_id FROM search_log") as cur:
+            assert [tuple(r) async for r in cur] == [(3, 300)]
+
+        ddl = await _instances_ddl(conn)
+        assert ddl.startswith('CREATE TABLE "instances"')
+        assert _has_v23_checks(ddl)
+        assert await _table_names_like(conn, "%_new") == []
+        for column, value in (("upgrade_series_window_size", 0), ("search_order", "x")):
+            with pytest.raises(aiosqlite.IntegrityError):
+                await conn.execute(
+                    f"INSERT INTO instances (name, type, url, {column})"
+                    " VALUES ('c', 'sonarr', 'u', ?)",
+                    (value,),
+                )
+
+
+@pytest.mark.asyncio()
+@pytest.mark.parametrize("deleted", [(3,), (1, 2, 3)])
+async def test_v23_rebuild_keeps_the_instance_id_high_water_mark(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, deleted: tuple[int, ...]
+) -> None:
+    """A rebuilt table never hands a deleted instance's id to a new one."""
+    db_path = tmp_path / "v22-ids.db"
+    await _upgrade_seed_to_v22(db_path, _seed_v12_shaped_db(), monkeypatch)
+    async with aiosqlite.connect(str(db_path)) as conn:
+        for name in ("a", "b", "c"):
+            await conn.execute(
+                "INSERT INTO instances (name, type, url) VALUES (?, 'radarr', 'http://r')", (name,)
+            )
+        await conn.executemany("DELETE FROM instances WHERE id = ?", [(i,) for i in deleted])
+        await conn.commit()
+
+    await init_db()
+
+    async with get_db() as conn:
+        cur = await conn.execute(
+            "INSERT INTO instances (name, type, url) VALUES ('new', 'radarr', 'http://r')"
+        )
+        await conn.commit()
+    assert cur.lastrowid == 4
+
+
+@pytest.mark.asyncio()
+async def test_v23_rebuild_repairs_orphan_rows_and_logs_counts(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Rows whose instance is gone are repaired the way the FKs would have done."""
+    db_path = tmp_path / "v22-orphans.db"
+    await _upgrade_seed_to_v22(db_path, _seed_v12_shaped_db(), monkeypatch)
+    async with aiosqlite.connect(str(db_path)) as conn:
+        await conn.execute(
+            "INSERT INTO instances (id, name, type, url, upgrade_series_window_size)"
+            " VALUES (1, 'kept', 'sonarr', 'http://s', 0)"
+        )
+        await conn.executemany(
+            "INSERT INTO cooldowns (instance_id, item_id, item_type, searched_at)"
+            " VALUES (?, ?, 'episode', '2024-06-01T00:00:00.000Z')",
+            [(1, 100), (9, 900), (9, 901)],
+        )
+        await conn.executemany(
+            "INSERT INTO search_log (instance_id, item_id, item_type, action, timestamp)"
+            " VALUES (?, ?, 'episode', 'searched', '2024-06-01T00:00:00.000Z')",
+            [(1, 100), (9, 900)],
+        )
+        await conn.commit()
+
+    caplog.set_level(logging.INFO, logger="houndarr.database")
+    await init_db()
+
+    async with get_db() as conn:
+        async with conn.execute("SELECT instance_id, item_id FROM cooldowns") as cur:
+            assert [tuple(r) async for r in cur] == [(1, 100)]
+        async with conn.execute(
+            "SELECT instance_id, item_id FROM search_log ORDER BY item_id"
+        ) as cur:
+            assert [tuple(r) async for r in cur] == [(1, 100), (None, 900)]
+        async with conn.execute("PRAGMA foreign_key_check") as cur:
+            assert [tuple(r) async for r in cur] == []
+
+    warnings = [r.getMessage() for r in caplog.records if r.levelno == logging.WARNING]
+    assert any(
+        "upgrade_series_window_size" in m and " 1 instance" in m and "id 1 'kept' was 0" in m
+        for m in warnings
+    )
+    assert any("2 cooldown row" in m for m in warnings)
+    assert any("1 search_log row" in m for m in warnings)
+    assert not any("search_order" in m for m in warnings)
+
+
+@pytest.mark.asyncio()
+async def test_v23_leaves_a_fresh_database_untouched(tmp_path: Path) -> None:
+    set_db_path(str(tmp_path / "fresh.db"))
+    await init_db()
+    async with get_db() as conn:
+        before = await _instances_ddl(conn)
+
+    await init_db()
+
+    async with get_db() as conn:
+        after = await _instances_ddl(conn)
+    assert after == before
+    assert before.startswith("CREATE TABLE instances (")
+    assert _has_v23_checks(before)
+
+
+@pytest.mark.asyncio()
+async def test_v23_self_heals_a_database_stamped_23_without_the_checks(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    db_path = tmp_path / "stamped-23.db"
+    await _upgrade_seed_to_v22(db_path, _seed_v12_shaped_db(), monkeypatch, stamp="23")
+    async with aiosqlite.connect(str(db_path)) as conn:
+        await conn.execute(
+            "INSERT INTO instances (id, name, type, url, upgrade_series_window_size)"
+            " VALUES (1, 's', 'sonarr', 'http://s', 101)"
+        )
+        await conn.commit()
+
+    await init_db()
+
+    async with get_db() as conn:
+        assert _has_v23_checks(await _instances_ddl(conn))
+        async with conn.execute("SELECT upgrade_series_window_size FROM instances") as cur:
+            assert [r[0] async for r in cur] == [5]
+
+
+@pytest.mark.asyncio()
+async def test_v23_heals_a_database_stamped_ahead_of_its_columns(tmp_path: Path) -> None:
+    """A v12-shaped file stamped 22 gains every later column, then the v23 checks."""
+    fresh_columns = [c[1] for c in (await _instances_shape(tmp_path / "fresh.db"))[0]]
+
+    db_path = tmp_path / "ahead.db"
+    async with aiosqlite.connect(str(db_path)) as conn:
+        await conn.executescript(_seed_v12_shaped_db())
+        await conn.execute(
+            "INSERT INTO instances (id, name, type, url) VALUES (1, 's', 'sonarr', 'http://s')"
+        )
+        await conn.execute("UPDATE settings SET value = '22' WHERE key = 'schema_version'")
+        await conn.commit()
+
+    set_db_path(str(db_path))
+    await init_db()
+
+    assert await get_setting("schema_version") == "23"
+    async with get_db() as conn:
+        async with conn.execute("PRAGMA table_info(instances)") as cur:
+            assert [r[1] async for r in cur] == fresh_columns
+        assert _has_v23_checks(await _instances_ddl(conn))
+        async with conn.execute("SELECT search_order FROM instances") as cur:
+            assert [r[0] async for r in cur] == ["chronological"]
+
+
+@pytest.mark.asyncio()
+async def test_v23_recovers_from_a_leftover_instances_new(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    db_path = tmp_path / "leftover.db"
+    await _upgrade_seed_to_v22(db_path, _seed_v12_shaped_db(), monkeypatch)
+    async with aiosqlite.connect(str(db_path)) as conn:
+        await conn.execute("CREATE TABLE instances_new (id INTEGER PRIMARY KEY)")
+        await conn.execute(
+            "INSERT INTO instances (id, name, type, url) VALUES (1, 's', 'sonarr', 'http://s')"
+        )
+        await conn.commit()
+
+    await init_db()
+
+    async with get_db() as conn:
+        assert await _table_names_like(conn, "%_new") == []
+        assert _has_v23_checks(await _instances_ddl(conn))
+        async with conn.execute("SELECT COUNT(*) FROM instances") as cur:
+            assert (await cur.fetchone())[0] == 1  # type: ignore[index]
+
+
+# Every column of the v23 table set away from its default, valid under every CHECK.
+_NON_DEFAULT_TEXT = {
+    "name": "every column",
+    "type": "whisparr_v2",
+    "url": "http://whisparr:6969",
+    "encrypted_api_key": "enc",
+    "sonarr_search_mode": "season_context",
+    "lidarr_search_mode": "artist_context",
+    "readarr_search_mode": "author_context",
+    "whisparr_v2_search_mode": "season_context",
+    "upgrade_sonarr_search_mode": "season_context",
+    "upgrade_lidarr_search_mode": "artist_context",
+    "upgrade_readarr_search_mode": "author_context",
+    "upgrade_whisparr_v2_search_mode": "season_context",
+    "allowed_time_window": "09:00-10:00",
+    "search_order": "random",
+    "snapshot_refreshed_at": "2024-06-01T00:00:00.000Z",
+    "tag_filter_include": "a",
+    "tag_filter_exclude": "b",
+    "tag_filter_missing_exclude": "c",
+    "tag_filter_cutoff_exclude": "d",
+    "tag_filter_upgrade_exclude": "e",
+    "created_at": "2020-01-01T00:00:00.000Z",
+    "updated_at": "2020-01-02T00:00:00.000Z",
+}
+_FLAG_COLUMNS = {"missing_enabled", "cutoff_enabled", "upgrade_enabled", "enabled"}
+
+
+@pytest.mark.asyncio()
+async def test_v23_rebuild_copies_every_column(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    db_path = tmp_path / "every-column.db"
+    await _upgrade_seed_to_v22(db_path, _seed_v12_shaped_db(), monkeypatch)
+    async with aiosqlite.connect(str(db_path)) as conn:
+        async with conn.execute("PRAGMA table_info(instances)") as cur:
+            columns = [(str(r[1]), str(r[2]), r[4]) async for r in cur]
+        values: dict[str, object] = {}
+        for name, column_type, default in columns:
+            if name == "id":
+                values[name] = 42
+            elif column_type == "TEXT":
+                values[name] = _NON_DEFAULT_TEXT[name]
+            else:
+                values[name] = 1 - int(default) if name in _FLAG_COLUMNS else 7
+                assert str(values[name]) != default, name
+        names = ", ".join(values)
+        marks = ", ".join("?" for _ in values)
+        await conn.execute(
+            f"INSERT INTO instances ({names}) VALUES ({marks})", tuple(values.values())
+        )
+        await conn.commit()
+
+    await init_db()
+
+    async with get_db() as conn:
+        async with conn.execute("SELECT * FROM instances") as cur:
+            rows = [dict(r) async for r in cur]
+        assert _has_v23_checks(await _instances_ddl(conn))
+    assert rows == [values]
+
+
+# Fields the v23 one-time reset covers: (column, lowest kept, highest kept, default).
+_V23_RESET_BOUNDS = (
+    ("batch_size", 1, 250, 2),
+    ("sleep_interval_mins", 1, 525600, 30),
+    ("hourly_cap", 0, 10000, 4),
+    ("cooldown_days", 0, 3650, 14),
+    ("post_release_grace_hrs", 0, 8760, 6),
+    ("missing_hot_retry_window_hrs", 0, 8760, 0),
+    ("missing_hot_retry_interval_hrs", 0, 8760, 2),
+    ("queue_limit", 0, 10000, 0),
+    ("cutoff_batch_size", 1, 250, 1),
+    ("cutoff_cooldown_days", 0, 3650, 21),
+    ("cutoff_hourly_cap", 0, 10000, 1),
+    ("upgrade_batch_size", 1, 250, 1),
+    ("upgrade_cooldown_days", 7, 3650, 90),
+    ("upgrade_hourly_cap", 0, 10000, 1),
+)
+
+
+@pytest.mark.asyncio()
+async def test_v23_reset_defaults_match_the_schema_defaults(db: None) -> None:
+    columns = await _instance_columns()
+    for name, _low, _high, default in _V23_RESET_BOUNDS:
+        assert int(columns[name][4]) == default, name
+
+
+@pytest.mark.asyncio()
+async def test_fresh_install_marks_the_v23_reset_done(tmp_path: Path) -> None:
+    """A later release that raises a limit must not see its own values reset."""
+    set_db_path(str(tmp_path / "fresh-marker.db"))
+    await init_db()
+    assert await get_setting("v23_range_reset_complete") == "1"
+
+
+@pytest.mark.asyncio()
+async def test_v23_resets_out_of_range_settings_once(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    db_path = tmp_path / "ranges.db"
+    await _upgrade_seed_to_v22(db_path, _seed_v12_shaped_db(), monkeypatch)
+    names = [name for name, *_ in _V23_RESET_BOUNDS]
+    # Rows 1 and 5 put every field one step outside its range, below or above in turn.
+    rows = {
+        1: [
+            low - 1 if i % 2 else high + 1 for i, (_, low, high, _) in enumerate(_V23_RESET_BOUNDS)
+        ],
+        2: [low for _, low, _, _ in _V23_RESET_BOUNDS],
+        3: [high for _, _, high, _ in _V23_RESET_BOUNDS],
+        5: [
+            high + 1 if i % 2 else low - 1 for i, (_, low, high, _) in enumerate(_V23_RESET_BOUNDS)
+        ],
+    }
+    async with aiosqlite.connect(str(db_path)) as conn:
+        for instance_id, values in rows.items():
+            await conn.execute(
+                f"INSERT INTO instances (id, name, type, url, {', '.join(names)})"
+                f" VALUES (?, ?, 'sonarr', 'http://s', {', '.join('?' for _ in names)})",
+                (instance_id, f"i{instance_id}", *values),
+            )
+        # Interval 0 is kept with the hot retry window off (id 2) and reset with it on.
+        await conn.execute(
+            "INSERT INTO instances (id, name, type, url, missing_hot_retry_window_hrs,"
+            " missing_hot_retry_interval_hrs) VALUES (4, 'i4', 'sonarr', 'http://s', 5, 0)"
+        )
+        await conn.execute(
+            "INSERT INTO instances (id, name, type, url, batch_size)"
+            " VALUES (6, 'i6', 'sonarr', 'http://s', 'abc')"
+        )
+        await conn.commit()
+
+    caplog.set_level(logging.WARNING, logger="houndarr.database")
+    await init_db()
+
+    async with get_db() as conn:
+        async with conn.execute(f"SELECT id, {', '.join(names)} FROM instances ORDER BY id") as cur:
+            stored = {r[0]: list(r)[1:] async for r in cur}
+        async with conn.execute(
+            "SELECT missing_hot_retry_window_hrs, missing_hot_retry_interval_hrs"
+            " FROM instances WHERE id = 4"
+        ) as cur:
+            assert tuple(await cur.fetchone()) == (5, 2)  # type: ignore[arg-type]
+    defaults = [default for *_, default in _V23_RESET_BOUNDS]
+    assert stored[1] == defaults
+    assert stored[5] == defaults
+    assert stored[2] == rows[2]
+    assert stored[3] == rows[3]
+    assert stored[6] == defaults
+    assert await get_setting("v23_range_reset_complete") == "1"
+    reset_logs = [r.getMessage() for r in caplog.records if r.levelno == logging.WARNING]
+    for i, (name, low, high, default) in enumerate(_V23_RESET_BOUNDS):
+        changed = f"id 1 'i1' was {rows[1][i]}, id 5 'i5' was {rows[5][i]}"
+        if name == "batch_size":
+            changed += ", id 6 'i6' was 'abc'"
+        count = changed.count("id ")
+        assert (
+            f"Schema v23: reset {name} to {default} on {count} instance(s);"
+            f" the stored value was outside {low}-{high}: {changed}"
+        ) in reset_logs, name
+    assert (
+        "Schema v23: reset missing_hot_retry_interval_hrs to 2 on 1 instance(s);"
+        " the stored value was outside 1-8760: id 4 'i4' was 0"
+    ) in reset_logs
+
+    async with get_db() as conn:
+        await conn.execute("UPDATE instances SET sleep_interval_mins = 0 WHERE id = 2")
+        await conn.commit()
+    await init_db()
+    async with get_db() as conn:
+        async with conn.execute("SELECT sleep_interval_mins FROM instances WHERE id = 2") as cur:
+            assert (await cur.fetchone())[0] == 0  # type: ignore[index]
+
+
+async def _every_pooled_connection_enforces_foreign_keys() -> None:
+    async with AsyncExitStack() as stack:
+        conns = [await stack.enter_async_context(get_db()) for _ in range(10)]
+        for conn in conns:
+            async with conn.execute("PRAGMA foreign_keys") as cur:
+                assert (await cur.fetchone())[0] == 1  # type: ignore[index]
+            assert not conn.in_transaction
+
+
+@pytest.mark.asyncio()
+async def test_pool_enforces_foreign_keys_after_rebuild_migrations(tmp_path: Path) -> None:
+    """The connection that ran the v5/v10/v15/v16/v23 rebuilds goes back with FKs on."""
+    db_path = tmp_path / "v4-fk.db"
+    async with aiosqlite.connect(str(db_path)) as conn:
+        await conn.executescript(_seed_v4_shaped_db())
+        await conn.executescript(
+            """
+            INSERT INTO instances (id, name, type, url) VALUES (1, 'S', 'sonarr', 'http://s');
+            INSERT INTO cooldowns (instance_id, item_id, item_type, searched_at)
+                VALUES (1, 100, 'episode', '2024-06-01T00:00:00.000Z');
+            INSERT INTO search_log (instance_id, item_id, item_type, action, timestamp)
+                VALUES (1, 100, 'episode', 'searched', '2024-06-01T00:00:00.000Z');
+            """
+        )
+        await conn.commit()
+
+    set_db_path(str(db_path))
+    await init_db()
+
+    await _every_pooled_connection_enforces_foreign_keys()
+    async with get_db() as conn:
+        await conn.execute("DELETE FROM instances WHERE id = 1")
+        await conn.commit()
+        async with conn.execute("SELECT COUNT(*) FROM cooldowns") as cur:
+            assert (await cur.fetchone())[0] == 0  # type: ignore[index]
+        async with conn.execute("SELECT instance_id FROM search_log") as cur:
+            assert [r[0] async for r in cur] == [None]
+
+
+@pytest.mark.asyncio()
+async def test_failed_migration_after_a_rebuild_keeps_foreign_keys_on(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The v5/v10/v15/v16 rebuilds run before v17; a failure there must not leak FKs off."""
+    db_path = tmp_path / "v4-fails.db"
+    async with aiosqlite.connect(str(db_path)) as conn:
+        await conn.executescript(_seed_v4_shaped_db())
+        await conn.commit()
+
+    async def _fail(_db: aiosqlite.Connection) -> None:
+        raise RuntimeError("v17 failed")
+
+    monkeypatch.setattr(database, "_migrate_to_v17", _fail)
+    set_db_path(str(db_path))
+    with pytest.raises(RuntimeError, match="v17 failed"):
+        await init_db()
+
+    await _every_pooled_connection_enforces_foreign_keys()
+
+
+@pytest.mark.asyncio()
+async def test_failed_v23_rebuild_rolls_back_and_keeps_foreign_keys_on(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    db_path = tmp_path / "v23-fails.db"
+    await _upgrade_seed_to_v22(db_path, _seed_v12_shaped_db(), monkeypatch)
+    async with aiosqlite.connect(str(db_path)) as conn:
+        before = await _instances_ddl(conn)
+        await conn.execute("PRAGMA ignore_check_constraints=ON")
+        await conn.executemany(
+            "INSERT INTO instances (id, name, type, url, upgrade_series_window_size)"
+            " VALUES (?, ?, ?, 'http://x', ?)",
+            [(1, "bad", "not-a-type", 5), (2, "window", "sonarr", 0)],
+        )
+        await conn.commit()
+
+    with pytest.raises(aiosqlite.IntegrityError):
+        await init_db()
+
+    await _every_pooled_connection_enforces_foreign_keys()
+    async with get_db() as conn:
+        assert await _instances_ddl(conn) == before
+        assert await _table_names_like(conn, "%_new") == []
+        async with conn.execute(
+            "SELECT id, upgrade_series_window_size FROM instances ORDER BY id"
+        ) as cur:
+            assert [tuple(r) async for r in cur] == [(1, 5), (2, 0)]
 
 
 @pytest.mark.asyncio()
@@ -268,7 +822,7 @@ async def test_init_db_migrates_v20_to_v21_hot_retry_columns(tmp_path: Path) -> 
 
     await init_db()
 
-    assert await get_setting("schema_version") == "22"
+    assert await get_setting("schema_version") == "23"
     async with get_db() as conn:
         async with conn.execute("PRAGMA table_info(instances)") as cur:
             columns = {row[1]: row async for row in cur}
@@ -335,7 +889,7 @@ async def test_init_db_migrates_v1_schema_to_v3(tmp_path: Path) -> None:
         instance_columns = {row[1] async for row in instances_cur}
         widget_table = await widget_cur.fetchone()
 
-    assert await get_setting("schema_version") == "22"
+    assert await get_setting("schema_version") == "23"
     assert widget_table is not None
     assert "item_label" in search_log_columns
     assert "search_kind" in search_log_columns
@@ -405,7 +959,7 @@ async def test_init_db_migrates_v2_schema_to_v4(tmp_path: Path) -> None:
         async with conn.execute("PRAGMA table_info(search_log)") as cur:
             search_log_columns = {row[1] async for row in cur}
 
-    assert await get_setting("schema_version") == "22"
+    assert await get_setting("schema_version") == "23"
     assert "cycle_id" in search_log_columns
     assert "cycle_trigger" in search_log_columns
 
@@ -472,7 +1026,7 @@ async def test_init_db_migrates_v3_schema_to_v4(tmp_path: Path) -> None:
     set_db_path(str(db_path))
     await init_db()
 
-    assert await get_setting("schema_version") == "22"
+    assert await get_setting("schema_version") == "23"
     async with get_db() as conn:
         async with conn.execute("PRAGMA table_info(instances)") as cur:
             instance_columns = {row[1] async for row in cur}
@@ -555,7 +1109,7 @@ async def test_init_db_migrates_v4_schema_to_v6(tmp_path: Path) -> None:
     set_db_path(str(db_path))
     await init_db()
 
-    assert await get_setting("schema_version") == "22"
+    assert await get_setting("schema_version") == "23"
 
     async with get_db() as conn:
         # Verify new columns exist
@@ -689,7 +1243,7 @@ async def test_init_db_migrates_v5_schema_to_v6(tmp_path: Path) -> None:
     set_db_path(str(db_path))
     await init_db()
 
-    assert await get_setting("schema_version") == "22"
+    assert await get_setting("schema_version") == "23"
 
     async with get_db() as conn:
         async with conn.execute("PRAGMA table_info(instances)") as cur:
@@ -786,7 +1340,7 @@ async def test_init_db_migrates_v6_schema_to_v7(tmp_path: Path) -> None:
     set_db_path(str(db_path))
     await init_db()
 
-    assert await get_setting("schema_version") == "22"
+    assert await get_setting("schema_version") == "23"
 
     async with get_db() as conn:
         async with conn.execute("PRAGMA table_info(instances)") as cur:
@@ -899,7 +1453,7 @@ async def test_init_db_self_heals_v9_and_v10_when_version_already_current(
     set_db_path(str(db_path))
     await init_db()
 
-    assert await get_setting("schema_version") == "22"
+    assert await get_setting("schema_version") == "23"
 
     async with get_db() as conn:
         async with conn.execute("PRAGMA table_info(instances)") as cur:
@@ -1042,7 +1596,7 @@ async def test_init_db_is_idempotent_on_healthy_v12(tmp_path: Path) -> None:
 
     # Second call: should be a no-op through the self-heal branch.
     await init_db()
-    assert await get_setting("schema_version") == first_version == "22"
+    assert await get_setting("schema_version") == first_version == "23"
 
     async with get_db() as conn:
         async with conn.execute("PRAGMA table_info(instances)") as cur:
@@ -1137,7 +1691,7 @@ async def test_migrate_to_v12_adds_search_order_column(tmp_path: Path) -> None:
     set_db_path(str(db_path))
     await init_db()
 
-    assert await get_setting("schema_version") == "22"
+    assert await get_setting("schema_version") == "23"
 
     async with get_db() as conn:
         async with conn.execute("PRAGMA table_info(instances)") as cur:
@@ -1157,9 +1711,9 @@ async def test_cooldowns_search_kind_check_enforced(db: None) -> None:
     """Every initialised DB rejects search_kind values outside the CHECK.
 
     Fresh installs pick this up from ``_SCHEMA_SQL``; databases that
-    migrated through v14 used to silently accept any string (SQLite
-    cannot attach a CHECK via ALTER TABLE ADD COLUMN).  v15 rebuilds
-    the table so the invariant holds everywhere.
+    migrated through v14 used to silently accept any string (v14's
+    ALTER TABLE ADD COLUMN left the CHECK out).  v15 rebuilds the table
+    so the invariant holds everywhere.
     """
     async with get_db() as conn:
         await conn.execute(
@@ -1280,7 +1834,7 @@ async def test_migrate_to_v15_coerces_invalid_search_kind(tmp_path: Path) -> Non
     set_db_path(str(db_path))
     await init_db()
 
-    assert await get_setting("schema_version") == "22"
+    assert await get_setting("schema_version") == "23"
 
     async with get_db() as conn:
         await conn.execute("PRAGMA foreign_keys=ON")
@@ -1718,6 +2272,18 @@ def _seed_v12_shaped_db() -> str:
     )
 
 
+def _seed_v12_fresh_install_db() -> str:
+    """v12 DB created fresh on 1.9.x: ``search_order`` carries its CHECK, no window yet."""
+    old = "search_order TEXT NOT NULL DEFAULT 'chronological',"
+    seed = _seed_v12_shaped_db()
+    assert old in seed
+    return seed.replace(
+        old,
+        "search_order TEXT NOT NULL DEFAULT 'random'"
+        " CHECK(search_order IN ('chronological', 'random')),",
+    )
+
+
 def _whisparr_v2_seed_inserts(version: int) -> str:
     """INSERTs that exercise the rename path: a Whisparr v2 instance plus
     cooldowns/search_log rows carrying the pre-v16 ``whisparr_episode`` value.
@@ -1784,7 +2350,7 @@ async def test_init_db_migrates_whisparr_episode_rows_through_to_current(
         async with conn.execute("SELECT value FROM settings WHERE key = 'schema_version'") as cur:
             row = await cur.fetchone()
         assert row is not None
-        assert row[0] == "22"
+        assert row[0] == "23"
 
         # 2. The Whisparr v2 cooldown rows survived and were renamed.
         async with conn.execute(
@@ -1902,7 +2468,7 @@ async def test_init_db_migrates_v4_preserves_cooldowns_through_v10_rebuild(
         async with conn.execute("SELECT value FROM settings WHERE key = 'schema_version'") as cur:
             row = await cur.fetchone()
         assert row is not None
-        assert row[0] == "22"
+        assert row[0] == "23"
 
         # All four cooldown rows must survive the v10 instances rebuild.
         async with conn.execute(
@@ -2020,6 +2586,61 @@ async def test_migrate_to_v15_recovers_from_partial_previous_run(
             row = await cur.fetchone()
         assert row is not None
         assert row[0] == 3
+
+
+def _check_clauses(ddl: str) -> list[str]:
+    """Return every ``CHECK(...)`` clause of *ddl*, whitespace removed, sorted."""
+    compact = "".join(ddl.split())
+    clauses = []
+    for match in re.finditer(r"CHECK\(", compact):
+        depth = 0
+        for end in range(match.end() - 1, len(compact)):
+            depth += {"(": 1, ")": -1}.get(compact[end], 0)
+            if depth == 0:
+                clauses.append(compact[match.start() : end + 1])
+                break
+    return sorted(clauses)
+
+
+async def _instances_shape(path: Path) -> tuple[list[tuple[Any, ...]], list[str]]:
+    set_db_path(str(path))
+    await init_db()
+    async with get_db() as conn:
+        async with conn.execute("PRAGMA table_info(instances)") as cur:
+            columns = [tuple(r) async for r in cur]
+        ddl = await _instances_ddl(conn)
+    await close_all_pools()
+    return columns, _check_clauses(ddl)
+
+
+@pytest.mark.asyncio()
+@pytest.mark.parametrize(
+    "seed",
+    [
+        _seed_v4_shaped_db,
+        _seed_v5_shaped_db,
+        _seed_v7_shaped_db,
+        _seed_v8_shaped_db,
+        _seed_v9_shaped_db,
+        _seed_v10_shaped_db,
+        _seed_v11_shaped_db,
+        _seed_v12_shaped_db,
+        _seed_v12_fresh_install_db,
+    ],
+)
+async def test_migrated_instances_table_matches_a_fresh_one(
+    tmp_path: Path, seed: Callable[[], str]
+) -> None:
+    """Columns, order, types, defaults and every CHECK equal the fresh table's."""
+    fresh = await _instances_shape(tmp_path / "fresh.db")
+    assert len(fresh[1]) == 11
+
+    db_path = tmp_path / "migrated.db"
+    async with aiosqlite.connect(str(db_path)) as conn:
+        await conn.executescript(seed())
+        await conn.commit()
+
+    assert await _instances_shape(db_path) == fresh
 
 
 @pytest.mark.asyncio()

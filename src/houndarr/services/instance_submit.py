@@ -44,6 +44,7 @@ from houndarr.services.instance_validation import (
     resolve_search_modes,
     type_mismatch_message,
     validate_cutoff_controls,
+    validate_missing_controls,
     validate_missing_hot_retry_controls,
     validate_tag_filter,
     validate_upgrade_controls,
@@ -123,6 +124,12 @@ def _validate_form(
     *,
     url: str,
     allowed_time_window: str,
+    batch_size: int,
+    sleep_interval_mins: int,
+    hourly_cap: int,
+    cooldown_days: int,
+    post_release_grace_hrs: int,
+    queue_limit: int,
     cutoff_batch_size: int,
     cutoff_cooldown_days: int,
     cutoff_hourly_cap: int,
@@ -131,6 +138,7 @@ def _validate_form(
     upgrade_batch_size: int,
     upgrade_cooldown_days: int,
     upgrade_hourly_cap: int,
+    upgrade_series_window_size: int,
     tag_filter_include: str,
     tag_filter_exclude: str,
     tag_filter_missing_exclude: str,
@@ -151,6 +159,17 @@ def _validate_form(
     if window_error is not None:
         raise InstanceValidationError(window_error)
 
+    missing_error = validate_missing_controls(
+        batch_size=batch_size,
+        sleep_interval_mins=sleep_interval_mins,
+        hourly_cap=hourly_cap,
+        cooldown_days=cooldown_days,
+        post_release_grace_hrs=post_release_grace_hrs,
+        queue_limit=queue_limit,
+    )
+    if missing_error is not None:
+        raise InstanceValidationError(missing_error)
+
     cutoff_error = validate_cutoff_controls(
         cutoff_batch_size, cutoff_cooldown_days, cutoff_hourly_cap
     )
@@ -165,7 +184,7 @@ def _validate_form(
         raise InstanceValidationError(hot_retry_error)
 
     upgrade_error = validate_upgrade_controls(
-        upgrade_batch_size, upgrade_cooldown_days, upgrade_hourly_cap
+        upgrade_batch_size, upgrade_cooldown_days, upgrade_hourly_cap, upgrade_series_window_size
     )
     if upgrade_error is not None:
         raise InstanceValidationError(upgrade_error)
@@ -304,6 +323,12 @@ async def submit_create(
     canonical = _validate_form(
         url=url,
         allowed_time_window=allowed_time_window,
+        batch_size=batch_size,
+        sleep_interval_mins=sleep_interval_mins,
+        hourly_cap=hourly_cap,
+        cooldown_days=cooldown_days,
+        post_release_grace_hrs=post_release_grace_hrs,
+        queue_limit=queue_limit,
         cutoff_batch_size=cutoff_batch_size,
         cutoff_cooldown_days=cutoff_cooldown_days,
         cutoff_hourly_cap=cutoff_hourly_cap,
@@ -312,6 +337,7 @@ async def submit_create(
         upgrade_batch_size=upgrade_batch_size,
         upgrade_cooldown_days=upgrade_cooldown_days,
         upgrade_hourly_cap=upgrade_hourly_cap,
+        upgrade_series_window_size=upgrade_series_window_size,
         tag_filter_include=tag_filter_include,
         tag_filter_exclude=tag_filter_exclude,
         tag_filter_missing_exclude=tag_filter_missing_exclude,
@@ -468,6 +494,12 @@ async def submit_update(
     canonical = _validate_form(
         url=url,
         allowed_time_window=allowed_time_window,
+        batch_size=batch_size,
+        sleep_interval_mins=sleep_interval_mins,
+        hourly_cap=hourly_cap,
+        cooldown_days=cooldown_days,
+        post_release_grace_hrs=post_release_grace_hrs,
+        queue_limit=queue_limit,
         cutoff_batch_size=cutoff_batch_size,
         cutoff_cooldown_days=cutoff_cooldown_days,
         cutoff_hourly_cap=cutoff_hourly_cap,
@@ -476,6 +508,7 @@ async def submit_update(
         upgrade_batch_size=upgrade_batch_size,
         upgrade_cooldown_days=upgrade_cooldown_days,
         upgrade_hourly_cap=upgrade_hourly_cap,
+        upgrade_series_window_size=upgrade_series_window_size,
         tag_filter_include=tag_filter_include,
         tag_filter_exclude=tag_filter_exclude,
         tag_filter_missing_exclude=tag_filter_missing_exclude,

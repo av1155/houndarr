@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+import inspect
+
 import pytest
 from fastapi.testclient import TestClient
+from httpx import Response
 
 from houndarr.clients._wire_models import SystemStatus
 from houndarr.clients.base import ArrClient
+from houndarr.services import instance_submit
 from tests.conftest import csrf_headers
 
 # ---------------------------------------------------------------------------
@@ -735,6 +739,92 @@ def test_update_instance_rejects_invalid_hot_retry_controls(app: TestClient) -> 
     resp = app.post("/settings/instances/1", data=form, headers=csrf_headers(app))
     assert resp.status_code == 422
     assert b"Missing hot retry interval" in resp.content
+
+
+def _assert_guard_banner(resp: Response, message: str) -> None:
+    assert resp.status_code == 422
+    assert resp.headers["HX-Retarget"] == "#instance-connection-status"
+    assert message.encode() in resp.content
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "message"),
+    [
+        ("upgrade_series_window_size", "0", "Upgrade series window must be at least 1."),
+        ("upgrade_series_window_size", "101", "Upgrade series window must be 100 or less."),
+        ("sleep_interval_mins", "0", "Sleep minutes must be at least 1."),
+        ("batch_size", "251", "Batch size must be 250 or less."),
+        ("sleep_interval_mins", str(2**63), "Sleep minutes must be 525600 or less."),
+        ("queue_limit", str(-(2**63) - 1), "Queue limit must be 0 or greater."),
+    ],
+)
+def test_create_and_update_reject_out_of_range_numbers(
+    app: TestClient, field: str, value: str, message: str
+) -> None:
+    """Server-side bounds hold for crafted posts on both create and edit."""
+    _login(app)
+    created = app.post(
+        "/settings/instances", data={**_VALID_FORM, "name": "Kept"}, headers=csrf_headers(app)
+    )
+    assert created.status_code == 200
+
+    _assert_guard_banner(
+        app.post(
+            "/settings/instances", data={**_VALID_FORM, field: value}, headers=csrf_headers(app)
+        ),
+        message,
+    )
+    _assert_guard_banner(
+        app.post(
+            "/settings/instances/1",
+            data={**_VALID_FORM, "api_key": "__UNCHANGED__", field: value},
+            headers=csrf_headers(app),
+        ),
+        message,
+    )
+
+    assert b"My Sonarr" not in app.get("/settings").content
+    stored = {
+        "upgrade_series_window_size": "5",
+        "sleep_interval_mins": "30",
+        "batch_size": "2",
+        "queue_limit": "0",
+    }
+    edit = app.get("/settings/instances/1/edit").content.decode()
+    assert _input_value(edit, field) == stored[field]
+
+
+_NUMBER_FIELDS = sorted(
+    name
+    for name, param in inspect.signature(
+        instance_submit._validate_form, eval_str=True
+    ).parameters.items()
+    if param.annotation is int
+)
+
+
+@pytest.mark.parametrize("field", _NUMBER_FIELDS)
+def test_create_and_update_check_every_number_field(app: TestClient, field: str) -> None:
+    """Both routes pass each posted number to the server check (#916)."""
+    _login(app)
+    created = app.post(
+        "/settings/instances", data={**_VALID_FORM, "name": "Kept"}, headers=csrf_headers(app)
+    )
+    assert created.status_code == 200
+    before = _input_value(app.get("/settings/instances/1/edit").content.decode(), field)
+
+    for url, extra in (
+        ("/settings/instances", {}),
+        ("/settings/instances/1", {"api_key": "__UNCHANGED__"}),
+    ):
+        resp = app.post(
+            url, data={**_VALID_FORM, **extra, field: str(2**63)}, headers=csrf_headers(app)
+        )
+        _assert_guard_banner(resp, " or less.")
+
+    assert b"My Sonarr" not in app.get("/settings").content
+    after = _input_value(app.get("/settings/instances/1/edit").content.decode(), field)
+    assert after == before
 
 
 def test_create_and_update_hot_retry_controls_round_trip(app: TestClient) -> None:

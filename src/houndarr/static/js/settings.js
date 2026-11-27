@@ -451,8 +451,9 @@ function initSettingsPage() {
           return;
         }
         form.querySelectorAll('input[type="number"][name]').forEach((input) => {
-          if (!input.disabled && Number.isSafeInteger(input.valueAsNumber)) {
-            evt.detail.parameters[input.name] = String(input.valueAsNumber);
+          if (!input.disabled && Number.isInteger(input.valueAsNumber)) {
+            // BigInt prints every digit; String() switches to "1e+21" from there up.
+            evt.detail.parameters[input.name] = BigInt(input.valueAsNumber).toString();
           }
         });
       },

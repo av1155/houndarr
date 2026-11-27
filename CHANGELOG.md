@@ -16,7 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - A failed `/tag` lookup skips the passes that carry tag-filter labels for that cycle instead of searching them unfiltered, and the cycle is logged as an error. (#833)
-- Instance number settings have upper limits on save: 3650 for cooldown days, 525600 for `Sleep (minutes)`, 8760 for `Post-Release Grace (hrs)` and the hot retry hours, and 10000 for hourly caps and `Queue Limit`. (#916)
+- Instance number settings have upper limits: 3650 for cooldown days, 525600 for `Sleep (minutes)`, 8760 for grace and hot retry hours, 10000 for hourly caps and `Queue Limit`; schema v23 resets a stored value above one to its default. (#916)
 
 ### Fixed
 
@@ -47,12 +47,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Lidarr upgrade search no longer picks a cutoff-unmet album that a PostgreSQL-backed Lidarr skipped while paging tied dates, once a second full read at another page size finds it. (#924)
 - A Lidarr or Readarr upgrade pass whose cutoff list read stops on a failed page is skipped for that cycle, as a failed library read is, instead of searching the unread cutoff-unmet items as upgrades. (#924)
 - `Upgrade Series Window (per cycle)` shows in the Add and Edit instance forms after switching `Type` to Sonarr or Whisparr v2, and hides for other types. (#907)
-- Saving an instance with `Upgrade Series Window (per cycle)` outside 1 to 100 shows an error in the dialog; before, databases first created before 1.10.0 stored it and newer ones failed with HTTP 500. (#916)
-- The instance dialog also rejects a `Batch Size`, `Cutoff Batch` or `Upgrade Batch` above 250, a `Sleep (minutes)` below 1, or a negative `Hourly Cap`, `Cooldown (days)`, `Post-Release Grace (hrs)` or `Queue Limit` on save. (#916)
+- A save that skips the instance dialog's own limits, such as a scripted request, is refused with a message instead of storing the value or failing with HTTP 500 on a series window outside 1 to 100. (#916)
 - A number typed in exponent form in the instance dialog, such as `1e2` in `Batch Size`, saves as its value instead of closing the dialog with nothing saved. (#916)
 - Schema v23 rebuilds `instances` on databases first created before 1.10.0, resetting a series window outside 1 to 100 to `5` and an unknown `search_order` to `chronological`. To roll back, downgrade to 1.13.4. (#916)
 - The v23 rebuild deletes cooldowns and clears the instance on log rows that still point at a deleted instance, and logs how many it repaired. (#916)
-- Schema v23 resets, once, each instance number setting stored outside the limits now enforced on save to its default, including a value above a new upper limit such as a 5000-day cooldown, and logs `Schema v23: reset <column> to <default>`. (#916)
+- Schema v23 resets, once, each instance number setting stored outside the limits now enforced on save to its default, and logs `Schema v23: reset <column> to <default>`. (#916)
 
 ### Security
 

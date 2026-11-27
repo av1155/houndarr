@@ -669,6 +669,27 @@ async def test_pool_enforces_foreign_keys_after_rebuild_migrations(tmp_path: Pat
 
 
 @pytest.mark.asyncio()
+async def test_failed_migration_after_a_rebuild_keeps_foreign_keys_on(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The v5/v10/v15/v16 rebuilds run before v17; a failure there must not leak FKs off."""
+    db_path = tmp_path / "v4-fails.db"
+    async with aiosqlite.connect(str(db_path)) as conn:
+        await conn.executescript(_seed_v4_shaped_db())
+        await conn.commit()
+
+    async def _fail(_db: aiosqlite.Connection) -> None:
+        raise RuntimeError("v17 failed")
+
+    monkeypatch.setattr(database, "_migrate_to_v17", _fail)
+    set_db_path(str(db_path))
+    with pytest.raises(RuntimeError, match="v17 failed"):
+        await init_db()
+
+    await _every_pooled_connection_enforces_foreign_keys()
+
+
+@pytest.mark.asyncio()
 async def test_failed_v23_rebuild_rolls_back_and_keeps_foreign_keys_on(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -2219,6 +2240,18 @@ def _seed_v12_shaped_db() -> str:
     )
 
 
+def _seed_v12_fresh_install_db() -> str:
+    """v12 DB created fresh on 1.9.x: ``search_order`` carries its CHECK, no window yet."""
+    old = "search_order TEXT NOT NULL DEFAULT 'chronological',"
+    seed = _seed_v12_shaped_db()
+    assert old in seed
+    return seed.replace(
+        old,
+        "search_order TEXT NOT NULL DEFAULT 'random'"
+        " CHECK(search_order IN ('chronological', 'random')),",
+    )
+
+
 def _whisparr_v2_seed_inserts(version: int) -> str:
     """INSERTs that exercise the rename path: a Whisparr v2 instance plus
     cooldowns/search_log rows carrying the pre-v16 ``whisparr_episode`` value.
@@ -2560,6 +2593,7 @@ async def _instances_shape(path: Path) -> tuple[list[tuple[Any, ...]], list[str]
         _seed_v10_shaped_db,
         _seed_v11_shaped_db,
         _seed_v12_shaped_db,
+        _seed_v12_fresh_install_db,
     ],
 )
 async def test_migrated_instances_table_matches_a_fresh_one(

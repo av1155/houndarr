@@ -416,8 +416,8 @@ async def _init_db_migrations(db: aiosqlite.Connection) -> None:
             "INSERT INTO settings (key, value) VALUES ('schema_version', ?)",
             (str(SCHEMA_VERSION),),
         )
-        # Otherwise a later boot's self-heal runs the v23 reset under whatever
-        # limits that release ships.
+        # Without it, the second boot's self-heal applies the frozen v23
+        # bounds to values a later release may allow.
         await db.execute(_V23_RESET_MARKER_SQL)
         await _ensure_v3_indexes(db)
         await db.commit()

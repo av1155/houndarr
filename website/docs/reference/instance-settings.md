@@ -315,8 +315,6 @@ quality profiles and custom format scoring.
 
 - Default: `90`
 - Range: `7` to `3650`
-- Minimum: `7`. Engine-enforced; configured values below 7 are
-  clamped to 7.
 
 ### Upgrade Cap
 

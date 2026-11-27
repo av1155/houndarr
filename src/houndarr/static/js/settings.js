@@ -199,11 +199,20 @@ function initSettingsPage() {
 
       const t = typeSelect.value;
       Object.entries(APP_ONLY_TYPES).forEach(([attr, types]) => {
+        const shown = types.includes(t);
         addInstanceModalContent.querySelectorAll('[' + attr + '="true"]').forEach((el) => {
           if (!(el instanceof HTMLElement)) {
             return;
           }
-          el.style.display = types.includes(t) ? '' : 'none';
+          el.style.display = shown ? '' : 'none';
+          if (!shown) {
+            // The browser cannot point at a hidden invalid field, so it would block Save silently.
+            el.querySelectorAll('input').forEach((input) => {
+              if (!input.validity.valid) {
+                input.value = input.defaultValue;
+              }
+            });
+          }
         });
       });
     }

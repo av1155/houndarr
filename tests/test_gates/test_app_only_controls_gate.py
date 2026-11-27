@@ -1,4 +1,4 @@
-"""Consolidated invariant: the instance form's type-gated controls follow the Type select.
+"""Consolidated invariant: the instance form's type gating matches settings.js's type map.
 
 The form renders each type-gated control shown or hidden for the
 instance's own type, and ``syncAppOnlyControls`` in
@@ -36,7 +36,7 @@ def _js_type_map() -> dict[str, frozenset[str]]:
     block = re.search(r"const APP_ONLY_TYPES = \{(.*?)\};", source, re.DOTALL)
     assert block, "settings.js no longer declares the APP_ONLY_TYPES map"
     entries = re.findall(r"'(data-[a-z0-9_-]+-only)':\s*\[([^\]]*)\]", block.group(1))
-    return {attr: frozenset(re.findall(r"'([a-z0-9_]+)'", types)) for attr, types in entries}
+    return {attr: frozenset(re.findall(r"'([^']*)'", types)) for attr, types in entries}
 
 
 class _GatedControls(HTMLParser):
@@ -49,7 +49,11 @@ class _GatedControls(HTMLParser):
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         style = dict(attrs).get("style") or ""
         shown = "display:none" not in style.replace(" ", "")
-        self.found.extend((name, shown) for name, value in attrs if _GATE_ATTR.match(name))
+        for name, value in attrs:
+            if _GATE_ATTR.match(name):
+                # syncAppOnlyControls selects only [attr="true"].
+                assert value == "true", f"<{tag} {name}={value!r}> is never toggled"
+                self.found.append((name, shown))
 
 
 def _render_edit_form(instance_type: InstanceType) -> list[tuple[str, bool]]:
@@ -70,6 +74,12 @@ def test_map_names_only_real_instance_types() -> None:
     for attr, types in _js_type_map().items():
         assert types, f"{attr} maps to no instance type"
         assert types <= valid, f"{attr} maps to unknown types {sorted(types - valid)}"
+
+
+def test_map_lists_only_attributes_the_form_uses() -> None:
+    rendered = {attr for t in InstanceType for attr, _ in _render_edit_form(t)}
+    unused = set(_js_type_map()) - rendered
+    assert not unused, f"APP_ONLY_TYPES lists attributes the form never renders: {sorted(unused)}"
 
 
 @pytest.mark.parametrize("instance_type", list(InstanceType), ids=lambda t: t.value)

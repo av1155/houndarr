@@ -161,6 +161,25 @@ def _assert_type_gated_controls(form: Locator, instance_type: str) -> None:
             expect(control, f"{selector} shown for {instance_type}").to_be_hidden()
 
 
+def _assert_hiding_restores_series_window(form: Locator, rendered_value: str) -> None:
+    """Switch a Sonarr form holding an out-of-range window to Radarr; the form must stay valid.
+
+    The browser cannot point at a hidden invalid field, so it would block Save silently.
+    """
+    window = form.locator('[name="upgrade_series_window_size"]')
+    window.fill("0")
+    expect(window).to_have_value("0")
+    form.locator('select[name="type"]').select_option("radarr")
+    expect(window).to_be_hidden()
+    expect(window).to_have_value(rendered_value)
+    hidden_invalid = form.evaluate(
+        "f => [...f.elements]"
+        ".filter((el) => el.willValidate && !el.validity.valid && !el.checkVisibility())"
+        ".map((el) => el.name)"
+    )
+    assert hidden_invalid == [], f"hidden fields fail validation: {hidden_invalid}"
+
+
 @pytest.mark.integration
 def test_full_instance_lifecycle(
     logged_in_page: Page, houndarr_url: str, mock_sonarr_url: str
@@ -227,7 +246,7 @@ def test_full_instance_lifecycle(
 
     # The Edit form's Type select stays editable, so its gated controls follow it too.
     _assert_type_gated_controls(reopened, "sonarr")
-    reopened.locator('select[name="type"]').select_option("radarr")
+    _assert_hiding_restores_series_window(reopened, "5")
     _assert_type_gated_controls(reopened, "radarr")
     reopened.locator('select[name="type"]').select_option("whisparr_v2")
     _assert_type_gated_controls(reopened, "whisparr_v2")
@@ -256,6 +275,8 @@ def test_add_form_type_gated_controls_follow_type(logged_in_page: Page, houndarr
     ):
         type_select.select_option(instance_type)
         _assert_type_gated_controls(add_form, instance_type)
+
+    _assert_hiding_restores_series_window(add_form, "5")
 
 
 # ---------------------------------------------------------------------------

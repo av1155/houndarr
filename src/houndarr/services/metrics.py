@@ -768,10 +768,8 @@ async def gather_cooldown_data(
         # which makes a naive [:3] slice render three identical "11d 8h"
         # rows; the spread gives the user a real sense of the window.
         n = len(upcoming)
-        if n == 0:
-            picks: list[dict[str, Any]] = []
-        elif n <= 3:
-            picks = upcoming
+        if n <= 3:
+            picks: list[dict[str, Any]] = upcoming
         else:
             picks = [upcoming[0], upcoming[n // 2], upcoming[-1]]
         out[iid]["unlocking_next"] = [

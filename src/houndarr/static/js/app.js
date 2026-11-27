@@ -50,10 +50,21 @@
     if (!dialog || typeof base.showPopover !== 'function') return base;
     let toast = dialog.querySelector(':scope > .toast');
     if (!toast) {
-      toast = base.cloneNode(true);
-      toast.removeAttribute('id');
-      toast.setAttribute('popover', 'manual');
-      dialog.appendChild(toast);
+      const clone = base.cloneNode(true);
+      clone.removeAttribute('id');
+      clone.setAttribute('popover', 'manual');
+      dialog.appendChild(clone);
+      // A dialog can close (or be removed) while its toast shows: move the message out for
+      // the time it has left. Listening on the dialog itself still fires once it is detached.
+      dialog.addEventListener('close', function () {
+        const live = shownToast === clone && !clone.hidden;
+        if (live && !clone.classList.contains('is-leaving')) {
+          present(toastFor(base), clone.querySelector('.toast__label').textContent);
+        } else {
+          setToastShown(clone, false);
+        }
+      });
+      toast = clone;
     }
     return toast;
   }
@@ -65,25 +76,25 @@
     else toast.hidePopover();
   }
 
-  function showToast(message) {
-    const base = document.getElementById('toast');
-    if (!base || !message) return;
-    const toast = toastFor(base);
+  function present(toast, message) {
     const label = toast.querySelector('.toast__label');
     if (label) label.textContent = message;
-    if (toastTimer !== null) {
-      clearTimeout(toastTimer);
-      toastTimer = null;
-    }
     if (shownToast && shownToast !== toast) setToastShown(shownToast, false);
     shownToast = toast;
     toast.classList.remove('is-leaving');
     setToastShown(toast, true);
+  }
+
+  function showToast(message) {
+    const base = document.getElementById('toast');
+    if (!base || !message) return;
+    present(toastFor(base), message);
+    if (toastTimer !== null) clearTimeout(toastTimer);
     toastTimer = window.setTimeout(function () {
-      toast.classList.add('is-leaving');
+      shownToast.classList.add('is-leaving');
       toastTimer = window.setTimeout(function () {
-        setToastShown(toast, false);
-        toast.classList.remove('is-leaving');
+        setToastShown(shownToast, false);
+        shownToast.classList.remove('is-leaving');
         toastTimer = null;
       }, TOAST_LEAVE_MS);
     }, TOAST_VISIBLE_MS);
@@ -109,6 +120,12 @@
   document.body.addEventListener('htmx:beforeSwap', function (evt) {
     const detail = evt.detail;
     if (!detail.isError || detail.shouldSwap || !isMutation(detail)) return;
+    // Password change and factory reset answer a rate limit with a target-ready 429 body. GETs
+    // stay unswapped so a proxy's own 429 page never replaces a polled slot.
+    if (detail.xhr.status === 429) {
+      detail.shouldSwap = true;
+      return;
+    }
     showToast('Request failed (HTTP ' + detail.xhr.status + '). Reload the page and try again.');
   });
 

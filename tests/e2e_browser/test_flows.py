@@ -12,7 +12,7 @@ import uuid
 from contextlib import suppress
 
 import pytest
-from playwright.sync_api import Locator, Page, expect
+from playwright.sync_api import Locator, Page, Route, expect
 
 from houndarr.config import DEFAULT_BATCH_SIZE, DEFAULT_SLEEP_INTERVAL_MINUTES
 
@@ -1075,6 +1075,54 @@ def test_error_toast_draws_above_open_instance_modal(
             }"""
         )
         assert uncovered, "the toast is drawn under the instance modal"
+        # Measure after the 10px slide-in animation settles.
+        gap = toast.evaluate(
+            """el => Promise.all(el.getAnimations().map(a => a.finished))
+                .then(() => window.innerHeight - el.getBoundingClientRect().bottom)"""
+        )
+        assert 20 <= gap <= 40, f"toast sits {gap}px above the viewport bottom, expected 28"
+    finally:
+        page.unroute(pattern)
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("failure", "motion", "message"),
+    [
+        ("http-500", "no-preference", "Request failed (HTTP 500)"),
+        ("network", "reduce", "Could not reach Houndarr"),
+    ],
+)
+def test_changelog_dismiss_error_toast_outlives_the_modal(
+    logged_in_page: Page,
+    houndarr_url: str,
+    console_guard,
+    failure: str,
+    motion: str,
+    message: str,
+) -> None:
+    """The changelog modal closes even when dismiss fails; its error toast must stay on screen."""
+    for p in [*_EXPECTED_500_CONSOLE_NOISE, r"net::ERR_FAILED"]:
+        console_guard.allow(p)
+    page = logged_in_page
+    page.emulate_media(reduced_motion=motion)
+    page.goto(f"{houndarr_url}/settings")
+    _open_admin_dropdown(page)
+    page.get_by_role("button", name=re.compile(r"what'?s\s*new", re.I)).click()
+    expect(page.locator("dialog#changelog-modal[open]")).to_be_visible(timeout=4_000)
+
+    pattern = re.compile(r"/settings/changelog/dismiss$")
+    page.route(
+        pattern,
+        lambda route: (
+            route.fulfill(status=500, body="") if failure == "http-500" else route.abort("failed")
+        ),
+    )
+    try:
+        page.locator('[data-changelog-dismiss="true"]').click()
+        expect(page.locator("dialog#changelog-modal")).to_have_count(0, timeout=4_000)
+        expect(page.locator("#toast")).to_be_visible()
+        expect(page.locator("#toast")).to_contain_text(message)
     finally:
         page.unroute(pattern)
 
@@ -1083,27 +1131,37 @@ def test_error_toast_draws_above_open_instance_modal(
 def test_error_toast_skips_gets_and_reports_unreachable_server(
     logged_in_page: Page, houndarr_url: str, console_guard
 ) -> None:
-    """A failed GET stays silent (the dashboard polls); a mutation that never lands toasts."""
-    for p in [*_EXPECTED_500_CONSOLE_NOISE, r"net::ERR_FAILED"]:
+    """A failed GET stays silent (the dashboard polls); a mutation that never lands toasts.
+
+    A GET 429 stands in for a reverse proxy's rate-limit page, which must
+    not replace the slot a polled request targets.
+    """
+    noise = [*_EXPECTED_500_CONSOLE_NOISE, *_EXPECTED_429_CONSOLE_NOISE, r"net::ERR_FAILED"]
+    for p in noise:
         console_guard.allow(p)
     page = logged_in_page
     page.goto(f"{houndarr_url}/settings")
-    probe = re.compile(r"/settings/toast-probe$")
-    page.route(
-        probe,
-        lambda route: (
-            route.fulfill(status=500, body="")
-            if route.request.method == "GET"
-            else route.abort("failed")
-        ),
-    )
-    request = """verb => htmx
-        .ajax(verb, '/settings/toast-probe', {target: '#admin-flash', swap: 'none'})
+
+    def respond(route: Route) -> None:
+        outcome = route.request.url.rsplit("=", 1)[-1]
+        if outcome == "abort":
+            route.abort("failed")
+        else:
+            route.fulfill(status=int(outcome), body="proxy rate-limit page")
+
+    probe = re.compile(r"/settings/toast-probe\?outcome=")
+    page.route(probe, respond)
+    request = """([verb, outcome]) => htmx
+        .ajax(verb, '/settings/toast-probe?outcome=' + outcome,
+              {target: '#admin-flash', swap: 'innerHTML'})
         .then(() => 'done', () => 'done')"""
     try:
-        page.evaluate(request, "GET")
+        page.evaluate(request, ["GET", "500"])
         expect(page.locator("#toast")).to_be_hidden()
-        page.evaluate(request, "POST")
+        page.evaluate(request, ["GET", "429"])
+        expect(page.locator("#admin-flash")).not_to_contain_text("proxy rate-limit page")
+        expect(page.locator("#toast")).to_be_hidden()
+        page.evaluate(request, ["POST", "abort"])
         expect(page.locator("#toast")).to_contain_text("Could not reach Houndarr", timeout=4_000)
     finally:
         page.unroute(probe)

@@ -136,7 +136,10 @@
   );
 
   // After dismiss/disable POSTs complete (hx-swap="none"), close the
-  // dialog.  htmx:afterRequest fires even on 204 responses.
+  // dialog.  htmx:afterRequest fires even on 204 responses.  The close
+  // waits a tick: a failed request fires htmx:sendError on the button
+  // after this, and a reduced-motion close would already have detached
+  // it, so the error would never reach the toast listener on <body>.
   document.body.addEventListener(
     'htmx:afterRequest',
     function (evt) {
@@ -148,7 +151,7 @@
         triggerEl.matches('[data-changelog-dismiss="true"]') ||
         triggerEl.matches('[data-changelog-disable="true"]')
       ) {
-        closeDialog();
+        window.setTimeout(closeDialog, 0);
       }
     },
     { signal },

@@ -68,8 +68,9 @@ def _flash_response(
 
     ``tone`` is ``"success"``, ``"danger"``, or ``"info"`` and maps to the
     existing alert palette in ``base.html``. Failures the panel should
-    show use status ``422`` (``429`` for the rate limit), the codes the
-    htmx-config meta in ``base.html`` opts into swapping.
+    show use status ``422``, which the htmx-config meta in ``base.html``
+    swaps, or ``429`` for the rate limit, which ``app.js`` swaps for
+    non-GET requests.
     """
     csrf_token = request.cookies.get(CSRF_COOKIE_NAME, "")
     return get_templates().TemplateResponse(

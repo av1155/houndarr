@@ -9,9 +9,6 @@ from __future__ import annotations
 
 import logging
 
-import httpx
-from pydantic import ValidationError
-
 from houndarr.clients.base import InstanceSnapshot, ReconcileSets, WantedWalks
 from houndarr.clients.lidarr import LibraryAlbum, LidarrClient, MissingAlbum
 from houndarr.engine.adapters._common import (
@@ -29,9 +26,6 @@ from houndarr.engine.candidates import (
 from houndarr.services.instances import Instance, LidarrSearchMode
 
 logger = logging.getLogger(__name__)
-
-_UPGRADE_CUTOFF_EXCLUSION_HARD_CAP = 100
-_CUTOFF_EXCLUSION_PAGE_SIZE = 250
 
 # ---------------------------------------------------------------------------
 # Label builders
@@ -207,16 +201,13 @@ async def fetch_upgrade_pool(
 ) -> list[LibraryAlbum]:
     """Fetch and filter Lidarr library for upgrade-eligible albums.
 
-    Builds a cutoff-unmet exclusion set by paginating ``wanted/cutoff``, then
-    returns monitored albums with files that are NOT in the exclusion set.
-
-    The cutoff pagination stops naturally when a short page is returned
-    (fewer records than the requested page_size).  A safety bound of
-    ``_UPGRADE_CUTOFF_EXCLUSION_HARD_CAP`` pages prevents an unbounded
-    walk if a misconfigured *arr instance returns full pages indefinitely;
-    that bound is sized to cover libraries up to roughly
-    ``hard_cap * 250`` cutoff-unmet albums (default 25000), which is well
-    above any real Lidarr deployment we have observed.
+    Returns monitored albums with files, less every album the
+    ``wanted/cutoff`` list returned, which the cutoff pass searches.  The
+    list is read as reconcile reads it (:func:`walk_wanted`), so a tie
+    split a re-read covers stays excluded.  A list that moved mid-read
+    excludes the albums it read, so an album it slid past may join this
+    cycle's pool.  A page that fails raises: excluding part of the list
+    would search cutoff-unmet albums as upgrades.
 
     Args:
         client: An open :class:`LidarrClient` context.
@@ -225,43 +216,23 @@ async def fetch_upgrade_pool(
     Returns:
         List of upgrade-eligible :class:`LibraryAlbum` items.
     """
-    exclusion: set[int] = set()
-    page = 1
-    while page <= _UPGRADE_CUTOFF_EXCLUSION_HARD_CAP:
-        try:
-            cutoff_items = await client.get_cutoff_unmet(
-                page=page, page_size=_CUTOFF_EXCLUSION_PAGE_SIZE
-            )
-        except (httpx.HTTPError, httpx.InvalidURL, ValidationError):
-            logger.warning(
-                "[%s] failed to fetch cutoff page %d for exclusion set",
-                instance.core.name,
-                page,
-            )
-            break
-        for item in cutoff_items:
-            exclusion.add(item.album_id)
-        if len(cutoff_items) < _CUTOFF_EXCLUSION_PAGE_SIZE:
-            break
-        page += 1
-    if page > _UPGRADE_CUTOFF_EXCLUSION_HARD_CAP:
+    cutoff = await walk_wanted(None, "cutoff", client.get_wanted_page)
+    if cutoff.capped:
         logger.warning(
-            "[%s] cutoff exclusion walk hit safety cap of %d pages; "
-            "library has more than %d cutoff-unmet albums and the "
-            "upgrade pool may include some that are still cutoff-unmet",
+            "[%s] cutoff exclusion walk hit its page cap after %d albums; "
+            "the upgrade pool may include some that are still cutoff-unmet",
             instance.core.name,
-            _UPGRADE_CUTOFF_EXCLUSION_HARD_CAP,
-            _UPGRADE_CUTOFF_EXCLUSION_HARD_CAP * _CUTOFF_EXCLUSION_PAGE_SIZE,
+            len(cutoff.items),
         )
-
-    return await _library_upgrade_pool(client, exclusion)
+    return await _library_upgrade_pool(client, cutoff.items)
 
 
 async def _library_upgrade_pool(
     client: LidarrClient,
-    exclusion: set[int],
+    cutoff: list[MissingAlbum],
 ) -> list[LibraryAlbum]:
-    """Return monitored albums with files whose id is not in *exclusion*."""
+    """Return monitored albums with files that are not in the *cutoff* list."""
+    exclusion = {item.album_id for item in cutoff}
     library = await client.get_albums()
     return [a for a in library if a.monitored and a.has_file and a.album_id not in exclusion]
 
@@ -343,16 +314,9 @@ async def fetch_reconcile_sets(
     cutoff_set = _album_leaf_pairs(cutoff.items) if cutoff.complete else None
     upgrade_set: frozenset[tuple[str, int]] = frozenset()
     if instance.upgrade.upgrade_enabled:
-        # The cycle's pool excludes only the first
-        # _UPGRADE_CUTOFF_EXCLUSION_HARD_CAP pages of this same sorted list, as
-        # its plain paged reads return them, so excluding more here (an item a
-        # re-read recovered included) would reap upgrade cooldowns it still stamps.
-        excluded = cutoff.first_read[
-            : _UPGRADE_CUTOFF_EXCLUSION_HARD_CAP * _CUTOFF_EXCLUSION_PAGE_SIZE
-        ]
-        exclusion = {item.album_id for item in excluded}
         upgrade_candidates = [
-            adapt_upgrade(item, instance) for item in await _library_upgrade_pool(client, exclusion)
+            adapt_upgrade(item, instance)
+            for item in await _library_upgrade_pool(client, cutoff.items)
         ]
         upgrade_set = frozenset((str(c.item_type), c.item_id) for c in upgrade_candidates)
     return ReconcileSets(missing=missing_set, cutoff=cutoff_set, upgrade=upgrade_set)

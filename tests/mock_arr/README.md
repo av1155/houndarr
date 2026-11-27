@@ -81,6 +81,10 @@ envelope reports the key and direction actually used:
   cutoff and both Readarr lists, release date for Lidarr missing,
   `episodes.airDateUtc` for Sonarr missing and Whisparr v2, sort title
   for Radarr. Sonarr cutoff answers 500, as Sonarr 3.0.10.1567 does.
+- Readarr's cutoff list has one row per below-cutoff file, and its
+  `totalRecords` counts rows. `--readarr-cutoff-files N` (or
+  `SeedConfig.readarr_cutoff_files`) gives every cutoff-unmet book N
+  files, so each fills N adjacent rows.
 
 Debug:
 - `GET /__commands__/{sonarr|radarr|lidarr|readarr|whisparr_v2|whisparr_v3}` returns

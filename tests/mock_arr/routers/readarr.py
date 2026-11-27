@@ -30,6 +30,7 @@ def make_readarr_data(
     missing_ratio: float = 0.5,
     cutoff_ratio: float = 0.2,
     shuffle_dates: bool = False,
+    cutoff_files: int = 1,
 ) -> AppData:
     rng = random.Random(seed)
     parents: list[dict[str, Any]] = []
@@ -99,6 +100,7 @@ def make_readarr_data(
         missing_ids=missing_ids,
         cutoff_ids=cutoff_ids,
         upgrade_ids=upgrade_ids,
+        cutoff_rows=dict.fromkeys(cutoff_ids, cutoff_files),
     )
 
 

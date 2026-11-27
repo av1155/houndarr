@@ -118,6 +118,10 @@ exactly ``page_size`` items (whether due to an off-by-one bug or a
 hostile endpoint); without it the loop would never terminate."""
 
 
+_WANTED_READ_ERRORS = (httpx.HTTPError, httpx.InvalidURL, ValueError, ClientError)
+"""What a failed ``/wanted`` page read raises; a payload that fails parsing is a ``ValueError``."""
+
+
 type WantedPageFetch[T] = Callable[..., Awaitable[WantedPage[T]]]
 """``async def(*, page, page_size)``: ``ArrClient.get_wanted_page`` bound to one kind."""
 
@@ -178,7 +182,7 @@ async def _read_pass[T](fetch: WantedPageFetch[T], page_size: int) -> _Pass[T]:
 
 def _verdict[T](walked: _Pass[T]) -> WantedWalk[T]:
     if walked.capped:
-        return WantedWalk(walked.items, complete=False)
+        return WantedWalk(walked.items, complete=False, capped=True)
     if None in walked.totals:
         # A proxy that strips totalRecords leaves the short page as the only signal.
         return WantedWalk(walked.items, complete=True)
@@ -209,7 +213,7 @@ async def read_wanted[T](fetch_page: WantedPageFetch[T]) -> WantedWalk[T]:
     the page cap.  Every read must report the same total, so a list that
     changed meanwhile stays churned, as does one whose re-read fails.  A
     covered list is complete and lists each item once, in the order first
-    read, keeping the first read's rows as ``paged_rows``.
+    read.
     """
     first = await _read_pass(fetch_page, _RECONCILE_PAGE_SIZE)
     if not first.reordered():
@@ -222,13 +226,13 @@ async def read_wanted[T](fetch_page: WantedPageFetch[T]) -> WantedWalk[T]:
             continue
         try:
             retry = await _read_pass(fetch_page, size)
-        except (httpx.HTTPError, httpx.InvalidURL, ValueError, ClientError):
+        except _WANTED_READ_ERRORS:
             break
         if retry.capped or retry.total() != total:
             break
         items.extend(_first_of_each(retry, seen))
         if len(seen) == total:
-            return WantedWalk(items, complete=True, paged_rows=first.items)
+            return WantedWalk(items, complete=True)
     return _verdict(first)
 
 
@@ -400,6 +404,7 @@ async def compute_default_snapshot[T](
     anchor_fn: Callable[[T], str | None] | Callable[[T], datetime | None],
     anchor_is_dt: bool = False,
     walks: WantedWalks | None = None,
+    cutoff_id_fn: Callable[[Any], int] | None = None,
 ) -> InstanceSnapshot:
     """Build an :class:`InstanceSnapshot` from a ``/wanted``-paged client.
 
@@ -411,9 +416,11 @@ async def compute_default_snapshot[T](
 
     - ``monitored_total``: the sum of ``totalRecords`` for missing +
       cutoff via :meth:`ArrClient.get_wanted_total`.  Each call is a
-      cheap ``pageSize=1`` probe.  Mirrors the legacy
-      ``ArrClient.get_instance_snapshot`` default precisely so the
-      number does not drift after the refactor.
+      cheap ``pageSize=1`` probe.  An app whose cutoff total counts
+      rows (Readarr: one per below-cutoff file) passes *cutoff_id_fn*,
+      and the cutoff part counts the distinct ids of the cutoff walk
+      instead, falling back to the probe when that walk raises or
+      stops at the page cap.
     - ``unreleased_count``: walks ``/wanted/missing`` once via
       :func:`walk_wanted` and counts items whose
       ``anchor_fn(item)`` resolves as still-in-the-future per
@@ -437,15 +444,17 @@ async def compute_default_snapshot[T](
             ``datetime``; pick the dt-typed unreleased helper.  Default
             ``False`` keeps the string path.
         walks: This refresh's walk memo, shared with the reconcile fetch.
+        cutoff_id_fn: Selector for a cutoff item's id, for an app whose
+            cutoff total counts rows.
 
     Returns:
         :class:`InstanceSnapshot` with both counts populated.
     """
-    monitored_kind: WantedKind = "missing"
-    cutoff_kind: WantedKind = "cutoff"
-    monitored_total = await client.get_wanted_total(monitored_kind) + await client.get_wanted_total(
-        cutoff_kind
-    )
+    monitored_total = await client.get_wanted_total("missing")
+    if cutoff_id_fn is None:
+        monitored_total += await client.get_wanted_total("cutoff")
+    else:
+        monitored_total += await _distinct_cutoff_total(client, walks, cutoff_id_fn)
 
     walk: WantedWalk[T] = await walk_wanted(walks, "missing", client.get_wanted_page)
     items = walk.items
@@ -460,3 +469,18 @@ async def compute_default_snapshot[T](
         monitored_total=monitored_total,
         unreleased_count=unreleased_count,
     )
+
+
+async def _distinct_cutoff_total(
+    client: ArrClient,
+    walks: WantedWalks | None,
+    id_fn: Callable[[Any], int],
+) -> int:
+    """Return how many distinct items the cutoff list holds, or its row total when unread."""
+    try:
+        walk: WantedWalk[Any] | None = await walk_wanted(walks, "cutoff", client.get_wanted_page)
+    except _WANTED_READ_ERRORS:
+        walk = None
+    if walk is None or walk.capped:
+        return await client.get_wanted_total("cutoff")
+    return len({id_fn(item) for item in walk.items})

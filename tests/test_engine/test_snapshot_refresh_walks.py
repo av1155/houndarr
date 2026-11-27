@@ -918,6 +918,7 @@ async def test_a_reread_whose_total_moved_does_not_cover_the_list() -> None:
     fetch.before[(1, 239)] = lambda rows: rows.append(9_999)
     walk = await read_wanted(fetch)
     assert (walk.complete, walk.churned) == (False, True)
+    assert {250, 9_999} <= set(walk.items)
     assert fetch.walk_sizes() == [239, 250]
 
 

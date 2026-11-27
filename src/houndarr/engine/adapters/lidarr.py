@@ -206,10 +206,11 @@ async def fetch_upgrade_pool(
     list is read as reconcile reads it (:func:`walk_wanted`), so an album
     a tie split skipped stays excluded once a re-read at another page size
     returns it.  A list that moved mid-read, or a split no re-read
-    recovered, excludes the albums the reads returned, so an album it slid
-    past or the split skipped may join this cycle's pool.  A page of the
-    first read that fails raises: excluding the pages before it would
-    search every unread cutoff-unmet album as an upgrade.
+    recovered, excludes the albums the first read and every re-read that
+    did not fail returned, so an album it slid past or the split skipped
+    may join this cycle's pool.  A page of the first read that fails raises:
+    excluding the pages before it would search every unread cutoff-unmet
+    album as an upgrade.
 
     Args:
         client: An open :class:`LidarrClient` context.

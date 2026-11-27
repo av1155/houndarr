@@ -210,7 +210,7 @@ async def read_wanted[T](fetch_page: WantedPageFetch[T]) -> WantedWalk[T]:
     changed meanwhile stays churned, as does one whose re-read fails.  A
     covered list is complete and lists each item once, in the order first
     read.  A list the re-reads do not cover lists the first read's rows as
-    returned, then each item a re-read added.
+    returned, then each item a re-read that did not fail added.
     """
     first = await _read_pass(fetch_page, _RECONCILE_PAGE_SIZE)
     if not first.reordered():
@@ -226,9 +226,9 @@ async def read_wanted[T](fetch_page: WantedPageFetch[T]) -> WantedWalk[T]:
             retry = await _read_pass(fetch_page, size)
         except (httpx.HTTPError, httpx.InvalidURL, ValueError, ClientError):
             break
+        recovered.extend(_first_of_each(retry, seen))
         if retry.capped or retry.total() != total:
             break
-        recovered.extend(_first_of_each(retry, seen))
         if len(seen) == total:
             return WantedWalk([*items, *recovered], complete=True)
     # The upgrade pool excludes every item a walk returns, recovered ones included.

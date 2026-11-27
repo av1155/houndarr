@@ -23,7 +23,7 @@ Inhabitants:
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from functools import partial
 from typing import Any, Protocol
@@ -209,7 +209,8 @@ async def read_wanted[T](fetch_page: WantedPageFetch[T]) -> WantedWalk[T]:
     the page cap.  Every read must report the same total, so a list that
     changed meanwhile stays churned, as does one whose re-read fails.  A
     covered list is complete and lists each item once, in the order first
-    read.
+    read.  A list the re-reads do not cover lists the first read's rows as
+    returned, then each item a re-read added.
     """
     first = await _read_pass(fetch_page, _RECONCILE_PAGE_SIZE)
     if not first.reordered():
@@ -217,6 +218,7 @@ async def read_wanted[T](fetch_page: WantedPageFetch[T]) -> WantedWalk[T]:
     total = first.total()
     seen: set[int] = set()
     items = _first_of_each(first, seen)
+    recovered: list[T] = []
     for size in _RECONCILE_RETRY_PAGE_SIZES:
         if len(first.ids) >= size * _RECONCILE_MAX_PAGES:
             continue
@@ -226,10 +228,11 @@ async def read_wanted[T](fetch_page: WantedPageFetch[T]) -> WantedWalk[T]:
             break
         if retry.capped or retry.total() != total:
             break
-        items.extend(_first_of_each(retry, seen))
+        recovered.extend(_first_of_each(retry, seen))
         if len(seen) == total:
-            return WantedWalk(items, complete=True)
-    return _verdict(first)
+            return WantedWalk([*items, *recovered], complete=True)
+    # The upgrade pool excludes every item a walk returns, recovered ones included.
+    return replace(_verdict(first), items=[*first.items, *recovered])
 
 
 def _first_of_each[T](walked: _Pass[T], seen: set[int]) -> list[T]:

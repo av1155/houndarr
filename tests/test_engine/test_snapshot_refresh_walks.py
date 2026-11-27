@@ -898,6 +898,20 @@ async def test_a_tie_split_no_read_covers_stays_churned() -> None:
 
 
 @pytest.mark.asyncio()
+async def test_an_uncovered_list_keeps_the_items_a_reread_recovered() -> None:
+    fetch = _Pages(600)
+    fetch.views[(2, 250)] = _swap(249, 250)
+    fetch.views[(3, 250)] = _swap(499, 500)
+    fetch.views[(3, 239)] = _serve_twice(serve=477, instead_of=500)
+    fetch.views[(2, 261)] = _serve_twice(serve=260, instead_of=500)
+    walk = await read_wanted(fetch)
+    assert (walk.complete, walk.churned) == (False, True)
+    assert (250 in walk.items, 500 in walk.items) == (True, False)
+    assert walk.items.count(249) == 2
+    assert fetch.walk_sizes() == [239, 250, 261]
+
+
+@pytest.mark.asyncio()
 async def test_a_reread_whose_total_moved_does_not_cover_the_list() -> None:
     fetch = _Pages(600)
     fetch.views[(2, 250)] = _swap(249, 250)

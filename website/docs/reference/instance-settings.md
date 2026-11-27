@@ -21,7 +21,8 @@ the per-app API command Houndarr sends see
 If you want every instance back to default policy without losing the
 instances themselves, use **Settings > Admin > Maintenance > Reset
 all instance settings**. It reverts every field below at once except
-the tag filters, and keeps your connection details and API keys. See
+the tag filters and the enabled toggle, and keeps your connection
+details and API keys. See
 [Admin actions](/docs/guides/admin-actions) for the full list of
 what a reset touches.
 :::
@@ -41,6 +42,13 @@ alt="The Houndarr Edit Instance modal, pre-populated with an existing Sonarr ins
 />
 
 ## Missing search controls
+
+### Missing search
+
+Turns the missing-item pass on or off for this instance. Turn it off
+to pause missing searches without changing the settings below.
+
+- Default: On
 
 ### Batch Size
 
@@ -381,6 +389,7 @@ window` info row and sleeps normally. See
 
 | Setting                  | Value                                      |
 | ------------------------ | ------------------------------------------ |
+| Missing search           | On                                         |
 | Batch Size               | `2`                                        |
 | Sleep (minutes)          | `30`                                       |
 | Hourly Cap               | `4`                                        |

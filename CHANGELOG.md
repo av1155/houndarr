@@ -23,6 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Snapshot refresh reads the missing list once instead of twice, and Lidarr and Readarr with the upgrade pass on read the cutoff list once instead of twice. (#839)
 - Cooldown reconcile keeps a pass's cooldowns when its wanted list holds 50,000 items or more or a Sonarr or Whisparr v2 series fails to load, and logs `incomplete; keeping those cooldowns` once. (#839)
 - With `Queue Limit` set, a non-JSON answer from the \*arr's queue status (such as a proxy login page) lets the search proceed instead of failing the whole cycle. (#833)
+- `Reset all instance settings` also turns `Enable missing search` back on and resets `Upgrade Series Window (per cycle)` to `5`. (#909)
 
 ### Security
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import os
 from collections.abc import AsyncGenerator
 from pathlib import Path
@@ -13,36 +14,53 @@ import pytest_asyncio
 from cryptography.fernet import Fernet
 from fastapi import FastAPI
 
-from houndarr.config import (
-    DEFAULT_BATCH_SIZE,
-    DEFAULT_COOLDOWN_DAYS,
-    DEFAULT_CUTOFF_BATCH_SIZE,
-    DEFAULT_CUTOFF_COOLDOWN_DAYS,
-    DEFAULT_CUTOFF_HOURLY_CAP,
-    DEFAULT_HOURLY_CAP,
-    DEFAULT_MISSING_HOT_RETRY_INTERVAL_HOURS,
-    DEFAULT_MISSING_HOT_RETRY_WINDOW_HOURS,
-    DEFAULT_POST_RELEASE_GRACE_HOURS,
-    DEFAULT_QUEUE_LIMIT,
-    DEFAULT_SLEEP_INTERVAL_MINUTES,
-    DEFAULT_UPGRADE_BATCH_SIZE,
-    DEFAULT_UPGRADE_COOLDOWN_DAYS,
-    DEFAULT_UPGRADE_HOURLY_CAP,
-)
+from houndarr.config import DEFAULT_UPGRADE_SERIES_WINDOW_SIZE
 from houndarr.database import close_all_pools, get_db, set_db_path
+from houndarr.routes.settings._helpers import blank_instance
 from houndarr.services.admin import (
+    _policy_defaults,
     clear_all_search_logs,
     factory_reset,
     reset_all_instance_policy,
 )
 from houndarr.services.instances import (
+    CutoffPolicy,
     InstanceType,
+    MissingPolicy,
+    SchedulePolicy,
+    SearchOrder,
+    SonarrSearchMode,
     TagFilterPolicy,
+    UpgradePolicy,
     create_instance,
     get_instance,
+    update_instance,
+    update_instance_snapshot,
 )
 
 _MASTER_KEY = Fernet.generate_key()
+
+# Identity, timestamps, snapshot counters and tag filters survive a policy reset.
+_RESET_KEEPS: frozenset[str] = frozenset(
+    {
+        "id",
+        "name",
+        "type",
+        "url",
+        "encrypted_api_key",
+        "enabled",
+        "created_at",
+        "updated_at",
+        "monitored_total",
+        "unreleased_count",
+        "snapshot_refreshed_at",
+        "tag_filter_include",
+        "tag_filter_exclude",
+        "tag_filter_missing_exclude",
+        "tag_filter_cutoff_exclude",
+        "tag_filter_upgrade_exclude",
+    }
+)
 
 
 # A factory_reset test opens its pools without the ``db`` fixture; an open
@@ -62,6 +80,7 @@ async def seeded_instances(db: None) -> AsyncGenerator[list[int]]:
         type=InstanceType.sonarr,
         url="http://sonarr:8989",
         api_key="sonarr-key",
+        missing_enabled=False,
         batch_size=25,
         sleep_interval_mins=5,
         hourly_cap=99,
@@ -74,18 +93,33 @@ async def seeded_instances(db: None) -> AsyncGenerator[list[int]]:
         cutoff_batch_size=7,
         cutoff_cooldown_days=90,
         cutoff_hourly_cap=5,
+        sonarr_search_mode=SonarrSearchMode.season_context,
         upgrade_enabled=True,
         upgrade_batch_size=3,
         upgrade_cooldown_days=60,
         upgrade_hourly_cap=2,
+        upgrade_sonarr_search_mode=SonarrSearchMode.season_context,
+        upgrade_series_window_size=20,
         allowed_time_window="09:00-17:00",
+        search_order=SearchOrder.chronological,
     )
+    # Cursors and snapshot counters have no create_instance kwargs.
+    await update_instance(
+        inst1.core.id,
+        master_key=_MASTER_KEY,
+        missing_page_offset=7,
+        cutoff_page_offset=3,
+        upgrade_item_offset=11,
+        upgrade_series_offset=4,
+    )
+    await update_instance_snapshot(inst1.core.id, monitored_total=120, unreleased_count=8)
     inst2 = await create_instance(
         master_key=_MASTER_KEY,
         name="Radarr Movies",
         type=InstanceType.radarr,
         url="http://radarr:7878",
         api_key="radarr-key",
+        enabled=False,
         batch_size=50,
         hourly_cap=20,
     )
@@ -108,29 +142,58 @@ async def test_reset_all_instance_policy_reverts_columns(
     seeded_instances: list[int],
 ) -> None:
     await reset_all_instance_policy(master_key=_MASTER_KEY, supervisor=None)
-    inst = await get_instance(seeded_instances[0], master_key=_MASTER_KEY)
+    for instance_id in seeded_instances:
+        inst = await get_instance(instance_id, master_key=_MASTER_KEY)
+        assert inst is not None
+        assert inst.missing == MissingPolicy()
+        assert inst.cutoff == CutoffPolicy()
+        assert inst.upgrade == UpgradePolicy()
+        assert inst.schedule == SchedulePolicy()
+
+
+@pytest.mark.asyncio()
+async def test_reset_all_instance_policy_reenables_missing_and_resets_series_window(
+    db: None,
+) -> None:
+    created = await create_instance(
+        master_key=_MASTER_KEY,
+        name="Sonarr Paused",
+        type=InstanceType.sonarr,
+        url="http://sonarr:8989",
+        api_key="sonarr-key",
+        missing_enabled=False,
+        upgrade_series_window_size=20,
+    )
+
+    await reset_all_instance_policy(master_key=_MASTER_KEY, supervisor=None)
+
+    inst = await get_instance(created.core.id, master_key=_MASTER_KEY)
     assert inst is not None
-    assert inst.missing.batch_size == DEFAULT_BATCH_SIZE
-    assert inst.missing.sleep_interval_mins == DEFAULT_SLEEP_INTERVAL_MINUTES
-    assert inst.missing.hourly_cap == DEFAULT_HOURLY_CAP
-    assert inst.missing.cooldown_days == DEFAULT_COOLDOWN_DAYS
-    assert inst.missing.post_release_grace_hrs == DEFAULT_POST_RELEASE_GRACE_HOURS
-    assert inst.missing.missing_hot_retry_window_hrs == DEFAULT_MISSING_HOT_RETRY_WINDOW_HOURS
-    assert inst.missing.missing_hot_retry_interval_hrs == DEFAULT_MISSING_HOT_RETRY_INTERVAL_HOURS
-    assert inst.missing.queue_limit == DEFAULT_QUEUE_LIMIT
-    assert inst.cutoff.cutoff_enabled is False
-    assert inst.cutoff.cutoff_batch_size == DEFAULT_CUTOFF_BATCH_SIZE
-    assert inst.cutoff.cutoff_cooldown_days == DEFAULT_CUTOFF_COOLDOWN_DAYS
-    assert inst.cutoff.cutoff_hourly_cap == DEFAULT_CUTOFF_HOURLY_CAP
-    assert inst.upgrade.upgrade_enabled is False
-    assert inst.upgrade.upgrade_batch_size == DEFAULT_UPGRADE_BATCH_SIZE
-    assert inst.upgrade.upgrade_cooldown_days == DEFAULT_UPGRADE_COOLDOWN_DAYS
-    assert inst.upgrade.upgrade_hourly_cap == DEFAULT_UPGRADE_HOURLY_CAP
-    assert inst.schedule.allowed_time_window == ""
-    assert inst.schedule.missing_page_offset == 1
-    assert inst.schedule.cutoff_page_offset == 1
-    assert inst.upgrade.upgrade_item_offset == 0
-    assert inst.upgrade.upgrade_series_offset == 0
+    assert inst.missing.missing_enabled is True
+    assert inst.upgrade.upgrade_series_window_size == DEFAULT_UPGRADE_SERIES_WINDOW_SIZE
+
+
+@pytest.mark.asyncio()
+async def test_policy_defaults_cover_every_policy_column(db: None) -> None:
+    """A new instances column must join the reset or the set of columns it keeps."""
+    async with get_db() as conn:
+        async with conn.execute("PRAGMA table_info(instances)") as cur:
+            columns = {row["name"] for row in await cur.fetchall()}
+    assert columns >= _RESET_KEEPS
+    assert columns - _RESET_KEEPS == set(_policy_defaults())
+
+
+def test_policy_defaults_match_instance_defaults() -> None:
+    """The reset writes the policy defaults the Add form pre-fills for a new instance."""
+    expected: dict[str, object] = {}
+    for policy in (MissingPolicy(), CutoffPolicy(), UpgradePolicy(), SchedulePolicy()):
+        expected.update(dataclasses.asdict(policy))
+    blank = blank_instance()
+    add_form: dict[str, object] = {}
+    for policy in (blank.missing, blank.cutoff, blank.upgrade, blank.schedule):
+        add_form.update(dataclasses.asdict(policy))
+    assert add_form == expected
+    assert _policy_defaults() == expected
 
 
 @pytest.mark.asyncio()
@@ -166,6 +229,8 @@ async def test_reset_all_instance_policy_leaves_tag_filters_alone(db: None) -> N
 async def test_reset_all_instance_policy_preserves_identity(
     seeded_instances: list[int],
 ) -> None:
+    before = await get_instance(seeded_instances[0], master_key=_MASTER_KEY)
+    assert before is not None
     await reset_all_instance_policy(master_key=_MASTER_KEY, supervisor=None)
     inst = await get_instance(seeded_instances[0], master_key=_MASTER_KEY)
     assert inst is not None
@@ -174,6 +239,15 @@ async def test_reset_all_instance_policy_preserves_identity(
     assert inst.core.url == "http://sonarr:8989"
     assert inst.core.api_key == "sonarr-key"  # Decrypted round-trip still works
     assert inst.core.enabled is True
+    assert inst.snapshot.monitored_total == 120
+    assert inst.snapshot.unreleased_count == 8
+    assert inst.snapshot.snapshot_refreshed_at is not None
+    assert inst.snapshot == before.snapshot
+    assert inst.timestamps.created_at == before.timestamps.created_at
+
+    disabled = await get_instance(seeded_instances[1], master_key=_MASTER_KEY)
+    assert disabled is not None
+    assert disabled.core.enabled is False
 
 
 @pytest.mark.asyncio()

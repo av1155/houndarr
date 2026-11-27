@@ -1,20 +1,22 @@
-"""Pinning tests for :class:`Instance` and its seven policy sub-structs.
+"""Pinning tests for :class:`Instance` and its eight sub-structs.
 
-Seven frozen, slotted dataclasses make up an :class:`Instance`:
+Eight frozen, slotted dataclasses make up an :class:`Instance`:
 :class:`InstanceCore`, :class:`MissingPolicy`, :class:`CutoffPolicy`,
 :class:`UpgradePolicy`, :class:`SchedulePolicy`,
-:class:`RuntimeSnapshot`, and :class:`InstanceTimestamps`.
-:class:`Instance` carries only the seven sub-struct fields and
-accepts only the seven sub-struct kwargs at construction time.
+:class:`TagFilterPolicy`, :class:`RuntimeSnapshot`, and
+:class:`InstanceTimestamps`.  :class:`Instance` carries only the eight
+sub-struct fields and accepts only the eight sub-struct kwargs at
+construction time.
 
 These tests lock the invariants that the sub-struct shape must keep
 through any future Instance changes:
 
 * every sub-struct is a frozen, slotted dataclass with the exact field
   list and defaults the plan specified
-* the seven sub-structs partition the historical flat surface
-  disjointly and exhaustively (no field dropped, no field renamed)
-* :class:`Instance` exposes exactly the seven sub-structs as its
+* the seven sub-structs other than :class:`TagFilterPolicy` partition
+  the historical flat surface disjointly and exhaustively (no field
+  dropped, no field renamed)
+* :class:`Instance` exposes exactly the eight sub-structs as its
   dataclass fields, each typed to its matching class
 * flat attribute access no longer works: reading ``instance.batch_size``
   must raise ``AttributeError`` so a regressed caller fails loudly
@@ -55,6 +57,7 @@ from houndarr.config import (
     DEFAULT_UPGRADE_HOURLY_CAP,
     DEFAULT_UPGRADE_LIDARR_SEARCH_MODE,
     DEFAULT_UPGRADE_READARR_SEARCH_MODE,
+    DEFAULT_UPGRADE_SERIES_WINDOW_SIZE,
     DEFAULT_UPGRADE_SONARR_SEARCH_MODE,
     DEFAULT_UPGRADE_WHISPARR_V2_SEARCH_MODE,
     DEFAULT_WHISPARR_V2_SEARCH_MODE,
@@ -276,6 +279,7 @@ def test_missing_policy_fields_in_declaration_order() -> None:
 def test_missing_policy_defaults_match_config() -> None:
     """Every MissingPolicy default flows from :mod:`houndarr.config`."""
     policy = MissingPolicy()
+    assert policy.missing_enabled is True
     assert policy.batch_size == DEFAULT_BATCH_SIZE
     assert policy.sleep_interval_mins == DEFAULT_SLEEP_INTERVAL_MINUTES
     assert policy.hourly_cap == DEFAULT_HOURLY_CAP
@@ -349,6 +353,7 @@ def test_upgrade_policy_defaults_match_config() -> None:
     )
     assert policy.upgrade_item_offset == 0
     assert policy.upgrade_series_offset == 0
+    assert policy.upgrade_series_window_size == DEFAULT_UPGRADE_SERIES_WINDOW_SIZE
 
 
 # SchedulePolicy.
@@ -547,7 +552,7 @@ def test_instance_rejects_pre_refactor_flat_kwargs() -> None:
     kwargs; sub-struct kwargs are the only accepted form.
 
     The kwargs travel through ``**dict`` so pyright cannot resolve them
-    against Instance's seven sub-struct __init__ parameters and (rightly)
+    against Instance's eight sub-struct __init__ parameters and (rightly)
     flag the negative case statically.  Runtime behaviour is identical.
     """
     legacy_flat_kwargs: dict[str, Any] = {

@@ -108,10 +108,12 @@ typed phrase required.
 
 Reverts every instance's policy columns to defaults:
 
+- Missing search toggle (turned back on)
 - Cadence (batch size, sleep interval, hourly cap, cooldown days)
 - Post-release grace, hot retry, and queue backpressure limits
 - Cutoff search settings (enabled / batch / cooldown / cap)
-- Upgrade search settings (enabled / batch / cooldown / cap)
+- Upgrade search settings (enabled / batch / cooldown / cap / series
+  window)
 - Per-app search modes (Sonarr / Lidarr / Readarr / Whisparr v2)
 - Allowed search window and search order
 - Pagination cursors (missing, cutoff) and upgrade-pool offsets

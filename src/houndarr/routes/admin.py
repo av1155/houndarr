@@ -115,17 +115,22 @@ async def admin_reset_instances(
         return _flash_response(
             request, tone="success", message="No instances configured: nothing to reset."
         )
+    message = f"Policy settings reset to defaults for {count} instance{'s' if count != 1 else ''}."
+    # The reset has committed, so a failed table refresh must not report the reset as failed.
+    try:
+        instances = await list_instances(master_key=master_key)
+        active_error_ids = await active_error_instance_ids()
+    except Exception:
+        logger.exception("Policy reset applied; refreshing the instance table failed")
+        instances = []
+    if not instances:
+        return _flash_response(request, tone="success", message=message)
     return _flash_response(
         request,
         tone="success",
-        message=(
-            f"Policy settings reset to defaults for {count} instance{'s' if count != 1 else ''}."
-        ),
+        message=message,
         template="partials/admin/reset_flash.html",
-        extra_context={
-            "instances": await list_instances(master_key=master_key),
-            "active_error_ids": await active_error_instance_ids(),
-        },
+        extra_context={"instances": instances, "active_error_ids": active_error_ids},
     )
 
 

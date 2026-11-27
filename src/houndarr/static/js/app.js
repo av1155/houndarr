@@ -40,22 +40,49 @@
   const TOAST_VISIBLE_MS = 2400;
   const TOAST_LEAVE_MS = 240;
   let toastTimer = null;
+  let shownToast = null;
+
+  // An open modal <dialog> sits in the top layer and makes the rest of the page inert, so the
+  // toast is cloned into it as a manual popover; the top layer also escapes the dialog's transform.
+  function toastFor(base) {
+    const dialogs = document.querySelectorAll('dialog[open]');
+    const dialog = dialogs[dialogs.length - 1];
+    if (!dialog || typeof base.showPopover !== 'function') return base;
+    let toast = dialog.querySelector(':scope > .toast');
+    if (!toast) {
+      toast = base.cloneNode(true);
+      toast.removeAttribute('id');
+      toast.setAttribute('popover', 'manual');
+      dialog.appendChild(toast);
+    }
+    return toast;
+  }
+
+  function setToastShown(toast, shown) {
+    toast.hidden = !shown;
+    if (!toast.hasAttribute('popover') || shown === toast.matches(':popover-open')) return;
+    if (shown) toast.showPopover();
+    else toast.hidePopover();
+  }
 
   function showToast(message) {
-    const toast = document.getElementById('toast');
-    if (!toast || !message) return;
+    const base = document.getElementById('toast');
+    if (!base || !message) return;
+    const toast = toastFor(base);
     const label = toast.querySelector('.toast__label');
     if (label) label.textContent = message;
     if (toastTimer !== null) {
       clearTimeout(toastTimer);
       toastTimer = null;
     }
+    if (shownToast && shownToast !== toast) setToastShown(shownToast, false);
+    shownToast = toast;
     toast.classList.remove('is-leaving');
-    toast.hidden = false;
+    setToastShown(toast, true);
     toastTimer = window.setTimeout(function () {
       toast.classList.add('is-leaving');
       toastTimer = window.setTimeout(function () {
-        toast.hidden = true;
+        setToastShown(toast, false);
         toast.classList.remove('is-leaving');
         toastTimer = null;
       }, TOAST_LEAVE_MS);

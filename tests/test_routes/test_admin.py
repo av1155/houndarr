@@ -191,6 +191,29 @@ def test_reset_instances_refreshes_instance_table(app: TestClient) -> None:
     assert "99 /" not in oob[1]
 
 
+def test_reset_instances_reports_success_when_table_refresh_fails(
+    app: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _login(app)
+    app.post(
+        "/settings/instances",
+        data={**_VALID_INSTANCE, "batch_size": "99"},
+        headers=csrf_headers(app),
+    )
+    monkeypatch.setattr(
+        "houndarr.routes.admin.active_error_instance_ids",
+        AsyncMock(side_effect=RuntimeError("read failed")),
+    )
+
+    resp = app.post("/settings/admin/reset-instances", headers=csrf_headers(app))
+
+    assert resp.status_code == 200
+    assert 'data-admin-flash-tone="success"' in resp.text
+    assert "hx-swap-oob" not in resp.text
+    assert f"{DEFAULT_BATCH_SIZE} / {DEFAULT_SLEEP_INTERVAL_MINUTES}m" in app.get("/settings").text
+
+
 def test_reset_instances_failure_returns_danger_flash_and_changes_nothing(
     app: TestClient,
     test_settings: AppSettings,

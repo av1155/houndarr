@@ -1034,3 +1034,76 @@ def test_admin_factory_reset_rate_limit_flash_renders(
         expect(page.locator("#toast")).to_be_hidden()
     finally:
         page.unroute(pattern)
+
+
+@pytest.mark.integration
+def test_error_toast_draws_above_open_instance_modal(
+    logged_in_page: Page, houndarr_url: str, mock_sonarr_url: str, console_guard
+) -> None:
+    """A failed request from the instance modal shows a toast the modal does not cover.
+
+    The modal is a top-layer <dialog>, so a toast left on <body> would sit
+    under its backdrop; the element-from-point check catches that where
+    ``to_be_visible`` alone would not.
+    """
+    for p in _EXPECTED_500_CONSOLE_NOISE:
+        console_guard.allow(p)
+    page = logged_in_page
+    page.goto(f"{houndarr_url}/settings")
+    page.get_by_role("button", name=re.compile(r"add\s*instance", re.I)).first.click()
+    add_form = page.locator('form[data-form-mode="add"]')
+    expect(add_form).to_be_visible()
+    add_form.locator('input[name="name"]').fill(f"E2E Toast {uuid.uuid4().hex[:8]}")
+    add_form.locator('select[name="type"]').select_option("sonarr")
+    add_form.locator('input[name="url"]').fill(mock_sonarr_url)
+    add_form.locator('input[name="api_key"]').fill("e2e-sonarr-key")
+    _wait_for_connection_ui_idle(page)
+
+    pattern = re.compile(r"/settings/instances/test-connection$")
+    page.route(pattern, lambda route: route.fulfill(status=500, body="Internal Server Error"))
+    try:
+        with page.expect_response(lambda r: "/settings/instances/test-connection" in r.url):
+            add_form.locator("button[data-test-connection-btn]").dispatch_event("click")
+        toast = page.locator("#add-instance-modal > .toast")
+        expect(toast).to_be_visible(timeout=4_000)
+        expect(toast).to_contain_text("Request failed (HTTP 500)")
+        uncovered = toast.evaluate(
+            """el => {
+                const r = el.getBoundingClientRect();
+                const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+                return el.contains(hit);
+            }"""
+        )
+        assert uncovered, "the toast is drawn under the instance modal"
+    finally:
+        page.unroute(pattern)
+
+
+@pytest.mark.integration
+def test_error_toast_skips_gets_and_reports_unreachable_server(
+    logged_in_page: Page, houndarr_url: str, console_guard
+) -> None:
+    """A failed GET stays silent (the dashboard polls); a mutation that never lands toasts."""
+    for p in [*_EXPECTED_500_CONSOLE_NOISE, r"net::ERR_FAILED"]:
+        console_guard.allow(p)
+    page = logged_in_page
+    page.goto(f"{houndarr_url}/settings")
+    probe = re.compile(r"/settings/toast-probe$")
+    page.route(
+        probe,
+        lambda route: (
+            route.fulfill(status=500, body="")
+            if route.request.method == "GET"
+            else route.abort("failed")
+        ),
+    )
+    request = """verb => htmx
+        .ajax(verb, '/settings/toast-probe', {target: '#admin-flash', swap: 'none'})
+        .then(() => 'done', () => 'done')"""
+    try:
+        page.evaluate(request, "GET")
+        expect(page.locator("#toast")).to_be_hidden()
+        page.evaluate(request, "POST")
+        expect(page.locator("#toast")).to_contain_text("Could not reach Houndarr", timeout=4_000)
+    finally:
+        page.unroute(probe)

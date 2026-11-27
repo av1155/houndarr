@@ -52,6 +52,7 @@ from houndarr.value_objects import ItemRef
 __all__ = [
     "_QUEUED_REASON",
     "_QUEUE_FETCH_FAILED_REASON",
+    "CycleReport",
     "_reset_random_deck",
     "run_instance_search",
 ]
@@ -81,6 +82,24 @@ _UPGRADE_SCAN_BUDGET_MAX = 40
 _UPGRADE_BATCH_HARD_CAP = 5
 _UPGRADE_HOURLY_CAP_HARD_CAP = 5
 _UPGRADE_MIN_COOLDOWN_DAYS = 7
+
+# 4xx codes that ask the client to come back later, so they pass like a 5xx.
+_RETRYABLE_CLIENT_STATUSES = frozenset({408, 429})
+
+
+@dataclass(slots=True)
+class CycleReport:
+    """What one cycle learned about its *arr, filled in as the cycle runs.
+
+    ``reached`` is set once the *arr answered a request with the data it
+    asked for (the queue status, a wanted page, the upgrade list), which
+    proves it is reachable and accepts the API key.  ``upgrade_deferred``
+    is set when the upgrade list could not be read for a reason that is
+    expected to pass.
+    """
+
+    reached: bool = False
+    upgrade_deferred: bool = False
 
 
 # ---------------------------------------------------------------------------
@@ -969,6 +988,25 @@ async def _fetch_pool_with_typed_wrap(
         raise EnginePoolFetchError(describe_exception(exc)) from exc
 
 
+def _upgrade_pool_failure(exc: EnginePoolFetchError) -> str | None:
+    """Return the error-row detail for an upgrade list the *arr refused, or ``None`` to defer.
+
+    A 3xx or 4xx does not pass on its own: a wrong API key, a reverse
+    proxy's login redirect (the client never follows redirects), a moved
+    URL base.  A 5xx, a 408 or 429, a transport error past the connect
+    and a payload that fails validation are expected to, so they defer.
+    """
+    cause = exc.__cause__
+    if isinstance(cause, httpx.HTTPStatusError):
+        status = cause.response.status_code
+        if status >= 500 or status in _RETRYABLE_CLIENT_STATUSES:
+            return None
+        return f"HTTP {status} from {cause.request.url.path}"
+    if isinstance(cause, (httpx.HTTPError, ValidationError)):
+        return None
+    return str(exc)
+
+
 # Unified search pass
 
 
@@ -1419,6 +1457,7 @@ async def _run_upgrade_pass(
     tag_filter_include_ids: frozenset[int] | None = None,
     tag_filter_exclude_ids: frozenset[int] | None = None,
     in_queue_fn: Callable[[SearchCandidate], Awaitable[bool]] | None = None,
+    report: CycleReport | None = None,
 ) -> int:
     """Execute the upgrade search pass for *instance*.
 
@@ -1441,9 +1480,14 @@ async def _run_upgrade_pass(
         in_queue_fn: Predicate from :func:`_download_queue_lookup`;
             candidates it reports as already downloading are skipped
             instead of dispatched.  ``None`` disables the check.
+        report: The cycle's :class:`CycleReport`; marked reached once the
+            upgrade list is read, or deferred when it could not be.
 
     Returns:
         Count of items searched in this upgrade pass.
+
+    Raises:
+        ClientTransportError: The upgrade list fetch could not connect.
     """
     batch_size = min(max(0, instance.upgrade.upgrade_batch_size), _UPGRADE_BATCH_HARD_CAP)
     hourly_cap = min(max(0, instance.upgrade.upgrade_hourly_cap), _UPGRADE_HOURLY_CAP_HARD_CAP)
@@ -1453,37 +1497,37 @@ async def _run_upgrade_pass(
     if batch_size == 0:
         return 0
 
-    # Fetch upgrade-eligible pool via the adapter.  A transient HTTP,
-    # transport, or wire-validation failure (the *arr is briefly
-    # unreachable or still rebuilding metadata) is treated as an empty
-    # pool for this cycle: the warning lands in the app log for
-    # operators, but no ``error`` row is written so a flaky *arr does
-    # not spam the in-app log feed every cycle.  The reconcile path
-    # (``Supervisor.refresh_snapshot``) still sees the same exception
-    # propagate through ``fetch_reconcile_sets`` and uses
-    # ``ReconcileSets.empty()`` to skip cooldown reconciliation, so
-    # upgrade cooldowns are preserved across transient failures.
+    # A transient failure (5xx, read timeout, the *arr still rebuilding
+    # metadata) defers the pass without a row, so a flaky *arr does not
+    # spam the log feed; the reconcile path keeps upgrade cooldowns
+    # across the same failure via ``ReconcileSets.empty()``.  A refused
+    # connection is an outage and a rejected request is a failure, and
+    # both must mark the instance failing.
     try:
         pool = await _fetch_pool_with_typed_wrap(adapter, instance)
     except EnginePoolFetchError as exc:
-        msg = str(exc)
-        cause = exc.__cause__
-        if isinstance(cause, (httpx.HTTPError, httpx.InvalidURL, ValidationError)):
-            logger.warning("[%s] upgrade pool fetch deferred: %s", instance.core.name, msg)
-            pool = []
-        else:
-            logger.warning("[%s] upgrade pool fetch failed: %s", instance.core.name, msg)
-            await _write_log(
-                instance.core.id,
-                None,
-                None,
-                SearchAction.error.value,
-                search_kind="upgrade",
-                cycle_id=cycle_id,
-                cycle_trigger=cycle_trigger,
-                message=f"upgrade pool fetch failed: {msg}",
-            )
+        if isinstance(exc.__cause__, (httpx.ConnectError, httpx.ConnectTimeout)):
+            raise ClientTransportError(f"upgrade pool fetch: {exc}") from exc.__cause__
+        failure = _upgrade_pool_failure(exc)
+        if failure is None:
+            logger.warning("[%s] upgrade pool fetch deferred: %s", instance.core.name, exc)
+            if report is not None:
+                report.upgrade_deferred = True
             return 0
+        logger.warning("[%s] upgrade pool fetch failed: %s", instance.core.name, exc)
+        await _write_log(
+            instance.core.id,
+            None,
+            None,
+            SearchAction.error.value,
+            search_kind="upgrade",
+            cycle_id=cycle_id,
+            cycle_trigger=cycle_trigger,
+            message=f"upgrade pool fetch failed: {failure}",
+        )
+        return 0
+    if report is not None:
+        report.reached = True
 
     # Advance series offset for series-based apps (Sonarr/Whisparr v2),
     # but only when the slice produced something. Rotating through an
@@ -1718,6 +1762,7 @@ async def run_instance_search(
     *,
     cycle_id: str | None = None,
     cycle_trigger: CycleTrigger | str = CycleTrigger.scheduled,
+    report: CycleReport | None = None,
 ) -> int:
     """Execute one search cycle for *instance*.
 
@@ -1741,6 +1786,8 @@ async def run_instance_search(
         instance: Fully-populated (decrypted) instance.
         master_key: Unused here but kept in signature for symmetry with
             supervisor; future callers may need it for re-encryption.
+        report: Optional :class:`CycleReport` the cycle fills in as it
+            runs, for the supervisor's health rows.
 
     Returns:
         Count of items searched in this cycle.
@@ -1751,6 +1798,7 @@ async def run_instance_search(
             master_key,
             cycle_id=cycle_id,
             cycle_trigger=cycle_trigger,
+            report=report if report is not None else CycleReport(),
         )
     except httpx.TransportError:
         raise
@@ -1768,6 +1816,7 @@ async def _run_instance_search_impl(
     *,
     cycle_id: str | None = None,
     cycle_trigger: CycleTrigger | str = CycleTrigger.scheduled,
+    report: CycleReport,
 ) -> int:
     """Cycle body; wrapped by :func:`run_instance_search` for typed errors.
 
@@ -1825,6 +1874,7 @@ async def _run_instance_search_impl(
         try:
             async with adapter.make_client(instance) as queue_client:
                 queue_status = await queue_client.get_queue_status()
+            report.reached = True
             total_queued = queue_status.total_count
             if total_queued >= instance.missing.queue_limit:
                 reason = f"queue backpressure ({total_queued}/{instance.missing.queue_limit})"
@@ -1927,6 +1977,7 @@ async def _run_instance_search_impl(
                         in_queue_fn=in_queue_fn,
                     ),
                 )
+            report.reached = True
             searched += missing_searched
             # In random mode the "next page" returned by the pass is
             # derived from a random pick, not a rotation offset, so
@@ -1978,6 +2029,7 @@ async def _run_instance_search_impl(
                         in_queue_fn=in_queue_fn,
                     ),
                 )
+            report.reached = True
             logger.info(
                 "[%s] cutoff pass complete: %d searched", instance.core.name, cutoff_searched
             )
@@ -2015,6 +2067,7 @@ async def _run_instance_search_impl(
                 tag_filter_include_ids=upgrade_tags.include_ids,
                 tag_filter_exclude_ids=upgrade_tags.exclude_ids,
                 in_queue_fn=in_queue_fn,
+                report=report,
             )
             logger.info(
                 "[%s] upgrade pass complete: %d searched",
@@ -2040,11 +2093,12 @@ async def _run_instance_search_impl(
         from houndarr.repositories.search_log import has_rows_for_cycle
 
         if not await has_rows_for_cycle(cycle_id_value):
-            message = (
-                "Run now finished: no wanted items to evaluate"
-                if _enabled_kinds(instance)
-                else "Run now finished: every search pass is disabled for this instance"
-            )
+            if report.upgrade_deferred:
+                message = "Run now finished: the upgrade list could not be read, try again shortly"
+            elif _enabled_kinds(instance):
+                message = "Run now finished: no wanted items to evaluate"
+            else:
+                message = "Run now finished: every search pass is disabled for this instance"
             # Message-only, like the reconnect rows: the logs page renders
             # ``reason or message``, so setting a reason here would shadow
             # the full sentence and both variants would display alike.

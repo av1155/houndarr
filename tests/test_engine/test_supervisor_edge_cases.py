@@ -15,6 +15,8 @@ from cryptography.fernet import Fernet
 
 from houndarr.database import get_db
 from houndarr.engine import supervisor as _supervisor_mod
+from houndarr.engine.retry import CycleOutcome
+from houndarr.engine.search_loop import CycleReport
 from houndarr.engine.supervisor import Supervisor
 from houndarr.services.instances import (
     CutoffPolicy,
@@ -117,7 +119,9 @@ async def _get_log_rows() -> list[dict[str, Any]]:
 async def test_run_now_accepted_for_enabled_instance(seeded_instances: None) -> None:
     """trigger_run_now returns 'accepted' for an enabled instance."""
     supervisor = Supervisor(master_key=MASTER_KEY)
-    with patch.object(supervisor, "_run_search_cycle", new_callable=AsyncMock, return_value=False):
+    with patch.object(
+        supervisor, "_run_search_cycle", new_callable=AsyncMock, return_value=CycleOutcome.ok
+    ):
         result = await supervisor.trigger_run_now(1)
     assert result == "accepted"
 
@@ -148,9 +152,9 @@ async def test_run_now_duplicate_returns_accepted(seeded_instances: None) -> Non
     supervisor = Supervisor(master_key=MASTER_KEY)
     long_running = asyncio.Event()
 
-    async def _slow_cycle(*args: object, **kwargs: object) -> bool:
+    async def _slow_cycle(*args: object, **kwargs: object) -> CycleOutcome:
         await long_running.wait()
-        return False
+        return CycleOutcome.ok
 
     with patch.object(supervisor, "_run_search_cycle", side_effect=_slow_cycle):
         r1 = await supervisor.trigger_run_now(1)
@@ -311,11 +315,14 @@ async def test_connection_recovery_logs_info(seeded_instances: None) -> None:
 
     call_count = 0
 
-    async def _run_search_side_effect(inst: Instance, mk: bytes, **kwargs: object) -> int:
+    async def _run_search_side_effect(
+        inst: Instance, mk: bytes, *, report: CycleReport, **kwargs: object
+    ) -> int:
         nonlocal call_count
         call_count += 1
         if call_count == 1:
             raise httpx.TransportError("Connection refused")
+        report.reached = True
         return 0
 
     cycle = 0

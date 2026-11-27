@@ -118,10 +118,6 @@ exactly ``page_size`` items (whether due to an off-by-one bug or a
 hostile endpoint); without it the loop would never terminate."""
 
 
-_WANTED_READ_ERRORS = (httpx.HTTPError, httpx.InvalidURL, ValueError, ClientError)
-"""What a failed ``/wanted`` page read raises; a payload that fails parsing is a ``ValueError``."""
-
-
 type WantedPageFetch[T] = Callable[..., Awaitable[WantedPage[T]]]
 """``async def(*, page, page_size)``: ``ArrClient.get_wanted_page`` bound to one kind."""
 
@@ -226,7 +222,7 @@ async def read_wanted[T](fetch_page: WantedPageFetch[T]) -> WantedWalk[T]:
             continue
         try:
             retry = await _read_pass(fetch_page, size)
-        except _WANTED_READ_ERRORS:
+        except (httpx.HTTPError, httpx.InvalidURL, ValueError, ClientError):
             break
         if retry.capped or retry.total() != total:
             break

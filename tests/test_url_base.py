@@ -5,9 +5,11 @@ from __future__ import annotations
 import asyncio
 import os
 import re
+import sqlite3
 import subprocess
 import sys
 from collections.abc import Iterator
+from contextlib import closing
 from pathlib import Path
 from typing import Any
 from urllib.parse import unquote
@@ -186,6 +188,12 @@ def test_invalid_url_base_is_a_fatal_config_error() -> None:
 def test_cli_exits_on_a_config_error(
     tmp_path: Path, args: list[str], env: dict[str, str], error: str
 ) -> None:
+    returncode, output = _run_cli(tmp_path, args, env)
+    assert returncode == 1, output
+    assert f"Configuration error: {error}" in output
+
+
+def _run_cli(tmp_path: Path, args: list[str], env: dict[str, str]) -> tuple[int, str]:
     clean_env = {
         key: value
         for key, value in os.environ.items()
@@ -200,9 +208,26 @@ def test_cli_exits_on_a_config_error(
         timeout=60,
         check=False,
     )
-    output = result.stdout + result.stderr
-    assert result.returncode == 1, output
-    assert f"Configuration error: {error}" in output
+    return result.returncode, result.stdout + result.stderr
+
+
+def test_cli_normalises_the_url_base_before_validating(tmp_path: Path) -> None:
+    # The auth error forces an exit after validation; the base itself must pass.
+    returncode, output = _run_cli(tmp_path, ["--url-base", "houndarr/", "--auth-mode", "proxy"], {})
+    assert returncode == 1, output
+    assert "Configuration error: HOUNDARR_AUTH_PROXY_HEADER" in output
+    assert "HOUNDARR_URL_BASE" not in output
+
+
+def test_cli_exits_when_the_database_bootstrap_fails(tmp_path: Path) -> None:
+    """A failure after the pool opens still ends the process instead of hanging."""
+    with closing(sqlite3.connect(tmp_path / "houndarr.db")) as conn:
+        conn.execute("CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
+        conn.execute("INSERT INTO settings VALUES ('schema_version', 'not-a-number')")
+        conn.commit()
+    returncode, output = _run_cli(tmp_path, [], {})
+    assert returncode == 1, output
+    assert "invalid literal for int()" in output
 
 
 # ---------------------------------------------------------------------------
@@ -605,6 +630,15 @@ def test_proxy_pages_need_the_auth_header_under_base(proxy_base_app: TestClient,
 @pytest.mark.parametrize("path", [f"{_BASE}/api/health", "/api/health"])
 def test_proxy_health_is_public_under_base(proxy_base_app: TestClient, path: str) -> None:
     assert proxy_base_app.get(path).status_code == 200
+
+
+@pytest.mark.parametrize(
+    "path", [f"{_BASE}/api/health/x", f"{_BASE}/api/healthz", f"{_BASE}/staticx"]
+)
+def test_proxy_near_miss_public_paths_need_the_header(
+    proxy_base_app: TestClient, path: str
+) -> None:
+    assert proxy_base_app.get(path, follow_redirects=False).status_code == 401
 
 
 @pytest.mark.usefixtures("_stub_factory_reset")

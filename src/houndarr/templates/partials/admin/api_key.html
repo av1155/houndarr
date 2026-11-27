@@ -27,7 +27,7 @@
         <h4 class="text-sm font-semibold text-slate-100">Houndarr API key</h4>
         <p class="text-xs text-slate-500 mt-0.5">
           Lets external read-only clients call
-          <code class="text-slate-400">/api/v1/widget</code>.
+          <code class="text-slate-400">{{ base_path }}/api/v1/widget</code>.
           Regenerating invalidates the old key immediately.
         </p>
       </div>
@@ -66,8 +66,8 @@
     <div class="flex flex-wrap gap-2">
       <form
         method="post"
-        action="/settings/api-key/generate"
-        hx-post="/settings/api-key/generate"
+        action="{{ base_path }}/settings/api-key/generate"
+        hx-post="{{ base_path }}/settings/api-key/generate"
         hx-target="#admin-api-key"
         hx-swap="outerHTML"
         hx-disabled-elt="find button"
@@ -88,14 +88,14 @@
       {% if api_key %}
       <form
         method="post"
-        action="/settings/api-key/revoke"
-        hx-post="/settings/api-key/revoke"
+        action="{{ base_path }}/settings/api-key/revoke"
+        hx-post="{{ base_path }}/settings/api-key/revoke"
         hx-target="#admin-api-key"
         hx-swap="outerHTML"
         hx-disabled-elt="find button"
         hx-confirm="Revoke the Houndarr API key?"
         data-confirm-title="Revoke Houndarr API key?"
-        data-confirm-body="External clients will receive 401 from /api/v1/widget until a new key is generated."
+        data-confirm-body="External clients will receive 401 from {{ base_path }}/api/v1/widget until a new key is generated."
         data-confirm-cta="Revoke key"
         data-confirm-tone="danger"
       >

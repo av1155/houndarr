@@ -42,18 +42,25 @@ _DEFAULT_PROBES: dict[str, dict[str, int]] = {
 }
 
 
-def _render_probes(*set_args: str) -> dict[str, dict[str, Any]]:
-    cmd = ["helm", "template", "houndarr", str(_CHART)]
-    for arg in set_args:
-        cmd += ["--set", arg]
+def _render(kind: str, *helm_args: str) -> dict[str, Any]:
+    cmd = ["helm", "template", "houndarr", str(_CHART), *helm_args]
     result = subprocess.run(cmd, capture_output=True, text=True)
     assert result.returncode == 0, result.stderr
-    statefulset = next(
-        doc
-        for doc in yaml.safe_load_all(result.stdout)
-        if doc is not None and doc["kind"] == "StatefulSet"
+    document: dict[str, Any] = next(
+        doc for doc in yaml.safe_load_all(result.stdout) if doc is not None and doc["kind"] == kind
     )
-    container = statefulset["spec"]["template"]["spec"]["containers"][0]
+    return document
+
+
+def _render_container(*set_args: str) -> dict[str, Any]:
+    helm_args = [token for arg in set_args for token in ("--set", arg)]
+    statefulset = _render("StatefulSet", *helm_args)
+    container: dict[str, Any] = statefulset["spec"]["template"]["spec"]["containers"][0]
+    return container
+
+
+def _render_probes(*set_args: str) -> dict[str, dict[str, Any]]:
+    container = _render_container(*set_args)
     probes: dict[str, dict[str, Any]] = {}
     for name in _DEFAULT_PROBES:
         probe = dict(container[name])
@@ -110,6 +117,41 @@ def test_overrides_reach_the_rendered_probes() -> None:
     ]
 
     assert _render_probes(*set_args) == expected
+
+
+@pytest.mark.parametrize(
+    ("set_args", "expected"),
+    [
+        pytest.param((), None, id="default"),
+        pytest.param(("env.urlBase=/houndarr",), "/houndarr", id="set"),
+        pytest.param(("env.urlBase=null",), None, id="reuse-values-without-key"),
+    ],
+)
+def test_url_base_sets_env_only_when_configured(
+    set_args: tuple[str, ...], expected: str | None
+) -> None:
+    env = {e["name"]: e.get("value") for e in _render_container(*set_args)["env"]}
+    assert env.get("HOUNDARR_URL_BASE") == expected
+
+
+@pytest.mark.parametrize(
+    ("url_base", "expected"),
+    [
+        pytest.param(None, "/", id="default"),
+        pytest.param("", "/", id="empty"),
+        pytest.param("/", "/", id="slash"),
+        pytest.param("/houndarr", "/houndarr", id="set"),
+        pytest.param("houndarr/", "/houndarr", id="normalised"),
+        pytest.param("/apps/houndarr/", "/apps/houndarr", id="nested"),
+    ],
+)
+def test_ingress_path_follows_url_base(url_base: str | None, expected: str) -> None:
+    helm_args = ["--set", "ingress.enabled=true"]
+    if url_base is not None:
+        helm_args += ["--set-string", f"env.urlBase={url_base}"]
+    path = _render("Ingress", *helm_args)["spec"]["rules"][0]["http"]["paths"][0]
+    assert path["path"] == expected
+    assert path["pathType"] == "Prefix"
 
 
 def test_chart_passes_strict_lint() -> None:

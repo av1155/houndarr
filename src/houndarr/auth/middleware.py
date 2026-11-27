@@ -27,18 +27,22 @@ from houndarr.auth import rate_limit as _rate_limit
 from houndarr.auth.csrf import _CSRF_PROTECTED_METHODS, validate_csrf
 from houndarr.auth.session import CSRF_COOKIE_NAME, validate_session
 from houndarr.auth.setup import is_setup_complete
+from houndarr.base_path import app_url, route_path
 from houndarr.config import get_settings
 from houndarr.repositories import widget_api_key as _widget_api_key_repo
 
 logger = logging.getLogger(__name__)
 
-# Routes that don't require authentication
+_HEALTH_PATH = "/api/health"
+_STATIC_PATH = "/static"
+
+# Routes that don't require authentication, matched exactly; static files
+# are public through _is_static_path.
 _PUBLIC_PATHS = frozenset(
     [
         "/setup",
         "/login",
-        "/api/health",
-        "/static",
+        _HEALTH_PATH,
     ]
 )
 
@@ -48,6 +52,11 @@ _API_KEY_PATHS = frozenset(["/api/v1/widget"])
 # We allow it without CSRF/session validation so stale legacy sessions
 # can always be cleared after upgrades.
 _LOGOUT_PATH = "/logout"
+
+
+def _is_static_path(path: str) -> bool:
+    """Return True for the static mount, bounded so ``/staticx`` stays protected."""
+    return path == _STATIC_PATH or path.startswith(f"{_STATIC_PATH}/")
 
 
 class AuthMiddleware(BaseHTTPMiddleware):
@@ -83,7 +92,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
         Per-request dispatch keeps the middleware thin and lets each
         branch handle its own public-path and CSRF rules.
         """
-        path = request.url.path
+        path = route_path(request)
 
         if path in _API_KEY_PATHS:
             return await self._dispatch_api_key(request, call_next)
@@ -144,15 +153,15 @@ class AuthMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         # Always allow public paths and static files
-        if any(path.startswith(p) for p in _PUBLIC_PATHS):
+        if path in _PUBLIC_PATHS or _is_static_path(path):
             return await call_next(request)
 
         setup_done = await is_setup_complete()
         if not setup_done:
-            return RedirectResponse(url="/setup", status_code=302)
+            return RedirectResponse(url=app_url(request, "/setup"), status_code=302)
 
         if not await validate_session(request):
-            return RedirectResponse(url="/login", status_code=302)
+            return RedirectResponse(url=app_url(request, "/login"), status_code=302)
 
         # CSRF check on state-changing methods
         if request.method in _CSRF_PROTECTED_METHODS and not await validate_csrf(request):
@@ -180,14 +189,14 @@ class AuthMiddleware(BaseHTTPMiddleware):
         path: str,
     ) -> Response:
         # Health check and static assets remain public
-        if path.startswith("/api/health") or path.startswith("/static"):
+        if path == _HEALTH_PATH or _is_static_path(path):
             return await call_next(request)
 
         # Setup, login, and logout serve no purpose in proxy mode
         if path in _proxy_auth._PROXY_DEAD_PATHS:
-            return RedirectResponse(url="/", status_code=302)
+            return RedirectResponse(url=app_url(request, "/"), status_code=302)
         if path == _LOGOUT_PATH and request.method == "POST":
-            logout_response = RedirectResponse(url="/", status_code=302)
+            logout_response = RedirectResponse(url=app_url(request, "/"), status_code=302)
             logout_response.delete_cookie(CSRF_COOKIE_NAME)
             return logout_response
 

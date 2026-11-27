@@ -39,3 +39,15 @@ Selector labels used by matchLabels and service selectors.
 app.kubernetes.io/name: {{ include "houndarr.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
+
+{{/*
+env.urlBase normalised the way Houndarr reads HOUNDARR_URL_BASE: a leading
+slash added and one trailing slash dropped.  Empty when served from the root.
+*/}}
+{{- define "houndarr.urlBase" -}}
+{{- $base := .Values.env.urlBase | default "" | trimSuffix "/" -}}
+{{- if and $base (not (hasPrefix "/" $base)) -}}
+{{- $base = printf "/%s" $base -}}
+{{- end -}}
+{{- $base -}}
+{{- end }}

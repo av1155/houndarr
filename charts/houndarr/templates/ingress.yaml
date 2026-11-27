@@ -18,7 +18,7 @@ spec:
     - host: {{ .Values.ingress.host | quote }}
       http:
         paths:
-          - path: /
+          - path: {{ include "houndarr.urlBase" . | default "/" | quote }}
             pathType: Prefix
             backend:
               service:

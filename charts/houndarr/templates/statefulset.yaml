@@ -79,6 +79,10 @@ spec:
             - name: HOUNDARR_LOG_RETENTION_DAYS
               value: {{ .Values.env.logRetentionDays | quote }}
             {{- end }}
+            {{- if .Values.env.urlBase }}
+            - name: HOUNDARR_URL_BASE
+              value: {{ .Values.env.urlBase | quote }}
+            {{- end }}
             {{- with .Values.extraEnv }}
             {{- toYaml . | nindent 12 }}
             {{- end }}

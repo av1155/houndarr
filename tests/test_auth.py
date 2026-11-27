@@ -1137,14 +1137,14 @@ def test_api_key_paths_constant_has_exact_contents() -> None:
 
 @pytest.mark.pinning()
 def test_public_paths_constant_has_exact_contents() -> None:
-    """_PUBLIC_PATHS must stay exactly {/setup, /login, /api/health, /static}.
+    """_PUBLIC_PATHS must stay exactly {/setup, /login, /api/health}.
 
-    Each entry is matched via ``path.startswith`` in the middleware, so
-    the breadth is deliberately small; widening it without updating
-    every consumer (proxy-auth dead-path redirects included) would
-    silently bypass the auth check.
+    Each entry is matched exactly in the middleware (``/static`` is a
+    separate segment-bounded check), so the breadth is deliberately
+    small; widening it without updating every consumer (proxy-auth
+    dead-path redirects included) would silently bypass the auth check.
     """
-    assert frozenset(["/setup", "/login", "/api/health", "/static"]) == _PUBLIC_PATHS
+    assert frozenset(["/setup", "/login", "/api/health"]) == _PUBLIC_PATHS
 
 
 # Proxy-auth seam

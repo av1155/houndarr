@@ -34,6 +34,14 @@ The `test_settings` fixture resets `_auth._serializer`,
 `_auth._setup_complete`, and `_auth._login_attempts` so auth state does
 not bleed between tests.
 
+`db` closes its pools on teardown. A test that calls `set_db_path` and
+`init_db()` itself (migration and self-heal tests, factory reset,
+`bootstrap_non_web`) must close them too, or the run hangs at exit when
+that test runs alone: aiosqlite threads are non-daemon. Those files use
+a file-local autouse `_close_pools` fixture, and
+`tests/test_gates/test_db_pool_teardown_gate.py` runs one such test per
+file in its own interpreter.
+
 ## FK constraint pattern
 
 Tests touching `cooldowns` or `search_log` must seed the `instances` table

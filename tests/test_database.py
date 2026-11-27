@@ -2,15 +2,25 @@
 
 from __future__ import annotations
 
+from collections.abc import AsyncGenerator
 from pathlib import Path
 from typing import Any
 
 import aiosqlite
 import pytest
+import pytest_asyncio
 
-from houndarr.database import get_db, init_db, set_db_path
+from houndarr.database import close_all_pools, get_db, init_db, set_db_path
 from houndarr.repositories.search_log import purge_old_logs
 from houndarr.repositories.settings import get_setting, set_setting
+
+
+# Many tests here open pools without the ``db`` fixture; an open pool's
+# aiosqlite threads are non-daemon and keep the interpreter from exiting.
+@pytest_asyncio.fixture(autouse=True)
+async def _close_pools() -> AsyncGenerator[None]:
+    yield
+    await close_all_pools()
 
 
 @pytest.mark.asyncio()

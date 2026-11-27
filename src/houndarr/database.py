@@ -192,12 +192,13 @@ CREATE INDEX IF NOT EXISTS idx_search_log_action_time
 _db_path: str = ""
 
 # Per-path pool registry.  ``_db_path`` is mutated per-test by the ``db``
-# fixture in tests/conftest.py (~2580 tests rely on per-test temp files);
-# a single global pool would bind to the first path and break every
-# subsequent test.  Keying on the path lets the same module-level state
-# back both the production lifecycle (one path, one pool) and the test
-# suite (many paths, many short-lived pools, all torn down by the
-# autouse close_all_pools fixture).
+# fixture in tests/conftest.py and by tests that build their own temp
+# databases; a single global pool would bind to the first path and break
+# every subsequent test.  Keying on the path lets the same module-level
+# state back both the production lifecycle (one path, one pool) and the
+# test suite (many paths, many short-lived pools).  A pool stays open
+# until close_all_pools() runs, and its non-daemon aiosqlite threads keep
+# the interpreter from exiting until then.
 _pools: dict[str, SQLiteConnectionPool] = {}
 
 
@@ -282,9 +283,9 @@ def _get_or_create_pool() -> SQLiteConnectionPool:
 async def close_all_pools() -> None:
     """Close every per-path pool and clear the registry.
 
-    Called from the FastAPI lifespan exit and from the autouse pytest
-    teardown so per-test temp DB files are released and their dedicated
-    aiosqlite threads exit cleanly.
+    Called from the FastAPI lifespan exit, from factory reset before it
+    deletes the database files, and from test teardowns, so temp DB files
+    are released and their dedicated aiosqlite threads exit cleanly.
     """
     pools = list(_pools.values())
     _pools.clear()

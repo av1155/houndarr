@@ -44,6 +44,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Dashboard and widget cooldown counts leave out cooldowns past their pass's cooldown window, so those items count as Eligible again instead of gated. (#924)
 - Lidarr upgrade search no longer picks a cutoff-unmet album that a PostgreSQL-backed Lidarr skipped while paging tied dates, once a second full read at another page size finds it. (#924)
 - A Lidarr or Readarr upgrade pass whose cutoff list read stops on a failed page is skipped for that cycle, as a failed library read is, instead of searching the unread cutoff-unmet items as upgrades. (#924)
+- `Upgrade Series Window (per cycle)` shows in the Add and Edit instance forms after switching `Type` to Sonarr or Whisparr v2, and hides for other types. (#907)
 
 ### Security
 

@@ -25,6 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Items keep their cooldowns, instead of being searched again early, when a wanted list's page reads do not add up because it changed mid-read or a PostgreSQL-backed \*arr paged tied dates inconsistently (Readarr cutoff excepted). (#897)
 - `incomplete; keeping those cooldowns` is also logged once when a wanted list's page reads do not add up on six snapshot refreshes in a row. (#897)
 - With `Queue Limit` set, a non-JSON answer from the \*arr's queue status (such as a proxy login page) lets the search proceed instead of failing the whole cycle. (#833)
+- `Reset all instance settings` also turns `Enable missing search` back on and resets `Upgrade Series Window (per cycle)` to `5`. (#909)
 
 ### Security
 

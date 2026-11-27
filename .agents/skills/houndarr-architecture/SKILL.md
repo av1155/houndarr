@@ -92,9 +92,9 @@ src/houndarr/
 - **Domain models** (parsed result types): `MissingEpisode`,
   `LibraryMovie`, etc. are frozen dataclasses, one per client file
   next to the client that builds them. Every frozen dataclass uses
-  `slots=True`. `Instance` composes seven frozen sub-structs (`core`,
-  `missing`, `cutoff`, `upgrade`, `schedule`, `snapshot`, `timestamps`)
-  and is itself frozen and slotted; callers evolve it through
+  `slots=True`. `Instance` composes eight frozen sub-structs (`core`,
+  `missing`, `cutoff`, `upgrade`, `schedule`, `tag_filter`, `snapshot`,
+  `timestamps`) and is itself frozen and slotted; callers evolve it through
   `dataclasses.replace`. `AppSettings` is the only deliberately-mutable
   dataclass (env overrides applied in-place on the lazy singleton).
 

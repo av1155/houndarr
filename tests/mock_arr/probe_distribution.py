@@ -37,7 +37,7 @@ from cryptography.fernet import Fernet
 
 import houndarr.engine.search_loop as _search_loop
 from houndarr.crypto import encrypt
-from houndarr.database import get_db, init_db, set_db_path
+from houndarr.database import close_all_pools, get_db, init_db, set_db_path
 from houndarr.engine.search_loop import run_instance_search
 from houndarr.services.instances import (
     CutoffPolicy,
@@ -184,7 +184,10 @@ async def _temp_db(master_key: bytes) -> AsyncIterator[None]:
                 (1, "Probe Sonarr 1", "sonarr", "http://localhost/sonarr", encrypted),
             )
             await conn.commit()
-        yield
+        try:
+            yield
+        finally:
+            await close_all_pools()
 
 
 async def _wipe_cooldowns_and_log() -> None:

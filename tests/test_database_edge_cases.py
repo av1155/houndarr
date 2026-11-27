@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import asyncio
 import time
+from collections.abc import AsyncGenerator
 from datetime import UTC, datetime, timedelta
 
 import pytest
+import pytest_asyncio
 
 from houndarr.database import (
     _connection_factory,
@@ -18,6 +20,15 @@ from houndarr.database import (
 )
 from houndarr.repositories.search_log import purge_old_logs
 from houndarr.repositories.settings import get_setting, set_setting
+
+
+# The pool isolation test opens pools without the ``db`` fixture; an open
+# pool's aiosqlite threads are non-daemon and keep the interpreter from exiting.
+@pytest_asyncio.fixture(autouse=True)
+async def _close_pools() -> AsyncGenerator[None]:
+    yield
+    await close_all_pools()
+
 
 # ---------------------------------------------------------------------------
 # purge_old_logs
@@ -365,13 +376,11 @@ async def test_pool_factory_applies_full_pragma_stack(db: None) -> None:
 
 @pytest.mark.asyncio()
 async def test_pool_per_db_path_isolation(tmp_data_dir: str) -> None:
-    """Setting a new ``_db_path`` builds a fresh pool, leaving the old one closed.
+    """Setting a new ``_db_path`` builds a fresh pool; the old one stays registered.
 
-    The test fixture pattern relies on this: every test calls
-    ``set_db_path`` to a unique tmp file, and the autouse teardown
-    closes the previous pool.  A regression that shares one pool
-    across paths would silently route writes to the wrong DB on the
-    next test.
+    Every test points ``set_db_path`` at its own tmp file, so a
+    regression that shares one pool across paths would silently route
+    writes to the wrong DB on the next test.
     """
     import os
 

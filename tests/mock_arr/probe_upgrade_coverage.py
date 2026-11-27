@@ -40,7 +40,7 @@ import threading
 import time
 from collections import Counter
 from collections.abc import AsyncIterator
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 from typing import Any
 from unittest.mock import patch
@@ -51,7 +51,7 @@ from cryptography.fernet import Fernet
 
 import houndarr.engine.search_loop as _search_loop
 from houndarr.crypto import encrypt
-from houndarr.database import get_db, init_db, set_db_path
+from houndarr.database import close_all_pools, get_db, init_db, set_db_path
 from houndarr.engine.search_loop import run_instance_search
 from houndarr.services.instances import (
     CutoffPolicy,
@@ -181,7 +181,10 @@ async def _temp_db(master_key: bytes, instance: Instance) -> AsyncIterator[None]
                 ),
             )
             await conn.commit()
-        yield
+        try:
+            yield
+        finally:
+            await close_all_pools()
 
 
 async def _read_dispatched_per_item() -> Counter[int]:
@@ -303,27 +306,12 @@ async def _run_probe(
                             ) as cur:
                                 row = await cur.fetchone()
                         if row is not None:
-                            new_upgrade = UpgradePolicy(
-                                upgrade_enabled=current.upgrade.upgrade_enabled,
-                                upgrade_batch_size=current.upgrade.upgrade_batch_size,
-                                upgrade_cooldown_days=current.upgrade.upgrade_cooldown_days,
-                                upgrade_hourly_cap=current.upgrade.upgrade_hourly_cap,
-                                upgrade_sonarr_search_mode=current.upgrade.upgrade_sonarr_search_mode,
-                                upgrade_lidarr_search_mode=current.upgrade.upgrade_lidarr_search_mode,
-                                upgrade_readarr_search_mode=current.upgrade.upgrade_readarr_search_mode,
-                                upgrade_whisparr_v2_search_mode=current.upgrade.upgrade_whisparr_v2_search_mode,
+                            new_upgrade = replace(
+                                current.upgrade,
                                 upgrade_item_offset=int(row[1] or 0),
                                 upgrade_series_offset=int(row[0] or 0),
                             )
-                            current = Instance(
-                                core=current.core,
-                                missing=current.missing,
-                                cutoff=current.cutoff,
-                                upgrade=new_upgrade,
-                                schedule=current.schedule,
-                                snapshot=current.snapshot,
-                                timestamps=current.timestamps,
-                            )
+                            current = replace(current, upgrade=new_upgrade)
                         fake_time[0] += advance
 
                 dispatched = await _read_dispatched_per_item()

@@ -209,7 +209,7 @@ async def read_wanted[T](fetch_page: WantedPageFetch[T]) -> WantedWalk[T]:
     the page cap.  Every read must report the same total, so a list that
     changed meanwhile stays churned, as does one whose re-read fails.  A
     covered list is complete and lists each item once, in the order first
-    read.
+    read, keeping the first read's rows as ``paged_rows``.
     """
     first = await _read_pass(fetch_page, _RECONCILE_PAGE_SIZE)
     if not first.reordered():
@@ -228,7 +228,7 @@ async def read_wanted[T](fetch_page: WantedPageFetch[T]) -> WantedWalk[T]:
             break
         items.extend(_first_of_each(retry, seen))
         if len(seen) == total:
-            return WantedWalk(items, complete=True)
+            return WantedWalk(items, complete=True, paged_rows=first.items)
     return _verdict(first)
 
 

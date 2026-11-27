@@ -21,7 +21,7 @@ import respx
 
 from houndarr.clients.base import ReconcileSets, WantedPage, WantedWalk, WantedWalks
 from houndarr.database import get_db
-from houndarr.engine.adapters import _common
+from houndarr.engine.adapters import _common, get_adapter
 from houndarr.engine.adapters import lidarr as lidarr_adapter
 from houndarr.engine.adapters import radarr as radarr_adapter
 from houndarr.engine.adapters import readarr as readarr_adapter
@@ -33,6 +33,7 @@ from houndarr.engine.adapters._common import (
     walk_wanted,
 )
 from houndarr.engine.supervisor import Supervisor
+from houndarr.errors import ClientError
 from houndarr.services.instances import InstanceType, get_instance
 from tests.mock_arr._common import arm_wanted_fault
 from tests.mock_arr.server import SeedConfig, create_app
@@ -542,6 +543,35 @@ async def test_a_readarr_cutoff_tie_split_still_loses_the_cooldown(
 
 @pytest.mark.asyncio()
 @respx.mock
+async def test_a_recovered_cutoff_album_keeps_the_upgrade_cooldown_its_cycle_stamps(
+    seeded_instances: None,
+) -> None:
+    """The cycle's exclusion read skips the album too, so its upgrade pool still holds it."""
+    data = _serve_mock(_LARGE).lidarr
+    assert len(data.cutoff_ids) > _RECONCILE_PAGE_SIZE
+    arm_wanted_fault(data, "cutoff", 2, "tie_split", page_size=_RECONCILE_PAGE_SIZE, sticky=True)
+    instance = make_instance(
+        instance_id=3, itype=InstanceType.lidarr, url=f"{_MOCK}/lidarr", upgrade_enabled=True
+    )
+    async with get_adapter(InstanceType.lidarr).make_client(instance) as client:
+        pool = {
+            album.album_id for album in await lidarr_adapter.fetch_upgrade_pool(client, instance)
+        }
+    skipped = data.fired_faults[0]["skipped"]
+    read = next(i for i in data.cutoff_ids if i != skipped)
+    assert skipped in pool
+    assert read not in pool
+    await _seed_cooldowns(3, "album", [(skipped, "upgrade"), (read, "upgrade")])
+
+    await Supervisor(master_key=MASTER_KEY)._refresh_one_snapshot(instance)
+
+    rows = await _cooldown_rows(3)
+    assert (skipped, "upgrade") in rows
+    assert (read, "upgrade") not in rows
+
+
+@pytest.mark.asyncio()
+@respx.mock
 async def test_the_next_steady_refresh_reaps_what_left_during_a_moving_one(
     seeded_instances: None,
 ) -> None:
@@ -704,12 +734,14 @@ class _Pages:
         *,
         fail_on: int | None = None,
         fail_size: int | None = None,
+        fail_with: Exception | None = None,
         counts_rows: bool = False,
         totals: bool = True,
     ) -> None:
         self.rows = list(range(total))
         self.fail_on = fail_on
         self.fail_size = fail_size
+        self.fail_with = fail_with or httpx.ConnectError("refused")
         self.counts_rows = counts_rows
         self.totals = totals
         self.total_override: int | None = None
@@ -723,7 +755,7 @@ class _Pages:
     ) -> WantedPage[int]:
         self.calls.append((page, page_size))
         if page == self.fail_on and page_size > 1 and self.fail_size in (None, page_size):
-            raise httpx.ConnectError("refused")
+            raise self.fail_with
         if hook := self.before.get((page, page_size)):
             hook(self.rows)
         view = self.views.get((page, page_size), lambda rows: rows)(list(self.rows))
@@ -783,9 +815,12 @@ async def test_walk_stopped_by_the_page_cap_reports_incomplete(
 
 
 @pytest.mark.asyncio()
-async def test_the_page_cap_wins_over_a_reordered_read(monkeypatch: pytest.MonkeyPatch) -> None:
+@pytest.mark.parametrize("size", [500, 600], ids=["fills_the_cap", "past_the_cap"])
+async def test_the_page_cap_wins_over_a_reordered_read(
+    monkeypatch: pytest.MonkeyPatch, size: int
+) -> None:
     monkeypatch.setattr(_common, "_RECONCILE_MAX_PAGES", 2)
-    fetch = _Pages(600)
+    fetch = _Pages(size)
     fetch.views[(2, 250)] = _swap(249, 250)
     walk = await read_wanted(fetch)
     assert (walk.complete, walk.churned) == (False, False)
@@ -836,6 +871,7 @@ async def test_a_tie_split_is_read_again_and_covered() -> None:
     walk = await read_wanted(fetch)
     assert (walk.complete, walk.churned) == (True, False)
     assert walk.items == [*range(250), *range(251, 600), 250]
+    assert walk.first_read == [*range(250), 249, *range(251, 600)]
     assert fetch.walk_sizes() == [239, 250]
 
 
@@ -846,6 +882,7 @@ async def test_a_tie_split_both_reads_share_is_covered_by_the_third() -> None:
     fetch.views[(2, 239)] = _serve_twice(serve=238, instead_of=250)
     walk = await read_wanted(fetch)
     assert (walk.complete, sorted(walk.items)) == (True, list(range(600)))
+    assert walk.first_read.count(249) == 2
     assert fetch.walk_sizes() == [239, 250, 261]
 
 
@@ -870,8 +907,18 @@ async def test_a_reread_whose_total_moved_does_not_cover_the_list() -> None:
 
 
 @pytest.mark.asyncio()
-async def test_a_reread_that_fails_leaves_the_list_churned() -> None:
-    fetch = _Pages(600, fail_on=2, fail_size=239)
+@pytest.mark.parametrize(
+    "error",
+    [
+        httpx.ConnectError("refused"),
+        httpx.InvalidURL("bad url"),
+        ValueError("not json"),
+        ClientError("bad response"),
+    ],
+    ids=["http", "url", "body", "client"],
+)
+async def test_a_reread_that_fails_leaves_the_list_churned(error: Exception) -> None:
+    fetch = _Pages(600, fail_on=2, fail_size=239, fail_with=error)
     fetch.views[(2, 250)] = _swap(249, 250)
     walk = await read_wanted(fetch)
     assert (walk.complete, walk.churned) == (False, True)

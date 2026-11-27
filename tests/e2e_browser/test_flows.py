@@ -12,7 +12,7 @@ import uuid
 from contextlib import suppress
 
 import pytest
-from playwright.sync_api import Locator, Page, Route, expect
+from playwright.sync_api import Locator, Page, Request, Route, expect
 
 from houndarr.config import DEFAULT_BATCH_SIZE, DEFAULT_SLEEP_INTERVAL_MINUTES
 
@@ -431,13 +431,27 @@ def test_test_connection_4xx_renders_error(
 
 
 @pytest.mark.integration
+@pytest.mark.parametrize(
+    ("tested_url", "result_status"),
+    [(None, 200), ("http://127.0.0.1", 422)],
+    ids=["success", "failure"],
+)
 def test_connection_result_for_edited_details_is_dropped(
-    logged_in_page: Page, houndarr_url: str, mock_sonarr_url: str
+    logged_in_page: Page,
+    houndarr_url: str,
+    mock_sonarr_url: str,
+    console_guard,
+    tested_url: str | None,
+    result_status: int,
 ) -> None:
-    """A test result that lands after the URL was edited must not verify the new URL."""
+    """A test result that lands after the URL was edited neither verifies nor fails the new URL."""
+    for p in _EXPECTED_422_CONSOLE_NOISE:
+        console_guard.allow(p)
     page = logged_in_page
     page.goto(f"{houndarr_url}/settings")
     add_form = _open_filled_add_form(page, mock_sonarr_url, f"E2E Stale {uuid.uuid4().hex[:8]}")
+    if tested_url is not None:
+        add_form.locator('input[name="url"]').fill(tested_url)
     status = page.locator("#instance-connection-status")
     prompt = "Test connection before adding this instance."
 
@@ -462,13 +476,135 @@ def test_connection_result_for_edited_details_is_dropped(
             lambda r: "/settings/instances/test-connection" in r.url
         ) as resp_info:
             held[0].continue_()
-        assert resp_info.value.status == 200, resp_info.value.status
+        assert resp_info.value.status == result_status, resp_info.value.status
         _wait_for_htmx_idle(page)
 
         expect(status).to_contain_text(prompt)
         expect(status).not_to_contain_text("Connected")
+        expect(status).not_to_contain_text("blocked")
         expect(add_form.locator("#instance-submit-btn")).to_be_disabled()
         expect(add_form.locator("#instance-connection-verified")).to_have_value("false")
+        expect(test_btn).not_to_have_class(re.compile(r"\bis-(success|error)\b"))
+    finally:
+        page.unroute(pattern)
+
+
+@pytest.mark.integration
+def test_save_refusal_for_edited_details_is_dropped(
+    logged_in_page: Page, houndarr_url: str, mock_sonarr_url: str, console_guard
+) -> None:
+    """A save refusal that lands after the URL was edited keeps the edit's prompt."""
+    for p in _EXPECTED_422_CONSOLE_NOISE:
+        console_guard.allow(p)
+    page = logged_in_page
+    page.goto(f"{houndarr_url}/settings")
+    add_form = _open_filled_add_form(
+        page, mock_sonarr_url, f"E2E Stale save {uuid.uuid4().hex[:8]}"
+    )
+    _test_connection_and_wait_for_success(
+        page, add_form, add_form.locator("button[data-test-connection-btn]")
+    )
+    add_form.locator('input[name="cooldown_days"]').fill("99999")
+    status = page.locator("#instance-connection-status")
+    changed = "Connection details changed. Test again to enable Add Instance."
+
+    held: list[Route] = []
+
+    def hold(route: Route) -> None:
+        if route.request.method == "POST":
+            held.append(route)
+        else:
+            route.continue_()
+
+    pattern = re.compile(r"/settings/instances$")
+    page.route(pattern, hold)
+    try:
+        add_form.locator("#instance-submit-btn").click()
+        add_form.locator('input[name="url"]').fill("http://10.255.255.1:8989")
+        _wait_for_connection_ui_idle(page)
+        expect(status).to_contain_text(changed)
+        assert len(held) == 1, f"expected one held save request, got {len(held)}"
+
+        with page.expect_response(
+            lambda r: r.url.endswith("/settings/instances") and r.request.method == "POST"
+        ) as resp_info:
+            held[0].continue_()
+        assert resp_info.value.status == 422, resp_info.value.status
+        _wait_for_htmx_idle(page)
+
+        expect(status).to_contain_text(changed)
+        expect(status).not_to_contain_text("Cooldown days")
+        expect(add_form.locator("#instance-submit-btn")).to_be_disabled()
+    finally:
+        page.unroute(pattern)
+
+
+@pytest.mark.integration
+def test_double_click_on_add_instance_saves_once(
+    logged_in_page: Page, houndarr_url: str, mock_sonarr_url: str
+) -> None:
+    """The second click of a double-click on Save must not add a second copy."""
+    page = logged_in_page
+    instance_name = f"E2E Double {uuid.uuid4().hex[:8]}"
+    page.goto(f"{houndarr_url}/settings")
+    add_form = _open_filled_add_form(page, mock_sonarr_url, instance_name)
+    _test_connection_and_wait_for_success(
+        page, add_form, add_form.locator("button[data-test-connection-btn]")
+    )
+
+    saves: list[str] = []
+
+    def record(request: Request) -> None:
+        if request.method == "POST" and request.url.endswith("/settings/instances"):
+            saves.append(request.url)
+
+    page.on("request", record)
+    add_form.locator("#instance-submit-btn").dblclick()
+    rows = page.locator("#instance-tbody tr").filter(has_text=instance_name)
+    expect(rows).to_have_count(1, timeout=10_000)
+    expect(page.locator("dialog#add-instance-modal[open]")).to_have_count(0)
+    _wait_for_htmx_idle(page)
+    assert len(saves) == 1, f"double-click sent {len(saves)} saves"
+
+    page.reload()
+    expect(page.locator("#instance-tbody tr").filter(has_text=instance_name)).to_have_count(1)
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("failure", "message"),
+    [("http-404", "Request failed (HTTP 404)"), ("network", "Could not reach Houndarr")],
+)
+def test_instance_dialog_that_fails_to_open_shows_a_toast(
+    logged_in_page: Page, houndarr_url: str, console_guard, failure: str, message: str
+) -> None:
+    """A dialog whose form fails to load (a 404 or no answer) shows a toast instead of nothing.
+
+    Edit on a row deleted in another tab gets that 404; the Add button's
+    request takes the same path and needs no instance to exist.
+    """
+    for p in [
+        r"Failed to load resource: the server responded with a status of 404",
+        r"Response Status Error Code 404",
+        r"net::ERR_FAILED",
+    ]:
+        console_guard.allow(p)
+    page = logged_in_page
+    page.goto(f"{houndarr_url}/settings")
+
+    def fail(route: Route) -> None:
+        if failure == "http-404":
+            route.fulfill(status=404, body="Not found")
+        else:
+            route.abort("failed")
+
+    pattern = re.compile(r"/settings/instances/add-form$")
+    page.route(pattern, fail)
+    try:
+        page.get_by_role("button", name=re.compile(r"add\s*instance", re.I)).first.click()
+        expect(page.locator("#toast")).to_be_visible(timeout=4_000)
+        expect(page.locator("#toast")).to_contain_text(message)
+        expect(page.locator("dialog#add-instance-modal[open]")).to_have_count(0)
     finally:
         page.unroute(pattern)
 

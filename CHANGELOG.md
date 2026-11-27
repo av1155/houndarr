@@ -57,6 +57,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A save refused for a search setting, such as `Cooldown (days)` above 3650, keeps `Add Instance` or `Save Changes` enabled, so fixing the field saves without a new connection test. (#931)
 - `Test Connection` and `Save Changes` in the Edit dialog of an instance deleted in another tab show `Instance not found.` in the dialog instead of a `Request failed (HTTP 404)` toast. (#931)
 - Clicking `Run now` again while it shows `Queued` keeps the button on `Running…` until the new request finishes, instead of re-enabling it early. (#931)
+- A double-click on `Add Instance` adds the instance once, instead of adding two identical instances that both get searched. (#931)
+- `Edit` on an instance deleted in another tab, or any instance dialog that fails to open, shows an error toast instead of doing nothing. (#931)
 
 ### Security
 

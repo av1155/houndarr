@@ -165,6 +165,10 @@ function initSettingsPage() {
       return addInstanceModalContent.querySelector('#instance-test-connection-btn');
     }
 
+    function getSubmitButton() {
+      return addInstanceModalContent.querySelector('#instance-submit-btn');
+    }
+
     function isConnectionGuardedFormLoaded() {
       return Boolean(addInstanceModalContent.querySelector('#instance-connection-verified'));
     }
@@ -485,6 +489,12 @@ function initSettingsPage() {
         triggerEl.dataset.connectionFieldsVersion = String(connectionFieldsVersion);
         if (isTestButton) {
           setConnectionTestButtonState('testing');
+          return;
+        }
+        // A second click while this save runs, or while the dialog closes after it, saves a copy.
+        const submitBtn = getSubmitButton();
+        if (submitBtn) {
+          submitBtn.disabled = true;
         }
       },
       { signal },
@@ -548,7 +558,18 @@ function initSettingsPage() {
       'htmx:afterRequest',
       (evt) => {
         const triggerEl = evt.detail.elt;
-        if (!triggerEl || !triggerEl.matches('[data-test-connection-btn="true"]')) {
+        if (!triggerEl) {
+          return;
+        }
+        if (triggerEl.matches('form[data-form-mode]')) {
+          // A saved instance keeps Save off while the dialog closes; a refused save hands it back.
+          const submitBtn = getSubmitButton();
+          if (submitBtn && !evt.detail.successful) {
+            submitBtn.disabled = !isConnectionVerified();
+          }
+          return;
+        }
+        if (!triggerEl.matches('[data-test-connection-btn="true"]')) {
           return;
         }
 
@@ -615,18 +636,29 @@ function initSettingsPage() {
       { signal },
     );
 
+    // app.js toasts failed mutations only, since the dashboard polls; opening this dialog is a click.
+    function endModalOpen(evt, failureMessage) {
+      if (pendingModalShow && evt.detail.target === addInstanceModalContent) {
+        window.houndarrShowToast(failureMessage);
+      }
+      pendingModalShow = false;
+    }
+
     document.body.addEventListener(
       'htmx:responseError',
-      () => {
-        pendingModalShow = false;
+      (evt) => {
+        endModalOpen(
+          evt,
+          `Request failed (HTTP ${evt.detail.xhr.status}). Reload the page and try again.`,
+        );
       },
       { signal },
     );
 
     document.body.addEventListener(
       'htmx:sendError',
-      () => {
-        pendingModalShow = false;
+      (evt) => {
+        endModalOpen(evt, 'Could not reach Houndarr. Check that it is running, then try again.');
       },
       { signal },
     );

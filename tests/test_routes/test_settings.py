@@ -921,7 +921,7 @@ def test_remote_refusal_asks_for_a_new_test(
 
 
 def test_test_connection_for_a_deleted_instance_shows_in_the_dialog(app: TestClient) -> None:
-    """htmx-config swaps a 422 only, so a 404 here left the old status and a toast (#931)."""
+    """422 is the only error htmx-config swaps; a 404 left the old status and a toast (#931)."""
     _login(app)
     resp = app.post(
         "/settings/instances/test-connection",

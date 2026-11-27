@@ -204,10 +204,12 @@ async def fetch_upgrade_pool(
     Returns monitored albums with files, less every album the
     ``wanted/cutoff`` list returned, which the cutoff pass searches.  The
     list is read as reconcile reads it (:func:`walk_wanted`), so a tie
-    split a re-read covers stays excluded.  A list that moved mid-read
-    excludes the albums it read, so an album it slid past may join this
-    cycle's pool.  A page that fails raises: excluding part of the list
-    would search cutoff-unmet albums as upgrades.
+    split a re-read covers stays excluded.  A list that moved mid-read,
+    or a tie split whose re-read failed, excludes the albums it read, so
+    an album it slid past or the split skipped may join this cycle's
+    pool.  A page of the first read that fails raises: excluding the
+    pages before it would search every unread cutoff-unmet album as an
+    upgrade.
 
     Args:
         client: An open :class:`LidarrClient` context.

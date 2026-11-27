@@ -4,8 +4,8 @@ Their upgrade pool is every monitored album or book with a file, minus
 the cutoff-unmet list, which the cutoff pass already searches.  That list
 is read the way reconcile reads it, so a tie split a re-read covers stays
 excluded, and reconcile builds its upgrade set from the same function.
-A page that fails ends the read: the pass defers or writes its error row
-instead of searching with part of the list excluded.
+A page of the first read that fails ends it: the pass defers or writes
+its error row instead of searching with part of the list excluded.
 """
 
 from __future__ import annotations
@@ -56,6 +56,10 @@ def _instance(instance_id: int, itype: InstanceType, app: str, **kwargs: Any) ->
     )
 
 
+def _cutoff_route(app: str) -> str:
+    return f"{_MOCK}/{app}/api/v1/wanted/cutoff"
+
+
 async def _pool_matching_reconcile(module: Any, instance: Any) -> set[int]:
     """Return the cycle's upgrade pool ids, after checking reconcile's upgrade set matches it."""
     async with module.make_client(instance) as client:
@@ -95,6 +99,22 @@ async def test_a_tie_split_a_reread_covers_keeps_the_album_out_of_the_pool() -> 
 
     assert data.fired_faults[0]["skipped"] in data.cutoff_ids
     assert pool == data.upgrade_ids
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_a_tie_split_whose_reread_fails_leaves_only_the_skipped_album_in_the_pool() -> None:
+    """The first read covered every row but the split's, so the pass still runs."""
+    respx.get(_cutoff_route("lidarr"), params={"pageSize": "239"}).mock(
+        return_value=httpx.Response(503)
+    )
+    data = _serve_mock(_LARGE).lidarr
+    arm_wanted_fault(data, "cutoff", 2, "tie_split", page_size=_RECONCILE_PAGE_SIZE, sticky=True)
+    instance = _instance(3, InstanceType.lidarr, "lidarr")
+
+    pool = await _pool_matching_reconcile(lidarr_adapter, instance)
+
+    assert pool == data.upgrade_ids | {data.fired_faults[0]["skipped"]}
 
 
 @pytest.mark.asyncio()
@@ -168,8 +188,21 @@ async def test_a_cutoff_list_past_the_page_cap_warns_and_excludes_what_it_read(
     ]
 
 
-def _cutoff_route(app: str) -> str:
-    return f"{_MOCK}/{app}/api/v1/wanted/cutoff"
+@pytest.mark.asyncio()
+@respx.mock
+async def test_the_readarr_page_cap_warning_counts_books_not_files(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    monkeypatch.setattr(_common, "_RECONCILE_MAX_PAGES", 1)
+    _serve_mock(SeedConfig(readarr_authors=200, readarr_cutoff_files=2))
+
+    with caplog.at_level(logging.WARNING, logger=readarr_adapter.__name__):
+        await _pool_matching_reconcile(
+            readarr_adapter, _instance(4, InstanceType.readarr, "readarr")
+        )
+
+    [warning] = [r.getMessage() for r in caplog.records if r.name == readarr_adapter.__name__]
+    assert f"after {_RECONCILE_PAGE_SIZE // 2} books;" in warning
 
 
 @pytest.mark.asyncio()

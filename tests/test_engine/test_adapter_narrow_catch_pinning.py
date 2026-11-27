@@ -8,9 +8,10 @@ pool.  Anything else (``KeyError``, ``RuntimeError``, etc.) propagates to
 the search_loop wrap (:func:`_fetch_pool_with_typed_wrap`), which
 converts it to :class:`~houndarr.errors.EnginePoolFetchError`.
 
-Lidarr and Readarr catch nothing: a cutoff page that fails ends the
+Lidarr and Readarr catch nothing here: a cutoff page that fails ends the
 exclusion read, so the pass defers or writes its error row instead of
-searching cutoff-unmet items as upgrades.
+searching cutoff-unmet items as upgrades.  Only the walk's own tie-split
+re-read swallows a failure, keeping what the first read excluded.
 """
 
 from __future__ import annotations

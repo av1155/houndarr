@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock
 import httpx
 import pytest
 
+from houndarr.clients.base import WantedPage
 from houndarr.clients.readarr import MissingBook, ReadarrClient
 from houndarr.engine.adapters import _common
 from houndarr.engine.adapters.readarr import (
@@ -426,7 +427,8 @@ class TestFetchInstanceSnapshot:
         assert snap.monitored_total == 251
 
     @pytest.mark.asyncio()
-    async def test_a_cutoff_walk_that_fails_keeps_its_row_total(self):
+    async def test_a_cutoff_walk_that_fails_fails_the_snapshot(self):
+        """As a failed missing walk does, so the dashboard keeps its last good count."""
         client = AsyncMock(spec=ReadarrClient)
         client.get_wanted_total.side_effect = lambda kind: {"missing": 1, "cutoff": 3}[kind]
         serve_wanted(client, missing=[_make_book(book_id=1)])
@@ -439,6 +441,24 @@ class TestFetchInstanceSnapshot:
 
         client.get_wanted_page.side_effect = page
 
+        with pytest.raises(httpx.ReadTimeout):
+            await fetch_instance_snapshot(client, _make_instance())
+
+    @pytest.mark.asyncio()
+    async def test_a_cutoff_list_that_moved_counts_the_books_it_read(self):
+        client = AsyncMock(spec=ReadarrClient)
+        client.get_wanted_total.side_effect = lambda kind: {"missing": 0, "cutoff": 5}[kind]
+        rows = [_make_book(book_id=7), _make_book(book_id=7), _make_book(book_id=8)]
+
+        async def page(kind: str, *, page: int, page_size: int) -> WantedPage[Any]:
+            chunk = rows[:page_size] if kind == "cutoff" and page == 1 else []
+            # The size-1 count read sees a fourth row that is gone by page 1.
+            total = 4 if kind == "cutoff" and page_size == 1 else len(chunk)
+            ids = tuple(b.book_id for b in chunk)
+            return WantedPage(items=chunk, ids=ids, total_records=total, total_counts_rows=True)
+
+        client.get_wanted_page.side_effect = page
+
         snap = await fetch_instance_snapshot(client, _make_instance())
 
-        assert snap.monitored_total == 4
+        assert snap.monitored_total == 2

@@ -205,8 +205,8 @@ async def fetch_upgrade_pool(
     list is read as reconcile reads it (:func:`walk_wanted`).  Readarr
     counts that list by file, so a tie split there goes unseen and its
     skipped book may join this cycle's pool, as may one a list that moved
-    mid-read slid past.  A page that fails raises: excluding part of the
-    list would search cutoff-unmet books as upgrades.
+    mid-read slid past.  A page that fails raises: excluding the pages
+    before it would search every unread cutoff-unmet book as an upgrade.
 
     Args:
         client: An open :class:`ReadarrClient` context.
@@ -221,7 +221,7 @@ async def fetch_upgrade_pool(
             "[%s] cutoff exclusion walk hit its page cap after %d books; "
             "the upgrade pool may include some that are still cutoff-unmet",
             instance.core.name,
-            len(cutoff.items),
+            len({item.book_id for item in cutoff.items}),
         )
     return await _library_upgrade_pool(client, cutoff.items)
 

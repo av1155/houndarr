@@ -419,8 +419,9 @@ async def compute_default_snapshot[T](
       cheap ``pageSize=1`` probe.  An app whose cutoff total counts
       rows (Readarr: one per below-cutoff file) passes *cutoff_id_fn*,
       and the cutoff part counts the distinct ids of the cutoff walk
-      instead, falling back to the probe when that walk raises or
-      stops at the page cap.
+      instead, falling back to the probe when that walk stops at the
+      page cap.  A cutoff walk that raises fails the snapshot, as the
+      missing walk does.
     - ``unreleased_count``: walks ``/wanted/missing`` once via
       :func:`walk_wanted` and counts items whose
       ``anchor_fn(item)`` resolves as still-in-the-future per
@@ -476,11 +477,8 @@ async def _distinct_cutoff_total(
     walks: WantedWalks | None,
     id_fn: Callable[[Any], int],
 ) -> int:
-    """Return how many distinct items the cutoff list holds, or its row total when unread."""
-    try:
-        walk: WantedWalk[Any] | None = await walk_wanted(walks, "cutoff", client.get_wanted_page)
-    except _WANTED_READ_ERRORS:
-        walk = None
-    if walk is None or walk.capped:
+    """Return how many distinct items the cutoff list holds, or its row total past the page cap."""
+    walk = await walk_wanted(walks, "cutoff", client.get_wanted_page)
+    if walk.capped:
         return await client.get_wanted_total("cutoff")
     return len({id_fn(item) for item in walk.items})

@@ -28,6 +28,8 @@ from datetime import datetime
 from functools import partial
 from typing import Any, Protocol
 
+import httpx
+
 from houndarr.clients.base import (
     ArrClient,
     InstanceSnapshot,
@@ -41,6 +43,7 @@ from houndarr.engine.candidates import (
     _is_unreleased,
     _is_unreleased_dt,
 )
+from houndarr.errors import ClientError
 
 
 class _UpgradeFilterable(Protocol):
@@ -202,9 +205,11 @@ async def read_wanted[T](fetch_page: WantedPageFetch[T]) -> WantedWalk[T]:
     When a steady list came back with a row repeated and another skipped
     (:meth:`_Pass.reordered`), each size in
     :data:`_RECONCILE_RETRY_PAGE_SIZES` reads it again until the reads
-    together cover every item.  Every read must report the same total, so
-    a list that changed meanwhile stays churned.  A covered list is
-    complete and lists each item once, in the order first read.
+    together cover every item, skipping a size whose read would stop at
+    the page cap.  Every read must report the same total, so a list that
+    changed meanwhile stays churned, as does one whose re-read fails.  A
+    covered list is complete and lists each item once, in the order first
+    read.
     """
     first = await _read_pass(fetch_page, _RECONCILE_PAGE_SIZE)
     if not first.reordered():
@@ -213,7 +218,12 @@ async def read_wanted[T](fetch_page: WantedPageFetch[T]) -> WantedWalk[T]:
     seen: set[int] = set()
     items = _first_of_each(first, seen)
     for size in _RECONCILE_RETRY_PAGE_SIZES:
-        retry = await _read_pass(fetch_page, size)
+        if len(first.ids) >= size * _RECONCILE_MAX_PAGES:
+            continue
+        try:
+            retry = await _read_pass(fetch_page, size)
+        except (httpx.HTTPError, httpx.InvalidURL, ValueError, ClientError):
+            break
         if retry.capped or retry.total() != total:
             break
         items.extend(_first_of_each(retry, seen))

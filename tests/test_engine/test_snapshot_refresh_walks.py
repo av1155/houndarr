@@ -670,6 +670,25 @@ async def test_disabling_an_instance_ends_its_moving_streak(
     assert _churn_lines(caplog) == [_churn_line("missing", n) for n in (*range(1, 6), *range(1, 6))]
 
 
+@pytest.mark.asyncio()
+@respx.mock
+async def test_disabling_an_instance_lets_its_next_incomplete_list_warn_again(
+    seeded_instances: None, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    monkeypatch.setattr(_common, "_RECONCILE_MAX_PAGES", 1)
+    _serve_mock()
+    instance = make_instance(instance_id=1, itype=InstanceType.sonarr, url=f"{_MOCK}/sonarr")
+    supervisor = Supervisor(master_key=MASTER_KEY)
+
+    with caplog.at_level(logging.DEBUG, logger="houndarr.engine.supervisor"):
+        await supervisor._refresh_one_snapshot(instance)
+        await supervisor._refresh_one_snapshot(instance)
+        await supervisor.stop_instance_task(1)
+        await supervisor._refresh_one_snapshot(instance)
+
+    assert _incomplete(caplog) == [_warning("missing"), _still("missing"), _warning("missing")]
+
+
 class _Pages:
     """A ``/wanted`` list read through ``get_wanted_page``; ids are its rows.
 
@@ -684,11 +703,13 @@ class _Pages:
         total: int,
         *,
         fail_on: int | None = None,
+        fail_size: int | None = None,
         counts_rows: bool = False,
         totals: bool = True,
     ) -> None:
         self.rows = list(range(total))
         self.fail_on = fail_on
+        self.fail_size = fail_size
         self.counts_rows = counts_rows
         self.totals = totals
         self.total_override: int | None = None
@@ -701,7 +722,7 @@ class _Pages:
         self, kind: str = "missing", *, page: int, page_size: int
     ) -> WantedPage[int]:
         self.calls.append((page, page_size))
-        if page == self.fail_on and page_size > 1:
+        if page == self.fail_on and page_size > 1 and self.fail_size in (None, page_size):
             raise httpx.ConnectError("refused")
         if hook := self.before.get((page, page_size)):
             hook(self.rows)
@@ -846,6 +867,28 @@ async def test_a_reread_whose_total_moved_does_not_cover_the_list() -> None:
     walk = await read_wanted(fetch)
     assert (walk.complete, walk.churned) == (False, True)
     assert fetch.walk_sizes() == [239, 250]
+
+
+@pytest.mark.asyncio()
+async def test_a_reread_that_fails_leaves_the_list_churned() -> None:
+    fetch = _Pages(600, fail_on=2, fail_size=239)
+    fetch.views[(2, 250)] = _swap(249, 250)
+    walk = await read_wanted(fetch)
+    assert (walk.complete, walk.churned) == (False, True)
+    assert walk.items.count(249) == 2
+    assert fetch.walk_sizes() == [239, 250]
+
+
+@pytest.mark.asyncio()
+async def test_a_reread_that_would_stop_at_the_page_cap_is_skipped(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(_common, "_RECONCILE_MAX_PAGES", 3)
+    fetch = _Pages(720)
+    fetch.views[(2, 250)] = _swap(249, 250)
+    walk = await read_wanted(fetch)
+    assert (walk.complete, sorted(walk.items)) == (True, list(range(720)))
+    assert fetch.walk_sizes() == [250, 261]
 
 
 @pytest.mark.asyncio()

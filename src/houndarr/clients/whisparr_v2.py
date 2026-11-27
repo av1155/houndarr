@@ -17,7 +17,7 @@ from houndarr.clients._wire_models import (
     WhisparrV2LibraryEpisode,
     WhisparrV2WantedEpisode,
 )
-from houndarr.clients.base import ArrClient, WantedKind
+from houndarr.clients.base import ArrClient, WantedKind, WantedPage
 
 __all__ = ["LibraryWhisparrV2Episode", "MissingWhisparrV2Episode", "WhisparrV2Client"]
 
@@ -84,8 +84,14 @@ class WhisparrV2Client(ArrClient):
         Returns:
             List of :class:`MissingWhisparrV2Episode` dataclasses, oldest first.
         """
-        envelope = await self._fetch_wanted_page("missing", page=page, page_size=page_size)
-        return [_parse_episode(w) for w in envelope.records]
+        return (await self.get_wanted_page("missing", page=page, page_size=page_size)).items
+
+    async def get_wanted_page(
+        self, kind: WantedKind, *, page: int, page_size: int
+    ) -> WantedPage[MissingWhisparrV2Episode]:
+        """Return one page of ``/wanted/{kind}`` episodes with its ids and total."""
+        envelope = await self._fetch_wanted_page(kind, page=page, page_size=page_size)
+        return self._wanted_page(kind, envelope, [_parse_episode(w) for w in envelope.records])
 
     async def search(self, item_id: int) -> None:
         """Trigger an automatic episode search in Whisparr v2.
@@ -131,8 +137,7 @@ class WhisparrV2Client(ArrClient):
         Returns:
             List of :class:`MissingWhisparrV2Episode` dataclasses.
         """
-        envelope = await self._fetch_wanted_page("cutoff", page=page, page_size=page_size)
-        return [_parse_episode(w) for w in envelope.records]
+        return (await self.get_wanted_page("cutoff", page=page, page_size=page_size)).items
 
     async def get_wanted_total(self, kind: WantedKind) -> int:
         """Return the totalRecords count for ``wanted/{kind}`` via a size-1 probe.

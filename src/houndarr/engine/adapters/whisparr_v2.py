@@ -414,8 +414,8 @@ async def fetch_reconcile_sets(
     one rotation period.  An upgrade-disabled instance short-circuits
     to an empty upgrade set so no library traffic is paid.
     """
-    missing = await walk_wanted(walks, "missing", client.get_missing)
-    cutoff = await walk_wanted(walks, "cutoff", client.get_cutoff_unmet)
+    missing = await walk_wanted(walks, "missing", client.get_wanted_page)
+    cutoff = await walk_wanted(walks, "cutoff", client.get_wanted_page)
     missing_set: frozenset[tuple[str, int]] | None = None
     if missing.complete:
         missing_set = _whisparr_v2_leaf_pairs(missing.items)

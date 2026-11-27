@@ -322,8 +322,8 @@ async def fetch_reconcile_sets(
     ``upgrade_enabled`` is false the upgrade set short-circuits to
     empty so the library scan is skipped.
     """
-    missing = await walk_wanted(walks, "missing", client.get_missing)
-    cutoff = await walk_wanted(walks, "cutoff", client.get_cutoff_unmet)
+    missing = await walk_wanted(walks, "missing", client.get_wanted_page)
+    cutoff = await walk_wanted(walks, "cutoff", client.get_wanted_page)
     missing_set: frozenset[tuple[str, int]] | None = None
     if missing.complete:
         missing_set = _book_leaf_pairs(missing.items)
@@ -333,9 +333,12 @@ async def fetch_reconcile_sets(
     upgrade_set: frozenset[tuple[str, int]] = frozenset()
     if instance.upgrade.upgrade_enabled:
         # The cycle's pool excludes only the first
-        # _UPGRADE_CUTOFF_EXCLUSION_HARD_CAP pages of this same sorted list,
-        # so excluding more here would reap upgrade cooldowns it still stamps.
-        excluded = cutoff.items[: _UPGRADE_CUTOFF_EXCLUSION_HARD_CAP * _CUTOFF_EXCLUSION_PAGE_SIZE]
+        # _UPGRADE_CUTOFF_EXCLUSION_HARD_CAP pages of this same sorted list, as
+        # its plain paged reads return them, so excluding more here (an item a
+        # re-read recovered included) would reap upgrade cooldowns it still stamps.
+        excluded = cutoff.first_read[
+            : _UPGRADE_CUTOFF_EXCLUSION_HARD_CAP * _CUTOFF_EXCLUSION_PAGE_SIZE
+        ]
         exclusion = {item.book_id for item in excluded}
         upgrade_candidates = [
             adapt_upgrade(item, instance) for item in await _library_upgrade_pool(client, exclusion)

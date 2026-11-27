@@ -81,7 +81,7 @@ just e2e-down                   # tear the stack down
 ```
 
 Markers: `@pytest.mark.integration` (12 async engine-cycle cases in
-`tests/test_e2e/` + 27 Playwright cases in `tests/e2e_browser/`; browser
+`tests/test_e2e/` + 28 Playwright cases in `tests/e2e_browser/`; browser
 tree excluded from default collection via `norecursedirs`),
 `@pytest.mark.pinning` (characterisation tests, runs in default suite).
 Fixture graph, FK-seeding pattern, and route-test helpers live in the

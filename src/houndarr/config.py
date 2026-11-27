@@ -289,25 +289,44 @@ def _parse_log_retention_days(raw: str) -> int:
 
 
 # The value lands in HTML, JS, and Location headers, so only plain path segments pass.
-_URL_BASE_RE = re.compile(r"^(?:/[A-Za-z0-9._~-]+)+$")
+_URL_BASE_RE = re.compile(r"(?:/[A-Za-z0-9._~-]+)+")
+
+# Unprefixed requests (healthcheck, widget) still route, so a base whose first
+# segment is one of the app's own would swallow them.
+_URL_BASE_RESERVED_SEGMENTS = frozenset(
+    {"api", "docs", "login", "logout", "logs", "openapi.json", "settings", "setup", "static"}
+)
 
 
 def _parse_url_base(raw: str) -> str:
     """Normalise HOUNDARR_URL_BASE to ``/houndarr`` form, or ``""`` for the root.
 
-    Invalid values log a warning and fall back to the root.
+    Adds a missing leading ``/`` and drops one trailing ``/``; anything
+    else invalid is left for :meth:`AppSettings.validate_auth_config` to
+    reject, so the env-var fallback in :func:`get_settings` never raises.
     """
-    value = raw.strip().strip("/")
+    if not raw:
+        return ""
+    value = raw if raw.startswith("/") else f"/{raw}"
+    return value.removesuffix("/")
+
+
+def _url_base_error(value: str) -> str | None:
+    """Return why *value* cannot serve as the URL base, or ``None`` if it can."""
     if not value:
-        return ""
-    value = f"/{value}"
-    if not _URL_BASE_RE.match(value) or any(seg in (".", "..") for seg in value.split("/")):
-        logger.warning(
-            "HOUNDARR_URL_BASE=%r is not a valid URL path; serving from the root instead",
-            raw,
+        return None
+    segments = value.split("/")[1:]
+    if not _URL_BASE_RE.fullmatch(value) or any(seg in (".", "..") for seg in segments):
+        return (
+            "HOUNDARR_URL_BASE must be a path such as '/houndarr' whose segments use "
+            f"only letters, digits, '.', '_', '~' and '-', got {value!r}"
         )
-        return ""
-    return value
+    if segments[0].lower() in _URL_BASE_RESERVED_SEGMENTS:
+        return (
+            f"HOUNDARR_URL_BASE {value!r} starts with '/{segments[0]}', which Houndarr "
+            "already serves; use another prefix such as '/houndarr'"
+        )
+    return None
 
 
 def _parse_update_check_repo(raw: str) -> str:
@@ -509,12 +528,15 @@ class AppSettings:
         return self._trusted_proxy_cache
 
     def validate_auth_config(self) -> list[str]:
-        """Return fatal configuration errors for authentication settings.
+        """Return fatal configuration errors for authentication and URL settings.
 
         Returns:
             List of error messages.  Empty means the configuration is valid.
         """
         errors: list[str] = []
+        url_base_error = _url_base_error(self.url_base)
+        if url_base_error:
+            errors.append(url_base_error)
         if self.cookie_samesite not in ("lax", "strict"):
             errors.append(
                 f"HOUNDARR_COOKIE_SAMESITE must be 'lax' or 'strict', got '{self.cookie_samesite}'"

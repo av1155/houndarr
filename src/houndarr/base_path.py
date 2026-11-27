@@ -8,12 +8,17 @@ sent to the browser.
 
 from __future__ import annotations
 
+from urllib.parse import urlsplit
+
 from fastapi import Request
-from starlette.types import ASGIApp, Receive, Scope, Send
+from starlette.datastructures import URL
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
+
+_REDIRECT_STATUSES = frozenset({301, 302, 303, 307, 308})
 
 
 class BasePathMiddleware:
-    """Normalise every request onto ``base_path`` and expose it as ``root_path``."""
+    """Normalise every request onto ``base_path`` and keep redirects path-only."""
 
     def __init__(self, app: ASGIApp, base_path: str) -> None:
         self.app = app
@@ -21,27 +26,76 @@ class BasePathMiddleware:
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         """Prefix the request path when the proxy stripped it, then delegate."""
-        base = self.base_path
-        if not base or scope["type"] not in ("http", "websocket"):
+        if scope["type"] not in ("http", "websocket"):
             await self.app(scope, receive, send)
             return
-
-        path: str = scope["path"]
-        raw_path: bytes | None = scope.get("raw_path")
-        if path == base:
-            # Serve the bare prefix as the dashboard rather than a 404.
-            path = f"{base}/"
-            if raw_path is not None:
-                raw_path += b"/"
-        elif not path.startswith(f"{base}/"):
-            path = f"{base}{path}"
-            if raw_path is not None:
-                raw_path = base.encode() + raw_path
-
-        scope = {**scope, "path": path, "root_path": base}
-        if raw_path is not None:
-            scope["raw_path"] = raw_path
+        if self.base_path:
+            scope = _rebase(scope, self.base_path)
+        if scope["type"] == "http":
+            send = _path_only_redirects(scope, send)
         await self.app(scope, receive, send)
+
+
+def _rebase(scope: Scope, base: str) -> Scope:
+    """Return *scope* with its path under *base* and ``root_path`` set to it.
+
+    Leading slashes after the base collapse to one, so an nginx
+    ``location /houndarr`` that strips into ``//login`` still routes.
+    """
+    path: str = scope["path"]
+    has_base = path == base or path.startswith(f"{base}/")
+    rest = path[len(base) :] if has_base else path
+    rebased = {**scope, "path": f"{base}/{rest.lstrip('/')}", "root_path": base}
+
+    raw_path: bytes | None = scope.get("raw_path")
+    if raw_path is not None:
+        raw_base = base.encode()
+        raw_has_base = raw_path == raw_base or raw_path.startswith(raw_base + b"/")
+        if raw_has_base == has_base:
+            raw_rest = raw_path[len(raw_base) :] if raw_has_base else raw_path
+            rebased["raw_path"] = raw_base + b"/" + raw_rest.lstrip(b"/")
+        else:
+            # A percent-encoded base decodes onto the prefix but the bytes don't;
+            # ASGI lets raw_path be absent, which beats a value that disagrees.
+            del rebased["raw_path"]
+    return rebased
+
+
+def _path_only_redirects(scope: Scope, send: Send) -> Send:
+    """Wrap *send* so a same-origin absolute ``Location`` becomes path-only.
+
+    Starlette's trailing-slash redirect builds ``http://<Host>/...`` from the
+    scope, which downgrades the scheme behind a TLS-terminating proxy.
+    """
+
+    async def wrapped(message: Message) -> None:
+        if message["type"] == "http.response.start" and message["status"] in _REDIRECT_STATUSES:
+            headers = [
+                (name, _path_only(scope, value) if name.lower() == b"location" else value)
+                for name, value in message.get("headers", [])
+            ]
+            message = {**message, "headers": headers}
+        await send(message)
+
+    return wrapped
+
+
+def _path_only(scope: Scope, location: bytes) -> bytes:
+    """Return *location* without its origin when it points back at this request's host."""
+    target = urlsplit(location.decode("latin-1"))
+    if target.scheme not in ("http", "https") or not target.netloc:
+        return location
+    if target.netloc.lower() != URL(scope=scope).netloc.lower():
+        return location
+    # A path starting "//" or "/\" reads as another host once the origin is dropped.
+    if not target.path.startswith("/") or target.path.startswith(("//", "/\\")):
+        return location
+    relative = target.path
+    if target.query:
+        relative += f"?{target.query}"
+    if target.fragment:
+        relative += f"#{target.fragment}"
+    return relative.encode("latin-1")
 
 
 def _app_root_path(request: Request) -> str:
@@ -52,11 +106,20 @@ def _app_root_path(request: Request) -> str:
 
 
 def route_path(request: Request) -> str:
-    """Return the request path relative to the base path (``/login``, not ``/x/login``)."""
+    """Return the path the router matches (``/login``, not ``/houndarr/login``).
+
+    Mirrors Starlette's segment-bounded ``get_route_path`` so auth classifies
+    exactly the path the router dispatches on.  Reads the app's root, so the
+    answer holds after a Mount extends ``root_path`` on the shared scope.
+    """
+    path: str = request.scope["path"]
     root = _app_root_path(request)
-    path = request.url.path
-    if root and path.startswith(root):
-        return path[len(root) :] or "/"
+    if not root or not path.startswith(root):
+        return path
+    if path == root:
+        return ""
+    if path[len(root)] == "/":
+        return path[len(root) :]
     return path
 
 

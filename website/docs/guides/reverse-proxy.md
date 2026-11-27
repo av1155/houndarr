@@ -60,28 +60,6 @@ houndarr.example.com {
 Caddy handles HTTPS automatically and sets appropriate forwarding
 headers.
 
-## Serving from a sub-path
-
-To reach Houndarr at a path such as `https://example.com/houndarr`
-instead of its own hostname, set `HOUNDARR_URL_BASE=/houndarr` and
-proxy that location to Houndarr. Redirects, links, and static assets
-then carry the prefix.
-
-```nginx
-location /houndarr/ {
-    proxy_pass http://houndarr:8877;
-    proxy_set_header Host $http_host;
-    proxy_set_header X-Real-IP $remote_addr;
-    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-    proxy_set_header X-Forwarded-Proto $scheme;
-}
-```
-
-Houndarr accepts requests with or without the prefix, so a
-`proxy_pass` that strips it (`http://houndarr:8877/`) works too, and the
-container health check on `/api/health` is unaffected. `$http_host`
-keeps a non-standard port in the `Host` header.
-
 ## Example: Traefik (Docker labels)
 
 ```yaml
@@ -98,6 +76,72 @@ services:
       - HOUNDARR_SECURE_COOKIES=true
       - HOUNDARR_TRUSTED_PROXIES=172.18.0.0/16
 ```
+
+## Serving from a sub-path
+
+To reach Houndarr at `https://example.com/houndarr` instead of its
+own hostname, set `HOUNDARR_URL_BASE=/houndarr`. Pages, links,
+redirects and assets then carry the prefix. Houndarr answers with or
+without it, so the proxy can pass the prefix through or strip it, and
+requests straight to port 8877 (the container health check,
+Kubernetes probes, the [Homepage widget](/docs/guides/homepage-integration))
+keep working unprefixed.
+
+Nginx, passing the prefix through:
+
+```nginx
+location /houndarr/ {
+    proxy_pass http://houndarr:8877;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+}
+```
+
+To strip the prefix, write `proxy_pass http://houndarr:8877/;` with
+the trailing slash. Keep the slash at the end of `location /houndarr/`
+too, so the block doesn't also catch paths such as `/houndarr-old`.
+
+Caddy, passing the prefix through, or stripping it with `handle_path`:
+
+```text
+example.com {
+    redir /houndarr /houndarr/
+    reverse_proxy /houndarr/* houndarr:8877
+}
+```
+
+```text
+example.com {
+    redir /houndarr /houndarr/
+    handle_path /houndarr/* {
+        reverse_proxy houndarr:8877
+    }
+}
+```
+
+Traefik, passing the prefix through:
+
+```yaml
+labels:
+  - "traefik.http.routers.houndarr.rule=Host(`example.com`) && PathPrefix(`/houndarr`)"
+```
+
+To strip it, add a `StripPrefix` middleware to the same router:
+
+```yaml
+labels:
+  - "traefik.http.routers.houndarr.rule=Host(`example.com`) && PathPrefix(`/houndarr`)"
+  - "traefik.http.middlewares.houndarr-strip.stripprefix.prefixes=/houndarr"
+  - "traefik.http.routers.houndarr.middlewares=houndarr-strip"
+```
+
+The prefix comes only from `HOUNDARR_URL_BASE`; Houndarr ignores
+`X-Forwarded-Prefix`. It can't start with a path Houndarr already
+serves, such as `/api` or `/settings`, and Houndarr refuses to start
+when the value isn't a plain path. A sub-path shares cookies with every other app on the hostname;
+see [Credential Handling](/docs/security/credential-handling#cookies).
 
 ## Trusted proxies
 

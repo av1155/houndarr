@@ -70,6 +70,19 @@ jobs:
             -v /tmp/houndarr-smoke-data:/data \
             houndarr:smoke
 
+      # HOUNDARR_URL_BASE (#918): the same image under a prefix, reached on
+      # the container port with and without it, as a proxy would forward.
+      # Started now so it boots while the first container is tested.
+      - name: Start container under a URL base
+        run: |
+          mkdir -p /tmp/houndarr-smoke-base-data
+          docker run -d \
+            --name houndarr-smoke-base \
+            -p 8878:8877 \
+            -e HOUNDARR_URL_BASE=/houndarr \
+            -v /tmp/houndarr-smoke-base-data:/data \
+            houndarr:smoke
+
       - name: Wait for health
         run: |
           for i in $(seq 1 30); do
@@ -95,12 +108,22 @@ jobs:
           HOUNDARR_CONTAINER: houndarr-smoke
         run: bash scripts/security_smoke_test.sh http://localhost:8877 CITestPass1!
 
+      - name: Run URL base smoke test
+        run: bash scripts/url_base_smoke_test.sh http://localhost:8878 /houndarr houndarr-smoke-base CITestPass1!
+
+      - name: Run security smoke test under the URL base
+        env:
+          HOUNDARR_CONTAINER: houndarr-smoke-base
+        run: bash scripts/security_smoke_test.sh http://localhost:8878/houndarr CITestPass1!
+
       - name: Dump container logs on failure
         if: failure()
-        run: docker logs houndarr-smoke
+        run: |
+          docker logs houndarr-smoke || true
+          docker logs houndarr-smoke-base || true
 
       - name: Stop and remove container
         if: always()
         run: |
-          docker stop houndarr-smoke || true
-          docker rm houndarr-smoke || true
+          docker stop houndarr-smoke houndarr-smoke-base || true
+          docker rm houndarr-smoke houndarr-smoke-base || true

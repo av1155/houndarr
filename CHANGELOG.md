@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- `HOUNDARR_URL_BASE` (or `--url-base`) serves Houndarr under a reverse-proxy sub-path such as `/houndarr`, keeping the prefix on redirects, links, and assets.
+- `HOUNDARR_URL_BASE` (Helm `env.urlBase`) serves Houndarr under a reverse-proxy sub-path such as `/houndarr`, whether the proxy keeps or strips the prefix; `/api/health` and `/api/v1/widget` also answer without it. (#918)
 - The container log warns `Wanted list <url> came back sorted by ...` once per instance and list when an \*arr sorts a wanted list by a different column or direction than Houndarr asked for. (#852)
 - `Missing Tag Exclude`, `Cutoff Tag Exclude`, and `Upgrade Tag Exclude` skip tagged items on that one pass, on top of `Tag Filter · Exclude`. Schema v22 adds three columns with empty defaults. (#833)
 

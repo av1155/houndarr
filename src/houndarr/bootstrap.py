@@ -30,7 +30,7 @@ from typing import Literal, TypedDict, Unpack
 
 from houndarr.config import AppSettings, bootstrap_settings
 from houndarr.crypto import ensure_master_key
-from houndarr.database import init_db_migrations, init_db_schema, set_db_path
+from houndarr.database import close_all_pools, init_db_migrations, init_db_schema, set_db_path
 from houndarr.repositories.search_log import purge_old_logs
 
 
@@ -132,10 +132,15 @@ def bootstrap_non_web(
         # v14 fast on its own, but the symmetry with the lifespan means
         # the docstring's "trim before migrate" guarantee actually
         # holds for the CLI entry point too (issue #586).
-        await init_db_schema()
-        if settings.log_retention_days > 0:
-            await purge_old_logs(settings.log_retention_days)
-        await init_db_migrations()
+        try:
+            await init_db_schema()
+            if settings.log_retention_days > 0:
+                await purge_old_logs(settings.log_retention_days)
+            await init_db_migrations()
+        finally:
+            # aiosqlite threads are non-daemon: a pool left open here keeps
+            # the CLI's SystemExit on a config error from ending the process.
+            await close_all_pools()
 
     asyncio.run(_bootstrap_db())
 

@@ -33,13 +33,16 @@ from houndarr.repositories import widget_api_key as _widget_api_key_repo
 
 logger = logging.getLogger(__name__)
 
-# Routes that don't require authentication
+_HEALTH_PATH = "/api/health"
+_STATIC_PATH = "/static"
+
+# Routes that don't require authentication, matched exactly; static files
+# are public through _is_static_path.
 _PUBLIC_PATHS = frozenset(
     [
         "/setup",
         "/login",
-        "/api/health",
-        "/static",
+        _HEALTH_PATH,
     ]
 )
 
@@ -49,6 +52,11 @@ _API_KEY_PATHS = frozenset(["/api/v1/widget"])
 # We allow it without CSRF/session validation so stale legacy sessions
 # can always be cleared after upgrades.
 _LOGOUT_PATH = "/logout"
+
+
+def _is_static_path(path: str) -> bool:
+    """Return True for the static mount, bounded so ``/staticx`` stays protected."""
+    return path == _STATIC_PATH or path.startswith(f"{_STATIC_PATH}/")
 
 
 class AuthMiddleware(BaseHTTPMiddleware):
@@ -145,7 +153,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         # Always allow public paths and static files
-        if any(path.startswith(p) for p in _PUBLIC_PATHS):
+        if path in _PUBLIC_PATHS or _is_static_path(path):
             return await call_next(request)
 
         setup_done = await is_setup_complete()
@@ -181,7 +189,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
         path: str,
     ) -> Response:
         # Health check and static assets remain public
-        if path.startswith("/api/health") or path.startswith("/static"):
+        if path == _HEALTH_PATH or _is_static_path(path):
             return await call_next(request)
 
         # Setup, login, and logout serve no purpose in proxy mode

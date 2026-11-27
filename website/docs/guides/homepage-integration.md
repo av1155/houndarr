@@ -73,7 +73,7 @@ with values from your deployment.
 | Setting | Value |
 |---------|-------|
 | `href` | The browser link Homepage opens when you select the service. Use the URL you normally use for Houndarr. |
-| `widget.url` | The URL the Homepage server or container can reach. In Docker, this is often `http://houndarr:8877/api/v1/widget`. |
+| `widget.url` | The URL the Homepage server or container can reach. In Docker, this is often `http://houndarr:8877/api/v1/widget`, which works with or without `HOUNDARR_URL_BASE`; through a proxy that serves Houndarr under `/houndarr`, use `/houndarr/api/v1/widget`. |
 | `headers.X-Api-Key` | The Houndarr API key copied from `Settings > Admin > API key`. |
 | `refreshInterval` | `30000` asks Homepage to refresh every 30 seconds. |
 | `mappings` | The four fields shown in Homepage's compact service card. |

@@ -296,6 +296,10 @@ spec:
       secretName: houndarr-tls
 ```
 
+To serve Houndarr under a sub-path such as `/houndarr`, set the Ingress
+`path` to it and add `HOUNDARR_URL_BASE=/houndarr` to the StatefulSet;
+see [Serving from a sub-path](/docs/guides/reverse-proxy#serving-from-a-sub-path).
+
 When using TLS, uncomment the security env vars in the StatefulSet:
 
 - `HOUNDARR_SECURE_COOKIES=true`: marks session cookies as HTTPS-only

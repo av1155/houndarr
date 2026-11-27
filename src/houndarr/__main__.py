@@ -235,6 +235,8 @@ def cli(
         logging.info("Auth mode: proxy (trusted proxies configured)")
     else:
         logging.info("Auth mode: builtin")
+    if settings.url_base:
+        logging.info("URL base: %s", settings.url_base)
 
     # Propagate the remaining resolved CLI values to env vars so that
     # uvicorn's reload child process (which reimports modules fresh,

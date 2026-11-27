@@ -660,7 +660,7 @@ function initSettingsPage() {
         body: 'Reverts policy settings (missing search, batch, cadence, cooldowns, cutoff, upgrade) to their factory defaults.',
         keep: 'Your instances, connections, and API keys are kept.',
         cta: 'Reset settings',
-        endpoint: '/settings/admin/reset-instances',
+        endpoint: `${BASE_PATH}/settings/admin/reset-instances`,
         requiresTyped: false,
       },
       logs: {
@@ -669,7 +669,7 @@ function initSettingsPage() {
         body: 'Empties the Activity log on disk.  A single breadcrumb entry survives so you can see when the wipe happened.',
         keep: 'Instances, settings, and credentials are not affected.',
         cta: 'Clear logs',
-        endpoint: '/settings/admin/clear-logs',
+        endpoint: `${BASE_PATH}/settings/admin/clear-logs`,
         requiresTyped: false,
       },
       factory: {
@@ -681,7 +681,7 @@ function initSettingsPage() {
           'The master key is regenerated; existing backups of encrypted API keys become unreadable.',
         ],
         cta: 'Factory reset',
-        endpoint: '/settings/admin/factory-reset',
+        endpoint: `${BASE_PATH}/settings/admin/factory-reset`,
         requiresTyped: true,
       },
     };
@@ -715,7 +715,7 @@ function initSettingsPage() {
     function openFor(kind) {
       const copy = COPY[kind];
       if (!copy) return;
-      form.setAttribute('hx-post', `${BASE_PATH}${copy.endpoint}`);
+      form.setAttribute('hx-post', copy.endpoint);
       if (window.htmx && typeof window.htmx.process === 'function') {
         window.htmx.process(form);
       }

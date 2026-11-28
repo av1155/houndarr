@@ -8,7 +8,8 @@ from pathlib import Path
 import pytest
 from cryptography.fernet import Fernet, InvalidToken
 
-from houndarr.crypto import decrypt, encrypt, ensure_master_key
+from houndarr import crypto as crypto_module
+from houndarr.crypto import MasterKeyError, decrypt, encrypt, ensure_master_key
 
 # ---------------------------------------------------------------------------
 # ensure_master_key
@@ -43,6 +44,62 @@ def test_ensure_master_key_file_permissions(tmp_path: Path) -> None:
     key_path = tmp_path / "houndarr.masterkey"
     mode = stat.S_IMODE(key_path.stat().st_mode)
     assert mode == 0o600
+
+
+@pytest.mark.parametrize(
+    "content",
+    [b"", b"\n", b"not-a-fernet-key", Fernet.generate_key()[:-4]],
+    ids=["empty", "blank-line", "garbage", "truncated"],
+)
+def test_ensure_master_key_refuses_a_damaged_key_file(tmp_path: Path, content: bytes) -> None:
+    """A key file that holds no Fernet key is refused by name and left as it is."""
+    key_path = tmp_path / "houndarr.masterkey"
+    key_path.write_bytes(content)
+
+    with pytest.raises(MasterKeyError) as excinfo:
+        ensure_master_key(tmp_path)
+
+    assert str(key_path) in str(excinfo.value)
+    assert key_path.read_bytes() == content
+
+
+def test_ensure_master_key_accepts_a_key_with_a_trailing_newline(tmp_path: Path) -> None:
+    key = Fernet.generate_key()
+    (tmp_path / "houndarr.masterkey").write_bytes(key + b"\n")
+
+    assert ensure_master_key(tmp_path) == key
+
+
+def test_ensure_master_key_removes_a_partly_written_key(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A write that fails leaves no key file behind to block the next start."""
+
+    def failing_write(fd: int, data: bytes) -> int:
+        raise OSError(28, "No space left on device")
+
+    monkeypatch.setattr(crypto_module.os, "write", failing_write)
+
+    with pytest.raises(OSError, match="No space left"):
+        ensure_master_key(tmp_path)
+
+    assert not (tmp_path / "houndarr.masterkey").exists()
+
+
+def test_ensure_master_key_removes_a_short_write(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    real_write = crypto_module.os.write
+
+    def short_write(fd: int, data: bytes) -> int:
+        return real_write(fd, data[:10])
+
+    monkeypatch.setattr(crypto_module.os, "write", short_write)
+
+    with pytest.raises(OSError):
+        ensure_master_key(tmp_path)
+
+    assert not (tmp_path / "houndarr.masterkey").exists()
 
 
 def test_ensure_master_key_str_path(tmp_path: Path) -> None:

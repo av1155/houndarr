@@ -30,7 +30,8 @@ Relevant source files:
 
 ## The master key
 
-A Fernet master key is generated on first startup using
+A Fernet master key is generated whenever the key file is missing (on
+first startup, or after the file is lost) using
 `Fernet.generate_key()`, which calls `os.urandom(32)` (the operating
 system's cryptographically secure random number generator).
 
@@ -38,10 +39,12 @@ The key is stored at `<data_dir>/houndarr.masterkey` (typically
 `/data/houndarr.masterkey` in Docker). It is:
 
 - Created atomically with `O_CREAT | O_EXCL` to prevent race
-  conditions
+  conditions, and removed again if the write fails
 - Written with file permissions `0o600` (owner read/write only)
 - Permission-enforced at runtime even when the process umask would
   allow broader access
+- Never replaced once it exists: a file that holds no valid key stops
+  startup with exit code 1 instead
 
 The master key is loaded into memory once at application startup and
 passed explicitly to service functions. It is never written to logs,
@@ -68,6 +71,11 @@ On submit:
   encrypted key.
 - If a new value was entered, the server encrypts and stores the
   new key.
+
+When the stored key cannot be decrypted with the current master key,
+the field starts empty and the server refuses the sentinel, so a new
+key has to be entered. See
+[Backup and Restore](/docs/guides/backup-and-restore#what-happens-when-the-master-key-is-lost).
 
 The decrypted Instance API key never appears in any HTTP response body,
 HTML template output, or JSON API payload. Specifically:

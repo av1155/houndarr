@@ -38,7 +38,9 @@ from dataclasses import dataclass
 
 from houndarr.errors import InstanceValidationError
 from houndarr.services.instance_validation import (
+    API_KEY_MISSING_MESSAGE,
     API_KEY_UNCHANGED,
+    API_KEY_UNREADABLE_MESSAGE,
     SearchModes,
     check_connection,
     resolve_search_modes,
@@ -355,6 +357,9 @@ async def submit_create(
         tag_filter_upgrade_exclude=tag_filter_upgrade_exclude,
     )
 
+    if not api_key.strip():
+        raise InstanceValidationError(API_KEY_MISSING_MESSAGE)
+
     if not connection_verified:
         raise InstanceValidationError("Test connection successfully before adding.")
 
@@ -478,7 +483,8 @@ async def submit_update(
       dialog says the instance is gone.
     - Resolve the API key sentinel (``API_KEY_UNCHANGED``) by
       substituting the current row's plaintext key when the form
-      indicates the operator did not edit it.
+      indicates the operator did not edit it, and refuse it when that
+      key cannot be decrypted with the current master key.
     - Reset ``upgrade_item_offset`` and ``upgrade_series_offset`` to
       ``0`` when the upgrade pass is being toggled off, so a future
       re-enable starts from a clean position.
@@ -526,7 +532,15 @@ async def submit_update(
         tag_filter_upgrade_exclude=tag_filter_upgrade_exclude,
     )
 
-    resolved_api_key = current.core.api_key if api_key == API_KEY_UNCHANGED else api_key
+    if api_key == API_KEY_UNCHANGED:
+        # Keeping a key the master key cannot decrypt would save it as ''.
+        if current.core.api_key_unreadable:
+            raise InstanceValidationError(API_KEY_UNREADABLE_MESSAGE)
+        resolved_api_key = current.core.api_key
+    elif not api_key.strip():
+        raise InstanceValidationError(API_KEY_MISSING_MESSAGE)
+    else:
+        resolved_api_key = api_key
 
     if not connection_verified:
         raise InstanceValidationError("Test connection successfully before saving changes.")

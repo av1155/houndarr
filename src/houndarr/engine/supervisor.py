@@ -51,7 +51,10 @@ _SNAPSHOT_INITIAL_DELAY_SECS = 20  # first run after startup, gives arr time to 
 _UNRELEASED_DELTA_LOG_THRESHOLD = 10  # log INFO when |new - prior| exceeds this
 _CHURN_WARN_AFTER = 6  # refreshes in a row, about an hour at the refresh cadence
 _WANTED_KINDS: tuple[WantedKind, ...] = ("missing", "cutoff")
-RunNowStatus = Literal["accepted", "not_found", "disabled"]
+RunNowStatus = Literal["accepted", "not_found", "disabled", "key_unreadable"]
+KEY_UNREADABLE_MESSAGE = (
+    "API key can't be decrypted with the current master key; enter it again in Settings"
+)
 _UNREACHABLE_PREFIX = "Could not reach "
 _NOT_RECHECKED = "; its last error is not rechecked yet: "
 # Stands in for a row under an outage that could not be read.
@@ -72,6 +75,15 @@ def _is_unreachable(row: NewestLogRow | None) -> bool:
         row is not None
         and row.action == SearchAction.error.value
         and (row.message or "").startswith(_UNREACHABLE_PREFIX)
+    )
+
+
+def _is_key_error(row: NewestLogRow | None) -> bool:
+    """Return whether *row* is the open unreadable-API-key error."""
+    return (
+        row is not None
+        and row.action == SearchAction.error.value
+        and row.message == KEY_UNREADABLE_MESSAGE
     )
 
 
@@ -171,10 +183,15 @@ class Supervisor:
         instances = await list_instances(master_key=self._master_key)
         enabled = [i for i in instances if i.core.enabled]
 
-        for idx, instance in enumerate(enabled):
-            await self.start_instance_task(
-                instance.core.id, instance=instance, startup_offset=idx * _STARTUP_STAGGER_SECS
-            )
+        # Staggered by tasks started, so an instance that gets none takes no slot.
+        started = 0
+        for instance in enabled:
+            if await self.start_instance_task(
+                instance.core.id,
+                instance=instance,
+                startup_offset=started * _STARTUP_STAGGER_SECS,
+            ):
+                started += 1
 
         # Snapshot refresh runs even when no search cycles are enabled, so
         # a fresh install with zero enabled instances still gets the
@@ -187,8 +204,10 @@ class Supervisor:
             name="snapshot-refresh-loop",
         )
 
-        if not self._tasks:
+        if not enabled:
             logger.warning("Supervisor: no enabled instances configured. Nothing to do.")
+            return
+        if not self._tasks:
             return
 
         await _write_log(
@@ -253,7 +272,11 @@ class Supervisor:
     async def start_instance_task(
         self, instance_id: int, *, instance: Instance | None = None, startup_offset: int = 0
     ) -> bool:
-        """Ensure the scheduled loop task exists for *instance_id* when enabled."""
+        """Ensure the scheduled loop task exists for *instance_id* when enabled.
+
+        An instance whose API key cannot be decrypted gets no task; an
+        enabled one shows the error row instead, until a new key is saved.
+        """
         self._prune_scheduled_tasks()
 
         existing = self._tasks.get(instance_id)
@@ -264,6 +287,15 @@ class Supervisor:
         if current is None:
             current = await get_instance(instance_id, master_key=self._master_key)
         if current is None or not current.core.enabled:
+            return False
+        if current.core.api_key_unreadable:
+            logger.info(
+                "Supervisor: not starting %r (id=%d); its API key cannot be decrypted "
+                "with the current master key",
+                current.core.name,
+                current.core.id,
+            )
+            await self._show_key_unreadable(current)
             return False
 
         # A refresh already running when the instance was stopped can record
@@ -292,6 +324,14 @@ class Supervisor:
             current.core.name,
             current.core.id,
         )
+        # Written after the task exists, so a second start meanwhile sees it.
+        if _is_key_error(await self._newest_row(current)):
+            await self._write_recovery_row(
+                current,
+                f"{current.core.name!r} API key can be decrypted again",
+                cycle_id=None,
+                cycle_trigger=None,
+            )
         return True
 
     async def stop_instance_task(self, instance_id: int) -> bool:
@@ -344,6 +384,8 @@ class Supervisor:
             return "not_found"
         if not instance.core.enabled:
             return "disabled"
+        if instance.core.api_key_unreadable:
+            return "key_unreadable"
 
         existing = self._manual_runs.get(instance_id)
         if existing is not None and not existing.done():
@@ -393,6 +435,15 @@ class Supervisor:
                     )
                     return
 
+                if instance.core.api_key_unreadable:
+                    logger.warning(
+                        "Supervisor: %r API key cannot be decrypted with the current "
+                        "master key; stopping loop",
+                        instance.core.name,
+                    )
+                    await self._show_key_unreadable(instance)
+                    return
+
                 sleep_secs = await run_with_reconnect(
                     cycle=partial(self._run_search_cycle, instance, cycle_trigger="scheduled"),
                     error_retry_secs=_CONNECT_RETRY_SECS,
@@ -407,7 +458,7 @@ class Supervisor:
     async def _run_manual_once(self, instance_id: int) -> None:
         """Run one ad-hoc cycle, serialized with the scheduled loop."""
         instance = await get_instance(instance_id, master_key=self._master_key)
-        if instance is None or not instance.core.enabled:
+        if instance is None or not instance.core.enabled or instance.core.api_key_unreadable:
             return
 
         await self._run_search_cycle(instance, cycle_trigger="run_now")
@@ -440,6 +491,9 @@ class Supervisor:
         Returns:
             The cycle's :class:`CycleOutcome`.
         """
+        if instance.core.api_key_unreadable:
+            await self._show_key_unreadable(instance)
+            return CycleOutcome.failed
         lock = self._run_locks.setdefault(instance.core.id, asyncio.Lock())
         async with lock:
             cycle_id = str(uuid4())
@@ -618,13 +672,27 @@ class Supervisor:
             )
             return None
 
+    async def _show_key_unreadable(self, instance: Instance) -> None:
+        """Write the unreadable-API-key error unless it is already the newest row.
+
+        The row carries no trigger, so the Logs page shows it by default.
+        """
+        if not _is_key_error(await self._newest_row(instance)):
+            await self._write_health_row(
+                instance,
+                SearchAction.error,
+                KEY_UNREADABLE_MESSAGE,
+                cycle_id=None,
+                cycle_trigger=None,
+            )
+
     async def _write_recovery_row(
         self,
         instance: Instance,
         message: str,
         *,
         cycle_id: str | None,
-        cycle_trigger: CycleTrigger | str,
+        cycle_trigger: CycleTrigger | str | None,
     ) -> None:
         """Log and write the ``info`` row that closes an open error."""
         logger.info("Supervisor: %s", redact_url_credentials(message))
@@ -639,7 +707,7 @@ class Supervisor:
         message: str,
         *,
         cycle_id: str | None,
-        cycle_trigger: CycleTrigger | str,
+        cycle_trigger: CycleTrigger | str | None,
     ) -> None:
         """Write a health row; a database error is logged, not raised."""
         try:
@@ -721,7 +789,7 @@ class Supervisor:
         ``/wanted`` list is walked once per refresh; a pass whose list was
         not read in full, or whose reads did not add up, keeps its rows.
         """
-        if not instance.core.enabled:
+        if not instance.core.enabled or instance.core.api_key_unreadable:
             return
         lock = self._run_locks.setdefault(instance.core.id, asyncio.Lock())
         async with lock:
@@ -864,10 +932,18 @@ class Supervisor:
         Runs sequentially; acquires the per-instance search lock before
         writing so it cannot race an in-progress cycle.  Disabled
         instances are skipped (their last-known snapshot stays on disk).
+        So is one whose API key cannot be decrypted; an enabled one gets
+        its error row back if a retention purge or Clear logs removed it.
         """
         instances = await list_instances(master_key=self._master_key)
         for inst in instances:
-            await self._refresh_one_snapshot(inst)
+            if not inst.core.api_key_unreadable:
+                await self._refresh_one_snapshot(inst)
+                continue
+            # Re-read: a key saved during the refreshes above clears the flag.
+            current = await get_instance(inst.core.id, master_key=self._master_key)
+            if current is not None and current.core.enabled and current.core.api_key_unreadable:
+                await self._show_key_unreadable(current)
 
     def _on_scheduled_task_done(self, instance_id: int, task: asyncio.Task[None]) -> None:
         """Remove finished scheduled task references."""

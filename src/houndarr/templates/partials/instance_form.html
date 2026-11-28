@@ -268,9 +268,17 @@
         </div>
         <div>
           <label class="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide" for="{{ form_id }}-api-key">API Key</label>
+          {#- A stored key the master key cannot decrypt is not kept: the field starts empty. -#}
+          {%- set keep_stored_key = is_edit and not instance.core.api_key_unreadable %}
+          {%- set api_key_placeholder -%}
+            {%- if keep_stored_key -%}(stored; enter new value to change)
+            {%- elif is_edit -%}Enter the API key again
+            {%- else -%}••••••••••••••••
+            {%- endif -%}
+          {%- endset %}
           <input id="{{ form_id }}-api-key" name="api_key" type="password" required
-                 value="{{ '__UNCHANGED__' if is_edit else '' }}"
-                 placeholder="{{ '(stored; enter new value to change)' if is_edit else '••••••••••••••••' }}"
+                 value="{{ '__UNCHANGED__' if keep_stored_key else '' }}"
+                 placeholder="{{ api_key_placeholder }}"
                  class="{{ mono_input_cls }}" />
         </div>
       </div>

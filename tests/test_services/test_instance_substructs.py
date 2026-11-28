@@ -155,6 +155,9 @@ FLAT_TO_SUB: dict[str, str] = {
     "updated_at": "timestamps",
 }
 
+# Fields added after the flat surface was retired; none of them is a column.
+POST_REFACTOR_TO_SUB: dict[str, str] = {"api_key_unreadable": "core"}
+
 
 def _field_names(cls: type) -> list[str]:
     """Return the dataclass field names of *cls* in declaration order."""
@@ -236,7 +239,7 @@ def _construct_with_required(cls: type) -> Any:
 
 
 def test_instance_core_fields_in_declaration_order() -> None:
-    """InstanceCore exposes the six identity fields in the locked order."""
+    """InstanceCore exposes the identity fields in the locked order."""
     assert _field_names(InstanceCore) == [
         "id",
         "name",
@@ -244,12 +247,13 @@ def test_instance_core_fields_in_declaration_order() -> None:
         "url",
         "api_key",
         "enabled",
+        "api_key_unreadable",
     ]
 
 
 def test_instance_core_defaults() -> None:
-    """Only ``enabled`` carries a default; the other five are required."""
-    assert _field_defaults(InstanceCore) == {"enabled": True}
+    """Only ``enabled`` and ``api_key_unreadable`` carry a default; the other five are required."""
+    assert _field_defaults(InstanceCore) == {"enabled": True, "api_key_unreadable": False}
 
 
 # MissingPolicy.
@@ -462,31 +466,31 @@ def test_substruct_field_sets_are_disjoint() -> None:
 
 
 def test_substruct_field_union_matches_flat_surface() -> None:
-    """The seven sub-structs cover the 43-field flat surface.
+    """The seven sub-structs cover the 43-field flat surface plus the later fields.
 
-    :data:`FLAT_TO_SUB` encodes the authoritative flat-name surface;
-    the test asserts that the declared sub-struct fields cover it
-    exactly with no extras.  A regression here means either a new
-    column landed without a sub-struct update or an old column lost
-    its sub-struct owner.
+    :data:`FLAT_TO_SUB` encodes the authoritative flat-name surface and
+    :data:`POST_REFACTOR_TO_SUB` the fields added since; the test
+    asserts that the declared sub-struct fields cover both exactly with
+    no extras.  A regression here means either a new field landed
+    without a table update or an old column lost its sub-struct owner.
     """
     substruct_fields: set[str] = set()
     for cls in SUBSTRUCTS:
         substruct_fields.update(_field_names(cls))
-    assert substruct_fields == set(FLAT_TO_SUB.keys())
+    assert substruct_fields == set(FLAT_TO_SUB) | set(POST_REFACTOR_TO_SUB)
 
 
 def test_substruct_field_union_count_matches_pre_refactor_surface() -> None:
-    """Forty-three flat fields, partitioned across seven sub-structs.
+    """Forty-three flat fields plus the later ones, partitioned across seven sub-structs.
 
     Canary for arithmetic drift: if someone bumps :data:`FLAT_TO_SUB` or
-    adds a sub-struct field without updating the other, this test
+    adds a sub-struct field without updating the tables, this test
     surfaces the inconsistency before the union check does, with a
     clearer failure.
     """
     total = sum(len(_field_names(cls)) for cls in SUBSTRUCTS)
-    assert total == 43
     assert len(FLAT_TO_SUB) == 43
+    assert total == len(FLAT_TO_SUB) + len(POST_REFACTOR_TO_SUB)
 
 
 # Instance shape.

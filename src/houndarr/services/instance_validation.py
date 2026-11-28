@@ -63,6 +63,11 @@ from houndarr.services.url_validation import validate_instance_url
 API_KEY_UNCHANGED = "__UNCHANGED__"
 """Sentinel sent back in the edit form to indicate the stored key is kept."""
 
+API_KEY_UNREADABLE_MESSAGE = "The stored API key can't be decrypted. Enter it again."
+"""Shown when the sentinel would keep a stored key the master key cannot decrypt."""
+
+API_KEY_MISSING_MESSAGE = "Provide an API key."
+
 
 @dataclass(frozen=True, slots=True)
 class ConnectionCheck:
@@ -504,7 +509,8 @@ async def run_connection_test(
             never double-joins.
         api_key: Raw api_key string from the form.  The
             :data:`API_KEY_UNCHANGED` sentinel triggers the stored-
-            key lookup; any other value is used verbatim.
+            key lookup, refused when that key cannot be decrypted; a
+            blank value is refused; any other value is used verbatim.
         instance_id: Optional raw instance_id string from the form.
             Required only when ``api_key`` is the sentinel; empty or
             non-numeric means the sentinel resolves to a 422.
@@ -522,6 +528,9 @@ async def run_connection_test(
     if url_error is not None:
         return ConnectionTestOutcome(ok=False, message=url_error, status_code=422)
 
+    if not api_key.strip():
+        return ConnectionTestOutcome(ok=False, message=API_KEY_MISSING_MESSAGE, status_code=422)
+
     resolved_api_key = api_key
     if api_key == API_KEY_UNCHANGED:
         # A sentinel submission requires an instance_id so the service
@@ -535,7 +544,7 @@ async def run_connection_test(
         if not instance_id:
             return ConnectionTestOutcome(
                 ok=False,
-                message="Provide an API key.",
+                message=API_KEY_MISSING_MESSAGE,
                 status_code=422,
             )
         try:
@@ -549,6 +558,10 @@ async def run_connection_test(
         existing = await get_instance(iid, master_key=master_key)
         if existing is None:
             return ConnectionTestOutcome(ok=False, message="Instance not found.", status_code=422)
+        if existing.core.api_key_unreadable:
+            return ConnectionTestOutcome(
+                ok=False, message=API_KEY_UNREADABLE_MESSAGE, status_code=422
+            )
         resolved_api_key = existing.core.api_key
 
     check = await check_connection(instance_type, url.rstrip("/"), resolved_api_key)

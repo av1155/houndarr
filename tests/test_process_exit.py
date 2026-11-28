@@ -10,24 +10,29 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import queue
+import signal
 import sqlite3
 import subprocess
 import sys
+import threading
+import time
 from collections.abc import AsyncGenerator, Awaitable, Callable, Iterable
+from contextlib import closing, suppress
 from pathlib import Path
-from typing import Any
+from typing import IO, Any
 
 import aiosqlite
 import pytest
 import pytest_asyncio
 from aiosqlitepool.connection import PoolConnection
-from cryptography.fernet import Fernet, InvalidToken
+from cryptography.fernet import Fernet
 from fastapi import FastAPI
 
 from houndarr import app as app_module
 from houndarr import database
 from houndarr.config import AppSettings
-from houndarr.crypto import encrypt, ensure_master_key
+from houndarr.crypto import MasterKeyError, encrypt, ensure_master_key
 from houndarr.database import close_all_pools, get_db, init_db, set_db_path
 from houndarr.engine import supervisor as supervisor_module
 from houndarr.engine.supervisor import Supervisor
@@ -309,18 +314,61 @@ async def test_a_startup_failure_closes_the_database(
     _assert_workers_stopped(opened)
 
 
-async def test_a_master_key_that_does_not_match_fails_startup_and_closes_the_database(
-    opened: list[aiosqlite.Connection], test_settings: AppSettings
+def _key_warnings(caplog: pytest.LogCaptureFixture) -> list[logging.LogRecord]:
+    return [
+        record
+        for record in caplog.records
+        if record.name == app_module.__name__ and "cannot be decrypted" in record.getMessage()
+    ]
+
+
+async def test_a_master_key_that_does_not_match_still_starts(
+    opened: list[aiosqlite.Connection],
+    test_settings: AppSettings,
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
     await _seed_instance(test_settings.db_path, Fernet.generate_key())
+    caplog.set_level(logging.INFO)
     app = app_module.create_app()
 
-    with pytest.raises(InvalidToken):
+    async with app.router.lifespan_context(app):
+        assert app.state.supervisor._tasks == {}
+
+    assert str(test_settings.db_path) not in database._pools
+    _assert_workers_stopped(opened)
+    [warning] = _key_warnings(caplog)
+    assert warning.levelno == logging.WARNING
+    message = warning.getMessage()
+    assert str(test_settings.master_key_path) in message
+    assert "'Sonarr'" in message
+    assert "sonarr.invalid" not in message
+
+
+async def test_a_fresh_install_logs_no_master_key_warning(
+    test_settings: AppSettings, caplog: pytest.LogCaptureFixture
+) -> None:
+    await _seed_instance(test_settings.db_path, ensure_master_key(test_settings.data_dir))
+    caplog.set_level(logging.INFO)
+    app = app_module.create_app()
+
+    async with app.router.lifespan_context(app):
+        pass
+
+    assert _key_warnings(caplog) == []
+
+
+async def test_a_damaged_master_key_file_fails_startup_before_the_database_opens(
+    opened: list[aiosqlite.Connection], test_settings: AppSettings
+) -> None:
+    test_settings.master_key_path.write_bytes(b"not a key\n")
+    app = app_module.create_app()
+
+    with pytest.raises(MasterKeyError, match="houndarr.masterkey"):
         async with app.router.lifespan_context(app):
             pass
 
     assert str(test_settings.db_path) not in database._pools
-    _assert_workers_stopped(opened)
+    assert opened == []
 
 
 async def test_a_partial_supervisor_start_leaves_no_task_running(
@@ -458,28 +506,35 @@ async def test_shutdown_after_a_failed_factory_reset_start_stops_the_new_supervi
 # The CLI process
 
 
-def _run_cli(data_dir: Path) -> tuple[int, str]:
-    env = {
+def _cli_env() -> dict[str, str]:
+    return {
         key: value
         for key, value in os.environ.items()
         if not key.startswith(("HOUNDARR_", "PYTEST_"))
     }
+
+
+def _cli_command(data_dir: Path) -> list[str]:
+    # Port 0 binds a free loopback port, so a server that starts never collides.
+    return [
+        sys.executable,
+        "-m",
+        "houndarr",
+        "--data-dir",
+        str(data_dir),
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "0",
+    ]
+
+
+def _run_cli(data_dir: Path) -> tuple[int, str]:
     try:
         result = subprocess.run(
-            # A regression that let startup pass would bind a free loopback port.
-            [
-                sys.executable,
-                "-m",
-                "houndarr",
-                "--data-dir",
-                str(data_dir),
-                "--host",
-                "127.0.0.1",
-                "--port",
-                "0",
-            ],
+            _cli_command(data_dir),
             cwd=_REPO_ROOT,
-            env=env,
+            env=_cli_env(),
             capture_output=True,
             text=True,
             timeout=60,
@@ -488,6 +543,51 @@ def _run_cli(data_dir: Path) -> tuple[int, str]:
     except subprocess.TimeoutExpired as exc:
         pytest.fail(f"houndarr was still running after {exc.timeout} s")
     return result.returncode, result.stdout + result.stderr
+
+
+def _pump(stream: IO[str], sink: queue.Queue[str]) -> None:
+    for line in stream:
+        sink.put(line)
+
+
+def _run_cli_until_started(data_dir: Path) -> str:
+    """Run the CLI until uvicorn reports startup, stop it with SIGINT, return its output."""
+    lines: queue.Queue[str] = queue.Queue()
+    output: list[str] = []
+    with subprocess.Popen(
+        _cli_command(data_dir),
+        cwd=_REPO_ROOT,
+        env=_cli_env(),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+    ) as proc:
+        assert proc.stdout is not None
+        reader = threading.Thread(target=_pump, args=(proc.stdout, lines), daemon=True)
+        reader.start()
+        deadline = time.monotonic() + 60
+        started = False
+        try:
+            while not started:
+                # The reader ends at EOF, once every line of a crashed process is queued.
+                if time.monotonic() > deadline or (not reader.is_alive() and lines.empty()):
+                    pytest.fail(f"houndarr did not start (rc={proc.poll()}):\n{''.join(output)}")
+                with suppress(queue.Empty):
+                    line = lines.get(timeout=1)
+                    output.append(line)
+                    started = "Application startup complete." in line
+        finally:
+            proc.send_signal(signal.SIGINT)
+            try:
+                proc.wait(timeout=30)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                proc.wait()
+                pytest.fail("houndarr was still running 30 s after SIGINT")
+        reader.join(timeout=5)
+    while not lines.empty():
+        output.append(lines.get_nowait())
+    return "".join(output)
 
 
 def test_cli_exits_when_the_database_file_is_not_sqlite(tmp_path: Path) -> None:
@@ -499,12 +599,43 @@ def test_cli_exits_when_the_database_file_is_not_sqlite(tmp_path: Path) -> None:
     assert "file is not a database" in output
 
 
-def test_cli_exits_when_the_master_key_does_not_match(tmp_path: Path) -> None:
-    asyncio.run(_seed_instance(tmp_path / "houndarr.db", ensure_master_key(tmp_path)))
-    (tmp_path / "houndarr.masterkey").unlink()
+def test_cli_exits_when_the_lifespan_startup_fails(tmp_path: Path) -> None:
+    db_path = tmp_path / "houndarr.db"
+    asyncio.run(_seed_instance(db_path, ensure_master_key(tmp_path)))
+    with closing(sqlite3.connect(db_path)) as conn:
+        conn.execute(
+            "CREATE TRIGGER refuse_start BEFORE INSERT ON search_log"
+            " WHEN NEW.message LIKE 'Supervisor started%'"
+            " BEGIN SELECT RAISE(ABORT, 'search_log write refused'); END"
+        )
+        conn.commit()
 
     returncode, output = _run_cli(tmp_path)
 
     assert returncode == 3, output
-    assert "InvalidToken" in output
+    assert "search_log write refused" in output
     assert "Application startup failed. Exiting." in output
+
+
+def test_cli_starts_when_the_master_key_was_lost(tmp_path: Path) -> None:
+    asyncio.run(_seed_instance(tmp_path / "houndarr.db", ensure_master_key(tmp_path)))
+    (tmp_path / "houndarr.masterkey").unlink()
+
+    output = _run_cli_until_started(tmp_path)
+
+    assert "cannot be decrypted with" in output
+    assert str(tmp_path / "houndarr.masterkey") in output
+    assert (tmp_path / "houndarr.masterkey").is_file()
+
+
+def test_cli_exits_when_the_master_key_file_is_damaged(tmp_path: Path) -> None:
+    key_path = tmp_path / "houndarr.masterkey"
+    key_path.write_bytes(b"not a key\n")
+
+    returncode, output = _run_cli(tmp_path)
+
+    assert returncode == 1, output
+    assert "CRITICAL" in output
+    assert str(key_path) in output
+    assert "Traceback" not in output
+    assert key_path.read_bytes() == b"not a key\n"

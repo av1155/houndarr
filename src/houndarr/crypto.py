@@ -9,26 +9,45 @@ from pathlib import Path
 
 from cryptography.fernet import Fernet, InvalidToken
 
-__all__ = ["InvalidToken", "decrypt", "encrypt", "ensure_master_key"]
+__all__ = ["InvalidToken", "MasterKeyError", "decrypt", "encrypt", "ensure_master_key"]
+
+
+class MasterKeyError(RuntimeError):
+    """Raised when ``houndarr.masterkey`` exists but holds no Fernet key."""
 
 
 def ensure_master_key(data_dir: str | Path) -> bytes:
-    """Return the Fernet master key for *data_dir*, creating it on first run.
+    """Return the Fernet master key for *data_dir*, creating it when the file is missing.
 
     The key is persisted to ``<data_dir>/houndarr.masterkey`` with mode
     ``0o600`` so that only the owning user can read it.  On subsequent calls
-    the existing key is read and returned unchanged.
+    the existing key is read and returned unchanged.  An existing file is
+    never replaced: one that holds no valid key raises
+    :class:`MasterKeyError`, since a new key would make every stored API key
+    unreadable while the original might still be restored.
 
     Args:
         data_dir: Path to the application data directory (must already exist).
 
     Returns:
         32-byte URL-safe base64-encoded Fernet key.
+
+    Raises:
+        MasterKeyError: When the key file exists but is empty or damaged.
     """
     key_path = Path(data_dir) / "houndarr.masterkey"
 
     if key_path.exists():
-        return key_path.read_bytes().strip()
+        key = key_path.read_bytes().strip()
+        try:
+            _get_fernet(key)
+        except ValueError as exc:
+            raise MasterKeyError(
+                f"The master key file '{key_path}' is damaged: it does not hold a "
+                "valid key. Restore it from a backup, or delete it so Houndarr "
+                "writes a new one and then enter every instance's API key again."
+            ) from exc
+        return key
 
     # Generate a brand-new key and write it atomically.
     key = Fernet.generate_key()
@@ -46,10 +65,16 @@ def ensure_master_key(data_dir: str | Path) -> bytes:
             "that UID/GID. "
             "For Proxmox/LXC, set PUID=0/PGID=0."
         ) from exc
+    # A partial file would be refused as damaged on every later start.
     try:
-        os.write(fd, key)
-    finally:
-        os.close(fd)
+        try:
+            if os.write(fd, key) != len(key):
+                raise OSError(f"Short write to '{key_path}'")
+        finally:
+            os.close(fd)
+    except BaseException:
+        key_path.unlink(missing_ok=True)
+        raise
 
     # Enforce 0o600 even if umask is permissive.
     key_path.chmod(stat.S_IRUSR | stat.S_IWUSR)

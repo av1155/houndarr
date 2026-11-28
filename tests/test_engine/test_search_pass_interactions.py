@@ -178,7 +178,7 @@ async def test_upgrade_disabled_skips_upgrade_pass(
 @pytest.mark.asyncio()
 @respx.mock
 @patch(
-    "houndarr.engine.search_loop.update_instance",
+    "houndarr.engine.search_loop.update_instance_offset",
     new_callable=AsyncMock,
 )
 async def test_all_three_passes_run_and_sum(
@@ -269,7 +269,7 @@ async def test_cutoff_hourly_cap_independent_of_missing(
 @pytest.mark.asyncio()
 @respx.mock
 @patch(
-    "houndarr.engine.search_loop.update_instance",
+    "houndarr.engine.search_loop.update_instance_offset",
     new_callable=AsyncMock,
 )
 async def test_upgrade_hourly_cap_independent(
@@ -402,7 +402,7 @@ async def test_search_kind_logged_correctly_cutoff(
 @pytest.mark.asyncio()
 @respx.mock
 @patch(
-    "houndarr.engine.search_loop.update_instance",
+    "houndarr.engine.search_loop.update_instance_offset",
     new_callable=AsyncMock,
 )
 async def test_search_kind_logged_correctly_upgrade(
@@ -526,7 +526,7 @@ async def test_missing_dispatch_error_does_not_prevent_cutoff(
 @pytest.mark.asyncio()
 @respx.mock
 @patch(
-    "houndarr.engine.search_loop.update_instance",
+    "houndarr.engine.search_loop.update_instance_offset",
     new_callable=AsyncMock,
 )
 async def test_empty_upgrade_pool_logs_info(

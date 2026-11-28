@@ -2,12 +2,18 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock
 
 import pytest
 
-from houndarr.clients.whisparr_v2 import MissingWhisparrV2Episode, WhisparrV2Client
+from houndarr.clients._wire_models import ArrSeries
+from houndarr.clients.whisparr_v2 import (
+    LibraryWhisparrV2Episode,
+    MissingWhisparrV2Episode,
+    WhisparrV2Client,
+)
 from houndarr.engine.adapters.whisparr_v2 import (
     _episode_label,
     _season_context_label,
@@ -17,6 +23,7 @@ from houndarr.engine.adapters.whisparr_v2 import (
     adapt_missing,
     dispatch_search,
     fetch_instance_snapshot,
+    fetch_upgrade_pool,
     make_client,
 )
 from houndarr.engine.candidates import SearchCandidate
@@ -508,3 +515,62 @@ class TestFetchInstanceSnapshot:
 
         assert snap.monitored_total == 1
         assert snap.unreleased_count == 0
+
+
+# ---------------------------------------------------------------------------
+# fetch_upgrade_pool: series window
+# ---------------------------------------------------------------------------
+
+
+class TestFetchUpgradePoolWindow:
+    """The window samples consecutive monitored series and never one twice."""
+
+    @staticmethod
+    def _client(series_count: int) -> AsyncMock:
+        client = AsyncMock(spec=WhisparrV2Client)
+        client.get_series.return_value = [
+            ArrSeries(id=sid, title=f"Series {sid}", monitored=True)
+            for sid in range(1, series_count + 1)
+        ]
+        client.get_episodes.side_effect = lambda series_id: [
+            LibraryWhisparrV2Episode(
+                episode_id=series_id * 100,
+                series_id=series_id,
+                series_title=f"Series {series_id}",
+                episode_title="Scene",
+                season_number=1,
+                absolute_episode_number=None,
+                monitored=True,
+                has_file=True,
+                cutoff_met=True,
+            )
+        ]
+        return client
+
+    @staticmethod
+    def _instance(*, offset: int, window: int) -> Instance:
+        return replace(
+            _make_instance(),
+            upgrade=UpgradePolicy(
+                upgrade_enabled=True,
+                upgrade_series_offset=offset,
+                upgrade_series_window_size=window,
+            ),
+        )
+
+    @pytest.mark.asyncio()
+    async def test_a_window_inside_the_library_wraps_past_its_end(self):
+        client = self._client(5)
+
+        await fetch_upgrade_pool(client, self._instance(offset=4, window=3))
+
+        assert [c.args[0] for c in client.get_episodes.call_args_list] == [5, 1, 2]
+
+    @pytest.mark.asyncio()
+    async def test_a_window_larger_than_the_library_fetches_each_series_once(self):
+        client = self._client(3)
+
+        pool = await fetch_upgrade_pool(client, self._instance(offset=1, window=8))
+
+        assert [c.args[0] for c in client.get_episodes.call_args_list] == [2, 3, 1]
+        assert sorted(e.episode_id for e in pool) == [100, 200, 300]

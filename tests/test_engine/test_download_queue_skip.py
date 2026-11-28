@@ -473,7 +473,7 @@ async def test_cutoff_pass_skips_queued_item(seeded_instances: None) -> None:
 
 @pytest.mark.asyncio()
 @respx.mock
-@patch("houndarr.engine.search_loop.update_instance", new_callable=AsyncMock)
+@patch("houndarr.engine.search_loop.update_instance_offset", new_callable=AsyncMock)
 async def test_upgrade_pass_skips_queued_item(
     mock_update: AsyncMock,
     seeded_instances: None,
@@ -498,7 +498,7 @@ async def test_upgrade_pass_skips_queued_item(
 
 @pytest.mark.asyncio()
 @respx.mock
-@patch("houndarr.engine.search_loop.update_instance", new_callable=AsyncMock)
+@patch("houndarr.engine.search_loop.update_instance_offset", new_callable=AsyncMock)
 async def test_queued_upgrade_items_do_not_consume_the_scan_budget(
     mock_update: AsyncMock,
     seeded_instances: None,
@@ -519,7 +519,7 @@ async def test_queued_upgrade_items_do_not_consume_the_scan_budget(
 
 @pytest.mark.asyncio()
 @respx.mock
-@patch("houndarr.engine.search_loop.update_instance", new_callable=AsyncMock)
+@patch("houndarr.engine.search_loop.update_instance_offset", new_callable=AsyncMock)
 async def test_upgrade_cooldown_is_checked_before_the_queue(
     mock_update: AsyncMock,
     seeded_instances: None,
@@ -697,7 +697,7 @@ async def test_artist_context_skips_only_when_every_seen_album_is_queued(
 )
 @pytest.mark.asyncio()
 @respx.mock
-@patch("houndarr.engine.search_loop.update_instance", new_callable=AsyncMock)
+@patch("houndarr.engine.search_loop.update_instance_offset", new_callable=AsyncMock)
 async def test_upgrade_season_context_skips_only_fully_queued_seasons(
     mock_update: AsyncMock,
     seeded_instances: None,
@@ -755,7 +755,7 @@ async def test_queue_is_not_fetched_when_nothing_is_dispatched(
 
 @pytest.mark.asyncio()
 @respx.mock
-@patch("houndarr.engine.search_loop.update_instance", new_callable=AsyncMock)
+@patch("houndarr.engine.search_loop.update_instance_offset", new_callable=AsyncMock)
 async def test_queue_is_fetched_once_for_all_three_passes(
     mock_update: AsyncMock,
     seeded_instances: None,

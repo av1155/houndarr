@@ -39,6 +39,8 @@ from .conftest import (
     SONARR_URL,
     get_log_rows,
     insert_search_log_row,
+    stored_offsets,
+    sync_instance_row,
 )
 from .test_download_queue_skip import (
     _commands,
@@ -370,9 +372,7 @@ async def test_two_instances_queued_on_the_same_item_id_each_write_their_own_ski
 
 @pytest.mark.asyncio()
 @respx.mock
-@patch("houndarr.engine.search_loop.update_instance", new_callable=AsyncMock)
 async def test_a_permanently_queued_head_of_the_upgrade_pool_does_not_starve_its_tail(
-    mock_update: AsyncMock,
     seeded_instances: None,
 ) -> None:
     """A block of queued items at the cursor still lets the cursor and the pass move on."""
@@ -394,10 +394,12 @@ async def test_a_permanently_queued_head_of_the_upgrade_pool_does_not_starve_its
         upgrade_cooldown_days=90,
     )
 
+    await sync_instance_row(instance)
+
     persisted: list[int] = []
     for _ in range(4):
         await run_instance_search(instance, MASTER_KEY)
-        offset = int(mock_update.await_args.kwargs["upgrade_item_offset"])
+        offset = (await stored_offsets(instance.core.id))["upgrade_item_offset"]
         persisted.append(offset)
         instance = _advance(instance, offset)
 
@@ -420,7 +422,7 @@ async def test_a_permanently_queued_head_of_the_upgrade_pool_does_not_starve_its
 
 @pytest.mark.asyncio()
 @respx.mock
-@patch("houndarr.engine.search_loop.update_instance", new_callable=AsyncMock)
+@patch("houndarr.engine.search_loop.update_instance_offset", new_callable=AsyncMock)
 async def test_a_failing_queue_read_stays_failed_for_the_whole_cycle(
     mock_update: AsyncMock,
     seeded_instances: None,

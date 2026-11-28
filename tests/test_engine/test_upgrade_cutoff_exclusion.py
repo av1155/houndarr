@@ -208,7 +208,7 @@ async def test_the_readarr_page_cap_warning_counts_books_not_files(
 @pytest.mark.asyncio()
 @pytest.mark.parametrize(("module", "instance_id", "itype", "app", "item_type"), _APPS)
 @respx.mock
-@patch("houndarr.engine.search_loop.update_instance", new_callable=AsyncMock)
+@patch("houndarr.engine.search_loop.update_instance_offset", new_callable=AsyncMock)
 async def test_a_cutoff_page_that_fails_defers_the_upgrade_pass(
     mock_update: AsyncMock,
     seeded_instances: None,
@@ -236,7 +236,7 @@ async def test_a_cutoff_page_that_fails_defers_the_upgrade_pass(
 @pytest.mark.asyncio()
 @pytest.mark.parametrize(("module", "instance_id", "itype", "app", "item_type"), _APPS)
 @respx.mock
-@patch("houndarr.engine.search_loop.update_instance", new_callable=AsyncMock)
+@patch("houndarr.engine.search_loop.update_instance_offset", new_callable=AsyncMock)
 async def test_a_refused_cutoff_list_writes_the_upgrade_error_row(
     mock_update: AsyncMock,
     seeded_instances: None,

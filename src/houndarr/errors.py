@@ -117,10 +117,11 @@ class EnginePoolFetchError(EngineError):
 
 
 class EngineOffsetPersistError(EngineError):
-    """Persisting a ``*_page_offset`` / ``upgrade_item_offset`` failed.
+    """Writing a ``*_page_offset`` or ``upgrade_*_offset`` back failed.
 
-    Replaces ``except Exception`` at ``engine/search_loop.py:608, 771,
-    928, 971``.  Non-fatal (the next cycle retries); we log + continue.
+    Raised by the search loop's four offset writes.  Non-fatal (the next
+    cycle retries); we log + continue.  A write skipped because the row
+    changed during the cycle is not a failure and does not raise.
     """
 
 

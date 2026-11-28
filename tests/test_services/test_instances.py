@@ -450,6 +450,28 @@ async def test_update_instance_snapshot_overwrites_prior_values(
 
 
 # ---------------------------------------------------------------------------
+# update_instance_offset: conditional cycle write
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio()
+async def test_update_instance_offset_reports_whether_the_row_matched(
+    db: None, master_key: bytes
+) -> None:
+    from houndarr.services.instances import update_instance_offset
+
+    inst = await _make(master_key, upgrade_enabled=True)
+
+    assert await update_instance_offset(inst.core.id, "upgrade_series_offset", expected=0, value=5)
+    assert not await update_instance_offset(
+        inst.core.id, "upgrade_series_offset", expected=0, value=10
+    )
+    refreshed = await get_instance(inst.core.id, master_key=master_key)
+    assert refreshed is not None
+    assert refreshed.upgrade.upgrade_series_offset == 5
+
+
+# ---------------------------------------------------------------------------
 # active_error_instance_ids: newest row, no time window
 # ---------------------------------------------------------------------------
 

@@ -9,7 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from dataclasses import fields as dataclass_fields
 from enum import StrEnum
-from typing import Any
+from typing import Any, Literal
 
 from houndarr.config import (
     DEFAULT_ALLOWED_TIME_WINDOW,
@@ -85,6 +85,15 @@ class SearchOrder(StrEnum):
 
     chronological = "chronological"
     random = "random"
+
+
+# The four rotation cursors a search cycle advances and writes back.
+OffsetColumn = Literal[
+    "missing_page_offset",
+    "cutoff_page_offset",
+    "upgrade_item_offset",
+    "upgrade_series_offset",
+]
 
 
 @dataclass(frozen=True, slots=True)
@@ -659,3 +668,27 @@ async def update_instance_snapshot(
         monitored_total=monitored_total,
         unreleased_count=unreleased_count,
     )
+
+
+async def update_instance_offset(
+    id: int,
+    column: OffsetColumn,
+    *,
+    expected: int,
+    value: int,
+) -> bool:
+    """Write a cycle's advanced offset unless the row changed since the cycle read it.
+
+    Thin delegator over
+    :func:`houndarr.repositories.instances.update_instance_offset`.
+    Called by the search loop at the end of each pass.
+
+    Returns:
+        ``True`` when the row still held *expected* and the mode that
+        advances *column*, so *value* was written; ``False`` otherwise.
+    """
+    from houndarr.repositories.instances import (
+        update_instance_offset as _repo_update_instance_offset,
+    )
+
+    return await _repo_update_instance_offset(id, column, expected=expected, value=value)

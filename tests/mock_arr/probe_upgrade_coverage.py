@@ -10,10 +10,10 @@ Coverage promises by app type:
   order, ``upgrade_item_offset`` rotates so every item is touched within
   ``ceil(library_size / batch_size)`` cycles. With random order, a fresh
   shuffle every cycle yields probabilistic coverage that converges.
-- Sonarr / Whisparr v2: a sliding window of 5 series per cycle (the
-  ``_UPGRADE_MAX_SERIES_PER_CYCLE`` constant). ``upgrade_series_offset``
-  advances by 5 every cycle, so all monitored series are sampled within
-  ``ceil(monitored_series / 5)`` cycles.
+- Sonarr / Whisparr v2: a sliding window of ``upgrade_series_window_size``
+  series per cycle (default 5). ``upgrade_series_offset`` advances by the
+  window every cycle, so all monitored series are sampled within
+  ``ceil(monitored_series / window)`` cycles.
 - Lidarr / Readarr: a cutoff-list read for the exclusion (the reconcile
   walk, max 200 pages * 250 records) followed by a full library fetch.
   The exclusion set is capped, so very large cutoff backlogs may not
@@ -171,15 +171,18 @@ async def _temp_db(master_key: bytes, instance: Instance) -> AsyncIterator[None]
             await init_db()
             encrypted = encrypt("probe-key", master_key)
             async with get_db() as conn:
+                # The offset writes land only while the row has the snapshot's mode.
                 await conn.execute(
-                    "INSERT INTO instances (id, name, type, url, encrypted_api_key)"
-                    " VALUES (?, ?, ?, ?, ?)",
+                    "INSERT INTO instances (id, name, type, url, encrypted_api_key,"
+                    " upgrade_enabled, search_order) VALUES (?, ?, ?, ?, ?, ?, ?)",
                     (
                         instance.core.id,
                         instance.core.name,
                         instance.core.type.value,
                         instance.core.url,
                         encrypted,
+                        int(instance.upgrade.upgrade_enabled),
+                        instance.schedule.search_order.value,
                     ),
                 )
                 await conn.commit()

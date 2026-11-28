@@ -285,8 +285,12 @@ async def fetch_upgrade_pool(
 ) -> list[LibraryWhisparrV2Episode]:
     """Fetch and filter Whisparr v2 library for upgrade-eligible episodes.
 
-    Uses series rotation: fetches up to ``_UPGRADE_MAX_SERIES_PER_CYCLE``
-    monitored series per cycle, starting from ``instance.upgrade.upgrade_series_offset``.
+    Uses series rotation: fetches
+    ``instance.upgrade.upgrade_series_window_size`` consecutive monitored
+    series per cycle (default 5, at most every monitored series once),
+    starting from ``instance.upgrade.upgrade_series_offset`` and wrapping
+    past the end of the list.  The engine then moves the offset on by the
+    configured window.
 
     Args:
         client: An open :class:`WhisparrV2Client` context.
@@ -308,8 +312,9 @@ async def fetch_upgrade_pool(
     # Per-instance window size lets users with very large libraries trade
     # higher per-cycle *arr load for faster rotation coverage.  Clamp to
     # at least 1 so a stored 0 (impossible per CHECK constraint, but
-    # defensive) still makes progress.
-    window = max(1, instance.upgrade.upgrade_series_window_size)
+    # defensive) still makes progress, and to the library size so the
+    # wrap never lists a series twice.
+    window = min(max(1, instance.upgrade.upgrade_series_window_size), len(monitored))
     selected = monitored[offset : offset + window]
     if len(selected) < window:
         remaining = window - len(selected)

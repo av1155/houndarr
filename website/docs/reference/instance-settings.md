@@ -361,9 +361,11 @@ further down do not starve. Offsets reset to page 1 when you save
 instance settings. Upgrade offsets reset to zero when upgrade
 search is toggled off.
 
-Under `Search Order: Random`, the offset columns are still written
-but not used for rotation; the engine picks a fresh random page
-each cycle.
+Under `Search Order: Random`, the page offsets and the upgrade item
+offset stay where they are: the engine picks a fresh random page each
+cycle and shuffles the upgrade pool. For Sonarr and Whisparr v2 the
+upgrade series offset still moves on each cycle, so the upgrade pool
+still works through the whole library.
 
 ## Queue backpressure
 

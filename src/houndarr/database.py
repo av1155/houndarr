@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import logging
+import weakref
 from collections.abc import AsyncIterator, Awaitable, Callable
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from typing import cast
 
 import aiosqlite
@@ -253,9 +254,18 @@ _db_path: str = ""
 # every subsequent test.  Keying on the path lets the same module-level
 # state back both the production lifecycle (one path, one pool) and the
 # test suite (many paths, many short-lived pools).  A pool stays open
-# until close_all_pools() runs, and its non-daemon aiosqlite threads keep
-# the interpreter from exiting until then.
+# until close_all_pools() runs.  Every aiosqlite connection runs a
+# non-daemon thread the interpreter joins at exit, so one left open keeps
+# the process alive.
 _pools: dict[str, SQLiteConnectionPool] = {}
+
+# Connections the factory opened that no pool has handed out yet, so
+# close_all_pools() can close the ones a pool never registered: aiosqlitepool
+# 1.0.0 drops a new connection whose health check is cancelled without
+# closing it.  get_db() removes a connection on its first borrow, so the
+# sweep never touches one a pool has handed out: two concurrent closes of
+# one aiosqlite connection leave the second caller waiting forever.
+_unclaimed_connections: weakref.WeakSet[aiosqlite.Connection] = weakref.WeakSet()
 
 
 def set_db_path(path: str) -> None:
@@ -291,19 +301,27 @@ async def _connection_factory() -> aiosqlite.Connection:
       transient writer contention does not produce user-visible errors.
     """
     conn = await aiosqlite.connect(_db_path)
-    conn.row_factory = aiosqlite.Row
-    # journal_mode=WAL must precede synchronous=NORMAL: NORMAL is only
-    # corruption-safe in WAL mode (per sqlite.org/pragma.html#pragma_synchronous).
-    # The pragma is file-level and idempotent, so it is a no-op fetch on
-    # every pool member after the first.
-    await conn.execute("PRAGMA journal_mode=WAL")
-    await conn.execute("PRAGMA synchronous=NORMAL")
-    await conn.execute("PRAGMA temp_store=MEMORY")
-    await conn.execute("PRAGMA cache_size=-20000")
-    await conn.execute("PRAGMA mmap_size=134217728")
-    await conn.execute("PRAGMA journal_size_limit=67108864")
-    await conn.execute("PRAGMA foreign_keys=ON")
-    await conn.execute("PRAGMA busy_timeout=5000")
+    try:
+        conn.row_factory = aiosqlite.Row
+        # journal_mode=WAL must precede synchronous=NORMAL: NORMAL is only
+        # corruption-safe in WAL mode (per sqlite.org/pragma.html#pragma_synchronous).
+        # The pragma is file-level and idempotent, so it is a no-op fetch on
+        # every pool member after the first.
+        await conn.execute("PRAGMA journal_mode=WAL")
+        await conn.execute("PRAGMA synchronous=NORMAL")
+        await conn.execute("PRAGMA temp_store=MEMORY")
+        await conn.execute("PRAGMA cache_size=-20000")
+        await conn.execute("PRAGMA mmap_size=134217728")
+        await conn.execute("PRAGMA journal_size_limit=67108864")
+        await conn.execute("PRAGMA foreign_keys=ON")
+        await conn.execute("PRAGMA busy_timeout=5000")
+    except BaseException:
+        # The pool never sees this connection, so only this close stops its
+        # thread; a file that is not SQLite fails at the first PRAGMA.
+        with suppress(Exception):
+            await conn.close()
+        raise
+    _unclaimed_connections.add(conn)
     return conn
 
 
@@ -337,19 +355,28 @@ def _get_or_create_pool() -> SQLiteConnectionPool:
 
 
 async def close_all_pools() -> None:
-    """Close every per-path pool and clear the registry.
+    """Close every per-path pool, then any connection no pool handed out.
 
-    Called from the FastAPI lifespan exit, from factory reset before it
-    deletes the database files, and from test teardowns, so temp DB files
-    are released and their dedicated aiosqlite threads exit cleanly.
+    The process can only exit, and the database files can only be deleted,
+    once this has closed every connection.  The loop also closes a pool that
+    a concurrent ``get_db()`` opens before the last pool has closed.
+    ``get_db()`` still works after the call and opens a new pool.
     """
-    pools = list(_pools.values())
-    _pools.clear()
-    for pool in pools:
+    while _pools:
+        _, pool = _pools.popitem()
         try:
             await pool.close()
         except Exception:
             logger.exception("Error closing SQLite connection pool")
+    while True:
+        try:
+            conn = _unclaimed_connections.pop()
+        except KeyError:
+            break
+        try:
+            await conn.close()
+        except Exception:
+            logger.exception("Error closing SQLite connection")
 
 
 @asynccontextmanager
@@ -366,7 +393,9 @@ async def get_db() -> AsyncIterator[aiosqlite.Connection]:
     async with pool.connection() as db:
         # The pool re-types the connection as its structural Protocol; the
         # underlying object is the aiosqlite.Connection from the factory.
-        yield cast("aiosqlite.Connection", db)
+        conn = cast("aiosqlite.Connection", db)
+        _unclaimed_connections.discard(conn)
+        yield conn
 
 
 # ---------------------------------------------------------------------------

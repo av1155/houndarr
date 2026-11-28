@@ -52,7 +52,7 @@ _UNRELEASED_DELTA_LOG_THRESHOLD = 10  # log INFO when |new - prior| exceeds this
 _CHURN_WARN_AFTER = 6  # refreshes in a row, about an hour at the refresh cadence
 _WANTED_KINDS: tuple[WantedKind, ...] = ("missing", "cutoff")
 RunNowStatus = Literal["accepted", "not_found", "disabled", "key_unreadable"]
-KEY_UNREADABLE_MESSAGE = (
+KEY_UNREADABLE_ERROR = (
     "API key can't be decrypted with the current master key; enter it again in Settings"
 )
 _UNREACHABLE_PREFIX = "Could not reach "
@@ -83,7 +83,7 @@ def _is_key_error(row: NewestLogRow | None) -> bool:
     return (
         row is not None
         and row.action == SearchAction.error.value
-        and row.message == KEY_UNREADABLE_MESSAGE
+        and row.message == KEY_UNREADABLE_ERROR
     )
 
 
@@ -141,6 +141,9 @@ class Supervisor:
         self._tasks: dict[int, asyncio.Task[None]] = {}
         self._manual_runs: dict[int, asyncio.Task[None]] = {}
         self._run_locks: dict[int, asyncio.Lock] = {}
+        # Orders an instance's unreadable-key error row against the row that
+        # closes it; held only for those writes, never across a cycle.
+        self._key_row_locks: dict[int, asyncio.Lock] = {}
         # Global snapshot-refresh task handle.  Populated in ``start`` and
         # cancelled in ``stop``.
         self._snapshot_task: asyncio.Task[None] | None = None
@@ -325,13 +328,14 @@ class Supervisor:
             current.core.id,
         )
         # Written after the task exists, so a second start meanwhile sees it.
-        if _is_key_error(await self._newest_row(current)):
-            await self._write_recovery_row(
-                current,
-                f"{current.core.name!r} API key can be decrypted again",
-                cycle_id=None,
-                cycle_trigger=None,
-            )
+        async with self._key_row_locks.setdefault(instance_id, asyncio.Lock()):
+            if _is_key_error(await self._newest_row(current)):
+                await self._write_recovery_row(
+                    current,
+                    f"{current.core.name!r} API key can be decrypted again",
+                    cycle_id=None,
+                    cycle_trigger=None,
+                )
         return True
 
     async def stop_instance_task(self, instance_id: int) -> bool:
@@ -675,16 +679,29 @@ class Supervisor:
     async def _show_key_unreadable(self, instance: Instance) -> None:
         """Write the unreadable-API-key error unless it is already the newest row.
 
-        The row carries no trigger, so the Logs page shows it by default.
+        Re-reads the stored key under the lock the closing row is written
+        under, so a key saved meanwhile is never left under this error.  An
+        instance disabled meanwhile gets no row.  The row carries no trigger,
+        so the Logs page shows it by default.
         """
-        if not _is_key_error(await self._newest_row(instance)):
-            await self._write_health_row(
-                instance,
-                SearchAction.error,
-                KEY_UNREADABLE_MESSAGE,
-                cycle_id=None,
-                cycle_trigger=None,
-            )
+        async with self._key_row_locks.setdefault(instance.core.id, asyncio.Lock()):
+            try:
+                current = await get_instance(instance.core.id, master_key=self._master_key)
+            except _DB_ERRORS:
+                logger.warning(
+                    "Supervisor: could not re-read %r", instance.core.name, exc_info=True
+                )
+                return
+            if current is None or not current.core.enabled or not current.core.api_key_unreadable:
+                return
+            if not _is_key_error(await self._newest_row(current)):
+                await self._write_health_row(
+                    current,
+                    SearchAction.error,
+                    KEY_UNREADABLE_ERROR,
+                    cycle_id=None,
+                    cycle_trigger=None,
+                )
 
     async def _write_recovery_row(
         self,
@@ -937,13 +954,10 @@ class Supervisor:
         """
         instances = await list_instances(master_key=self._master_key)
         for inst in instances:
-            if not inst.core.api_key_unreadable:
+            if inst.core.api_key_unreadable:
+                await self._show_key_unreadable(inst)
+            else:
                 await self._refresh_one_snapshot(inst)
-                continue
-            # Re-read: a key saved during the refreshes above clears the flag.
-            current = await get_instance(inst.core.id, master_key=self._master_key)
-            if current is not None and current.core.enabled and current.core.api_key_unreadable:
-                await self._show_key_unreadable(current)
 
     def _on_scheduled_task_done(self, instance_id: int, task: asyncio.Task[None]) -> None:
         """Remove finished scheduled task references."""

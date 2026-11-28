@@ -40,7 +40,7 @@ from houndarr.errors import InstanceValidationError
 from houndarr.services.instance_validation import (
     API_KEY_MISSING_MESSAGE,
     API_KEY_UNCHANGED,
-    API_KEY_UNREADABLE_MESSAGE,
+    STORED_KEY_UNREADABLE_MESSAGE,
     SearchModes,
     check_connection,
     resolve_search_modes,
@@ -535,7 +535,7 @@ async def submit_update(
     if api_key == API_KEY_UNCHANGED:
         # Keeping a key the master key cannot decrypt would save it as ''.
         if current.core.api_key_unreadable:
-            raise InstanceValidationError(API_KEY_UNREADABLE_MESSAGE)
+            raise InstanceValidationError(STORED_KEY_UNREADABLE_MESSAGE)
         resolved_api_key = current.core.api_key
     elif not api_key.strip():
         raise InstanceValidationError(API_KEY_MISSING_MESSAGE)

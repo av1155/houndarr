@@ -289,16 +289,59 @@ async def test_the_snapshot_refresh_leaves_a_key_entered_meanwhile_alone(
     assert await _rows(LOST) == []
 
 
+async def test_a_key_saved_while_the_refresh_writes_its_error_ends_on_the_closing_row(
+    seeded: None, no_network: list[int], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    supervisor = Supervisor(master_key=MASTER_KEY)
+    saves: list[asyncio.Task[None]] = []
+    real_newest_row = Supervisor._newest_row
+
+    async def save_new_key() -> None:
+        await update_instance(LOST, master_key=MASTER_KEY, api_key="new")
+        await supervisor.reconcile_instance(LOST)
+
+    # The save lands after the refresh re-read the key, before it writes the row.
+    async def newest_row_with_a_save_meanwhile(self: Supervisor, instance: Instance) -> Any:
+        if instance.core.id == LOST and not saves:
+            saves.append(asyncio.create_task(save_new_key()))
+            await asyncio.sleep(0.2)
+        return await real_newest_row(self, instance)
+
+    try:
+        await supervisor.start()
+        # Clear logs: the refresh then has an error row to write.
+        async with get_db() as conn:
+            await conn.execute("DELETE FROM search_log")
+            await conn.commit()
+        monkeypatch.setattr(Supervisor, "_newest_row", newest_row_with_a_save_meanwhile)
+
+        await supervisor._refresh_all_snapshots_once()
+        await saves[0]
+
+        assert LOST in supervisor._tasks
+        assert await _rows(LOST) == [
+            ("error", KEY_ERROR, None, None),
+            ("info", "'Lost' API key can be decrypted again", None, None),
+        ]
+    finally:
+        await supervisor.stop()
+
+
 async def test_a_snapshot_refresh_never_builds_a_client_for_an_unreadable_key(
     seeded: None, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    def no_adapter(*args: object) -> None:
-        raise AssertionError("built a client for an unreadable key")
+    built: list[object] = []
 
-    monkeypatch.setattr(supervisor_module, "get_adapter", no_adapter)
+    # Recorded rather than raised: the refresh logs and swallows any exception.
+    def record_adapter(instance_type: object) -> None:
+        built.append(instance_type)
+
+    monkeypatch.setattr(supervisor_module, "get_adapter", record_adapter)
     supervisor = Supervisor(master_key=MASTER_KEY)
 
     await supervisor._refresh_one_snapshot(await _flagged(LOST))
+
+    assert built == []
 
 
 async def test_a_cycle_never_searches_with_an_unreadable_key(

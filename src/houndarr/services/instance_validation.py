@@ -63,8 +63,9 @@ from houndarr.services.url_validation import validate_instance_url
 API_KEY_UNCHANGED = "__UNCHANGED__"
 """Sentinel sent back in the edit form to indicate the stored key is kept."""
 
-API_KEY_UNREADABLE_MESSAGE = "The stored API key can't be decrypted. Enter it again."
-"""Shown when the sentinel would keep a stored key the master key cannot decrypt."""
+STORED_KEY_UNREADABLE_MESSAGE = "The stored API key can't be decrypted. Enter it again."
+"""Shown for a stored key the master key cannot decrypt: in the Edit dialog, and when the
+sentinel would keep it for a connection test or a save."""
 
 API_KEY_MISSING_MESSAGE = "Provide an API key."
 
@@ -560,7 +561,7 @@ async def run_connection_test(
             return ConnectionTestOutcome(ok=False, message="Instance not found.", status_code=422)
         if existing.core.api_key_unreadable:
             return ConnectionTestOutcome(
-                ok=False, message=API_KEY_UNREADABLE_MESSAGE, status_code=422
+                ok=False, message=STORED_KEY_UNREADABLE_MESSAGE, status_code=422
             )
         resolved_api_key = existing.core.api_key
 

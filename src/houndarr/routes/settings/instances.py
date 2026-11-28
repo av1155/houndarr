@@ -55,7 +55,10 @@ from houndarr.services.instance_submit import (
     submit_create,
     submit_update,
 )
-from houndarr.services.instance_validation import API_KEY_UNREADABLE_MESSAGE, run_connection_test
+from houndarr.services.instance_validation import (
+    STORED_KEY_UNREADABLE_MESSAGE,
+    run_connection_test,
+)
 from houndarr.services.instances import (
     active_error_instance_ids,
     delete_instance,
@@ -243,7 +246,7 @@ async def instance_edit_get(
         instance=instance,
         defaults=blank_instance(),
         editing=True,
-        error=API_KEY_UNREADABLE_MESSAGE if instance.core.api_key_unreadable else None,
+        error=STORED_KEY_UNREADABLE_MESSAGE if instance.core.api_key_unreadable else None,
     )
 
 

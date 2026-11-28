@@ -86,7 +86,8 @@ Otherwise, re-enter the key for each instance:
    **API Key** field empty.
 2. Enter the API key from your *arr instance and click
    **Test Connection**.
-3. Click **Save Changes**. The instance starts searching again.
+3. Click **Save Changes**. If the instance is enabled, it starts
+   searching again.
 
 ### A damaged master key file
 

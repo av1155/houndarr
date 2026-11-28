@@ -24,7 +24,7 @@ from fastapi.responses import JSONResponse
 
 from houndarr.database import get_db
 from houndarr.deps import get_supervisor
-from houndarr.engine.supervisor import KEY_UNREADABLE_MESSAGE, Supervisor
+from houndarr.engine.supervisor import KEY_UNREADABLE_ERROR, Supervisor
 from houndarr.protocols import SupervisorProto
 from houndarr.services.metrics import gather_dashboard_status, invalidate_dashboard_cache
 
@@ -104,7 +104,7 @@ async def run_now(
     if status == "disabled":
         raise HTTPException(status_code=409, detail="Instance is disabled")
     if status == "key_unreadable":
-        raise HTTPException(status_code=409, detail=KEY_UNREADABLE_MESSAGE)
+        raise HTTPException(status_code=409, detail=KEY_UNREADABLE_ERROR)
 
     # The supervisor's run-now path writes to ``search_log`` on a
     # background task ~1-2 s later.  The synchronous invalidate clears

@@ -1,11 +1,13 @@
-"""Offset writes from a running cycle never undo a reset or an Edit save made during it.
+"""Offset writes from a running cycle leave a reset or an Edit save made during it in place.
 
 A cycle reads its :class:`Instance` before it searches and writes the
 advanced offsets at the end of each pass.  These cases run real cycles
 against respx stubs and land a reset, a save, a delete or a second cycle
-right before one of those writes.  The Edit save has the same lost update
-on its own: it reads the row before its connection check, so it must not
-write back the enabled flag it read.
+right before one of those writes; the change the check cannot detect (a
+row back at the cycle's start value and mode) is pinned as a known gap.
+The Edit save has the same lost update on its own: it reads the row
+before its connection check, so it must not write back the enabled flag
+it read.
 """
 
 from __future__ import annotations

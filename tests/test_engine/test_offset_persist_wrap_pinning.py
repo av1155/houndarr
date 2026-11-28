@@ -190,7 +190,7 @@ class TestPersistOffsetTypedWrap:
         assert [(r.levelno, r.getMessage()) for r in caplog.records] == [
             (
                 logging.DEBUG,
-                "[Test Instance] upgrade_item_offset changed during the cycle;"
-                " keeping the stored value",
+                "[Test Instance] upgrade_item_offset not written:"
+                " the instance changed during the cycle",
             ),
         ]

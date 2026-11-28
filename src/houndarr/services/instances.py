@@ -677,11 +677,11 @@ async def update_instance_offset(
     expected: int,
     value: int,
 ) -> bool:
-    """Write a cycle's advanced offset unless the row changed since the cycle read it.
+    """Write a cycle's advanced offset while the row still holds the cycle's start and mode.
 
     Thin delegator over
     :func:`houndarr.repositories.instances.update_instance_offset`.
-    Called by the search loop once a pass has advanced an offset.
+    Called by the search loop after each pass that rotates an offset.
 
     Returns:
         ``True`` when the row still held *expected* and the mode that

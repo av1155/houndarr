@@ -121,7 +121,7 @@ class EngineOffsetPersistError(EngineError):
 
     Raised by the search loop's four offset writes.  Non-fatal (the next
     cycle retries); we log + continue.  A write skipped because the row
-    changed during the cycle is not a failure and does not raise.
+    no longer matches the cycle is not a failure and does not raise.
     """
 
 

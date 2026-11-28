@@ -955,17 +955,17 @@ async def _persist_offset_with_typed_wrap(
     start: int,
     value: int,
 ) -> None:
-    """Store one advanced offset unless the row changed during the cycle.
+    """Store one advanced offset while the row still holds the cycle's start and mode.
 
     Callers reach this only through :func:`_persist_offset_or_warn`.
 
     The write lands only while the row still holds *start* and the mode
     that advances *column* (see
     :func:`houndarr.repositories.instances.update_instance_offset` for
-    the one save it cannot detect), so a reset, an Edit save that moved
-    the offset or changed that mode, or a newer cycle committed after
-    this cycle read *instance* keeps its value.  A skipped write is
-    expected and logs at DEBUG only.
+    the change it cannot detect), so a reset, an Edit save that moved
+    the offset or changed that mode, or a newer cycle that moved the
+    offset keeps its value.  A skipped write is expected and logs at
+    DEBUG only.
 
     A failed write is non-fatal by design: the typed error gives
     observability a surface to key on, :func:`_persist_offset_or_warn`
@@ -992,7 +992,7 @@ async def _persist_offset_with_typed_wrap(
         raise EngineOffsetPersistError(str(exc)) from exc
     if not written:
         logger.debug(
-            "[%s] %s changed during the cycle; keeping the stored value",
+            "[%s] %s not written: the instance changed during the cycle",
             instance.core.name,
             column,
         )

@@ -349,8 +349,9 @@ class InstanceUpdate:
     :func:`update_instance` re-encrypts it.  The three snapshot
     columns and the four pagination-offset columns are included so
     the update surface matches the table schema exactly, even though
-    the search loop writes them through :func:`update_instance_snapshot`
-    and :func:`update_instance_offset` respectively.
+    the supervisor's snapshot refresh and the search loop write them
+    through :func:`update_instance_snapshot` and
+    :func:`update_instance_offset` respectively.
     """
 
     name: str | None = None
@@ -685,13 +686,14 @@ async def update_instance_offset(
 
     The row must still hold *expected* in *column*, and still have the
     pass on and the search order that advance *column* (the series offset
-    rotates in either order).  A reset committed after the cycle read the
-    row therefore always keeps its value, and so does an Edit save that
-    moved the offset or turned that pass or Chronological order off.  An
-    Edit save that wrote back the cycle's start value and kept the mode
-    cannot be told apart from no change, so the cycle's value lands, as
-    if the save had come just before the cycle.  ``updated_at`` is bumped
-    on a write.
+    rotates in either order).  A reset (which turns those modes off), an
+    Edit save that moved the offset or turned that pass or Chronological
+    order off, and a newer cycle that moved the offset therefore keep
+    their value.  A row that holds the cycle's start value and mode
+    again, such as after a save that wrote page 1 back and kept the mode,
+    cannot be told apart from an unchanged one, so the cycle's value
+    lands, as if the change had come just before the cycle.
+    ``updated_at`` is bumped on a write.
 
     Args:
         instance_id: Primary key of the row to update.
@@ -701,7 +703,7 @@ async def update_instance_offset(
 
     Returns:
         ``True`` when the row matched and was written, ``False`` when it
-        changed since the cycle read it or no longer exists.
+        no longer holds *expected* or that mode, or no longer exists.
 
     Raises:
         KeyError: *column* is not one of the four offset columns.

@@ -144,7 +144,7 @@ class InstanceRepository(Protocol):
         expected: int,
         value: int,
     ) -> Awaitable[bool]:
-        """Write a cycle's offset; ``False`` when the row changed since the cycle read it."""
+        """Write a cycle's offset; ``False`` when the row lost *expected* or its mode."""
         ...
 
 

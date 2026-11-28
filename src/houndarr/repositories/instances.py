@@ -347,11 +347,12 @@ class InstanceUpdate:
     non-nullable at the schema level, so no field's domain includes
     ``None`` legitimately.  ``api_key``, when supplied, is plaintext;
     :func:`update_instance` re-encrypts it.  The three snapshot
-    columns and the four pagination-offset columns are included so
-    the update surface matches the table schema exactly, even though
-    the supervisor's snapshot refresh and the search loop write them
-    through :func:`update_instance_snapshot` and
-    :func:`update_instance_offset` respectively.
+    columns are included so the update surface matches the table
+    schema exactly, even though the supervisor's snapshot refresh
+    writes them through :func:`update_instance_snapshot`.  The four
+    offset columns are written here by the Edit save and the policy
+    reset; a search cycle writes them through
+    :func:`update_instance_offset`.
     """
 
     name: str | None = None

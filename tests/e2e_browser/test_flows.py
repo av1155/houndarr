@@ -641,6 +641,10 @@ def test_refused_setting_keeps_save_enabled(
     expect(save).to_be_enabled()
     expect(save).to_be_focused()
     expect(add_form.locator("#instance-connection-verified")).to_have_value("true")
+    # The refusal ended the save, so a later test result can turn Save on again.
+    _test_connection_and_wait_for_success(
+        page, add_form, add_form.locator("button[data-test-connection-btn]")
+    )
 
     cooldown.fill("7")
     with page.expect_response(
@@ -655,9 +659,10 @@ def test_refused_setting_keeps_save_enabled(
 def test_connection_result_during_a_save_keeps_save_off(
     logged_in_page: Page, houndarr_url: str, mock_sonarr_url: str
 ) -> None:
-    """A test result that lands while a save runs, or once it succeeded, must not turn Save on.
+    """A test result that lands while a save runs must not turn Save on.
 
     A second click would then queue another save and add a second copy.
+    Save must also still be off once the save succeeds and the dialog closes.
     """
     page = logged_in_page
     instance_name = f"E2E Save lock {uuid.uuid4().hex[:8]}"
@@ -715,6 +720,54 @@ def test_connection_result_during_a_save_keeps_save_off(
         expect(page.locator("#instance-tbody tr").filter(has_text=instance_name)).to_have_count(1)
     finally:
         page.unroute(pattern)
+
+
+@pytest.mark.integration
+def test_save_for_a_deleted_instance_says_so_and_moves_focus(
+    logged_in_page: Page, houndarr_url: str, mock_sonarr_url: str, console_guard
+) -> None:
+    """Save Changes on an instance deleted in another tab shows why and asks for a new test.
+
+    Save stays off, so keyboard focus moves to Test Connection instead of the page.
+    """
+    for p in _EXPECTED_422_CONSOLE_NOISE:
+        console_guard.allow(p)
+    page = logged_in_page
+    instance_name = f"E2E Deleted {uuid.uuid4().hex[:8]}"
+    page.goto(f"{houndarr_url}/settings")
+    add_form = _open_filled_add_form(page, mock_sonarr_url, instance_name)
+    _test_connection_and_wait_for_success(
+        page, add_form, add_form.locator("button[data-test-connection-btn]")
+    )
+    _submit_form(add_form)
+    row = page.locator("#instance-tbody tr").filter(has_text=instance_name)
+    expect(row).to_have_count(1, timeout=10_000)
+
+    row.locator('button[hx-get^="/settings/instances/"]').click()
+    edit_form = page.locator('form[data-form-mode="edit"]')
+    _expect_dialog_ready(page, edit_form)
+    test_btn = edit_form.locator("button[data-test-connection-btn]")
+    _test_connection_and_wait_for_success(page, edit_form, test_btn)
+
+    other = page.context.new_page()
+    other.goto(f"{houndarr_url}/settings")
+    other_row = other.locator("#instance-tbody tr").filter(has_text=instance_name)
+    other_row.locator("button[hx-delete]").click()
+    other.locator("#confirm-go").click()
+    expect(other_row).to_have_count(0, timeout=5_000)
+    other.close()
+
+    save = edit_form.locator("#instance-submit-btn")
+    with page.expect_response(
+        lambda r: r.request.method == "POST" and re.search(r"/settings/instances/\d+$", r.url)
+    ) as resp_info:
+        save.focus()
+        page.keyboard.press("Enter")
+    assert resp_info.value.status == 422, resp_info.value.status
+    expect(page.locator("#instance-connection-status")).to_contain_text("Instance not found.")
+    expect(save).to_be_disabled()
+    expect(test_btn).to_be_focused()
+    expect(page.locator("#toast")).to_be_hidden()
 
 
 @pytest.mark.integration

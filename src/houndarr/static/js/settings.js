@@ -580,13 +580,12 @@ function initSettingsPage() {
             return;
           }
           submitBtn.disabled = !isConnectionVerified();
-          // Turning Save off dropped its focus to the page; give it back unless focus moved on.
-          if (
-            !submitBtn.disabled &&
-            triggerEl.dataset.saveHadFocus === 'true' &&
-            document.activeElement === document.body
-          ) {
-            submitBtn.focus();
+          // Disabling a focused Save drops focus to the page (Firefox keeps it on Save).
+          const focusLeftWithSave =
+            document.activeElement === document.body || document.activeElement === submitBtn;
+          if (triggerEl.dataset.saveHadFocus === 'true' && focusLeftWithSave) {
+            const focusTarget = submitBtn.disabled ? getConnectionTestButton() : submitBtn;
+            focusTarget?.focus();
           }
           return;
         }

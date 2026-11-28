@@ -148,48 +148,50 @@ async def main() -> int:
     with tempfile.TemporaryDirectory() as tmp:
         db_path = os.path.join(tmp, "houndarr.db")
         set_db_path(db_path)
-        await init_db_schema()
-        await _seed(args.rows, args.instances, args.cooldowns_per_instance)
+        try:
+            await init_db_schema()
+            await _seed(args.rows, args.instances, args.cooldowns_per_instance)
 
-        print("\n" + "=" * 60)
-        print("SCENARIO 1: WITH idx_search_log_lookup (post-fix)")
-        print("=" * 60)
-        await _create_lookup_index()
-        await _reset_cooldowns_to_default(args.instances, args.cooldowns_per_instance)
-        elapsed_with = await _time_update()
-        print(f"  v14 UPDATE: {_human(elapsed_with)}")
+            print("\n" + "=" * 60)
+            print("SCENARIO 1: WITH idx_search_log_lookup (post-fix)")
+            print("=" * 60)
+            await _create_lookup_index()
+            await _reset_cooldowns_to_default(args.instances, args.cooldowns_per_instance)
+            elapsed_with = await _time_update()
+            print(f"  v14 UPDATE: {_human(elapsed_with)}")
 
-        print("\n" + "=" * 60)
-        print("SCENARIO 2: WITHOUT idx_search_log_lookup (pre-fix v1.10.0)")
-        print("=" * 60)
-        await _drop_lookup_index()
-        await _reset_cooldowns_to_default(args.instances, args.cooldowns_per_instance)
-        elapsed_without = await _time_update()
-        print(f"  v14 UPDATE: {_human(elapsed_without)}")
+            print("\n" + "=" * 60)
+            print("SCENARIO 2: WITHOUT idx_search_log_lookup (pre-fix v1.10.0)")
+            print("=" * 60)
+            await _drop_lookup_index()
+            await _reset_cooldowns_to_default(args.instances, args.cooldowns_per_instance)
+            elapsed_without = await _time_update()
+            print(f"  v14 UPDATE: {_human(elapsed_without)}")
 
-        print("\n" + "=" * 60)
-        print("SCENARIO 3: Reporter's manual workaround (build index, then UPDATE)")
-        print("=" * 60)
-        await _drop_lookup_index()
-        await _reset_cooldowns_to_default(args.instances, args.cooldowns_per_instance)
-        idx_start = time.monotonic()
-        await _create_lookup_index()
-        idx_elapsed = time.monotonic() - idx_start
-        elapsed_with_built = await _time_update()
-        total = idx_elapsed + elapsed_with_built
-        print(f"  CREATE INDEX: {_human(idx_elapsed)}")
-        print(f"  v14 UPDATE:   {_human(elapsed_with_built)}")
-        print(f"  total:        {_human(total)}")
+            print("\n" + "=" * 60)
+            print("SCENARIO 3: Reporter's manual workaround (build index, then UPDATE)")
+            print("=" * 60)
+            await _drop_lookup_index()
+            await _reset_cooldowns_to_default(args.instances, args.cooldowns_per_instance)
+            idx_start = time.monotonic()
+            await _create_lookup_index()
+            idx_elapsed = time.monotonic() - idx_start
+            elapsed_with_built = await _time_update()
+            total = idx_elapsed + elapsed_with_built
+            print(f"  CREATE INDEX: {_human(idx_elapsed)}")
+            print(f"  v14 UPDATE:   {_human(elapsed_with_built)}")
+            print(f"  total:        {_human(total)}")
 
-        print("\n" + "=" * 60)
-        print("SUMMARY")
-        print("=" * 60)
-        speedup = elapsed_without / elapsed_with if elapsed_with > 0 else float("inf")
-        print(f"  Pre-fix UPDATE:  {_human(elapsed_without)}")
-        print(f"  Post-fix UPDATE: {_human(elapsed_with)}")
-        print(f"  Speedup:         {speedup:.1f}x")
-
-        await close_all_pools()
+            print("\n" + "=" * 60)
+            print("SUMMARY")
+            print("=" * 60)
+            speedup = elapsed_without / elapsed_with if elapsed_with > 0 else float("inf")
+            print(f"  Pre-fix UPDATE:  {_human(elapsed_without)}")
+            print(f"  Post-fix UPDATE: {_human(elapsed_with)}")
+            print(f"  Speedup:         {speedup:.1f}x")
+        finally:
+            # An open pool keeps the script from exiting after a failure.
+            await close_all_pools()
     return 0
 
 

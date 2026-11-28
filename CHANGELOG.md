@@ -60,6 +60,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A double-click on `Add Instance` adds the instance once, instead of adding two identical instances that both get searched. (#931)
 - A save still running when its instance dialog is cancelled no longer closes the next instance dialog when it finishes, so what was typed there stays. (#931)
 - `Edit` on an instance deleted in another tab, or any instance dialog that fails to open, shows an error toast instead of doing nothing. (#931)
+- Houndarr exits instead of hanging when startup fails: a configuration error or a `houndarr.db` that is not SQLite exits with code 1, and a failure logged as `Application startup failed. Exiting.` exits with code 3. (#915)
+- A second Ctrl-C while Houndarr shuts down ends the process instead of leaving it running after `Finished server process`. (#915)
 
 ### Security
 

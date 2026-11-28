@@ -125,71 +125,84 @@ async def _lifespan(app: FastAPI) -> AsyncGenerator[None]:
     # whose liveness probe would otherwise kill the process before any
     # request lands (issue #586).
     set_db_path(str(settings.db_path))
-    await init_db_schema()
+    # Everything below runs under the finally: one open connection keeps the
+    # process alive after a failed startup, and a second Ctrl-C cancels the
+    # lifespan at the yield without running the shutdown.
+    try:
+        await init_db_schema()
 
-    retention_days = settings.log_retention_days
-    if retention_days > 0:
-        purged = await purge_old_logs(retention_days)
-        if purged > 0:
-            logger.info("Purged %d search_log rows older than %d days", purged, retention_days)
-    else:
-        logger.info("Search log retention disabled (HOUNDARR_LOG_RETENTION_DAYS=0)")
+        retention_days = settings.log_retention_days
+        if retention_days > 0:
+            purged = await purge_old_logs(retention_days)
+            if purged > 0:
+                logger.info("Purged %d search_log rows older than %d days", purged, retention_days)
+        else:
+            logger.info("Search log retention disabled (HOUNDARR_LOG_RETENTION_DAYS=0)")
 
-    await init_db_migrations()
-    logger.info("Database ready at %s", settings.db_path)
+        await init_db_migrations()
+        logger.info("Database ready at %s", settings.db_path)
 
-    # Warn if no instances are configured yet
-    instances = await list_instances(master_key=app.state.master_key)
-    if not instances:
-        logger.warning("No instances configured. Visit the Settings page to add an instance.")
+        # Warn if no instances are configured yet
+        instances = await list_instances(master_key=app.state.master_key)
+        if not instances:
+            logger.warning("No instances configured. Visit the Settings page to add an instance.")
 
-    # Build the dashboard aggregate cache before the supervisor starts.
-    # Order matters: as soon as ``supervisor.start()`` returns, a
-    # background cycle can write to ``search_log`` and a request can
-    # land on ``/api/status``.  Attaching the cache first guarantees
-    # the route's ``getattr(app.state, 'aggregate_cache', None)`` lookup
-    # never sees ``None`` after lifespan completion, so the very first
-    # post-startup request still benefits from caching.  async-lru
-    # clears a cache whenever a different event loop calls it, so the
-    # cache lives per-app instead of as a module global: one app per
-    # event loop in production, one app per test in pytest-asyncio
-    # function scope.
-    app.state.aggregate_cache = build_aggregate_cache()
+        # Build the dashboard aggregate cache before the supervisor starts.
+        # Order matters: as soon as ``supervisor.start()`` returns, a
+        # background cycle can write to ``search_log`` and a request can
+        # land on ``/api/status``.  Attaching the cache first guarantees
+        # the route's ``getattr(app.state, 'aggregate_cache', None)`` lookup
+        # never sees ``None`` after lifespan completion, so the very first
+        # post-startup request still benefits from caching.  async-lru
+        # clears a cache whenever a different event loop calls it, so the
+        # cache lives per-app instead of as a module global: one app per
+        # event loop in production, one app per test in pytest-asyncio
+        # function scope.
+        app.state.aggregate_cache = build_aggregate_cache()
 
-    # Start the background search supervisor
-    supervisor = Supervisor(master_key=app.state.master_key)
-    await supervisor.start()
-    app.state.supervisor = supervisor
+        # Published before start() so the finally also stops a partial start.
+        supervisor = Supervisor(master_key=app.state.master_key)
+        app.state.supervisor = supervisor
+        await supervisor.start()
 
-    if retention_days > 0:
-        retention_task: asyncio.Task[None] | None = asyncio.create_task(
-            _periodic_log_retention(retention_days), name="log-retention-loop"
+        if retention_days > 0:
+            app.state.retention_task = asyncio.create_task(
+                _periodic_log_retention(retention_days), name="log-retention-loop"
+            )
+        else:
+            app.state.retention_task = None
+
+        # Rate-limit buckets need active eviction in addition to the lazy
+        # clean-up `_check_rate_limit` does on read: scanners that hit
+        # /login once per source IP and never return otherwise leave one
+        # entry per IP behind for the lifetime of the process (issue #632).
+        app.state.rate_limit_sweep_task = asyncio.create_task(
+            periodic_rate_limit_sweep(), name="rate-limit-sweep-loop"
         )
-    else:
-        retention_task = None
-    app.state.retention_task = retention_task
 
-    # Rate-limit buckets need active eviction in addition to the lazy
-    # clean-up `_check_rate_limit` does on read: scanners that hit
-    # /login once per source IP and never return otherwise leave one
-    # entry per IP behind for the lifetime of the process (issue #632).
-    rate_limit_sweep_task: asyncio.Task[None] = asyncio.create_task(
-        periodic_rate_limit_sweep(), name="rate-limit-sweep-loop"
-    )
-    app.state.rate_limit_sweep_task = rate_limit_sweep_task
+        yield  # Application runs here
 
-    yield  # Application runs here
+        logger.info("Houndarr shutting down")
+    finally:
+        try:
+            await _stop_background_work(app)
+        except Exception:
+            logger.exception("Error stopping background work")
+        finally:
+            await close_all_pools()
 
-    logger.info("Houndarr shutting down")
-    if retention_task is not None:
-        retention_task.cancel()
-        with suppress(asyncio.CancelledError):
-            await retention_task
-    rate_limit_sweep_task.cancel()
-    with suppress(asyncio.CancelledError):
-        await rate_limit_sweep_task
-    await supervisor.stop()
-    await close_all_pools()
+
+async def _stop_background_work(app: FastAPI) -> None:
+    """Stop the background work on ``app.state``, which a factory reset replaces."""
+    for name in ("retention_task", "rate_limit_sweep_task"):
+        task = getattr(app.state, name, None)
+        if task is not None and not task.done():
+            task.cancel()
+            with suppress(asyncio.CancelledError):
+                await task
+    supervisor = getattr(app.state, "supervisor", None)
+    if isinstance(supervisor, Supervisor):
+        await supervisor.stop()
 
 
 def create_app() -> FastAPI:

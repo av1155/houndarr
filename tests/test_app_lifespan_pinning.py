@@ -108,14 +108,15 @@ class TestLifespanStartup:
 
     def test_shutdown_cancels_retention_task(
         self,
-        app: TestClient,
+        test_settings: AppSettings,
     ) -> None:
         """After the TestClient exits the lifespan, retention_task is cancelled."""
-        retention = getattr(cast("FastAPI", app.app).state, "retention_task", None)
-        assert retention is not None
-        # TestClient has yielded (we are still inside the with-block via fixture).
-        # Sanity: task was created and is alive.
-        assert not retention.done()
+        fastapi_app = app_module.create_app()
+        with TestClient(fastapi_app):
+            retention = getattr(fastapi_app.state, "retention_task", None)
+            assert retention is not None
+            assert not retention.done()
+        assert retention.done()
 
     def test_lifespan_spawns_rate_limit_sweep_task(
         self,

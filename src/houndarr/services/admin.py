@@ -25,7 +25,6 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
-from contextlib import suppress
 from pathlib import Path
 from typing import Any
 
@@ -269,24 +268,14 @@ async def _factory_reset_impl(*, app: FastAPI, data_dir: str) -> None:
 
     # Stop every background task that touches the database before the
     # on-disk wipe, so none of them race a half-deleted file or wake up
-    # on a schema that has not been recreated yet.
-    supervisor = getattr(app.state, "supervisor", None)
-    if isinstance(supervisor, Supervisor):
-        await supervisor.stop()
+    # on a schema that has not been recreated yet.  The lifespan shutdown
+    # stops the same state, so both share one routine.  Lazy import:
+    # houndarr.app imports this module's siblings during router registration.
+    from houndarr.app import _stop_background_work
+
+    await _stop_background_work(app)
     app.state.supervisor = None
-
-    retention_task = getattr(app.state, "retention_task", None)
-    if retention_task is not None and not retention_task.done():
-        retention_task.cancel()
-        with suppress(asyncio.CancelledError):
-            await retention_task
     app.state.retention_task = None
-
-    rate_limit_sweep_task = getattr(app.state, "rate_limit_sweep_task", None)
-    if rate_limit_sweep_task is not None and not rate_limit_sweep_task.done():
-        rate_limit_sweep_task.cancel()
-        with suppress(asyncio.CancelledError):
-            await rate_limit_sweep_task
     app.state.rate_limit_sweep_task = None
 
     # app.state.master_key is deliberately not nulled here. Keeping the old
@@ -325,8 +314,9 @@ async def _factory_reset_impl(*, app: FastAPI, data_dir: str) -> None:
     app.state.master_key = new_key
     reset_auth_caches()
     new_supervisor = Supervisor(master_key=new_key)
-    await new_supervisor.start()
+    # Published first, as in the lifespan, so shutdown also stops a partial start.
     app.state.supervisor = new_supervisor
+    await new_supervisor.start()
     # Respawn the log-retention loop we cancelled above. Without this,
     # an operator who stays in the same container process after the
     # reset gets unbounded search_log growth until the next restart.

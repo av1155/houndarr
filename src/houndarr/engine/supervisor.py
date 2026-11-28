@@ -108,10 +108,15 @@ class Supervisor:
     Usage (in FastAPI lifespan)::
 
         supervisor = Supervisor(master_key=app.state.master_key)
-        await supervisor.start()
         app.state.supervisor = supervisor
-        yield
-        await supervisor.stop()
+        try:
+            await supervisor.start()
+            yield
+        finally:
+            await supervisor.stop()
+
+    ``start()`` can raise after it has spawned tasks, so publish the
+    supervisor first and stop it on every exit path.
     """
 
     def __init__(self, master_key: bytes) -> None:

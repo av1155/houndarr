@@ -193,38 +193,40 @@ async def main() -> int:
         bootstrap_settings(data_dir=tmp, log_retention_days=30)
         set_db_path(db_path)
 
-        await init_db_schema()
-        await _seed_search_log(args.rows, args.instances)
-        await _seed_cooldowns(args.instances, args.cooldowns_per_instance)
+        try:
+            await init_db_schema()
+            await _seed_search_log(args.rows, args.instances)
+            await _seed_cooldowns(args.instances, args.cooldowns_per_instance)
 
-        if args.without_indexes:
-            await _drop_new_indexes()
-            print("DROPPED new indexes; simulating pre-PR codepath")
+            if args.without_indexes:
+                await _drop_new_indexes()
+                print("DROPPED new indexes; simulating pre-PR codepath")
 
-        size_mb = os.path.getsize(db_path) / 1024 / 1024
-        print(f"\nDatabase size: {size_mb:.1f} MB")
+            size_mb = os.path.getsize(db_path) / 1024 / 1024
+            print(f"\nDatabase size: {size_mb:.1f} MB")
 
-        print("\n=== init_db_migrations() ===")
-        elapsed_init = await _measure_init_db()
-        print(f"  wall clock: {_human(elapsed_init)}")
+            print("\n=== init_db_migrations() ===")
+            elapsed_init = await _measure_init_db()
+            print(f"  wall clock: {_human(elapsed_init)}")
 
-        print("\n=== _migrate_to_v14 idempotency ===")
-        first, second = await _measure_v14_backfill()
-        print(f"  first run:  {_human(first)}")
-        print(f"  second run: {_human(second)}  (idempotency guard kicked in)")
+            print("\n=== _migrate_to_v14 idempotency ===")
+            first, second = await _measure_v14_backfill()
+            print(f"  first run:  {_human(first)}")
+            print(f"  second run: {_human(second)}  (idempotency guard kicked in)")
 
-        print("\n=== /api/status latency (uncached) ===")
-        uncached = await _measure_dashboard(samples=5, with_cache=False)
-        print(f"  per call: {[_human(t) for t in uncached]}")
-        print(f"  median:   {_human(statistics.median(uncached))}")
+            print("\n=== /api/status latency (uncached) ===")
+            uncached = await _measure_dashboard(samples=5, with_cache=False)
+            print(f"  per call: {[_human(t) for t in uncached]}")
+            print(f"  median:   {_human(statistics.median(uncached))}")
 
-        print("\n=== /api/status latency (cached, ttl=20s) ===")
-        cached = await _measure_dashboard(samples=5, with_cache=True)
-        print(f"  per call: {[_human(t) for t in cached]}")
-        print(f"  median:   {_human(statistics.median(cached))}")
-        print("  (cache invalidated after 3rd call to prove cache_clear path)")
-
-        await close_all_pools()
+            print("\n=== /api/status latency (cached, ttl=20s) ===")
+            cached = await _measure_dashboard(samples=5, with_cache=True)
+            print(f"  per call: {[_human(t) for t in cached]}")
+            print(f"  median:   {_human(statistics.median(cached))}")
+            print("  (cache invalidated after 3rd call to prove cache_clear path)")
+        finally:
+            # An open pool keeps the script from exiting after a failure.
+            await close_all_pools()
 
     print("\nDone.")
     return 0

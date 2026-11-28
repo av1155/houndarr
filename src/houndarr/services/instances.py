@@ -1,7 +1,9 @@
 """Instance CRUD service: create, read, update, and delete *arr instances.
 
 API keys are never stored in plaintext.  Every write encrypts with the
-caller-supplied Fernet *master_key*; every read decrypts transparently.
+caller-supplied Fernet *master_key*; every read decrypts transparently,
+and a key that does not decrypt reads as ``''`` with
+``InstanceCore.api_key_unreadable`` set.
 """
 
 from __future__ import annotations
@@ -100,14 +102,17 @@ OffsetColumn = Literal[
 class InstanceCore:
     """Row identity plus wire credentials for one configured *arr instance.
 
-    These six fields uniquely identify an instance and describe how the
-    engine reaches it.  They are kept apart from the policy sub-structs
-    so callers that only need "which instance and how do I talk to it"
+    These fields identify an instance and describe how the engine
+    reaches it.  They are kept apart from the policy sub-structs so
+    callers that only need "which instance and how do I talk to it"
     (the client factory, the connection check, the snapshot writer) do
     not have to carry the full policy bag.
 
-    ``api_key`` is always the **decrypted** plaintext value; the
-    encrypted form only ever lives in the ``encrypted_api_key`` column.
+    ``api_key`` is the **decrypted** plaintext value; the encrypted form
+    only ever lives in the ``encrypted_api_key`` column.  When the stored
+    key does not decrypt with the current master key (a lost or replaced
+    ``houndarr.masterkey``), ``api_key`` is ``''`` and
+    ``api_key_unreadable`` is set until a new key is saved.
     """
 
     id: int
@@ -116,6 +121,7 @@ class InstanceCore:
     url: str
     api_key: str
     enabled: bool = True
+    api_key_unreadable: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -345,9 +351,10 @@ class Instance:
     the only way to evolve state is by constructing a new value
     object, which makes the repository the single mutation authority.
 
-    API keys are always decrypted at this layer:
-    ``instance.core.api_key`` returns plaintext; the encrypted form
-    only ever lives in the database column ``encrypted_api_key``.
+    API keys are decrypted at this layer: ``instance.core.api_key``
+    returns plaintext, or ``''`` when ``instance.core.api_key_unreadable``
+    is set; the encrypted form only ever lives in the database column
+    ``encrypted_api_key``.
     """
 
     core: InstanceCore

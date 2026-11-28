@@ -353,8 +353,12 @@ _PRE_REFACTOR_FLAT_FIELDS = {
 }
 
 
+# Fields added after the refactor; none of them is a column.
+_POST_REFACTOR_FIELDS = {"api_key_unreadable"}
+
+
 def test_sub_struct_field_union_covers_pre_refactor_surface() -> None:
-    """The seven sub-structs together own every historical flat column."""
+    """The seven sub-structs together own every historical flat column, plus the later fields."""
     substructs = (
         InstanceCore,
         MissingPolicy,
@@ -367,5 +371,5 @@ def test_sub_struct_field_union_covers_pre_refactor_surface() -> None:
     union: set[str] = set()
     for cls in substructs:
         union.update(f.name for f in dataclasses.fields(cls))
-    assert union == _PRE_REFACTOR_FLAT_FIELDS
-    assert len(union) == 43
+    assert union == _PRE_REFACTOR_FLAT_FIELDS | _POST_REFACTOR_FIELDS
+    assert len(_PRE_REFACTOR_FLAT_FIELDS) == 43

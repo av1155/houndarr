@@ -60,14 +60,43 @@ instance configs, and search history pick up where they left off.
 
 Without `houndarr.masterkey`, every stored *arr API key becomes
 unrecoverable ciphertext. The file cannot be regenerated from the
-database: the key is an `os.urandom(32)` value generated on first
-startup, and Fernet is symmetric.
-
-The recovery path is manual: re-enter the API key for each
-configured instance. Instance names, URLs, types, and schedule
-settings survive; only the API keys are lost.
+database: Houndarr writes a new random key whenever the file is
+missing, and the old keys only decrypt with the old one.
 
 :::
+
+Houndarr still starts. It writes a new `houndarr.masterkey` and logs
+a warning naming that file and each instance whose API key it cannot
+decrypt. Instance names, URLs, types, and settings survive; only the
+API keys are lost. Those instances stop searching. An enabled one
+shows as failing on the dashboard and the Settings page, with
+`API key can't be decrypted with the current master key; enter it again in Settings`
+on the dashboard and the Logs page. A disabled one shows the same
+error once you enable it.
+
+If you still have the original file, put it back before you re-enter
+any key: stop Houndarr, restore `houndarr.masterkey`, and start it
+again. Every key decrypts as before. Once you have re-entered keys,
+keep the new file, since those keys are encrypted with it.
+
+Otherwise, re-enter the key for each instance:
+
+1. On the Settings page, click **Edit** on the instance. The dialog
+   says the stored API key can't be decrypted and leaves the
+   **API Key** field empty.
+2. Enter the API key from your *arr instance and click
+   **Test Connection**.
+3. Click **Save Changes**. If the instance is enabled, it starts
+   searching again.
+
+### A damaged master key file
+
+When `houndarr.masterkey` exists but does not hold a valid key, for
+example an empty or truncated file from a full disk or a bad copy,
+Houndarr leaves it untouched, logs a CRITICAL line naming the file,
+and exits with code 1. Restore the file from a backup, or delete it
+so Houndarr writes a new one and then re-enter every API key as
+above.
 
 ## Migrating between hosts
 

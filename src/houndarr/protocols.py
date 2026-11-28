@@ -26,7 +26,7 @@ from houndarr.value_objects import ItemRef, WidgetApiKey
 # asyncio task bookkeeping, httpx, and the search loop.  The concrete
 # :class:`~houndarr.engine.supervisor.Supervisor` still exports the
 # same Literal alias, and both resolve to an identical type.
-RunNowStatus = Literal["accepted", "not_found", "disabled"]
+RunNowStatus = Literal["accepted", "not_found", "disabled", "key_unreadable"]
 
 # Repositories
 

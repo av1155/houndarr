@@ -18,9 +18,10 @@ local imports to avoid an import-time cycle.
 
 API keys are encrypted at rest: every write accepts plaintext, and
 the repository runs :func:`houndarr.crypto.encrypt` before touching
-SQL.  Every read decrypts via :func:`_row_to_instance`.  Payload
-dataclasses therefore carry plaintext in their ``api_key`` field;
-the encrypted blob never escapes this module.
+SQL.  Every read decrypts via :func:`_row_to_instance`, which flags a
+key it cannot decrypt instead of raising.  Payload dataclasses
+therefore carry plaintext in their ``api_key`` field; the encrypted
+blob never escapes this module.
 """
 
 from __future__ import annotations
@@ -58,7 +59,7 @@ from houndarr.config import (
     DEFAULT_UPGRADE_WHISPARR_V2_SEARCH_MODE,
     DEFAULT_WHISPARR_V2_SEARCH_MODE,
 )
-from houndarr.crypto import decrypt, encrypt
+from houndarr.crypto import InvalidToken, decrypt, encrypt
 from houndarr.database import get_db
 from houndarr.services.instances import (
     CutoffPolicy,
@@ -158,22 +159,33 @@ def _row_to_instance(row: aiosqlite.Row, master_key: bytes) -> Instance:
     / ``snapshot_refreshed_at`` route through the tolerant optional
     helpers so older test fixtures keep deserialising.
 
+    A key encrypted under another master key reads as ``''`` with
+    ``api_key_unreadable`` set, so one lost ``houndarr.masterkey`` never
+    hides the instance from the pages where its key can be entered again.
+
     Args:
         row: ``SELECT *`` row from the ``instances`` table.
         master_key: Fernet key used to decrypt ``encrypted_api_key``.
 
     Returns:
         A fully-populated :class:`Instance` with a plaintext
-        ``api_key``.
+        ``api_key``, or a flagged empty one.
     """
+    try:
+        api_key = decrypt(row["encrypted_api_key"], master_key)
+        unreadable = False
+    except InvalidToken:
+        api_key = ""
+        unreadable = True
     return Instance(
         core=InstanceCore(
             id=row["id"],
             name=row["name"],
             type=InstanceType(row["type"]),
             url=row["url"],
-            api_key=decrypt(row["encrypted_api_key"], master_key),
+            api_key=api_key,
             enabled=bool(row["enabled"]),
+            api_key_unreadable=unreadable,
         ),
         missing=MissingPolicy(
             missing_enabled=bool(row["missing_enabled"]),

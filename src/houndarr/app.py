@@ -145,6 +145,16 @@ async def _lifespan(app: FastAPI) -> AsyncGenerator[None]:
         instances = await list_instances(master_key=app.state.master_key)
         if not instances:
             logger.warning("No instances configured. Visit the Settings page to add an instance.")
+        unreadable = [repr(i.core.name) for i in instances if i.core.api_key_unreadable]
+        if unreadable:
+            logger.warning(
+                "%d instance API key(s) cannot be decrypted with %s: %s. Those instances "
+                "do not search until you restore the original key file and restart, or "
+                "enter each key again under Settings > Edit.",
+                len(unreadable),
+                settings.master_key_path,
+                ", ".join(unreadable),
+            )
 
         # Build the dashboard aggregate cache before the supervisor starts.
         # Order matters: as soon as ``supervisor.start()`` returns, a

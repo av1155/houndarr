@@ -197,6 +197,7 @@ def cli(
 
     from houndarr.bootstrap import bootstrap_non_web
     from houndarr.config import _parse_log_retention_days, _parse_samesite, _parse_url_base
+    from houndarr.crypto import MasterKeyError
     from houndarr.log_redaction import uvicorn_log_config
 
     # Configure the root logger so that application loggers (houndarr.*)
@@ -209,20 +210,24 @@ def cli(
     # the data dir, load the Fernet master key, and run init_db. The
     # FastAPI lifespan re-runs the same idempotent primitives once uvicorn
     # spawns (or reloads) the ASGI child, so running them here is safe.
-    settings, _db_path, _master_key = bootstrap_non_web(
-        data_dir=data_dir,
-        host=host,
-        port=port,
-        dev=dev,
-        log_level=log_level.lower(),
-        secure_cookies=secure_cookies,
-        cookie_samesite=_parse_samesite(cookie_samesite),
-        trusted_proxies=trusted_proxies,
-        auth_mode=auth_mode.lower(),
-        auth_proxy_header=auth_proxy_header,
-        log_retention_days=_parse_log_retention_days(log_retention_days),
-        url_base=_parse_url_base(url_base),
-    )
+    try:
+        settings, _db_path, _master_key = bootstrap_non_web(
+            data_dir=data_dir,
+            host=host,
+            port=port,
+            dev=dev,
+            log_level=log_level.lower(),
+            secure_cookies=secure_cookies,
+            cookie_samesite=_parse_samesite(cookie_samesite),
+            trusted_proxies=trusted_proxies,
+            auth_mode=auth_mode.lower(),
+            auth_proxy_header=auth_proxy_header,
+            log_retention_days=_parse_log_retention_days(log_retention_days),
+            url_base=_parse_url_base(url_base),
+        )
+    except MasterKeyError as exc:
+        logging.critical("%s", exc)
+        raise SystemExit(1) from None
 
     # Validate authentication configuration before starting
     auth_errors = settings.validate_auth_config()

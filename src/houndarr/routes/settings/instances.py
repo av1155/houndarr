@@ -55,7 +55,10 @@ from houndarr.services.instance_submit import (
     submit_create,
     submit_update,
 )
-from houndarr.services.instance_validation import run_connection_test
+from houndarr.services.instance_validation import (
+    STORED_KEY_UNREADABLE_MESSAGE,
+    run_connection_test,
+)
 from houndarr.services.instances import (
     active_error_instance_ids,
     delete_instance,
@@ -87,8 +90,8 @@ async def instance_add_form(request: Request) -> HTMLResponse:
 async def instance_test_connection(
     master_key: Annotated[bytes, Depends(get_master_key)],
     type: Annotated[str, Form()],
-    url: Annotated[str, Form()],
-    api_key: Annotated[str, Form()],
+    url: Annotated[str, Form()] = "",
+    api_key: Annotated[str, Form()] = "",
     instance_id: Annotated[str, Form()] = "",
 ) -> HTMLResponse:
     """Test *arr instance connectivity and return a status snippet.
@@ -98,7 +101,9 @@ async def instance_test_connection(
     the service owns the sentinel-resolution, SSRF gate, live probe,
     type-mismatch check, and message shaping.  When ``api_key`` is the
     edit-form sentinel and ``instance_id`` is set, the service looks
-    up the stored key before the probe.
+    up the stored key before the probe.  An empty ``url`` or ``api_key``
+    defaults to ``""`` so the service's message shows: FastAPI answers a
+    missing field with a 422 the dialog never displays.
     """
     outcome = await run_connection_test(
         master_key=master_key,
@@ -119,7 +124,8 @@ async def instance_create(
     name: Annotated[str, Form()],
     type: Annotated[str, Form()],
     url: Annotated[str, Form()],
-    api_key: Annotated[str, Form()],
+    # Blank reaches the service, which answers "Provide an API key."
+    api_key: Annotated[str, Form()] = "",
     missing_enabled: Annotated[str, Form()] = "",
     batch_size: Annotated[int, Form()] = DEFAULT_BATCH_SIZE,
     sleep_interval_mins: Annotated[int, Form()] = DEFAULT_SLEEP_INTERVAL_MINUTES,
@@ -240,6 +246,7 @@ async def instance_edit_get(
         instance=instance,
         defaults=blank_instance(),
         editing=True,
+        error=STORED_KEY_UNREADABLE_MESSAGE if instance.core.api_key_unreadable else None,
     )
 
 
@@ -251,7 +258,8 @@ async def instance_update(
     name: Annotated[str, Form()],
     type: Annotated[str, Form()],
     url: Annotated[str, Form()],
-    api_key: Annotated[str, Form()],
+    # Blank reaches the service, which answers "Provide an API key."
+    api_key: Annotated[str, Form()] = "",
     missing_enabled: Annotated[str, Form()] = "",
     batch_size: Annotated[int, Form()] = DEFAULT_BATCH_SIZE,
     sleep_interval_mins: Annotated[int, Form()] = DEFAULT_SLEEP_INTERVAL_MINUTES,
@@ -345,6 +353,11 @@ async def instance_update(
         return connection_guard_response(exc.public_message, connection=False)
     except InstanceValidationError as exc:
         return connection_guard_response(exc.public_message)
+
+    # Starts the loop of an instance whose API key was just entered again.
+    supervisor = getattr(request.app.state, "supervisor", None)
+    if isinstance(supervisor, Supervisor):
+        await supervisor.reconcile_instance(updated.core.id)
 
     invalidate_dashboard_cache(request.app.state)
 

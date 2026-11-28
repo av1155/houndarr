@@ -97,10 +97,21 @@ Common causes:
   instead.
 - `Could not reach <url>`: the instance is unreachable. See the
   first section above.
+- `API key can't be decrypted with the current master key; enter it again in Settings`:
+  `houndarr.masterkey` was lost or replaced, so the instance does not
+  search until its key is entered again. See
+  [Backup and Restore](/docs/guides/backup-and-restore#what-happens-when-the-master-key-is-lost).
 
 An error that repeats every cycle needs fixing; a single 404 does
 not. Once a cycle runs cleanly again, Houndarr logs
 `'<name>' is healthy again` and the dashboard clears the instance.
+
+## Houndarr exits right after it starts
+
+Check the container log for a CRITICAL line. One that names
+`houndarr.masterkey` means the file exists but holds no valid key;
+Houndarr exits with code 1 instead of replacing it. See
+[Backup and Restore](/docs/guides/backup-and-restore#a-damaged-master-key-file).
 
 ## Dashboard shows "next patrol" but nothing happens
 

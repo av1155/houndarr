@@ -134,8 +134,10 @@ async def test_list_instances_decrypts_each_api_key(db: None, master_key: bytes)
 
 @pytest.mark.pinning()
 @pytest.mark.asyncio()
-async def test_get_instance_decrypts_with_correct_key(db: None, master_key: bytes) -> None:
-    """Reading with a different master_key raises a decryption error."""
+async def test_get_instance_flags_a_key_another_master_key_encrypted(
+    db: None, master_key: bytes
+) -> None:
+    """A stored key that does not decrypt reads as an empty, flagged key."""
     created = await create_instance(
         master_key=master_key,
         name="Secure",
@@ -144,8 +146,58 @@ async def test_get_instance_decrypts_with_correct_key(db: None, master_key: byte
         api_key="s3cret",
     )
     other_key = Fernet.generate_key()
-    with pytest.raises(Exception):  # noqa: B017
-        await repo.get_instance(created.core.id, master_key=other_key)
+
+    got = await repo.get_instance(created.core.id, master_key=other_key)
+
+    assert got is not None
+    assert got.core.api_key == ""
+    assert got.core.api_key_unreadable is True
+    assert got.core.name == "Secure"
+    assert got.core.url == "http://sonarr:8989"
+    readable = await repo.get_instance(created.core.id, master_key=master_key)
+    assert readable is not None
+    assert readable.core.api_key == "s3cret"
+    assert readable.core.api_key_unreadable is False
+
+
+@pytest.mark.asyncio()
+async def test_list_instances_reads_every_row_when_some_keys_do_not_decrypt(
+    db: None, master_key: bytes
+) -> None:
+    """One unreadable key never hides the other rows, and its ciphertext stays as stored."""
+    other_key = Fernet.generate_key()
+    foreign = encrypt("old-key", other_key)
+    await create_instance(
+        master_key=master_key,
+        name="Readable",
+        type=InstanceType.sonarr,
+        url="http://s1:8989",
+        api_key="good",
+    )
+    async with get_db() as conn:
+        await conn.executemany(
+            "INSERT INTO instances (name, type, url, encrypted_api_key) VALUES (?, ?, ?, ?)",
+            [
+                ("Other key", "radarr", "http://r1:7878", foreign),
+                ("No key", "radarr", "http://r2:7878", ""),
+            ],
+        )
+        await conn.commit()
+
+    rows = await repo.list_instances(master_key=master_key)
+
+    assert [(r.core.name, r.core.api_key, r.core.api_key_unreadable) for r in rows] == [
+        ("Readable", "good", False),
+        ("Other key", "", True),
+        ("No key", "", True),
+    ]
+    async with get_db() as conn:
+        async with conn.execute(
+            "SELECT encrypted_api_key FROM instances WHERE name = 'Other key'"
+        ) as cur:
+            row = await cur.fetchone()
+    assert row is not None
+    assert row["encrypted_api_key"] == foreign
 
 
 @pytest.mark.pinning()

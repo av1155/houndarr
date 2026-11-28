@@ -957,24 +957,20 @@ async def _persist_offset_with_typed_wrap(
 ) -> None:
     """Store one advanced offset unless the row changed during the cycle.
 
-    The four offset-persist call sites (upgrade series offset and
-    upgrade item offset in :func:`_run_upgrade_pass`; missing page
-    offset and cutoff page offset in
-    :func:`_run_instance_search_impl`) share this helper so each one
-    narrows its ``except Exception`` to
-    :class:`EngineOffsetPersistError`.
+    Callers reach this only through :func:`_persist_offset_or_warn`.
 
     The write lands only while the row still holds *start* and the mode
     that advances *column* (see
-    :func:`houndarr.repositories.instances.update_instance_offset`), so a
-    reset, an Edit save or a newer cycle committed after this cycle read
-    *instance* keeps its value.  A skipped write is expected and logs at
-    DEBUG only.
+    :func:`houndarr.repositories.instances.update_instance_offset` for
+    the one save it cannot detect), so a reset, an Edit save that moved
+    the offset or changed that mode, or a newer cycle committed after
+    this cycle read *instance* keeps its value.  A skipped write is
+    expected and logs at DEBUG only.
 
-    A failed write is non-fatal by design: callers swallow the typed
-    error and the next cycle retries the persist.  The wrap keeps the
-    log line identical (``"failed to persist ..."``) while giving
-    observability a typed surface to key on.
+    A failed write is non-fatal by design: the typed error gives
+    observability a surface to key on, :func:`_persist_offset_or_warn`
+    logs it as ``failed to persist <column>``, and the next cycle
+    retries the persist.
 
     Args:
         instance: The snapshot the cycle ran on.
@@ -1593,11 +1589,14 @@ async def _run_upgrade_pass(
         report.reached = True
 
     # Advance series offset for series-based apps (Sonarr/Whisparr v2) by
-    # the window the adapter sampled, so the next slice starts right after
-    # this one.  An empty slice advances too: series with nothing to
-    # upgrade would otherwise hold the rotation on them for good.  The
-    # adapter reads the offset modulo the series count, so an empty
-    # library only grows the stored number.
+    # the configured window, so the next slice starts right after this
+    # one.  An empty slice advances too, including one whose episode
+    # fetches all failed (each failure already logs a warning): holding
+    # the offset would let series with nothing to upgrade, or one series
+    # that always fails, stop the rotation for good, while a skipped
+    # slice comes round again on the next rotation.  The adapter reads
+    # the offset modulo the series count, so an empty library only grows
+    # the stored number.
     # Unlike upgrade_item_offset, this advances in both chronological and
     # random modes on purpose: the series offset decides which slice of
     # series feeds the upgrade pool, so continuing to rotate it in random

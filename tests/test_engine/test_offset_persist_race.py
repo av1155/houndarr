@@ -313,6 +313,26 @@ async def test_a_save_during_a_cycle_keeps_its_page_offsets(
 
 
 @respx.mock
+async def test_a_save_that_rewrites_the_cycle_start_lets_the_cycle_page_stand(
+    db: None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Known gap: from page 1, a save that keeps the pass and the order leaves nothing to detect.
+
+    The cycle's next page lands, the same as if the save had come just
+    before the cycle.  Telling the two apart needs a revision column.
+    """
+    _mock_sonarr()
+    instance = await _instance()
+    _before_write(monkeypatch, lambda: _save(instance.core.id, batch_size=2))
+
+    await run_instance_search(instance, MASTER_KEY)
+
+    stored = await stored_offsets(instance.core.id)
+    assert (stored["missing_page_offset"], stored["cutoff_page_offset"]) == (2, 2)
+
+
+@respx.mock
 @pytest.mark.parametrize(
     ("item", "series"),
     [pytest.param(7, 10, id="from-moved-offsets"), pytest.param(0, 0, id="from-zero")],

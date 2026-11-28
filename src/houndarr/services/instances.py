@@ -681,7 +681,7 @@ async def update_instance_offset(
 
     Thin delegator over
     :func:`houndarr.repositories.instances.update_instance_offset`.
-    Called by the search loop at the end of each pass.
+    Called by the search loop once a pass has advanced an offset.
 
     Returns:
         ``True`` when the row still held *expected* and the mode that

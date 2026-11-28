@@ -269,8 +269,8 @@ async def _factory_reset_impl(*, app: FastAPI, data_dir: str) -> None:
     # Stop every background task that touches the database before the
     # on-disk wipe, so none of them race a half-deleted file or wake up
     # on a schema that has not been recreated yet.  The lifespan shutdown
-    # stops the same state, so both share one routine.  Lazy import:
-    # houndarr.app imports this module's siblings during router registration.
+    # stops the same state, so both share one routine.  Imported here so
+    # loading the service layer does not load houndarr.app.
     from houndarr.app import _stop_background_work
 
     await _stop_background_work(app)

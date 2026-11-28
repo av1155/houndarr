@@ -8,6 +8,7 @@ alive after uvicorn or the CLI has given up.
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
 import sqlite3
 import subprocess
@@ -132,13 +133,12 @@ async def test_a_cancel_during_connection_setup_leaves_no_worker_running(
     task = asyncio.create_task(_borrow())
     await entered.wait()
     task.cancel()
-    # The traceback keeps the half-built connection alive, as a logged or
-    # re-raised error would; without it __del__ would hide the leak.
-    with pytest.raises(asyncio.CancelledError) as excinfo:
+    with pytest.raises(asyncio.CancelledError):
         await task
 
+    # ``opened`` holds the connection, so its __del__ cannot stop the thread
+    # and hide the leak.
     _assert_workers_stopped(opened)
-    assert excinfo.value is not None
 
 
 async def test_a_cancel_during_the_pool_health_check_leaves_no_worker_running(
@@ -158,12 +158,11 @@ async def test_a_cancel_during_the_pool_health_check_leaves_no_worker_running(
     task = asyncio.create_task(_borrow())
     await entered.wait()
     task.cancel()
-    with pytest.raises(asyncio.CancelledError) as excinfo:
+    with pytest.raises(asyncio.CancelledError):
         await task
 
     await close_all_pools()
     _assert_workers_stopped(opened)
-    assert excinfo.value is not None
 
 
 async def test_close_all_pools_closes_a_pool_opened_while_it_runs(
@@ -182,6 +181,22 @@ async def test_close_all_pools_closes_a_pool_opened_while_it_runs(
     await close_all_pools()
 
     assert database._pools == {}
+    _assert_workers_stopped(opened)
+
+
+@pytest.mark.parametrize("ticks", [0, 1, 2, 3, 4])
+async def test_overlapping_close_all_pools_calls_both_return(
+    opened: list[aiosqlite.Connection], tmp_path: Path, ticks: int
+) -> None:
+    # Two factory resets in flight, or a cancelled reset and the lifespan exit.
+    set_db_path(str(tmp_path / "houndarr.db"))
+    await _borrow()
+    first = asyncio.create_task(close_all_pools())
+    for _ in range(ticks):
+        await asyncio.sleep(0)
+
+    await asyncio.wait_for(asyncio.gather(first, close_all_pools()), timeout=5)
+
     _assert_workers_stopped(opened)
 
 
@@ -280,6 +295,28 @@ async def test_a_cancel_while_serving_closes_the_database(
         await _cancel([app.state.rate_limit_sweep_task, app.state.retention_task])
 
 
+async def test_a_failing_stop_is_logged_and_the_database_still_closes(
+    opened: list[aiosqlite.Connection],
+    test_settings: AppSettings,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    async def failing_stop(self: Supervisor) -> None:
+        raise RuntimeError("supervisor stop failed")
+
+    caplog.set_level(logging.ERROR, logger="houndarr.app")
+    app = app_module.create_app()
+    try:
+        async with app.router.lifespan_context(app):
+            monkeypatch.setattr(Supervisor, "stop", failing_stop)
+
+        assert "Error stopping background work" in caplog.text
+        assert str(test_settings.db_path) not in database._pools
+        _assert_workers_stopped(opened)
+    finally:
+        await _cancel(_supervisor_tasks())
+
+
 async def test_shutdown_after_a_factory_reset_stops_the_new_background_work(
     opened: list[aiosqlite.Connection], test_settings: AppSettings
 ) -> None:
@@ -344,7 +381,18 @@ def _run_cli(data_dir: Path) -> tuple[int, str]:
     }
     try:
         result = subprocess.run(
-            [sys.executable, "-m", "houndarr", "--data-dir", str(data_dir)],
+            # A regression that let startup pass would bind a free loopback port.
+            [
+                sys.executable,
+                "-m",
+                "houndarr",
+                "--data-dir",
+                str(data_dir),
+                "--host",
+                "127.0.0.1",
+                "--port",
+                "0",
+            ],
             cwd=_REPO_ROOT,
             env=env,
             capture_output=True,

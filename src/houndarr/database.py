@@ -259,10 +259,13 @@ _db_path: str = ""
 # the process alive.
 _pools: dict[str, SQLiteConnectionPool] = {}
 
-# Every connection the factory handed out, so close_all_pools() can close
-# the ones a pool never registered: aiosqlitepool 1.0.0 drops a new
-# connection whose health check is cancelled without closing it.
-_factory_connections: weakref.WeakSet[aiosqlite.Connection] = weakref.WeakSet()
+# Connections the factory opened that no pool has handed out yet, so
+# close_all_pools() can close the ones a pool never registered: aiosqlitepool
+# 1.0.0 drops a new connection whose health check is cancelled without
+# closing it.  get_db() removes a connection on its first borrow, so the
+# sweep never touches one a pool has handed out: two concurrent closes of
+# one aiosqlite connection leave the second caller waiting forever.
+_unclaimed_connections: weakref.WeakSet[aiosqlite.Connection] = weakref.WeakSet()
 
 
 def set_db_path(path: str) -> None:
@@ -318,7 +321,7 @@ async def _connection_factory() -> aiosqlite.Connection:
         with suppress(Exception):
             await conn.close()
         raise
-    _factory_connections.add(conn)
+    _unclaimed_connections.add(conn)
     return conn
 
 
@@ -352,12 +355,12 @@ def _get_or_create_pool() -> SQLiteConnectionPool:
 
 
 async def close_all_pools() -> None:
-    """Close every per-path pool, then any connection no pool registered.
+    """Close every per-path pool, then any connection no pool handed out.
 
-    Afterwards every aiosqlite thread has exited, so the process can exit
-    and the database files can be deleted.  A pool opened while the pools
-    are closing is closed too.  ``get_db()`` still works after the call
-    and opens a new pool.
+    The process can only exit, and the database files can only be deleted,
+    once this has closed every connection.  The loop also closes a pool that
+    a concurrent ``get_db()`` opens before the last pool has closed.
+    ``get_db()`` still works after the call and opens a new pool.
     """
     while _pools:
         _, pool = _pools.popitem()
@@ -365,7 +368,11 @@ async def close_all_pools() -> None:
             await pool.close()
         except Exception:
             logger.exception("Error closing SQLite connection pool")
-    for conn in list(_factory_connections):
+    while True:
+        try:
+            conn = _unclaimed_connections.pop()
+        except KeyError:
+            break
         try:
             await conn.close()
         except Exception:
@@ -386,7 +393,9 @@ async def get_db() -> AsyncIterator[aiosqlite.Connection]:
     async with pool.connection() as db:
         # The pool re-types the connection as its structural Protocol; the
         # underlying object is the aiosqlite.Connection from the factory.
-        yield cast("aiosqlite.Connection", db)
+        conn = cast("aiosqlite.Connection", db)
+        _unclaimed_connections.discard(conn)
+        yield conn
 
 
 # ---------------------------------------------------------------------------

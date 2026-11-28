@@ -69,7 +69,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The Sonarr and Whisparr v2 upgrade rotation steps by `Upgrade Series Window (per cycle)`, so small windows no longer skip series and large ones no longer overlap. (#936)
 - An `Upgrade Series Window (per cycle)` larger than the library fetches each monitored series once per cycle instead of listing some twice. (#936)
 - The Sonarr and Whisparr v2 upgrade rotation moves past series with nothing to upgrade, instead of sampling the same ones every cycle from then on. (#936)
-- Houndarr starts after `houndarr.masterkey` is lost instead of exiting with code 3, and each enabled instance whose API key no longer decrypts shows `API key can't be decrypted` and is not searched until its key is entered again. (#934)
+- Houndarr starts after `houndarr.masterkey` is lost, instead of stopping at `Application startup failed. Exiting.` (#934)
+- An enabled instance whose API key no longer decrypts shows `API key can't be decrypted` and is not searched until its key is entered again under `Edit`. (#934)
 - A damaged `houndarr.masterkey`, such as an empty file left by a full disk, exits with code 1 and a CRITICAL line naming the file instead of failing later with a traceback; Houndarr never replaces it. (#934)
 - `Test Connection` with the URL or API key left empty shows `Instance URL is required.` or `Provide an API key.` in the instance dialog instead of nothing. (#934)
 

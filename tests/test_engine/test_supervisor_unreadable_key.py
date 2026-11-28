@@ -71,6 +71,15 @@ async def _rows(instance_id: int) -> list[tuple[Any, ...]]:
             return [tuple(row) for row in await cur.fetchall()]
 
 
+async def _log_error(instance_id: int, message: str) -> None:
+    async with get_db() as conn:
+        await conn.execute(
+            "INSERT INTO search_log (instance_id, action, message) VALUES (?, 'error', ?)",
+            (instance_id, message),
+        )
+        await conn.commit()
+
+
 async def _flagged(instance_id: int) -> Instance:
     instance = await get_instance(instance_id, master_key=MASTER_KEY)
     assert instance is not None
@@ -150,6 +159,38 @@ async def test_start_writes_the_error_again_once_a_newer_row_covers_it(
             ("error", KEY_ERROR),
             ("info", "x"),
             ("error", KEY_ERROR),
+        ]
+    finally:
+        await supervisor.stop()
+
+
+async def test_an_open_outage_does_not_stand_in_for_the_key_error(
+    seeded: None, no_network: list[int]
+) -> None:
+    await _log_error(LOST, "Could not reach http://s2:8989")
+    supervisor = Supervisor(master_key=MASTER_KEY)
+    try:
+        await supervisor.start()
+
+        assert [row[:2] for row in await _rows(LOST)] == [
+            ("error", "Could not reach http://s2:8989"),
+            ("error", KEY_ERROR),
+        ]
+    finally:
+        await supervisor.stop()
+
+
+async def test_starting_over_an_open_outage_writes_no_key_closing_row(
+    seeded: None, no_network: list[int]
+) -> None:
+    await _log_error(READABLE, "Could not reach http://s1:8989")
+    supervisor = Supervisor(master_key=MASTER_KEY)
+    try:
+        await supervisor.start()
+
+        assert READABLE in supervisor._tasks
+        assert [row[:2] for row in await _rows(READABLE)] == [
+            ("error", "Could not reach http://s1:8989")
         ]
     finally:
         await supervisor.stop()
@@ -304,7 +345,10 @@ async def test_a_key_saved_while_the_refresh_writes_its_error_ends_on_the_closin
     async def newest_row_with_a_save_meanwhile(self: Supervisor, instance: Instance) -> Any:
         if instance.core.id == LOST and not saves:
             saves.append(asyncio.create_task(save_new_key()))
-            await asyncio.sleep(0.2)
+            # The save registers its task, then queues on the key-row lock with no await between.
+            async with asyncio.timeout(5):
+                while LOST not in supervisor._tasks:
+                    await asyncio.sleep(0.01)
         return await real_newest_row(self, instance)
 
     try:

@@ -609,11 +609,13 @@ function initSettingsPage() {
           document.body.style.overflow = '';
         }
 
-        if (evt.detail.target.id === 'instance-tbody') {
-          window.houndarrCloseAddInstanceModal();
-        }
-
-        if (evt.detail.target.id.startsWith('instance-row-')) {
+        // A save from a dialog cancelled earlier still refreshes the table but must not close
+        // the dialog opened since; that save's form is no longer in it.
+        const targetId = evt.detail.target.id;
+        if (
+          (targetId === 'instance-tbody' || targetId.startsWith('instance-row-')) &&
+          addInstanceModalContent.contains(evt.detail.requestConfig?.elt)
+        ) {
           window.houndarrCloseAddInstanceModal();
         }
 

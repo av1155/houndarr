@@ -723,6 +723,59 @@ def test_connection_result_during_a_save_keeps_save_off(
 
 
 @pytest.mark.integration
+def test_save_from_a_cancelled_dialog_leaves_the_next_one_open(
+    logged_in_page: Page, houndarr_url: str, mock_sonarr_url: str
+) -> None:
+    """A save that finishes after its dialog was cancelled must not close the next dialog.
+
+    Cancel does not stop a running save, so it still adds its row; the dialog
+    opened since then keeps what the user typed.
+    """
+    page = logged_in_page
+    first_name = f"E2E Cancelled {uuid.uuid4().hex[:8]}"
+    page.goto(f"{houndarr_url}/settings")
+    add_form = _open_filled_add_form(page, mock_sonarr_url, first_name)
+    _test_connection_and_wait_for_success(
+        page, add_form, add_form.locator("button[data-test-connection-btn]")
+    )
+
+    held: list[Route] = []
+
+    def hold(route: Route) -> None:
+        if route.request.method == "POST":
+            held.append(route)
+        else:
+            route.continue_()
+
+    pattern = re.compile(r"/settings/instances$")
+    page.route(pattern, hold)
+    try:
+        add_form.locator("#instance-submit-btn").click()
+        page.locator('#add-instance-modal [data-close-add-instance-modal="true"]').first.click()
+        expect(page.locator("dialog#add-instance-modal[open]")).to_have_count(0)
+
+        page.get_by_role("button", name=re.compile(r"add\s*instance", re.I)).first.click()
+        next_form = page.locator('form[data-form-mode="add"]')
+        _expect_dialog_ready(page, next_form)
+        next_form.locator('input[name="name"]').fill("Typed after cancel")
+        assert len(held) == 1, f"expected one held save, got {len(held)}"
+
+        with page.expect_response(
+            lambda r: r.url.endswith("/settings/instances") and r.request.method == "POST"
+        ) as resp_info:
+            held[0].continue_()
+        assert resp_info.value.status == 200, resp_info.value.status
+        expect(page.locator("#instance-tbody")).to_contain_text(first_name, timeout=10_000)
+        _wait_for_htmx_idle(page)
+        page.wait_for_timeout(500)  # past the dialog's 160 ms close animation
+
+        expect(page.locator("dialog#add-instance-modal[open]")).to_have_count(1)
+        expect(next_form.locator('input[name="name"]')).to_have_value("Typed after cancel")
+    finally:
+        page.unroute(pattern)
+
+
+@pytest.mark.integration
 def test_save_for_a_deleted_instance_says_so_and_moves_focus(
     logged_in_page: Page, houndarr_url: str, mock_sonarr_url: str, console_guard
 ) -> None:

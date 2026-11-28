@@ -41,7 +41,13 @@ from houndarr.services.cooldown import (
     record_search_ref,
     should_log_skip,
 )
-from houndarr.services.instances import Instance, InstanceType, SearchOrder, update_instance
+from houndarr.services.instances import (
+    Instance,
+    InstanceType,
+    OffsetColumn,
+    SearchOrder,
+    update_instance_offset,
+)
 from houndarr.services.time_window import (
     describe_outside_window,
     is_within_window,
@@ -943,43 +949,67 @@ async def _dispatch_with_typed_wrap(
 
 
 async def _persist_offset_with_typed_wrap(
-    instance_id: int,
+    instance: Instance,
+    column: OffsetColumn,
     *,
-    master_key: bytes,
-    **offsets: int,
+    start: int,
+    value: int,
 ) -> None:
-    """Call :func:`update_instance` with offset kwargs, typing failures.
+    """Store one advanced offset while the row still holds the cycle's start and mode.
 
-    The four offset-persist call sites (upgrade series offset and
-    upgrade item offset in :func:`_run_upgrade_pass`; missing page
-    offset and cutoff page offset in
-    :func:`_run_instance_search_impl`) share this helper so each one
-    narrows its ``except Exception`` to
-    :class:`EngineOffsetPersistError`.
+    Callers reach this only through :func:`_persist_offset_or_warn`.
 
-    These writes are non-fatal by design: callers swallow the typed
-    error and the next cycle retries the persist.  The wrap keeps the
-    log line identical (``"failed to persist ..."``) while giving
-    observability a typed surface to key on.
+    The write lands only while the row still holds *start* and the mode
+    that advances *column* (see
+    :func:`houndarr.repositories.instances.update_instance_offset` for
+    the change it cannot detect), so a reset, an Edit save that moved
+    the offset or changed that mode, or a newer cycle that moved the
+    offset keeps its value.  A skipped write is expected and logs at
+    DEBUG only.
+
+    A failed write is non-fatal by design: the typed error gives
+    observability a surface to key on, :func:`_persist_offset_or_warn`
+    logs it as ``failed to persist <column>``, and the next cycle
+    retries the persist.
 
     Args:
-        instance_id: Primary key of the row being updated.
-        master_key: Fernet key required by :func:`update_instance`.
-        **offsets: Integer columns to update, e.g.
-            ``missing_page_offset=7``.  Non-integer columns are not a
-            valid shape for this helper; callers should use
-            :func:`update_instance` directly for those.
+        instance: The snapshot the cycle ran on.
+        column: The offset column to write.
+        start: The stored value the cycle read for *column*.
+        value: The advanced value.
 
     Raises:
         EngineOffsetPersistError: Any non-typed ``Exception``; the
             original is preserved on ``__cause__``.
     """
     try:
-        await update_instance(instance_id, master_key=master_key, **offsets)
+        written = await update_instance_offset(
+            instance.core.id, column, expected=start, value=value
+        )
     except (EngineError, ClientError):
         raise
     except Exception as exc:
         raise EngineOffsetPersistError(str(exc)) from exc
+    if not written:
+        logger.debug(
+            "[%s] %s not written: the instance changed during the cycle",
+            instance.core.name,
+            column,
+        )
+
+
+async def _persist_offset_or_warn(
+    instance: Instance,
+    column: OffsetColumn,
+    *,
+    start: int,
+    value: int,
+) -> None:
+    """Run :func:`_persist_offset_with_typed_wrap`, logging a failed write as a warning."""
+    try:
+        await _persist_offset_with_typed_wrap(instance, column, start=start, value=value)
+    except EngineOffsetPersistError:
+        logger.warning("[%s] failed to persist %s", instance.core.name, column)
 
 
 async def _fetch_pool_with_typed_wrap(
@@ -1475,7 +1505,6 @@ async def _run_search_pass(
 async def _run_upgrade_pass(
     instance: Instance,
     adapter: AppAdapterProto,
-    master_key: bytes,
     *,
     cycle_id: str,
     cycle_trigger: CycleTrigger | str,
@@ -1493,7 +1522,6 @@ async def _run_upgrade_pass(
         instance: Fully-populated (decrypted) instance.
         adapter: The :class:`AppAdapterProto` implementation for this
             instance type.
-        master_key: Fernet key for persisting offset updates.
         cycle_id: Shared cycle identifier for all log rows.
         cycle_trigger: How this cycle was initiated.
         tag_filter_include_ids: Resolved include tag-IDs from
@@ -1560,25 +1588,28 @@ async def _run_upgrade_pass(
     if report is not None:
         report.reached = True
 
-    # Advance series offset for series-based apps (Sonarr/Whisparr v2),
-    # but only when the slice produced something. Rotating through an
-    # always-empty library (no enabled/monitored series yet) would walk
-    # the cursor off into the future for no coverage gain.
+    # Advance series offset for series-based apps (Sonarr/Whisparr v2) by
+    # the configured window, so the next slice starts right after this
+    # one.  An empty slice advances too, including one whose episode
+    # fetches all failed (each failure already logs a warning): holding
+    # the offset would let series with nothing to upgrade, or one series
+    # that always fails, stop the rotation for good, while a skipped
+    # slice comes round again on the next rotation.  The adapter reads
+    # the offset modulo the series count, so an empty library only grows
+    # the stored number.
     # Unlike upgrade_item_offset, this advances in both chronological and
     # random modes on purpose: the series offset decides which slice of
     # series feeds the upgrade pool, so continuing to rotate it in random
     # mode preserves whole-library coverage while the shuffle happens
     # within each rotated slice.
-    if pool and instance.core.type in (InstanceType.sonarr, InstanceType.whisparr_v2):
-        new_series_offset = instance.upgrade.upgrade_series_offset + 5
-        try:
-            await _persist_offset_with_typed_wrap(
-                instance.core.id,
-                master_key=master_key,
-                upgrade_series_offset=new_series_offset,
-            )
-        except EngineOffsetPersistError:
-            logger.warning("[%s] failed to persist upgrade_series_offset", instance.core.name)
+    if instance.core.type in (InstanceType.sonarr, InstanceType.whisparr_v2):
+        series_start = instance.upgrade.upgrade_series_offset
+        await _persist_offset_or_warn(
+            instance,
+            "upgrade_series_offset",
+            start=series_start,
+            value=series_start + max(1, instance.upgrade.upgrade_series_window_size),
+        )
 
     if not pool:
         logger.info("[%s] upgrade pool empty, nothing to upgrade", instance.core.name)
@@ -1772,14 +1803,12 @@ async def _run_upgrade_pass(
     # (the pool was shuffled, not rotated), so skip the write entirely to
     # keep the column meaningful and avoid per-cycle row churn.
     if instance.schedule.search_order == SearchOrder.chronological:
-        try:
-            await _persist_offset_with_typed_wrap(
-                instance.core.id,
-                master_key=master_key,
-                upgrade_item_offset=new_offset,
-            )
-        except EngineOffsetPersistError:
-            logger.warning("[%s] failed to persist upgrade_item_offset", instance.core.name)
+        await _persist_offset_or_warn(
+            instance,
+            "upgrade_item_offset",
+            start=instance.upgrade.upgrade_item_offset,
+            value=new_offset,
+        )
 
     return searched
 
@@ -1826,7 +1855,6 @@ async def run_instance_search(
     try:
         return await _run_instance_search_impl(
             instance,
-            master_key,
             cycle_id=cycle_id,
             cycle_trigger=cycle_trigger,
             report=report if report is not None else CycleReport(),
@@ -1843,7 +1871,6 @@ async def run_instance_search(
 
 async def _run_instance_search_impl(
     instance: Instance,
-    master_key: bytes,
     *,
     cycle_id: str | None = None,
     cycle_trigger: CycleTrigger | str = CycleTrigger.scheduled,
@@ -2020,14 +2047,12 @@ async def _run_instance_search_impl(
             # and churn the row every cycle.  Only advance the offset in
             # chronological mode.
             if instance.schedule.search_order == SearchOrder.chronological:
-                try:
-                    await _persist_offset_with_typed_wrap(
-                        instance.core.id,
-                        master_key=master_key,
-                        missing_page_offset=next_missing_page,
-                    )
-                except EngineOffsetPersistError:
-                    logger.warning("[%s] failed to persist missing_page_offset", instance.core.name)
+                await _persist_offset_or_warn(
+                    instance,
+                    "missing_page_offset",
+                    start=instance.schedule.missing_page_offset,
+                    value=next_missing_page,
+                )
 
     logger.info("[%s] cycle complete: %d searched", instance.core.name, searched)
 
@@ -2071,14 +2096,12 @@ async def _run_instance_search_impl(
             # Mirror the missing-pass gate: only advance the offset in
             # chronological mode.  See the missing pass for rationale.
             if instance.schedule.search_order == SearchOrder.chronological:
-                try:
-                    await _persist_offset_with_typed_wrap(
-                        instance.core.id,
-                        master_key=master_key,
-                        cutoff_page_offset=next_cutoff_page,
-                    )
-                except EngineOffsetPersistError:
-                    logger.warning("[%s] failed to persist cutoff_page_offset", instance.core.name)
+                await _persist_offset_or_warn(
+                    instance,
+                    "cutoff_page_offset",
+                    start=instance.schedule.cutoff_page_offset,
+                    value=next_cutoff_page,
+                )
             searched += cutoff_searched
 
     # --- Upgrade pass ---
@@ -2096,7 +2119,6 @@ async def _run_instance_search_impl(
             upgrade_searched = await _run_upgrade_pass(
                 instance,
                 adapter,
-                master_key,
                 cycle_id=cycle_id_value,
                 cycle_trigger=cycle_trigger,
                 tag_filter_include_ids=upgrade_tags.include_ids,

@@ -115,10 +115,14 @@ operating point changes or a user reports a concrete regression.
   draw which is a substantial redesign of `_run_search_pass`. Probe:
   `tests/mock_arr/probe_cooldown.py`.
 - Sonarr / Whisparr v2 windowed-rotation coverage time. The upgrade
-  pass visits 5 series per cycle; full-library coverage takes
+  pass visits `upgrade_series_window_size` series per cycle (default
+  5, capped at the monitored series count) and moves the series offset
+  on by that window, so every series is sampled within
+  `ceil(series / window)` cycles (#936). Episode-level coverage takes
   approximately `ceil(eligible_episodes * H / batch)` cycles where H
   is the harmonic-coverage factor. Measured 91% theoretical and
-  85-89% empirical coverage at 60 cycles with batch=5 on 50 series.
-  This is the intentional trade-off versus hammering one series with
-  a single huge *arr fetch. Probe:
+  85-89% empirical coverage at 60 cycles with batch=5 on 50 series at
+  the default window (127 and 133 of 150 for Chronological and Random
+  on 2026-11-28). This is the intentional trade-off versus hammering
+  one series with a single huge *arr fetch. Probe:
   `tests/mock_arr/probe_upgrade_coverage.py`.

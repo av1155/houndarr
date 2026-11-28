@@ -140,11 +140,12 @@ async def reset_all_instance_policy(
     protective exclude would widen what the next cycle searches.  Every
     row and the audit breadcrumb commit in one transaction, so a failure
     leaves every instance as it was.  After the commit the supervisor is
-    reconciled per row so the running search loop adopts the new cadence
-    on its next wake; the search loop re-reads columns each cycle
-    already, so this is mostly a belt-and-braces for the upgrade-offset
-    reset.  A reconcile failure is logged and the remaining rows are
-    still reconciled, because the reset itself has already committed.
+    reconciled per row, which starts a loop for an enabled instance that
+    has none; running loops re-read the row each cycle.  A cycle already
+    in progress keeps the policy it read, but its offset writes skip a
+    row the reset changed, so the reset's offsets stand.  A reconcile
+    failure is logged and the remaining rows are still reconciled,
+    because the reset itself has already committed.
 
     Args:
         master_key: Fernet master key used to decrypt the stored api_key

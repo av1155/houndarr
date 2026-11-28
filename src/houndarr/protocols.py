@@ -17,7 +17,7 @@ from collections.abc import Awaitable
 from typing import Any, Literal, Protocol, runtime_checkable
 
 from houndarr.clients.base import ArrClient
-from houndarr.services.instances import Instance
+from houndarr.services.instances import Instance, OffsetColumn
 from houndarr.value_objects import ItemRef, WidgetApiKey
 
 # ``RunNowStatus`` is duplicated here (rather than imported from
@@ -134,6 +134,17 @@ class InstanceRepository(Protocol):
         unreleased_count: int,
     ) -> Awaitable[None]:
         """Refresh the three v13 snapshot columns for *instance_id*."""
+        ...
+
+    def update_instance_offset(
+        self,
+        instance_id: int,
+        column: OffsetColumn,
+        *,
+        expected: int,
+        value: int,
+    ) -> Awaitable[bool]:
+        """Write a cycle's offset; ``False`` when the row lost *expected* or its mode."""
         ...
 
 

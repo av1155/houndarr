@@ -22,6 +22,8 @@ from .conftest import (
     WHISPARR_V2_URL,
     get_log_rows,
     make_instance,
+    stored_offsets,
+    sync_instance_row,
 )
 
 # ---------------------------------------------------------------------------
@@ -157,7 +159,7 @@ def _mock_radarr_command() -> None:
 @pytest.mark.asyncio()
 @respx.mock
 @patch(
-    "houndarr.engine.search_loop.update_instance",
+    "houndarr.engine.search_loop.update_instance_offset",
     new_callable=AsyncMock,
 )
 async def test_upgrade_batch_size_clamped_to_5(
@@ -183,7 +185,7 @@ async def test_upgrade_batch_size_clamped_to_5(
 @pytest.mark.asyncio()
 @respx.mock
 @patch(
-    "houndarr.engine.search_loop.update_instance",
+    "houndarr.engine.search_loop.update_instance_offset",
     new_callable=AsyncMock,
 )
 async def test_upgrade_batch_size_3_not_clamped(
@@ -214,7 +216,7 @@ async def test_upgrade_batch_size_3_not_clamped(
 @pytest.mark.asyncio()
 @respx.mock
 @patch(
-    "houndarr.engine.search_loop.update_instance",
+    "houndarr.engine.search_loop.update_instance_offset",
     new_callable=AsyncMock,
 )
 async def test_upgrade_hourly_cap_clamped_to_5(
@@ -243,7 +245,7 @@ async def test_upgrade_hourly_cap_clamped_to_5(
 @pytest.mark.asyncio()
 @respx.mock
 @patch(
-    "houndarr.engine.search_loop.update_instance",
+    "houndarr.engine.search_loop.update_instance_offset",
     new_callable=AsyncMock,
 )
 async def test_upgrade_hourly_cap_1_not_clamped(
@@ -277,7 +279,7 @@ async def test_upgrade_hourly_cap_1_not_clamped(
 @pytest.mark.asyncio()
 @respx.mock
 @patch(
-    "houndarr.engine.search_loop.update_instance",
+    "houndarr.engine.search_loop.update_instance_offset",
     new_callable=AsyncMock,
 )
 async def test_upgrade_cooldown_days_clamped_to_min_7(
@@ -319,7 +321,7 @@ async def test_upgrade_cooldown_days_clamped_to_min_7(
 @pytest.mark.asyncio()
 @respx.mock
 @patch(
-    "houndarr.engine.search_loop.update_instance",
+    "houndarr.engine.search_loop.update_instance_offset",
     new_callable=AsyncMock,
 )
 async def test_upgrade_cooldown_days_90_not_clamped(
@@ -365,7 +367,7 @@ async def test_upgrade_cooldown_days_90_not_clamped(
 @pytest.mark.asyncio()
 @respx.mock
 @patch(
-    "houndarr.engine.search_loop.update_instance",
+    "houndarr.engine.search_loop.update_instance_offset",
     new_callable=AsyncMock,
 )
 async def test_upgrade_zero_batch_size_returns_zero(
@@ -391,7 +393,7 @@ async def test_upgrade_zero_batch_size_returns_zero(
 @pytest.mark.asyncio()
 @respx.mock
 @patch(
-    "houndarr.engine.search_loop.update_instance",
+    "houndarr.engine.search_loop.update_instance_offset",
     new_callable=AsyncMock,
 )
 async def test_upgrade_empty_pool_logs_info(
@@ -418,7 +420,7 @@ async def test_upgrade_empty_pool_logs_info(
 @pytest.mark.asyncio()
 @respx.mock
 @patch(
-    "houndarr.engine.search_loop.update_instance",
+    "houndarr.engine.search_loop.update_instance_offset",
     new_callable=AsyncMock,
 )
 async def test_upgrade_empty_pool_returns_zero(
@@ -444,7 +446,7 @@ async def test_upgrade_empty_pool_returns_zero(
 @pytest.mark.asyncio()
 @respx.mock
 @patch(
-    "houndarr.engine.search_loop.update_instance",
+    "houndarr.engine.search_loop.update_instance_offset",
     new_callable=AsyncMock,
 )
 @pytest.mark.parametrize(
@@ -495,7 +497,7 @@ async def test_upgrade_pool_fetch_transient_error_defers_without_rows(
 @pytest.mark.asyncio()
 @respx.mock
 @patch(
-    "houndarr.engine.search_loop.update_instance",
+    "houndarr.engine.search_loop.update_instance_offset",
     new_callable=AsyncMock,
 )
 @pytest.mark.parametrize("status", [301, 302, 307, 401, 403, 404])
@@ -528,7 +530,7 @@ async def test_upgrade_pool_fetch_rejected_writes_error_row(
 @pytest.mark.asyncio()
 @respx.mock
 @patch(
-    "houndarr.engine.search_loop.update_instance",
+    "houndarr.engine.search_loop.update_instance_offset",
     new_callable=AsyncMock,
 )
 @pytest.mark.parametrize(
@@ -558,7 +560,7 @@ async def test_upgrade_pool_fetch_connect_failure_raises_transport_error(
 @pytest.mark.asyncio()
 @respx.mock
 @patch(
-    "houndarr.engine.search_loop.update_instance",
+    "houndarr.engine.search_loop.update_instance_offset",
     new_callable=AsyncMock,
 )
 async def test_run_now_deferred_upgrade_list_says_so(
@@ -579,7 +581,7 @@ async def test_run_now_deferred_upgrade_list_says_so(
 @pytest.mark.asyncio()
 @respx.mock
 @patch(
-    "houndarr.engine.search_loop.update_instance",
+    "houndarr.engine.search_loop.update_instance_offset",
     new_callable=AsyncMock,
 )
 async def test_run_now_that_read_nothing_leaves_an_open_error_newest(
@@ -607,7 +609,7 @@ async def test_run_now_that_read_nothing_leaves_an_open_error_newest(
 @pytest.mark.asyncio()
 @respx.mock
 @patch(
-    "houndarr.engine.search_loop.update_instance",
+    "houndarr.engine.search_loop.update_instance_offset",
     new_callable=AsyncMock,
 )
 async def test_upgrade_pool_fetch_nontransient_error_writes_error_row(
@@ -636,7 +638,7 @@ async def test_upgrade_pool_fetch_nontransient_error_writes_error_row(
 @pytest.mark.asyncio()
 @respx.mock
 @patch(
-    "houndarr.engine.search_loop.update_instance",
+    "houndarr.engine.search_loop.update_instance_offset",
     new_callable=AsyncMock,
 )
 async def test_upgrade_pool_fetch_transient_error_no_error_row_lidarr(
@@ -678,7 +680,7 @@ async def test_upgrade_pool_fetch_transient_error_no_error_row_lidarr(
 @pytest.mark.asyncio()
 @respx.mock
 @patch(
-    "houndarr.engine.search_loop.update_instance",
+    "houndarr.engine.search_loop.update_instance_offset",
     new_callable=AsyncMock,
 )
 async def test_upgrade_offset_rotation(
@@ -707,7 +709,7 @@ async def test_upgrade_offset_rotation(
 @pytest.mark.asyncio()
 @respx.mock
 @patch(
-    "houndarr.engine.search_loop.update_instance",
+    "houndarr.engine.search_loop.update_instance_offset",
     new_callable=AsyncMock,
 )
 async def test_upgrade_offset_wraparound(
@@ -736,15 +738,10 @@ async def test_upgrade_offset_wraparound(
 
 @pytest.mark.asyncio()
 @respx.mock
-@patch(
-    "houndarr.engine.search_loop.update_instance",
-    new_callable=AsyncMock,
-)
 async def test_upgrade_offset_persisted(
-    mock_update: AsyncMock,
     seeded_instances: None,
 ) -> None:
-    """update_instance is called to persist the new item offset."""
+    """The item offset after the searched item is stored."""
     movies = [_library_movie(200 + i) for i in range(5)]
     _mock_radarr_empty_missing()
     _mock_radarr_library(movies)
@@ -755,17 +752,16 @@ async def test_upgrade_offset_persisted(
         upgrade_batch_size=1,
         upgrade_hourly_cap=5,
     )
+    await sync_instance_row(inst)
     await run_instance_search(inst, MASTER_KEY)
 
-    # update_instance should be called at least once with upgrade_item_offset
-    calls_with_offset = [c for c in mock_update.call_args_list if "upgrade_item_offset" in c.kwargs]
-    assert len(calls_with_offset) >= 1
+    assert (await stored_offsets(inst.core.id))["upgrade_item_offset"] == 1
 
 
 @pytest.mark.asyncio()
 @respx.mock
 @patch(
-    "houndarr.engine.search_loop.update_instance",
+    "houndarr.engine.search_loop.update_instance_offset",
     new_callable=AsyncMock,
 )
 async def test_upgrade_offset_zero_no_rotation(
@@ -799,15 +795,10 @@ async def test_upgrade_offset_zero_no_rotation(
 
 @pytest.mark.asyncio()
 @respx.mock
-@patch(
-    "houndarr.engine.search_loop.update_instance",
-    new_callable=AsyncMock,
-)
 async def test_sonarr_series_offset_advanced_by_5(
-    mock_update: AsyncMock,
     seeded_instances: None,
 ) -> None:
-    """Sonarr: update_instance called with series_offset+5."""
+    """Sonarr: the default window of 5 moves the series offset by 5."""
     respx.get(f"{SONARR_URL}/api/v3/wanted/missing").mock(
         return_value=httpx.Response(200, json=_EMPTY_PAGE),
     )
@@ -846,26 +837,18 @@ async def test_sonarr_series_offset_advanced_by_5(
         upgrade_batch_size=1,
         upgrade_hourly_cap=5,
     )
+    await sync_instance_row(inst)
     await run_instance_search(inst, MASTER_KEY)
 
-    calls_with_series = [
-        c for c in mock_update.call_args_list if "upgrade_series_offset" in c.kwargs
-    ]
-    assert len(calls_with_series) >= 1
-    assert calls_with_series[0].kwargs["upgrade_series_offset"] == 5
+    assert (await stored_offsets(inst.core.id))["upgrade_series_offset"] == 5
 
 
 @pytest.mark.asyncio()
 @respx.mock
-@patch(
-    "houndarr.engine.search_loop.update_instance",
-    new_callable=AsyncMock,
-)
 async def test_whisparr_v2_series_offset_advanced_by_5(
-    mock_update: AsyncMock,
     seeded_instances: None,
 ) -> None:
-    """Whisparr v2: update_instance called with series_offset+5."""
+    """Whisparr v2: the default window of 5 moves the series offset by 5."""
     respx.get(f"{WHISPARR_V2_URL}/api/v3/wanted/missing").mock(
         return_value=httpx.Response(200, json=_EMPTY_PAGE),
     )
@@ -903,23 +886,122 @@ async def test_whisparr_v2_series_offset_advanced_by_5(
         upgrade_batch_size=1,
         upgrade_hourly_cap=5,
     )
+    await sync_instance_row(inst)
     await run_instance_search(inst, MASTER_KEY)
 
-    calls_with_series = [
-        c for c in mock_update.call_args_list if "upgrade_series_offset" in c.kwargs
-    ]
-    assert len(calls_with_series) >= 1
-    assert calls_with_series[0].kwargs["upgrade_series_offset"] == 5
+    assert (await stored_offsets(inst.core.id))["upgrade_series_offset"] == 5
+
+
+def _mock_series_library(url: str, series_count: int) -> respx.Route:
+    """Serve monitored series 1..N with one upgradeable episode each; return the episode route."""
+    respx.get(f"{url}/api/v3/wanted/missing").mock(
+        return_value=httpx.Response(200, json=_EMPTY_PAGE),
+    )
+    respx.get(f"{url}/api/v3/series").mock(
+        return_value=httpx.Response(
+            200,
+            json=[
+                {"id": n, "monitored": True, "title": f"Show {n}"}
+                for n in range(1, series_count + 1)
+            ],
+        ),
+    )
+
+    def episodes(request: httpx.Request) -> httpx.Response:
+        series_id = int(request.url.params["seriesId"])
+        return httpx.Response(
+            200,
+            json=[
+                {
+                    "id": 1000 + series_id,
+                    "seriesId": series_id,
+                    "title": "Ep",
+                    "seasonNumber": 1,
+                    "episodeNumber": 1,
+                    "monitored": True,
+                    "hasFile": True,
+                    "episodeFile": {"qualityCutoffNotMet": False},
+                    "series": {"id": series_id, "title": f"Show {series_id}"},
+                },
+            ],
+        )
+
+    route = respx.get(f"{url}/api/v3/episode").mock(side_effect=episodes)
+    respx.post(f"{url}/api/v3/command").mock(
+        return_value=httpx.Response(201, json=_COMMAND_RESP),
+    )
+    return route
 
 
 @pytest.mark.asyncio()
 @respx.mock
-@patch(
-    "houndarr.engine.search_loop.update_instance",
-    new_callable=AsyncMock,
+@pytest.mark.parametrize("window", [1, 2, 8])
+@pytest.mark.parametrize(
+    ("build", "url"),
+    [
+        pytest.param(_sonarr_instance, SONARR_URL, id="sonarr"),
+        pytest.param(_whisparr_v2_instance, WHISPARR_V2_URL, id="whisparr_v2"),
+    ],
 )
+async def test_series_offset_moves_by_the_series_window(
+    seeded_instances: None,
+    build: Any,
+    url: str,
+    window: int,
+) -> None:
+    """The next cycle starts right after the series this one sampled."""
+    _mock_series_library(url, series_count=20)
+
+    inst = build(upgrade_series_offset=3, upgrade_series_window_size=window, upgrade_hourly_cap=5)
+    await sync_instance_row(inst)
+    await run_instance_search(inst, MASTER_KEY)
+
+    assert (await stored_offsets(inst.core.id))["upgrade_series_offset"] == 3 + window
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_a_small_series_window_reaches_every_series(
+    seeded_instances: None,
+) -> None:
+    """Window 2 over 10 series samples each of them in 5 cycles."""
+    episode_route = _mock_series_library(SONARR_URL, series_count=10)
+
+    for _ in range(5):
+        stored = await stored_offsets(1)
+        inst = _sonarr_instance(
+            upgrade_series_window_size=2,
+            upgrade_series_offset=stored["upgrade_series_offset"],
+            upgrade_item_offset=stored["upgrade_item_offset"],
+            upgrade_hourly_cap=5,
+        )
+        await sync_instance_row(inst)
+        await run_instance_search(inst, MASTER_KEY)
+
+    sampled = {int(call.request.url.params["seriesId"]) for call in episode_route.calls}
+    assert sampled == set(range(1, 11))
+
+
+@pytest.mark.asyncio()
+@respx.mock
+async def test_a_series_slice_with_nothing_to_upgrade_still_moves_on(
+    seeded_instances: None,
+) -> None:
+    """An empty slice advances the series offset, so one series cannot stall the rotation."""
+    episode_route = _mock_series_library(SONARR_URL, series_count=3)
+    episode_route.mock(return_value=httpx.Response(200, json=[]))
+
+    inst = _sonarr_instance(upgrade_series_offset=1, upgrade_series_window_size=1)
+    await sync_instance_row(inst)
+    await run_instance_search(inst, MASTER_KEY)
+
+    assert [call.request.url.params["seriesId"] for call in episode_route.calls] == ["2"]
+    assert (await stored_offsets(inst.core.id))["upgrade_series_offset"] == 2
+
+
+@pytest.mark.asyncio()
+@respx.mock
 async def test_radarr_series_offset_not_advanced(
-    mock_update: AsyncMock,
     seeded_instances: None,
 ) -> None:
     """No series_offset update for Radarr."""
@@ -928,23 +1010,16 @@ async def test_radarr_series_offset_not_advanced(
     _mock_radarr_library(movies)
     _mock_radarr_command()
 
-    inst = _radarr_instance(upgrade_batch_size=1, upgrade_hourly_cap=5)
+    inst = _radarr_instance(upgrade_batch_size=1, upgrade_hourly_cap=5, upgrade_series_offset=10)
+    await sync_instance_row(inst)
     await run_instance_search(inst, MASTER_KEY)
 
-    calls_with_series = [
-        c for c in mock_update.call_args_list if "upgrade_series_offset" in c.kwargs
-    ]
-    assert len(calls_with_series) == 0
+    assert (await stored_offsets(inst.core.id))["upgrade_series_offset"] == 10
 
 
 @pytest.mark.asyncio()
 @respx.mock
-@patch(
-    "houndarr.engine.search_loop.update_instance",
-    new_callable=AsyncMock,
-)
 async def test_lidarr_series_offset_not_advanced(
-    mock_update: AsyncMock,
     seeded_instances: None,
 ) -> None:
     """No series_offset update for Lidarr."""
@@ -977,23 +1052,16 @@ async def test_lidarr_series_offset_not_advanced(
         return_value=httpx.Response(201, json=_COMMAND_RESP),
     )
 
-    inst = _lidarr_instance(upgrade_batch_size=1, upgrade_hourly_cap=5)
+    inst = _lidarr_instance(upgrade_batch_size=1, upgrade_hourly_cap=5, upgrade_series_offset=10)
+    await sync_instance_row(inst)
     await run_instance_search(inst, MASTER_KEY)
 
-    calls_with_series = [
-        c for c in mock_update.call_args_list if "upgrade_series_offset" in c.kwargs
-    ]
-    assert len(calls_with_series) == 0
+    assert (await stored_offsets(inst.core.id))["upgrade_series_offset"] == 10
 
 
 @pytest.mark.asyncio()
 @respx.mock
-@patch(
-    "houndarr.engine.search_loop.update_instance",
-    new_callable=AsyncMock,
-)
 async def test_readarr_series_offset_not_advanced(
-    mock_update: AsyncMock,
     seeded_instances: None,
 ) -> None:
     """No series_offset update for Readarr."""
@@ -1025,13 +1093,11 @@ async def test_readarr_series_offset_not_advanced(
         return_value=httpx.Response(201, json=_COMMAND_RESP),
     )
 
-    inst = _readarr_instance(upgrade_batch_size=1, upgrade_hourly_cap=5)
+    inst = _readarr_instance(upgrade_batch_size=1, upgrade_hourly_cap=5, upgrade_series_offset=10)
+    await sync_instance_row(inst)
     await run_instance_search(inst, MASTER_KEY)
 
-    calls_with_series = [
-        c for c in mock_update.call_args_list if "upgrade_series_offset" in c.kwargs
-    ]
-    assert len(calls_with_series) == 0
+    assert (await stored_offsets(inst.core.id))["upgrade_series_offset"] == 10
 
 
 # ---------------------------------------------------------------------------
@@ -1042,7 +1108,7 @@ async def test_readarr_series_offset_not_advanced(
 @pytest.mark.asyncio()
 @respx.mock
 @patch(
-    "houndarr.engine.search_loop.update_instance",
+    "houndarr.engine.search_loop.update_instance_offset",
     new_callable=AsyncMock,
 )
 async def test_upgrade_hourly_cap_blocks(
@@ -1080,7 +1146,7 @@ async def test_upgrade_hourly_cap_blocks(
 @pytest.mark.asyncio()
 @respx.mock
 @patch(
-    "houndarr.engine.search_loop.update_instance",
+    "houndarr.engine.search_loop.update_instance_offset",
     new_callable=AsyncMock,
 )
 async def test_upgrade_cooldown_blocks_item(
@@ -1117,7 +1183,7 @@ async def test_upgrade_cooldown_blocks_item(
 @pytest.mark.asyncio()
 @respx.mock
 @patch(
-    "houndarr.engine.search_loop.update_instance",
+    "houndarr.engine.search_loop.update_instance_offset",
     new_callable=AsyncMock,
 )
 async def test_upgrade_dispatch_error_continues(
@@ -1156,7 +1222,7 @@ async def test_upgrade_dispatch_error_continues(
 @pytest.mark.asyncio()
 @respx.mock
 @patch(
-    "houndarr.engine.search_loop.update_instance",
+    "houndarr.engine.search_loop.update_instance_offset",
     new_callable=AsyncMock,
 )
 async def test_upgrade_pool_sorted_by_item_id(
@@ -1193,12 +1259,7 @@ async def test_upgrade_pool_sorted_by_item_id(
 
 @pytest.mark.asyncio()
 @respx.mock
-@patch(
-    "houndarr.engine.search_loop.update_instance",
-    new_callable=AsyncMock,
-)
 async def test_upgrade_offset_advances_on_cooldown_skip(
-    mock_update: AsyncMock,
     seeded_instances: None,
 ) -> None:
     """Offset moves even for skipped (cooldown) items."""
@@ -1216,14 +1277,11 @@ async def test_upgrade_offset_advances_on_cooldown_skip(
         upgrade_hourly_cap=5,
         upgrade_cooldown_days=90,
     )
+    await sync_instance_row(inst)
     await run_instance_search(inst, MASTER_KEY)
 
-    # update_instance called; offset advanced past the cooldown skip
-    calls_with_offset = [c for c in mock_update.call_args_list if "upgrade_item_offset" in c.kwargs]
-    assert len(calls_with_offset) >= 1
-    persisted_offset = calls_with_offset[-1].kwargs["upgrade_item_offset"]
     # Skip item 200 (cooldown) + search item 201 = scanned 2 items, (0+2)%3 = 2
-    assert persisted_offset == 2
+    assert (await stored_offsets(inst.core.id))["upgrade_item_offset"] == 2
 
 
 # ---------------------------------------------------------------------------
@@ -1234,7 +1292,7 @@ async def test_upgrade_offset_advances_on_cooldown_skip(
 @pytest.mark.asyncio()
 @respx.mock
 @patch(
-    "houndarr.engine.search_loop.update_instance",
+    "houndarr.engine.search_loop.update_instance_offset",
     new_callable=AsyncMock,
     side_effect=RuntimeError("db error"),
 )
@@ -1267,7 +1325,7 @@ async def test_upgrade_offset_persist_failure_no_crash(
 @pytest.mark.asyncio()
 @respx.mock
 @patch(
-    "houndarr.engine.search_loop.update_instance",
+    "houndarr.engine.search_loop.update_instance_offset",
     new_callable=AsyncMock,
 )
 async def test_upgrade_scan_budget_limits(
@@ -1308,7 +1366,7 @@ async def test_upgrade_scan_budget_limits(
 @pytest.mark.asyncio()
 @respx.mock
 @patch(
-    "houndarr.engine.search_loop.update_instance",
+    "houndarr.engine.search_loop.update_instance_offset",
     new_callable=AsyncMock,
 )
 async def test_upgrade_random_shuffles_pool(

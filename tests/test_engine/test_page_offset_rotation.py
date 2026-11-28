@@ -19,6 +19,7 @@ from .conftest import (
     MASTER_KEY,
     SONARR_URL,
     make_instance,
+    sync_instance_row,
 )
 
 # ---------------------------------------------------------------------------
@@ -181,6 +182,7 @@ async def test_missing_page_offset_persisted_after_cycle(
     )
 
     inst = _sonarr_instance(missing_page_offset=1, batch_size=2)
+    await sync_instance_row(inst)
     await run_instance_search(inst, MASTER_KEY)
 
     # Verify the offset was persisted (should be page 2 after consuming page 1)
@@ -215,6 +217,7 @@ async def test_missing_offset_advances_across_cycles(
     )
 
     inst = _sonarr_instance(missing_page_offset=1, batch_size=1)
+    await sync_instance_row(inst)
     count = await run_instance_search(inst, MASTER_KEY)
 
     assert count == 1
@@ -299,6 +302,7 @@ async def test_cutoff_page_offset_persisted_after_cycle(
         cutoff_page_offset=1,
         batch_size=0,
     )
+    await sync_instance_row(inst)
     await run_instance_search(inst, MASTER_KEY)
 
     updated = await get_instance(1, master_key=MASTER_KEY)
@@ -337,6 +341,7 @@ async def test_batch_fills_mid_page_does_not_skip_page(
     )
 
     inst = _sonarr_instance(missing_page_offset=1, batch_size=1)
+    await sync_instance_row(inst)
     count = await run_instance_search(inst, MASTER_KEY)
 
     assert count == 1

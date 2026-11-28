@@ -115,8 +115,7 @@ async def main() -> None:
 
     port = _free_port()
     base = f"http://127.0.0.1:{port}"
-    # The cycle writes the page offset back through update_instance, which
-    # decrypts the stored API key, so the key and the seeded row must be real.
+    # run_instance_search still takes a master key; any Fernet key will do.
     master_key = Fernet.generate_key()
     with tempfile.TemporaryDirectory() as tmp:
         import os

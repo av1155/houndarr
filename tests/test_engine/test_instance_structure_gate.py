@@ -243,6 +243,7 @@ def test_instances_repository_public_api() -> None:
         "update_instance",
         "delete_instance",
         "update_instance_snapshot",
+        "update_instance_offset",
     }
     for name in expected:
         assert hasattr(instances, name), f"missing repositories.instances.{name}"

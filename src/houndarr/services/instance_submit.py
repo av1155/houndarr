@@ -556,12 +556,12 @@ async def submit_update(
 
     parsed_search_order = _parse_search_order(search_order)
 
+    # No ``enabled``: the form never sets it, so a toggle during the remote check stands.
     update_kwargs: dict[str, object] = {
         "name": name,
         "type": instance_type,
         "url": cleaned_url,
         "api_key": resolved_api_key,
-        "enabled": current.core.enabled,
         "missing_enabled": missing_enabled,
         "batch_size": batch_size,
         "sleep_interval_mins": sleep_interval_mins,

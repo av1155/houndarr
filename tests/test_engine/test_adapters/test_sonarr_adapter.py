@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock
 
@@ -18,6 +19,7 @@ from houndarr.engine.adapters.sonarr import (
     dispatch_search,
     fetch_instance_snapshot,
     fetch_reconcile_sets,
+    fetch_upgrade_pool,
     make_client,
 )
 from houndarr.engine.candidates import SearchCandidate
@@ -608,3 +610,52 @@ class TestFetchReconcileSetsMissingDisabled:
 
         assert sets.missing == frozenset({("episode", 101)})
         client.get_wanted_page.assert_any_await("missing", page=1, page_size=250)
+
+
+# ---------------------------------------------------------------------------
+# fetch_upgrade_pool: series window
+# ---------------------------------------------------------------------------
+
+
+class TestFetchUpgradePoolWindow:
+    """The window samples consecutive monitored series and never one twice."""
+
+    @staticmethod
+    def _client(series_count: int) -> AsyncMock:
+        client = AsyncMock(spec=SonarrClient)
+        client.get_series.return_value = [
+            ArrSeries(id=sid, title=f"Series {sid}", monitored=True)
+            for sid in range(1, series_count + 1)
+        ]
+        client.get_episodes.side_effect = lambda series_id: [
+            _make_library_episode(episode_id=series_id * 100, series_id=series_id)
+        ]
+        return client
+
+    @staticmethod
+    def _instance(*, offset: int, window: int) -> Instance:
+        return replace(
+            _make_instance(),
+            upgrade=UpgradePolicy(
+                upgrade_enabled=True,
+                upgrade_series_offset=offset,
+                upgrade_series_window_size=window,
+            ),
+        )
+
+    @pytest.mark.asyncio()
+    async def test_a_window_inside_the_library_wraps_past_its_end(self):
+        client = self._client(5)
+
+        await fetch_upgrade_pool(client, self._instance(offset=4, window=3))
+
+        assert [c.args[0] for c in client.get_episodes.call_args_list] == [5, 1, 2]
+
+    @pytest.mark.asyncio()
+    async def test_a_window_larger_than_the_library_fetches_each_series_once(self):
+        client = self._client(3)
+
+        pool = await fetch_upgrade_pool(client, self._instance(offset=1, window=8))
+
+        assert [c.args[0] for c in client.get_episodes.call_args_list] == [2, 3, 1]
+        assert sorted(e.episode_id for e in pool) == [100, 200, 300]

@@ -197,6 +197,7 @@ def make_instance(
     upgrade_whisparr_v2_search_mode: WhisparrV2SearchMode = WhisparrV2SearchMode.episode,
     upgrade_item_offset: int = 0,
     upgrade_series_offset: int = 0,
+    upgrade_series_window_size: int = 5,
     missing_page_offset: int = 1,
     cutoff_page_offset: int = 1,
     allowed_time_window: str = "",
@@ -245,6 +246,7 @@ def make_instance(
             upgrade_whisparr_v2_search_mode=upgrade_whisparr_v2_search_mode,
             upgrade_item_offset=upgrade_item_offset,
             upgrade_series_offset=upgrade_series_offset,
+            upgrade_series_window_size=upgrade_series_window_size,
         ),
         schedule=SchedulePolicy(
             allowed_time_window=allowed_time_window,
@@ -291,6 +293,50 @@ async def seeded_instances(db: None) -> AsyncGenerator[None]:
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+
+async def sync_instance_row(instance: Instance) -> None:
+    """Copy *instance*'s pass switches, search order, window and offsets into its row.
+
+    An offset write lands only while the row still holds the offset and the
+    mode the cycle read, so a test that reads an offset back seeds the row
+    from the snapshot it runs.
+    """
+    async with get_db() as conn:
+        await conn.execute(
+            "UPDATE instances SET missing_enabled = ?, cutoff_enabled = ?, upgrade_enabled = ?,"
+            " search_order = ?, upgrade_series_window_size = ?, missing_page_offset = ?,"
+            " cutoff_page_offset = ?, upgrade_item_offset = ?, upgrade_series_offset = ?"
+            " WHERE id = ?",
+            (
+                int(instance.missing.missing_enabled),
+                int(instance.cutoff.cutoff_enabled),
+                int(instance.upgrade.upgrade_enabled),
+                instance.schedule.search_order.value,
+                instance.upgrade.upgrade_series_window_size,
+                instance.schedule.missing_page_offset,
+                instance.schedule.cutoff_page_offset,
+                instance.upgrade.upgrade_item_offset,
+                instance.upgrade.upgrade_series_offset,
+                instance.core.id,
+            ),
+        )
+        await conn.commit()
+
+
+async def stored_offsets(instance_id: int) -> dict[str, int]:
+    """Return the four offset columns stored for *instance_id*."""
+    async with (
+        get_db() as conn,
+        conn.execute(
+            "SELECT missing_page_offset, cutoff_page_offset, upgrade_item_offset,"
+            " upgrade_series_offset FROM instances WHERE id = ?",
+            (instance_id,),
+        ) as cur,
+    ):
+        row = await cur.fetchone()
+    assert row is not None
+    return dict(row)
 
 
 async def get_log_rows() -> list[dict[str, Any]]:

@@ -62,6 +62,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `Edit` on an instance deleted in another tab, or any instance dialog that fails to open, shows an error toast instead of doing nothing. (#931)
 - Houndarr exits instead of hanging when startup fails: a configuration error or a `houndarr.db` that is not SQLite exits with code 1, and a failure logged as `Application startup failed. Exiting.` exits with code 3. (#915)
 - A second Ctrl-C while Houndarr shuts down ends the process instead of leaving it running after `Finished server process`. (#915)
+- `Reset all instance settings` during a running search cycle keeps its offsets, instead of the cycle writing its own back when it finishes. (#926)
+- `Save Changes` during a running search cycle keeps page 1 when the cycle started further on, and the upgrade offsets at zero when it turns upgrade search off. (#926)
+- A search cycle that waited for another to finish, such as a scheduled cycle behind `Run now`, no longer moves the rotation offsets backwards. (#926)
+- An instance switched off or on while `Save Changes` is still testing its connection keeps that state, instead of the save reverting it. (#926)
+- The Sonarr and Whisparr v2 upgrade rotation steps by `Upgrade Series Window (per cycle)`, so small windows no longer skip series and large ones no longer overlap. (#936)
+- An `Upgrade Series Window (per cycle)` larger than the library fetches each monitored series once per cycle instead of listing some twice. (#936)
+- The Sonarr and Whisparr v2 upgrade rotation moves past series with nothing to upgrade, instead of sampling the same ones every cycle from then on. (#936)
 
 ### Security
 

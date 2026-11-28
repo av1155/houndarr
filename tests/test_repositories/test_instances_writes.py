@@ -1,16 +1,17 @@
 """Pinning tests for the instances-repository write boundary.
 
 Locks the contract of the :class:`InstanceInsert` /
-:class:`InstanceUpdate` payload dataclasses and the five write
-functions (``insert_instance``, ``update_instance``,
-``delete_instance``, ``update_instance_snapshot``, and the service
-delegator path).  Every case below pins one boundary the
+:class:`InstanceUpdate` payload dataclasses and the write functions
+(``insert_instance``, ``update_instance``, ``delete_instance``,
+``update_instance_snapshot``, ``update_instance_offset``, and the
+service delegator path).  Every case below pins one boundary the
 repository has to preserve so business logic in the service and
 route layers can evolve without drifting the SQL below them.
 """
 
 from __future__ import annotations
 
+import asyncio
 from dataclasses import fields as dataclass_fields
 
 import pytest
@@ -24,10 +25,12 @@ from houndarr.repositories.instances import (
     delete_instance,
     insert_instance,
     update_instance,
+    update_instance_offset,
     update_instance_snapshot,
 )
 from houndarr.services.instances import (
     InstanceType,
+    OffsetColumn,
     SearchOrder,
     SonarrSearchMode,
     TagFilterPolicy,
@@ -574,3 +577,176 @@ def test_instance_update_has_every_updatable_column() -> None:
     }
     actual = {f.name for f in dataclass_fields(InstanceUpdate)}
     assert actual == expected
+
+
+# ---------------------------------------------------------------------------
+# update_instance_offset: conditional cycle writes
+# ---------------------------------------------------------------------------
+
+_STALE_UPDATED_AT = "2024-01-01T00:00:00.000Z"
+_STARTS = {
+    "missing_page_offset": 3,
+    "cutoff_page_offset": 4,
+    "upgrade_item_offset": 7,
+    "upgrade_series_offset": 10,
+}
+
+
+async def _cycle_row(master_key: bytes) -> int:
+    """Insert a Chronological row with all three passes on and every offset moved."""
+    created = await create_instance(
+        master_key=master_key,
+        name="Cycling",
+        type=InstanceType.sonarr,
+        url="http://s:8989",
+        api_key="k",
+        cutoff_enabled=True,
+        upgrade_enabled=True,
+        search_order=SearchOrder.chronological,
+    )
+    await update_instance(created.core.id, InstanceUpdate(**_STARTS), master_key=master_key)
+    async with get_db() as conn:
+        await conn.execute(
+            "UPDATE instances SET updated_at = ? WHERE id = ?",
+            (_STALE_UPDATED_AT, created.core.id),
+        )
+        await conn.commit()
+    return created.core.id
+
+
+async def _row(instance_id: int) -> dict[str, object]:
+    async with (
+        get_db() as conn,
+        conn.execute(
+            "SELECT missing_page_offset, cutoff_page_offset, upgrade_item_offset,"
+            " upgrade_series_offset, updated_at FROM instances WHERE id = ?",
+            (instance_id,),
+        ) as cur,
+    ):
+        row = await cur.fetchone()
+    assert row is not None
+    return dict(row)
+
+
+@pytest.mark.asyncio()
+@pytest.mark.parametrize("column", list(_STARTS))
+async def test_update_instance_offset_writes_when_the_row_matches(
+    db: None, master_key: bytes, column: OffsetColumn
+) -> None:
+    """A matching start writes the value, bumps updated_at and leaves the other offsets."""
+    instance_id = await _cycle_row(master_key)
+
+    written = await update_instance_offset(
+        instance_id, column, expected=_STARTS[column], value=_STARTS[column] + 1
+    )
+
+    row = await _row(instance_id)
+    assert written is True
+    assert row[column] == _STARTS[column] + 1
+    assert row["updated_at"] != _STALE_UPDATED_AT
+    others = {c for c in _STARTS if c != column}
+    assert {c: row[c] for c in others} == {c: _STARTS[c] for c in others}
+
+
+@pytest.mark.asyncio()
+@pytest.mark.parametrize("column", list(_STARTS))
+async def test_update_instance_offset_skips_a_changed_offset(
+    db: None, master_key: bytes, column: OffsetColumn
+) -> None:
+    """A start the row no longer holds leaves the row, updated_at included, as it was."""
+    instance_id = await _cycle_row(master_key)
+    before = await _row(instance_id)
+
+    written = await update_instance_offset(
+        instance_id, column, expected=_STARTS[column] - 1, value=99
+    )
+
+    assert written is False
+    assert await _row(instance_id) == before
+
+
+@pytest.mark.asyncio()
+async def test_update_instance_offset_unknown_id_returns_false(db: None) -> None:
+    """No row matches an unknown id; the write reports that instead of raising."""
+    assert await update_instance_offset(999, "upgrade_item_offset", expected=0, value=1) is False
+
+
+@pytest.mark.asyncio()
+async def test_update_instance_offset_same_value_still_matches(db: None, master_key: bytes) -> None:
+    """Writing the stored value back counts as a match."""
+    instance_id = await _cycle_row(master_key)
+
+    assert await update_instance_offset(instance_id, "missing_page_offset", expected=3, value=3)
+
+
+@pytest.mark.asyncio()
+@pytest.mark.parametrize(
+    ("column", "change", "written"),
+    [
+        ("missing_page_offset", InstanceUpdate(search_order=SearchOrder.random), False),
+        ("missing_page_offset", InstanceUpdate(missing_enabled=False), False),
+        ("cutoff_page_offset", InstanceUpdate(search_order=SearchOrder.random), False),
+        ("cutoff_page_offset", InstanceUpdate(cutoff_enabled=False), False),
+        ("upgrade_item_offset", InstanceUpdate(search_order=SearchOrder.random), False),
+        ("upgrade_item_offset", InstanceUpdate(upgrade_enabled=False), False),
+        ("upgrade_series_offset", InstanceUpdate(upgrade_enabled=False), False),
+        # The series offset rotates in Random order too.
+        ("upgrade_series_offset", InstanceUpdate(search_order=SearchOrder.random), True),
+        ("upgrade_series_offset", InstanceUpdate(cutoff_enabled=False), True),
+    ],
+)
+async def test_update_instance_offset_requires_the_mode_that_moves_the_column(
+    db: None,
+    master_key: bytes,
+    column: OffsetColumn,
+    change: InstanceUpdate,
+    written: bool,
+) -> None:
+    """A matching offset is not enough once the pass or the order that moves it changed."""
+    instance_id = await _cycle_row(master_key)
+    await update_instance(instance_id, change, master_key=master_key)
+
+    result = await update_instance_offset(
+        instance_id, column, expected=_STARTS[column], value=_STARTS[column] + 1
+    )
+
+    assert result is written
+    expected = _STARTS[column] + 1 if written else _STARTS[column]
+    assert (await _row(instance_id))[column] == expected
+
+
+@pytest.mark.asyncio()
+async def test_update_instance_offset_rejects_other_columns(db: None, master_key: bytes) -> None:
+    """Only the four offset columns have a statement."""
+    instance_id = await _cycle_row(master_key)
+
+    with pytest.raises(KeyError):
+        await update_instance_offset(
+            instance_id,
+            "batch_size",  # type: ignore[arg-type]
+            expected=10,
+            value=1,
+        )
+
+
+@pytest.mark.asyncio()
+async def test_update_instance_offset_waits_for_an_open_reset_then_skips(
+    db: None, master_key: bytes
+) -> None:
+    """The write waits for a reset still in its transaction and sees it once committed."""
+    instance_id = await _cycle_row(master_key)
+
+    async with get_db() as reset:
+        await reset.execute(
+            "UPDATE instances SET upgrade_item_offset = 0, upgrade_enabled = 0 WHERE id = ?",
+            (instance_id,),
+        )
+        write = asyncio.create_task(
+            update_instance_offset(instance_id, "upgrade_item_offset", expected=7, value=8)
+        )
+        await asyncio.sleep(0.3)
+        assert not write.done()
+        await reset.commit()
+
+    assert await write is False
+    assert (await _row(instance_id))["upgrade_item_offset"] == 0

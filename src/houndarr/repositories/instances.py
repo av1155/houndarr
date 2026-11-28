@@ -6,8 +6,9 @@ test rows loadable under the current sub-struct
 :class:`~houndarr.services.instances.Instance`.  The write path
 (:class:`InstanceInsert`, :class:`InstanceUpdate`,
 :func:`insert_instance`, :func:`update_instance`,
-:func:`delete_instance`, :func:`update_instance_snapshot`) covers
-every column the service writes today.
+:func:`delete_instance`, :func:`update_instance_snapshot`,
+:func:`update_instance_offset`) covers every column the service and
+the search loop write today.
 
 The :class:`~houndarr.services.instances.Instance` domain dataclass
 and the :class:`enum.StrEnum` search-mode classes live in the service
@@ -67,6 +68,7 @@ from houndarr.services.instances import (
     InstanceType,
     LidarrSearchMode,
     MissingPolicy,
+    OffsetColumn,
     ReadarrSearchMode,
     RuntimeSnapshot,
     SchedulePolicy,
@@ -345,10 +347,12 @@ class InstanceUpdate:
     non-nullable at the schema level, so no field's domain includes
     ``None`` legitimately.  ``api_key``, when supplied, is plaintext;
     :func:`update_instance` re-encrypts it.  The three snapshot
-    columns and the four pagination-offset columns are included so
-    the update surface matches the table schema exactly, even though
-    the routine caller path uses :func:`update_instance_snapshot`
-    and :func:`update_instance` for offsets respectively.
+    columns are included so the update surface matches the table
+    schema exactly, even though the supervisor's snapshot refresh
+    writes them through :func:`update_instance_snapshot`.  The four
+    offset columns are written here by the Edit save and the policy
+    reset; a search cycle writes them through
+    :func:`update_instance_offset`.
     """
 
     name: str | None = None
@@ -642,3 +646,71 @@ async def update_instance_snapshot(
             (int(monitored_total), int(unreleased_count), instance_id),
         )
         await db.commit()
+
+
+# The mode check catches a reset or a mode-changing save that wrote back the cycle's start value.
+_OFFSET_UPDATE_SQL: dict[OffsetColumn, str] = {
+    "missing_page_offset": (
+        "UPDATE instances SET missing_page_offset = ?,"
+        " updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')"
+        " WHERE id = ? AND missing_page_offset = ?"
+        " AND search_order = 'chronological' AND missing_enabled <> 0"
+    ),
+    "cutoff_page_offset": (
+        "UPDATE instances SET cutoff_page_offset = ?,"
+        " updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')"
+        " WHERE id = ? AND cutoff_page_offset = ?"
+        " AND search_order = 'chronological' AND cutoff_enabled <> 0"
+    ),
+    "upgrade_item_offset": (
+        "UPDATE instances SET upgrade_item_offset = ?,"
+        " updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')"
+        " WHERE id = ? AND upgrade_item_offset = ?"
+        " AND search_order = 'chronological' AND upgrade_enabled <> 0"
+    ),
+    "upgrade_series_offset": (
+        "UPDATE instances SET upgrade_series_offset = ?,"
+        " updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')"
+        " WHERE id = ? AND upgrade_series_offset = ? AND upgrade_enabled <> 0"
+    ),
+}
+
+
+async def update_instance_offset(
+    instance_id: int,
+    column: OffsetColumn,
+    *,
+    expected: int,
+    value: int,
+) -> bool:
+    """Write a search cycle's advanced offset only if the row still matches the cycle.
+
+    The row must still hold *expected* in *column*, and still have the
+    pass on and the search order that advance *column* (the series offset
+    rotates in either order).  A reset (which turns those modes off), an
+    Edit save that moved the offset or turned that pass or Chronological
+    order off, and a newer cycle that moved the offset therefore keep
+    their value.  A row that holds the cycle's start value and mode
+    again, such as after a save that wrote page 1 back and kept the mode,
+    cannot be told apart from an unchanged one, so the cycle's value
+    lands, as if the change had come just before the cycle.
+    ``updated_at`` is bumped on a write.
+
+    Args:
+        instance_id: Primary key of the row to update.
+        column: The offset column the cycle advanced.
+        expected: The value the cycle read for *column*.
+        value: The advanced value to store.
+
+    Returns:
+        ``True`` when the row matched and was written, ``False`` when it
+        no longer holds *expected* or that mode, or no longer exists.
+
+    Raises:
+        KeyError: *column* is not one of the four offset columns.
+    """
+    sql = _OFFSET_UPDATE_SQL[column]
+    async with get_db() as db:
+        cur = await db.execute(sql, (value, instance_id, expected))
+        await db.commit()
+        return (cur.rowcount or 0) > 0

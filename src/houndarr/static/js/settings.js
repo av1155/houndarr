@@ -605,13 +605,13 @@ function initSettingsPage() {
     document.body.addEventListener(
       'htmx:afterSwap',
       (evt) => {
-        if (evt.detail.target.id === 'app-content') {
+        const targetId = evt.detail.target.id;
+        if (targetId === 'app-content') {
           document.body.style.overflow = '';
         }
 
         // A save from a dialog cancelled earlier still refreshes the table but must not close
         // the dialog opened since; that save's form is no longer in it.
-        const targetId = evt.detail.target.id;
         if (
           (targetId === 'instance-tbody' || targetId.startsWith('instance-row-')) &&
           addInstanceModalContent.contains(evt.detail.requestConfig?.elt)
@@ -619,7 +619,7 @@ function initSettingsPage() {
           window.houndarrCloseAddInstanceModal();
         }
 
-        if (evt.detail.target.id === 'admin-security') {
+        if (targetId === 'admin-security') {
           // After the password-change form re-renders (success or
           // validation error) via the /settings/account/password
           // endpoint, return focus to the first password field so
@@ -630,7 +630,7 @@ function initSettingsPage() {
           }
         }
 
-        if (evt.detail.target.id === 'add-instance-modal-content') {
+        if (targetId === 'add-instance-modal-content') {
           if (pendingModalShow) {
             pendingModalShow = false;
             addInstanceModal.showModal();

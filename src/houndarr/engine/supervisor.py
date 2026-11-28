@@ -11,7 +11,6 @@ from __future__ import annotations
 import asyncio
 import logging
 import sqlite3
-from contextlib import suppress
 from datetime import UTC, datetime
 from functools import partial
 from typing import Literal
@@ -59,6 +58,12 @@ _NOT_RECHECKED = "; its last error is not rechecked yet: "
 _UNREADABLE_ROW = NewestLogRow(action="", cycle_id=None, message=None)
 # A database hiccup around the health rows must not end an instance's loop.
 _DB_ERRORS = (sqlite3.Error, PoolClosedError, PoolConnectionAcquireTimeoutError)
+
+
+async def _cancel_and_wait(task: asyncio.Task[None]) -> None:
+    task.cancel()
+    # wait(), unlike suppress(), lets a cancel of this caller propagate.
+    await asyncio.wait({task})
 
 
 def _is_unreachable(row: NewestLogRow | None) -> bool:
@@ -202,9 +207,7 @@ class Supervisor:
 
         snapshot = self._snapshot_task
         if snapshot is not None and not snapshot.done():
-            snapshot.cancel()
-            with suppress(asyncio.CancelledError):
-                await snapshot
+            await _cancel_and_wait(snapshot)
         self._snapshot_task = None
 
         # Cancel any in-flight snapshot-prime tasks spawned from
@@ -306,16 +309,12 @@ class Supervisor:
 
         scheduled = self._tasks.pop(instance_id, None)
         if scheduled is not None and not scheduled.done():
-            scheduled.cancel()
-            with suppress(asyncio.CancelledError):
-                await scheduled
+            await _cancel_and_wait(scheduled)
             stopped = True
 
         manual = self._manual_runs.pop(instance_id, None)
         if manual is not None and not manual.done():
-            manual.cancel()
-            with suppress(asyncio.CancelledError):
-                await manual
+            await _cancel_and_wait(manual)
             stopped = True
 
         return stopped

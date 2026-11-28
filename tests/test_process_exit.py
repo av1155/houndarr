@@ -13,7 +13,7 @@ import os
 import sqlite3
 import subprocess
 import sys
-from collections.abc import AsyncGenerator, Iterable
+from collections.abc import AsyncGenerator, Awaitable, Callable, Iterable
 from pathlib import Path
 from typing import Any
 
@@ -22,6 +22,7 @@ import pytest
 import pytest_asyncio
 from aiosqlitepool.connection import PoolConnection
 from cryptography.fernet import Fernet, InvalidToken
+from fastapi import FastAPI
 
 from houndarr import app as app_module
 from houndarr import database
@@ -141,8 +142,8 @@ async def test_a_cancel_during_connection_setup_leaves_no_worker_running(
     _assert_workers_stopped(opened)
 
 
-async def test_a_cancel_during_the_pool_health_check_leaves_no_worker_running(
-    opened: list[aiosqlite.Connection], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+async def _leave_a_connection_from_a_cancelled_health_check(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     set_db_path(str(tmp_path / "houndarr.db"))
     entered = asyncio.Event()
@@ -160,6 +161,12 @@ async def test_a_cancel_during_the_pool_health_check_leaves_no_worker_running(
     task.cancel()
     with pytest.raises(asyncio.CancelledError):
         await task
+
+
+async def test_a_cancel_during_the_pool_health_check_leaves_no_worker_running(
+    opened: list[aiosqlite.Connection], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    await _leave_a_connection_from_a_cancelled_health_check(tmp_path, monkeypatch)
 
     await close_all_pools()
     _assert_workers_stopped(opened)
@@ -198,6 +205,84 @@ async def test_overlapping_close_all_pools_calls_both_return(
     await asyncio.wait_for(asyncio.gather(first, close_all_pools()), timeout=5)
 
     _assert_workers_stopped(opened)
+
+
+@pytest.mark.parametrize("ticks", [0, 1, 2, 3])
+async def test_overlapping_close_all_pools_calls_both_return_with_a_leftover_connection(
+    opened: list[aiosqlite.Connection],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    ticks: int,
+) -> None:
+    await _leave_a_connection_from_a_cancelled_health_check(tmp_path, monkeypatch)
+
+    first = asyncio.create_task(close_all_pools())
+    for _ in range(ticks):
+        await asyncio.sleep(0)
+    await asyncio.wait_for(asyncio.gather(first, close_all_pools()), timeout=5)
+
+    _assert_workers_stopped(opened)
+
+
+# Cancelling the caller of a stop
+
+
+async def _slow_to_stop() -> None:
+    try:
+        await asyncio.Event().wait()
+    except asyncio.CancelledError:
+        await asyncio.sleep(0.2)
+        raise
+
+
+async def _stop_background_work_on(task: asyncio.Task[None]) -> None:
+    app = FastAPI()
+    app.state.retention_task = task
+    await app_module._stop_background_work(app)
+
+
+async def _supervisor_stop_on(task: asyncio.Task[None]) -> None:
+    supervisor = Supervisor(master_key=Fernet.generate_key())
+    supervisor._snapshot_task = task
+    await supervisor.stop()
+
+
+async def _stop_scheduled_instance_task_on(task: asyncio.Task[None]) -> None:
+    supervisor = Supervisor(master_key=Fernet.generate_key())
+    supervisor._tasks[1] = task
+    await supervisor.stop_instance_task(1)
+
+
+async def _stop_manual_run_on(task: asyncio.Task[None]) -> None:
+    supervisor = Supervisor(master_key=Fernet.generate_key())
+    supervisor._manual_runs[1] = task
+    await supervisor.stop_instance_task(1)
+
+
+@pytest.mark.parametrize(
+    "stop",
+    [
+        _stop_background_work_on,
+        _supervisor_stop_on,
+        _stop_scheduled_instance_task_on,
+        _stop_manual_run_on,
+    ],
+)
+async def test_a_cancel_while_waiting_for_a_stopped_task_reaches_the_caller(
+    stop: Callable[[asyncio.Task[None]], Awaitable[None]],
+) -> None:
+    # A second Ctrl-C during a factory reset must not let the reset carry on
+    # and reopen the database after shutdown has closed it.
+    slow = asyncio.create_task(_slow_to_stop())
+    await asyncio.sleep(0)
+    stopper = asyncio.create_task(stop(slow))
+    await asyncio.sleep(0.05)
+    stopper.cancel()
+    try:
+        with pytest.raises(asyncio.CancelledError):
+            await stopper
+    finally:
+        await _cancel([slow])
 
 
 # Lifespan

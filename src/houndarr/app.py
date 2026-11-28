@@ -6,7 +6,7 @@ import asyncio
 import logging
 import os
 from collections.abc import AsyncGenerator
-from contextlib import asynccontextmanager, suppress
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, Request
@@ -197,8 +197,8 @@ async def _stop_background_work(app: FastAPI) -> None:
         task = getattr(app.state, name, None)
         if task is not None and not task.done():
             task.cancel()
-            with suppress(asyncio.CancelledError):
-                await task
+            # wait(), unlike suppress(), lets a cancel of this caller propagate.
+            await asyncio.wait({task})
     supervisor = getattr(app.state, "supervisor", None)
     if isinstance(supervisor, Supervisor):
         await supervisor.stop()

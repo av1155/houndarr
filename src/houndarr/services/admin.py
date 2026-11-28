@@ -320,8 +320,7 @@ async def _factory_reset_impl(*, app: FastAPI, data_dir: str) -> None:
     # Respawn the log-retention loop we cancelled above. Without this,
     # an operator who stays in the same container process after the
     # reset gets unbounded search_log growth until the next restart.
-    # Lazy import avoids a circular dependency: houndarr.app imports
-    # this module's siblings during router registration.
+    # Imported here so loading the service layer does not load houndarr.app.
     from houndarr.app import _periodic_log_retention
     from houndarr.config import get_settings
 

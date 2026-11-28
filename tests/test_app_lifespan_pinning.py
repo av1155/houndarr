@@ -106,13 +106,17 @@ class TestLifespanStartup:
             "init_db_migrations",
         ]
 
-    def test_shutdown_cancels_retention_task(
+    async def test_shutdown_cancels_retention_task(
         self,
         test_settings: AppSettings,
     ) -> None:
-        """After the TestClient exits the lifespan, retention_task is cancelled."""
+        """After the lifespan exits, retention_task is cancelled.
+
+        Runs the lifespan in this test's loop: TestClient's own loop cancels
+        every task when it closes, so the check would pass either way there.
+        """
         fastapi_app = app_module.create_app()
-        with TestClient(fastapi_app):
+        async with fastapi_app.router.lifespan_context(fastapi_app):
             retention = getattr(fastapi_app.state, "retention_task", None)
             assert retention is not None
             assert not retention.done()

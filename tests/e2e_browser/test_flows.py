@@ -820,7 +820,10 @@ def test_save_for_a_deleted_instance_says_so_and_moves_focus(
     expect(page.locator("#instance-connection-status")).to_contain_text("Instance not found.")
     expect(save).to_be_disabled()
     expect(test_btn).to_be_focused()
-    expect(page.locator("#toast")).to_be_hidden()
+    # Checked once, not retried: a toast fades on its own. With the dialog open it is drawn
+    # as a copy inside the dialog.
+    toasts = page.locator("#toast:visible, #add-instance-modal > .toast:visible")
+    assert toasts.count() == 0, toasts.all_inner_texts()
 
 
 @pytest.mark.integration

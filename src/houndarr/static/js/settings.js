@@ -580,7 +580,8 @@ function initSettingsPage() {
             return;
           }
           submitBtn.disabled = !isConnectionVerified();
-          // Disabling a focused Save drops focus to the page (Firefox keeps it on Save).
+          // A disabled Save loses focus to the page at the next rendering update, so a fast
+          // response can still find it on Save.
           const focusLeftWithSave =
             document.activeElement === document.body || document.activeElement === submitBtn;
           if (triggerEl.dataset.saveHadFocus === 'true' && focusLeftWithSave) {

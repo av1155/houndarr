@@ -630,13 +630,16 @@ def test_refused_setting_keeps_save_enabled(
     with page.expect_response(
         lambda r: r.url.endswith("/settings/instances") and r.request.method == "POST"
     ) as resp_info:
-        save.click()
+        # From the keyboard: Save turns off while it runs, so it must get its focus back.
+        save.focus()
+        page.keyboard.press("Enter")
     assert resp_info.value.status == 422, resp_info.value.status
     _wait_for_htmx_idle(page)
     expect(page.locator("#instance-connection-status")).to_contain_text(
         "Cooldown days must be 3650 or less."
     )
     expect(save).to_be_enabled()
+    expect(save).to_be_focused()
     expect(add_form.locator("#instance-connection-verified")).to_have_value("true")
 
     cooldown.fill("7")
@@ -646,6 +649,72 @@ def test_refused_setting_keeps_save_enabled(
         save.click()
     assert resp_info.value.status == 200, resp_info.value.status
     expect(page.locator("#instance-tbody")).to_contain_text(instance_name, timeout=10_000)
+
+
+@pytest.mark.integration
+def test_connection_result_during_a_save_keeps_save_off(
+    logged_in_page: Page, houndarr_url: str, mock_sonarr_url: str
+) -> None:
+    """A test result that lands while a save runs, or once it succeeded, must not turn Save on.
+
+    A second click would then queue another save and add a second copy.
+    """
+    page = logged_in_page
+    instance_name = f"E2E Save lock {uuid.uuid4().hex[:8]}"
+    page.goto(f"{houndarr_url}/settings")
+    add_form = _open_filled_add_form(page, mock_sonarr_url, instance_name)
+    test_btn = add_form.locator("button[data-test-connection-btn]")
+    _test_connection_and_wait_for_success(page, add_form, test_btn)
+    save = add_form.locator("#instance-submit-btn")
+    # Runs after settings.js's own listener, so it sees Save as the dialog starts to close.
+    page.evaluate(
+        """() => {
+            window.__saveDisabledAfterSave = [];
+            document.body.addEventListener('htmx:afterRequest', (evt) => {
+                if (evt.detail.elt.matches('form[data-form-mode]')) {
+                    window.__saveDisabledAfterSave.push(
+                        document.querySelector('#instance-submit-btn').disabled,
+                    );
+                }
+            });
+        }"""
+    )
+
+    tests: list[Route] = []
+    saves: list[Route] = []
+
+    def hold(route: Route) -> None:
+        if route.request.url.endswith("/test-connection"):
+            tests.append(route)
+        elif route.request.method == "POST":
+            saves.append(route)
+        else:
+            route.continue_()
+
+    pattern = re.compile(r"/settings/instances(/test-connection)?$")
+    page.route(pattern, hold)
+    try:
+        test_btn.click()
+        expect(test_btn).to_have_class(re.compile(r"\bis-testing\b"))
+        save.click()
+        expect(save).to_be_disabled()
+
+        with page.expect_response(lambda r: "/settings/instances/test-connection" in r.url):
+            tests[0].continue_()
+        expect(test_btn).to_have_class(re.compile(r"\bis-success\b"))
+        expect(save).to_be_disabled()
+        assert len(saves) == 1, f"expected one held save, got {len(saves)}"
+
+        with page.expect_response(
+            lambda r: r.url.endswith("/settings/instances") and r.request.method == "POST"
+        ) as resp_info:
+            saves[0].continue_()
+        assert resp_info.value.status == 200, resp_info.value.status
+        page.wait_for_function("() => window.__saveDisabledAfterSave.length === 1")
+        assert page.evaluate("() => window.__saveDisabledAfterSave") == [True]
+        expect(page.locator("#instance-tbody tr").filter(has_text=instance_name)).to_have_count(1)
+    finally:
+        page.unroute(pattern)
 
 
 @pytest.mark.integration

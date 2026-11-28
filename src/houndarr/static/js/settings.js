@@ -238,6 +238,12 @@ function initSettingsPage() {
       return verifiedInput && verifiedInput.value === 'true';
     }
 
+    // Set when a save starts; a refused or failed save clears it, so a saved form stays locked.
+    function isSaveLocked() {
+      const modalForm = getModalForm();
+      return Boolean(modalForm && modalForm.dataset.saveLocked === 'true');
+    }
+
     function setConnectionState(isVerified, statusText, statusTone) {
       const verifiedInput = addInstanceModalContent.querySelector('#instance-connection-verified');
       const submitBtn = getSubmitButton();
@@ -247,7 +253,7 @@ function initSettingsPage() {
         verifiedInput.value = isVerified ? 'true' : 'false';
       }
       if (submitBtn) {
-        submitBtn.disabled = !isVerified;
+        submitBtn.disabled = !isVerified || isSaveLocked();
       }
       if (statusEl && statusText) {
         if (connectionStatusTimer) {
@@ -493,6 +499,8 @@ function initSettingsPage() {
         }
         // A second click while this save runs, or while the dialog closes after it, saves a copy.
         const submitBtn = getSubmitButton();
+        triggerEl.dataset.saveLocked = 'true';
+        triggerEl.dataset.saveHadFocus = String(document.activeElement === submitBtn);
         if (submitBtn) {
           submitBtn.disabled = true;
         }
@@ -563,9 +571,22 @@ function initSettingsPage() {
         }
         if (triggerEl.matches('form[data-form-mode]')) {
           // A saved instance keeps Save off while the dialog closes; a refused save hands it back.
+          if (evt.detail.successful) {
+            return;
+          }
+          delete triggerEl.dataset.saveLocked;
           const submitBtn = getSubmitButton();
-          if (submitBtn && !evt.detail.successful) {
-            submitBtn.disabled = !isConnectionVerified();
+          if (!submitBtn) {
+            return;
+          }
+          submitBtn.disabled = !isConnectionVerified();
+          // Turning Save off dropped its focus to the page; give it back unless focus moved on.
+          if (
+            !submitBtn.disabled &&
+            triggerEl.dataset.saveHadFocus === 'true' &&
+            document.activeElement === document.body
+          ) {
+            submitBtn.focus();
           }
           return;
         }

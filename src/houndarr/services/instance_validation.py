@@ -548,7 +548,7 @@ async def run_connection_test(
             )
         existing = await get_instance(iid, master_key=master_key)
         if existing is None:
-            return ConnectionTestOutcome(ok=False, message="Instance not found.", status_code=404)
+            return ConnectionTestOutcome(ok=False, message="Instance not found.", status_code=422)
         resolved_api_key = existing.core.api_key
 
     check = await check_connection(instance_type, url.rstrip("/"), resolved_api_key)

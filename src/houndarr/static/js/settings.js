@@ -133,6 +133,7 @@ function initSettingsPage() {
     const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     let pendingModalShow = false;
     let connectionStatusTimer = null;
+    let connectionFieldsVersion = 0;
 
     if (!addInstanceBtn || !addInstanceModal || !addInstanceModalContent) {
       return;
@@ -162,6 +163,10 @@ function initSettingsPage() {
 
     function getConnectionTestButton() {
       return addInstanceModalContent.querySelector('#instance-test-connection-btn');
+    }
+
+    function getSubmitButton() {
+      return addInstanceModalContent.querySelector('#instance-submit-btn');
     }
 
     function isConnectionGuardedFormLoaded() {
@@ -233,16 +238,22 @@ function initSettingsPage() {
       return verifiedInput && verifiedInput.value === 'true';
     }
 
+    // Set when a save starts; a refused or failed save clears it, so a saved form stays locked.
+    function isSaveLocked() {
+      const modalForm = getModalForm();
+      return Boolean(modalForm && modalForm.dataset.saveLocked === 'true');
+    }
+
     function setConnectionState(isVerified, statusText, statusTone) {
       const verifiedInput = addInstanceModalContent.querySelector('#instance-connection-verified');
-      const submitBtn = addInstanceModalContent.querySelector('#instance-submit-btn');
+      const submitBtn = getSubmitButton();
       const statusEl = addInstanceModalContent.querySelector('#instance-connection-status');
 
       if (verifiedInput) {
         verifiedInput.value = isVerified ? 'true' : 'false';
       }
       if (submitBtn) {
-        submitBtn.disabled = !isVerified;
+        submitBtn.disabled = !isVerified || isSaveLocked();
       }
       if (statusEl && statusText) {
         if (connectionStatusTimer) {
@@ -295,6 +306,15 @@ function initSettingsPage() {
       return 'Test connection before adding this instance.';
     }
 
+    // The type, URL or API key changed after this element's request was sent.
+    function isStaleConnectionResult(elt) {
+      return (
+        elt instanceof HTMLElement &&
+        elt.dataset.connectionFieldsVersion !== undefined &&
+        Number(elt.dataset.connectionFieldsVersion) !== connectionFieldsVersion
+      );
+    }
+
     function resetConnectionStateOnFieldChange(target) {
       const mode = getModalFormMode();
       if (!isConnectionGuardedFormLoaded() || mode === null) {
@@ -309,6 +329,7 @@ function initSettingsPage() {
         return;
       }
 
+      connectionFieldsVersion += 1;
       const actionLabel = mode === 'edit' ? 'Save Changes' : 'Add Instance';
       if (isConnectionVerified()) {
         setConnectionState(
@@ -464,18 +485,59 @@ function initSettingsPage() {
       'htmx:beforeRequest',
       (evt) => {
         const triggerEl = evt.detail.elt;
-        if (!triggerEl || !triggerEl.matches('[data-test-connection-btn="true"]')) {
+        if (!triggerEl) {
           return;
         }
-        setConnectionTestButtonState('testing');
+        const isTestButton = triggerEl.matches('[data-test-connection-btn="true"]');
+        if (!isTestButton && !triggerEl.matches('form[data-form-mode]')) {
+          return;
+        }
+        triggerEl.dataset.connectionFieldsVersion = String(connectionFieldsVersion);
+        if (isTestButton) {
+          setConnectionTestButtonState('testing');
+          return;
+        }
+        // A second click while this save runs, or while the dialog closes after it, saves a copy.
+        const submitBtn = getSubmitButton();
+        triggerEl.dataset.saveLocked = 'true';
+        triggerEl.dataset.saveHadFocus = String(document.activeElement === submitBtn);
+        if (submitBtn) {
+          submitBtn.disabled = true;
+        }
+      },
+      { signal },
+    );
+
+    // app.js's failed-request toast listener runs before this one, so a dropped 422 never toasts.
+    document.body.addEventListener(
+      'htmx:beforeSwap',
+      (evt) => {
+        const statusEl = addInstanceModalContent.querySelector('#instance-connection-status');
+        if (!statusEl || evt.detail.target !== statusEl) {
+          return;
+        }
+        if (isStaleConnectionResult(evt.detail.requestConfig.elt)) {
+          evt.detail.shouldSwap = false;
+          return;
+        }
+        if (evt.detail.shouldSwap) {
+          // The server's text replaces any prompt still queued by an earlier field edit.
+          window.clearTimeout(connectionStatusTimer);
+          connectionStatusTimer = null;
+          statusEl.classList.remove('is-updating');
+        }
       },
       { signal },
     );
 
     document.body.addEventListener(
       'houndarr-connection-test-success',
-      () => {
-        if (!isConnectionGuardedFormLoaded() || getModalFormMode() === null) {
+      (evt) => {
+        if (
+          !isConnectionGuardedFormLoaded() ||
+          getModalFormMode() === null ||
+          isStaleConnectionResult(evt.target)
+        ) {
           return;
         }
         // Server response already contains the full message via HTMX swap;
@@ -488,8 +550,8 @@ function initSettingsPage() {
 
     document.body.addEventListener(
       'houndarr-connection-test-failure',
-      () => {
-        if (!isConnectionGuardedFormLoaded()) {
+      (evt) => {
+        if (!isConnectionGuardedFormLoaded() || isStaleConnectionResult(evt.target)) {
           return;
         }
         // Server response already contains the specific error via HTMX swap;
@@ -504,7 +566,31 @@ function initSettingsPage() {
       'htmx:afterRequest',
       (evt) => {
         const triggerEl = evt.detail.elt;
-        if (!triggerEl || !triggerEl.matches('[data-test-connection-btn="true"]')) {
+        if (!triggerEl) {
+          return;
+        }
+        if (triggerEl.matches('form[data-form-mode]')) {
+          // A saved instance keeps Save off while the dialog closes; a refused save hands it back.
+          if (evt.detail.successful) {
+            return;
+          }
+          delete triggerEl.dataset.saveLocked;
+          const submitBtn = getSubmitButton();
+          if (!submitBtn) {
+            return;
+          }
+          submitBtn.disabled = !isConnectionVerified();
+          // A disabled Save loses focus to the page at the next rendering update, so a fast
+          // response can still find it on Save.
+          const focusLeftWithSave =
+            document.activeElement === document.body || document.activeElement === submitBtn;
+          if (triggerEl.dataset.saveHadFocus === 'true' && focusLeftWithSave) {
+            const focusTarget = submitBtn.disabled ? getConnectionTestButton() : submitBtn;
+            focusTarget?.focus();
+          }
+          return;
+        }
+        if (!triggerEl.matches('[data-test-connection-btn="true"]')) {
           return;
         }
 
@@ -520,19 +606,21 @@ function initSettingsPage() {
     document.body.addEventListener(
       'htmx:afterSwap',
       (evt) => {
-        if (evt.detail.target.id === 'app-content') {
+        const targetId = evt.detail.target.id;
+        if (targetId === 'app-content') {
           document.body.style.overflow = '';
         }
 
-        if (evt.detail.target.id === 'instance-tbody') {
+        // A save from a dialog cancelled earlier still refreshes the table but must not close
+        // the dialog opened since; that save's form is no longer in it.
+        if (
+          (targetId === 'instance-tbody' || targetId.startsWith('instance-row-')) &&
+          addInstanceModalContent.contains(evt.detail.requestConfig?.elt)
+        ) {
           window.houndarrCloseAddInstanceModal();
         }
 
-        if (evt.detail.target.id.startsWith('instance-row-')) {
-          window.houndarrCloseAddInstanceModal();
-        }
-
-        if (evt.detail.target.id === 'admin-security') {
+        if (targetId === 'admin-security') {
           // After the password-change form re-renders (success or
           // validation error) via the /settings/account/password
           // endpoint, return focus to the first password field so
@@ -543,7 +631,7 @@ function initSettingsPage() {
           }
         }
 
-        if (evt.detail.target.id === 'add-instance-modal-content') {
+        if (targetId === 'add-instance-modal-content') {
           if (pendingModalShow) {
             pendingModalShow = false;
             addInstanceModal.showModal();
@@ -571,18 +659,29 @@ function initSettingsPage() {
       { signal },
     );
 
+    // app.js toasts failed mutations only, since the dashboard polls; opening this dialog is a click.
+    function endModalOpen(evt, failureMessage) {
+      if (pendingModalShow && evt.detail.target === addInstanceModalContent) {
+        window.houndarrShowToast(failureMessage);
+      }
+      pendingModalShow = false;
+    }
+
     document.body.addEventListener(
       'htmx:responseError',
-      () => {
-        pendingModalShow = false;
+      (evt) => {
+        endModalOpen(
+          evt,
+          `Request failed (HTTP ${evt.detail.xhr.status}). Reload the page and try again.`,
+        );
       },
       { signal },
     );
 
     document.body.addEventListener(
       'htmx:sendError',
-      () => {
-        pendingModalShow = false;
+      (evt) => {
+        endModalOpen(evt, 'Could not reach Houndarr. Check that it is running, then try again.');
       },
       { signal },
     );

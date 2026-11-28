@@ -386,6 +386,14 @@ class TestConnectionResponses:
         assert resp.headers.get("HX-Trigger") == "houndarr-connection-test-failure"
         assert "Verify first" in bytes(resp.body).decode("utf-8")
 
+    def test_guard_response_for_a_setting_keeps_the_connection_state(self) -> None:
+        resp = connection_guard_response("Cooldown days must be 3650 or less.", connection=False)
+        assert resp.status_code == 422
+        assert resp.headers.get("HX-Retarget") == "#instance-connection-status"
+        assert resp.headers.get("HX-Reswap") == "innerHTML"
+        assert "HX-Trigger" not in resp.headers
+        assert "Cooldown days must be 3650 or less." in bytes(resp.body).decode("utf-8")
+
     def test_guard_response_escapes_message(self) -> None:
         resp = connection_guard_response("<b>bold</b>")
         body = bytes(resp.body).decode("utf-8")

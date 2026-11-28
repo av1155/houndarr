@@ -14,7 +14,7 @@ has one test:
 * URL that fails the SSRF gate -> 422, URL-validation message.
 * ``__UNCHANGED__`` sentinel with a non-numeric instance_id -> 422,
   "Invalid instance ID for key lookup."
-* Sentinel with an instance_id that does not exist -> 404,
+* Sentinel with an instance_id that does not exist -> 422,
   "Instance not found."
 * Sentinel with an existing instance_id -> uses the stored api_key
   on the probe (verified by asserting the bytes passed into the
@@ -122,8 +122,8 @@ async def test_sentinel_with_non_numeric_instance_id_returns_422() -> None:
 
 
 @pytest.mark.asyncio()
-async def test_sentinel_with_unknown_instance_id_returns_404(db: None, master_key: bytes) -> None:
-    """Sentinel path with an instance_id that does not exist returns 404."""
+async def test_sentinel_with_unknown_instance_id_returns_422(db: None, master_key: bytes) -> None:
+    """A deleted instance gets a 422 like every other failure, so the dialog shows it."""
     outcome = await run_connection_test(
         master_key=master_key,
         type_value="sonarr",
@@ -132,7 +132,7 @@ async def test_sentinel_with_unknown_instance_id_returns_404(db: None, master_ke
         instance_id="9999",
     )
     assert outcome == ConnectionTestOutcome(
-        ok=False, message="Instance not found.", status_code=404
+        ok=False, message="Instance not found.", status_code=422
     )
 
 

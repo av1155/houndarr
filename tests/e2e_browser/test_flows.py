@@ -12,23 +12,18 @@ import uuid
 from contextlib import suppress
 
 import pytest
-from playwright.sync_api import Locator, Page, Route, expect
+from playwright.sync_api import Locator, Page, Request, Route, expect
 
 from houndarr.config import DEFAULT_BATCH_SIZE, DEFAULT_SLEEP_INTERVAL_MINUTES
 
 
 def _wait_for_connection_ui_idle(page: Page) -> None:
-    """Drain the 80 ms setTimeout scheduled by the field-change handler.
+    """Wait until ``#instance-connection-status`` has no status update pending.
 
-    The settings JS reacts to ``input``/``change`` events on the
-    type/url/api_key fields by adding ``is-updating`` to
-    ``#instance-connection-status`` and scheduling a ~80 ms text reset.
-    Two places trigger it in this flow: ``locator.fill()`` (synchronous
-    input events) and the blur that happens when clicking Test Connection
-    (which fires ``change`` on the previously focused input).  When the
-    mock *arr runs on the same Docker network the HTMX round-trip is
-    faster than 80 ms, so the stale timer wipes out the success message
-    if we don't drain it on both sides of the click.
+    An edit to the type, URL or API key adds ``is-updating`` and queues the
+    "Test connection before ..." prompt on an 80 ms timer; a server response
+    that lands first cancels it.  Asserting the status text after this wait
+    proves no queued prompt is left to overwrite it.
     """
     page.wait_for_function(
         "() => !document.querySelector('#instance-connection-status')"
@@ -47,22 +42,23 @@ def _wait_for_htmx_idle(page: Page) -> None:
     ).to_have_count(0)
 
 
+def _expect_dialog_ready(page: Page, form: Locator) -> None:
+    """Wait for the instance dialog's form and for htmx to wire its controls.
+
+    htmx 2 processes swapped-in content in its settle step, 20 ms after
+    the dialog opens, so a click before that sends no request.
+    """
+    expect(form).to_be_visible()
+    _wait_for_htmx_idle(page)
+
+
 def _test_connection_and_wait_for_success(page: Page, form: Locator, button: Locator) -> None:
-    """Trigger Test Connection and wait for the success signal.
+    """Click Test Connection the way a user does and wait for the success state.
 
-    Two races would otherwise make this flaky against a fast mock:
-
-    1. ``locator.fill()`` fires ``input`` events that schedule an 80 ms
-       ``setTimeout`` which resets ``#instance-connection-status``.
-       A real button click then fires a ``change`` event on the
-       previously focused input, scheduling another reset that races
-       with the HTMX response.  We dispatch the click synthetically so
-       no blur/change happens, and drain any residual timer afterwards.
-    2. The HTMX ``HX-Trigger`` + DOM swap + any pending reset timer must
-       all settle before we assert.  The submit button's enabled state
-       is the authoritative success signal: the JS handler for
-       ``houndarr-connection-test-success`` sets ``connection_verified``
-       and enables submit regardless of text-swap timing.
+    The click blurs the field filled last, and the response from the mock
+    on the same Docker network often lands inside the 80 ms that field's
+    change event queues its prompt for, so "Connected" next to an enabled
+    Save proves the response won (#931).
 
     The response filter matches any status for the test-connection URL.
     Filtering on ``status == 200`` would hang for the full Playwright
@@ -72,12 +68,43 @@ def _test_connection_and_wait_for_success(page: Page, form: Locator, button: Loc
     with page.expect_response(
         lambda r: "/settings/instances/test-connection" in r.url
     ) as resp_info:
-        button.dispatch_event("click")
+        button.click()
     resp = resp_info.value
     assert resp.status == 200, f"test-connection returned {resp.status}: {resp.text()}"
     _wait_for_connection_ui_idle(page)
     _wait_for_htmx_idle(page)
+    expect(page.locator("#instance-connection-status")).to_contain_text("Connected to")
     expect(form.locator("#instance-submit-btn")).to_be_enabled(timeout=10_000)
+
+
+def _expect_blocked_url_error_to_stay(page: Page, form: Locator) -> None:
+    """Type a loopback URL and click Test Connection at once; the server's error must stay.
+
+    The click blurs the URL field, and the 422 for a blocked address comes
+    back faster than the prompt its change event queues (#931).
+    """
+    form.locator('input[name="url"]').fill("http://127.0.0.1")
+    with page.expect_response(
+        lambda r: "/settings/instances/test-connection" in r.url
+    ) as resp_info:
+        form.locator("button[data-test-connection-btn]").click()
+    assert resp_info.value.status == 422, resp_info.value.status
+    _wait_for_connection_ui_idle(page)
+    _wait_for_htmx_idle(page)
+    expect(page.locator("#instance-connection-status")).to_contain_text("blocked address range")
+    expect(form.locator("#instance-submit-btn")).to_be_disabled()
+
+
+def _open_filled_add_form(page: Page, mock_sonarr_url: str, name: str) -> Locator:
+    """Open the Add Instance dialog and fill a Sonarr instance against the mock."""
+    page.get_by_role("button", name=re.compile(r"add\s*instance", re.I)).first.click()
+    add_form = page.locator('form[data-form-mode="add"]')
+    _expect_dialog_ready(page, add_form)
+    add_form.locator('input[name="name"]').fill(name)
+    add_form.locator('select[name="type"]').select_option("sonarr")
+    add_form.locator('input[name="url"]').fill(mock_sonarr_url)
+    add_form.locator('input[name="api_key"]').fill("e2e-sonarr-key")
+    return add_form
 
 
 def _submit_form(form: Locator) -> None:
@@ -182,7 +209,7 @@ def _assert_hiding_restores_series_window(form: Locator, rendered_value: str) ->
 
 @pytest.mark.integration
 def test_full_instance_lifecycle(
-    logged_in_page: Page, houndarr_url: str, mock_sonarr_url: str
+    logged_in_page: Page, houndarr_url: str, mock_sonarr_url: str, console_guard
 ) -> None:
     """Add an instance against the mock *arr, then flip search_order and verify persistence.
 
@@ -195,6 +222,8 @@ def test_full_instance_lifecycle(
     edit-flow row lookup then targets the row by this unique name
     instead of ``.first``, so retries remain idempotent.
     """
+    for p in _EXPECTED_422_CONSOLE_NOISE:
+        console_guard.allow(p)
     page = logged_in_page
     instance_name = f"E2E Sonarr {uuid.uuid4().hex[:8]}"
     page.goto(f"{houndarr_url}/settings")
@@ -202,14 +231,13 @@ def test_full_instance_lifecycle(
     # Open the add modal.
     page.get_by_role("button", name=re.compile(r"add\s*instance", re.I)).first.click()
     add_form = page.locator('form[data-form-mode="add"]')
-    expect(add_form).to_be_visible()
+    _expect_dialog_ready(page, add_form)
 
     # Fill in the form against the mock Sonarr.
     add_form.locator('input[name="name"]').fill(instance_name)
     add_form.locator('select[name="type"]').select_option("sonarr")
     add_form.locator('input[name="url"]').fill(mock_sonarr_url)
     add_form.locator('input[name="api_key"]').fill("e2e-sonarr-key")
-    _wait_for_connection_ui_idle(page)
 
     # Test Connection must succeed before Save is enabled.
     _test_connection_and_wait_for_success(
@@ -225,7 +253,7 @@ def test_full_instance_lifecycle(
     row = page.locator("#instance-tbody tr").filter(has_text=instance_name)
     row.locator('button[hx-get^="/settings/instances/"]').click()
     edit_form = page.locator('form[data-form-mode="edit"]')
-    expect(edit_form).to_be_visible()
+    _expect_dialog_ready(page, edit_form)
     expect(edit_form.locator('select[name="search_order"]')).to_have_value("random")
 
     # Flip to Chronological.  The edit form always starts with
@@ -233,7 +261,8 @@ def test_full_instance_lifecycle(
     edit_form.locator('select[name="search_order"]').select_option("chronological")
     # Not the default 5, so the hide check below can tell the stored value from the default.
     edit_form.locator('[name="upgrade_series_window_size"]').fill("37")
-    _wait_for_connection_ui_idle(page)
+    _expect_blocked_url_error_to_stay(page, edit_form)
+    edit_form.locator('input[name="url"]').fill(mock_sonarr_url)
     _test_connection_and_wait_for_success(
         page, edit_form, edit_form.locator("button[data-test-connection-btn]")
     )
@@ -243,7 +272,7 @@ def test_full_instance_lifecycle(
     # Re-open the same row and verify persistence.
     row.locator('button[hx-get^="/settings/instances/"]').click()
     reopened = page.locator('form[data-form-mode="edit"]')
-    expect(reopened).to_be_visible()
+    _expect_dialog_ready(page, reopened)
     expect(reopened.locator('select[name="search_order"]')).to_have_value("chronological")
     expect(reopened.locator('[name="upgrade_series_window_size"]')).to_have_value("37")
 
@@ -262,7 +291,7 @@ def test_add_form_type_gated_controls_follow_type(logged_in_page: Page, houndarr
     page.goto(f"{houndarr_url}/settings")
     page.get_by_role("button", name=re.compile(r"add\s*instance", re.I)).first.click()
     add_form = page.locator('form[data-form-mode="add"]')
-    expect(add_form).to_be_visible()
+    _expect_dialog_ready(page, add_form)
     type_select = add_form.locator('select[name="type"]')
     expect(type_select).to_have_value("radarr")
     _assert_type_gated_controls(add_form, "radarr")
@@ -318,13 +347,12 @@ def test_save_instance_4xx_renders_error(
     page.goto(f"{houndarr_url}/settings")
     page.get_by_role("button", name=re.compile(r"add\s*instance", re.I)).first.click()
     add_form = page.locator('form[data-form-mode="add"]')
-    expect(add_form).to_be_visible()
+    _expect_dialog_ready(page, add_form)
 
     add_form.locator('input[name="name"]').fill(f"E2E Guard {uuid.uuid4().hex[:8]}")
     add_form.locator('select[name="type"]').select_option("sonarr")
     add_form.locator('input[name="url"]').fill(mock_sonarr_url)
     add_form.locator('input[name="api_key"]').fill("guard-key")
-    _wait_for_connection_ui_idle(page)
 
     # requestSubmit with ``connection_verified=false`` in the hidden input
     # triggers the 422 guard path in routes/settings/instances.py
@@ -334,6 +362,7 @@ def test_save_instance_4xx_renders_error(
     ) as resp_info:
         _submit_form(add_form)
     assert resp_info.value.status == 422, resp_info.value.status
+    _wait_for_connection_ui_idle(page)
     _wait_for_htmx_idle(page)
 
     expect(page.locator("#instance-connection-status")).to_contain_text(
@@ -356,14 +385,13 @@ def test_number_typed_in_exponent_form_saves_its_value(
     page.goto(f"{houndarr_url}/settings")
     page.get_by_role("button", name=re.compile(r"add\s*instance", re.I)).first.click()
     add_form = page.locator('form[data-form-mode="add"]')
-    expect(add_form).to_be_visible()
+    _expect_dialog_ready(page, add_form)
 
     add_form.locator('input[name="name"]').fill(instance_name)
     add_form.locator('select[name="type"]').select_option("sonarr")
     add_form.locator('input[name="url"]').fill(mock_sonarr_url)
     add_form.locator('input[name="api_key"]').fill("e2e-exponent-key")
     add_form.locator('input[name="batch_size"]').fill("1e2")
-    _wait_for_connection_ui_idle(page)
     _test_connection_and_wait_for_success(
         page, add_form, add_form.locator("button[data-test-connection-btn]")
     )
@@ -378,7 +406,7 @@ def test_number_typed_in_exponent_form_saves_its_value(
     row = page.locator("#instance-tbody tr").filter(has_text=instance_name)
     row.locator('button[hx-get^="/settings/instances/"]').click()
     edit_form = page.locator('form[data-form-mode="edit"]')
-    expect(edit_form).to_be_visible()
+    _expect_dialog_ready(page, edit_form)
     expect(edit_form.locator('input[name="batch_size"]')).to_have_value("100")
 
 
@@ -394,26 +422,474 @@ def test_test_connection_4xx_renders_error(
     page.goto(f"{houndarr_url}/settings")
     page.get_by_role("button", name=re.compile(r"add\s*instance", re.I)).first.click()
     add_form = page.locator('form[data-form-mode="add"]')
-    expect(add_form).to_be_visible()
+    _expect_dialog_ready(page, add_form)
 
     add_form.locator('input[name="name"]').fill(f"E2E SSRF {uuid.uuid4().hex[:8]}")
     add_form.locator('select[name="type"]').select_option("sonarr")
-    add_form.locator('input[name="url"]').fill("http://127.0.0.1")
     add_form.locator('input[name="api_key"]').fill("guard-key")
-    _wait_for_connection_ui_idle(page)
+    _expect_blocked_url_error_to_stay(page, add_form)
 
-    with page.expect_response(
-        lambda r: "/settings/instances/test-connection" in r.url
-    ) as resp_info:
-        add_form.locator("button[data-test-connection-btn]").dispatch_event("click")
-    assert resp_info.value.status == 422, resp_info.value.status
-    _wait_for_connection_ui_idle(page)
-    _wait_for_htmx_idle(page)
 
-    expect(page.locator("#instance-connection-status")).to_contain_text(
-        "blocked address range",
-        timeout=5_000,
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("tested_url", "result_status"),
+    [(None, 200), ("http://127.0.0.1", 422)],
+    ids=["success", "failure"],
+)
+def test_connection_result_for_edited_details_is_dropped(
+    logged_in_page: Page,
+    houndarr_url: str,
+    mock_sonarr_url: str,
+    console_guard,
+    tested_url: str | None,
+    result_status: int,
+) -> None:
+    """A test result that lands after the URL was edited neither verifies nor fails the new URL."""
+    for p in _EXPECTED_422_CONSOLE_NOISE:
+        console_guard.allow(p)
+    page = logged_in_page
+    page.goto(f"{houndarr_url}/settings")
+    add_form = _open_filled_add_form(page, mock_sonarr_url, f"E2E Stale {uuid.uuid4().hex[:8]}")
+    if tested_url is not None:
+        add_form.locator('input[name="url"]').fill(tested_url)
+    status = page.locator("#instance-connection-status")
+    prompt = "Test connection before adding this instance."
+
+    held: list[Route] = []
+
+    def hold(route: Route) -> None:
+        held.append(route)
+
+    pattern = re.compile(r"/settings/instances/test-connection$")
+    page.route(pattern, hold)
+    try:
+        test_btn = add_form.locator("button[data-test-connection-btn]")
+        test_btn.click()
+        expect(test_btn).to_have_class(re.compile(r"\bis-testing\b"))
+        add_form.locator('input[name="url"]').fill("http://10.255.255.1:8989")
+        # The edit's prompt is on screen before the old result arrives.
+        _wait_for_connection_ui_idle(page)
+        expect(status).to_contain_text(prompt)
+        assert len(held) == 1, f"expected one held test-connection request, got {len(held)}"
+
+        with page.expect_response(
+            lambda r: "/settings/instances/test-connection" in r.url
+        ) as resp_info:
+            held[0].continue_()
+        assert resp_info.value.status == result_status, resp_info.value.status
+        _wait_for_htmx_idle(page)
+
+        expect(status).to_contain_text(prompt)
+        expect(status).not_to_contain_text("Connected")
+        expect(status).not_to_contain_text("blocked")
+        expect(add_form.locator("#instance-submit-btn")).to_be_disabled()
+        expect(add_form.locator("#instance-connection-verified")).to_have_value("false")
+        expect(test_btn).not_to_have_class(re.compile(r"\bis-(success|error)\b"))
+    finally:
+        page.unroute(pattern)
+
+
+@pytest.mark.integration
+def test_save_refusal_for_edited_details_is_dropped(
+    logged_in_page: Page, houndarr_url: str, mock_sonarr_url: str, console_guard
+) -> None:
+    """A save refusal that lands after the URL was edited keeps the edit's prompt."""
+    for p in _EXPECTED_422_CONSOLE_NOISE:
+        console_guard.allow(p)
+    page = logged_in_page
+    page.goto(f"{houndarr_url}/settings")
+    add_form = _open_filled_add_form(
+        page, mock_sonarr_url, f"E2E Stale save {uuid.uuid4().hex[:8]}"
     )
+    _test_connection_and_wait_for_success(
+        page, add_form, add_form.locator("button[data-test-connection-btn]")
+    )
+    add_form.locator('input[name="cooldown_days"]').fill("99999")
+    status = page.locator("#instance-connection-status")
+    changed = "Connection details changed. Test again to enable Add Instance."
+
+    held: list[Route] = []
+
+    def hold(route: Route) -> None:
+        if route.request.method == "POST":
+            held.append(route)
+        else:
+            route.continue_()
+
+    pattern = re.compile(r"/settings/instances$")
+    page.route(pattern, hold)
+    try:
+        add_form.locator("#instance-submit-btn").click()
+        add_form.locator('input[name="url"]').fill("http://10.255.255.1:8989")
+        _wait_for_connection_ui_idle(page)
+        expect(status).to_contain_text(changed)
+        assert len(held) == 1, f"expected one held save request, got {len(held)}"
+
+        with page.expect_response(
+            lambda r: r.url.endswith("/settings/instances") and r.request.method == "POST"
+        ) as resp_info:
+            held[0].continue_()
+        assert resp_info.value.status == 422, resp_info.value.status
+        _wait_for_htmx_idle(page)
+
+        expect(status).to_contain_text(changed)
+        expect(status).not_to_contain_text("Cooldown days")
+        expect(add_form.locator("#instance-submit-btn")).to_be_disabled()
+    finally:
+        page.unroute(pattern)
+
+
+@pytest.mark.integration
+def test_double_click_on_add_instance_saves_once(
+    logged_in_page: Page, houndarr_url: str, mock_sonarr_url: str
+) -> None:
+    """The second click of a double-click on Save must not add a second copy."""
+    page = logged_in_page
+    instance_name = f"E2E Double {uuid.uuid4().hex[:8]}"
+    page.goto(f"{houndarr_url}/settings")
+    add_form = _open_filled_add_form(page, mock_sonarr_url, instance_name)
+    _test_connection_and_wait_for_success(
+        page, add_form, add_form.locator("button[data-test-connection-btn]")
+    )
+
+    saves: list[str] = []
+
+    def record(request: Request) -> None:
+        if request.method == "POST" and request.url.endswith("/settings/instances"):
+            saves.append(request.url)
+
+    page.on("request", record)
+    add_form.locator("#instance-submit-btn").dblclick()
+    rows = page.locator("#instance-tbody tr").filter(has_text=instance_name)
+    expect(rows).to_have_count(1, timeout=10_000)
+    expect(page.locator("dialog#add-instance-modal[open]")).to_have_count(0)
+    _wait_for_htmx_idle(page)
+    assert len(saves) == 1, f"double-click sent {len(saves)} saves"
+
+    page.reload()
+    expect(page.locator("#instance-tbody tr").filter(has_text=instance_name)).to_have_count(1)
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("failure", "message"),
+    [("http-404", "Request failed (HTTP 404)"), ("network", "Could not reach Houndarr")],
+)
+def test_instance_dialog_that_fails_to_open_shows_a_toast(
+    logged_in_page: Page, houndarr_url: str, console_guard, failure: str, message: str
+) -> None:
+    """A dialog whose form fails to load (a 404 or no answer) shows a toast instead of nothing.
+
+    Edit on a row deleted in another tab gets that 404; the Add button's
+    request takes the same path and needs no instance to exist.
+    """
+    for p in [
+        r"Failed to load resource: the server responded with a status of 404",
+        r"Response Status Error Code 404",
+        r"net::ERR_FAILED",
+    ]:
+        console_guard.allow(p)
+    page = logged_in_page
+    page.goto(f"{houndarr_url}/settings")
+
+    def fail(route: Route) -> None:
+        if failure == "http-404":
+            route.fulfill(status=404, body="Not found")
+        else:
+            route.abort("failed")
+
+    pattern = re.compile(r"/settings/instances/add-form$")
+    page.route(pattern, fail)
+    try:
+        page.get_by_role("button", name=re.compile(r"add\s*instance", re.I)).first.click()
+        expect(page.locator("#toast")).to_be_visible(timeout=4_000)
+        expect(page.locator("#toast")).to_contain_text(message)
+        expect(page.locator("dialog#add-instance-modal[open]")).to_have_count(0)
+    finally:
+        page.unroute(pattern)
+
+
+@pytest.mark.integration
+def test_refused_setting_keeps_save_enabled(
+    logged_in_page: Page, houndarr_url: str, mock_sonarr_url: str, console_guard
+) -> None:
+    """A save refused for a setting needs no new connection test once the setting is fixed."""
+    for p in _EXPECTED_422_CONSOLE_NOISE:
+        console_guard.allow(p)
+    page = logged_in_page
+    instance_name = f"E2E Setting {uuid.uuid4().hex[:8]}"
+    page.goto(f"{houndarr_url}/settings")
+    add_form = _open_filled_add_form(page, mock_sonarr_url, instance_name)
+    _test_connection_and_wait_for_success(
+        page, add_form, add_form.locator("button[data-test-connection-btn]")
+    )
+
+    cooldown = add_form.locator('input[name="cooldown_days"]')
+    save = add_form.locator("#instance-submit-btn")
+    cooldown.fill("99999")
+    with page.expect_response(
+        lambda r: r.url.endswith("/settings/instances") and r.request.method == "POST"
+    ) as resp_info:
+        # From the keyboard: Save turns off while it runs, so it must get its focus back.
+        save.focus()
+        page.keyboard.press("Enter")
+    assert resp_info.value.status == 422, resp_info.value.status
+    _wait_for_htmx_idle(page)
+    expect(page.locator("#instance-connection-status")).to_contain_text(
+        "Cooldown days must be 3650 or less."
+    )
+    expect(save).to_be_enabled()
+    expect(save).to_be_focused()
+    expect(add_form.locator("#instance-connection-verified")).to_have_value("true")
+    # The refusal ended the save, so a later test result can turn Save on again.
+    _test_connection_and_wait_for_success(
+        page, add_form, add_form.locator("button[data-test-connection-btn]")
+    )
+
+    cooldown.fill("7")
+    with page.expect_response(
+        lambda r: r.url.endswith("/settings/instances") and r.request.method == "POST"
+    ) as resp_info:
+        save.click()
+    assert resp_info.value.status == 200, resp_info.value.status
+    expect(page.locator("#instance-tbody")).to_contain_text(instance_name, timeout=10_000)
+
+
+@pytest.mark.integration
+def test_connection_result_during_a_save_keeps_save_off(
+    logged_in_page: Page, houndarr_url: str, mock_sonarr_url: str
+) -> None:
+    """A test result that lands while a save runs must not turn Save on.
+
+    A second click would then queue another save and add a second copy.
+    Save must also still be off once the save succeeds and the dialog closes.
+    """
+    page = logged_in_page
+    instance_name = f"E2E Save lock {uuid.uuid4().hex[:8]}"
+    page.goto(f"{houndarr_url}/settings")
+    add_form = _open_filled_add_form(page, mock_sonarr_url, instance_name)
+    test_btn = add_form.locator("button[data-test-connection-btn]")
+    _test_connection_and_wait_for_success(page, add_form, test_btn)
+    save = add_form.locator("#instance-submit-btn")
+    # Runs after settings.js's own listener, so it sees Save as the dialog starts to close.
+    page.evaluate(
+        """() => {
+            window.__saveDisabledAfterSave = [];
+            document.body.addEventListener('htmx:afterRequest', (evt) => {
+                if (evt.detail.elt.matches('form[data-form-mode]')) {
+                    window.__saveDisabledAfterSave.push(
+                        document.querySelector('#instance-submit-btn').disabled,
+                    );
+                }
+            });
+        }"""
+    )
+
+    tests: list[Route] = []
+    saves: list[Route] = []
+
+    def hold(route: Route) -> None:
+        if route.request.url.endswith("/test-connection"):
+            tests.append(route)
+        elif route.request.method == "POST":
+            saves.append(route)
+        else:
+            route.continue_()
+
+    pattern = re.compile(r"/settings/instances(/test-connection)?$")
+    page.route(pattern, hold)
+    try:
+        test_btn.click()
+        expect(test_btn).to_have_class(re.compile(r"\bis-testing\b"))
+        save.click()
+        expect(save).to_be_disabled()
+
+        with page.expect_response(lambda r: "/settings/instances/test-connection" in r.url):
+            tests[0].continue_()
+        expect(test_btn).to_have_class(re.compile(r"\bis-success\b"))
+        expect(save).to_be_disabled()
+        assert len(saves) == 1, f"expected one held save, got {len(saves)}"
+
+        with page.expect_response(
+            lambda r: r.url.endswith("/settings/instances") and r.request.method == "POST"
+        ) as resp_info:
+            saves[0].continue_()
+        assert resp_info.value.status == 200, resp_info.value.status
+        page.wait_for_function("() => window.__saveDisabledAfterSave.length === 1")
+        assert page.evaluate("() => window.__saveDisabledAfterSave") == [True]
+        expect(page.locator("#instance-tbody tr").filter(has_text=instance_name)).to_have_count(1)
+    finally:
+        page.unroute(pattern)
+
+
+@pytest.mark.integration
+def test_save_from_a_cancelled_dialog_leaves_the_next_one_open(
+    logged_in_page: Page, houndarr_url: str, mock_sonarr_url: str
+) -> None:
+    """A save that finishes after its dialog was cancelled must not close the next dialog.
+
+    Cancel does not stop a running save, so it still adds its row; the dialog
+    opened since then keeps what the user typed.
+    """
+    page = logged_in_page
+    first_name = f"E2E Cancelled {uuid.uuid4().hex[:8]}"
+    page.goto(f"{houndarr_url}/settings")
+    add_form = _open_filled_add_form(page, mock_sonarr_url, first_name)
+    _test_connection_and_wait_for_success(
+        page, add_form, add_form.locator("button[data-test-connection-btn]")
+    )
+
+    held: list[Route] = []
+
+    def hold(route: Route) -> None:
+        if route.request.method == "POST":
+            held.append(route)
+        else:
+            route.continue_()
+
+    pattern = re.compile(r"/settings/instances$")
+    page.route(pattern, hold)
+    try:
+        add_form.locator("#instance-submit-btn").click()
+        page.locator('#add-instance-modal [data-close-add-instance-modal="true"]').first.click()
+        expect(page.locator("dialog#add-instance-modal[open]")).to_have_count(0)
+
+        page.get_by_role("button", name=re.compile(r"add\s*instance", re.I)).first.click()
+        next_form = page.locator('form[data-form-mode="add"]')
+        _expect_dialog_ready(page, next_form)
+        next_form.locator('input[name="name"]').fill("Typed after cancel")
+        assert len(held) == 1, f"expected one held save, got {len(held)}"
+
+        with page.expect_response(
+            lambda r: r.url.endswith("/settings/instances") and r.request.method == "POST"
+        ) as resp_info:
+            held[0].continue_()
+        assert resp_info.value.status == 200, resp_info.value.status
+        expect(page.locator("#instance-tbody")).to_contain_text(first_name, timeout=10_000)
+        _wait_for_htmx_idle(page)
+        page.wait_for_timeout(500)  # past the dialog's 160 ms close animation
+
+        expect(page.locator("dialog#add-instance-modal[open]")).to_have_count(1)
+        expect(next_form.locator('input[name="name"]')).to_have_value("Typed after cancel")
+    finally:
+        page.unroute(pattern)
+
+
+@pytest.mark.integration
+def test_save_for_a_deleted_instance_says_so_and_moves_focus(
+    logged_in_page: Page, houndarr_url: str, mock_sonarr_url: str, console_guard
+) -> None:
+    """Save Changes on an instance deleted in another tab shows why and asks for a new test.
+
+    Save stays off, so keyboard focus moves to Test Connection instead of the page.
+    """
+    for p in _EXPECTED_422_CONSOLE_NOISE:
+        console_guard.allow(p)
+    page = logged_in_page
+    instance_name = f"E2E Deleted {uuid.uuid4().hex[:8]}"
+    page.goto(f"{houndarr_url}/settings")
+    add_form = _open_filled_add_form(page, mock_sonarr_url, instance_name)
+    _test_connection_and_wait_for_success(
+        page, add_form, add_form.locator("button[data-test-connection-btn]")
+    )
+    _submit_form(add_form)
+    row = page.locator("#instance-tbody tr").filter(has_text=instance_name)
+    expect(row).to_have_count(1, timeout=10_000)
+
+    row.locator('button[hx-get^="/settings/instances/"]').click()
+    edit_form = page.locator('form[data-form-mode="edit"]')
+    _expect_dialog_ready(page, edit_form)
+    test_btn = edit_form.locator("button[data-test-connection-btn]")
+    _test_connection_and_wait_for_success(page, edit_form, test_btn)
+
+    other = page.context.new_page()
+    other.goto(f"{houndarr_url}/settings")
+    other_row = other.locator("#instance-tbody tr").filter(has_text=instance_name)
+    other_row.locator("button[hx-delete]").click()
+    other.locator("#confirm-go").click()
+    expect(other_row).to_have_count(0, timeout=5_000)
+    other.close()
+
+    save = edit_form.locator("#instance-submit-btn")
+    with page.expect_response(
+        lambda r: r.request.method == "POST" and re.search(r"/settings/instances/\d+$", r.url)
+    ) as resp_info:
+        save.focus()
+        page.keyboard.press("Enter")
+    assert resp_info.value.status == 422, resp_info.value.status
+    expect(page.locator("#instance-connection-status")).to_contain_text("Instance not found.")
+    expect(save).to_be_disabled()
+    expect(test_btn).to_be_focused()
+    # Checked once, not retried: a toast fades on its own. With the dialog open it is drawn
+    # as a copy inside the dialog.
+    toasts = page.locator("#toast:visible, #add-instance-modal > .toast:visible")
+    assert toasts.count() == 0, toasts.all_inner_texts()
+
+
+@pytest.mark.integration
+def test_run_now_clicked_again_stays_running_until_its_own_response(
+    logged_in_page: Page, houndarr_url: str, mock_sonarr_url: str
+) -> None:
+    """A second Run now during the Queued hold stays Running while its request is in flight.
+
+    The first request's hold timer used to reset the button to an enabled
+    Run now 900 ms after Queued, with the second request still running.
+    """
+    page = logged_in_page
+    instance_name = f"E2E Run now {uuid.uuid4().hex[:8]}"
+    page.goto(f"{houndarr_url}/settings")
+    add_form = _open_filled_add_form(page, mock_sonarr_url, instance_name)
+    _test_connection_and_wait_for_success(
+        page, add_form, add_form.locator("button[data-test-connection-btn]")
+    )
+    _submit_form(add_form)
+    expect(page.locator("#instance-tbody")).to_contain_text(instance_name, timeout=10_000)
+
+    accepted = {"status": 202, "content_type": "application/json", "body": '{"status":"accepted"}'}
+    calls: list[Route] = []
+
+    def respond(route: Route) -> None:
+        calls.append(route)
+        if len(calls) == 1:
+            route.fulfill(**accepted)
+
+    pattern = re.compile(r"/api/instances/\d+/run-now$")
+    page.route(pattern, respond)
+    try:
+        page.goto(f"{houndarr_url}/")
+        card = page.locator(".dash-card").filter(
+            has=page.locator(".dash-card__name", has_text=instance_name)
+        )
+        button = card.locator('[data-run-now-btn="true"]')
+        label = button.locator("[data-run-now-label]")
+        expect(button).to_be_enabled()
+        instance_id = button.get_attribute("data-instance-id")
+
+        button.click()
+        # Polls every frame: the Queued hold is the only window a second click can land in.
+        page.wait_for_function(
+            """id => document.querySelector(
+                `[data-run-now-btn][data-instance-id="${id}"] [data-run-now-label]`
+            )?.textContent === 'Queued'""",
+            arg=instance_id,
+        )
+        button.click()
+        expect(label).to_have_text("Running…")
+
+        page.wait_for_timeout(1_500)
+        expect(label).to_have_text("Running…")
+        expect(button).to_be_disabled()
+        assert len(calls) == 2, f"expected two run-now requests, got {len(calls)}"
+
+        calls[1].fulfill(**accepted)
+        expect(label).to_have_text("Queued")
+        expect(label).to_have_text("Run now")
+        expect(button).to_be_enabled()
+    finally:
+        for route in calls[1:]:
+            with suppress(Exception):
+                route.fulfill(**accepted)
+        page.unroute(pattern)
 
 
 @pytest.mark.integration
@@ -859,12 +1335,11 @@ def test_instance_toggle_and_delete_keeps_layout_stable(
 
     page.get_by_role("button", name=re.compile(r"add\s*instance", re.I)).first.click()
     add_form = page.locator('form[data-form-mode="add"]')
-    expect(add_form).to_be_visible()
+    _expect_dialog_ready(page, add_form)
     add_form.locator('input[name="name"]').fill(instance_name)
     add_form.locator('select[name="type"]').select_option("sonarr")
     add_form.locator('input[name="url"]').fill(mock_sonarr_url)
     add_form.locator('input[name="api_key"]').fill("e2e-toggle-key")
-    _wait_for_connection_ui_idle(page)
     _test_connection_and_wait_for_success(
         page, add_form, add_form.locator("button[data-test-connection-btn]")
     )
@@ -1060,14 +1535,13 @@ def test_admin_reset_instances_refreshes_table_without_reload(
 
     page.get_by_role("button", name=re.compile(r"add\s*instance", re.I)).first.click()
     add_form = page.locator('form[data-form-mode="add"]')
-    expect(add_form).to_be_visible()
+    _expect_dialog_ready(page, add_form)
     add_form.locator('input[name="name"]').fill(instance_name)
     add_form.locator('select[name="type"]').select_option("sonarr")
     add_form.locator('input[name="url"]').fill(mock_sonarr_url)
     add_form.locator('input[name="api_key"]').fill("e2e-sonarr-key")
     add_form.locator('input[name="batch_size"]').fill("7")
     add_form.locator('input[name="sleep_interval_mins"]').fill("45")
-    _wait_for_connection_ui_idle(page)
     _test_connection_and_wait_for_success(
         page, add_form, add_form.locator("button[data-test-connection-btn]")
     )
@@ -1171,12 +1645,11 @@ def _fail_test_connection_in_add_modal(page: Page, mock_sonarr_url: str) -> Loca
     """Open the add modal, run Test Connection against a routed 500, return its toast."""
     page.get_by_role("button", name=re.compile(r"add\s*instance", re.I)).first.click()
     add_form = page.locator('form[data-form-mode="add"]')
-    expect(add_form).to_be_visible()
+    _expect_dialog_ready(page, add_form)
     add_form.locator('input[name="name"]').fill(f"E2E Toast {uuid.uuid4().hex[:8]}")
     add_form.locator('select[name="type"]').select_option("sonarr")
     add_form.locator('input[name="url"]').fill(mock_sonarr_url)
     add_form.locator('input[name="api_key"]').fill("e2e-sonarr-key")
-    _wait_for_connection_ui_idle(page)
     with page.expect_response(lambda r: "/settings/instances/test-connection" in r.url):
         add_form.locator("button[data-test-connection-btn]").dispatch_event("click")
     toast = page.locator("#add-instance-modal > .toast")

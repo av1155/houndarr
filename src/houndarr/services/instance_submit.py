@@ -68,11 +68,20 @@ from houndarr.services.url_validation import validate_instance_url
 class InstanceNotFoundError(InstanceValidationError):
     """Raised by :func:`submit_update` when the target instance id is missing.
 
-    Distinct from generic validation so the route can map it to a 404
-    instead of the connection-guard 422.  Inherits from
+    The route shows it in the dialog like a connection refusal, since an
+    instance deleted elsewhere can no longer be saved.  Inherits from
     :class:`~houndarr.errors.InstanceValidationError` (and therefore
     :class:`~houndarr.errors.ServiceError`) so the broader
     error-handling discipline still applies.
+    """
+
+
+class InstanceSettingsError(InstanceValidationError):
+    """Raised when a search setting is refused, as opposed to the connection.
+
+    The route answers it without the connection-failure trigger, so the
+    dialog keeps a tested connection verified and Save enabled while the
+    user fixes the setting.
     """
 
 
@@ -89,7 +98,7 @@ def _parse_search_order(raw: str) -> SearchOrder:
     try:
         return SearchOrder(raw)
     except ValueError as exc:
-        raise InstanceValidationError("Invalid search order.") from exc
+        raise InstanceSettingsError("Invalid search order.") from exc
 
 
 @dataclass(frozen=True, slots=True)
@@ -116,7 +125,7 @@ def _canonical_tag_labels(raw: str, field_label: str) -> str:
     """Return canonical labels for one tag field or raise its validation error."""
     error, canonical = validate_tag_filter(raw, field_label=field_label)
     if error is not None:
-        raise InstanceValidationError(error)
+        raise InstanceSettingsError(error)
     return canonical
 
 
@@ -148,8 +157,9 @@ def _validate_form(
     """Run every static validator and return canonical form values.
 
     Raises:
-        InstanceValidationError: First validator failure; message is
-            the form-level string the user sees in the guard banner.
+        InstanceValidationError: The URL failed; message is the
+            form-level string the user sees in the guard banner.
+        InstanceSettingsError: The first failing search setting.
     """
     url_error = validate_instance_url(url)
     if url_error is not None:
@@ -157,7 +167,7 @@ def _validate_form(
 
     window_error = validate_allowed_time_window(allowed_time_window)
     if window_error is not None:
-        raise InstanceValidationError(window_error)
+        raise InstanceSettingsError(window_error)
 
     missing_error = validate_missing_controls(
         batch_size=batch_size,
@@ -168,26 +178,26 @@ def _validate_form(
         queue_limit=queue_limit,
     )
     if missing_error is not None:
-        raise InstanceValidationError(missing_error)
+        raise InstanceSettingsError(missing_error)
 
     cutoff_error = validate_cutoff_controls(
         cutoff_batch_size, cutoff_cooldown_days, cutoff_hourly_cap
     )
     if cutoff_error is not None:
-        raise InstanceValidationError(cutoff_error)
+        raise InstanceSettingsError(cutoff_error)
 
     hot_retry_error = validate_missing_hot_retry_controls(
         missing_hot_retry_window_hrs,
         missing_hot_retry_interval_hrs,
     )
     if hot_retry_error is not None:
-        raise InstanceValidationError(hot_retry_error)
+        raise InstanceSettingsError(hot_retry_error)
 
     upgrade_error = validate_upgrade_controls(
         upgrade_batch_size, upgrade_cooldown_days, upgrade_hourly_cap, upgrade_series_window_size
     )
     if upgrade_error is not None:
-        raise InstanceValidationError(upgrade_error)
+        raise InstanceSettingsError(upgrade_error)
 
     # Keyword arguments evaluate in order, so the first failing field wins.
     return _FormCanonical(
@@ -236,12 +246,12 @@ def _resolve_modes_or_raise(
     Returns the :class:`SearchModes` bundle the caller can destructure
     field-by-field.  Re-raises any validation error string from
     :func:`resolve_search_modes` as
-    :class:`InstanceValidationError` so the route always sees the
+    :class:`InstanceSettingsError` so the route always sees the
     typed surface.
     """
     bundle = resolve_search_modes(instance_type, sonarr, lidarr, readarr, whisparr_v2)
     if isinstance(bundle, str):
-        raise InstanceValidationError(bundle)
+        raise InstanceSettingsError(bundle)
     return bundle
 
 
@@ -465,7 +475,7 @@ async def submit_update(
 
     - Look up the current row via :func:`get_instance`; raise
       :class:`InstanceNotFoundError` when the id is unknown so the
-      route can render a 404.
+      dialog says the instance is gone.
     - Resolve the API key sentinel (``API_KEY_UNCHANGED``) by
       substituting the current row's plaintext key when the form
       indicates the operator did not edit it.
@@ -599,7 +609,6 @@ async def submit_update(
     if updated is None:
         # update_instance returns None only if the row vanished between
         # the initial get_instance and the UPDATE; treat as not-found
-        # so the route renders the same 404 path it would have for the
-        # original lookup miss.
+        # so the route answers as it would for the original lookup miss.
         raise InstanceNotFoundError("Instance not found.")
     return updated

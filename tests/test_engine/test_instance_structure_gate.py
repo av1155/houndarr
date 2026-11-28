@@ -189,6 +189,7 @@ def test_instance_submit_service_public_api() -> None:
 
     expected = {
         "InstanceNotFoundError",
+        "InstanceSettingsError",
         "submit_create",
         "submit_update",
     }

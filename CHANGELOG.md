@@ -52,6 +52,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Schema v23 rebuilds `instances` on databases first created before 1.10.0, resetting a series window outside 1 to 100 to `5` and an unknown `search_order` to `chronological`. To roll back, downgrade to 1.13.4. (#916)
 - The v23 rebuild deletes cooldowns and clears the instance on log rows that still point at a deleted instance, and logs how many it repaired. (#916)
 - Schema v23 resets, once, each instance number setting stored outside the limits now enforced on save to its default, and logs `Schema v23: reset <column> to <default>` with each instance's old value. (#916)
+- The instance dialog keeps a fast `Test Connection` result on screen instead of replacing it a moment later with the `Test connection before ...` prompt. (#931)
+- A `Test Connection` result that arrives after the URL, API key or `Type` changed is ignored, so it no longer enables `Add Instance` or `Save Changes` for untested details. (#931)
+- A save refused for a search setting, such as `Cooldown (days)` above 3650, keeps `Add Instance` or `Save Changes` enabled, so fixing the field saves without a new connection test. (#931)
+- `Test Connection` and `Save Changes` in the Edit dialog of an instance deleted in another tab show `Instance not found.` in the dialog instead of a `Request failed (HTTP 404)` toast. (#931)
+- Clicking `Run now` again while it shows `Queued` keeps the button on `Running…` until the new request finishes, instead of re-enabling it early. (#931)
+- A double-click on `Add Instance` adds the instance once, instead of adding two identical instances that both get searched. (#931)
+- A save still running when its instance dialog is cancelled no longer closes the next instance dialog when it finishes, so what was typed there stays. (#931)
+- `Edit` on an instance deleted in another tab, or any instance dialog that fails to open, shows an error toast instead of doing nothing. (#931)
 
 ### Security
 
